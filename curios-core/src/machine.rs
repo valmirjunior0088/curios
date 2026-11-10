@@ -1147,7 +1147,7 @@ impl Machine {
                                 item_demand: Demand::Whnf,
                                 catch: true,
                                 finish: Finish::Arm {
-                                    body: arm.body.clone(),
+                                    body: arm.body().clone(),
                                     demand,
                                 },
                             },

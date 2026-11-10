@@ -5,20 +5,21 @@ mod tests;
 
 // Deliberately not re-exported: the caches are [`Node`]'s private business.
 mod scalars;
-use scalars::*;
+pub use scalars::*;
 
 mod mentions;
 use mentions::*;
-pub use mentions::{Mentions, MentionsIter, Names};
+pub use mentions::{MentionCache, Mentions, MentionsIter, Names};
 
 mod rank;
+pub use rank::Ranked;
 
 mod shape;
 pub use shape::*;
 
 mod former;
-use former::built;
-pub use former::*;
+use former::*;
+pub use former::{FormerEta, former_eta};
 
 mod metavar_spine;
 pub use metavar_spine::*;
@@ -1192,10 +1193,10 @@ impl Term {
                 let payload = names.iter().collect::<Vec<_>>();
                 (
                     atom.into(),
-                    InductArm {
-                        body: Scope::close(Many(payload.len()), &payload, body.into()),
+                    InductArm::new(
+                        Scope::close(Many(payload.len()), &payload, body.into()),
                         plicities,
-                    },
+                    ),
                 )
             })
             .collect()

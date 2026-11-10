@@ -2,7 +2,8 @@ mod compare;
 use compare::*;
 
 mod cost;
-pub(crate) use cost::*;
+use cost::*;
+pub use cost::{Footprint, image_bound, product_bound, sum_bound};
 
 mod free_monoid;
 use free_monoid::*;

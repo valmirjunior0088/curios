@@ -184,7 +184,7 @@ pub struct Mints {
 pub struct Minted {
     /// What the declaration each top-level name was lowered from minted.
     #[archived_with(ByDeclaration)]
-    from: Sorted<Global, Rc<Mints>>,
+    pub from: Sorted<Global, Rc<Mints>>,
     /// What the entry minted, the term a program closes with.
     pub entry: Mints,
 }
@@ -489,8 +489,8 @@ pub enum Import {
 pub struct Imported<'a> {
     pub global: Global,
     /// The label of the module the binding is reached through, where it is.
-    through: Option<&'a str>,
-    written: &'a str,
+    pub through: Option<&'a str>,
+    pub written: &'a str,
 }
 
 impl Imported<'_> {

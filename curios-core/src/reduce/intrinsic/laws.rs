@@ -10,10 +10,7 @@ use {
 };
 
 /// A binary fold's laws beside its two-literal case, tried on what that case left neutral: a literal unit on one side yields the other operand, a literal absorbing element yields itself, and two structurally identical operands yield what idempotence or self-cancellation says. Every one is an equation on the carrier's values that holds for every value of its symbolic side, which is what makes it admissible in a fold both checkers share — see `documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`. Run after the fold rather than inside it because every binary helper already rebuilds its neutral from the operands it reduced, so the laws read them back off the neutral and the helpers keep one signature; a fold that produced a literal has no operands to read and passes through. `reduce_bool_binary` leaves a connective's right operand as written under a stuck left — deliberately, see `a_stuck_left_operand_leaves_the_right_as_written` — so a `&&` or `||` law sees that operand unreduced; a literal or a repeated binder is visible either way, and a law missed on an unreduced operand leaves a neutral, never a wrong answer: conversion decides it by the decision diagram where it compares, and an elimination where it takes the neutral apart. An equality, and the `xor` that `!=` lowers through, reads both, since its laws do.
-pub(super) fn then_laws(
-    result: Subterm,
-    laws: impl FnOnce(&Term, &Term) -> Option<Term>,
-) -> Subterm {
+pub fn then_laws(result: Subterm, laws: impl FnOnce(&Term, &Term) -> Option<Term>) -> Subterm {
     let Subterm::Intrinsic(intrinsic) = &result else {
         return result;
     };
@@ -28,7 +25,7 @@ pub(super) fn then_laws(
 }
 
 /// The Boolean connectives' identities, as `curios-algebra`'s `Operation::boolean_identity` states them: `&&` and `||` with their units and absorbers, idempotence and the complement law; `xor` with its unit, self-cancellation and cancellation through one nesting, which takes `not(not(b))` back to `b`; `==` and `!=` over identical, complementary and literal operands. What is read here is each operand's literal value, whether the two are one term, whether one is the other's negation, and for `xor` which nested operand cancels; a law that answers a negation builds it as `xor(·, true)`, the spelling `not` already has.
-pub(super) fn bool_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
+pub fn bool_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
     let Declaration::Operation {
         carrier: Carrier::Boolean,
         operation,
@@ -121,7 +118,7 @@ fn complementary(left: &Term, right: &Term) -> bool {
 }
 
 /// The bitwise lattice on ℕ and on ℤ, as `curios-algebra`'s `Operation::bitwise_identity` states it: `0` absorbs `and` and is the unit of `or` and `xor`; `-1` is the unit of `and` and absorbs `or`, at ℤ alone, no natural having every bit set; `and` and `or` are idempotent and `xor` self-cancels. What is read here is whether an operand is zero or `-1` and whether the two are one term.
-pub(super) fn bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
+pub fn bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
     let Declaration::Operation {
         carrier, operation, ..
     } = op.algebra()
@@ -156,7 +153,7 @@ pub(super) fn bitwise_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<
 }
 
 /// A shift by `0` is the value, and a shifted `0` is `0`, on ℕ and on ℤ — the two shift laws that build nothing, which is why they are the two stated here: a law beside a fold takes no reducer to charge. The one that builds, `shl(x, k) = 2ᵏ · x` for a literal `k`, is `then_coefficient`'s, which has the reducer in hand and charges the coefficient before it exists. The count is a natural at both carriers.
-pub(super) fn shift_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
+pub fn shift_laws(left: &Term, right: &Term, op: &Intrinsic) -> Option<Term> {
     let Declaration::Operation {
         carrier, operation, ..
     } = op.algebra()

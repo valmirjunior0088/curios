@@ -11,18 +11,18 @@ use {
 };
 
 /// A sequence carrier's words: one alphabet over the `Nat` measures every sequence shares, and the sequence that says what its runs are, how a chunk is measured, and how a value is read and rebuilt.
-pub(crate) struct Words<S> {
+pub struct Words<S> {
     sequence: S,
 }
 
 /// The sequence `Bytes`'s words are over, whose every element is a byte.
-pub(crate) struct Bytes;
+pub struct Bytes;
 
 /// The element type a `List`'s words are over, which every residual is rebuilt with.
-pub(crate) struct Element(pub(crate) Term);
+pub struct Element(pub Term);
 
 /// What differs between `Bytes`'s words and `List`'s.
-pub(crate) trait Sequence: Sized {
+pub trait Sequence: Sized {
     type Run: Run;
     /// `len` of an opaque chunk.
     fn measure(&self, chunk: &Term) -> Term;
@@ -33,17 +33,17 @@ pub(crate) trait Sequence: Sized {
 }
 
 impl<S: Sequence> Words<S> {
-    pub(crate) fn new(sequence: S) -> Self {
+    pub fn new(sequence: S) -> Self {
         Words { sequence }
     }
 
     /// `intrinsic` as its word.
-    pub(crate) fn read(&self, intrinsic: &Intrinsic) -> Word<Self> {
+    pub fn read(&self, intrinsic: &Intrinsic) -> Word<Self> {
         S::read(self, intrinsic)
     }
 
     /// `word` as the term it spells.
-    pub(crate) fn rebuild(&self, word: Word<Self>) -> Term {
+    pub fn rebuild(&self, word: Word<Self>) -> Term {
         self.sequence.rebuild(word)
     }
 }
@@ -120,7 +120,7 @@ impl<S: Sequence> Alphabet for Words<S> {
 }
 
 /// Whether `intrinsic` is one of the `Bytes`-valued intrinsics a word reads. `Bytes` and `BytesConcat` carry the monoid's literals and juxtaposition; `BytesSlice` rides in as a window, so adjacent slices of one base fuse and equal slices cancel; `BytesAppend` rides in as its base followed by the appended byte; `BytesReplicate` rides in as its leading generator followed by a fill one shorter, which is what lets a fill compare against the cons it equals. Any other producer is an opaque chunk left to the caller's own comparison.
-pub(crate) fn is_bytes_word(intrinsic: &Intrinsic) -> bool {
+pub fn is_bytes_word(intrinsic: &Intrinsic) -> bool {
     matches!(
         intrinsic,
         Intrinsic::Bytes(_)
@@ -132,7 +132,7 @@ pub(crate) fn is_bytes_word(intrinsic: &Intrinsic) -> bool {
 }
 
 /// The `List` analogue of [`is_bytes_word`], doubling as the element type residuals are rebuilt with: every element of a `List(T)` value is a `T`, so one suffices for the whole list. `List` and `ListConcat` carry the monoid's literals and juxtaposition, `ListSlice` rides in as a window, and `ListAppend` as its base followed by a one-element run, so `append(xs, e)` is `xs ++ [e]`.
-pub(crate) fn list_element(intrinsic: &Intrinsic) -> Option<Term> {
+pub fn list_element(intrinsic: &Intrinsic) -> Option<Term> {
     match intrinsic {
         Intrinsic::List { element, items: _ }
         | Intrinsic::ListConcat {

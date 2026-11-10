@@ -9,7 +9,7 @@ use {
 };
 
 /// A reducer that reduces nothing. Every operand below is already a literal — a weak-head normal form — so no strategy is involved, and running the comparison body against an inert reducer says exactly that: the outcome is decided by the structural compare, not by anything unfolded.
-pub(super) struct Inert;
+pub struct Inert;
 
 impl Reducer for Inert {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
@@ -30,19 +30,19 @@ impl Reducer for Inert {
     }
 }
 
-pub(super) fn lit(n: u32) -> Term {
+pub fn lit(n: u32) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(n as usize)))
 }
 
-pub(super) fn sym(index: u32, hint: &'static str) -> Term {
+pub fn sym(index: u32, hint: &'static str) -> Term {
     Term::free_var(&Free::local(u64::from(index), Some(hint)))
 }
 
-pub(super) fn add(left: Term, right: Term) -> Term {
+pub fn add(left: Term, right: Term) -> Term {
     Term::intrinsic(Intrinsic::nat_add(left, right))
 }
 
-pub(super) fn occurrences(term: &Term, wanted: &Term) -> usize {
+pub fn occurrences(term: &Term, wanted: &Term) -> usize {
     Nat::summands(term)
         .iter()
         .filter(|summand| *summand == wanted)
@@ -50,8 +50,8 @@ pub(super) fn occurrences(term: &Term, wanted: &Term) -> usize {
 }
 
 /// [`Folding`] under a budget, for the gates whose subject is a *charge* rather than a value.
-pub(super) struct Budgeted {
-    pub(super) remaining: u64,
+pub struct Budgeted {
+    pub remaining: u64,
 }
 
 impl Reducer for Budgeted {
@@ -86,7 +86,7 @@ impl Reducer for Budgeted {
 }
 
 /// What reducing `term` costs a fresh [`Budgeted`], for the gates whose subject is a charge.
-pub(super) fn charged(term: Term) -> u64 {
+pub fn charged(term: Term) -> u64 {
     const AMPLE: u64 = 1_000_000_000;
     let mut reducer = Budgeted { remaining: AMPLE };
     reducer.reduce(term).expect("the subject reduces");
@@ -95,53 +95,53 @@ pub(super) fn charged(term: Term) -> u64 {
 }
 
 /// A literal run of `n` naturals.
-pub(super) fn run_of(n: usize) -> Term {
+pub fn run_of(n: usize) -> Term {
     Term::intrinsic(Intrinsic::List {
         element: nat_type(),
         items: (0..n).map(|i| lit(i as u32)).collect(),
     })
 }
 
-pub(super) fn nat_type() -> Term {
+pub fn nat_type() -> Term {
     Term::intrinsic(Intrinsic::NatType)
 }
 
 /// A stand-in for a discharged bound. Reduction never inspects one — proof irrelevance makes its value unobservable, and these tests are about the fold laws rather than the obligation — so every bounded operation below states it with the same name.
-pub(super) fn qed() -> Term {
+pub fn qed() -> Term {
     symbol(9_999, "qed")
 }
 
-pub(super) fn symbol(index: u32, hint: &'static str) -> Term {
+pub fn symbol(index: u32, hint: &'static str) -> Term {
     Term::free_var(&Free::local(u64::from(index), Some(hint)))
 }
 
-pub(super) fn to_nat_of(term: Term) -> Term {
+pub fn to_nat_of(term: Term) -> Term {
     Term::intrinsic(Intrinsic::ByteToNat(term))
 }
 
-pub(super) fn scaled(coefficient: u32, factor: Term) -> Term {
+pub fn scaled(coefficient: u32, factor: Term) -> Term {
     Term::intrinsic(Intrinsic::nat_mul(lit(coefficient), factor))
 }
 
-pub(super) fn plus(left: Term, right: Term) -> Term {
+pub fn plus(left: Term, right: Term) -> Term {
     Term::intrinsic(Intrinsic::nat_add(left, right))
 }
 
-pub(super) fn fold(term: Term) -> Term {
+pub fn fold(term: Term) -> Term {
     Folding.reduce(term).expect("reduces")
 }
 
 /// `term` with the free variable `binder` replaced by `value`: close over the binder, then open at the value. Comparing *values* rather than shapes is what this gate needs — `4 · (3 · x)` and `12 · x` are the same number, and reduction does not re-associate nested literal factors.
-pub(super) fn at(term: Term, binder: &Free, value: Term) -> Term {
+pub fn at(term: Term, binder: &Free, value: Term) -> Term {
     Scope::close(One, &[binder], term).open(&[&value])
 }
 
-pub(super) fn run_bytes(run: &[u8]) -> Term {
+pub fn run_bytes(run: &[u8]) -> Term {
     Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(run.to_vec())))
 }
 
 /// The same five bytes, spelled four ways: whole, split once, split twice, and left-nested the way an accumulation builds one.
-pub(super) fn groupings(whole: &[u8]) -> Vec<Term> {
+pub fn groupings(whole: &[u8]) -> Vec<Term> {
     let nest = |left: Term, right: Term| {
         Term::intrinsic(Intrinsic::BytesConcat {
             operands: vec![left, right],
@@ -166,7 +166,7 @@ pub(super) fn groupings(whole: &[u8]) -> Vec<Term> {
 }
 
 /// The `List` twin of the three tests above, in one: its carrier flattens element vectors where `Bytes` copies packed bytes, and the walks are written separately, so agreement on one is not agreement on the other. Elements are symbols, compared syntactically — which is all the property needs, since regrouping never changes an element, only which run it sits in.
-pub(super) fn list_of(elements: &[u32]) -> Term {
+pub fn list_of(elements: &[u32]) -> Term {
     Term::intrinsic(Intrinsic::List {
         element: symbol(1000, "T"),
         items: elements.iter().map(|n| symbol(*n, "e")).collect(),
@@ -174,7 +174,7 @@ pub(super) fn list_of(elements: &[u32]) -> Term {
 }
 
 /// A literal `List` run of `Nat` literals — [`list_of`]'s twin for the grids below, whose ground truth needs closed elements rather than symbols.
-pub(super) fn nat_list(elements: &[u32]) -> Term {
+pub fn nat_list(elements: &[u32]) -> Term {
     Term::intrinsic(Intrinsic::List {
         element: symbol(1000, "T"),
         items: elements.iter().map(|n| lit(*n)).collect(),
@@ -182,7 +182,7 @@ pub(super) fn nat_list(elements: &[u32]) -> Term {
 }
 
 /// Fold a closed `Bytes` term to its literal run — the ground truth the peel grids compare, so it must land on a literal or the instantiation was not closed.
-pub(super) fn bytes_value(term: Term) -> Term {
+pub fn bytes_value(term: Term) -> Term {
     let folded = fold(term);
     assert!(
         matches!(
@@ -195,7 +195,7 @@ pub(super) fn bytes_value(term: Term) -> Term {
 }
 
 /// Fold a closed `List` term to its element run, folding each element too — a fused literal keeps its elements as written, so `[2 + 3]` and `[5]` are one value and must compare as one.
-pub(super) fn list_value(term: Term) -> Vec<Term> {
+pub fn list_value(term: Term) -> Vec<Term> {
     let folded = fold(term);
     match &*folded {
         Subterm::Intrinsic(Intrinsic::List {
@@ -207,7 +207,7 @@ pub(super) fn list_value(term: Term) -> Vec<Term> {
 }
 
 /// Fold a closed term to the value the commutation grid compares: a `List` literal folds its elements too, since a fused run keeps them as written, and every other carrier's closed fold is already the value.
-pub(super) fn closed_value(term: Term) -> Term {
+pub fn closed_value(term: Term) -> Term {
     let folded = fold(term);
     match &*folded {
         Subterm::Intrinsic(Intrinsic::List {

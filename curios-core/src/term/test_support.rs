@@ -13,7 +13,7 @@ use {
 
 /// A declaration's name, from the path a test writes. Fixture-only.
 /// An extent of the entry's text from `start`, one byte long: a position for a fixture that needs one and no text behind it.
-pub(super) fn written_at(start: u32) -> Extent {
+pub fn written_at(start: u32) -> Extent {
     Extent {
         anchor: Anchor::of(Anchored::Entry),
         start,
@@ -22,12 +22,12 @@ pub(super) fn written_at(start: u32) -> Extent {
     }
 }
 
-pub(super) fn nominal(path: &str) -> Global {
+pub fn nominal(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
 }
 
 /// The number of distinct `Node`s reachable from `term`, counting a shared node once. Inlined here because only these tests ask the question.
-pub(super) fn distinct_nodes(term: &Term) -> usize {
+pub fn distinct_nodes(term: &Term) -> usize {
     let mut seen = HashSet::new();
     let mut stack = Vec::from([term.clone()]);
     while let Some(node) = stack.pop() {
@@ -43,10 +43,10 @@ pub(super) fn distinct_nodes(term: &Term) -> usize {
 }
 
 /// Deep enough that a walk recursing natively per link overflows a default stack, so a regression is a stack overflow rather than a slow test.
-pub(super) const DEEP: u32 = 100_000;
+pub const DEEP: u32 = 100_000;
 
 /// A reading of no family that pairs sorts, as a caller carrying one spelling to another reads the walk.
-pub(super) struct PairingSorts;
+pub struct PairingSorts;
 
 impl Families for PairingSorts {
     fn induct(&self, _: &Global) -> Option<&InductDecl> {
@@ -72,14 +72,14 @@ impl Families for PairingSorts {
 
 /// The families a test declares, as the level alignment reads a registry.
 #[derive(Default)]
-pub(super) struct Registry {
-    pub(super) inducts: BTreeMap<Global, InductDecl>,
+pub struct Registry {
+    pub inducts: BTreeMap<Global, InductDecl>,
     /// Each definition's vector, with how many arguments one spine applies it in full by.
-    pub(super) definitions: BTreeMap<Global, (Vec<Variance>, usize)>,
+    pub definitions: BTreeMap<Global, (Vec<Variance>, usize)>,
     /// Each record-valued definition's field vectors, with its arity.
-    pub(super) fields: BTreeMap<Global, (Vec<Vec<Variance>>, usize)>,
+    pub fields: BTreeMap<Global, (Vec<Vec<Variance>>, usize)>,
     /// Each definition whose value is a field of one of its binders, with its arity.
-    pub(super) parameter_fields: BTreeMap<Global, (ParameterField, usize)>,
+    pub parameter_fields: BTreeMap<Global, (ParameterField, usize)>,
 }
 
 impl Families for Registry {
@@ -109,7 +109,7 @@ impl Families for Registry {
 }
 
 /// A family of `params` type parameters and `indices` `Nat` indices with no constructor, carrying `variances`: all the alignment reads of a declaration is its counts and its vector.
-pub(super) fn shaped(params: usize, indices: usize, variances: &[Variance]) -> InductDecl {
+pub fn shaped(params: usize, indices: usize, variances: &[Variance]) -> InductDecl {
     let binders = |from: u64, count: usize, type_: Term| {
         (from..)
             .take(count)
@@ -140,12 +140,12 @@ pub(super) fn shaped(params: usize, indices: usize, variances: &[Variance]) -> I
 }
 
 /// `path`'s former at `level` as its group's projection, applied in full to `Nat`.
-pub(super) fn former_applied(path: &str, level: u32) -> Term {
+pub fn former_applied(path: &str, level: u32) -> Term {
     Term::apply(former(path, level), [Term::intrinsic(Intrinsic::NatType)])
 }
 
 /// `path`'s former at `level` as its group's projection: `rec W : (A: Type l) -> Type l = (A) => W.{l}(A); W`, the spelling reduction hands over for an instance of an `induct`'s name.
-pub(super) fn former(path: &str, level: u32) -> Term {
+pub fn former(path: &str, level: u32) -> Term {
     let member = Free::local(970, Some("W"));
     let carrier = Free::local(971, Some("A"));
     let sort = Term::type_at(Level::constant(level));
@@ -170,7 +170,7 @@ pub(super) fn former(path: &str, level: u32) -> Term {
 }
 
 /// A left-nested application spine `((x a) a) …`, `DEEP` links tall.
-pub(super) fn deep_spine(seed: u64) -> Term {
+pub fn deep_spine(seed: u64) -> Term {
     let argument = Term::free_var(&Free::local(seed, None));
     let mut term = Term::free_var(&Free::local(seed, None));
     for _ in 0..DEEP {
@@ -180,4 +180,4 @@ pub(super) fn deep_spine(seed: u64) -> Term {
 }
 
 /// Past one 32 MiB stack segment several times over, which is what proves a walk can chain another rather than merely start on one. `DEEP` would prove the same thing at twenty segments; this asks for four.
-pub(super) const TALL: u32 = 20_000;
+pub const TALL: u32 = 20_000;

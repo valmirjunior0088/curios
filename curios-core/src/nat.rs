@@ -22,7 +22,7 @@ pub enum Nat<T = Term> {
 
 /// A summand's factor as it was read, and the summand itself where it is spelled as [`Nat::scaled`] writes one: what a rebuild restores.
 #[derive(Debug, Clone)]
-pub(crate) struct NatOrigin {
+pub struct NatOrigin {
     factor: Term,
     /// The summand and the coefficient it was read at. A rebuild at that coefficient hands the summand back in place of writing its product again, as `int.rs` hands a monomial back as the spine it was read over.
     written: Option<(Natural, Term)>,
@@ -116,7 +116,7 @@ impl Nat {
         Some(Self::new(&self.to_natural()? >> &amount.to_natural()?))
     }
 
-    /// View a reduced term as a flat successor floor over a symbolic tail: `term = inner + floor`. A non-`Succ` term — literal zero, a variable, any stuck intrinsic — has floor `0` and is its own `inner`; reduction flattens nested `Succ`, so `inner` is never itself successor-headed. The one-value companion to `spine::peel_nat_terms` (which peels the floor shared by *two* values): this is the seam `Nat/add`, `Nat/sub`, `Nat/mul`, and the comparison family share to act on the floor symbolically, then rebuild a canonical neutral.
+    /// View a reduced term as a flat successor floor over a symbolic tail: `term = inner + floor`. A non-`Succ` term — literal zero, a variable, any stuck intrinsic — has floor `0` and is its own `inner`; reduction flattens nested `Succ`, so `inner` is never itself successor-headed. The one-value companion to `spine::peel_nat_pair` (which peels the floor shared by *two* values): this is the seam `Nat/add`, `Nat/sub`, `Nat/mul`, and the comparison family share to act on the floor symbolically, then rebuild a canonical neutral.
     pub fn decompose(term: &Term) -> (Natural, Term) {
         match &**term {
             Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(floor, inner))) => {

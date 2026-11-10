@@ -509,7 +509,7 @@ impl<E: Env> Walk<'_, E> {
                 stated,
             } => {
                 for (tag, case) in cases {
-                    let (binders, body) = self.open_many(&case.body);
+                    let (binders, body) = self.open_many(case.body());
                     let shape = Shape::node(
                         Tag::Variant(tag.clone()),
                         binders.iter().map(|b| Shape::Atom(*b)),

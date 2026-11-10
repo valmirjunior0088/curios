@@ -2,7 +2,7 @@
 
 use {
     crate::reduce::intrinsic::test_support::*,
-    crate::{test_support::*, *},
+    crate::{spine::test_support::peel_nat_terms, test_support::*, *},
     curios_algebra::Deduction,
     curios_num::Integer,
 };

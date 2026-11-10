@@ -1439,13 +1439,13 @@ fn ground_cases(
                 _ => None,
             };
             for ((this_tag, this_arm), (that_tag, that_arm)) in this_cases.iter().zip(that_cases) {
-                if this_tag != that_tag || this_arm.body.arity() != that_arm.body.arity() {
+                if this_tag != that_tag || this_arm.body().arity() != that_arm.body().arity() {
                     return Ok(false);
                 }
                 let signature = family
                     .as_ref()
                     .and_then(|at| at.signature(kernel, this_tag).ok().flatten())
-                    .filter(|signature| signature.len() == this_arm.body.arity());
+                    .filter(|signature| signature.len() == this_arm.body().arity());
                 let converge = match signature {
                     Some(signature) => kernel.scoped(|kernel| {
                         let mut cursor = signature.cursor();
@@ -1458,11 +1458,11 @@ fn ground_cases(
                         ground(
                             kernel,
                             pairs,
-                            &this_arm.body.open(&refs),
-                            &that_arm.body.open(&refs),
+                            &this_arm.body().open(&refs),
+                            &that_arm.body().open(&refs),
                         )
                     })?,
-                    None => ground_scope(kernel, pairs, &this_arm.body, &that_arm.body)?,
+                    None => ground_scope(kernel, pairs, this_arm.body(), that_arm.body())?,
                 };
                 if !converge {
                     return Ok(false);

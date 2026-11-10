@@ -16,18 +16,18 @@ use {
     },
 };
 
-/// One node's position-independent derivations: the structural hash, the loose-index `reach`, the newest local, and the five containment flags. Computed from the node's subterm with every child's own cache already filled, so [`Scalars::of`] costs O(children).
+/// One node's position-independent derivations: the structural hash, the loose-index `reach`, the newest local, and the five containment flags. Computed from the node's subterm with every child's own cache already filled, so `Scalars::of` costs O(children).
 #[derive(Clone, Copy)]
-pub(crate) struct Scalars {
-    pub(crate) reach: usize,
+pub struct Scalars {
+    pub reach: usize,
     /// The newest binder occurring free, by its index, or `None` where no local does.
-    pub(crate) newest_local: Option<u64>,
-    pub(crate) has_metavar: bool,
-    pub(crate) has_transient: bool,
-    pub(crate) has_universe_meta: bool,
-    pub(crate) has_universe_data: bool,
-    pub(crate) has_group: bool,
-    pub(crate) hash: u64,
+    pub newest_local: Option<u64>,
+    pub has_metavar: bool,
+    pub has_transient: bool,
+    pub has_universe_meta: bool,
+    pub has_universe_data: bool,
+    pub has_group: bool,
+    pub hash: u64,
 }
 
 impl Scalars {
@@ -64,7 +64,7 @@ const NEWEST_PAST: u64 = (1 << NEWEST_BITS) - 1;
 
 /// A node's memoized [`Scalars`], packed into two `Cell<u64>` words: the flags, `reach`, the newest local and a filled bit in `packed`, and the full hash in `hash`, whose validity the shared filled bit governs — a hash of any value (zero included) is legitimate once filled. `Default` is the unfilled state, which is also what an archived node restores to (the field is `rkyv`-skipped).
 #[derive(Default)]
-pub(crate) struct ScalarCache {
+pub struct ScalarCache {
     packed: Cell<u64>,
     hash: Cell<u64>,
 }

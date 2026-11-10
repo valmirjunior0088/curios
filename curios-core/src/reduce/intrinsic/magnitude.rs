@@ -127,10 +127,7 @@ fn operand_of(reducer: &mut impl Reducer, operand: &Term) -> Result<Term, Reduce
 }
 
 /// Reduce `Int/abs`: a literal's magnitude; otherwise the operand's literal factor times its powers times the magnitude of what is left, which is its preimage where it is a non-negative combination of widened naturals and the stuck node over it otherwise.
-pub(super) fn reduce_int_abs(
-    reducer: &mut impl Reducer,
-    operand: &Term,
-) -> Result<Subterm, ReduceError> {
+pub fn reduce_int_abs(reducer: &mut impl Reducer, operand: &Term) -> Result<Subterm, ReduceError> {
     let operand = operand_of(reducer, operand)?;
     if let Some(value) = operand.as_int() {
         return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(
@@ -166,10 +163,7 @@ pub(super) fn reduce_int_abs(
 }
 
 /// Reduce `Int/sign`: a literal's sign; otherwise the sign of what is left of the operand, flipped where its leading coefficient was below zero —`+1`, `+0` or `-1` where the plain comparison holds what is left above, at or below zero, and the stuck node over it otherwise.
-pub(super) fn reduce_int_sign(
-    reducer: &mut impl Reducer,
-    operand: &Term,
-) -> Result<Subterm, ReduceError> {
+pub fn reduce_int_sign(reducer: &mut impl Reducer, operand: &Term) -> Result<Subterm, ReduceError> {
     let operand = operand_of(reducer, operand)?;
     if let Some(value) = operand.as_int() {
         return Ok(Subterm::Intrinsic(Intrinsic::Int(value.sign())));
@@ -205,7 +199,7 @@ pub(super) fn reduce_int_sign(
 }
 
 /// A stuck magnitude widened back, where the plain comparison decides its operand's sign: `to_int(abs(x))` is `x` where `x` is held at least zero and `-x` where at most. `None` for any other operand of the widening, and where the sign is not decided.
-pub(super) fn widened_magnitude(
+pub fn widened_magnitude(
     reducer: &mut impl Reducer,
     natural: &Term,
 ) -> Result<Option<Term>, ReduceError> {

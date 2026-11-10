@@ -22,14 +22,14 @@ use {
 ///
 /// It lives as long as the comparison that made it: an arm's equations and a reducer's state are one thing for the whole of a comparison, and may be another for the next.
 #[derive(Default)]
-pub(super) struct Asked {
+pub struct Asked {
     /// A pair is told apart from another by its hash, so a probe compares no term but the two it asks about.
     verdicts: HashMap<Keyed<(Term, Term)>, Comparison>,
 }
 
 impl Asked {
     /// What `carrier`'s comparison decides of `left` against `right`, compared where this is the first time the pair is asked about.
-    pub(super) fn verdict(
+    pub fn verdict(
         &mut self,
         reducer: &mut impl Reducer,
         carrier: Carrier,
@@ -83,7 +83,7 @@ impl Operand {
 /// The `Nat` eliminator's structural comparison, specialized to the flat `Natural` successor spine: the floors stand in for peeling successors, so no recursion is needed and two literals decide in one `Natural` compare (the literal fold folds into the shared-inner shortcut). It decides ONLY where the answer is forced and is `Stuck` otherwise — a sound partial decision procedure, the shared body of the whole comparison family. (The `lt` partner of the `Unary` eliminator's successor peel; for `Bytes`/`List` the same `Comparison` shape would recurse via `uncons`.)
 ///
 /// Returns the operands with their shared successor floor peeled off, so an *undecided* comparison still rebuilds a normalized neutral: `cmp(x + m, y + m)` and `cmp(x, y)` reduce to the same term, which conversion needs (e.g. `Lt(a, succ b) ≡ Lt(succ a, succ(succ b))`).
-pub(super) fn compare_nat(
+pub fn compare_nat(
     reducer: &mut impl Reducer,
     left: Term,
     right: Term,
@@ -92,7 +92,7 @@ pub(super) fn compare_nat(
 }
 
 /// [`compare_nat`] inside a comparison that has asked about other pairs: what it is led to in turn is asked of `asked`.
-pub(super) fn compare_nat_among(
+pub fn compare_nat_among(
     reducer: &mut impl Reducer,
     asked: &mut Asked,
     left: Term,
@@ -258,7 +258,7 @@ fn residuated(
 }
 
 /// Reduce a `Nat` comparison through the shared structural body [`compare_nat`]. `read` projects the outcome to this op's boolean (or `None` when the operands do not decide it), in which case the neutral term is rebuilt from the peeled operands so undecided comparisons land in a normal form.
-pub(super) fn reduce_nat_compare(
+pub fn reduce_nat_compare(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,

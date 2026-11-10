@@ -17,7 +17,7 @@ use {
 /// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bytes`, elements for `List`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, a `Window` cut from a base with the bound that placed it, or an `Opaque` node (a variable) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
 ///
 /// **A window is a shape, not an opaque node, because its length is known without its contents.** `slice` states `start + length <= len(base)` as its precondition, so a window's own `length` operand is its measure at every well-typed instance, and a homomorphism that reads only the count (`len`) or passes through elementwise (`map`) has a law over it — `len(slice(b, s, n)) = n` and `map(f, slice(b, s, n)) = slice(map(f, b), s, n)` — that filing the slice as opaque left stuck even at literal bounds. What a window does *not* give a reader is a bound on its base for a position inside it, which is why `get` and `slice` through a window are not laws here: the outer bound is a proposition no term in hand proves, and a reducer may not invent one.
-pub(super) enum Shape<L> {
+pub enum Shape<L> {
     Literal(Vec<L>),
     Concat(Vec<Term>),
     Append(Term, Term),
@@ -33,10 +33,7 @@ pub(super) enum Shape<L> {
 /// Classify a reduced `Bytes` value into its product shape (generators are bytes).
 ///
 /// **The literal arm materializes the whole run**, one `u8` per generator. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bytes/len` of a wholly-literal value answers from the free monoid's measure without reaching here, but every symbolic shape falls through to the homomorphism and pays this.
-pub(super) fn bytes_shape(
-    reducer: &mut impl Reducer,
-    value: Term,
-) -> Result<Shape<u8>, ReduceError> {
+pub fn bytes_shape(reducer: &mut impl Reducer, value: Term) -> Result<Shape<u8>, ReduceError> {
     Ok(match Term::unwrap_or_clone(value) {
         Subterm::Intrinsic(Intrinsic::Bytes(value)) => {
             reducer.spend(Cost::buffer(value.len() as u64))?;
@@ -66,7 +63,7 @@ pub(super) fn bytes_shape(
 /// Classify a reduced `List` value into its product shape (generators are elements).
 ///
 /// No charge: every arm hands back storage the value already held. The literal arm moves the element vector out of a uniquely-held node, or clones its reference slots out of a shared one — which is the sharing case, since the elements themselves are reference-count bumps rather than rebuilt terms.
-pub(super) fn list_shape(value: Term) -> Shape<Term> {
+pub fn list_shape(value: Term) -> Shape<Term> {
     match Term::unwrap_or_clone(value) {
         Subterm::Intrinsic(Intrinsic::List {
             element: _,
@@ -98,7 +95,7 @@ pub(super) fn list_shape(value: Term) -> Shape<Term> {
 }
 
 /// The shared driver for a free-monoid homomorphism `h` — the one place its distribution law lives, so a carrier physically cannot forget a case. A literal run maps via `literal`; a concatenation recurses `h` over its operands and folds the images with `combine`; an append combines `h(base)` with the appended generator via `append`; a window is answered by `window` from its base, bounds and proof, which is where `len` reads the count alone and `map` moves inside; an opaque value stays neutral, rebuilt by `node` (which also builds `h(sub)` to recurse). `len` and `map` differ only in those five slots. The built image is reduced, so the homomorphism is eager.
-pub(super) fn reduce_homomorphism<L>(
+pub fn reduce_homomorphism<L>(
     reducer: &mut impl Reducer,
     shape: Shape<L>,
     literal: impl Fn(Vec<L>) -> Term,
@@ -132,7 +129,7 @@ pub(super) fn reduce_homomorphism<L>(
 }
 
 /// `Σ` over a run of `Nat` images — the `combine` of the `len` homomorphism into `(ℕ, +, 0)`. `NatAdd`'s successor peeling carries the count out of a symbolic spine.
-pub(super) fn nat_sum(images: Vec<Term>) -> Term {
+pub fn nat_sum(images: Vec<Term>) -> Term {
     images
         .into_iter()
         .rev()
@@ -144,7 +141,7 @@ pub(super) fn nat_sum(images: Vec<Term>) -> Term {
 /// One piece of a located `Bytes` window, as a value.
 ///
 /// Every segment the carrier's own spine walk admits is a literal run, so a narrowed edge is narrowed *here* — `Binary::slice` is an O(1) window into the same payload — rather than rebuilt as a `BytesSlice` node for the next pass to fold into exactly this. Same value, same operation, one round trip earlier, and the window arm then constructs no bounded node at all.
-pub(super) fn bytes_piece(piece: Piece<'_>) -> Term {
+pub fn bytes_piece(piece: Piece<'_>) -> Term {
     match piece {
         Piece::Whole(operand) => operand.clone(),
         Piece::Part(operand, lo, hi) => match &**operand {
@@ -161,7 +158,7 @@ pub(super) fn bytes_piece(piece: Piece<'_>) -> Term {
 }
 
 /// The literal runs a reduced `Bytes` value spells, left to right: the value itself where it is one run, and each operand of a concatenation of runs, which [`crate::FUSION_CAP`] leaves standing rather than recopying. `None` where any operand is not a literal run.
-pub(super) fn bytes_runs(value: &Term) -> Option<Vec<Binary>> {
+pub fn bytes_runs(value: &Term) -> Option<Vec<Binary>> {
     // Answered before the window, which locates no piece in an empty run.
     if let Subterm::Intrinsic(Intrinsic::Bytes(run)) = &**value {
         return Some(vec![run.clone()]);
@@ -182,10 +179,7 @@ pub(super) fn bytes_runs(value: &Term) -> Option<Vec<Binary>> {
 }
 
 /// One run holding `runs` in order, charged before it is built: twice the fused payload, per the price list's last paragraph, because `Binary::concat` fills a `Vec<u8>` and then converts it into an `Arc<[u8]>`, which allocates a second buffer of the same length. The operation costs two payloads even though one survives.
-pub(super) fn bytes_fused(
-    reducer: &mut impl Reducer,
-    runs: &[&Binary],
-) -> Result<Binary, ReduceError> {
+pub fn bytes_fused(reducer: &mut impl Reducer, runs: &[&Binary]) -> Result<Binary, ReduceError> {
     let bytes = runs
         .iter()
         .map(|run| run.len() as u64)
@@ -196,7 +190,7 @@ pub(super) fn bytes_fused(
 }
 
 /// The generator a located index names, read straight out of the literal run holding it: a `Byte`, read here and nowhere else.
-pub(super) fn element_of_run(run: &Binary, local: usize) -> Option<Subterm> {
+pub fn element_of_run(run: &Binary, local: usize) -> Option<Subterm> {
     run.byte(local)
         .map(|byte| Subterm::Intrinsic(Intrinsic::Byte(byte)))
 }
@@ -204,13 +198,13 @@ pub(super) fn element_of_run(run: &Binary, local: usize) -> Option<Subterm> {
 /// One generator, read out of the term an element reduced to.
 ///
 /// The other direction of [`element_of_run`]'s seam. Naming the generator separates the two steps the append arm needs kept apart, because the budget is charged between them: the read decides whether there is work to do, and the charge has to precede the copy that does it.
-pub(super) enum Generator {
+pub enum Generator {
     Byte(u8),
 }
 
 impl Generator {
     /// The generator a reduced element names, or `None` where it is no literal byte.
-    pub(super) fn read(element: &Subterm) -> Option<Self> {
+    pub fn read(element: &Subterm) -> Option<Self> {
         match element {
             Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(Self::Byte(*byte)),
             _ => None,
@@ -218,14 +212,14 @@ impl Generator {
     }
 
     /// The run with this generator appended.
-    pub(super) fn appended_to(self, run: &Binary) -> Binary {
+    pub fn appended_to(self, run: &Binary) -> Binary {
         match self {
             Self::Byte(byte) => run.append_byte(byte),
         }
     }
 
     /// `count` copies of this generator, as a run of its own: the fill partner of [`Generator::appended_to`], beside it because both directions of the seam belong in one place.
-    pub(super) fn replicated(self, count: usize) -> Binary {
+    pub fn replicated(self, count: usize) -> Binary {
         match self {
             Self::Byte(byte) => Binary::replicate(byte, count),
         }
@@ -289,7 +283,7 @@ impl FreeMonoid {
 /// `Past` is the concrete strategy's alone — the symbolic one never learns a total, so a window it cannot place is simply not found. A window past the end is past the domain its bound states, so the caller leaves its read stuck.
 ///
 /// `Inside` is the symbolic strategy's, and it is the one answer that names an operand *without* covering it whole: the caller rebuilds its own operation over that operand at `start`, with the same count and the same bound. The bound is reused, not derived — `curios-algebra`'s `seam_window` states why it proves the narrowed proposition.
-pub(super) enum Windowed {
+pub enum Windowed {
     Parts(Vec<Term>),
     Inside { operand: Term, start: Term },
     Past,
@@ -344,7 +338,7 @@ impl FreeMonoid {
 }
 
 /// [`bytes_piece`] over the element carrier, restoring the element type every `List` value carries.
-pub(super) fn list_piece(element: &Term, piece: Piece<'_>) -> Term {
+pub fn list_piece(element: &Term, piece: Piece<'_>) -> Term {
     match piece {
         Piece::Whole(operand) => operand.clone(),
         Piece::Part(operand, lo, hi) => match &**operand {

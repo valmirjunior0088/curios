@@ -119,12 +119,12 @@ impl<'a> IntoIterator for &'a Mentions {
 
 /// The union of sets taken one at a time, each the smaller put into the larger ([`Sorted::union_with`]): the one set holding any name where only one does, shared as it stands — the chain-shaped common case, where every link above the one free occurrence would otherwise copy the same set — and otherwise the larger of the two with the smaller's names it lacks, so the union so far is the largest operand's set itself wherever the others add nothing to it.
 #[derive(Default)]
-pub(crate) struct Union {
+pub struct Union {
     union: Option<Mentions>,
 }
 
 impl Union {
-    pub(crate) fn add(&mut self, set: &Mentions) {
+    pub fn add(&mut self, set: &Mentions) {
         if set.is_empty() {
             return;
         }
@@ -144,7 +144,7 @@ impl Union {
         }
     }
 
-    pub(crate) fn finish(self) -> Mentions {
+    pub fn finish(self) -> Mentions {
         self.union.unwrap_or_else(Mentions::empty)
     }
 }
@@ -207,7 +207,7 @@ impl Names {
 
 /// A node's memoized mentions. `Default` is the unfilled state, which is also what an archived node restores to (the field is `rkyv`-skipped).
 #[derive(Default)]
-pub(crate) struct MentionCache {
+pub struct MentionCache {
     mentions: OnceCell<Mentions>,
 }
 

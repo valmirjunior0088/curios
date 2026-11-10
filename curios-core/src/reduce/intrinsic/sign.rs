@@ -12,7 +12,7 @@ use {
 };
 
 /// `folded` in its sign reading's one form where it is a stuck sign operation, and `folded` otherwise. Each node of the form is charged before it is built.
-pub(super) fn then_flt_sign_form(
+pub fn then_flt_sign_form(
     reducer: &mut impl Reducer,
     folded: Subterm,
 ) -> Result<Subterm, ReduceError> {

@@ -513,7 +513,7 @@ impl<'a> Zonk<'a> {
                             .map(|(atom, arm)| {
                                 Ok((
                                     atom.clone(),
-                                    arm.with_body(arm.body.try_map_body(|b| self.zonk_term(b))?),
+                                    arm.with_body(arm.body().try_map_body(|b| self.zonk_term(b))?),
                                 ))
                             })
                             .collect::<Result<_, Error>>()?,

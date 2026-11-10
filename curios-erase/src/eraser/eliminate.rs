@@ -734,7 +734,7 @@ impl Eraser<'_> {
                 Some(arm) => {
                     // Erasure opens the arm positionally; plicity is irrelevant.
                     let arm =
-                        self.variant_arm(context, &m, (tag, &arm.body), &mask, constructor)?;
+                        self.variant_arm(context, &m, (tag, arm.body()), &mask, constructor)?;
                     arms.push(arm);
                 }
                 // A missing constructor without a default is provably impossible: an `Unreachable` arm, still declaring its payload binders to satisfy the constructor's arity.

@@ -15,7 +15,7 @@ use {
 };
 
 /// The structural outcome of comparing two `Int`s, with the operands their shared part cancelled off. A stuck product on either of two symbolic sides is distributed first, by name, and a side against a literal is read as it stands, as `compare_nat` reads a pair.
-pub(super) fn compare_int(
+pub fn compare_int(
     reducer: &mut impl Reducer,
     left: Term,
     right: Term,
@@ -24,7 +24,7 @@ pub(super) fn compare_int(
 }
 
 /// [`compare_int`] inside a comparison that has asked about other pairs: what it is led to in turn is asked of `asked`.
-pub(super) fn compare_int_among(
+pub fn compare_int_among(
     reducer: &mut impl Reducer,
     asked: &mut Asked,
     left: Term,
@@ -71,7 +71,7 @@ pub(super) fn compare_int_among(
 }
 
 /// A reduced `Int`'s constant and the divisor of its symbolic coefficients, read through every layer of its form as `nat_modular` reads a `Nat`'s. Once per node.
-pub(super) fn int_modular(term: &Term) -> Modular {
+pub fn int_modular(term: &Term) -> Modular {
     int_modular_within(term, &mut HashMap::new())
 }
 
@@ -119,7 +119,7 @@ fn compare_preimages(
 }
 
 /// Reduce an `Int` comparison through [`compare_int`]: `read` projects the outcome to this op's boolean, or `None` when the operands do not decide it, in which case the neutral term is rebuilt from the cancelled operands.
-pub(super) fn reduce_int_compare(
+pub fn reduce_int_compare(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,

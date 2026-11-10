@@ -27,7 +27,7 @@ fn compare(
 }
 
 /// Reduce a `min` or a `max`: its operands reduced, two literals folded, and otherwise the tree's leaves with each one another answers for dropped and the least offset they share stood outside. A node nothing is dropped from or hoisted out of is rebuilt over its reduced operands as it was written.
-pub(super) fn reduce_extremum(
+pub fn reduce_extremum(
     reducer: &mut impl Reducer,
     extremum: Extremum,
     left: &Term,
@@ -130,7 +130,7 @@ fn folded(
 /// What the lattice forces of `left` against `right`, each a reduced term of `carrier`: a `min` is at most each of its leaves and at least what is at most all of them, and a `max` the mirror, each read over the verdicts the plain comparison reaches of the leaves (`curios-algebra`'s `Lattice::below` and `Lattice::above`). `Stuck` where neither side is a `min` or a `max` under a literal offset, or the leaves' verdicts force nothing.
 ///
 /// Each verdict asked is of a leaf, a strict subterm of the side it stands in, so the reading ends, and each is asked of `asked`, the comparison this one is part of.
-pub(super) fn lattice_verdict(
+pub fn lattice_verdict(
     reducer: &mut impl Reducer,
     asked: &mut Asked,
     carrier: Carrier,

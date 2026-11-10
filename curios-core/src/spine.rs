@@ -1,6 +1,6 @@
 //! The free-monoid peel shared by inversion (`invert`) and conversion (`convert`). An intrinsic whose values are a literal run of generators over a symbolic tail — a `Nat` count or sum, a `Bytes` byte run, a `List` element run — reduces two values by stripping what they carry in common; the residual tails go back to the caller's own recursion. `Bool`/`Int` are the degenerate, zero-generator spines. The point of the seam: a new instance is one `peel_intrinsic` arm and nothing else — the drivers, the verdict vocabulary (`curios-algebra`'s `Deduction`), and the termination argument are shared, and `Bytes`/`List` further share `curios-algebra`'s word strip itself (they differ only in their runs, and whether two runs whose heads differ are a clash).
 //!
-//! `Nat` is the one whose gate is a *shape* rather than a carrier, because it is the one commutative member: its values are also spelled as `NatAdd` spines, which no `Intrinsic::Nat` arm can match. See [`peel_nat_terms`].
+//! `Nat` is the one whose gate is a *shape* rather than a carrier, because it is the one commutative member: its values are also spelled as `NatAdd` spines, which no `Intrinsic::Nat` arm can match. See [`peel_nat_pair`].
 
 use {
     super::{
@@ -17,7 +17,7 @@ use {
 /// What a peel concludes, over the pair of residuals it hands back. Every peel here is at [`Deduction`]'s strength — a residual it hands back holds exactly when the pair does, a common prefix or summand peeled off or a side regrouped — except [`peel_monomial`]'s and [`peel_comparison`]'s, which are merely sufficient and are therefore [`Conclusion`]s only conversion reads. `Undecided` is a pair the peel reads and makes no progress on, which every reader treats as the refusing direction, so declining can only cost reductions; `None` beside it is a pair the peel does not read at all.
 pub type Verdict = Deduction<(Term, Term)>;
 
-/// Classify a reduced intrinsic pair: the entry inversion reads, and so only ever a [`Verdict`]. `None` means the pair is not a matched spine-intrinsic, so the caller keeps its own handling.
+/// Classify a reduced intrinsic pair: the entry inversion reads, and so only ever a `Verdict`. `None` means the pair is not a matched spine-intrinsic, so the caller keeps its own handling.
 pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     match (left, right) {
         // Finite scalars are the degenerate (zero-generator) spines: no tail.
@@ -73,7 +73,7 @@ fn stands_behind(first: Option<&Verdict>, answer: &Verdict) -> bool {
     }
 }
 
-/// The `Int` peel: ℤ under `+` is a group, so two reduced sums are one value exactly when their difference is zero, and `curios-algebra`'s cancellation moves that difference to the two sides by sign. Two constant residuals decide `Equal` or `Impossible`; a pair the cancellation changed carries on as `Equivalent` over its residuals, so `i + a ~ i + b` becomes `a ~ b` for the caller; and a pair it left untouched is `Undecided`, the stability [`peel_nat_terms`] rests on for the same reason. `None` when neither side is a literal, a sum spine or a product, so the caller keeps its own handling.
+/// The `Int` peel: ℤ under `+` is a group, so two reduced sums are one value exactly when their difference is zero, and `curios-algebra`'s cancellation moves that difference to the two sides by sign. Two constant residuals decide `Equal` or `Impossible`; a pair the cancellation changed carries on as `Equivalent` over its residuals, so `i + a ~ i + b` becomes `a ~ b` for the caller; and a pair it left untouched is `Undecided`, the stability [`peel_nat_pair`] rests on for the same reason. `None` when neither side is a literal, a sum spine or a product, so the caller keeps its own handling.
 pub fn peel_int_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     // Gated before lifting, as [`peel_nat_pair`] is, so a pair that is not an `Int` costs a shape test rather than two allocations.
     (int_shaped_intrinsic(left) || int_shaped_intrinsic(right)).then(|| {
@@ -316,18 +316,7 @@ fn bool_leaves(intrinsic: &Intrinsic) -> Option<(bool, Vec<Term>)> {
     Some((conjunction, leaves))
 }
 
-/// The `Nat` peel over two reduced intrinsics — [`peel_nat_terms`] at the shape [`peel_intrinsic`] and the two congruences hold their operands in.
-pub fn peel_nat_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
-    // Gated before lifting, so a pair that is not a `Nat` at all costs a shape test rather than two allocations.
-    (nat_shaped_intrinsic(left) || nat_shaped_intrinsic(right)).then(|| {
-        Nat::cancellation_deduced(
-            &Term::intrinsic(left.clone()),
-            &Term::intrinsic(right.clone()),
-        )
-    })
-}
-
-/// The `Nat` peel over two reduced terms. `None` means neither side is a shape the cancellation can read, so the caller keeps its own handling.
+/// The `Nat` peel over two reduced intrinsics, at the shape [`peel_intrinsic`] and the two congruences hold their operands in. `None` means neither side is a shape the cancellation can read, so the caller keeps its own handling.
 ///
 /// **The gate is a shape, not a carrier, and that is the whole of what floorless sums needed.** `Nat::decompose` reads a successor floor and `Nat::summands` reads a `NatAdd` spine; those two shapes are what the cancellation acts on, and a `Nat`-valued operation that is neither rides in as an opaque summand either way. Admitting a pair where *one* side is one of them is what reaches the mixed case — `(s + 1) + l` reduces to a floored `Succ(1, s + l)` while `s + l` stays a bare `NatAdd`, so a gate demanding both sides be `Intrinsic::Nat` sees neither the reassociation nor the shared floor and hands the pair to a shape congruence that refuses it.
 ///
@@ -342,23 +331,21 @@ pub fn peel_nat_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
 /// **A pass that changed nothing must decline, not carry.** Every `Equivalent` off a floored pair strips a shared floor, and that structural decrease is the termination argument; a floorless pair sharing no summand comes back from the cancellation *identically* — its no-progress arm returns the operands untouched on purpose — and handing that back as `Equivalent` re-enters the same congruence on the same terms and never settles. So a cancellation that took nothing off is `Undecided`, and the pair falls through to the caller's shape congruence, exactly as `Bytes`'s and `List`'s peels do.
 ///
 /// `Undecided` therefore stays unreachable for a pair of `Nat` *carriers*: two `Nat`s that are not both zero and not zero-against-floored are both `Succ`-headed, so they share a positive floor and always progress.
-pub fn peel_nat_terms(left: &Term, right: &Term) -> Option<Verdict> {
-    (nat_shaped(left) || nat_shaped(right)).then(|| Nat::cancellation_deduced(left, right))
-}
-
-/// Whether a reduced term is one of the two shapes [`peel_nat_terms`] can act on: a successor floor, or a sum spine.
-fn nat_shaped(term: &Term) -> bool {
-    match &**term {
-        Subterm::Intrinsic(intrinsic) => nat_shaped_intrinsic(intrinsic),
-        _ => false,
-    }
+pub fn peel_nat_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
+    // Gated before lifting, so a pair that is not a `Nat` at all costs a shape test rather than two allocations.
+    (nat_shaped_intrinsic(left) || nat_shaped_intrinsic(right)).then(|| {
+        Nat::cancellation_deduced(
+            &Term::intrinsic(left.clone()),
+            &Term::intrinsic(right.clone()),
+        )
+    })
 }
 
 fn nat_shaped_intrinsic(intrinsic: &Intrinsic) -> bool {
     matches!(intrinsic, Intrinsic::Nat(_) | Intrinsic::NatAdd(..))
 }
 
-/// [`int_shaped`](super::int_shaped) of an intrinsic not yet lifted to a term.
+/// Whether a reduced intrinsic is one of the shapes the `Int` cancellation reads: a literal, a sum spine, or a product.
 fn int_shaped_intrinsic(intrinsic: &Intrinsic) -> bool {
     matches!(
         intrinsic,
@@ -445,7 +432,7 @@ fn peel_words<S: Sequence>(words: &Words<S>, left: &Intrinsic, right: &Intrinsic
     }
 }
 
-/// The verdict for a pair whose leading segments the strip could not match. A side spelled as anything but its own segment list — a nesting, an append, a run split across operands, an empty operand — is handed back as that list, and the pair carries on as `Equivalent`: regrouping is the identity on values, so the residuals hold the same obligation as any other `Equivalent`'s, and what the caller then sees is one operand list against another rather than a nesting against its flattening, which its shape congruence refused on operand count before comparing a single chunk. A pair already spelled flat declines as `Undecided`, exactly as [`peel_nat_terms`] declines an unchanged pair — an `Equivalent` that changed nothing would re-enter the caller on the same terms and never settle. The round after a regroup is that flat pair, so the two arms are the whole termination argument.
+/// The verdict for a pair whose leading segments the strip could not match. A side spelled as anything but its own segment list — a nesting, an append, a run split across operands, an empty operand — is handed back as that list, and the pair carries on as `Equivalent`: regrouping is the identity on values, so the residuals hold the same obligation as any other `Equivalent`'s, and what the caller then sees is one operand list against another rather than a nesting against its flattening, which its shape congruence refused on operand count before comparing a single chunk. A pair already spelled flat declines as `Undecided`, exactly as [`peel_nat_pair`] declines an unchanged pair — an `Equivalent` that changed nothing would re-enter the caller on the same terms and never settle. The round after a regroup is that flat pair, so the two arms are the whole termination argument.
 fn regroup(left: &Intrinsic, flat_left: Term, right: &Intrinsic, flat_right: Term) -> Verdict {
     let flat = |written: &Intrinsic, spelled: &Term| match &**spelled {
         Subterm::Intrinsic(intrinsic) => intrinsic == written,
@@ -467,4 +454,4 @@ mod nat_tests;
 #[cfg(test)]
 mod position_tests;
 #[cfg(test)]
-mod test_support;
+pub mod test_support;

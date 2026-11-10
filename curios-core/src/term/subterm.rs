@@ -263,7 +263,7 @@ impl Subterm {
                     } => {
                         cases
                             .iter()
-                            .for_each(|(_, s)| s.body.body().collect_construction_names(names));
+                            .for_each(|(_, s)| s.body().body().collect_construction_names(names));
                         default
                             .iter()
                             .for_each(|d| d.collect_construction_names(names));
@@ -369,7 +369,7 @@ impl Subterm {
                             default,
                             stated,
                         } => {
-                            cases.iter().any(|(_, s)| pred(s.body.body()))
+                            cases.iter().any(|(_, s)| pred(s.body().body()))
                                 || default.as_ref().is_some_and(&mut *pred)
                                 || stated.as_ref().is_some_and(&mut *pred)
                         }
@@ -702,7 +702,7 @@ impl Bound for Subterm {
                         cases: cases
                             .iter()
                             .map(|(atom, arm)| {
-                                (atom.clone(), arm.with_body(visit.visit_scope(&arm.body)))
+                                (atom.clone(), arm.with_body(visit.visit_scope(arm.body())))
                             })
                             .collect(),
                         // The default binds nothing — it lives in the enclosing scope, like `head`, and so does the instance the match states.

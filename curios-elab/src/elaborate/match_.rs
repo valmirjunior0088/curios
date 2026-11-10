@@ -1475,7 +1475,7 @@ fn elaborate_induct_match(
             .iter()
             .map(|fill| match fill {
                 Some(member) => {
-                    context.fresh_for(scope.body.hint(*member), scope.body.written(*member))
+                    context.fresh_for(scope.body().hint(*member), scope.body().written(*member))
                 }
                 None => context.fresh(None),
             })

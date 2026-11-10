@@ -712,7 +712,7 @@ impl Writing {
 
         let body = context.with_frame(|context| {
             let labels = arm
-                .body
+                .body()
                 .hint_iter()
                 .map(|hint| context.fresh(hint))
                 .collect::<Vec<_>>();
@@ -722,11 +722,13 @@ impl Writing {
             let body = match refined {
                 true => {
                     self.layers.push(HashMap::new());
-                    let body = arm.body.map_body(|body| self.term(context, body));
+                    let body = arm.body().map_body(|body| self.term(context, body));
                     self.layers.pop();
                     body
                 }
-                false => arm.body.map_body(|body| self.unrefined_term(context, body)),
+                false => arm
+                    .body()
+                    .map_body(|body| self.unrefined_term(context, body)),
             };
             self.entered.truncate(before);
             body

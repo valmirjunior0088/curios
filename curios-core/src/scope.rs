@@ -281,7 +281,7 @@ impl Bound for () {
 }
 
 /// [`Bound::capture`] over `count` binders, `place` answering a name's index among them and `oldest` the oldest of them ([`oldest_local`]): for a caller that closes terms over the prefixes of one list, which looks a name's place up once for all of them where a capture would search each prefix at each occurrence.
-pub(crate) fn capture_placed<B: Bound>(
+pub fn capture_placed<B: Bound>(
     value: &B,
     count: usize,
     oldest: u64,
@@ -299,7 +299,7 @@ pub(crate) fn capture_placed<B: Bound>(
 }
 
 /// The oldest of `binders`, which a capture passes over a subterm holding only older locals by; past every local where there is none.
-pub(crate) fn oldest_local(binders: &[&Free]) -> u64 {
+pub fn oldest_local(binders: &[&Free]) -> u64 {
     binders
         .iter()
         .map(|binder| binder.index())
@@ -903,10 +903,10 @@ pub struct Visit<F> {
 
 /// What one node of [`Term::level_differences`]'s walk stood down: its children, its own levels, and its own sorts where the walk stands them down too, in traversal order.
 #[derive(Default)]
-pub(crate) struct MaskedLevels {
-    pub(crate) children: Vec<Term>,
-    pub(crate) levels: Vec<Level>,
-    pub(crate) qualities: Vec<Quality>,
+pub struct MaskedLevels {
+    pub children: Vec<Term>,
+    pub levels: Vec<Level>,
+    pub qualities: Vec<Quality>,
 }
 
 /// Whether a traversal remembers what it rebuilt, and under what key.
@@ -980,7 +980,7 @@ impl NodeMemo {
 /// Naming the combinations makes adding one a change the compiler checks: every `match` below stops compiling until the new case has been decided. Closed on purpose — a traversal mode is compiler-internal vocabulary, and all of its construction sites live in this crate.
 /// What a visit leaves as it is, read off a term's reach and newest local alone ([`Visit::pass_over`]).
 #[derive(Clone, Copy)]
-pub(crate) enum PassOver {
+pub enum PassOver {
     Nothing,
     /// A pruning visit's: whatever reaches no index past its depth.
     Within(usize),
@@ -992,7 +992,7 @@ pub(crate) enum PassOver {
 }
 
 impl PassOver {
-    pub(crate) fn passes(self, reach: usize, newest_local: Option<u64>) -> bool {
+    pub fn passes(self, reach: usize, newest_local: Option<u64>) -> bool {
         match self {
             PassOver::Nothing => false,
             PassOver::Within(depth) => reach <= depth,

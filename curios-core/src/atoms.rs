@@ -60,7 +60,7 @@ enum Key {
 
 /// The handles one operation has handed out, keyed by the carrier's identity, with the first term each stood for.
 #[derive(Default)]
-pub(crate) struct Atoms {
+pub struct Atoms {
     index: HashMap<Key, Atom>,
     terms: Vec<Term>,
     /// The reader every comparison this table keys is viewed by, so the atoms of two views are one reader's handles and the views compare.
@@ -69,7 +69,7 @@ pub(crate) struct Atoms {
 
 impl Atoms {
     /// The handle for `term` as an atom of `carrier`: one handle for the terms [`same_atom`] holds one, ranked as what they are known by, so the rank is as blind to instances as the identity is.
-    pub(crate) fn handle(&mut self, carrier: Carrier, term: &Term) -> Atom {
+    pub fn handle(&mut self, carrier: Carrier, term: &Term) -> Atom {
         if carrier == Carrier::Boolean
             && let Some((relation, form, negated)) = self.polarized(term)
         {
@@ -89,7 +89,7 @@ impl Atoms {
     }
 
     /// The handle for `term` as an atom of `Bool` read at a polarity, beside whether `term` is that handle's negation: a comparison and its negation, however each is spelled, are one handle at two polarities, and any other term is [`Atoms::handle`]'s, read positive.
-    pub(crate) fn signed(&mut self, term: &Term) -> (Atom, bool) {
+    pub fn signed(&mut self, term: &Term) -> (Atom, bool) {
         match self.polarized(term) {
             Some((relation, form, negated)) => {
                 let key = Key::View {
@@ -104,12 +104,12 @@ impl Atoms {
     }
 
     /// The handle for `term` as written: one handle per term, ranked as itself.
-    pub(crate) fn exact(&mut self, term: &Term) -> Atom {
+    pub fn exact(&mut self, term: &Term) -> Atom {
         self.keyed(Key::Term(term.clone()), term)
     }
 
     /// The first term `atom` was handed out for.
-    pub(crate) fn term(&self, atom: &Atom) -> &Term {
+    pub fn term(&self, atom: &Atom) -> &Term {
         &self.terms[atom.index() as usize]
     }
 

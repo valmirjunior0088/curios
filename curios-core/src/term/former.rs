@@ -104,7 +104,7 @@ pub fn former_eta(telescope: &Telescope<Term>) -> Option<FormerEta> {
 /// `subterm` as a term is built from it: itself, or, where it applies a type former's η-form ([`former_eta`]) over the whole of the lambda's parameter list, the node or the narrower η-form that application reduces to.
 ///
 /// **The one β-step taken where a term is made.** A former short of its application is spelled by its η-form, and an application of one is reached by elaboration, by a substitution putting an η-form at a head and by an imitation's solution alike. Taken here, where every term a traversal, a substitution or a reduction rebuilds is made (`Term::rebuilt`), a former applied in full is one node however its application was built, as GHC's `mkAppTy` keeps a saturated `TyConApp` visibly so through a substitution. A β-step changes no term's meaning, and it is taken of an η-form alone, whose application is the node it holds.
-pub(super) fn built(subterm: Subterm) -> Subterm {
+pub fn built(subterm: Subterm) -> Subterm {
     let Subterm::Apply(apply) = &subterm else {
         return subterm;
     };

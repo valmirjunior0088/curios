@@ -13,13 +13,13 @@ use {
 };
 
 /// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bytes`/`List` `get`/`slice` bounds.
-pub(super) fn as_index(term: &Term) -> Option<usize> {
+pub fn as_index(term: &Term) -> Option<usize> {
     term.as_nat()
         .and_then(|n| usize::try_from(&n.to_natural()?).ok())
 }
 
 /// Whether a `Bool` binary fold reads its right operand under a stuck left. `&&` and `||` leave it as written; `==`, `!=` and `xor` reduce it; see [`reduce_bool_binary`] for why each side of that line is where it is.
-pub(super) enum Right {
+pub enum Right {
     AsWritten,
     Reduced,
 }
@@ -27,7 +27,7 @@ pub(super) enum Right {
 /// Reduce the operands of a `Bool` binary intrinsic as far as a fold could use them, then either `fold` the two literals or `rebuild` the neutral term. `Bool` has no numeric carrier at the type level, so the fold reads the `true`/`false` constructors directly.
 ///
 /// **A connective's right operand is reduced only once the left is a literal.** A fold needs both, so a stuck left settles the verdict whatever the right holds, and reducing the right then is work the answer cannot use. It was reduced regardless, and that made weak-head reduction of a `&&`/`||` tree its *full* normalization: a web of predicate definitions each naming the one before it twice unfolded `2^n` times under any demand on its top, since a local-bearing term is remembered by nothing — the cliff `curios`' `scrutinee_refinement_measurements` records under `proved`. Stopping at the left leaves the right as written, which conversion compares lazily through its own reduction, so no equality decision moves, and an elimination reads the stuck connective by the decision diagram, which reads its graph once. `==`, `!=` and `xor` read both operands, as the `Nat` folds below do, because their laws read the right — `b == true` is `b`, `xor(b, xor(b, c))` is `c`, and `b == not b` is `false` only once `not b` is the `xor` it unfolds to — and no predicate web is built out of equalities the way one is out of conjunctions: `not` is `xor(_, true)`, whose right is a literal.
-pub(super) fn reduce_bool_binary(
+pub fn reduce_bool_binary(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
@@ -52,7 +52,7 @@ pub(super) fn reduce_bool_binary(
 }
 
 /// `Int/shl` and `Int/shr`: a signed value over a `Nat` count, the signed twins of [`reduce_nat_shl`](super::reduce_nat_shl) and its right shift. `cost` is what the fold may construct from the value's width and the count — [`shift_bound`](super::shift_bound) for a left shift, whose result grows by the count, and [`operand_bound`] for a right shift, whose result never does — and `fold` declines only a left shift by a count too large to be a shift count at all; the right shift is total, a count past the width answering the sign.
-pub(super) fn reduce_int_shift(
+pub fn reduce_int_shift(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
@@ -79,7 +79,7 @@ pub(super) fn reduce_int_shift(
 }
 
 /// `Int` counterpart of [`reduce_nat_binary`](super::reduce_nat_binary): fold both literal operands or rebuild the neutral term. The fold is partial for the same reason — the shifts decline a negative or oversized literal shift count (`None`); the total ops just wrap their result in `Some`.
-pub(super) fn reduce_int_binary(
+pub fn reduce_int_binary(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
@@ -107,7 +107,7 @@ pub(super) fn reduce_int_binary(
 /// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero leaves the division stuck — mathematically undefined, and past the domain its bound states, following `BytesGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see `Int`).
 ///
 /// Beside the two-literal fold stand the laws a truncated division shares with ℕ's, each reading no sign. The floor law and the Euclidean split are not among them: each is false at a dividend below zero, where truncation rounds the other way.
-pub(super) fn reduce_int_division(
+pub fn reduce_int_division(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
@@ -169,7 +169,7 @@ pub(super) fn reduce_int_division(
 /// The rule the opacity established survives verbatim: an intrinsic needs a fold here only if a type or a proof can depend on its value. `Flt` has moved to the other side of it, because the domains [`Intrinsic::signature`] states for `Flt/to_int` and `Flt/to_nat` are bounds decided by a comparison.
 ///
 /// One fact predates all of it, and `free_monoid::bytes_measure` is where: `Bytes/len(Flt/to_le_bytes(x))` is `8` for every `x`, symbolic `x` included. That is the arity of the operation's result rather than anything about the float, and it is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
-pub(super) fn reduce_flt_binary(
+pub fn reduce_flt_binary(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
@@ -191,7 +191,7 @@ pub(super) fn reduce_flt_binary(
 }
 
 /// [`reduce_flt_binary`]'s three-operand counterpart, for the fused multiply-add: every operand a literal folds, and anything symbolic rebuilds the neutral term.
-pub(super) fn reduce_flt_ternary(
+pub fn reduce_flt_ternary(
     reducer: &mut impl Reducer,
     (a, b, c): (&Term, &Term, &Term),
     fold: impl FnOnce(Floating, Floating, Floating) -> Intrinsic,
@@ -213,7 +213,7 @@ pub(super) fn reduce_flt_ternary(
 }
 
 /// `Int` counterpart of [`reduce_nat_unary`](super::reduce_nat_unary). The fold's `None` rebuilds the neutral term: with `Int` unbounded at the type level, a conversion of a value the target cannot represent simply stays stuck.
-pub(super) fn reduce_int_unary(
+pub fn reduce_int_unary(
     reducer: &mut impl Reducer,
     inner: &Term,
     fold: impl FnOnce(Integer) -> Option<Intrinsic>,
@@ -228,7 +228,7 @@ pub(super) fn reduce_int_unary(
 }
 
 /// [`reduce_flt_binary`]'s unary counterpart. The fold's `None` rebuilds the neutral term, which is how the two narrowings answer an operand outside the domain their bound states: a well-typed call carries a proof that excludes it, and a term that reaches here without one stays stuck rather than being given a value the model does not define.
-pub(super) fn reduce_flt_unary(
+pub fn reduce_flt_unary(
     reducer: &mut impl Reducer,
     inner: &Term,
     fold: impl FnOnce(Floating) -> Option<Intrinsic>,

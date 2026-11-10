@@ -25,7 +25,7 @@ type Monomial = (Integer, Vec<Term>);
 
 /// A summand's monomial as it was read: its factors, in canonical order, and the spine that already spells their product where the summand was written over one.
 #[derive(Debug, Clone)]
-pub(crate) struct IntOrigin {
+pub struct IntOrigin {
     factors: Vec<Term>,
     /// The left-nested product of `factors` as the summand held it. A rebuild hands it back in place of writing the product again, so a sum that keeps a monomial writes a node for it and none for its factors, as `Nat`'s keeps the factor it read.
     spine: Option<Term>,
@@ -59,7 +59,7 @@ pub fn int_is_minus_one(term: &Term) -> bool {
 }
 
 /// A reduced term read as its constant and its symbolic summands, the `IntAdd` spine flattened whatever its nesting and every literal summand folded into the constant.
-pub(crate) fn int_terms(term: &Term) -> (Integer, Vec<Term>) {
+pub fn int_terms(term: &Term) -> (Integer, Vec<Term>) {
     let mut constant = zero();
     let mut summands = Vec::new();
     let mut pending = vec![term.clone()];
@@ -79,7 +79,7 @@ pub(crate) fn int_terms(term: &Term) -> (Integer, Vec<Term>) {
 }
 
 /// A reduced summand read as a monomial: its coefficient and its symbolic factors, the `IntMul` spine flattened whatever its nesting and every literal factor multiplied into the coefficient, the factors then sorted into canonical order.
-pub(crate) fn int_monomial(summand: &Term) -> Monomial {
+pub fn int_monomial(summand: &Term) -> Monomial {
     let mut coefficient = one();
     let mut factors = Vec::new();
     let mut pending = vec![summand.clone()];
@@ -100,7 +100,7 @@ pub(crate) fn int_monomial(summand: &Term) -> Monomial {
 }
 
 /// `summands` as a linear combination: like monomials merged by adding their coefficients, in first-appearance order, each factor an atom under the carrier's identity (`crate::atoms`) and a monomial its factors in canonical order, and a monomial whose coefficient cancelled to zero dropped. The collection is `curios-algebra`'s; a merged monomial keeps its first appearance's factors.
-pub(crate) fn int_linear(summands: impl IntoIterator<Item = Term>) -> Vec<Monomial> {
+pub fn int_linear(summands: impl IntoIterator<Item = Term>) -> Vec<Monomial> {
     let summands: Vec<Term> = summands.into_iter().collect();
     let mut atoms = Atoms::default();
     int_monomials_of(int_combination(&mut atoms, zero(), &summands))
@@ -232,7 +232,7 @@ fn int_scaled_spine(coefficient: Integer, spine: Term) -> Term {
 }
 
 /// A combination and a constant written back into the normal form every reader here reads: summands folded left to right, the constant last and absent when zero, a combination with nothing in it the constant alone.
-pub(crate) fn int_from_linear(constant: Integer, combination: Vec<Monomial>) -> Term {
+pub fn int_from_linear(constant: Integer, combination: Vec<Monomial>) -> Term {
     let summands = combination
         .into_iter()
         .map(|(coefficient, factors)| int_scaled(coefficient, &factors))
@@ -517,7 +517,7 @@ fn int_monomials(term: &Term) -> Vec<Monomial> {
 }
 
 /// The product of two reduced terms, distributed in full: every monomial of one times every monomial of the other, each product's factors re-sorted, and the results merged. Asked for by [`int_product`] only where one side is a single monomial, and by [`int_normalize`] for the rest.
-pub(crate) fn int_multiply(left: &Term, right: &Term) -> Term {
+pub fn int_multiply(left: &Term, right: &Term) -> Term {
     let mut atoms = Atoms::default();
     let distributable = |atoms: &mut Atoms, term: &Term| {
         int_monomials(term)
@@ -546,7 +546,7 @@ pub(crate) fn int_multiply(left: &Term, right: &Term) -> Term {
 }
 
 /// A reduced term's footprint, counted before a fold writes it back, as `Nat::footprint` counts: its monomials with the constant one of them, their factors, and the bits of their coefficients.
-pub(crate) fn int_footprint(term: &Term) -> Footprint {
+pub fn int_footprint(term: &Term) -> Footprint {
     let monomials = int_monomials(term);
     Footprint {
         summands: monomials.len(),
@@ -559,7 +559,7 @@ pub(crate) fn int_footprint(term: &Term) -> Footprint {
 }
 
 /// Whether the fold distributes a product of two reduced terms: where either is a constant or a single monomial — the same line `NatMul` draws, and [`int_normalize`] is what crosses it on demand.
-pub(crate) fn int_distributes(left: &Term, right: &Term) -> bool {
+pub fn int_distributes(left: &Term, right: &Term) -> bool {
     int_single(left) || int_single(right)
 }
 
@@ -677,7 +677,7 @@ pub fn int_same(left: &Term, right: &Term) -> bool {
 }
 
 /// `left` against `right` read over one table of atoms, with what they share split off by sign.
-pub(crate) fn int_cancellation(left: &Term, right: &Term) -> Cancelled<Integer, IntOrigin> {
+pub fn int_cancellation(left: &Term, right: &Term) -> Cancelled<Integer, IntOrigin> {
     let mut atoms = Atoms::default();
     let (constant_left, summands_left) = int_terms(left);
     let (constant_right, summands_right) = int_terms(right);
@@ -687,7 +687,7 @@ pub(crate) fn int_cancellation(left: &Term, right: &Term) -> Cancelled<Integer, 
 }
 
 /// The terms a cancellation of `left` against `right` leaves: the two operands themselves where it took nothing off.
-pub(crate) fn int_rebuild_cancelled(
+pub fn int_rebuild_cancelled(
     cancelled: Cancelled<Integer, IntOrigin>,
     left: &Term,
     right: &Term,
@@ -702,7 +702,7 @@ pub(crate) fn int_rebuild_cancelled(
 }
 
 /// How many summands [`int_rebuild_cancelled`] writes back for `cancelled`: both residuals where anything was taken off, and none where the operands stand.
-pub(crate) fn int_residuals(cancelled: &Cancelled<Integer, IntOrigin>) -> usize {
+pub fn int_residuals(cancelled: &Cancelled<Integer, IntOrigin>) -> usize {
     match cancelled.progress {
         Progress::Nothing => 0,
         Progress::Constant | Progress::Summands => {
@@ -723,14 +723,6 @@ pub fn int_split_by_sign(left: &Term, right: &Term) -> (Term, Term) {
     (
         int_from_combination(split_left),
         int_from_combination(split_right),
-    )
-}
-
-/// Whether a reduced term is one of the shapes the cancellation reads: a literal, a sum spine, or a product.
-pub fn int_shaped(term: &Term) -> bool {
-    matches!(
-        &**term,
-        Subterm::Intrinsic(Intrinsic::Int(_) | Intrinsic::IntAdd(..) | Intrinsic::IntMul(..))
     )
 }
 

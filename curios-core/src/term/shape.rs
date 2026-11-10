@@ -480,8 +480,8 @@ impl MatchResult {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct InductArm {
-    pub body: Scope<Many>,
-    pub(crate) plicities: Vec<Plicity>,
+    body: Scope<Many>,
+    plicities: Vec<Plicity>,
 }
 
 impl InductArm {
@@ -489,6 +489,11 @@ impl InductArm {
     pub fn new(body: Scope<Many>, plicities: Vec<Plicity>) -> Self {
         assert_eq!(plicities.len(), body.arity());
         Self { body, plicities }
+    }
+
+    /// The arm body, closed over its payload binders.
+    pub fn body(&self) -> &Scope<Many> {
+        &self.body
     }
 
     /// The marks, one per payload binder by construction.

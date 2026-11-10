@@ -228,7 +228,7 @@ fn peel_front(bytes: &Term) -> Front {
 }
 
 /// Split the first byte off a reduced `Bytes` value, returning a length-1 head chunk and the residual tail. Where `peel_bytes` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructors `Bytes/get` and `Bytes/slice` walk an atom at a time, exposing the cons structure a symbolic `x[h, ..t]` builds (`concat(append(x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
-pub(crate) fn peel_first_atom(bytes: &Term) -> Option<(Term, Term)> {
+pub fn peel_first_atom(bytes: &Term) -> Option<(Term, Term)> {
     match peel_front(bytes) {
         Front::Cons { head, tail } => Some((head.into_chunk(), tail)),
         Front::Empty | Front::Opaque => None,
@@ -352,7 +352,7 @@ fn peel_front_list(list: &Term) -> ListFront {
 }
 
 /// Split the first element off a reduced `List` value, returning the head element and the residual tail — the element-typed twin of [`peel_first_atom`]. Lets `List/get` and `List/slice` peel a symbolic cons one element at a time, exactly as `Bytes/get`/`Bytes/slice` walk an atom at a time. `None` for the empty array or an opaque symbolic value, where no first element is statically exposed.
-pub(crate) fn peel_first_elem(list: &Term) -> Option<(Term, Term)> {
+pub fn peel_first_elem(list: &Term) -> Option<(Term, Term)> {
     match peel_front_list(list) {
         ListFront::Cons { head, tail } => Some((head, tail)),
         ListFront::Empty | ListFront::Opaque => None,
@@ -572,7 +572,7 @@ fn lengths(segments: &[(&Term, usize)]) -> Vec<usize> {
 /// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end.
 ///
 /// One operand a window spans: whole, or narrowed to the half-open range within it.
-pub(crate) enum Piece<'a> {
+pub enum Piece<'a> {
     Whole(&'a Term),
     Part(&'a Term, usize, usize),
 }
@@ -616,10 +616,10 @@ fn window(
 /// So the corpus fuses little, and what it does fuse is one to seven generators; the pathological case is unbounded. Any cap of eight or more leaves every normal form the rest of the corpus reaches untouched, and this one clears the observed maximum by nine times while stopping the accumulation within a handful of steps: the five tests that accumulate (`tests::reduction`'s two, `tests::numeric::bound_tests`' two and `tests::runtime`'s `accumulation_loops_are_linear_by_construction`) fuse no operand past 60, and `bytes_growing(800)` at the cap fuses seven times a walk. The last row is the whole defect in one line: operands of 10, 20, 30 … 7990, the accumulator recopied every step.
 ///
 /// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that would close by literal equality failing to close through the peel. It does not: `crate::words` flattens a concatenation into segments and `curios-algebra`'s `Word::push` merges adjacent runs, so a capped spelling and the literal it would have fused to decompose identically. The folds that read bytes rather than the spine — `Bytes/and`, `Bytes/or` and `Bytes/xor` — fuse a capped spelling's runs where they combine them (`reduce::intrinsic`'s `reduce_bytes_pointwise`), so they answer it as they answer the literal. `curios-core`'s `spine` tests state that per carrier, `curios`'s `tests::aggregates::monoid_tests::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
-pub(crate) const FUSION_CAP: usize = 64;
+pub const FUSION_CAP: usize = 64;
 
 /// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`Binary` for `Bytes`, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.
-pub(crate) trait Run {
+pub trait Run {
     fn is_empty(&self) -> bool;
 }
 
@@ -642,7 +642,7 @@ impl Run for Vec<Term> {
 /// **`merge` is fallible and the other two are not**, and the asymmetry is the price list's rather than this function's: fusing is the only branch that *constructs* anything, so it is the only one that has to charge before it does. Dropping an empty operand and rebuilding the survivors both hand back storage that already exists. That makes this function fallible for its caller, which is the shape the audit says to expect at every fusing seam rather than only at this one.
 ///
 /// Window fusion (adjacent `Bytes/slice`s of one base) is deliberately NOT done here: that is the word strip's job when *deciding equality* (`curios-algebra`'s `Word::push`); reduction only needs a normal form, and conversion closes any residual gap.
-pub(crate) fn normalize_concat<C: Run, E>(
+pub fn normalize_concat<C: Run, E>(
     mut operands: Vec<Term>,
     literal: impl Fn(&Term) -> Option<&C>,
     merge: impl FnOnce(Vec<&C>) -> Result<Subterm, E>,

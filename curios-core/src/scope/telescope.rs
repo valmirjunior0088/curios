@@ -498,7 +498,7 @@ impl<B: Bound> Telescope<B> {
 }
 
 /// `written`, the type of the field at `index` of a field telescope beneath `outer` binders, opened: each field before it at its projection off `value`, read as `field` reads its own, and each outer binder at `outer`, outermost first. A field type that names an earlier field names *that value's* earlier field rather than a loose binder, and the projection is asked of a field only where the type names it.
-pub(crate) fn open_field(
+pub fn open_field(
     written: &Term,
     index: usize,
     outer: &[Term],

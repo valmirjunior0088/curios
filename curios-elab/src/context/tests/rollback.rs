@@ -76,8 +76,10 @@ fn an_attempt_mints_above_what_its_own_declaration_lowered() {
         binders,
         ..Mints::default()
     };
-    let mut seeded = Minted::default();
-    seeded.entry = lowered(9);
+    let mut seeded = Minted {
+        entry: lowered(9),
+        ..Minted::default()
+    };
     seeded.declare(&Rc::new(lowered(2)), [a]);
     seeded.declare(&Rc::new(lowered(5)), [b]);
     context.seed(&Rc::new(seeded));

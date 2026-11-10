@@ -39,7 +39,7 @@ type Identity = (Kind, u64);
 
 /// What a node carries of its rank. See the module documentation.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Ranked {
+pub struct Ranked {
     /// The structure, every identity a placeholder: the tag the node's own identities and the smaller children's entries are joined under.
     structure: u64,
     /// The rank's key: the structure and the sum in one hash.
@@ -272,19 +272,19 @@ impl Ranked {
 
 /// The summary of a spine's entries, each placed at its rank, kept as the spine is built and rewritten: a spine is a sequence, so an entry's positions stand at its rank and an entry taken out takes out what it put in, and an identity leaves the map with the last entry holding it, counted as the spine's names are.
 #[derive(Clone, Debug, Default)]
-pub(super) struct SpineRanked {
+pub struct SpineRanked {
     ranked: Ranked,
     /// How many entries hold each identity.
     holding: Sorted<Identity, u32>,
 }
 
 impl SpineRanked {
-    pub(super) fn ranked(&self) -> &Ranked {
+    pub fn ranked(&self) -> &Ranked {
         &self.ranked
     }
 
     /// `entry`'s summary placed at `rank`, put in or taken out.
-    pub(super) fn changed(&mut self, rank: i64, entry: &Ranked, put_in: bool) {
+    pub fn changed(&mut self, rank: i64, entry: &Ranked, put_in: bool) {
         let share = mix(&[SPINE_STRUCTURE, rank as u64, entry.structure]);
         self.ranked.structure = match put_in {
             true => self.ranked.structure.wrapping_add(share),
