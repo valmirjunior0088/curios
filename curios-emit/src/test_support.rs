@@ -20,12 +20,12 @@ fn declared(name: &str, params: Vec<WireType>, returns: WireReturn) -> Arc<Forei
 }
 
 /// The row a program declares as `/name`, taking `params` and answering `results`.
-pub(super) fn row(name: &str, params: Vec<WireType>, results: WireResults) -> Arc<ForeignFunction> {
+pub fn row(name: &str, params: Vec<WireType>, results: WireResults) -> Arc<ForeignFunction> {
     declared(name, params, WireReturn::Answers(results))
 }
 
 /// A halt reading `args`, through a row that does not return, `/exit: (Byte) -> Never` — the terminal a fixture ends with when what it passes must stay live.
-pub(super) fn halt(args: Vec<curios_cps::Atom>) -> curios_cps::Node {
+pub fn halt(args: Vec<curios_cps::Atom>) -> curios_cps::Node {
     curios_cps::Node::Halt {
         function: declared("exit", vec![WireType::Byte], WireReturn::Never),
         args,
@@ -33,48 +33,48 @@ pub(super) fn halt(args: Vec<curios_cps::Atom>) -> curios_cps::Node {
 }
 
 /// A halt reading nothing of the program's own: its code is the literal zero.
-pub(super) fn halt_zero() -> curios_cps::Node {
+pub fn halt_zero() -> curios_cps::Node {
     halt(vec![nat(0)])
 }
 
 /// The emitted module rendered as WAT text — the public inspection surface (`Module`'s items are private; `Display` is how consumers read it back).
-pub(super) fn wat(module: &curios_cps::Module) -> String {
+pub fn wat(module: &curios_cps::Module) -> String {
     into_wasm(module).0.to_string()
 }
 
 #[track_caller]
-pub(super) fn assert_contains(wat: &str, needle: &str) {
+pub fn assert_contains(wat: &str, needle: &str) {
     assert!(wat.contains(needle), "expected wat to contain `{needle}`");
 }
 
 #[track_caller]
-pub(super) fn assert_absent(wat: &str, needle: &str) {
+pub fn assert_absent(wat: &str, needle: &str) {
     assert!(!wat.contains(needle), "expected wat to lack `{needle}`");
 }
 
-pub(super) fn count(wat: &str, needle: &str) -> usize {
+pub fn count(wat: &str, needle: &str) -> usize {
     wat.matches(needle).count()
 }
 
 /// The refusal calls a module makes besides its closing halt's: a fixture halts with the value it computed, whose narrowing to the wire can refuse whatever the operation under test did.
-pub(super) fn refusals_besides_the_exit(wat: &str) -> usize {
+pub fn refusals_besides_the_exit(wat: &str) -> usize {
     count(wat, "call $refuse/") - count(wat, "call $refuse/nat_wire")
 }
 
-pub(super) fn nat(value: u32) -> curios_cps::Atom {
+pub fn nat(value: u32) -> curios_cps::Atom {
     curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(value)))
 }
 
-pub(super) fn int(value: i32) -> curios_cps::Atom {
+pub fn int(value: i32) -> curios_cps::Atom {
     curios_cps::Atom::Literal(curios_cps::Literal::Int(Integer::from(value)))
 }
 
-pub(super) fn flt(value: f64) -> curios_cps::Atom {
+pub fn flt(value: f64) -> curios_cps::Atom {
     curios_cps::Atom::Literal(curios_cps::Literal::Flt(Floating::from(value)))
 }
 
 /// A nullary `main` that binds one intrinsic over `args` and exits with the result — compute one thing, exit with it. `into_wasm` does not fold, so the op lowers verbatim.
-pub(super) fn intrinsic_main(
+pub fn intrinsic_main(
     op: curios_cps::Intrinsic,
     args: Vec<curios_cps::Atom>,
 ) -> curios_cps::Module {
@@ -106,7 +106,7 @@ pub(super) fn intrinsic_main(
 // --- Aggregates / packed / cells -----------------------------------------
 
 /// Construct a tuple then project field 0 from it.
-pub(super) fn tuple_project() -> curios_cps::Module {
+pub fn tuple_project() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -139,7 +139,7 @@ pub(super) fn tuple_project() -> curios_cps::Module {
 }
 
 /// A list literal then its length.
-pub(super) fn list_len() -> curios_cps::Module {
+pub fn list_len() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -172,7 +172,7 @@ pub(super) fn list_len() -> curios_cps::Module {
 }
 
 /// A packed-bytes literal then its length.
-pub(super) fn bytes_len() -> curios_cps::Module {
+pub fn bytes_len() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -208,7 +208,7 @@ pub(super) fn bytes_len() -> curios_cps::Module {
 }
 
 /// Allocate a cell, fill and poll it, and exit with the value.
-pub(super) fn cell_roundtrip() -> curios_cps::Module {
+pub fn cell_roundtrip() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -269,7 +269,7 @@ pub(super) fn cell_roundtrip() -> curios_cps::Module {
     module
 }
 
-pub(super) fn channel_roundtrip() -> curios_cps::Module {
+pub fn channel_roundtrip() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -333,7 +333,7 @@ pub(super) fn channel_roundtrip() -> curios_cps::Module {
 // --- Foreign ABI ----------------------------------------------------------
 
 /// A host call whose signature has `results` results, resuming into a continuation that binds them all and the lane's token and exits with the first. Its operands are zeros, the lane's token an empty list.
-pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cps::Module {
+pub fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cps::Module {
     let params = function.signature().imported_params();
     let results = function.signature().imported_results().len();
 
@@ -391,11 +391,11 @@ pub(super) fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cps::Mod
 // --- Higher-order / closure ABI + module wiring ---------------------------
 
 /// `main` builds a closure of `target` and passes it to `apply`, which invokes it indirectly — an unknown callee that must go through the closure ABI.
-pub(super) fn indirect_apply() -> curios_cps::Module {
+pub fn indirect_apply() -> curios_cps::Module {
     indirect_application(false)
 }
 
-pub(super) fn indirect_apply_discarding_result() -> curios_cps::Module {
+pub fn indirect_apply_discarding_result() -> curios_cps::Module {
     indirect_application(true)
 }
 
@@ -489,12 +489,12 @@ fn indirect_application(discard_result: bool) -> curios_cps::Module {
 
 // --- Rope operations ------------------------------------------------------
 
-pub(super) fn bytes_lit(bytes: Vec<u8>) -> curios_cps::Atom {
+pub fn bytes_lit(bytes: Vec<u8>) -> curios_cps::Atom {
     curios_cps::Atom::Literal(curios_cps::Literal::Bytes(Binary::from_bytes(bytes)))
 }
 
 /// A list literal read at an index — the list-rope read helper.
-pub(super) fn list_read() -> curios_cps::Module {
+pub fn list_read() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -527,7 +527,7 @@ pub(super) fn list_read() -> curios_cps::Module {
 }
 
 /// A list literal settled and its length read — the settle's build arm, which seals a leaf over the run's exact payload.
-pub(super) fn list_settle() -> curios_cps::Module {
+pub fn list_settle() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -567,7 +567,7 @@ pub(super) fn list_settle() -> curios_cps::Module {
 }
 
 /// Map a closure over a list literal — the `list/map` intrinsic, which threads the mapping function through as a closure and services the fill via the shared helper.
-pub(super) fn list_map() -> curios_cps::Module {
+pub fn list_map() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let mapper = module.reserve_function();
@@ -631,7 +631,7 @@ pub(super) fn list_map() -> curios_cps::Module {
 }
 
 /// A long left-leaning chain of appends, each over the previous result. Lowering must return on the default test-thread stack, so the only assertion that matters is that `into_wasm` returns at all.
-pub(super) fn deep_bytes_chain(depth: usize) -> curios_cps::Module {
+pub fn deep_bytes_chain(depth: usize) -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -669,7 +669,7 @@ pub(super) fn deep_bytes_chain(depth: usize) -> curios_cps::Module {
 // --- Control-flow structuring (loops vs. localized dispatch) ---------------
 
 /// A single self-recursive continuation: one entry, so a reducible natural loop.
-pub(super) fn reducible_loop() -> curios_cps::Module {
+pub fn reducible_loop() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -710,7 +710,7 @@ pub(super) fn reducible_loop() -> curios_cps::Module {
 }
 
 /// Two continuations that jump to each other, entered from *both* arms of a switch — a two-entry (irreducible) component that only a localized dispatcher can structure.
-pub(super) fn irreducible_pair() -> curios_cps::Module {
+pub fn irreducible_pair() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -781,7 +781,7 @@ pub(super) fn irreducible_pair() -> curios_cps::Module {
 }
 
 /// Two bindings of the same constant tuple, the second projected — the hoister must intern both to one global.
-pub(super) fn constant_tuple_pair() -> curios_cps::Module {
+pub fn constant_tuple_pair() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -820,7 +820,7 @@ pub(super) fn constant_tuple_pair() -> curios_cps::Module {
 }
 
 /// A tuple over a computed element — not constant, so it must stay an inline allocation.
-pub(super) fn runtime_tuple() -> curios_cps::Module {
+pub fn runtime_tuple() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -860,7 +860,7 @@ pub(super) fn runtime_tuple() -> curios_cps::Module {
 }
 
 /// A tuple over a scalar past the i31 — a boxed magnitude, whose limbs no constant expression can read.
-pub(super) fn big_tuple() -> curios_cps::Module {
+pub fn big_tuple() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -894,6 +894,6 @@ pub(super) fn big_tuple() -> curios_cps::Module {
 
 /// A `Nat` or `Int` operation grows rather than refusing: the module reaches no refusal but its exit's.
 #[track_caller]
-pub(super) fn assert_refuses_nothing(wat: &str) {
+pub fn assert_refuses_nothing(wat: &str) {
     assert_eq!(refusals_besides_the_exit(wat), 0);
 }

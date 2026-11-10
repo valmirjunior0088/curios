@@ -11,18 +11,18 @@ use {
 
 /// The control-flow graph of one region over its sibling blocks plus a virtual entry node. Blocks are numbered by their position in `region.blocks`; the entry node — the region's prologue and tail transfer — is numbered one past the last block. The entry has no predecessors and is the root every block is reached from.
 #[derive(Debug)]
-pub(crate) struct RegionCfg {
+pub struct RegionCfg {
     blocks: usize,
     succ: Vec<Vec<usize>>,
     pred: Vec<Vec<usize>>,
 }
 
 impl RegionCfg {
-    pub(crate) fn new(region: &EmissionBody) -> Self {
-        let blocks = region.blocks.len();
+    pub fn new(region: &EmissionBody) -> Self {
+        let blocks = region.blocks().len();
         let entry = blocks;
         let index = region
-            .blocks
+            .blocks()
             .iter()
             .enumerate()
             .map(|(i, (name, _))| (name, i))
@@ -33,7 +33,7 @@ impl RegionCfg {
 
         // The entry node branches wherever the region's own tail transfers — never recursing into the blocks, which are separate nodes. A match may name one block from several arms; keep one edge, ordered.
         let mut entry_targets = region
-            .tail
+            .tail()
             .targets()
             .into_iter()
             .filter_map(|name| index.get(name).copied())
@@ -43,7 +43,7 @@ impl RegionCfg {
         succ[entry] = entry_targets;
 
         // A block branches to a sibling whenever the block's region — through any of its own nested blocks — transfers there, which the region recorded as it was built ([`EmissionBody::escapes`]); mapping through the sibling index and sorting keeps each successor list sorted and duplicate-free (the set already deduplicates).
-        for (source, (_, block)) in region.blocks.iter().enumerate() {
+        for (source, (_, block)) in region.blocks().iter().enumerate() {
             let mut targets = block
                 .region
                 .escapes()
@@ -94,7 +94,7 @@ const NONE: usize = usize::MAX;
 
 /// The structured layout of a region's blocks: an ordered nesting of `loop`, forward `block`, and localized-dispatcher scopes the emitter walks to place each block. Items at one level are already in a topological order of the condensation, so a forward branch to a later item's entry is a forward `br` out of the enclosing scopes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum LayoutItem {
+pub enum LayoutItem {
     /// A block reached only by forward edges at this level: emit its body, enter it by a forward branch to its own label.
     Block(usize),
     /// A reducible loop with a single entry `header`. `body` structures the component's interior with the back edges to `header` removed, so the header leads and any nested loop nests inside. Back edges become a branch to the loop label; forward entry falls into the loop.
@@ -107,7 +107,7 @@ pub(crate) enum LayoutItem {
 }
 
 /// Structure a region's blocks into a [`LayoutItem`] nesting driven entirely by the control-flow analysis: strongly connected components give the loop hierarchy, single-entry components become `loop`s, and only genuinely irreducible components fall back to a localized dispatcher.
-pub(crate) fn region_layout(region: &EmissionBody) -> Vec<LayoutItem> {
+pub fn region_layout(region: &EmissionBody) -> Vec<LayoutItem> {
     let cfg = RegionCfg::new(region);
     let all = (0..cfg.block_count()).collect();
     structure_set(&cfg, &all, &BTreeSet::new())

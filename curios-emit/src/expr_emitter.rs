@@ -13,14 +13,14 @@ use {
 };
 
 #[derive(Debug)]
-pub(crate) struct ExprEmitter<'a, 'b> {
+pub struct ExprEmitter<'a, 'b> {
     context: Context<'a, 'b>,
     module: &'b mut curios_wasm::Module,
     expr: &'b mut curios_wasm::Expr,
 }
 
 impl<'a, 'b> ExprEmitter<'a, 'b> {
-    pub(crate) fn new(
+    pub fn new(
         context: Context<'a, 'b>,
         module: &'b mut curios_wasm::Module,
         expr: &'b mut curios_wasm::Expr,
@@ -61,7 +61,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         self.expr.extend(instrs);
     }
 
-    pub(crate) fn emit_data(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
+    pub fn emit_data(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
             EmissionData::Nat(value) => match curios_cps::nat_is_small(value) {
                 true => self.emit_instrs([
@@ -316,7 +316,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         region: &'a EmissionBody,
     ) {
         let aggregates: HashSet<_> = region
-            .values
+            .values()
             .iter()
             .filter(|(_, value)| {
                 matches!(
@@ -330,13 +330,13 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .collect();
 
         // A region with no join blocks is straight-line code ending in its tail; there is nothing to structure.
-        if region.blocks.is_empty() {
+        if region.blocks().is_empty() {
             self.context.enter_frame(Frame {
                 instrs: code,
                 ..Frame::new(params, aggregates, vec![])
             });
-            self.emit_let_values(&region.values);
-            let tail = self.context.tail_instrs(&region.tail);
+            self.emit_let_values(region.values());
+            let tail = self.context.tail_instrs(region.tail());
             self.emit_instrs(tail);
             return;
         }
@@ -352,10 +352,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             instrs: code,
             ..Frame::new(params, aggregates, registrations)
         });
-        self.emit_let_values(&region.values);
+        self.emit_let_values(region.values());
 
         // The tail is the innermost code: every block wraps it, so the tail can branch forward to any of them.
-        let entry = self.context.tail_instrs(&region.tail);
+        let entry = self.context.tail_instrs(region.tail());
         let code = mem::take(&mut self.region_frame().instrs);
         let code = self.fold_items(code, entry, &layout, region, &block_params, &dispatch);
         let frame = self.region_frame();
@@ -379,7 +379,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         region: &'a EmissionBody,
     ) -> Vec<Vec<(&'a EmissionValueName, LocalData)>> {
         region
-            .blocks
+            .blocks()
             .iter()
             .map(|(_, block)| {
                 block
@@ -410,7 +410,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     let index_local = self
                         .context
                         .push_local("", curios_wasm::ValType::Num(curios_wasm::NumType::I32));
-                    let anchor = &region.blocks[members[0]].0;
+                    let anchor = &region.blocks()[members[0]].0;
                     let enter_label =
                         curios_wasm::LabelName::from(format!("$dispatch/enter/{anchor}"));
                     let dispatch_label =
@@ -471,11 +471,11 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         match item {
             LayoutItem::Block(block) => {
                 let params = block_params[*block].iter().cloned().collect();
-                self.emit_region(code, params, &region.blocks[*block].1.region);
+                self.emit_region(code, params, &region.blocks()[*block].1.region);
                 self.context.leave_frame()
             }
             LayoutItem::Loop { header, body } => {
-                let anchor = &region.blocks[*header].0;
+                let anchor = &region.blocks()[*header].0;
                 let loop_label = curios_wasm::LabelName::from(format!("$loop/{anchor}"));
                 let (head, rest) = body
                     .split_first()
@@ -487,14 +487,18 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
                 // The loop frame shadows the header's forward-entry registration with the loop label, so back edges resolve to `br $loop`, and registers the interior's own forward-entry blocks.
                 let mut registrations = vec![(
-                    &region.blocks[*header].0,
+                    &region.blocks()[*header].0,
                     BlockData::new_loop(loop_label.clone(), block_params[*header].clone()),
                 )];
                 registrations.extend(scope_registrations(rest, region, block_params, dispatch));
                 self.context.enter_frame(Frame::structural(registrations));
 
                 let header_params = block_params[*header].iter().cloned().collect();
-                self.emit_region(Vec::new(), header_params, &region.blocks[*header].1.region);
+                self.emit_region(
+                    Vec::new(),
+                    header_params,
+                    &region.blocks()[*header].1.region,
+                );
                 let header_body = self.context.leave_frame();
                 let interior = self.fold_items(
                     Vec::new(),
@@ -539,7 +543,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         let registrations = members
             .iter()
             .map(|member| {
-                let name = &region.blocks[*member].0;
+                let name = &region.blocks()[*member].0;
                 (
                     name,
                     BlockData::new(
@@ -558,8 +562,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .iter()
             .map(|member| {
                 let params = block_params[*member].iter().cloned().collect();
-                self.emit_region(Vec::new(), params, &region.blocks[*member].1.region);
-                let label = curios_wasm::LabelName::from(format!("${}", region.blocks[*member].0));
+                self.emit_region(Vec::new(), params, &region.blocks()[*member].1.region);
+                let label =
+                    curios_wasm::LabelName::from(format!("${}", region.blocks()[*member].0));
                 (label, self.context.leave_frame())
             })
             .collect::<Vec<_>>();
@@ -603,7 +608,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         ]
     }
 
-    pub(crate) fn emit_root_region(&mut self, region: &'a EmissionBody) {
+    pub fn emit_root_region(&mut self, region: &'a EmissionBody) {
         self.emit_region(Vec::new(), self.context.params(), region);
         self.leave_last_frame();
     }
@@ -628,7 +633,7 @@ fn scope_registrations<'a>(
     for item in items {
         match item {
             LayoutItem::Block(block) | LayoutItem::Loop { header: block, .. } => {
-                let name = &region.blocks[*block].0;
+                let name = &region.blocks()[*block].0;
                 registrations.push((
                     name,
                     BlockData::new_direct(name, block_params[*block].clone()),
@@ -637,7 +642,7 @@ fn scope_registrations<'a>(
             LayoutItem::Dispatch { members } => {
                 let plan = &dispatch[&members[0]];
                 for member in members {
-                    let name = &region.blocks[*member].0;
+                    let name = &region.blocks()[*member].0;
                     registrations.push((
                         name,
                         BlockData::new_dispatch_enter(
@@ -663,7 +668,7 @@ fn item_enter_label(
 ) -> curios_wasm::LabelName {
     match item {
         LayoutItem::Block(block) | LayoutItem::Loop { header: block, .. } => {
-            curios_wasm::LabelName::from(format!("${}", region.blocks[*block].0))
+            curios_wasm::LabelName::from(format!("${}", region.blocks()[*block].0))
         }
         LayoutItem::Dispatch { members } => dispatch[&members[0]].enter_label.clone(),
     }

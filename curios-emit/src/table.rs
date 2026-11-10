@@ -14,34 +14,31 @@ use {
 };
 
 #[derive(Debug, Clone)]
-pub(crate) struct FieldData {
+pub struct FieldData {
     type_name: curios_wasm::TypeName,
     field_name: curios_wasm::FieldName,
 }
 
 impl FieldData {
-    pub(crate) fn new(
-        type_name: curios_wasm::TypeName,
-        field_name: curios_wasm::FieldName,
-    ) -> Self {
+    pub fn new(type_name: curios_wasm::TypeName, field_name: curios_wasm::FieldName) -> Self {
         Self {
             type_name,
             field_name,
         }
     }
 
-    pub(crate) fn type_name(&self) -> curios_wasm::TypeName {
+    pub fn type_name(&self) -> curios_wasm::TypeName {
         self.type_name.clone()
     }
 
-    pub(crate) fn field_name(&self) -> curios_wasm::FieldName {
+    pub fn field_name(&self) -> curios_wasm::FieldName {
         self.field_name.clone()
     }
 }
 
 /// The name bundle for one internal rope carrier (`$rope/bytes` or `$rope/list`): the base struct every helper takes, its `leaf`/`node`/`view` subtypes, the block type a reference enters the base through, the flat payload array, the room record both carriers share, and every field name — one handle to thread through the op emitters so packed `Bytes` and `List` share their lowering code.
 #[derive(Debug, Clone)]
-pub(crate) struct RopeData {
+pub struct RopeData {
     pub base: curios_wasm::TypeName,
     /// `[anyref] -> [(ref $base)]`, the type of the block `Table::enter` builds.
     pub enter: curios_wasm::TypeName,
@@ -66,7 +63,7 @@ pub(crate) struct RopeData {
 
 /// The bounded channel's storage names. The payload array fixes capacity; mutable head, count, and closed fields describe its live window.
 #[derive(Debug, Clone)]
-pub(crate) struct ChannelData {
+pub struct ChannelData {
     pub channel: curios_wasm::TypeName,
     pub payload: curios_wasm::TypeName,
     pub payload_field: curios_wasm::FieldName,
@@ -77,7 +74,7 @@ pub(crate) struct ChannelData {
 
 /// The name bundle for the boxed form a `Nat` or `Int` outside the i31 takes: the `$big` struct, the `$words` array holding its magnitude, and the struct's two fields — one handle for the big-number helpers and the literal materialization to share.
 #[derive(Debug, Clone)]
-pub(crate) struct BigData {
+pub struct BigData {
     pub big: curios_wasm::TypeName,
     pub words: curios_wasm::TypeName,
     pub sign_field: curios_wasm::FieldName,
@@ -85,7 +82,7 @@ pub(crate) struct BigData {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ClsrData<'a> {
+pub struct ClsrData<'a> {
     /// This closure's slot in its arity's dispatch table — the value its environment's special field holds. 1-based: slot 0 stays null, so a zeroed code field dispatches into the null entry and traps rather than into a body.
     index: i32,
     func_name: curios_wasm::FuncName,
@@ -96,11 +93,7 @@ pub(crate) struct ClsrData<'a> {
 }
 
 impl<'a> ClsrData<'a> {
-    pub(crate) fn new(
-        clsr_name: &'a EmissionClosureName,
-        clsr: &'a EmissionClosure,
-        index: i32,
-    ) -> Self {
+    pub fn new(clsr_name: &'a EmissionClosureName, clsr: &'a EmissionClosure, index: i32) -> Self {
         Self {
             index,
             func_name: curios_wasm::FuncName::from(format!("clsr/{}", clsr_name)),
@@ -129,28 +122,28 @@ impl<'a> ClsrData<'a> {
         }
     }
 
-    pub(crate) fn index(&self) -> i32 {
+    pub fn index(&self) -> i32 {
         self.index
     }
 
-    pub(crate) fn func_name(&self) -> curios_wasm::FuncName {
+    pub fn func_name(&self) -> curios_wasm::FuncName {
         self.func_name.clone()
     }
 
-    pub(crate) fn envr_type(&self) -> curios_wasm::TypeName {
+    pub fn envr_type(&self) -> curios_wasm::TypeName {
         self.envr_type.clone()
     }
 
-    pub(crate) fn fields(&self) -> impl Iterator<Item = curios_wasm::FieldName> {
+    pub fn fields(&self) -> impl Iterator<Item = curios_wasm::FieldName> {
         self.fields.iter().map(|(_, field_name)| field_name.clone())
     }
 
     /// The value each field holds, in environment order: the captured value's own name, which the representation decided a carrier for.
-    pub(crate) fn field_values(&self) -> impl Iterator<Item = &'a EmissionValueName> + '_ {
+    pub fn field_values(&self) -> impl Iterator<Item = &'a EmissionValueName> + '_ {
         self.fields.iter().map(|(value_name, _)| *value_name)
     }
 
-    pub(crate) fn find_field(&self, value_name: &EmissionValueName) -> Option<FieldData> {
+    pub fn find_field(&self, value_name: &EmissionValueName) -> Option<FieldData> {
         self.fields
             .iter()
             .find_map(|(field_name, mapped_field_name)| {
@@ -160,29 +153,26 @@ impl<'a> ClsrData<'a> {
             .map(|field_name| FieldData::new(self.envr_type(), field_name))
     }
 
-    pub(crate) fn params(&self) -> HashMap<&'a EmissionValueName, curios_wasm::LocalName> {
+    pub fn params(&self) -> HashMap<&'a EmissionValueName, curios_wasm::LocalName> {
         self.params.clone()
     }
 
-    pub(crate) fn find_param(
-        &self,
-        value_name: &EmissionValueName,
-    ) -> Option<curios_wasm::LocalName> {
+    pub fn find_param(&self, value_name: &EmissionValueName) -> Option<curios_wasm::LocalName> {
         self.params.get(value_name).cloned()
     }
 
-    pub(crate) fn arity(&self) -> usize {
+    pub fn arity(&self) -> usize {
         self.params.len()
     }
 
-    pub(crate) fn is_resume(&self, block_name: &EmissionBlockName) -> bool {
+    pub fn is_resume(&self, block_name: &EmissionBlockName) -> bool {
         self.resume == block_name
     }
 }
 
 /// What one position of a function's type holds: a reference, or a register at its carrier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Position {
+pub enum Position {
     Reference,
     Word,
     Length,
@@ -193,7 +183,7 @@ pub(crate) enum Position {
 
 impl Position {
     /// The position a value held at `carrier` takes — a register's, or `None` for a reference.
-    pub(crate) fn of(carrier: Option<curios_cps::Repr>) -> Self {
+    pub fn of(carrier: Option<curios_cps::Repr>) -> Self {
         match carrier {
             None => Self::Reference,
             Some(curios_cps::Repr::Nat) => Self::Word,
@@ -204,7 +194,7 @@ impl Position {
     }
 
     /// The register carrier this position holds, or `None` for a reference.
-    pub(crate) fn carrier(self) -> Option<curios_cps::Repr> {
+    pub fn carrier(self) -> Option<curios_cps::Repr> {
         match self {
             Self::Reference | Self::Closure(_) => None,
             Self::Word => Some(curios_cps::Repr::Nat),
@@ -214,7 +204,7 @@ impl Position {
     }
 
     /// The wasm type a value in this position is declared at. A reference admits null, as every reference position a value crosses does.
-    pub(crate) fn val_type(self, table: &Table) -> curios_wasm::ValType {
+    pub fn val_type(self, table: &Table) -> curios_wasm::ValType {
         match self {
             Self::Reference => Table::top_type(true),
             Self::Word | Self::Length => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -224,7 +214,7 @@ impl Position {
     }
 
     /// How a value is loaded to cross into this position.
-    pub(crate) fn load_as(self, table: &Table) -> LoadAs {
+    pub fn load_as(self, table: &Table) -> LoadAs {
         match self {
             Self::Reference => LoadAs::Null,
             Self::Word | Self::Length | Self::Float => {
@@ -247,9 +237,9 @@ impl Position {
 
 /// A function's type: what each parameter and each result is held at.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Signature {
-    pub(crate) params: Vec<Position>,
-    pub(crate) results: Vec<Position>,
+pub struct Signature {
+    pub params: Vec<Position>,
+    pub results: Vec<Position>,
 }
 
 impl Signature {
@@ -299,7 +289,7 @@ impl Signature {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct FuncData<'a> {
+pub struct FuncData<'a> {
     func_name: curios_wasm::FuncName,
     params: HashMap<&'a EmissionValueName, curios_wasm::LocalName>,
     signature: Signature,
@@ -307,7 +297,7 @@ pub(crate) struct FuncData<'a> {
 }
 
 impl<'a> FuncData<'a> {
-    pub(crate) fn new(
+    pub fn new(
         func_name: &'a EmissionFunctionName,
         func: &'a EmissionFunction,
         raw: &HashMap<EmissionValueName, curios_cps::Repr>,
@@ -331,27 +321,24 @@ impl<'a> FuncData<'a> {
         }
     }
 
-    pub(crate) fn func_name(&self) -> curios_wasm::FuncName {
+    pub fn func_name(&self) -> curios_wasm::FuncName {
         self.func_name.clone()
     }
 
     /// What each parameter and each result of this function is held at.
-    pub(crate) fn signature(&self) -> &Signature {
+    pub fn signature(&self) -> &Signature {
         &self.signature
     }
 
-    pub(crate) fn params(&self) -> HashMap<&'a EmissionValueName, curios_wasm::LocalName> {
+    pub fn params(&self) -> HashMap<&'a EmissionValueName, curios_wasm::LocalName> {
         self.params.clone()
     }
 
-    pub(crate) fn find_param(
-        &self,
-        value_name: &EmissionValueName,
-    ) -> Option<curios_wasm::LocalName> {
+    pub fn find_param(&self, value_name: &EmissionValueName) -> Option<curios_wasm::LocalName> {
         self.params.get(value_name).cloned()
     }
 
-    pub(crate) fn is_resume(&self, block_name: &EmissionBlockName) -> bool {
+    pub fn is_resume(&self, block_name: &EmissionBlockName) -> bool {
         self.resume == block_name
     }
 }
@@ -366,18 +353,18 @@ fn built_tuple_arity(data: &EmissionData) -> Option<usize> {
 
 /// Note into `arities` the arity of every tuple `region` and the blocks nested in it build.
 fn note_built_tuple_arities(region: &EmissionBody, arities: &mut BTreeSet<usize>) {
-    for (_, value) in &region.values {
+    for (_, value) in region.values() {
         if let EmissionValue::Pure(data) = value {
             arities.extend(built_tuple_arity(data));
         }
     }
-    for (_, block) in &region.blocks {
+    for (_, block) in region.blocks() {
         note_built_tuple_arities(&block.region, arities);
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct Table<'a> {
+pub struct Table<'a> {
     special_field: curios_wasm::FieldName,
     special_local: curios_wasm::LocalName,
     special_label: curios_wasm::LabelName,
@@ -468,7 +455,7 @@ pub(crate) struct Table<'a> {
 }
 
 impl<'a> Table<'a> {
-    pub(crate) fn new(
+    pub fn new(
         module: &'a EmissionModule,
         raw: &'a HashMap<EmissionValueName, curios_cps::Repr>,
         closures: &'a HashMap<EmissionValueName, usize>,
@@ -675,46 +662,46 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub(crate) fn special_field(&self) -> curios_wasm::FieldName {
+    pub fn special_field(&self) -> curios_wasm::FieldName {
         self.special_field.clone()
     }
 
-    pub(crate) fn special_local(&self) -> curios_wasm::LocalName {
+    pub fn special_local(&self) -> curios_wasm::LocalName {
         self.special_local.clone()
     }
 
-    pub(crate) fn special_label(&self) -> curios_wasm::LabelName {
+    pub fn special_label(&self) -> curios_wasm::LabelName {
         self.special_label.clone()
     }
 
     /// The dispatch table holding every closure body of `arity`, indexed by [`ClsrData::index`]. Typed `(ref null $clsr/{arity})` rather than `funcref`, so a `call_indirect` expecting that type is statically known to match and the engine emits no runtime signature check at all.
-    pub(crate) fn clsr_table(&self, arity: usize) -> curios_wasm::TableName {
+    pub fn clsr_table(&self, arity: usize) -> curios_wasm::TableName {
         self.clsr_tables
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks closure table for arity `{}`", arity))
             .clone()
     }
 
-    pub(crate) fn top_type(is_nullable: bool) -> curios_wasm::ValType {
+    pub fn top_type(is_nullable: bool) -> curios_wasm::ValType {
         curios_wasm::ValType::Ref(curios_wasm::RefType {
             is_nullable,
             heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Any),
         })
     }
 
-    pub(crate) fn int_type(is_nullable: bool) -> curios_wasm::RefType {
+    pub fn int_type(is_nullable: bool) -> curios_wasm::RefType {
         curios_wasm::RefType {
             is_nullable,
             heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::I31),
         }
     }
 
-    pub(crate) fn flt_type(&self) -> curios_wasm::TypeName {
+    pub fn flt_type(&self) -> curios_wasm::TypeName {
         self.flt_type.clone()
     }
 
     /// The boxed form's name bundle.
-    pub(crate) fn big(&self) -> BigData {
+    pub fn big(&self) -> BigData {
         BigData {
             big: self.big_type.clone(),
             words: self.words_type.clone(),
@@ -724,35 +711,35 @@ impl<'a> Table<'a> {
     }
 
     /// The big-number helper `helper`, marked for emission by this first use — from the emitted code or from another helper's body, which is why the roster is emitted callers first.
-    pub(crate) fn big_func(&self, helper: BigHelper) -> curios_wasm::FuncName {
+    pub fn big_func(&self, helper: BigHelper) -> curios_wasm::FuncName {
         self.big[helper.slot()]
             .get_or_init(|| helper.func_name())
             .clone()
     }
 
-    pub(crate) fn big_used(&self, helper: BigHelper) -> bool {
+    pub fn big_used(&self, helper: BigHelper) -> bool {
         self.big[helper.slot()].get().is_some()
     }
 
     /// The float helper `helper`, marked for emission by this first use.
-    pub(crate) fn flt_func(&self, helper: FltHelper) -> curios_wasm::FuncName {
+    pub fn flt_func(&self, helper: FltHelper) -> curios_wasm::FuncName {
         self.flt[helper.slot()]
             .get_or_init(|| helper.func_name())
             .clone()
     }
 
-    pub(crate) fn flt_used(&self, helper: FltHelper) -> bool {
+    pub fn flt_used(&self, helper: FltHelper) -> bool {
         self.flt[helper.slot()].get().is_some()
     }
 
-    pub(crate) fn list_rope_type(&self) -> curios_wasm::TypeName {
+    pub fn list_rope_type(&self) -> curios_wasm::TypeName {
         self.list_rope_type.clone()
     }
 
     /// The wasm-level type a value of the given wire type crosses the host boundary as, in either direction: the carrier `WireType::carrier` states, a scalar as its raw number and a reference as the concrete non-nullable heap type of its payload.
     ///
     /// **A scalar crosses as the number it is, both ways.** Going out, the call site narrows a `Nat` or `Int` through `LoadAs::WireNat`/`LoadAs::WireInt`, refusing past the wire, reads a `Bool` as its word and an `Flt` out of its box. Coming back, the guest boxes what the host answered (`Context::host_instrs`), because every box is a layout this crate defines: an `Flt`'s `$flt` struct, and a `Nat` or `Int` past the i31 the boxed magnitude. A host that minted either would be a second crate needing that layout, and one that could mint only the i31 would have to refuse a result past it.
-    pub(crate) fn wire_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
+    pub fn wire_type(&self, wire_type: &WireType) -> curios_wasm::ValType {
         match wire_type.carrier() {
             Carrier::I64 => curios_wasm::ValType::Num(curios_wasm::NumType::I64),
             Carrier::I32 => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
@@ -765,17 +752,17 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub(crate) fn bytes_type(&self) -> curios_wasm::TypeName {
+    pub fn bytes_type(&self) -> curios_wasm::TypeName {
         self.bytes_type.clone()
     }
 
     /// `$longs`, the flat payload a list of `Nat` or `Int` crosses the host boundary as.
-    pub(crate) fn longs_type(&self) -> curios_wasm::TypeName {
+    pub fn longs_type(&self) -> curios_wasm::TypeName {
         self.longs_type.clone()
     }
 
     /// The flat payload a list of the scalar `leaf` crosses the host boundary as: `$longs` for a `Nat` or `Int`, whose elements cross as a lone one does, and `$words` for a `Bool`.
-    pub(crate) fn scalars_type(&self, leaf: WireLeaf) -> curios_wasm::TypeName {
+    pub fn scalars_type(&self, leaf: WireLeaf) -> curios_wasm::TypeName {
         match leaf {
             WireLeaf::Nat | WireLeaf::Int => self.longs_type.clone(),
             WireLeaf::Bool => self.words_type.clone(),
@@ -785,12 +772,12 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub(crate) fn elems_type(&self) -> curios_wasm::TypeName {
+    pub fn elems_type(&self) -> curios_wasm::TypeName {
         self.elems_type.clone()
     }
 
     /// The packed `Bytes` rope's name bundle.
-    pub(crate) fn bytes_rope(&self) -> RopeData {
+    pub fn bytes_rope(&self) -> RopeData {
         RopeData {
             base: self.bytes_rope_type.clone(),
             enter: self.bytes_rope_enter_type.clone(),
@@ -814,7 +801,7 @@ impl<'a> Table<'a> {
     }
 
     /// The `List` rope's name bundle.
-    pub(crate) fn list_rope(&self) -> RopeData {
+    pub fn list_rope(&self) -> RopeData {
         RopeData {
             base: self.list_rope_type.clone(),
             enter: self.list_rope_enter_type.clone(),
@@ -837,7 +824,7 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub(crate) fn channel(&self) -> ChannelData {
+    pub fn channel(&self) -> ChannelData {
         ChannelData {
             channel: curios_wasm::TypeName::from("channel"),
             payload: self.elems_type(),
@@ -848,14 +835,14 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub(crate) fn cell_type(&self) -> curios_wasm::TypeName {
+    pub fn cell_type(&self) -> curios_wasm::TypeName {
         self.cell_type.clone()
     }
 
     /// The internal binding name of a store-described host function. First use during emission records the function as live; [`host_funcs`](Self::host_funcs) hands the recorded set to `emit_sys_imports`.
     ///
     /// A row's identity is its import name (see [`ForeignFunction`]), which is chosen outside the emitter, so the minted name embeds it, after the namespace every row imports under, beneath the reserved `host/` row prefix — a foreign name can never collide with a runtime helper or with another minted row.
-    pub(crate) fn host_func(&self, function: &Arc<ForeignFunction>) -> curios_wasm::FuncName {
+    pub fn host_func(&self, function: &Arc<ForeignFunction>) -> curios_wasm::FuncName {
         let func_name =
             curios_wasm::FuncName::from(format!("host/{}/{}", Namespace::Ffi, function.name()));
 
@@ -868,19 +855,19 @@ impl<'a> Table<'a> {
     }
 
     /// The foreign functions the emitted code referenced, in minted-name order.
-    pub(crate) fn host_funcs(&self) -> Vec<Arc<ForeignFunction>> {
+    pub fn host_funcs(&self) -> Vec<Arc<ForeignFunction>> {
         self.host_funcs.borrow().values().cloned().collect()
     }
 
     /// The `sys.panic` import: a byte string in, no return. Declared by every module, since every module refuses somewhere.
-    pub(crate) fn panic_func(&self) -> curios_wasm::FuncName {
+    pub fn panic_func(&self) -> curios_wasm::FuncName {
         self.panic
             .get_or_init(|| curios_wasm::FuncName::from("panic"))
             .clone()
     }
 
     /// The instruction sequence a refusal is: a call to the class's helper and the `unreachable` that keeps the block's type. Spelled once for the code emitter, the region context and the rope helpers alike.
-    pub(crate) fn refuse_instrs(&self, panic: curios_cps::Panic) -> Vec<curios_wasm::Instr> {
+    pub fn refuse_instrs(&self, panic: curios_cps::Panic) -> Vec<curios_wasm::Instr> {
         vec![
             curios_wasm::Instr::Call {
                 func_name: self.refuse_func(panic),
@@ -890,11 +877,7 @@ impl<'a> Table<'a> {
     }
 
     /// The reference on the stack as a `target`, a null passing where `nullable`: one `ref.cast` to a final type, and for a rope base the test of each final shape the base holds. Every load at a heap type enters it here.
-    pub(crate) fn enter(
-        &self,
-        target: &curios_wasm::TypeName,
-        nullable: bool,
-    ) -> curios_wasm::Instr {
+    pub fn enter(&self, target: &curios_wasm::TypeName, nullable: bool) -> curios_wasm::Instr {
         for rope in [self.bytes_rope(), self.list_rope()] {
             if *target == rope.base {
                 return self.rope_entry(&rope, nullable);
@@ -941,7 +924,7 @@ impl<'a> Table<'a> {
     }
 
     /// A logical length or capacity computed unsigned in 64 bits, checked before it enters a 32-bit field or allocation. `wide` holds the producer once, so the guard neither repeats it nor lets its sum wrap.
-    pub(crate) fn length_instrs(
+    pub fn length_instrs(
         &self,
         producer: Vec<curios_wasm::Instr>,
         wide: &curios_wasm::LocalName,
@@ -960,7 +943,7 @@ impl<'a> Table<'a> {
     }
 
     /// Two represented lengths added exactly, then checked against the logical length bound before narrowing.
-    pub(crate) fn length_sum_instrs(
+    pub fn length_sum_instrs(
         &self,
         lhs: Vec<curios_wasm::Instr>,
         rhs: Vec<curios_wasm::Instr>,
@@ -992,7 +975,7 @@ impl<'a> Table<'a> {
     }
 
     /// The refusals the emitted code referenced, in `Panic::ALL`'s order. Read after every body that can refuse has been built — the rope helpers' included.
-    pub(crate) fn refuse_funcs(&self) -> Vec<(curios_cps::Panic, curios_wasm::FuncName)> {
+    pub fn refuse_funcs(&self) -> Vec<(curios_cps::Panic, curios_wasm::FuncName)> {
         curios_cps::Panic::ALL
             .into_iter()
             .zip(&self.refuse)
@@ -1001,127 +984,127 @@ impl<'a> Table<'a> {
     }
 
     /// `$bytes/force (ref $rope/bytes) -> (ref $bytes)`: flatten a `Bytes` rope to its payload, memoizing in the entry node; the payload holds the run in its first `len` slots and may hold room past them. First use marks it for emission.
-    pub(crate) fn bytes_force_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_force_func(&self) -> curios_wasm::FuncName {
         self.bytes_force
             .get_or_init(|| curios_wasm::FuncName::from("bytes/force"))
             .clone()
     }
 
-    pub(crate) fn bytes_force_used(&self) -> bool {
+    pub fn bytes_force_used(&self) -> bool {
         self.bytes_force.get().is_some()
     }
 
     /// `$bytes/write`, which `$bytes/force` calls and is emitted with it.
-    pub(crate) fn bytes_write_func() -> curios_wasm::FuncName {
+    pub fn bytes_write_func() -> curios_wasm::FuncName {
         curios_wasm::FuncName::from("bytes/write")
     }
 
     /// `$list/force (ref $rope/list) -> (ref $elems)`: the `List` mirror of [`bytes_force_func`](Self::bytes_force_func).
-    pub(crate) fn list_force_func(&self) -> curios_wasm::FuncName {
+    pub fn list_force_func(&self) -> curios_wasm::FuncName {
         self.list_force
             .get_or_init(|| curios_wasm::FuncName::from("list/force"))
             .clone()
     }
 
-    pub(crate) fn list_force_used(&self) -> bool {
+    pub fn list_force_used(&self) -> bool {
         self.list_force.get().is_some()
     }
 
     /// `$list/write`, which `$list/force` calls and is emitted with it.
-    pub(crate) fn list_write_func() -> curios_wasm::FuncName {
+    pub fn list_write_func() -> curios_wasm::FuncName {
         curios_wasm::FuncName::from("list/write")
     }
 
     /// `$bytes/exact (ref $rope/bytes) -> (ref $bytes)`: a `Bytes` run as a payload exactly its length — the forced payload where its array is the run's, a copy of the run where it holds room past it. What leaves the rope as a flat array takes this: a leaf made of a forced payload, and a host operand.
-    pub(crate) fn bytes_exact_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_exact_func(&self) -> curios_wasm::FuncName {
         self.bytes_exact
             .get_or_init(|| curios_wasm::FuncName::from("bytes/exact"))
             .clone()
     }
 
-    pub(crate) fn bytes_exact_used(&self) -> bool {
+    pub fn bytes_exact_used(&self) -> bool {
         self.bytes_exact.get().is_some()
     }
 
     /// `$list/exact (ref $rope/list) -> (ref $elems)`: the `List` mirror of [`bytes_exact_func`](Self::bytes_exact_func).
-    pub(crate) fn list_exact_func(&self) -> curios_wasm::FuncName {
+    pub fn list_exact_func(&self) -> curios_wasm::FuncName {
         self.list_exact
             .get_or_init(|| curios_wasm::FuncName::from("list/exact"))
             .clone()
     }
 
-    pub(crate) fn list_exact_used(&self) -> bool {
+    pub fn list_exact_used(&self) -> bool {
         self.list_exact.get().is_some()
     }
 
     /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force a `List(Bytes)` / `List(Handle)` host argument *deeply* — the outer rope to a fresh payload whose every element is itself forced to `$bytes`, the element shape the host lifts.
-    pub(crate) fn list_bytes_force_func(&self) -> curios_wasm::FuncName {
+    pub fn list_bytes_force_func(&self) -> curios_wasm::FuncName {
         self.list_bytes_force
             .get_or_init(|| curios_wasm::FuncName::from("list/bytes/force"))
             .clone()
     }
 
-    pub(crate) fn list_bytes_force_used(&self) -> bool {
+    pub fn list_bytes_force_used(&self) -> bool {
         self.list_bytes_force.get().is_some()
     }
 
     /// `$list/empty`, one empty list every host answer of `none` enters the guest as, so an option a host answers empty allocates nothing.
-    pub(crate) fn list_empty_global(&self) -> curios_wasm::GlobalName {
+    pub fn list_empty_global(&self) -> curios_wasm::GlobalName {
         self.list_empty
             .get_or_init(|| curios_wasm::GlobalName::from("list/empty"))
             .clone()
     }
 
-    pub(crate) fn list_empty_used(&self) -> bool {
+    pub fn list_empty_used(&self) -> bool {
         self.list_empty.get().is_some()
     }
 
     /// `$bytes/embed (ref $bytes) -> (ref $rope/bytes)`: embed a host-built flat payload into a fresh leaf on re-entry.
-    pub(crate) fn bytes_embed_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_embed_func(&self) -> curios_wasm::FuncName {
         self.bytes_embed
             .get_or_init(|| curios_wasm::FuncName::from("bytes/embed"))
             .clone()
     }
 
-    pub(crate) fn bytes_embed_used(&self) -> bool {
+    pub fn bytes_embed_used(&self) -> bool {
         self.bytes_embed.get().is_some()
     }
 
     /// `$bytes/box (ref null any) -> (ref $rope/bytes)`: a small-canonical `Bytes` as a rope — an immediate is materialised into a fresh leaf, a rope passes through. The entry every rope-shaped consumer pays where a bare `ref.cast` would reject the immediate form.
-    pub(crate) fn bytes_box_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_box_func(&self) -> curios_wasm::FuncName {
         self.bytes_box
             .get_or_init(|| curios_wasm::FuncName::from("bytes/box"))
             .clone()
     }
 
-    pub(crate) fn bytes_box_used(&self) -> bool {
+    pub fn bytes_box_used(&self) -> bool {
         self.bytes_box.get().is_some()
     }
 
     /// `$bytes/norm (ref $rope/bytes) -> (ref any)`: the canonical form of a byte rope — at most 3 bytes becomes the i31 (length in the top 2 payload bits, bytes LSB-first below), anything longer passes through. Every `Bytes` producer answers through this, which is what makes a mixed-representation pair unrepresentable.
-    pub(crate) fn bytes_norm_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_norm_func(&self) -> curios_wasm::FuncName {
         self.bytes_norm
             .get_or_init(|| curios_wasm::FuncName::from("bytes/norm"))
             .clone()
     }
 
-    pub(crate) fn bytes_norm_used(&self) -> bool {
+    pub fn bytes_norm_used(&self) -> bool {
         self.bytes_norm.get().is_some()
     }
 
     /// `$list/embed (ref $elems) -> (ref $rope/list)`: the `List` mirror of [`bytes_embed_func`](Self::bytes_embed_func), for scalar-element results.
-    pub(crate) fn list_embed_func(&self) -> curios_wasm::FuncName {
+    pub fn list_embed_func(&self) -> curios_wasm::FuncName {
         self.list_embed
             .get_or_init(|| curios_wasm::FuncName::from("list/embed"))
             .clone()
     }
 
-    pub(crate) fn list_embed_used(&self) -> bool {
+    pub fn list_embed_used(&self) -> bool {
         self.list_embed.get().is_some()
     }
 
     /// `$list/<leaf>/to_<payload>`, the helper a list of `leaf` crosses to a host through, marked for emission by this first use.
-    pub(crate) fn scalars_force_func(&self, leaf: WireLeaf) -> curios_wasm::FuncName {
+    pub fn scalars_force_func(&self, leaf: WireLeaf) -> curios_wasm::FuncName {
         record_leaf(&self.scalars_forces, leaf);
         curios_wasm::FuncName::from(format!(
             "list/{}/to_{}",
@@ -1131,12 +1114,12 @@ impl<'a> Table<'a> {
     }
 
     /// The leaves whose `to_<payload>` helper the emitted code referenced.
-    pub(crate) fn scalars_forces(&self) -> Vec<WireLeaf> {
+    pub fn scalars_forces(&self) -> Vec<WireLeaf> {
         self.scalars_forces.borrow().clone()
     }
 
     /// `$list/<leaf>/of_<payload>`, the helper a host's list of `leaf` comes back through, marked for emission by this first use.
-    pub(crate) fn scalars_embed_func(&self, leaf: WireLeaf) -> curios_wasm::FuncName {
+    pub fn scalars_embed_func(&self, leaf: WireLeaf) -> curios_wasm::FuncName {
         record_leaf(&self.scalars_embeds, leaf);
         curios_wasm::FuncName::from(format!(
             "list/{}/of_{}",
@@ -1146,12 +1129,12 @@ impl<'a> Table<'a> {
     }
 
     /// The leaves whose `of_<payload>` helper the emitted code referenced.
-    pub(crate) fn scalars_embeds(&self) -> Vec<WireLeaf> {
+    pub fn scalars_embeds(&self) -> Vec<WireLeaf> {
         self.scalars_embeds.borrow().clone()
     }
 
     /// Box one raw scalar the host answered, alone or as a list's element: a `Nat`'s `i64` read unsigned through `big/of_u64` and an `Int`'s read signed through `big/of_i64`, each answering the i31 below `2³⁰` in magnitude and the boxed magnitude past it; a `Bool` is its own i31. An `Flt` stays the raw `f64` its continuation takes, since `curios-cps` offers that parameter at its carrier.
-    pub(crate) fn box_word_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
+    pub fn box_word_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         match wire_type {
             WireType::Nat => vec![call(&self.big_func(BigHelper::OfU64))],
             WireType::Int => vec![call(&self.big_func(BigHelper::OfI64))],
@@ -1161,158 +1144,158 @@ impl<'a> Table<'a> {
     }
 
     /// `$list/bytes/embed (ref $elems) -> (ref $rope/list)`: embed a `List(Bytes)` host result *deeply* — each raw `$bytes` element into a leaf (in place; the host-built array is fresh), then the outer array.
-    pub(crate) fn list_bytes_embed_func(&self) -> curios_wasm::FuncName {
+    pub fn list_bytes_embed_func(&self) -> curios_wasm::FuncName {
         self.list_bytes_embed
             .get_or_init(|| curios_wasm::FuncName::from("list/bytes/embed"))
             .clone()
     }
 
-    pub(crate) fn list_bytes_embed_used(&self) -> bool {
+    pub fn list_bytes_embed_used(&self) -> bool {
         self.list_bytes_embed.get().is_some()
     }
 
     /// `$bytes/slice (ref $rope/bytes, i32, i32) -> (ref $rope/bytes)`, taking a start and a *count*: the `Bytes` view constructor, O(1) over a flat-available base — bounds-check, answer the empty leaf or the whole rope on the trivial windows, collapse a view-of-view, and force an uncached node base, O(n) once and memoized, so every `view` it builds reads through in O(1).
-    pub(crate) fn bytes_slice_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_slice_func(&self) -> curios_wasm::FuncName {
         self.bytes_slice
             .get_or_init(|| curios_wasm::FuncName::from("bytes/slice"))
             .clone()
     }
 
-    pub(crate) fn bytes_slice_used(&self) -> bool {
+    pub fn bytes_slice_used(&self) -> bool {
         self.bytes_slice.get().is_some()
     }
 
     /// `$list/slice (ref $rope/list, i32, i32) -> (ref $rope/list)`: the `List` mirror of [`bytes_slice_func`](Self::bytes_slice_func).
-    pub(crate) fn list_slice_func(&self) -> curios_wasm::FuncName {
+    pub fn list_slice_func(&self) -> curios_wasm::FuncName {
         self.list_slice
             .get_or_init(|| curios_wasm::FuncName::from("list/slice"))
             .clone()
     }
 
-    pub(crate) fn list_slice_used(&self) -> bool {
+    pub fn list_slice_used(&self) -> bool {
         self.list_slice.get().is_some()
     }
 
     /// `$bytes/read (ref $rope/bytes, i32) -> i32`: one byte read — straight off a leaf payload, through a `view`'s window without forcing, off a node's cache, and at an uncached node from the child that holds the byte where that child is flat-available, with `$bytes/force` (memoized) only where it is not.
-    pub(crate) fn bytes_read_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_read_func(&self) -> curios_wasm::FuncName {
         self.bytes_read
             .get_or_init(|| curios_wasm::FuncName::from("bytes/read"))
             .clone()
     }
 
-    pub(crate) fn bytes_read_used(&self) -> bool {
+    pub fn bytes_read_used(&self) -> bool {
         self.bytes_read.get().is_some()
     }
 
     /// `$list/read (ref $rope/list, i32) -> anyref`: the `List` mirror of [`bytes_read_func`](Self::bytes_read_func).
-    pub(crate) fn list_read_func(&self) -> curios_wasm::FuncName {
+    pub fn list_read_func(&self) -> curios_wasm::FuncName {
         self.list_read
             .get_or_init(|| curios_wasm::FuncName::from("list/read"))
             .clone()
     }
 
-    pub(crate) fn list_read_used(&self) -> bool {
+    pub fn list_read_used(&self) -> bool {
         self.list_read.get().is_some()
     }
 
     /// `$bytes/resolve (ref $rope/bytes) -> (ref null $bytes, i32, i32)`: where a rope's run already lies flat, for a read that keeps the run it last resolved — `RopeEmitter::emit_resolve_func`'s.
-    pub(crate) fn bytes_resolve_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_resolve_func(&self) -> curios_wasm::FuncName {
         self.bytes_resolve
             .get_or_init(|| curios_wasm::FuncName::from("bytes/resolve"))
             .clone()
     }
 
-    pub(crate) fn bytes_resolve_used(&self) -> bool {
+    pub fn bytes_resolve_used(&self) -> bool {
         self.bytes_resolve.get().is_some()
     }
 
     /// `$list/resolve (ref $rope/list) -> (ref null $elems, i32, i32)`: the `List` mirror of [`bytes_resolve_func`](Self::bytes_resolve_func).
-    pub(crate) fn list_resolve_func(&self) -> curios_wasm::FuncName {
+    pub fn list_resolve_func(&self) -> curios_wasm::FuncName {
         self.list_resolve
             .get_or_init(|| curios_wasm::FuncName::from("list/resolve"))
             .clone()
     }
 
-    pub(crate) fn list_resolve_used(&self) -> bool {
+    pub fn list_resolve_used(&self) -> bool {
         self.list_resolve.get().is_some()
     }
 
     /// `$bytes/eql (ref $rope/bytes, ref $rope/bytes) -> i32`: whole-value byte equality — unequal rope lengths answer without forcing, equal lengths force both payloads once and compare bytewise.
-    pub(crate) fn bytes_eql_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_eql_func(&self) -> curios_wasm::FuncName {
         self.bytes_eql
             .get_or_init(|| curios_wasm::FuncName::from("bytes/eql"))
             .clone()
     }
 
-    pub(crate) fn bytes_eql_used(&self) -> bool {
+    pub fn bytes_eql_used(&self) -> bool {
         self.bytes_eql.get().is_some()
     }
 
     /// `$bytes/and (ref $payload, ref $payload, i32) -> (ref $rope/bytes)`: two forced payloads combined byte for byte, sealed at the logical length the caller supplies.
     ///
     /// The operands arrive forced, so this is a walk over two byte arrays.
-    pub(crate) fn bytes_and_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_and_func(&self) -> curios_wasm::FuncName {
         self.bytes_and
             .get_or_init(|| curios_wasm::FuncName::from("bytes/and"))
             .clone()
     }
 
-    pub(crate) fn bytes_and_used(&self) -> bool {
+    pub fn bytes_and_used(&self) -> bool {
         self.bytes_and.get().is_some()
     }
 
     /// The disjunction, as [`bytes_and_func`](Self::bytes_and_func).
-    pub(crate) fn bytes_or_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_or_func(&self) -> curios_wasm::FuncName {
         self.bytes_or
             .get_or_init(|| curios_wasm::FuncName::from("bytes/or"))
             .clone()
     }
 
-    pub(crate) fn bytes_or_used(&self) -> bool {
+    pub fn bytes_or_used(&self) -> bool {
         self.bytes_or.get().is_some()
     }
 
     /// The difference, as [`bytes_and_func`](Self::bytes_and_func).
-    pub(crate) fn bytes_xor_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_xor_func(&self) -> curios_wasm::FuncName {
         self.bytes_xor
             .get_or_init(|| curios_wasm::FuncName::from("bytes/xor"))
             .clone()
     }
 
-    pub(crate) fn bytes_xor_used(&self) -> bool {
+    pub fn bytes_xor_used(&self) -> bool {
         self.bytes_xor.get().is_some()
     }
 
     /// `$bytes/replicate (i32 count, i32 atom) -> (ref $rope/bytes)`: `count` copies of one byte, as one flat leaf.
-    pub(crate) fn bytes_replicate_func(&self) -> curios_wasm::FuncName {
+    pub fn bytes_replicate_func(&self) -> curios_wasm::FuncName {
         self.bytes_replicate
             .get_or_init(|| curios_wasm::FuncName::from("bytes/replicate"))
             .clone()
     }
 
-    pub(crate) fn bytes_replicate_used(&self) -> bool {
+    pub fn bytes_replicate_used(&self) -> bool {
         self.bytes_replicate.get().is_some()
     }
 
     /// `$list/map (ref $rope/list, ref $envr/1) -> (ref $rope/list)`: apply a unary closure to every element of the forced payload, filling a fresh leaf.
-    pub(crate) fn list_map_func(&self) -> curios_wasm::FuncName {
+    pub fn list_map_func(&self) -> curios_wasm::FuncName {
         self.list_map
             .get_or_init(|| curios_wasm::FuncName::from("list/map"))
             .clone()
     }
 
-    pub(crate) fn list_map_used(&self) -> bool {
+    pub fn list_map_used(&self) -> bool {
         self.list_map.get().is_some()
     }
 
-    pub(crate) fn tuple_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
+    pub fn tuple_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
         self.tuple_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
     /// Every declared row type, with the carrier of each slot its struct holds.
-    pub(crate) fn row_types(
+    pub fn row_types(
         &self,
     ) -> impl Iterator<
         Item = (
@@ -1329,7 +1312,7 @@ impl<'a> Table<'a> {
     /// How a value is loaded to fill `slot`, and how a read of it is coerced back.
     ///
     /// A typed reference slot admits null, because the slots a narrow constructor leaves unwritten hold one; every other carrier is loaded exactly as any position naming it.
-    pub(crate) fn slot_load_as(&self, slot: curios_cps::Slot) -> LoadAs {
+    pub fn slot_load_as(&self, slot: curios_cps::Slot) -> LoadAs {
         match slot {
             curios_cps::Slot::Tag | curios_cps::Slot::Nat => LoadAs::Nat,
             curios_cps::Slot::Flt => LoadAs::Flt,
@@ -1341,7 +1324,7 @@ impl<'a> Table<'a> {
     }
 
     /// Whether some rebuild writes `row`'s slot `index`, which its struct then declares mutable: every other slot stays immutable, so an engine reads it as the constant its construction stored.
-    pub(crate) fn slot_written(&self, row: curios_cps::RowId, index: usize) -> bool {
+    pub fn slot_written(&self, row: curios_cps::RowId, index: usize) -> bool {
         self.rebuilt
             .get(&row)
             .is_some_and(|slots| slots.contains(&index))
@@ -1349,7 +1332,7 @@ impl<'a> Table<'a> {
     }
 
     /// The carriers of `row`'s slots.
-    pub(crate) fn row_slots(&self, row: curios_cps::RowId) -> &[curios_cps::Slot] {
+    pub fn row_slots(&self, row: curios_cps::RowId) -> &[curios_cps::Slot] {
         &self
             .row_types
             .get(&row)
@@ -1357,7 +1340,7 @@ impl<'a> Table<'a> {
             .1
     }
 
-    pub(crate) fn find_row_type(&self, row: curios_cps::RowId) -> curios_wasm::TypeName {
+    pub fn find_row_type(&self, row: curios_cps::RowId) -> curios_wasm::TypeName {
         self.row_types
             .get(&row)
             .unwrap_or_else(|| panic!("`Table` lacks a type for row `{}`", row))
@@ -1365,48 +1348,48 @@ impl<'a> Table<'a> {
             .clone()
     }
 
-    pub(crate) fn find_tuple_type(&self, arity: usize) -> curios_wasm::TypeName {
+    pub fn find_tuple_type(&self, arity: usize) -> curios_wasm::TypeName {
         self.tuple_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks tuple type for arity `{}`", arity))
             .clone()
     }
 
-    pub(crate) fn tuple_field(index: usize) -> curios_wasm::FieldName {
+    pub fn tuple_field(index: usize) -> curios_wasm::FieldName {
         curios_wasm::FieldName::from(index.to_string())
     }
 
-    pub(crate) fn envr_types(&self) -> impl Iterator<Item = curios_wasm::TypeName> {
+    pub fn envr_types(&self) -> impl Iterator<Item = curios_wasm::TypeName> {
         self.envr_types.values().cloned()
     }
 
-    pub(crate) fn find_envr_type(&self, arity: usize) -> curios_wasm::TypeName {
+    pub fn find_envr_type(&self, arity: usize) -> curios_wasm::TypeName {
         self.envr_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks environment type for arity `{}`", arity))
             .clone()
     }
 
-    pub(crate) fn clsr_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
+    pub fn clsr_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
         self.clsr_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub(crate) fn find_clsr_type(&self, arity: usize) -> curios_wasm::TypeName {
+    pub fn find_clsr_type(&self, arity: usize) -> curios_wasm::TypeName {
         self.clsr_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks closure type for arity `{}`", arity))
             .clone()
     }
 
-    pub(crate) fn func_types(&self) -> impl Iterator<Item = (&Signature, curios_wasm::TypeName)> {
+    pub fn func_types(&self) -> impl Iterator<Item = (&Signature, curios_wasm::TypeName)> {
         self.func_types
             .iter()
             .map(|(signature, type_name)| (signature, type_name.clone()))
     }
 
-    pub(crate) fn find_func_type(&self, signature: &Signature) -> curios_wasm::TypeName {
+    pub fn find_func_type(&self, signature: &Signature) -> curios_wasm::TypeName {
         self.func_types
             .get(signature)
             .unwrap_or_else(|| panic!("`Table` lacks function type for `{signature:?}`"))
@@ -1414,19 +1397,19 @@ impl<'a> Table<'a> {
     }
 
     /// Whether this name is a module const holding a `Tuple`/`List`. See `Context::refuse_raw_aggregate`.
-    pub(crate) fn is_aggregate_const(&self, const_name: &EmissionValueName) -> bool {
+    pub fn is_aggregate_const(&self, const_name: &EmissionValueName) -> bool {
         self.const_aggregates.contains(const_name)
     }
 
     /// The carrier a scalar const is held at in a register and the instruction that is its value there, or `None` for a const no register holds.
-    pub(crate) fn const_register(
+    pub fn const_register(
         &self,
         const_name: &EmissionValueName,
     ) -> Option<(curios_cps::Repr, curios_wasm::Instr)> {
         self.const_registers.get(const_name).cloned()
     }
 
-    pub(crate) fn find_const(&self, const_name: &EmissionValueName) -> curios_wasm::GlobalName {
+    pub fn find_const(&self, const_name: &EmissionValueName) -> curios_wasm::GlobalName {
         self.consts
             .get(const_name)
             .unwrap_or_else(|| panic!("`Table` lacks const `{}`", const_name))
@@ -1434,14 +1417,14 @@ impl<'a> Table<'a> {
     }
 
     /// The carrier this value is held at in a register, or `None` when it is held behind a reference.
-    pub(crate) fn raw_carrier(&self, value_name: &EmissionValueName) -> Option<curios_cps::Repr> {
+    pub fn raw_carrier(&self, value_name: &EmissionValueName) -> Option<curios_cps::Repr> {
         self.raw.get(value_name).copied()
     }
 
     /// The wasm type this value's local is declared at: the machine type of its carrier when it is held in a register, and the top reference type otherwise.
     ///
     /// The reference arms are unreachable — the analysis only ever answers a scalar carrier, since those are the only ones a register holds — and they answer `top_type` rather than panicking because a representation that cannot be held raw and a value that was never offered one are the same fact, and this function's job is to state it once.
-    pub(crate) fn local_type(&self, value_name: &EmissionValueName) -> curios_wasm::ValType {
+    pub fn local_type(&self, value_name: &EmissionValueName) -> curios_wasm::ValType {
         match self.raw_carrier(value_name) {
             Some(curios_cps::Repr::Nat | curios_cps::Repr::Length) => {
                 curios_wasm::ValType::Num(curios_wasm::NumType::I32)
@@ -1462,7 +1445,7 @@ impl<'a> Table<'a> {
     }
 
     /// The heap type `value_name` is declared at where it is narrower than the uniform reference, with the arity of the closures it holds: a closure construction's own environment, and the arity's environment base for a value the representation analysis knows holds closures of it.
-    pub(crate) fn static_type(
+    pub fn static_type(
         &self,
         value_name: &EmissionValueName,
     ) -> Option<(curios_wasm::TypeName, usize)> {
@@ -1476,7 +1459,7 @@ impl<'a> Table<'a> {
     }
 
     /// Whether a value declared at `value_name`'s own type is already a `target`, so entering it as one casts nothing: its own environment type, or its arity's base.
-    pub(crate) fn is_static(
+    pub fn is_static(
         &self,
         value_name: &EmissionValueName,
         target: &curios_wasm::TypeName,
@@ -1487,13 +1470,13 @@ impl<'a> Table<'a> {
             })
     }
 
-    pub(crate) fn find_clsr(&self, clsr_name: &EmissionClosureName) -> &ClsrData<'a> {
+    pub fn find_clsr(&self, clsr_name: &EmissionClosureName) -> &ClsrData<'a> {
         self.clsrs
             .get(clsr_name)
             .unwrap_or_else(|| panic!("`Table` lacks closure `{}`", clsr_name))
     }
 
-    pub(crate) fn find_func(&self, func_name: &EmissionFunctionName) -> &FuncData<'a> {
+    pub fn find_func(&self, func_name: &EmissionFunctionName) -> &FuncData<'a> {
         self.funcs
             .get(func_name)
             .unwrap_or_else(|| panic!("`Table` lacks func `{}`", func_name))

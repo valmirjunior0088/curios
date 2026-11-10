@@ -18,7 +18,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
+pub fn structurize(machine: &MachineModule) -> EmissionModule {
     let mut output = EmissionModule::new();
     output.set_rows(machine.rows().to_vec());
     output.set_entry_suspension(machine.entry_suspension());
@@ -708,7 +708,7 @@ fn hinted(index: usize, hint: Option<&str>) -> String {
         None => index.to_string(),
     }
 }
-pub(crate) fn value_name(value: MachineValueId) -> EmissionValueName {
+pub fn value_name(value: MachineValueId) -> EmissionValueName {
     EmissionValueName::from(format!("m{}", value.0))
 }
 fn direct_name(machine: &MachineModule, function: curios_cps::FunctionId) -> EmissionFunctionName {

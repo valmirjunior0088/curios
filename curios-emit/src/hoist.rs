@@ -4,9 +4,7 @@
 
 use {
     super::{
-        EmissionArg, EmissionBody, EmissionCallTarget, EmissionCellTarget, EmissionCode,
-        EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
-        EmissionValueName,
+        EmissionArg, EmissionBody, EmissionData, EmissionModule, EmissionValue, EmissionValueName,
     },
     curios_num::{Binary, Integer, Natural},
     std::collections::HashMap,
@@ -52,7 +50,7 @@ struct FunctionConsts {
     scalars: HashMap<EmissionValueName, (ConstKey, EmissionData)>,
 }
 
-pub(crate) fn hoist_consts(module: &mut EmissionModule) {
+pub fn hoist_consts(module: &mut EmissionModule) {
     let mut interner = ConstInterner::default();
     for region in module.regions_mut() {
         hoist_region(region, &mut interner);
@@ -64,11 +62,11 @@ pub(crate) fn hoist_consts(module: &mut EmissionModule) {
 fn hoist_region(region: &mut EmissionBody, interner: &mut ConstInterner) {
     let mut consts = FunctionConsts::default();
     collect_consts(region, interner, &mut consts);
-    apply_renames(region, &consts.renames);
+    region.rename_values(&consts.renames);
 }
 
 fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mut FunctionConsts) {
-    for (name, value) in &body.values {
+    for (name, value) in body.values() {
         let EmissionValue::Pure(data) = value else {
             continue;
         };
@@ -150,7 +148,7 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
             }
         }
     }
-    for (_, block) in &body.blocks {
+    for (_, block) in body.blocks() {
         collect_consts(&block.region, interner, consts);
     }
 }
@@ -207,108 +205,4 @@ fn intern_elements(
         })
         .collect();
     Some(canonical)
-}
-
-fn apply_renames(body: &mut EmissionBody, renames: &HashMap<EmissionValueName, EmissionValueName>) {
-    body.values.retain(|(name, _)| !renames.contains_key(name));
-    for (_, value) in &mut body.values {
-        rename_value(value, renames);
-    }
-    rename_tail(&mut body.tail, renames);
-    for (_, block) in &mut body.blocks {
-        apply_renames(&mut block.region, renames);
-    }
-}
-
-fn rename_name(
-    name: &mut EmissionValueName,
-    renames: &HashMap<EmissionValueName, EmissionValueName>,
-) {
-    if let Some(interned) = renames.get(name) {
-        *name = interned.clone();
-    }
-}
-
-fn rename_names(
-    names: &mut [EmissionValueName],
-    renames: &HashMap<EmissionValueName, EmissionValueName>,
-) {
-    for name in names {
-        rename_name(name, renames);
-    }
-}
-
-fn rename_jump_args(
-    args: &mut [EmissionArg],
-    renames: &HashMap<EmissionValueName, EmissionValueName>,
-) {
-    for arg in args {
-        // A filler names nothing, so there is nothing to intern it against.
-        if let EmissionArg::Value(name) = arg {
-            rename_name(name, renames);
-        }
-    }
-}
-
-fn rename_value(
-    value: &mut EmissionValue,
-    renames: &HashMap<EmissionValueName, EmissionValueName>,
-) {
-    match value {
-        EmissionValue::Pure(data) => match data {
-            EmissionData::Nat(_)
-            | EmissionData::Int(_)
-            | EmissionData::Flt(_)
-            | EmissionData::Bytes(_) => {}
-            EmissionData::List(elems) | EmissionData::Tuple(elems) => rename_names(elems, renames),
-            EmissionData::Row(_, slots) => rename_jump_args(slots, renames),
-            EmissionData::Closure(_, fields) => rename_names(fields, renames),
-        },
-        EmissionValue::Eval(code) => match code {
-            EmissionCode::Intrinsic(_, args) => rename_names(args, renames),
-            EmissionCode::ListMap(list, mapper) => {
-                rename_name(list, renames);
-                rename_name(mapper, renames);
-            }
-            EmissionCode::Rebuild { of, values, .. } => {
-                rename_name(of, renames);
-                rename_jump_args(values, renames);
-            }
-        },
-    }
-}
-
-fn rename_tail(tail: &mut EmissionTail, renames: &HashMap<EmissionValueName, EmissionValueName>) {
-    match tail {
-        EmissionTail::Jump(target) => rename_jump_args(&mut target.params, renames),
-        EmissionTail::Match(target) => {
-            rename_name(&mut target.operand, renames);
-            for target in target.cases.values_mut().chain(target.default.iter_mut()) {
-                rename_jump_args(&mut target.params, renames);
-            }
-        }
-        EmissionTail::Call(EmissionCallTarget::Direct { params, .. }) => {
-            rename_jump_args(params, renames)
-        }
-        EmissionTail::Call(EmissionCallTarget::Indirect { target, params, .. }) => {
-            rename_name(target, renames);
-            rename_jump_args(params, renames);
-        }
-        EmissionTail::Host(
-            EmissionHostTarget::Foreign { operands, .. }
-            | EmissionHostTarget::Halt { operands, .. },
-        ) => rename_names(operands, renames),
-        EmissionTail::Channel(channel) => {
-            for arg in &mut channel.args {
-                rename_name(arg, renames);
-            }
-        }
-        EmissionTail::Cell(EmissionCellTarget::Reserve { .. }) => {}
-        EmissionTail::Cell(EmissionCellTarget::Fill { cell, value, .. }) => {
-            rename_name(cell, renames);
-            rename_name(value, renames);
-        }
-        EmissionTail::Cell(EmissionCellTarget::Poll { cell, .. }) => rename_name(cell, renames),
-        EmissionTail::Panic(_) | EmissionTail::Unreachable => {}
-    }
 }

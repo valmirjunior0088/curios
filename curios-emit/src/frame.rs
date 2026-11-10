@@ -4,13 +4,13 @@ use {
 };
 
 #[derive(Debug, Clone)]
-pub(crate) struct LocalData {
+pub struct LocalData {
     pub local_name: curios_wasm::LocalName,
     pub is_nullable: bool,
 }
 
 impl LocalData {
-    pub(crate) fn new(local_name: curios_wasm::LocalName, is_nullable: bool) -> Self {
+    pub fn new(local_name: curios_wasm::LocalName, is_nullable: bool) -> Self {
         Self {
             local_name,
             is_nullable,
@@ -20,7 +20,7 @@ impl LocalData {
 
 /// How entering a block branches to its body. A region with multiple blocks (or a single block with a back-edge) trampolines through a `loop`: `enter` sets the dispatcher index and branches to the loop, whose `br_table` then selects the block. A single block with no back-edge instead branches straight out of its own label — a plain forward `br` — so it needs neither index nor loop.
 #[derive(Debug, Clone)]
-enum Dispatch {
+pub enum Dispatch {
     Loop {
         dispatch_label: curios_wasm::LabelName,
         index_local: curios_wasm::LocalName,
@@ -39,14 +39,14 @@ enum Dispatch {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct BlockData<'a> {
-    dispatch: Dispatch,
+pub struct BlockData<'a> {
+    pub dispatch: Dispatch,
     pub label_name: curios_wasm::LabelName,
-    params: Vec<(&'a EmissionValueName, LocalData)>,
+    pub params: Vec<(&'a EmissionValueName, LocalData)>,
 }
 
 impl<'a> BlockData<'a> {
-    pub(crate) fn new(
+    pub fn new(
         dispatch_label: curios_wasm::LabelName,
         index_local: curios_wasm::LocalName,
         index: usize,
@@ -65,7 +65,7 @@ impl<'a> BlockData<'a> {
     }
 
     /// A single-target block reached only by forward branches — no dispatcher, no loop. `enter` branches straight out of `label_name` into the body.
-    pub(crate) fn new_direct(
+    pub fn new_direct(
         block_name: &'a EmissionBlockName,
         params: Vec<(&'a EmissionValueName, LocalData)>,
     ) -> Self {
@@ -77,7 +77,7 @@ impl<'a> BlockData<'a> {
     }
 
     /// A loop header referenced from *inside* its own loop: back edges branch to `loop_label`, which is distinct from the header's forward-entry block label so the two never collide. The enclosing scope registers the same block under [`BlockData::new_direct`] for forward entry.
-    pub(crate) fn new_loop(
+    pub fn new_loop(
         loop_label: curios_wasm::LabelName,
         params: Vec<(&'a EmissionValueName, LocalData)>,
     ) -> Self {
@@ -91,7 +91,7 @@ impl<'a> BlockData<'a> {
     }
 
     /// A member of an irreducible component referenced from *outside* it: branch in through the dispatcher's enter block, having set this member's index.
-    pub(crate) fn new_dispatch_enter(
+    pub fn new_dispatch_enter(
         enter_label: curios_wasm::LabelName,
         index_local: curios_wasm::LocalName,
         index: usize,
@@ -110,16 +110,16 @@ impl<'a> BlockData<'a> {
     }
 
     /// Whether this is a natural loop's header as its own body sees it, entered by going back to the loop's start: a frame registering one is the scope of that body, and its preheader runs once each time the loop is entered from outside.
-    pub(crate) fn is_loop_header(&self) -> bool {
+    pub fn is_loop_header(&self) -> bool {
         matches!(self.dispatch, Dispatch::NaturalLoop { .. })
     }
 
     /// The values this block binds on entry, in the order a branch pushes them. A branch reads them to load each argument the way the parameter it feeds is held.
-    pub(crate) fn params(&self) -> &[(&'a EmissionValueName, LocalData)] {
+    pub fn params(&self) -> &[(&'a EmissionValueName, LocalData)] {
         &self.params
     }
 
-    pub(crate) fn bind(&self, arity: usize) -> Vec<curios_wasm::Instr> {
+    pub fn bind(&self, arity: usize) -> Vec<curios_wasm::Instr> {
         assert_eq!(
             self.params.len(),
             arity,
@@ -138,7 +138,7 @@ impl<'a> BlockData<'a> {
             .collect()
     }
 
-    pub(crate) fn enter(&self, arity: usize) -> Vec<curios_wasm::Instr> {
+    pub fn enter(&self, arity: usize) -> Vec<curios_wasm::Instr> {
         let bind = self.bind(arity);
 
         let branch = match &self.dispatch {
@@ -185,7 +185,7 @@ impl<'a> BlockData<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct Frame<'a> {
+pub struct Frame<'a> {
     pub params: HashMap<&'a EmissionValueName, LocalData>,
     pub values: HashMap<&'a EmissionValueName, curios_wasm::LocalName>,
     /// The region's `Tuple`/`List` constructions, so a load of one at a raw carrier is a build failure rather than a `ref.cast` trap. See [`Context::refuse_raw_aggregate`](super::Context::refuse_raw_aggregate).
@@ -197,7 +197,7 @@ pub(crate) struct Frame<'a> {
 }
 
 impl<'a> Frame<'a> {
-    pub(crate) fn new(
+    pub fn new(
         params: HashMap<&'a EmissionValueName, LocalData>,
         aggregates: HashSet<&'a EmissionValueName>,
         blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>,
@@ -213,7 +213,7 @@ impl<'a> Frame<'a> {
     }
 
     /// A frame that binds nothing of its own — the `loop` and localized-dispatcher scopes, which exist to register block labels.
-    pub(crate) fn structural(blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>) -> Self {
+    pub fn structural(blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>) -> Self {
         Self::new(HashMap::new(), HashSet::new(), blocks)
     }
 }

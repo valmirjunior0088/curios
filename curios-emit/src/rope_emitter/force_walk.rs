@@ -6,9 +6,9 @@ use super::{
 };
 
 /// The flattening of [`RopeEmitter::emit_force_func`](super::RopeEmitter::emit_force_func) and the `write` it calls: the names of both functions' parameters and locals, and the instruction blocks that bear the invariants — the entry shortcuts, the first piece and where it puts the run, the write, memoization.
-pub(super) struct ForceWalk<'r> {
+pub struct ForceWalk<'r> {
     rope: &'r RopeData,
-    pub(super) r: curios_wasm::LocalName,
+    r: curios_wasm::LocalName,
     node: curios_wasm::LocalName,
     out: curios_wasm::LocalName,
     room: curios_wasm::LocalName,
@@ -29,7 +29,7 @@ pub(super) struct ForceWalk<'r> {
 
 impl<'r> ForceWalk<'r> {
     /// The flattening of a rope whose run occupies as many payload slots as it is long.
-    pub(super) fn new(rope: &'r RopeData) -> Self {
+    pub fn new(rope: &'r RopeData) -> Self {
         let local = curios_wasm::LocalName::from;
         Self {
             rope,
@@ -61,8 +61,13 @@ impl<'r> ForceWalk<'r> {
         concrete_val(self.rope.payload.clone(), true)
     }
 
+    /// The force's one parameter, the rope `r`.
+    pub fn force_params(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
+        vec![(self.r.clone(), concrete_val(self.rope.base.clone(), false))]
+    }
+
     /// The force's locals beside its parameter `r`.
-    pub(super) fn force_locals(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
+    pub fn force_locals(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
         vec![
             (
                 self.node.clone(),
@@ -81,7 +86,7 @@ impl<'r> ForceWalk<'r> {
     }
 
     /// The write's parameters: the piece, the payload it is written into, the offset it starts at, and whether the run's first piece is claimed, already in place at offset zero.
-    pub(super) fn write_params(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
+    pub fn write_params(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
         vec![
             (self.piece.clone(), self.base()),
             (self.out.clone(), self.payload_type()),
@@ -91,7 +96,7 @@ impl<'r> ForceWalk<'r> {
     }
 
     /// The write's locals.
-    pub(super) fn write_locals(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
+    pub fn write_locals(&self) -> Vec<(curios_wasm::LocalName, curios_wasm::ValType)> {
         vec![
             (self.flat.clone(), self.base()),
             (self.dst.clone(), i32_type()),
@@ -105,7 +110,7 @@ impl<'r> ForceWalk<'r> {
     }
 
     /// The flat entries answer without walking: a leaf its payload, a cached node its memo (setting `node` on the way for the memoize epilogue). A view goes on to the walk.
-    pub(super) fn entry_shortcuts(&self) -> Vec<curios_wasm::Instr> {
+    pub fn entry_shortcuts(&self) -> Vec<curios_wasm::Instr> {
         vec![
             get(&self.r),
             field_get(&self.rope.base, &self.rope.tag_field),
@@ -174,7 +179,7 @@ impl<'r> ForceWalk<'r> {
     }
 
     /// The run's first piece into `first`: down the left children from the entry, through every node never flattened.
-    pub(super) fn find_first(&self) -> Vec<curios_wasm::Instr> {
+    pub fn find_first(&self) -> Vec<curios_wasm::Instr> {
         wasm![
             get(&self.r),
             set(&self.first),
@@ -209,7 +214,7 @@ impl<'r> ForceWalk<'r> {
     /// ```
     ///
     /// A claim writes past the extent only, where no slot is written, and every other holder of the payload reads below the extent its run ends at, which no slot it reads is past: so the rule asks nothing about who else holds the payload, and the extent, which only grows, is all that is shared.
-    pub(super) fn place_first(&self) -> Vec<curios_wasm::Instr> {
+    pub fn place_first(&self) -> Vec<curios_wasm::Instr> {
         let run_len = || {
             vec![
                 get(&self.r),
@@ -316,7 +321,7 @@ impl<'r> ForceWalk<'r> {
     }
 
     /// The entry written whole into `out` from offset zero.
-    pub(super) fn write_entry(&self, write: &curios_wasm::FuncName) -> Vec<curios_wasm::Instr> {
+    pub fn write_entry(&self, write: &curios_wasm::FuncName) -> Vec<curios_wasm::Instr> {
         vec![
             get(&self.r),
             get(&self.out),
@@ -411,7 +416,7 @@ impl<'r> ForceWalk<'r> {
     /// ```
     ///
     /// **Recursion into the shorter half bounds the depth.** A call is made only where both children still need walking, on the shorter, at most half the run, so no chain of calls is longer than the run's length has bits — 31 for any run — whatever the rope's depth, and a lean of any depth is a loop. Nothing is allocated: an offset is the lengths before a piece, so no worklist holds what is pending.
-    pub(super) fn write_body(&self, write: &curios_wasm::FuncName) -> Vec<curios_wasm::Instr> {
+    pub fn write_body(&self, write: &curios_wasm::FuncName) -> Vec<curios_wasm::Instr> {
         let child = |field: &curios_wasm::FieldName, into: &curios_wasm::LocalName| {
             wasm![
                 get(&self.piece),
@@ -503,7 +508,7 @@ impl<'r> ForceWalk<'r> {
     }
 
     /// Memoize a node entry, its payload and that payload's room record, and release its tree (`node` was set at entry exactly when the tag is 1); a view entry has nowhere to memoize. Answers the filled payload.
-    pub(super) fn memoize_entry_node(&self) -> Vec<curios_wasm::Instr> {
+    pub fn memoize_entry_node(&self) -> Vec<curios_wasm::Instr> {
         vec![
             get(&self.r),
             field_get(&self.rope.base, &self.rope.tag_field),

@@ -90,7 +90,7 @@ fn ref_field(
 }
 
 /// `$rope/room` — final: the written extent of a flattened payload that holds room past its run, `struct (field $extent (mut i32))`, in the run's own units. Its payload's slots below the extent are written and never again, and those past it are unwritten; the extent only grows, raised by the one run whose length it is when that run's flattening writes its other pieces into the room. Every flattened node over the payload references the record, so whether a run may write the room is a comparison any of them can make, of its length with the extent.
-pub(crate) fn rope_room_sub_type(rope: &RopeData) -> curios_wasm::SubType {
+pub fn rope_room_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
         super_types: vec![],
@@ -107,7 +107,7 @@ pub(crate) fn rope_room_sub_type(rope: &RopeData) -> curios_wasm::SubType {
 }
 
 /// A rope base (`$rope/bytes` / `$rope/list`) — the non-final struct every helper takes, which a carrier reference enters through its final shapes: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a leaf, 1 for a node, 2 for a view; `len` is the carrier's element count, so `len` and the tag dispatch never force.
-pub(crate) fn rope_base_sub_type(rope: &RopeData) -> curios_wasm::SubType {
+pub fn rope_base_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: false,
         super_types: vec![],
@@ -119,7 +119,7 @@ pub(crate) fn rope_base_sub_type(rope: &RopeData) -> curios_wasm::SubType {
 }
 
 /// A rope leaf (`$rope/bytes/leaf` / `$rope/list/leaf`) — final, subtype of the base: adds the flat payload (`$bytes` / `$elems`), exactly the run's length, so a leaf's read can leave its bounds to the engine's trap on the array.
-pub(crate) fn rope_leaf_sub_type(rope: &RopeData) -> curios_wasm::SubType {
+pub fn rope_leaf_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
         super_types: vec![rope.base.clone()],
@@ -135,7 +135,7 @@ pub(crate) fn rope_leaf_sub_type(rope: &RopeData) -> curios_wasm::SubType {
 }
 
 /// A rope node (`$rope/bytes/node` / `$rope/list/node`) — final, subtype of the base: adds two children, the memoization `cache`, and the `room` record of a cache that holds room past the run. All four are mutable and nullable: forcing writes the flat payload into `cache`, its room record into `room` where it has one, and nulls the children, releasing the tree while the memo stays live. A cache is written once, and it holds the run in its first `len` slots.
-pub(crate) fn rope_node_sub_type(rope: &RopeData) -> curios_wasm::SubType {
+pub fn rope_node_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
         super_types: vec![rope.base.clone()],
@@ -163,7 +163,7 @@ pub(crate) fn rope_node_sub_type(rope: &RopeData) -> curios_wasm::SubType {
 }
 
 /// A rope view (`$rope/bytes/view` / `$rope/list/view`) — final, subtype of the base: a window into a `base` rope starting at `offset`. All fields are immutable; the invariant that makes windows read-through is *representational*: a `view`'s base is always flat-available (a leaf, or a node whose `cache` is already set), enforced by the only constructor, the emitted `slice` helper.
-pub(crate) fn rope_view_sub_type(rope: &RopeData) -> curios_wasm::SubType {
+pub fn rope_view_sub_type(rope: &RopeData) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
         super_types: vec![rope.base.clone()],
@@ -180,7 +180,7 @@ pub(crate) fn rope_view_sub_type(rope: &RopeData) -> curios_wasm::SubType {
 }
 
 /// `[anyref] -> [(ref $base)]`, or `(ref null $base)` where a null passes: the type of the block a carrier reference enters its rope base through.
-pub(crate) fn rope_enter_sub_type(rope: &RopeData, admits_null: bool) -> curios_wasm::SubType {
+pub fn rope_enter_sub_type(rope: &RopeData, admits_null: bool) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
         super_types: vec![],
@@ -252,7 +252,7 @@ pub fn cell_sub_type(
 }
 
 /// A channel owns its preallocated nullable slots; taking an item clears its slot before returning it.
-pub(crate) fn channel_sub_type(data: &ChannelData) -> curios_wasm::SubType {
+pub fn channel_sub_type(data: &ChannelData) -> curios_wasm::SubType {
     let word = curios_wasm::FieldType {
         storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
             curios_wasm::NumType::I32,

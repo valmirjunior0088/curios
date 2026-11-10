@@ -13,14 +13,14 @@ use {
 };
 
 mod structurize;
-pub(crate) use structurize::*;
+pub use structurize::*;
 
 // Sigils follow the naming scheme shared with `curios-anf` and `curios-wasm` — see `documentation/design/tools/a-printer-states-each-fact-once-where-it-is-bound.md`.
 id!(MachineBlockId, "~b", mint);
 id!(MachineValueId, "~v", mint);
 
 #[derive(Debug, Clone)]
-pub(crate) enum MachineOperand {
+pub enum MachineOperand {
     Value(MachineValueId),
     Literal(curios_cps::Literal),
     /// [`curios_cps::Atom::Filler`] carried through unchanged: null, unless the destination turns out to be a register-held parameter, which is known only once `represent` has run.
@@ -28,7 +28,7 @@ pub(crate) enum MachineOperand {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum MachineConstruct {
+pub enum MachineConstruct {
     Literal(curios_cps::Literal),
     List(Vec<MachineOperand>),
     Tuple(Vec<MachineOperand>),
@@ -36,7 +36,7 @@ pub(crate) enum MachineConstruct {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum MachineInstruction {
+pub enum MachineInstruction {
     Construct {
         result: MachineValueId,
         value: MachineConstruct,
@@ -63,13 +63,13 @@ pub(crate) enum MachineInstruction {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MachineEdge {
+pub struct MachineEdge {
     target: MachineBlockId,
     args: Vec<MachineOperand>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum MachineTerminator {
+pub enum MachineTerminator {
     /// Hand every operand back to the caller. The vector is the return continuation's argument list, which the CPS verifier does not constrain to one — so a protocol delivering a constructor as its fields needs no widening here, only a producer that builds more than one.
     Return(Vec<MachineOperand>),
     Jump(MachineEdge),
@@ -143,14 +143,14 @@ pub(crate) enum MachineTerminator {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MachineBlock {
+pub struct MachineBlock {
     params: Vec<MachineValueId>,
     instructions: Vec<MachineInstruction>,
     terminator: MachineTerminator,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MachineFunction {
+pub struct MachineFunction {
     free_values: Vec<MachineValueId>,
     params: Vec<MachineValueId>,
     /// What every `Return` in this function carries, one carrier a value — a register's, or `None` for a reference — read off the representation decided over the CPS module rather than recounted here: a caller has to know it to size the block that resumes the call and to receive each value as it is held, and a block cannot be sized from a terminator it has not reached yet.
@@ -161,14 +161,14 @@ pub(crate) struct MachineFunction {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MachineWrapper {
+pub struct MachineWrapper {
     function: curios_cps::FunctionId,
     captures: Vec<MachineValueId>,
     arity: usize,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct MachineModule {
+pub struct MachineModule {
     functions: BTreeMap<curios_cps::FunctionId, MachineFunction>,
     wrappers: BTreeMap<curios_cps::FunctionId, MachineWrapper>,
     entry: curios_cps::FunctionId,
@@ -182,21 +182,21 @@ pub(crate) struct MachineModule {
 
 impl MachineModule {
     /// The source hint of a function, if it carries one.
-    pub(crate) fn function_hint(&self, id: curios_cps::FunctionId) -> Option<&str> {
+    pub fn function_hint(&self, id: curios_cps::FunctionId) -> Option<&str> {
         self.function_hints.get(&id).map(String::as_str)
     }
 
-    pub(crate) fn rows(&self) -> &[(curios_cps::RowId, curios_cps::Row)] {
+    pub fn rows(&self) -> &[(curios_cps::RowId, curios_cps::Row)] {
         &self.rows
     }
 
-    pub(crate) fn entry_suspension(&self) -> Option<curios_cps::RowId> {
+    pub fn entry_suspension(&self) -> Option<curios_cps::RowId> {
         self.entry_suspension
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct MachineVerifyError(String);
+pub struct MachineVerifyError(String);
 
 impl fmt::Display for MachineVerifyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -205,7 +205,7 @@ impl fmt::Display for MachineVerifyError {
 }
 
 /// Lower `source` to the closed machine CFG, each function handing back its results at the storage `results` decided for them.
-pub(crate) fn lower(
+pub fn lower(
     source: &curios_cps::Module,
     results: &BTreeMap<curios_cps::FunctionId, Vec<curios_cps::Storage>>,
 ) -> MachineModule {
@@ -464,7 +464,7 @@ fn function_nodes(
     nodes
 }
 
-pub(crate) struct MachineFunctionLowerer<'a> {
+pub struct MachineFunctionLowerer<'a> {
     source: &'a curios_cps::Module,
     id: curios_cps::FunctionId,
     function: &'a curios_cps::Function,
@@ -889,12 +889,12 @@ impl<'a> MachineFunctionLowerer<'a> {
     }
 }
 
-pub(crate) fn value_id(value: curios_cps::ValueId) -> MachineValueId {
+pub fn value_id(value: curios_cps::ValueId) -> MachineValueId {
     MachineValueId(value.index() as u32)
 }
 
 impl MachineModule {
-    pub(crate) fn verify(&self) -> Result<(), MachineVerifyError> {
+    pub fn verify(&self) -> Result<(), MachineVerifyError> {
         let entry = self
             .functions
             .get(&self.entry)

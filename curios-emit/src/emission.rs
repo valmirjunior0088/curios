@@ -12,7 +12,7 @@ use {
 
 /// A constructed value: the scalar immediates, packed `Bytes`, `List`/`Tuple` aggregates, a nominal `Row`, and `Closure` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `EmissionData` — so constructing one is a single allocation. `EmissionData` is also the payload of module consts, where codegen materialises it into a wasm global.
 #[derive(Debug, Clone)]
-pub(crate) enum EmissionData {
+pub enum EmissionData {
     Nat(Natural),
     Int(Integer),
     Flt(f64),
@@ -26,7 +26,7 @@ pub(crate) enum EmissionData {
 
 /// One computation over already-bound values: every variant produces exactly one value and has no effect a reader can see, anything stateful being an [`EmissionTail`]. A rebuild writes, into memory nothing but it reads from there on, so it is ordered where it stands like every binding and never interned.
 #[derive(Debug, Clone)]
-pub(crate) enum EmissionCode {
+pub enum EmissionCode {
     /// One [`curios_cps::Intrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bytes*`/`List*` rows are rope operations codegen services through shared helper functions.
     Intrinsic(curios_cps::Intrinsic, Vec<EmissionValueName>),
     // `ListMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$list/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_indirect`.
@@ -43,30 +43,30 @@ pub(crate) enum EmissionCode {
 
 /// The right-hand side of one binding in the emission body.
 #[derive(Debug, Clone)]
-pub(crate) enum EmissionValue {
+pub enum EmissionValue {
     Pure(EmissionData),
     Eval(EmissionCode),
 }
 
 /// A labeled join point inside a region: `params` are its block parameters — the SSA replacement for φ-nodes, bound afresh on every entry from a [`EmissionJumpTarget`] — and `region` its body. Blocks are also how calls continue: a call's `resume` names the block that receives its result, and a backward jump to a loop header block is how the loops contification leaves behind close.
 #[derive(Debug, Clone)]
-pub(crate) struct EmissionBlock {
-    pub(crate) params: Vec<EmissionValueName>,
-    pub(crate) region: EmissionBody,
+pub struct EmissionBlock {
+    pub params: Vec<EmissionValueName>,
+    pub region: EmissionBody,
 }
 
 /// One branch edge: the destination block plus the arguments feeding its parameters, positionally. This is the IR's φ-mechanism — a block parameter's value is whatever the taken edge passed for it.
 #[derive(Debug, Clone)]
-pub(crate) struct EmissionJumpTarget {
-    pub(crate) target: EmissionBlockName,
-    pub(crate) params: Vec<EmissionArg>,
+pub struct EmissionJumpTarget {
+    pub target: EmissionBlockName,
+    pub params: Vec<EmissionArg>,
 }
 
 /// What one edge passes for one block parameter.
 ///
 /// A named value in every ordinary case. [`EmissionArg::Filler`] is absence: null wherever the destination is a reference, and, where the destination is a parameter the representation analysis holds in a register, that register's zero — the one case a null cannot land, decided here because the carrier is decided after the filler was written.
 #[derive(Debug, Clone)]
-pub(crate) enum EmissionArg {
+pub enum EmissionArg {
     Value(EmissionValueName),
     /// No value: the slot belongs to a wider constructor than this edge's, and is a reference slot, so what the unwritten field holds is null.
     Filler,
@@ -74,15 +74,15 @@ pub(crate) enum EmissionArg {
 
 /// A multi-way branch on a scalar: `operand` is read as an unsigned `u32` (a constructor tag or nat), each case maps one value to its edge, and `default` catches the rest — `None` means the cases are exhaustive, and a match with no cases and no default lowers to a trap. Codegen picks the dispatch shape (a `br_table` for dense-from-zero tags, an `if` for two-way, a binary search otherwise); the IR just states the table.
 #[derive(Debug, Clone)]
-pub(crate) struct EmissionMatchTarget {
-    pub(crate) operand: EmissionValueName,
-    pub(crate) cases: BTreeMap<u32, EmissionJumpTarget>,
-    pub(crate) default: Option<EmissionJumpTarget>,
+pub struct EmissionMatchTarget {
+    pub operand: EmissionValueName,
+    pub cases: BTreeMap<u32, EmissionJumpTarget>,
+    pub default: Option<EmissionJumpTarget>,
 }
 
 /// A user-code call in tail position: `Direct` names a known function, `Indirect` invokes a closure value through the shared closure type of its arity (`call_indirect` through the module's closure table). Both name the `resume` block, which receives the callee's results as its parameters — one for a closure call, the callee's result count for a direct one — except when `resume` is the enclosing body's return sentinel, where the call is a genuine tail call and codegen emits `return_call`/`return_call_indirect` instead of branching.
 #[derive(Debug, Clone)]
-pub(crate) enum EmissionCallTarget {
+pub enum EmissionCallTarget {
     Direct {
         target: EmissionFunctionName,
         params: Vec<EmissionArg>,
@@ -97,7 +97,7 @@ pub(crate) enum EmissionCallTarget {
 
 /// A host-provided intrinsic in tail position. Returning foreign calls carry the block that receives their results; a diverging one does not. Purity analysis treats any `EmissionTail::Host` as the impure boundary of its enclosing region tree.
 #[derive(Debug, Clone)]
-pub(crate) enum EmissionHostTarget {
+pub enum EmissionHostTarget {
     /// A store-described host call: `function`'s `WireSignature` fixes the operand order/types and the resume shape — `resume` takes one block parameter per signature result, so a multi-result record arrives as parallel block parameters.
     Foreign {
         function: Arc<ForeignFunction>,
@@ -113,7 +113,7 @@ pub(crate) enum EmissionHostTarget {
 
 /// A guest write-once cell op in tail position. Same `resume` discipline as `EmissionHostTarget`, but serviced inline in codegen (no host import). Purity analysis treats any `EmissionTail::Cell` as an impure boundary, like `Host`.
 #[derive(Debug, Clone)]
-pub(crate) enum EmissionCellTarget {
+pub enum EmissionCellTarget {
     /// An empty cell, represented by a null field.
     Reserve { resume: EmissionBlockName },
     Fill {
@@ -128,7 +128,7 @@ pub(crate) enum EmissionCellTarget {
 }
 
 impl EmissionCellTarget {
-    pub(crate) fn resume(&self) -> &EmissionBlockName {
+    pub fn resume(&self) -> &EmissionBlockName {
         match self {
             EmissionCellTarget::Reserve { resume }
             | EmissionCellTarget::Fill { resume, .. }
@@ -139,15 +139,15 @@ impl EmissionCellTarget {
 
 /// A bounded guest channel operation, performed inline and delivering its results to `resume`.
 #[derive(Debug, Clone)]
-pub(crate) struct EmissionChannelTarget {
-    pub(crate) op: curios_cps::ChannelOp,
-    pub(crate) args: Vec<EmissionValueName>,
-    pub(crate) resume: EmissionBlockName,
+pub struct EmissionChannelTarget {
+    pub op: curios_cps::ChannelOp,
+    pub args: Vec<EmissionValueName>,
+    pub resume: EmissionBlockName,
 }
 
 /// The sole control transfer out of a region — a region never falls through. `Jump` and `Match` stay within the body; `Call` transfers to user code; `Host` and `Cell` are the effectful intrinsics (the only impurity the IR admits — purity analysis marks a region tree impure exactly when one appears in it); `Panic` reports a failure of its class and stops; `Unreachable` traps, marking a path that cannot be taken (an absurd match).
 #[derive(Debug, Clone)]
-pub(crate) enum EmissionTail {
+pub enum EmissionTail {
     Jump(EmissionJumpTarget),
     Match(EmissionMatchTarget),
     Call(EmissionCallTarget),
@@ -160,7 +160,7 @@ pub(crate) enum EmissionTail {
 
 impl EmissionTail {
     /// The blocks this tail transfers to directly, in source order — not reaching into any nested region.
-    pub(crate) fn targets(&self) -> Vec<&EmissionBlockName> {
+    pub fn targets(&self) -> Vec<&EmissionBlockName> {
         match self {
             EmissionTail::Jump(target) => vec![&target.target],
             EmissionTail::Match(target) => target
@@ -184,10 +184,10 @@ impl EmissionTail {
 
 /// One straight-line body fragment and the sub-structure hanging off it: bindings evaluated in order, the labeled join blocks its jumps enter, and the single [`EmissionTail`] transfer that ends it. All control flow in a body lives in its region tree — an [`EmissionValue`] binding never branches.
 #[derive(Debug, Clone)]
-pub(crate) struct EmissionBody {
-    pub(crate) values: Vec<(EmissionValueName, EmissionValue)>,
-    pub(crate) blocks: Vec<(EmissionBlockName, EmissionBlock)>,
-    pub(crate) tail: EmissionTail,
+pub struct EmissionBody {
+    values: Vec<(EmissionValueName, EmissionValue)>,
+    blocks: Vec<(EmissionBlockName, EmissionBlock)>,
+    tail: EmissionTail,
     /// The blocks this region's tail and every region nested in it branch to, other than its own: what the region it sits in reads its sibling edges off ([`EmissionBody::escapes`]).
     escapes: HashSet<EmissionBlockName>,
 }
@@ -196,7 +196,7 @@ impl EmissionBody {
     /// A region of `values`, `blocks` and `tail`, its escaping branches read off its tail and its blocks' own records.
     ///
     /// **A region is read once, where it is built.** Its blocks are built before it, so what they branch to is in hand, and a region nested n deep is not walked again by each of the n regions it sits in to find its edges — the square of a nesting.
-    pub(crate) fn new(
+    pub fn new(
         values: Vec<(EmissionValueName, EmissionValue)>,
         blocks: Vec<(EmissionBlockName, EmissionBlock)>,
         tail: EmissionTail,
@@ -218,8 +218,35 @@ impl EmissionBody {
     }
 
     /// The blocks this region branches to, at any depth, other than its own.
-    pub(crate) fn escapes(&self) -> &HashSet<EmissionBlockName> {
+    pub fn escapes(&self) -> &HashSet<EmissionBlockName> {
         &self.escapes
+    }
+
+    /// The region's bindings, in the order they are evaluated.
+    pub fn values(&self) -> &[(EmissionValueName, EmissionValue)] {
+        &self.values
+    }
+
+    /// The labeled join blocks the region's jumps enter.
+    pub fn blocks(&self) -> &[(EmissionBlockName, EmissionBlock)] {
+        &self.blocks
+    }
+
+    /// The transfer that ends the region.
+    pub fn tail(&self) -> &EmissionTail {
+        &self.tail
+    }
+
+    /// Read each value `renames` names under the name it maps to, here and in every region nested in this one, dropping the bindings it renames away. A value is renamed and never a block, so what the region escapes to stands.
+    pub fn rename_values(&mut self, renames: &HashMap<EmissionValueName, EmissionValueName>) {
+        self.values.retain(|(name, _)| !renames.contains_key(name));
+        for (_, value) in &mut self.values {
+            value.rename(renames);
+        }
+        self.tail.rename(renames);
+        for (_, block) in &mut self.blocks {
+            block.region.rename_values(renames);
+        }
     }
 
     /// Each value a closure construction binds in this region and every region nested in it, with the closure it builds.
@@ -251,8 +278,8 @@ impl EmissionBody {
 
 /// A function or closure argument in the private emission model.
 #[derive(Debug, Clone)]
-pub(crate) struct EmissionBinder {
-    pub(crate) name: EmissionValueName,
+pub struct EmissionBinder {
+    pub name: EmissionValueName,
 }
 
 impl From<EmissionValueName> for EmissionBinder {
@@ -263,26 +290,26 @@ impl From<EmissionValueName> for EmissionBinder {
 
 /// A closure definition: `fields` is the captured environment — filled where a `EmissionData::Closure` names this definition, read inside the body like extra bindings — and `params` the call arguments. `resume` is the return sentinel, exactly as on [`EmissionFunction`]. Codegen gives each definition its own environment struct type but files its function under the shared closure type for its arity, which is what lets a [`EmissionCallTarget::Indirect`] call any closure of matching arity.
 #[derive(Debug, Clone)]
-pub(crate) struct EmissionClosure {
-    pub(crate) fields: Vec<EmissionBinder>,
-    pub(crate) params: Vec<EmissionBinder>,
-    pub(crate) resume: EmissionBlockName,
-    pub(crate) region: EmissionBody,
+pub struct EmissionClosure {
+    pub fields: Vec<EmissionBinder>,
+    pub params: Vec<EmissionBinder>,
+    pub resume: EmissionBlockName,
+    pub region: EmissionBody,
 }
 
 /// A top-level function: parameters, body, and its `resume` sentinel — the block name that means "return": a jump to `resume` *is* the function's return, so a call whose resume block is the enclosing sentinel is a tail call by construction (codegen emits `return_call`), no separate tail-position analysis needed.
 #[derive(Debug, Clone)]
-pub(crate) struct EmissionFunction {
-    pub(crate) params: Vec<EmissionBinder>,
+pub struct EmissionFunction {
+    pub params: Vec<EmissionBinder>,
     /// What this function hands back, one carrier a value — a register's, or `None` for a reference: one value unless a return protocol delivers a constructor as its fields, each held as the representation decided for its result slot — which is why the wasm type is keyed on the carriers rather than on the parameter count alone.
-    pub(crate) results: Vec<Option<curios_cps::Repr>>,
-    pub(crate) resume: EmissionBlockName,
-    pub(crate) region: EmissionBody,
+    pub results: Vec<Option<curios_cps::Repr>>,
+    pub resume: EmissionBlockName,
+    pub region: EmissionBody,
 }
 
 /// One whole program in the emission model: module-level consts (hoisted literals), the closure and function definitions, and the blessed entrypoint. Bodies reference consts and each other by name, and definition order is preserved end-to-end — it is the printed order and the wasm emission order. The collections are private to this module: structurization grows a module through the `add_*` methods, and the hoister, a child module, rewrites its bodies in place.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct EmissionModule {
+pub struct EmissionModule {
     consts: Vec<(EmissionValueName, EmissionData)>,
     clsrs: Vec<(EmissionClosureName, EmissionClosure)>,
     funcs: Vec<(EmissionFunctionName, EmissionFunction)>,
@@ -299,67 +326,61 @@ pub(crate) struct EmissionModule {
 
 impl EmissionModule {
     /// An empty module: no definitions, no entrypoint.
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self::default()
     }
 
-    pub(crate) fn rows(&self) -> &[(curios_cps::RowId, curios_cps::Row)] {
+    pub fn rows(&self) -> &[(curios_cps::RowId, curios_cps::Row)] {
         &self.rows
     }
 
-    pub(crate) fn set_rows(&mut self, rows: Vec<(curios_cps::RowId, curios_cps::Row)>) {
+    pub fn set_rows(&mut self, rows: Vec<(curios_cps::RowId, curios_cps::Row)>) {
         self.rows = rows;
     }
 
-    pub(crate) fn entry_suspension(&self) -> Option<curios_cps::RowId> {
+    pub fn entry_suspension(&self) -> Option<curios_cps::RowId> {
         self.entry_suspension
     }
 
-    pub(crate) fn set_entry_suspension(&mut self, entry_suspension: Option<curios_cps::RowId>) {
+    pub fn set_entry_suspension(&mut self, entry_suspension: Option<curios_cps::RowId>) {
         self.entry_suspension = entry_suspension;
     }
 
-    pub(crate) fn rebuilt(&self) -> &BTreeMap<curios_cps::RowId, BTreeSet<usize>> {
+    pub fn rebuilt(&self) -> &BTreeMap<curios_cps::RowId, BTreeSet<usize>> {
         &self.rebuilt
     }
 
-    pub(crate) fn set_rebuilt(&mut self, rebuilt: BTreeMap<curios_cps::RowId, BTreeSet<usize>>) {
+    pub fn set_rebuilt(&mut self, rebuilt: BTreeMap<curios_cps::RowId, BTreeSet<usize>>) {
         self.rebuilt = rebuilt;
     }
 
-    pub(crate) fn consts(&self) -> &[(EmissionValueName, EmissionData)] {
+    pub fn consts(&self) -> &[(EmissionValueName, EmissionData)] {
         &self.consts
     }
 
     /// The values structurization minted that a register holds, at their carriers.
-    pub(crate) fn minted_registers(
+    pub fn minted_registers(
         &self,
     ) -> impl Iterator<Item = (EmissionValueName, curios_cps::Repr)> + '_ {
         self.minted_registers.iter().cloned()
     }
 
     /// Record that `name`, a value structurization minted, is held in a register at `carrier`.
-    pub(crate) fn add_minted_register(
-        &mut self,
-        name: EmissionValueName,
-        carrier: curios_cps::Repr,
-    ) {
+    pub fn add_minted_register(&mut self, name: EmissionValueName, carrier: curios_cps::Repr) {
         self.minted_registers.push((name, carrier));
     }
 
-    pub(crate) fn set_consts(&mut self, consts: Vec<(EmissionValueName, EmissionData)>) {
+    pub fn set_consts(&mut self, consts: Vec<(EmissionValueName, EmissionData)>) {
         self.consts = consts;
     }
 
     /// The closure definitions, in insertion order.
-    pub(crate) fn clsrs(&self) -> &[(EmissionClosureName, EmissionClosure)] {
+    pub fn clsrs(&self) -> &[(EmissionClosureName, EmissionClosure)] {
         &self.clsrs
     }
 
     /// Every value a closure construction binds, in a body or hoisted to a const, with the closure it builds.
-    pub(crate) fn closure_constructions(
-        &self,
-    ) -> HashMap<&EmissionValueName, &EmissionClosureName> {
+    pub fn closure_constructions(&self) -> HashMap<&EmissionValueName, &EmissionClosureName> {
         let mut constructions = HashMap::new();
         for (_, func) in &self.funcs {
             func.region
@@ -378,22 +399,22 @@ impl EmissionModule {
     }
 
     /// Append a closure definition under its name; `EmissionData::Closure` values cite that name to instantiate it.
-    pub(crate) fn add_clsr(&mut self, clsr_name: EmissionClosureName, clsr: EmissionClosure) {
+    pub fn add_clsr(&mut self, clsr_name: EmissionClosureName, clsr: EmissionClosure) {
         self.clsrs.push((clsr_name, clsr));
     }
 
     /// The function definitions, in insertion order — the order they print and emit in.
-    pub(crate) fn funcs(&self) -> &[(EmissionFunctionName, EmissionFunction)] {
+    pub fn funcs(&self) -> &[(EmissionFunctionName, EmissionFunction)] {
         &self.funcs
     }
 
     /// Append a function definition under its name; the position it lands in is the position it keeps.
-    pub(crate) fn add_func(&mut self, func_name: EmissionFunctionName, func: EmissionFunction) {
+    pub fn add_func(&mut self, func_name: EmissionFunctionName, func: EmissionFunction) {
         self.funcs.push((func_name, func));
     }
 
     /// Every definition's body, the closures' then the functions', each in insertion order — what a pass rewriting bodies in place walks.
-    pub(crate) fn regions_mut(&mut self) -> impl Iterator<Item = &mut EmissionBody> {
+    pub fn regions_mut(&mut self) -> impl Iterator<Item = &mut EmissionBody> {
         self.clsrs
             .iter_mut()
             .map(|(_, clsr)| &mut clsr.region)
@@ -401,7 +422,7 @@ impl EmissionModule {
     }
 
     /// Every closure arity the module needs closure types for: the arities of the surviving closure definitions, unioned with the arities of indirect call sites (whose target definition may have been inlined away). Sizing closure types from definitions alone misses the latter, leaving a surviving `call_indirect` with no declared type for its arity.
-    pub(crate) fn clsr_arities(&self) -> BTreeSet<usize> {
+    pub fn clsr_arities(&self) -> BTreeSet<usize> {
         let mut arities = BTreeSet::new();
 
         // A row slot declared at a closure arity names that arity's environment type, so the roster has to reach it whether or not the module ever builds a closure of that arity.
@@ -431,12 +452,110 @@ impl EmissionModule {
     }
 
     /// The entrypoint function — the program's sole root: the value the host invokes, the only export, and the seed of dead-code reachability. Recorded here so passes consult the module instead of re-deriving a blessed name.
-    pub(crate) fn entry(&self) -> Option<&EmissionFunctionName> {
+    pub fn entry(&self) -> Option<&EmissionFunctionName> {
         self.entry.as_ref()
     }
 
     /// Bless `func_name` as the entrypoint. Set once by `structurize` (always `main`); the module does not check the function exists — the structurizer adds it separately.
-    pub(crate) fn set_entry(&mut self, func_name: EmissionFunctionName) {
+    pub fn set_entry(&mut self, func_name: EmissionFunctionName) {
         self.entry = Some(func_name);
+    }
+}
+
+fn rename_name(
+    name: &mut EmissionValueName,
+    renames: &HashMap<EmissionValueName, EmissionValueName>,
+) {
+    if let Some(interned) = renames.get(name) {
+        *name = interned.clone();
+    }
+}
+
+fn rename_names(
+    names: &mut [EmissionValueName],
+    renames: &HashMap<EmissionValueName, EmissionValueName>,
+) {
+    for name in names {
+        rename_name(name, renames);
+    }
+}
+
+fn rename_jump_args(
+    args: &mut [EmissionArg],
+    renames: &HashMap<EmissionValueName, EmissionValueName>,
+) {
+    for arg in args {
+        // A filler names nothing, so there is nothing to intern it against.
+        if let EmissionArg::Value(name) = arg {
+            rename_name(name, renames);
+        }
+    }
+}
+
+impl EmissionValue {
+    /// Read each value `renames` names under the name it maps to.
+    fn rename(&mut self, renames: &HashMap<EmissionValueName, EmissionValueName>) {
+        match self {
+            EmissionValue::Pure(data) => match data {
+                EmissionData::Nat(_)
+                | EmissionData::Int(_)
+                | EmissionData::Flt(_)
+                | EmissionData::Bytes(_) => {}
+                EmissionData::List(elems) | EmissionData::Tuple(elems) => {
+                    rename_names(elems, renames)
+                }
+                EmissionData::Row(_, slots) => rename_jump_args(slots, renames),
+                EmissionData::Closure(_, fields) => rename_names(fields, renames),
+            },
+            EmissionValue::Eval(code) => match code {
+                EmissionCode::Intrinsic(_, args) => rename_names(args, renames),
+                EmissionCode::ListMap(list, mapper) => {
+                    rename_name(list, renames);
+                    rename_name(mapper, renames);
+                }
+                EmissionCode::Rebuild { of, values, .. } => {
+                    rename_name(of, renames);
+                    rename_jump_args(values, renames);
+                }
+            },
+        }
+    }
+}
+
+impl EmissionTail {
+    /// Read each value `renames` names under the name it maps to; the blocks it branches to stand.
+    fn rename(&mut self, renames: &HashMap<EmissionValueName, EmissionValueName>) {
+        match self {
+            EmissionTail::Jump(target) => rename_jump_args(&mut target.params, renames),
+            EmissionTail::Match(target) => {
+                rename_name(&mut target.operand, renames);
+                for target in target.cases.values_mut().chain(target.default.iter_mut()) {
+                    rename_jump_args(&mut target.params, renames);
+                }
+            }
+            EmissionTail::Call(EmissionCallTarget::Direct { params, .. }) => {
+                rename_jump_args(params, renames)
+            }
+            EmissionTail::Call(EmissionCallTarget::Indirect { target, params, .. }) => {
+                rename_name(target, renames);
+                rename_jump_args(params, renames);
+            }
+            EmissionTail::Host(
+                EmissionHostTarget::Foreign { operands, .. }
+                | EmissionHostTarget::Halt { operands, .. },
+            ) => rename_names(operands, renames),
+            EmissionTail::Channel(channel) => {
+                for arg in &mut channel.args {
+                    rename_name(arg, renames);
+                }
+            }
+            EmissionTail::Cell(EmissionCellTarget::Reserve { .. }) => {}
+            EmissionTail::Cell(EmissionCellTarget::Fill { cell, value, .. }) => {
+                rename_name(cell, renames);
+                rename_name(value, renames);
+            }
+            EmissionTail::Cell(EmissionCellTarget::Poll { cell, .. }) => rename_name(cell, renames),
+            EmissionTail::Panic(_) | EmissionTail::Unreachable => {}
+        }
     }
 }

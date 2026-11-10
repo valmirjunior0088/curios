@@ -14,14 +14,14 @@ use {
 };
 
 #[derive(Debug)]
-pub(crate) struct ModuleEmitter<'a, 'b> {
+pub struct ModuleEmitter<'a, 'b> {
     table: &'a Table<'a>,
     start_expr: curios_wasm::Expr,
     module: &'b mut curios_wasm::Module,
 }
 
 impl<'a, 'b> ModuleEmitter<'a, 'b> {
-    pub(crate) fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
+    pub fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
         Self {
             table,
             start_expr: Default::default(),
@@ -915,7 +915,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    pub(crate) fn emit_module(&mut self, module: &'a EmissionModule) {
+    pub fn emit_module(&mut self, module: &'a EmissionModule) {
         self.emit_flt_type();
         self.emit_big_types();
         self.emit_longs_type();

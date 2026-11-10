@@ -16,7 +16,7 @@ use super::{
 
 /// Every big-number helper, named by what it computes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BigHelper {
+pub enum BigHelper {
     /// `(anyref, anyref) -> (ref any)`: monus.
     NatSub,
     /// `(anyref, anyref, i32 flip) -> (ref any)`: the sum, or with `flip` the difference.
@@ -77,7 +77,7 @@ pub(crate) enum BigHelper {
 
 impl BigHelper {
     /// Every helper, callers before callees: the order the module emitter visits them in, so that a helper is looked at only after every body that could call it has been built.
-    pub(crate) const ALL: [BigHelper; 28] = [
+    pub const ALL: [BigHelper; 28] = [
         BigHelper::NatSub,
         BigHelper::Add,
         BigHelper::Pow,
@@ -109,14 +109,14 @@ impl BigHelper {
     ];
 
     /// This helper's position in [`BigHelper::ALL`], which is its slot in the table's roster.
-    pub(crate) fn slot(self) -> usize {
+    pub fn slot(self) -> usize {
         BigHelper::ALL
             .iter()
             .position(|helper| *helper == self)
             .expect("`BigHelper::ALL` holds every helper")
     }
 
-    pub(crate) fn func_name(self) -> curios_wasm::FuncName {
+    pub fn func_name(self) -> curios_wasm::FuncName {
         curios_wasm::FuncName::from(match self {
             BigHelper::NatSub => "nat/sub",
             BigHelper::Add => "big/add",
@@ -152,14 +152,14 @@ impl BigHelper {
 
 /// Which pointwise combination `big/bitwise` computes, handed to it as an `i32` so the three share one two's-complement walk.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Bitwise {
+pub enum Bitwise {
     And,
     Or,
     Xor,
 }
 
 impl Bitwise {
-    pub(crate) fn code(self) -> i32 {
+    pub fn code(self) -> i32 {
         match self {
             Bitwise::And => 0,
             Bitwise::Or => 1,
@@ -225,14 +225,14 @@ fn binary_scope() -> (Scope, curios_wasm::LocalName, curios_wasm::LocalName) {
 }
 
 #[derive(Debug)]
-pub(crate) struct BigEmitter<'a, 'b> {
+pub struct BigEmitter<'a, 'b> {
     table: &'a Table<'a>,
     module: &'b mut curios_wasm::Module,
     big: BigData,
 }
 
 impl<'a, 'b> BigEmitter<'a, 'b> {
-    pub(crate) fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
+    pub fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
         Self {
             big: table.big(),
             table,
@@ -241,7 +241,7 @@ impl<'a, 'b> BigEmitter<'a, 'b> {
     }
 
     /// Build `helper` and add it to the module.
-    pub(crate) fn emit_func(&mut self, helper: BigHelper) {
+    pub fn emit_func(&mut self, helper: BigHelper) {
         match helper {
             BigHelper::NatSub => self.emit_nat_sub(),
             BigHelper::Add => self.emit_big_add(),

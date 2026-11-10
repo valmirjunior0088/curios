@@ -13,15 +13,15 @@ use {curios_common::recurse, std::collections::HashMap};
 
 /// The engine's limits a module stays inside: the most fields a struct type declares, and the most parameters and results a function type does.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Envelope {
-    pub(crate) fields: usize,
-    pub(crate) params: usize,
-    pub(crate) results: usize,
+pub struct Envelope {
+    pub fields: usize,
+    pub params: usize,
+    pub results: usize,
 }
 
 impl Envelope {
     /// Wasmtime's, as its validator states them: `wasmparser`'s `MAX_WASM_STRUCT_FIELDS`, `MAX_WASM_FUNCTION_PARAMS` and `MAX_WASM_FUNCTION_RETURNS`.
-    pub(crate) const ENGINE: Self = Self {
+    pub const ENGINE: Self = Self {
         fields: 10_000,
         params: 1_000,
         results: 1_000,
@@ -32,7 +32,7 @@ impl Envelope {
 const SPILL: &str = "spill";
 
 /// Spill every shape of `module` past `envelope`. See the module documentation.
-pub(crate) fn spill_wide_shapes(module: &mut curios_wasm::Module, envelope: Envelope) {
+pub fn spill_wide_shapes(module: &mut curios_wasm::Module, envelope: Envelope) {
     curios_profile::profile!("spill_wide_shapes");
     let signatures = spill_signatures(module.types_mut(), envelope);
     let wides = spill_structs(module.types_mut(), envelope);

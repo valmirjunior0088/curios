@@ -41,7 +41,7 @@ const EXPONENT_BIAS: i32 = 1075;
 const INFINITE_FIELD: i32 = 2047;
 
 /// The `i32` a direction travels as, which is its position in [`Rounding::ALL`].
-pub(crate) fn rounding_code(rounding: Rounding) -> i32 {
+pub fn rounding_code(rounding: Rounding) -> i32 {
     match rounding {
         Rounding::TiesToEven => 0,
         Rounding::TiesToAway => 1,
@@ -53,7 +53,7 @@ pub(crate) fn rounding_code(rounding: Rounding) -> i32 {
 
 /// Every float helper, named by what it computes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum FltHelper {
+pub enum FltHelper {
     /// `(f64, f64, f64, i32 direction) -> f64`: `a · b + c`, rounded once.
     Fma,
     /// `(f64, f64, i32 direction) -> f64`: the sum. A difference is the sum with its subtrahend negated.
@@ -76,7 +76,7 @@ pub(crate) enum FltHelper {
 
 impl FltHelper {
     /// Every helper, callers before callees.
-    pub(crate) const ALL: [FltHelper; 9] = [
+    pub const ALL: [FltHelper; 9] = [
         FltHelper::Fma,
         FltHelper::Add,
         FltHelper::Mul,
@@ -89,14 +89,14 @@ impl FltHelper {
     ];
 
     /// This helper's position in [`FltHelper::ALL`], which is its slot in the table's roster.
-    pub(crate) fn slot(self) -> usize {
+    pub fn slot(self) -> usize {
         FltHelper::ALL
             .iter()
             .position(|helper| *helper == self)
             .expect("`FltHelper::ALL` holds every helper")
     }
 
-    pub(crate) fn func_name(self) -> curios_wasm::FuncName {
+    pub fn func_name(self) -> curios_wasm::FuncName {
         curios_wasm::FuncName::from(match self {
             FltHelper::Fma => "flt/fma",
             FltHelper::Add => "flt/add",
@@ -567,18 +567,18 @@ impl Wide {
     }
 }
 
-pub(crate) struct FltEmitter<'a, 'b> {
+pub struct FltEmitter<'a, 'b> {
     table: &'a Table<'a>,
     module: &'b mut curios_wasm::Module,
 }
 
 impl<'a, 'b> FltEmitter<'a, 'b> {
-    pub(crate) fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
+    pub fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
         Self { table, module }
     }
 
     /// Build `helper` and add it to the module.
-    pub(crate) fn emit_func(&mut self, helper: FltHelper) {
+    pub fn emit_func(&mut self, helper: FltHelper) {
         match helper {
             FltHelper::Fma => self.emit_flt_fma(),
             FltHelper::Add => self.emit_flt_add(),

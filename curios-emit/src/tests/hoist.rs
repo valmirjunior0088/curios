@@ -93,10 +93,10 @@ fn bound(structured: &mut EmissionModule) -> BTreeSet<String> {
 }
 
 fn collect(region: &EmissionBody, names: &mut BTreeSet<String>) {
-    for (name, _) in &region.values {
+    for (name, _) in region.values() {
         names.insert(name.as_string());
     }
-    for (_, block) in &region.blocks {
+    for (_, block) in region.blocks() {
         collect(&block.region, names);
     }
 }

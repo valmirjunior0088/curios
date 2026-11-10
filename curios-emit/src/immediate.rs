@@ -5,15 +5,15 @@
 //! **Two constants are free; the rest are consequences.** `envelope` and `len_shift` are decided, and the payload mask, the payload byte count and the element mask follow from them and a byte's eight bits. Deriving them is what makes a disagreement unspellable rather than merely unlikely, and [`ImmediateLayout::new`] asserts the two invariants that relate the free pair: the payload fits below the length field, and the length field is wide enough to count the envelope.
 
 /// The immediate layout. Every quantity is in the units a Wasm instruction takes them in, so a caller reads fields rather than converting.
-pub(crate) struct ImmediateLayout {
+pub struct ImmediateLayout {
     /// The longest value, in bytes, that still fits an immediate. A value past it is a rope.
-    pub(crate) envelope: i32,
+    pub envelope: i32,
     /// Where the length field starts. The payload occupies the bits below it, the length those from it up to bit 30 — the top of the `i31`.
-    pub(crate) len_shift: i32,
+    pub len_shift: i32,
 }
 
 impl ImmediateLayout {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         // The length rides the top 2 payload bits over up to 3 bytes, LSB-first.
         let (envelope, len_shift) = (3, 29);
         let layout = Self {
@@ -32,18 +32,18 @@ impl ImmediateLayout {
     }
 
     /// Bits per element: the distance between one element's slot and the next.
-    pub(crate) const STRIDE: i32 = 8;
+    pub const STRIDE: i32 = 8;
 
     /// One element's mask, for the wrap an element is written through.
-    pub(crate) const ELEM_MASK: i32 = (1 << Self::STRIDE) - 1;
+    pub const ELEM_MASK: i32 = (1 << Self::STRIDE) - 1;
 
     /// The whole payload's mask, which is what keeps the length field from bleeding into an extracted byte.
-    pub(crate) fn payload_mask(&self) -> i32 {
+    pub fn payload_mask(&self) -> i32 {
         (1 << self.payload_bits()) - 1
     }
 
     /// How many payload bytes the immediate can occupy.
-    pub(crate) fn slots(&self) -> i32 {
+    pub fn slots(&self) -> i32 {
         (self.payload_bits() as u32).div_ceil(8) as i32
     }
 
@@ -54,7 +54,7 @@ impl ImmediateLayout {
     /// Pack a whole constant value, known at compile time, into its immediate: the length in its field, the packed bytes LSB-first below it.
     ///
     /// The compile-time twin of `rope_emitter`'s `norm` helper, and the reason the two compile-time packers do not each spell the fold: they are one instruction sequence apart — a global initializer against an inline literal — and identical in what they compute.
-    pub(crate) fn pack(&self, length: usize, bytes: &[u8]) -> i32 {
+    pub fn pack(&self, length: usize, bytes: &[u8]) -> i32 {
         assert!(length <= self.envelope as usize, "the value must fit");
         bytes.iter().enumerate().fold(
             (length as i32) << self.len_shift,
@@ -63,7 +63,7 @@ impl ImmediateLayout {
     }
 
     /// Whether a value of this length rides an immediate rather than a rope.
-    pub(crate) fn holds(&self, length: usize) -> bool {
+    pub fn holds(&self, length: usize) -> bool {
         length <= self.envelope as usize
     }
 }

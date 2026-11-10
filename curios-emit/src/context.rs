@@ -32,7 +32,7 @@ fn is_sequential_from_zero(cases: &BTreeMap<u32, EmissionJumpTarget>) -> bool {
 }
 
 #[derive(Debug)]
-pub(crate) enum Context<'a, 'b> {
+pub enum Context<'a, 'b> {
     Const {
         table: &'a Table<'a>,
     },
@@ -53,11 +53,11 @@ pub(crate) enum Context<'a, 'b> {
 }
 
 impl<'a, 'b> Context<'a, 'b> {
-    pub(crate) fn new_const(table: &'a Table<'a>) -> Self {
+    pub fn new_const(table: &'a Table<'a>) -> Self {
         Self::Const { table }
     }
 
-    pub(crate) fn new_clsr(
+    pub fn new_clsr(
         table: &'a Table<'a>,
         data: &'a ClsrData<'a>,
         locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
@@ -71,7 +71,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn new_func(
+    pub fn new_func(
         table: &'a Table<'a>,
         data: &'a FuncData<'a>,
         locals: &'b mut Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
@@ -85,7 +85,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn table(&self) -> &'a Table<'a> {
+    pub fn table(&self) -> &'a Table<'a> {
         match self {
             Self::Const { table } | Self::Closure { table, .. } | Self::Function { table, .. } => {
                 table
@@ -93,14 +93,14 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn find_field(&self, value_name: &EmissionValueName) -> Option<FieldData> {
+    pub fn find_field(&self, value_name: &EmissionValueName) -> Option<FieldData> {
         match self {
             Self::Const { .. } | Self::Function { .. } => None,
             Self::Closure { data, .. } => data.find_field(value_name),
         }
     }
 
-    pub(crate) fn params(&self) -> HashMap<&'a EmissionValueName, LocalData> {
+    pub fn params(&self) -> HashMap<&'a EmissionValueName, LocalData> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks params"),
             // A parameter arrives through a nullable signature, so a read of it asserts what it needs exactly as a read of a field or a block parameter does.
@@ -117,7 +117,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn is_resume(&self, block_name: &EmissionBlockName) -> bool {
+    pub fn is_resume(&self, block_name: &EmissionBlockName) -> bool {
         match self {
             Self::Const { .. } => false,
             Self::Closure { data, .. } => data.is_resume(block_name),
@@ -134,7 +134,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn push_local(
+    pub fn push_local(
         &mut self,
         string: &str,
         val_type: curios_wasm::ValType,
@@ -161,14 +161,14 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn enter_frame(&mut self, frame: Frame<'a>) {
+    pub fn enter_frame(&mut self, frame: Frame<'a>) {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
             Self::Closure { frames, .. } | Self::Function { frames, .. } => frames.push(frame),
         }
     }
 
-    pub(crate) fn leave_frame(&mut self) -> Vec<curios_wasm::Instr> {
+    pub fn leave_frame(&mut self) -> Vec<curios_wasm::Instr> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
             Self::Closure { frames, .. } | Self::Function { frames, .. } => {
@@ -178,7 +178,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     /// The preheader of the innermost natural loop the code being emitted stands in, which runs before each entry into that loop from outside; `None` outside every natural loop, where the code runs once each time its function does or, inside an irreducible component's dispatcher alone, has no one place it is entered from.
-    pub(crate) fn loop_preheader(&mut self) -> Option<&mut Vec<curios_wasm::Instr>> {
+    pub fn loop_preheader(&mut self) -> Option<&mut Vec<curios_wasm::Instr>> {
         match self {
             Self::Const { .. } => None,
             Self::Closure { frames, .. } | Self::Function { frames, .. } => frames
@@ -190,7 +190,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     /// Leave a natural loop's frame, answering its preheader.
-    pub(crate) fn leave_loop(&mut self) -> Vec<curios_wasm::Instr> {
+    pub fn leave_loop(&mut self) -> Vec<curios_wasm::Instr> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
             Self::Closure { frames, .. } | Self::Function { frames, .. } => {
@@ -199,14 +199,14 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn this_frame(&mut self) -> Option<&mut Frame<'a>> {
+    pub fn this_frame(&mut self) -> Option<&mut Frame<'a>> {
         match self {
             Self::Const { .. } => None,
             Self::Closure { frames, .. } | Self::Function { frames, .. } => frames.last_mut(),
         }
     }
 
-    pub(crate) fn find_local(&self, value_name: &EmissionValueName) -> Option<LocalData> {
+    pub fn find_local(&self, value_name: &EmissionValueName) -> Option<LocalData> {
         match self {
             Self::Const { .. } => None,
             Self::Closure { frames, .. } | Self::Function { frames, .. } => {
@@ -256,7 +256,7 @@ impl<'a, 'b> Context<'a, 'b> {
         );
     }
 
-    pub(crate) fn find_block(&self, block_name: &EmissionBlockName) -> &BlockData<'a> {
+    pub fn find_block(&self, block_name: &EmissionBlockName) -> &BlockData<'a> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
             Self::Closure { frames, .. } | Self::Function { frames, .. } => frames
@@ -275,7 +275,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     /// `producer`, which leaves a reference on the stack, followed by what reads that reference as `load_as` wants it — or, for a narrowing to a word, wrapped by it, since a narrowing consumes the reference where the producer leaves it.
-    pub(crate) fn load_as_instrs(
+    pub fn load_as_instrs(
         &self,
         producer: Vec<curios_wasm::Instr>,
         load_as: LoadAs,
@@ -320,7 +320,7 @@ impl<'a, 'b> Context<'a, 'b> {
     /// Narrow the `Nat` or `Int` reference `producer` leaves to a machine integer: an i31 is its value read signed, and a boxed value is `boxed`'s to narrow — saturating to a word for a position or an `i64` for a shift count, refusing past the host wire's `i64`. A reference holding a word — a boxed `Bool`, byte or tag — is an i31 and takes the first arm.
     ///
     /// **The producer runs inside the narrowing, so no local holds the reference.** `br_on_cast_fail` tests the value it leaves: an i31 falls straight through to be read, and anything else branches out to the helper — one test where a `ref.test` and a `ref.cast` would make two, with the common case on the straight line. A block cannot consume a value from outside itself, which is why the producer runs in here rather than into a scratch local every narrowing in a function would write.
-    pub(super) fn narrow_instrs(
+    pub fn narrow_instrs(
         &self,
         producer: Vec<curios_wasm::Instr>,
         boxed: BigHelper,
@@ -370,10 +370,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     /// A constructed length or capacity is held to its field's bound before narrowing; the scratch local belongs to this activation and the shared guard evaluates the producer once.
-    pub(super) fn length_instrs(
-        &mut self,
-        producer: Vec<curios_wasm::Instr>,
-    ) -> Vec<curios_wasm::Instr> {
+    pub fn length_instrs(&mut self, producer: Vec<curios_wasm::Instr>) -> Vec<curios_wasm::Instr> {
         let wide = self.push_local(
             "length",
             curios_wasm::ValType::Num(curios_wasm::NumType::I64),
@@ -382,7 +379,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     /// Add two represented lengths through the shared checked sum, with a scratch local declared in this activation.
-    pub(super) fn length_sum_instrs(
+    pub fn length_sum_instrs(
         &mut self,
         lhs: Vec<curios_wasm::Instr>,
         rhs: Vec<curios_wasm::Instr>,
@@ -395,10 +392,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     /// A requested construction count crosses wide, like a shift count, then refuses past the 32-bit length bound. A position's saturation cannot stand in for this check.
-    pub(super) fn load_length_instrs(
-        &mut self,
-        value: &'a EmissionValueName,
-    ) -> Vec<curios_wasm::Instr> {
+    pub fn load_length_instrs(&mut self, value: &'a EmissionValueName) -> Vec<curios_wasm::Instr> {
         let producer = match self.table().raw_carrier(value) {
             Some(curios_cps::Repr::Nat | curios_cps::Repr::Length) => self
                 .load_value_instrs(value, LoadAs::Nat)
@@ -479,7 +473,7 @@ impl<'a, 'b> Context<'a, 'b> {
         block_data.enter(arity)
     }
 
-    pub(crate) fn load_value_instrs(
+    pub fn load_value_instrs(
         &self,
         value_name: &'a EmissionValueName,
         load_as: LoadAs,
@@ -563,7 +557,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn jump_instrs(&self, target: &'a EmissionJumpTarget) -> Vec<curios_wasm::Instr> {
+    pub fn jump_instrs(&self, target: &'a EmissionJumpTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
         // The bare-forwarder sentinel is the function's own return, so whatever it carries leaves at the position the function's type holds that result at: a reference unless the representation raised the class's slot into a register. The count is the target's own, not a fixed one: a function returning a constructor as its fields returns as many values as the shape has, and the arity a jump carries is the arity the return delivers.
@@ -618,7 +612,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub(crate) fn match_instrs(&self, target: &'a EmissionMatchTarget) -> Vec<curios_wasm::Instr> {
+    pub fn match_instrs(&self, target: &'a EmissionMatchTarget) -> Vec<curios_wasm::Instr> {
         // A match with no arm at all, or a tag outside every case with no default, is an arm the theory proved impossible: reaching it is the compiler's fault, and the refusal says so.
         if target.cases.is_empty() && target.default.is_none() {
             return self.table().refuse_instrs(curios_cps::Panic::Invariant);
@@ -757,7 +751,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn call_direct_instrs(
+    pub fn call_direct_instrs(
         &mut self,
         target: &'a EmissionFunctionName,
         params: &'a [EmissionArg],
@@ -872,7 +866,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub(crate) fn call_indirect_instrs(
+    pub fn call_indirect_instrs(
         &self,
         target: &'a EmissionValueName,
         params: &'a [EmissionArg],
@@ -918,7 +912,7 @@ impl<'a, 'b> Context<'a, 'b> {
         output
     }
 
-    pub(crate) fn tail_instrs(&mut self, tail: &'a EmissionTail) -> Vec<curios_wasm::Instr> {
+    pub fn tail_instrs(&mut self, tail: &'a EmissionTail) -> Vec<curios_wasm::Instr> {
         match tail {
             EmissionTail::Jump(target) => self.jump_instrs(target),
             EmissionTail::Match(target) => self.match_instrs(target),
@@ -1074,7 +1068,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 
     /// Emit a host intrinsic call in tail position, then branch to its resume. Models `call_direct_instrs`: load operands, call the host import, then either fall through to the function's return (when the resume happens to be the sentinel) or set up the dispatcher and branch into the resume block.
-    pub(crate) fn host_instrs(&mut self, host: &'a EmissionHostTarget) -> Vec<curios_wasm::Instr> {
+    pub fn host_instrs(&mut self, host: &'a EmissionHostTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
         match host {
@@ -1173,7 +1167,7 @@ impl<'a, 'b> Context<'a, 'b> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum LoadAs {
+pub enum LoadAs {
     Null,
     NonNull,
     Concrete(curios_wasm::TypeName),
@@ -1193,7 +1187,7 @@ pub(crate) enum LoadAs {
 /// The zero of one row slot: the register zero for a scalar carrier, and a null for every reference, a declared heap type or the uniform one.
 ///
 /// A reference slot takes `ref.null none` rather than the boxed zero because the boxed zero is not of a declared heap type — and because null is what a filler *means*, where an `i31` zero is a perfectly good `Nat` standing in a position that holds no value at all.
-pub(crate) fn slot_zero_instrs(slot: curios_cps::Slot) -> Vec<curios_wasm::Instr> {
+pub fn slot_zero_instrs(slot: curios_cps::Slot) -> Vec<curios_wasm::Instr> {
     match slot {
         curios_cps::Slot::Tag | curios_cps::Slot::Nat => {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
@@ -1207,14 +1201,14 @@ pub(crate) fn slot_zero_instrs(slot: curios_cps::Slot) -> Vec<curios_wasm::Instr
 }
 
 /// Absence as a reference: the null every nullable position admits, which is what a filler is wherever a reference rather than a register receives it.
-pub(crate) fn null_instrs() -> Vec<curios_wasm::Instr> {
+pub fn null_instrs() -> Vec<curios_wasm::Instr> {
     vec![curios_wasm::Instr::RefNull {
         heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::None),
     }]
 }
 
 /// Absence in a register: the zero of the carrier, since a register has no null. A packed carrier is small-canonical, so its zero is the empty immediate.
-pub(crate) fn zero_instrs(carrier: curios_cps::Repr) -> Vec<curios_wasm::Instr> {
+pub fn zero_instrs(carrier: curios_cps::Repr) -> Vec<curios_wasm::Instr> {
     match carrier {
         curios_cps::Repr::Nat | curios_cps::Repr::Length => {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
@@ -1231,7 +1225,7 @@ pub(crate) fn zero_instrs(carrier: curios_cps::Repr) -> Vec<curios_wasm::Instr> 
 /// How a value in its register carrier is boxed back into a reference: an `i31ref` for a word, which lies below `2³⁰` and so is already the i31 a `Bool`, a byte, a tag or a small `Nat` is; `big/of_u64` for a length, an i31 below `2³⁰` and a boxed magnitude past it; the `Flt` struct for `f64`; and nothing at all for a representation that already names one.
 ///
 /// The dual of [`LoadAs::of`], and the reason this reads a [`curios_cps::Repr`] rather than a dedicated enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
-pub(crate) fn box_instrs(repr: &curios_cps::Repr, table: &Table) -> Vec<curios_wasm::Instr> {
+pub fn box_instrs(repr: &curios_cps::Repr, table: &Table) -> Vec<curios_wasm::Instr> {
     match repr {
         curios_cps::Repr::Nat => vec![curios_wasm::Instr::RefI31],
         curios_cps::Repr::Length => vec![
@@ -1256,7 +1250,7 @@ impl LoadAs {
     /// This is the whole of the translation between [`curios_cps::Repr`] — what an operation declares it reads — and the instructions that deliver it. Every operand load in the emitter resolves through here rather than naming a `LoadAs` directly, so the demand has one statement (the intrinsic roster) and one realisation (this function), and the two cannot drift apart.
     ///
     /// `Repr::Ref` maps to `Null` rather than `NonNull`: an uninterpreted operand is passed along exactly as stored, and asserting non-nullness of a value nothing reads would emit an instruction for no reader.
-    pub(crate) fn of(repr: &curios_cps::Repr) -> Self {
+    pub fn of(repr: &curios_cps::Repr) -> Self {
         match repr {
             // A length is read as a position is: narrowed to a word read unsigned, which is what it already is.
             curios_cps::Repr::Nat | curios_cps::Repr::Length => Self::Nat,

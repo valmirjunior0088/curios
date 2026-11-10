@@ -24,13 +24,13 @@ use {
 };
 
 #[derive(Debug)]
-pub(crate) struct RopeEmitter<'a, 'b> {
+pub struct RopeEmitter<'a, 'b> {
     table: &'a Table<'a>,
     module: &'b mut curios_wasm::Module,
 }
 
 impl<'a, 'b> RopeEmitter<'a, 'b> {
-    pub(crate) fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
+    pub fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
         Self { table, module }
     }
 
@@ -65,7 +65,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// ```
     ///
     /// The first piece decides where the run goes ([`ForceWalk::place_first`]): a flattened node whose run ends at its payload's written extent hands the run its payload, the write then filling only the pieces after it, and every other first piece leaves the run a fresh payload. The write puts every piece at the offset the lengths before it give ([`ForceWalk::write_body`]). An entry *view* is not memoized (its fields are immutable): its fill is one window copy of exactly its own size, so there is nothing quadratic to fence off.
-    pub(crate) fn emit_force_func(
+    pub fn emit_force_func(
         &mut self,
         rope: &RopeData,
         func_name: curios_wasm::FuncName,
@@ -81,7 +81,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         self.add_helper(
             func_name,
-            vec![(walk.r.clone(), concrete_val(rope.base.clone(), false))],
+            walk.force_params(),
             concrete_val(rope.payload.clone(), false),
             walk.force_locals(),
             instrs,
@@ -109,7 +109,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// ```
     ///
     /// A flattened node's payload may hold room past its run, which a reader of the rope never sees, since every read is bounded by a `len`. What leaves the rope as a flat array is read by its array's length instead — a leaf, whose inline read leaves its bounds to the engine's trap on the array, and a host, which lifts the whole array — so it takes the run exactly.
-    pub(crate) fn emit_exact_func(
+    pub fn emit_exact_func(
         &mut self,
         rope: &RopeData,
         func_name: curios_wasm::FuncName,
@@ -186,7 +186,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// The count arrives as an operand, so nothing here computes one — and a reversed window cannot be spelled.
     ///
     /// The node arm's force is what maintains the read-through invariant: every `view` base is flat-available from birth, and stays so (a cache is written once, never cleared).
-    pub(crate) fn emit_slice_func(
+    pub fn emit_slice_func(
         &mut self,
         rope: &RopeData,
         func_name: curios_wasm::FuncName,
@@ -489,7 +489,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// The node arm probes the cache first: a cache is written once and never cleared, so on every walk over an already-forced rope the probe halves the serial call chain a per-element read costs — which is most of what a hot descent pays.
     ///
     /// Binary-sequence elements are packed bytes (`array.get_u`, an `i32` result); `List` elements are the top type (`array.get`).
-    pub(crate) fn emit_read_func(
+    pub fn emit_read_func(
         &mut self,
         rope: &RopeData,
         func_name: curios_wasm::FuncName,
@@ -627,7 +627,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$<carrier>/resolve (ref <base>) -> (ref null <payload>, i32, i32)`: where a rope's run already lies flat, without forcing anything — its payload, the run's length and where the run starts in that payload — for a read that keeps the run it last resolved. A leaf answers its own payload from zero, a flattened node its cache, and a view its base's payload, which is flat, at its offset; a node never flattened answers a null payload, and the reader takes the shared `read` helper instead.
     ///
     /// The length is the run's `len`, never the payload's, which may hold room past it ([A flattening extends the payload its first piece wrote last](../README.md#a-flattening-extends-the-payload-its-first-piece-wrote-last)).
-    pub(crate) fn emit_resolve_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
+    pub fn emit_resolve_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
         let r = curios_wasm::LocalName::from("r");
         let base = curios_wasm::LocalName::from("base");
         let tag = |shape: i32| {
@@ -710,7 +710,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     }
 
     /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then take every element exact through `$bytes/exact` into a *fresh* payload of the run's length (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
-    pub(crate) fn emit_list_bytes_force_func(&mut self, func_name: curios_wasm::FuncName) {
+    pub fn emit_list_bytes_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
         let list = self.table.list_rope();
 
@@ -811,7 +811,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ///   if lb[i] != rb[i] → 0
     ///   i += 1
     /// ```
-    pub(crate) fn emit_eql_func(
+    pub fn emit_eql_func(
         &mut self,
         rope: &RopeData,
         func_name: curios_wasm::FuncName,
@@ -925,7 +925,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// **Three helpers, because a payload is all they read.** The operands arrive already forced, so what is left is a walk over two byte arrays.
     ///
     /// Both lengths are the run's own rather than the payloads' extent, which may be longer: `len`, for the leaf to carry, and `count`, the bytes the run occupies. Forcing at the call site is what keeps this a walk over payloads, and it is allowed there because a pair of calls is a straight-line sequence — the loop, which is not, stays here. Equal operand lengths are the type's to guarantee; the bound is discharged above erasure and nothing here re-checks it.
-    pub(crate) fn emit_pointwise_func(
+    pub fn emit_pointwise_func(
         &mut self,
         func_name: curios_wasm::FuncName,
         combine: curios_wasm::Instr,
@@ -1023,7 +1023,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$<carrier>/replicate (i32 count) (i32 atom) -> (ref $rope/bytes)`: `count` copies of one generator, as one flat leaf.
     ///
     /// No loop: `array.new` is the fill, every slot the generator.
-    pub(crate) fn emit_replicate_func(&mut self, func_name: curios_wasm::FuncName) {
+    pub fn emit_replicate_func(&mut self, func_name: curios_wasm::FuncName) {
         let rope = self.table.bytes_rope();
 
         let count = curios_wasm::LocalName::from("count");
@@ -1072,7 +1072,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// ```
     ///
     /// `f` is a unary closure `(A) -> B`, called by the arity-1 convention: the environment as the self argument, the table index from its special field.
-    pub(crate) fn emit_map_func(
+    pub fn emit_map_func(
         &mut self,
         func_name: curios_wasm::FuncName,
         force_func: curios_wasm::FuncName,
@@ -1181,7 +1181,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     }
 
     /// `$bytes/box (ref null any) -> (ref $rope/bytes)`: a small-canonical packed value as a rope. An immediate — the length in the top 2 payload bits over up to 3 bytes, LSB-first — is materialised into a fresh exact leaf; anything else casts to the rope it must be, trapping on null as a bare cast would. The payload is masked before byte extraction so the length field can never bleed into a stored byte.
-    pub(crate) fn emit_box_func(&mut self, func_name: curios_wasm::FuncName) {
+    pub fn emit_box_func(&mut self, func_name: curios_wasm::FuncName) {
         let layout = ImmediateLayout::new();
         let (len_shift, payload_mask, slots) =
             (layout.len_shift, layout.payload_mask(), layout.slots());
@@ -1291,7 +1291,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     }
 
     /// `$bytes/norm (ref $rope/bytes) -> (ref any)`: the canonical form of a packed rope — inside its envelope it packs into the i31, and anything longer answers itself. Called at every producer's exit, which is what makes a mixed-representation pair unrepresentable and the immediate equality one instruction.
-    pub(crate) fn emit_norm_func(
+    pub fn emit_norm_func(
         &mut self,
         func_name: curios_wasm::FuncName,
         force_func: curios_wasm::FuncName,
@@ -1378,7 +1378,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     }
 
     /// `$<carrier>/embed (ref <payload>) -> (ref <base>)`: one fresh leaf.
-    pub(crate) fn emit_embed_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
+    pub fn emit_embed_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
         let b = curios_wasm::LocalName::from("b");
 
         let instrs = vec![
@@ -1401,11 +1401,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     }
 
     /// `$list/<leaf>/to_<payload> (ref $rope/list) -> (ref $<payload>)`: a list of scalars as a host reads it, one flat element per value. The list is forced to its elements and each is narrowed as a host argument of its type is — a `Nat` or `Int` into `$longs`, read off its i31 and widened or handed to its wire helper, which refuses one past the wire — and a `Bool` into `$words`, as its word.
-    pub(crate) fn emit_scalars_force_func(
-        &mut self,
-        leaf: WireLeaf,
-        func_name: curios_wasm::FuncName,
-    ) {
+    pub fn emit_scalars_force_func(&mut self, leaf: WireLeaf, func_name: curios_wasm::FuncName) {
         let rope = self.table.list_rope();
         let payload = self.table.scalars_type(leaf);
         let r = curios_wasm::LocalName::from("r");
@@ -1492,11 +1488,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     }
 
     /// `$list/<leaf>/of_<payload> (ref $<payload>) -> (ref $rope/list)`: a host's list of scalars back as a list, each element boxed as a scalar result is (`Table::box_word_instrs`) into a fresh payload the list's own embed places in a leaf.
-    pub(crate) fn emit_scalars_embed_func(
-        &mut self,
-        leaf: WireLeaf,
-        func_name: curios_wasm::FuncName,
-    ) {
+    pub fn emit_scalars_embed_func(&mut self, leaf: WireLeaf, func_name: curios_wasm::FuncName) {
         let rope = self.table.list_rope();
         let payload = self.table.scalars_type(leaf);
         let w = curios_wasm::LocalName::from("w");
@@ -1549,7 +1541,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     }
 
     /// `$list/bytes/embed (ref $elems) -> (ref $rope/list)`: embed each raw `$bytes` element into a `$rope/bytes/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/list/leaf`. Each element leaf is sealed at its payload's length, exactly as `$bytes/embed` seals a bare one.
-    pub(crate) fn emit_list_bytes_embed_func(&mut self, func_name: curios_wasm::FuncName) {
+    pub fn emit_list_bytes_embed_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
         let rope = self.table.bytes_rope();
         let list = self.table.list_rope();

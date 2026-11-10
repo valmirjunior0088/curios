@@ -15,7 +15,7 @@ use std::{
 };
 
 /// Fold the locals of each function of `module` by liveness. See the module documentation.
-pub(crate) fn allocate_locals(module: &mut curios_wasm::Module) {
+pub fn allocate_locals(module: &mut curios_wasm::Module) {
     curios_profile::profile!("allocate_locals");
     for (_, func) in module.funcs_mut() {
         allocate(func);

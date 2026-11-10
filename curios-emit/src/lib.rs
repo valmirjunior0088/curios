@@ -12,10 +12,10 @@ mod machine;
 use machine::*;
 
 mod emission;
-pub(crate) use emission::*;
+use emission::*;
 
 mod symbols;
-pub(crate) use symbols::*;
+use symbols::*;
 
 mod table;
 use table::*;
@@ -69,7 +69,8 @@ mod shorthand;
 use shorthand::*;
 
 mod types;
-pub use types::*;
+use types::*;
+pub use types::{bytes_sub_type, elems_sub_type, longs_sub_type, words_sub_type};
 
 #[cfg(test)]
 mod test_support;

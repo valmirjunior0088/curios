@@ -86,12 +86,12 @@ fn sequence<const N: usize>(parts: [Vec<curios_wasm::Instr>; N]) -> Vec<curios_w
 }
 
 #[derive(Debug)]
-pub(crate) struct CodeEmitter<'a, 'b, 'c> {
+pub struct CodeEmitter<'a, 'b, 'c> {
     context: &'c mut Context<'a, 'b>,
 }
 
 impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
-    pub(crate) fn new(context: &'c mut Context<'a, 'b>) -> Self {
+    pub fn new(context: &'c mut Context<'a, 'b>) -> Self {
         Self { context }
     }
 
@@ -1852,7 +1852,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
     }
 
     /// Lower one `EmissionCode` op into the current frame, writing its result into `value_name`'s local.
-    pub(crate) fn emit(&mut self, value_name: &'a EmissionValueName, op: &'a EmissionCode) {
+    pub fn emit(&mut self, value_name: &'a EmissionValueName, op: &'a EmissionCode) {
         let dest = Dest {
             value_name,
             local: self

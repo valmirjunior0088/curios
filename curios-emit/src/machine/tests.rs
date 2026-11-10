@@ -221,7 +221,7 @@ fn a_halt_stays_terminal_through_structurization() {
     let structured = super::structurize(&machine);
     let (_, function) = structured.funcs().first().unwrap();
     assert!(matches!(
-        function.region.tail,
+        function.region.tail(),
         EmissionTail::Host(EmissionHostTarget::Halt { .. })
     ));
 }

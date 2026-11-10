@@ -2,42 +2,36 @@
 //!
 //! Nothing here decides anything — each is one `curios_wasm` value spelled in one line instead of four. They live apart from the emitters only so the emitters read as the instruction sequences they are.
 
-pub(super) fn concrete_ref(
-    type_name: curios_wasm::TypeName,
-    is_nullable: bool,
-) -> curios_wasm::RefType {
+pub fn concrete_ref(type_name: curios_wasm::TypeName, is_nullable: bool) -> curios_wasm::RefType {
     curios_wasm::RefType {
         is_nullable,
         heap_type: curios_wasm::HeapType::Concrete(type_name),
     }
 }
 
-pub(super) fn concrete_val(
-    type_name: curios_wasm::TypeName,
-    is_nullable: bool,
-) -> curios_wasm::ValType {
+pub fn concrete_val(type_name: curios_wasm::TypeName, is_nullable: bool) -> curios_wasm::ValType {
     curios_wasm::ValType::Ref(concrete_ref(type_name, is_nullable))
 }
 
-pub(super) fn get(local: &curios_wasm::LocalName) -> curios_wasm::Instr {
+pub fn get(local: &curios_wasm::LocalName) -> curios_wasm::Instr {
     curios_wasm::Instr::LocalGet {
         local_name: local.clone(),
     }
 }
 
-pub(super) fn set(local: &curios_wasm::LocalName) -> curios_wasm::Instr {
+pub fn set(local: &curios_wasm::LocalName) -> curios_wasm::Instr {
     curios_wasm::Instr::LocalSet {
         local_name: local.clone(),
     }
 }
 
-pub(super) fn cast(type_name: &curios_wasm::TypeName) -> curios_wasm::Instr {
+pub fn cast(type_name: &curios_wasm::TypeName) -> curios_wasm::Instr {
     curios_wasm::Instr::RefCast {
         ref_type: concrete_ref(type_name.clone(), false),
     }
 }
 
-pub(super) fn field_get(
+pub fn field_get(
     type_name: &curios_wasm::TypeName,
     field_name: &curios_wasm::FieldName,
 ) -> curios_wasm::Instr {
@@ -47,7 +41,7 @@ pub(super) fn field_get(
     }
 }
 
-pub(super) fn field_set(
+pub fn field_set(
     type_name: &curios_wasm::TypeName,
     field_name: &curios_wasm::FieldName,
 ) -> curios_wasm::Instr {
@@ -57,46 +51,46 @@ pub(super) fn field_set(
     }
 }
 
-pub(super) fn null(type_name: &curios_wasm::TypeName) -> curios_wasm::Instr {
+pub fn null(type_name: &curios_wasm::TypeName) -> curios_wasm::Instr {
     curios_wasm::Instr::RefNull {
         heap_type: curios_wasm::HeapType::Concrete(type_name.clone()),
     }
 }
 
-pub(super) fn tee(local: &curios_wasm::LocalName) -> curios_wasm::Instr {
+pub fn tee(local: &curios_wasm::LocalName) -> curios_wasm::Instr {
     curios_wasm::Instr::LocalTee {
         local_name: local.clone(),
     }
 }
 
-pub(super) fn i32_const(value: i32) -> curios_wasm::Instr {
+pub fn i32_const(value: i32) -> curios_wasm::Instr {
     curios_wasm::Instr::I32Const { value }
 }
 
-pub(super) fn i64_const(value: i64) -> curios_wasm::Instr {
+pub fn i64_const(value: i64) -> curios_wasm::Instr {
     curios_wasm::Instr::I64Const { value }
 }
 
-pub(super) fn call(func_name: &curios_wasm::FuncName) -> curios_wasm::Instr {
+pub fn call(func_name: &curios_wasm::FuncName) -> curios_wasm::Instr {
     curios_wasm::Instr::Call {
         func_name: func_name.clone(),
     }
 }
 
-pub(super) fn br(label: &str) -> curios_wasm::Instr {
+pub fn br(label: &str) -> curios_wasm::Instr {
     curios_wasm::Instr::Br {
         label_name: curios_wasm::LabelName::from(label),
     }
 }
 
-pub(super) fn br_if(label: &str) -> curios_wasm::Instr {
+pub fn br_if(label: &str) -> curios_wasm::Instr {
     curios_wasm::Instr::BrIf {
         label_name: curios_wasm::LabelName::from(label),
     }
 }
 
 /// A `block` producing nothing, which a `br` to `label` leaves.
-pub(super) fn block(label: &str, instructions: Vec<curios_wasm::Instr>) -> curios_wasm::Instr {
+pub fn block(label: &str, instructions: Vec<curios_wasm::Instr>) -> curios_wasm::Instr {
     curios_wasm::Instr::Block {
         label_name: curios_wasm::LabelName::from(label),
         block_type: curios_wasm::BlockType::Empty,
@@ -105,7 +99,7 @@ pub(super) fn block(label: &str, instructions: Vec<curios_wasm::Instr>) -> curio
 }
 
 /// A `loop` producing nothing, which a `br` to `label` restarts.
-pub(super) fn repeat(label: &str, instructions: Vec<curios_wasm::Instr>) -> curios_wasm::Instr {
+pub fn repeat(label: &str, instructions: Vec<curios_wasm::Instr>) -> curios_wasm::Instr {
     curios_wasm::Instr::Loop {
         label_name: curios_wasm::LabelName::from(label),
         block_type: curios_wasm::BlockType::Empty,
@@ -114,7 +108,7 @@ pub(super) fn repeat(label: &str, instructions: Vec<curios_wasm::Instr>) -> curi
 }
 
 /// An `if` with no `else` and no result, over the condition already on the stack.
-pub(super) fn when(then_instructions: Vec<curios_wasm::Instr>) -> curios_wasm::Instr {
+pub fn when(then_instructions: Vec<curios_wasm::Instr>) -> curios_wasm::Instr {
     curios_wasm::Instr::If {
         label_name: curios_wasm::LabelName::from("when"),
         block_type: curios_wasm::BlockType::Empty,
@@ -124,7 +118,7 @@ pub(super) fn when(then_instructions: Vec<curios_wasm::Instr>) -> curios_wasm::I
 }
 
 /// An `if` with an `else` and no result, over the condition already on the stack.
-pub(super) fn branch(
+pub fn branch(
     then_instructions: Vec<curios_wasm::Instr>,
     else_instructions: Vec<curios_wasm::Instr>,
 ) -> curios_wasm::Instr {
@@ -137,7 +131,7 @@ pub(super) fn branch(
 }
 
 /// An `if` whose two arms each leave one `result`, over the condition already on the stack.
-pub(super) fn either(
+pub fn either(
     result: curios_wasm::ValType,
     then_instructions: Vec<curios_wasm::Instr>,
     else_instructions: Vec<curios_wasm::Instr>,
@@ -151,7 +145,7 @@ pub(super) fn either(
 }
 
 /// One piece of an instruction sequence: a single instruction or a run of them, so [`wasm!`] can splice either.
-pub(super) trait Chunk {
+pub trait Chunk {
     fn push_into(self, instrs: &mut Vec<curios_wasm::Instr>);
 }
 
@@ -180,47 +174,39 @@ pub(super) use wasm;
 
 /// One helper's parameters and locals, declared as its body names them.
 #[derive(Default)]
-pub(super) struct Scope {
-    pub(super) params: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
-    pub(super) locals: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
+pub struct Scope {
+    pub params: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
+    pub locals: Vec<(curios_wasm::LocalName, curios_wasm::ValType)>,
 }
 
 impl Scope {
-    pub(super) fn param(
-        &mut self,
-        name: &str,
-        val_type: curios_wasm::ValType,
-    ) -> curios_wasm::LocalName {
+    pub fn param(&mut self, name: &str, val_type: curios_wasm::ValType) -> curios_wasm::LocalName {
         let local = curios_wasm::LocalName::from(name);
         self.params.push((local.clone(), val_type));
         local
     }
 
-    pub(super) fn local(
-        &mut self,
-        name: &str,
-        val_type: curios_wasm::ValType,
-    ) -> curios_wasm::LocalName {
+    pub fn local(&mut self, name: &str, val_type: curios_wasm::ValType) -> curios_wasm::LocalName {
         let local = curios_wasm::LocalName::from(name);
         self.locals.push((local.clone(), val_type));
         local
     }
 }
 
-pub(super) fn i32_type() -> curios_wasm::ValType {
+pub fn i32_type() -> curios_wasm::ValType {
     curios_wasm::ValType::Num(curios_wasm::NumType::I32)
 }
 
-pub(super) fn i64_type() -> curios_wasm::ValType {
+pub fn i64_type() -> curios_wasm::ValType {
     curios_wasm::ValType::Num(curios_wasm::NumType::I64)
 }
 
-pub(super) fn f64_type() -> curios_wasm::ValType {
+pub fn f64_type() -> curios_wasm::ValType {
     curios_wasm::ValType::Num(curios_wasm::NumType::F64)
 }
 
 /// Declare one helper answering `results`, none for one called for what it writes: a final func type named after the function, plus the function itself. Helpers are called by name, never `ref.func`'d or exported, so no declaration beyond the pair is needed.
-pub(super) fn declare_helper<const N: usize>(
+pub fn declare_helper<const N: usize>(
     module: &mut curios_wasm::Module,
     func_name: curios_wasm::FuncName,
     scope: Scope,

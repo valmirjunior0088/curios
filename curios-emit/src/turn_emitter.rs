@@ -8,18 +8,18 @@ use {
 };
 
 #[derive(Debug)]
-pub(crate) struct TurnEmitter<'a, 'b> {
+pub struct TurnEmitter<'a, 'b> {
     table: &'a Table<'a>,
     module: &'b mut curios_wasm::Module,
 }
 
 impl<'a, 'b> TurnEmitter<'a, 'b> {
-    pub(crate) fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
+    pub fn new(table: &'a Table<'a>, module: &'b mut curios_wasm::Module) -> Self {
         Self { table, module }
     }
 
     /// Export the entry's turn and the advance. `entry` is the program's own entry function, answering what its forced description answered; `row` is the suspension's.
-    pub(crate) fn emit_turns(&mut self, entry: curios_wasm::FuncName, row: curios_cps::RowId) {
+    pub fn emit_turns(&mut self, entry: curios_wasm::FuncName, row: curios_cps::RowId) {
         let turn = self.emit_turn(row);
 
         let main = self.add_func(
