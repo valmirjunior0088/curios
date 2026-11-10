@@ -130,7 +130,7 @@ pub struct Summary {
     pub self_allocated: u64,
     /// Trips through the allocator while the spans were entered. Divided into [`allocated`](Self::allocated) it gives the average request size, which is what separates a pass that wants fewer allocations from one that wants a smaller structure.
     pub allocations: u64,
-    /// The costliest closed spans of this row, costliest first and at most [`SLOWEST_KEPT`] of them, each with the fields it was created with — for a span that declared fields beyond `group`, and empty for every other.
+    /// The costliest closed spans of this row, costliest first and at most `SLOWEST_KEPT` of them, each with the fields it was created with — for a span that declared fields beyond `group`, and empty for every other.
     ///
     /// **What an aggregate cannot say, the instances can.** A row answers how long a span took in all; it cannot say *which* call was slow or what it was handed, and that is the question a hunt for a pathological input asks. A span that declares its inputs as fields — `profile!("entails", assumed = assumed.len(), lower = ?lower)` — is answered here by the calls that cost the most, with their inputs beside them. Formatting a field costs at every span creation, so a field that is there to be read this way belongs on a span added to isolate one investigation, and leaves with it.
     pub slowest: Vec<SpanInstance>,

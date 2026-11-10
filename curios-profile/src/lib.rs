@@ -109,19 +109,23 @@ macro_rules! note {
 #[cfg(feature = "enabled")]
 mod count;
 #[cfg(feature = "enabled")]
-pub use count::*;
+use count::*;
+#[cfg(feature = "enabled")]
+pub use count::{allocated_bytes, allocation_count};
 
 #[cfg(feature = "enabled")]
 mod instructions;
 #[cfg(feature = "enabled")]
-pub use instructions::*;
+pub use instructions::Instructions;
 
 #[cfg(feature = "enabled")]
 mod fold;
 #[cfg(feature = "enabled")]
-pub use fold::*;
+pub use fold::{OpenSpan, Report, SampleSummary, SpanInstance, Summary, Within, fold, fold_at};
 
 #[cfg(feature = "enabled")]
 mod trace;
 #[cfg(feature = "enabled")]
-pub use trace::*;
+use trace::*;
+#[cfg(feature = "enabled")]
+pub use trace::{Destination, install, trace};
