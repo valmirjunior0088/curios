@@ -1,19 +1,10 @@
 # Every crate decides visibility at each hop
 
-Held to [Visibility is decided at each hop](../design/visibility-is-decided-at-each-hop.md): a name is private or `pub` and every module private, a crate root names its API and never globs, a record's fields are all `pub` and an owner's all private, and a scoped modifier sits only on a method narrower than its type. `curios-archive-derive`, `curios-cranelift`, the jig's crates and every crate from `curios` down to `curios-analysis` keep it; every other crate departs from it, and no row of the lint table holds any of it.
+Held to [Visibility is decided at each hop](../design/visibility-is-decided-at-each-hop.md): a name is private or `pub` and every module private, a crate root names its API and never globs, a record's fields are all `pub` and an owner's all private, and a scoped modifier sits only on a method narrower than its type. Every crate keeps it, and no row of the lint table holds any of it.
 
 ## What is wrong today
 
-Counted at `74a9ddf0d`; every figure is `counted`. Clippy's are the distinct spans of `cargo clippy --workspace --exclude 'x*' --all-targets --message-format=json -- --cap-lints warn -W clippy::<lint>`, which reports a site once for each target it is compiled in; `pub(super)` is counted by a text search of each crate's tracked `.rs` files for a line that opens with a scoped modifier outside an `impl` or `trait` block, and a root's globs by its `pub use x::*` lines.
-
-- **14 crate roots export by glob**, 126 `pub use x::*` lines. A glob exports every `pub` name below it, hides the unused ones from rustc's dead-code analysis, and turns a respelling to `pub` into an export.
-- **219 items carry `pub(crate)`**, by `redundant_pub_crate`, in 7 crates. The densest are `curios-cps` (137), `curios-core` (40), `curios-native` (32) and `curios-binaryen` (4).
-- **152 items carry `pub(super)` or `pub(in …)`**, which no lint reports, in 7 crates. The densest are `curios-core` (96), `curios-cps` (22), `curios-wasm` (18) and `curios-document` (8).
-- **89 fields carry a scoped modifier**, in 8 crates, by `field_scoped_visibility_modifiers`. The densest are `curios-cps` (40), `curios-core` (21), `curios-native` (13) and `curios-parse` (4).
-- **Four structs mix `pub` fields with others** (`partial_pub_fields`): `Source` (`curios-common/src/span.rs`), `Minted` and `Imported` (`curios-core/src/names.rs`) and `InductArm` (`curios-core/src/term/shape.rs`). `InductArm`'s rustdoc says its body and marks are sealed behind `InductArm::new` so the two "can never drift apart", and its `pub body` can be reassigned from any crate; none does.
-- **A method may carry a modifier no narrower than its type**: a `pub(crate)` method on a type that stays in its crate. How many there are in a crate is known once its root names its API, since a glob carries out of the crate types that will stay in it.
-- **Two crates re-export another crate's item**, a second path to a name its owner holds: `curios-native/src/host.rs` names `curios_abi`'s host vocabulary, and `curios-archive` names its derive (`curios_archive_derive::archived`) and `rkyv`'s `Archive`, `Deserialize`, `Serialize`, `AsString`, `Map` and `Skip`.
-- **The lint table holds none of it.** Neither field lint nor `redundant_pub_crate` is configured, and the table denies warnings, so a row cannot stand ahead of its sites.
+- **The lint table holds none of it.** Neither field lint nor `redundant_pub_crate` is configured, nor rustc's `unnameable_types`, and the table denies warnings, so a row cannot stand ahead of its sites.
 
 ## Goal
 
@@ -39,10 +30,9 @@ Every crate keeps the decision, the jig's included: its root names its API, no i
 
 ## Stages
 
-1. **The crates, one at a time, from the top down**: `curios-archive`. In each, the root names its API; each item's scoped modifier gives way to private or `pub`, the facades deciding reach; each method keeps one only where narrower than its type; each struct becomes a record or an owner; and what nothing reads once the root names its API is deleted. Check, per crate: `cargo xtask format`, then `cargo clippy --workspace --exclude 'x*' --all-targets --keep-going -- --cap-lints warn -W clippy::field_scoped_visibility_modifiers -W clippy::partial_pub_fields -W clippy::redundant_pub_crate -W unnameable_types`, which reports nothing but those four lints and none of them in the crates taken; the jig's crates by the same run over `--package 'x*'`, and `curios-native` by `cargo xtask native lint` too. And the crate's library and binaries alone, `cargo clippy -p <crate> --lib --bins -- -W unnameable_types`: the workspace's run turns every `test-support` feature on, so a name only a `test_support` reads is dead only here, as `cargo xtask bundle build` found four of `curios-pipeline`'s. After each layer — the jig's and `curios` to `curios-pipeline`, `curios-prelude` to `curios-analysis`, and the rest — `cargo xtask workspace lint`, `cargo xtask workspace test` and `cargo xtask docs build`, which refuses an exported item's documentation linking to a name its root stopped naming.
-2. **The four rows in both lint tables**, with the decision's sentence naming `redundant_pub_crate` and `unnameable_types`. Check: every lint step of the gate — `workspace lint`, `tools lint`, `native lint`, `instrumented lint`, `zed lint` — and `zed test`.
+1. **The four rows in both lint tables**, with the decision's sentence naming `redundant_pub_crate` and `unnameable_types`. Check: every lint step of the gate — `workspace lint`, `tools lint`, `native lint`, `instrumented lint`, `zed lint` — and `zed test`.
 
-The next step is a ready delivery: Stage 1's first crate.
+The next step is a ready delivery: the rows.
 
 ## Retirement
 

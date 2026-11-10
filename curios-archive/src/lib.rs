@@ -31,19 +31,19 @@
 pub use curios_archive_derive::archived;
 
 mod deferred;
-pub use deferred::*;
+pub use deferred::{Bytes, Deferred, joined, parted};
 
 mod pooled;
-pub use pooled::*;
+pub use pooled::Pooled;
 
 mod proxy;
-pub use proxy::*;
+pub use proxy::{Proxy, Shared, Sharing, Via};
 
 mod spelled;
-pub use spelled::*;
+pub use spelled::{BySpelling, ByText, Segments, Spelled, SpelledText};
 
 mod serialize;
-pub use serialize::*;
+pub use serialize::{Serialized, access, deserialize, from_bytes, to_bytes};
 
 pub use rkyv;
 
