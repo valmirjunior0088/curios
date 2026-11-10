@@ -1,9 +1,6 @@
 //! What a rope's run holds once it is read: every element in its place, whatever shape built it.
 
-use {
-    crate::tests::test_support::*,
-    curios_native::{MockHost, test_support::*},
-};
+use {crate::tests::test_support::*, curios_native::test_support::*};
 
 /// Every element at its position, weighed so an element out of place moves the sum, as the program weighs its runs.
 fn weighed(run: &[u64]) -> u64 {

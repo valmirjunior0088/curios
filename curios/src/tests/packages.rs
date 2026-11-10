@@ -7,7 +7,7 @@ use {
     curios_common::{Qualifier, digest, test_support::*},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource, open_entrypoint},
-    curios_native::{ForeignBindings, MockHost},
+    curios_native::{ForeignBindings, test_support::*},
     curios_package::{Entry, Selection, Spelling, Target},
     curios_pipeline::{Cache, Fold, Progress},
     curios_verdict::Verdicts,

@@ -8,7 +8,7 @@ use {
     curios_common::{Qualifier, RootKind},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::MockHost,
+    curios_native::test_support::*,
     curios_pipeline::Fold,
     curios_surface::Entrypoint,
 };

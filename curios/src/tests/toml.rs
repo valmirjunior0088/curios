@@ -9,7 +9,7 @@
 use {
     super::test_support::*,
     curios_common::fill,
-    curios_native::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, test_support::*},
     std::sync::OnceLock,
 };
 

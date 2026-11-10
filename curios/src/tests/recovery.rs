@@ -6,7 +6,7 @@ use {
     curios_common::{Qualifier, RootKind},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, supply_entrypoint},
-    curios_native::{ForeignBindings, MockHost, TestEnd},
+    curios_native::{ForeignBindings, TestEnd, test_support::*},
     curios_pipeline::{Fold, TestProgram},
     curios_surface::Entrypoint,
 };

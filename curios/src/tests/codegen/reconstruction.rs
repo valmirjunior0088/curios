@@ -6,7 +6,7 @@ use {
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
     curios_wasm::to_bytes,

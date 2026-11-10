@@ -4,7 +4,7 @@ use {
     crate::tests::test_support::*,
     curios_common::fill,
     curios_cps::{Node, ValueExpr},
-    curios_native::{MockHost, test_support::*},
+    curios_native::test_support::*,
     std::collections::BTreeSet,
 };
 

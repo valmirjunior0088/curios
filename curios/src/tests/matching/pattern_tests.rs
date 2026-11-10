@@ -1,6 +1,6 @@
 //! Nested constructor patterns over every carrier, and the shapes that lower without synthetic indirection.
 
-use {crate::tests::test_support::*, curios_native::MockHost};
+use {crate::tests::test_support::*, curios_native::test_support::*};
 
 // The `;` fold-hypothesis position accepts an irrefutable pattern: the destructuring binds the fold result's fields directly, lowering to the same projections a `let (t, live) = ih;` would.
 #[test]

@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     crate::tests::{LISTING_PROGRAM, test_support::*},
-    curios_native::{ForeignBindings, MockHost},
+    curios_native::{ForeignBindings, test_support::*},
     curios_profile::{Destination, fold, trace},
     std::{
         fs::{File, create_dir_all, write},

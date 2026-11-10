@@ -5,7 +5,7 @@ use test_support::*;
 
 use {
     super::structural::test_support::*,
-    curios_native::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_wasm::to_bytes,
 };
 

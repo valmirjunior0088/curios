@@ -2,10 +2,10 @@
 
 mod waiting_tests;
 
-use {super::test_support::*, curios_native::MockHost};
+use {super::test_support::*, curios_native::test_support::*};
 
 /// A host whose monotonic clock climbs one second per reading, so a sleeper's deadline is passed by the scripted ramp rather than by waiting.
-fn ticking() -> (MockHost, curios_native::MockIo) {
+fn ticking() -> (MockHost, MockIo) {
     MockHost::builder().mono((0..40i64).map(|s| (s, 0))).build()
 }
 

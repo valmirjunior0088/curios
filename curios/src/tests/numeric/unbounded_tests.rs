@@ -4,7 +4,7 @@
 
 use {
     super::test_support::*, crate::tests::test_support::*, curios_common::fill,
-    curios_elab::DEFAULT_BUDGET, curios_native::MockHost,
+    curios_elab::DEFAULT_BUDGET, curios_native::test_support::*,
 };
 
 #[test]

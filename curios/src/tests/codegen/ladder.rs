@@ -17,7 +17,7 @@
 use {
     super::structural::test_support::*,
     crate::test_support::*,
-    curios_native::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_wasm::to_bytes,
     std::time::Instant,
 };

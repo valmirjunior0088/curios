@@ -75,7 +75,7 @@ curios-cert = { workspace = true, features = ["test-support"] }
 curios-core = { workspace = true, features = ["test-support"] }
 curios-elab = { workspace = true }
 curios-erase = { workspace = true }
-curios-native = { workspace = true }
+curios-native = { workspace = true, features = ["test-support"] }
 curios-pipeline = { workspace = true }
 # This crate on itself, only to turn `test-support` on for its own tests: `tests/std.rs` links the library as an external crate, so `#[cfg(test)]` inside the lib would not reach it and the feature is the only switch that does.
 curios-prelude = { path = ".", features = ["test-support"] }

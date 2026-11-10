@@ -829,6 +829,7 @@ dependencies = [
  "curios-abi",
  "curios-archive",
  "curios-common",
+ "curios-native",
  "getrandom 0.4.3",
  "log",
  "rustix",

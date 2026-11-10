@@ -5,7 +5,7 @@
 use {
     crate::tests::test_support::*,
     curios_common::fill,
-    curios_native::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, test_support::*},
 };
 
 /// One program holding every row of a table, the row chosen by the host: its stdin line is two bytes, the first read as the runtime zero `n` (`'A' − 65`) with its `Int` twin `i`, which is what keeps every row out of the folder's reach, and the second naming the row. One compile therefore serves the whole table, and a run costs milliseconds — the reason this is a selector rather than one program per row. With `taint` false, `n` and `i` are literal zeros instead, so every row folds to a literal while the selection alone stays runtime, which is what "folded" asserts.

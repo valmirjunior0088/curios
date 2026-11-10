@@ -11,7 +11,7 @@ use {
     curios_common::Qualifier,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::{Compiled, ForeignBindings, MockHost, TestEnd},
+    curios_native::{Compiled, ForeignBindings, TestEnd, test_support::*},
     curios_pipeline::{Fold, Stage, TestProgram, compile_with_prelude},
     curios_surface::Entrypoint,
     std::{any::Any, sync::Mutex},

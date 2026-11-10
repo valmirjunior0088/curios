@@ -1,10 +1,6 @@
 //! The filesystem through `/std/fs`: what is at a path, listing, making, moving and removing, and the whole-file twins, against a scripted tree — every call a `Try` over `Io`, so a failure the test does not expect ends the program with its name.
 
-use {
-    crate::tests::test_support::*,
-    curios_common::fill,
-    curios_native::{MockHost, MockIo},
-};
+use {crate::tests::test_support::*, curios_common::fill, curios_native::test_support::*};
 
 /// A scripted tree: two files under `data`, one of them a level down, so `data` and `data/sub` exist without being named.
 fn seeded() -> (MockHost, MockIo) {

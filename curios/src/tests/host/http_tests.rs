@@ -3,7 +3,7 @@
 use {
     crate::tests::test_support::*,
     curios_common::fill,
-    curios_native::{Compiled, ForeignBindings, MockHost, MockHostBuilder, SocketEvent},
+    curios_native::{Compiled, ForeignBindings, test_support::*},
 };
 
 /// A program that makes one message and performs nothing.

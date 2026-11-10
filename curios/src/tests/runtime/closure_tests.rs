@@ -4,7 +4,7 @@ use {
     crate::tests::test_support::*,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::MockHost,
+    curios_native::test_support::*,
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
 };

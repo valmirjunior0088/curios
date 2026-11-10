@@ -2,7 +2,7 @@
 
 use {
     crate::tests::test_support::*,
-    curios_native::{ForeignBindings, MockHost},
+    curios_native::{ForeignBindings, test_support::*},
 };
 
 /// Both families have the same constructor tags and padded width. The dependent consumer reads the corresponding nominal row under each `Bool` arm; sharing a clone between those rows would rebuild one family where the other is read.

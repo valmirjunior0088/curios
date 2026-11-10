@@ -1,9 +1,8 @@
 use {
-    super::Table,
     crate::{
         Answer, ChildExit, ChildHandles, ClockReading, Direction, Failure, FileKind, FileStat,
         Handle, HostOps, Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled,
-        StdioMode, Termination, TtySize, lookup_address, names_a_variable, serial_frame,
+        StdioMode, Table, Termination, TtySize, lookup_address, names_a_variable, serial_frame,
         serial_speed,
     },
     curios_abi::{ClosedCode, errno, event},

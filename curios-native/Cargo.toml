@@ -39,3 +39,5 @@ webpki-roots = { version = "1.0.8" }
 rustix = { version = "1.1.4", features = ["pty"] }
 # The directory of its own every suite here works in, canonical and removed however the test ends. A dev-dependency for the same reason, so the launcher `cargo xtask launcher build` builds never carries it.
 curios-common = { workspace = true, features = ["test-support"] }
+# This crate on itself, only to turn `test-support` on for its own tests: the engine's suite runs a program under the mock host, which lives in `test_support`. A dev-dependency for the same reason as the rows above.
+curios-native = { path = ".", features = ["test-support"] }

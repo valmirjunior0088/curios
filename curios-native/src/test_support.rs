@@ -11,6 +11,11 @@
 //! It counts what the engine's collector does while a program runs: [`collected`](crate::test_support::collected) listens to the engine's own announcements, which are wasmtime's strings on wasmtime's channel, the `log` facade, and so are read here beside the pin that decides them. The facade is the process's and a record reaches it from whichever thread wrote it, which matters because the engine runs a module on a thread of its own: a listener bound to the calling thread hears nothing of a run.
 //!
 //! It also runs a compiled program against replies no adapter would write: [`run_raw`](crate::test_support::run_raw) answers chosen rows of the host's, with [`RawValue`](crate::test_support::RawValue)s written into the result slots as they stand. That is how the standard library's reading of a reply is put under test past what a host's types let it answer.
+//!
+//! And it holds the mock host the suites run programs against, [`MockHost`](crate::test_support::MockHost): a host made of memory, whose disk, network and devices a test seeds and reads back, and which no build that ships runs a program under.
+
+mod mock_host;
+pub use mock_host::{MockHost, MockHostBuilder, MockIo, SocketEvent};
 
 use {
     super::*,

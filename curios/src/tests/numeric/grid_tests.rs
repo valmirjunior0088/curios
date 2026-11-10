@@ -2,7 +2,7 @@
 
 use {
     crate::tests::test_support::*,
-    curios_native::MockHost,
+    curios_native::test_support::*,
     curios_num::{Floating, Integer, Natural, Rounding},
 };
 

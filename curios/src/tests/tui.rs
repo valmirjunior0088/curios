@@ -5,7 +5,7 @@
 use {
     super::test_support::*,
     curios_abi::{Failure, HostOp, TtySize},
-    curios_native::MockHost,
+    curios_native::test_support::*,
 };
 
 // The palette bound is a decided proposition, so an index past the sixteen is refused where it is written rather than clamped or wrapped at runtime.

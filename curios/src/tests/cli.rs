@@ -3,7 +3,7 @@
 use {
     super::test_support::*,
     curios_common::fill,
-    curios_native::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, test_support::*},
 };
 
 /// The declaration every refusal below is written against, beside the line `body` declares after it.

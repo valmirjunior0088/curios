@@ -1,6 +1,6 @@
 //! The controlling terminal through `/std/Tty`: opened, taken and measured against a scripted terminal, and refused where the host has none.
 
-use {crate::tests::test_support::*, curios_native::MockHost};
+use {crate::tests::test_support::*, curios_native::test_support::*};
 
 // The size is the scripted pair on a host with a terminal, and `other(ENXIO)` on one without, from the open: the errno lane is how a program learns it has no controlling terminal, and the mock reports it as the native host does.
 #[test]

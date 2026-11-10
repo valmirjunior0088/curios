@@ -2,7 +2,7 @@
 
 use {
     crate::tests::test_support::*, curios_common::fill, curios_module::RootSource,
-    curios_native::MockHost, curios_surface::Entrypoint,
+    curios_native::test_support::*, curios_surface::Entrypoint,
 };
 
 #[test]

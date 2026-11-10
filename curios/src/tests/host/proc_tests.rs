@@ -7,7 +7,7 @@ use {
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::{ForeignBindings, MockHost},
+    curios_native::{ForeignBindings, test_support::*},
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     std::num::NonZeroU32,

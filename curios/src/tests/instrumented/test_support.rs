@@ -1,6 +1,6 @@
 //! The terminal session the coordination and host boundary measurements both drive.
 
-use curios_native::{MockHost, MockIo};
+use curios_native::test_support::*;
 
 // The terminal answers the session's questions first, supporting none of what it asks after, so the loop asks the terminal's size where it is quiet. The keys pause twice between two whole keys, so the loop's deadline passes once at each and it reads the two scripted resizes, 16×6 and then 12×5.
 pub fn listing_host() -> (MockHost, MockIo) {

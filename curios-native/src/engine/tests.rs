@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_abi::{
         ForeignFunction, ForeignStore, HostOp, WireResults, WireReturn, WireSignature, WireType,
     },

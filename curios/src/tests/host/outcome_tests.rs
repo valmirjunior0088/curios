@@ -3,7 +3,7 @@
 use {
     crate::tests::test_support::*,
     curios_abi::{HostOp, status},
-    curios_native::{ForeignBindings, MockHost, test_support::*},
+    curios_native::{ForeignBindings, test_support::*},
 };
 
 /// The code a program ends with for `permission_denied`, the failure every scripted row answers; `0` is a success, `2` a `not_found` and `1` any other failure.

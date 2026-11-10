@@ -6,7 +6,7 @@ use {
     crate::test_support::*,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::{DeclaredModule, MockHost, plugin_bindings},
+    curios_native::{DeclaredModule, plugin_bindings, test_support::*},
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     curios_wasm::{

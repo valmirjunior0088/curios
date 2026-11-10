@@ -5,7 +5,7 @@ use {
     curios_abi::ForeignStore,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::{Compiled, ForeignBindings, MockHost},
+    curios_native::{Compiled, ForeignBindings, test_support::*},
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
     curios_wasm::{Module, to_bytes},
