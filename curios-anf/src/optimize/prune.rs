@@ -40,7 +40,7 @@ impl Subtree {
 }
 
 /// Drop the items the program neither reaches nor runs for observable effect. A recursive group is never seeded as observable: its members are forced by need and its initializers perform nothing, so a dead group drops, carrying its web with it.
-pub(super) fn prune_unreachable(module: &mut Module, analysis: &Analysis) {
+pub fn prune_unreachable(module: &mut Module, analysis: &Analysis) {
     curios_profile::profile!("prune_unreachable");
     let Some(entry) = module.entry() else { return };
     let items = module.items().to_vec();

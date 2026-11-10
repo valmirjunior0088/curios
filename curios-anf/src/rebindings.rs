@@ -11,7 +11,7 @@ use {
 };
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct Rebindings {
+pub struct Rebindings {
     aliases: BTreeMap<ValueId, Atom>,
     products: BTreeMap<ValueId, (ProductId, Vec<Atom>)>,
     projections: BTreeMap<ValueId, (ProductId, Atom, u32)>,
@@ -20,16 +20,16 @@ pub(crate) struct Rebindings {
 
 impl Rebindings {
     /// An alias's original operand, keeping projection provenance for reconstruction.
-    pub(crate) fn alias(&self, value: ValueId) -> Option<Atom> {
+    pub fn alias(&self, value: ValueId) -> Option<Atom> {
         self.aliases.get(&value).copied()
     }
 
     /// Whether reading this atom forces a computed recursive member.
-    pub(crate) fn is_computed(&self, atom: Atom) -> bool {
+    pub fn is_computed(&self, atom: Atom) -> bool {
         matches!(atom, Atom::Value(value) if self.computed.contains(&value))
     }
 
-    pub(crate) fn analyze(module: &Module) -> Self {
+    pub fn analyze(module: &Module) -> Self {
         let mut bindings = Self::default();
         for statement in module.statements().iter().flatten() {
             let Statement::Let { result, rhs } = statement else {
@@ -63,7 +63,7 @@ impl Rebindings {
     }
 
     /// Follow aliases and visible product projections without entering a computation. Pending projections are applied innermost first; a mismatch preserves the queried atom. The visited set bounds malformed cycles as well as well-scoped DAGs.
-    pub(crate) fn resolve(&self, atom: Atom) -> Atom {
+    pub fn resolve(&self, atom: Atom) -> Atom {
         let mut current = atom;
         let mut pending = Vec::<(ProductId, u32)>::new();
         let mut seen = BTreeSet::new();

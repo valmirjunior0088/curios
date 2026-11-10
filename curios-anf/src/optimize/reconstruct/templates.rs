@@ -14,14 +14,19 @@ enum TemplateAtom {
     Bound(Atom),
 }
 
-pub(super) struct ConstructionTemplate {
-    pub(super) shape: Shape,
+pub struct ConstructionTemplate {
+    shape: Shape,
     arity: usize,
     fields: Vec<TemplateAtom>,
 }
 
 impl ConstructionTemplate {
-    pub(super) fn instantiate(&self, arguments: &[Atom]) -> Option<Vec<Atom>> {
+    /// The shape every instance of the template constructs.
+    pub fn shape(&self) -> Shape {
+        self.shape
+    }
+
+    pub fn instantiate(&self, arguments: &[Atom]) -> Option<Vec<Atom>> {
         if self.arity != arguments.len() {
             return None;
         }
@@ -35,7 +40,7 @@ impl ConstructionTemplate {
     }
 }
 
-pub(super) fn construction_templates(
+pub fn construction_templates(
     module: &Module,
     bindings: &Rebindings,
 ) -> BTreeMap<FunctionId, ConstructionTemplate> {

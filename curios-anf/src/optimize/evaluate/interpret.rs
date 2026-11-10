@@ -51,7 +51,7 @@ impl Frame {
 }
 
 /// How one evaluation ended.
-pub(super) enum Outcome {
+pub enum Outcome {
     Done(Value),
     /// A tail-position effect reached with fully-evaluated inputs.
     Stuck(Residual),
@@ -59,7 +59,7 @@ pub(super) enum Outcome {
 }
 
 /// A residual installed in place of a folded candidate: a tail-position host call, or a tail call to a module function whose body performs an effect it cannot residualize itself.
-pub(super) enum Residual {
+pub enum Residual {
     Foreign(ForeignId, Vec<Value>),
     Call(FunctionId, Vec<Value>),
 }
@@ -71,7 +71,7 @@ enum CafSource<'m> {
 }
 
 /// The interpreter over a borrowed module.
-pub(super) struct Evaluator<'m> {
+pub struct Evaluator<'m> {
     module: &'m Module,
     /// What a function closes over, derived the first time it is closed rather than from a whole-module snapshot, which would be retaken every round while the module grows under reification; the handful actually closed are what this walks.
     free_values: FreeValues<'m>,
@@ -89,7 +89,7 @@ pub(super) struct Evaluator<'m> {
 
 impl<'m> Evaluator<'m> {
     /// Build an interpreter over a module. The top-level value bindings are the module's item chain.
-    pub(super) fn new(module: &'m Module) -> Self {
+    pub fn new(module: &'m Module) -> Self {
         let mut definitions = BTreeMap::new();
         let mut rec_caf = BTreeMap::new();
         let mut item_functions = BTreeSet::new();
@@ -127,7 +127,7 @@ impl<'m> Evaluator<'m> {
     }
 
     /// Whether an atom names a closed value — a constant, a module function, or a top-level item value — so a call over such atoms is a candidate.
-    pub(super) fn is_closed_atom(&self, atom: Atom) -> bool {
+    pub fn is_closed_atom(&self, atom: Atom) -> bool {
         match atom {
             Atom::Constant(_) | Atom::Function(_) => true,
             Atom::Value(value) => {
@@ -137,7 +137,7 @@ impl<'m> Evaluator<'m> {
     }
 
     /// Evaluate one closed candidate call from a fresh budget frame.
-    pub(super) fn evaluate(&mut self, callee: Atom, arguments: &[Atom]) -> Outcome {
+    pub fn evaluate(&mut self, callee: Atom, arguments: &[Atom]) -> Outcome {
         self.budget.restart();
         let mut frame = Frame::new();
         self.eval_apply(callee, arguments, &mut frame, true)

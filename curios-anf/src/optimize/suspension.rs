@@ -8,7 +8,7 @@ mod tests;
 use crate::{Atom, Block, BlockId, Module, Rhs, Statement, SuspensionOperation, Terminator};
 
 /// Take the value arm of every suspension test where nothing in `module` builds a suspension, and say whether any was taken. The arms left behind are orphaned until the next prune.
-pub(super) fn fold_suspension_tests(module: &mut Module) -> bool {
+pub fn fold_suspension_tests(module: &mut Module) -> bool {
     curios_profile::profile!("fold_suspension_tests");
     let builds = module.statements().iter().flatten().any(|statement| {
         matches!(

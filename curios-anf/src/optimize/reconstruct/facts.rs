@@ -11,7 +11,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-pub(super) const ORIGIN_LIMIT: usize = 32;
+pub const ORIGIN_LIMIT: usize = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Origin {
@@ -92,14 +92,14 @@ struct Constraint {
     selection: Option<Selection>,
 }
 
-pub(super) struct ValueFacts {
+pub struct ValueFacts {
     facts: BTreeMap<Key, Origins>,
     sites: BTreeMap<StatementId, Construction>,
     units: BTreeSet<ConstantId>,
 }
 
 impl ValueFacts {
-    pub(super) fn analyze(
+    pub fn analyze(
         module: &Module,
         bindings: &Rebindings,
         templates: &BTreeMap<FunctionId, ConstructionTemplate>,
@@ -176,7 +176,7 @@ impl ValueFacts {
                 Rhs::Apply { callee, arguments } => match bindings.resolve(*callee) {
                     Atom::Function(function) => templates.get(&function).and_then(|template| {
                         Some(Construction {
-                            shape: template.shape,
+                            shape: template.shape(),
                             fields: template.instantiate(arguments)?,
                         })
                     }),
@@ -367,7 +367,7 @@ impl ValueFacts {
         result
     }
 
-    pub(super) fn unit_field(&self, base: Atom, schema: ProductId, field: usize) -> bool {
+    pub fn unit_field(&self, base: Atom, schema: ProductId, field: usize) -> bool {
         let Origins::Known(origins) = self.source(Source::Atom(base)) else {
             return false;
         };

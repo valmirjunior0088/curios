@@ -5,10 +5,11 @@
 //! The engine is one shared core — the runtime [`value`] domain, the deterministic [`budget`], reification [`reify`](mod@reify), and the region [`copy`] — under two drivers: closed-term evaluation ([`closed`]) and literal-spine specialization ([`spine`]).
 
 mod budget;
-pub(crate) use budget::*;
+pub use budget::DESCRIPTION_COPY_NODE_LIMIT;
+use budget::*;
 
 mod closed;
-pub(crate) use closed::*;
+pub use closed::*;
 
 mod copy;
 use copy::*;
@@ -20,7 +21,7 @@ mod reify;
 use reify::*;
 
 mod spine;
-pub(crate) use spine::*;
+pub use spine::*;
 
 mod value;
 use value::*;

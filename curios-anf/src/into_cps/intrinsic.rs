@@ -5,7 +5,7 @@
 use super::{CellOperation, Operation, SequenceGrain, SequenceOp};
 
 /// The CPS intrinsic of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit), the conjunction and the disjunction under operations of their own, which a first operand can decide (`curios_cps::Intrinsic::decided_by_first`), and `Byte` comparisons on the `Nat` carrier. The `Byte` conversions are handled before this table.
-pub(super) fn operation_intrinsic(operation: Operation) -> curios_cps::Intrinsic {
+pub fn operation_intrinsic(operation: Operation) -> curios_cps::Intrinsic {
     match operation {
         Operation::BoolAnd => curios_cps::Intrinsic::BoolAnd,
         Operation::BoolOr => curios_cps::Intrinsic::BoolOr,
@@ -81,7 +81,7 @@ pub(super) fn operation_intrinsic(operation: Operation) -> curios_cps::Intrinsic
 }
 
 /// The CPS intrinsic of a [`SequenceOp`], threading the operand count into the variadic concatenations. `ListBuild` is a list value, never an intrinsic.
-pub(super) fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_cps::Intrinsic {
+pub fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_cps::Intrinsic {
     match operation {
         SequenceOp::BytesLen => curios_cps::Intrinsic::BytesLen,
         SequenceOp::BytesEql => curios_cps::Intrinsic::BytesEql,
@@ -102,7 +102,7 @@ pub(super) fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_
     }
 }
 
-pub(super) fn cell_op(operation: CellOperation) -> curios_cps::CellOp {
+pub fn cell_op(operation: CellOperation) -> curios_cps::CellOp {
     match operation {
         CellOperation::New => curios_cps::CellOp::Reserve,
         CellOperation::Poll { .. } => curios_cps::CellOp::Poll,
@@ -110,21 +110,21 @@ pub(super) fn cell_op(operation: CellOperation) -> curios_cps::CellOp {
     }
 }
 
-pub(super) fn sequence_len_op(grain: SequenceGrain) -> curios_cps::Intrinsic {
+pub fn sequence_len_op(grain: SequenceGrain) -> curios_cps::Intrinsic {
     match grain {
         SequenceGrain::List => curios_cps::Intrinsic::ListLen,
         SequenceGrain::Bytes => curios_cps::Intrinsic::BytesLen,
     }
 }
 
-pub(super) fn sequence_get_op(grain: SequenceGrain) -> curios_cps::Intrinsic {
+pub fn sequence_get_op(grain: SequenceGrain) -> curios_cps::Intrinsic {
     match grain {
         SequenceGrain::List => curios_cps::Intrinsic::ListGet,
         SequenceGrain::Bytes => curios_cps::Intrinsic::BytesGet,
     }
 }
 
-pub(super) fn sequence_rest_op(grain: SequenceGrain) -> curios_cps::Intrinsic {
+pub fn sequence_rest_op(grain: SequenceGrain) -> curios_cps::Intrinsic {
     match grain {
         SequenceGrain::List => curios_cps::Intrinsic::ListRest,
         SequenceGrain::Bytes => curios_cps::Intrinsic::BytesRest,

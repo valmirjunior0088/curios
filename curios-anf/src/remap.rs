@@ -17,36 +17,36 @@ use {
 };
 
 /// Look an identity up in a remap expected to contain it, keeping it unchanged when it does not (an identity outside the copied region).
-pub(crate) fn lookup<I: Ord + Copy>(map: &BTreeMap<I, I>, id: I) -> I {
+pub fn lookup<I: Ord + Copy>(map: &BTreeMap<I, I>, id: I) -> I {
     map.get(&id).copied().unwrap_or(id)
 }
 
 /// Where the identities a module keeps outside its arenas go: constants, foreign rows and schemas, which only linking moves.
 #[derive(Default)]
-pub(crate) struct Tables {
-    pub(crate) constants: BTreeMap<ConstantId, ConstantId>,
-    pub(crate) foreigns: BTreeMap<ForeignId, ForeignId>,
-    pub(crate) products: BTreeMap<ProductId, ProductId>,
-    pub(crate) families: BTreeMap<FamilyId, FamilyId>,
-    pub(crate) constructors: BTreeMap<ConstructorId, ConstructorId>,
+pub struct Tables {
+    pub constants: BTreeMap<ConstantId, ConstantId>,
+    pub foreigns: BTreeMap<ForeignId, ForeignId>,
+    pub products: BTreeMap<ProductId, ProductId>,
+    pub families: BTreeMap<FamilyId, FamilyId>,
+    pub constructors: BTreeMap<ConstructorId, ConstructorId>,
 }
 
-pub(crate) struct Remap<'a> {
-    pub(crate) values: &'a BTreeMap<ValueId, ValueId>,
-    pub(crate) blocks: &'a BTreeMap<BlockId, BlockId>,
-    pub(crate) functions: &'a BTreeMap<FunctionId, FunctionId>,
-    pub(crate) rec_groups: &'a BTreeMap<RecGroupId, RecGroupId>,
+pub struct Remap<'a> {
+    pub values: &'a BTreeMap<ValueId, ValueId>,
+    pub blocks: &'a BTreeMap<BlockId, BlockId>,
+    pub functions: &'a BTreeMap<FunctionId, FunctionId>,
+    pub rec_groups: &'a BTreeMap<RecGroupId, RecGroupId>,
     /// Statement identities, which a copier never renumbers and compaction always does.
-    pub(crate) statements: &'a BTreeMap<StatementId, StatementId>,
-    pub(crate) substitution: &'a BTreeMap<ValueId, Atom>,
+    pub statements: &'a BTreeMap<StatementId, StatementId>,
+    pub substitution: &'a BTreeMap<ValueId, Atom>,
     /// When set, a `Function` atom that would remap to `from` (the copy of the region's root) is kept as `to` (the original) instead. Structural bindings are never redirected.
-    pub(crate) redirect: Option<(FunctionId, FunctionId)>,
+    pub redirect: Option<(FunctionId, FunctionId)>,
     /// The tables' identities, where the rewrite moves them: `None` for a copy within one module and for compaction, which leave every one where it is.
-    pub(crate) tables: Option<&'a Tables>,
+    pub tables: Option<&'a Tables>,
 }
 
 impl Remap<'_> {
-    pub(crate) fn atom(&self, atom: Atom) -> Atom {
+    pub fn atom(&self, atom: Atom) -> Atom {
         match atom {
             Atom::Value(value) => {
                 if let Some(&fresh) = self.values.get(&value) {
@@ -79,12 +79,12 @@ impl Remap<'_> {
             .map_or(foreign, |tables| lookup(&tables.foreigns, foreign))
     }
 
-    pub(crate) fn product(&self, product: ProductId) -> ProductId {
+    pub fn product(&self, product: ProductId) -> ProductId {
         self.tables
             .map_or(product, |tables| lookup(&tables.products, product))
     }
 
-    pub(crate) fn family(&self, family: FamilyId) -> FamilyId {
+    pub fn family(&self, family: FamilyId) -> FamilyId {
         self.tables
             .map_or(family, |tables| lookup(&tables.families, family))
     }
@@ -95,15 +95,15 @@ impl Remap<'_> {
         })
     }
 
-    pub(crate) fn value(&self, value: ValueId) -> ValueId {
+    pub fn value(&self, value: ValueId) -> ValueId {
         lookup(self.values, value)
     }
 
-    pub(crate) fn block(&self, block: BlockId) -> BlockId {
+    pub fn block(&self, block: BlockId) -> BlockId {
         lookup(self.blocks, block)
     }
 
-    pub(crate) fn statement(&self, statement: &Statement) -> Statement {
+    pub fn statement(&self, statement: &Statement) -> Statement {
         match statement {
             Statement::Let { result, rhs } => Statement::Let {
                 result: self.value(*result),
@@ -121,7 +121,7 @@ impl Remap<'_> {
         }
     }
 
-    pub(crate) fn terminator(&self, terminator: &Terminator) -> Terminator {
+    pub fn terminator(&self, terminator: &Terminator) -> Terminator {
         match terminator {
             Terminator::Return(atom) => Terminator::Return(self.atom(*atom)),
             Terminator::Halt { foreign, operands } => Terminator::Halt {
@@ -132,7 +132,7 @@ impl Remap<'_> {
         }
     }
 
-    pub(crate) fn rhs(&self, rhs: &Rhs) -> Rhs {
+    pub fn rhs(&self, rhs: &Rhs) -> Rhs {
         let atoms = |operands: &[Atom]| operands.iter().map(|&atom| self.atom(atom)).collect();
         match rhs {
             Rhs::Alias(atom) => Rhs::Alias(self.atom(*atom)),
@@ -321,12 +321,12 @@ impl Remap<'_> {
         }
     }
 
-    pub(crate) fn statement_id(&self, statement: StatementId) -> StatementId {
+    pub fn statement_id(&self, statement: StatementId) -> StatementId {
         lookup(self.statements, statement)
     }
 
     /// A block's own contents — the statement list a copier rebuilds itself, and the terminator.
-    pub(crate) fn block_body(&self, block: &Block) -> Block {
+    pub fn block_body(&self, block: &Block) -> Block {
         Block {
             statements: block
                 .statements
@@ -337,7 +337,7 @@ impl Remap<'_> {
         }
     }
 
-    pub(crate) fn function(&self, function: &Function) -> Function {
+    pub fn function(&self, function: &Function) -> Function {
         Function {
             debug_name: function.debug_name.clone(),
             params: function.params.iter().map(|&p| self.value(p)).collect(),
@@ -347,7 +347,7 @@ impl Remap<'_> {
         }
     }
 
-    pub(crate) fn rec_group(&self, group: &RecGroup) -> RecGroup {
+    pub fn rec_group(&self, group: &RecGroup) -> RecGroup {
         RecGroup {
             functions: group
                 .functions

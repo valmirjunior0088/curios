@@ -29,7 +29,7 @@ const MAX_SPINE_NODES: usize = 256;
 const MAX_SPECIALIZATION_NODES: usize = 100_000;
 
 /// Specialize every eligible literal-spine call site, module-wide.
-pub(crate) fn specialize_literal_spines(module: &mut Module) {
+pub fn specialize_literal_spines(module: &mut Module) {
     curios_profile::profile!("specialize_literal_spines");
     let analysis = Analysis::analyze(module);
     let targets = find_targets(module, &analysis);

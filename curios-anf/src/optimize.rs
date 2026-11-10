@@ -6,7 +6,7 @@ mod prune;
 use prune::*;
 
 mod evaluate;
-pub(crate) use evaluate::*;
+pub use evaluate::*;
 
 mod rebase;
 use rebase::*;
@@ -22,22 +22,14 @@ use super::{Analysis, Mark, Module};
 /// The rounds a fold of closed applications runs at most. A curried chain folds one application per round. A cap the loop reaches, not a bound it stays under: every program in `programs/` installs replacements in all of them, because each reified closure copy carries closed applications of its own into the next round.
 const ROUNDS: usize = 8;
 
-/// Run the ANF transformations in place: prune, fold the suspension tests of a program that cannot suspend and prune what they alone reached, evaluate, specialize, recover reconstruction identities, rebase, and prune again (evaluation and specialization strand the code they collapse). The module must verify on entry; the compaction after the final prune re-verifies on exit. Taking a match arm during specialization orphans the untaken arms' values until that final prune tombstones them, so no intermediate verify runs after specialization.
+/// Run the ANF transformations in place: prune, fold the suspension tests of a program that cannot suspend and prune what they alone reached, evaluate, specialize, recover reconstruction identities, rebase, and prune again (evaluation and specialization strand the code they collapse). The module must arrive verified; the compaction after the final prune re-verifies on exit. Taking a match arm during specialization orphans the untaken arms' values until that final prune tombstones them, so no intermediate verify runs after specialization.
 ///
 /// Each prune is followed by a compaction whose [`Compaction`](super::Compaction) is dropped, so this must run on a module nothing else indexes into: the pipeline hands it the module `ErasedProgram::into_module` released, a linked program no fragment holds an identity of.
+///
+/// **The module is not verified again on entry: that would be a second reading of the same bytes.** A program's module arrives here straight from its link, which verifies the whole module ([`Module::verify`]) and hands it over unmutated; verifying again walks everything it linked a second time to reach the same verdict. Every other verification stays: erasure's, the one after closed-term evaluation, and the one each prune and compaction ends with.
+///
+/// Not a debug assertion either. Restating the check under `cfg(debug_assertions)` would put the whole cost back exactly where the suite runs, in exchange for a verdict the link already gave.
 pub fn optimize(module: &mut Module) {
-    module
-        .verify()
-        .expect("a module entering optimization verifies");
-    optimize_verified(module);
-}
-
-/// [`optimize`] over a module the caller has just verified, skipping the entry check.
-///
-/// **The check it skips is a second reading of the same bytes.** A program's module arrives here straight from its link, which verifies the whole module ([`Module::verify`]) and hands it over unmutated; verifying again walks everything it linked a second time to reach the same verdict. Every other verification stays: erasure's, the one after closed-term evaluation, and the one each prune and compaction ends with.
-///
-/// Not a debug assertion either. Restating the check under `cfg(debug_assertions)` would put the whole cost back exactly where the suite runs, in exchange for a verdict the line above it already gave.
-pub fn optimize_verified(module: &mut Module) {
     let analysis = Analysis::analyze(module);
     prune_unreachable(module, &analysis);
     compact(module);
@@ -71,7 +63,7 @@ pub fn optimize_verified(module: &mut Module) {
 pub fn evaluate_since(module: &mut Module, mark: &Mark) -> bool {
     let mut installed = false;
     for _ in 0..ROUNDS {
-        if !evaluate_closed_items(module, mark.items) {
+        if !evaluate_closed_items(module, mark.items()) {
             break;
         }
         installed = true;

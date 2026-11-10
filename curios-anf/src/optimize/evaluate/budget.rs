@@ -5,46 +5,46 @@
 use super::Bail;
 
 /// Per-candidate step budget.
-pub(super) const STEP_BUDGET: usize = 50_000;
+pub const STEP_BUDGET: usize = 50_000;
 
 /// Shared step pool for the whole pass — the hard compile-time ceiling.
-pub(super) const PASS_BUDGET: usize = 500_000;
+pub const PASS_BUDGET: usize = 500_000;
 
 /// Call-nesting cap: each interpreted call recurses into a host Rust frame.
 ///
 /// No candidate in `programs/` reaches it — the depth bails each round's profile ledger samples stay at zero — so a recursive walk deeper than this, a hand-written one over a literal longer than 256 elements, is left unfolded and nothing in the corpus is.
-pub(super) const MAX_CALL_DEPTH: usize = 256;
+pub const MAX_CALL_DEPTH: usize = 256;
 
 /// Caps on one replacement: materialized nodes, and packed payload bytes plus list elements.
-pub(super) const MAX_REIFY_NODES: usize = 2_048;
-pub(super) const MAX_REIFY_BYTES: usize = 65_536;
+pub const MAX_REIFY_NODES: usize = 2_048;
+pub const MAX_REIFY_BYTES: usize = 65_536;
 
 /// The heaviest copy a description closure may reify. A performance is small by construction — a write is one foreign call, a bind two forces, the test between them and its carry, a pure a return — so a description whose copy extent runs past this is carrying program code: a sequencing chain's continuation drags its whole suffix along as extent, and copying that per level per round is the compounding this cap exists to stop. The staged-formatter residuals the collapse pins protect weigh a few dozen nodes; a chain's first link weighs its program.
 ///
 /// One performance is not small: the library's write is a loop that resends what the host left and waits through `/std/internal/Handle/retried` where it would block, and it is the heaviest description a constant `print` copies. A combinator's body is copied at the one link that calls it, so it is no chain's suffix, and the cap clears it with room. Measured, mixed, on top of `5579bb995`, release, x86-64 Linux, the cap at 160 against 256: compile time over `programs/`, five interleaved rounds, and `../curios-papers`' harness from an empty store, three, 50.7 s at either cap, no difference proven; module sizes over `programs/`, counted, −56 to +2 bytes. `curios`'s `tests::fmt::a_constant_prints_descriptions_are_copied_within_the_evaluators_cap` holds the write under this cap, so an edit to that loop which crosses the cap fails there by this constant's name, where the collapses it breaks name only what they lost.
-pub(crate) const DESCRIPTION_COPY_NODE_LIMIT: usize = 256;
+pub const DESCRIPTION_COPY_NODE_LIMIT: usize = 256;
 
 /// Shared node pool for a whole reification pass — the growth analogue of [`PASS_BUDGET`].
 ///
 /// [`MAX_REIFY_NODES`] bounds one replacement and says nothing about how many replacements a pass performs. Without this pool a round can reify thousands of times and multiply the module, and the next round walks the multiplied module: over a prelude written in combinator style the module grows by orders of magnitude within three rounds, and the eight-round loop never finishes.
 ///
 /// Steps are pooled across a pass, and this pools growth the same way. Exhaustion stops further replacements for the pass; partial evaluation that folds less is always sound, so the bound costs optimization rather than correctness.
-pub(super) const PASS_REIFY_BUDGET: usize = 100_000;
+pub const PASS_REIFY_BUDGET: usize = 100_000;
 
 /// The widest scalar a fold may build, in bits — [`MAX_REIFY_BYTES`] read in the unit a numeral grows in.
 ///
 /// The erased carriers are unbounded, so multiplication and the left shifts can be asked to build without bound while costing one step each; a step budget cannot see that and a width can. A constant wider than one replacement may reify could not be placed in the module even if it were built, so this is the point past which folding is work with no possible use. Exhaustion here is a *decline*, like every other bound in this module: partial evaluation that folds less is always sound.
-pub(super) const MAX_FOLD_BITS: u64 = MAX_REIFY_BYTES as u64 * 8;
+pub const MAX_FOLD_BITS: u64 = MAX_REIFY_BYTES as u64 * 8;
 
 /// The step fuel shared across a pass, plus the per-candidate counters.
-pub(super) struct Budget {
+pub struct Budget {
     pool: usize,
     steps: usize,
     depth: usize,
 }
 
 impl Budget {
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             pool: PASS_BUDGET,
             steps: 0,
@@ -53,12 +53,12 @@ impl Budget {
     }
 
     /// Reset the per-candidate counters; the shared pool carries over.
-    pub(super) fn restart(&mut self) {
+    pub fn restart(&mut self) {
         self.steps = 0;
         self.depth = 0;
     }
 
-    pub(super) fn charge(&mut self) -> Result<(), Bail> {
+    pub fn charge(&mut self) -> Result<(), Bail> {
         if self.pool == 0 || self.steps >= STEP_BUDGET {
             return Err(Bail::Fuel);
         }
@@ -67,7 +67,7 @@ impl Budget {
         Ok(())
     }
 
-    pub(super) fn enter(&mut self) -> Result<(), Bail> {
+    pub fn enter(&mut self) -> Result<(), Bail> {
         if self.depth >= MAX_CALL_DEPTH {
             return Err(Bail::Depth);
         }
@@ -75,7 +75,7 @@ impl Budget {
         Ok(())
     }
 
-    pub(super) fn leave(&mut self) {
+    pub fn leave(&mut self) {
         self.depth -= 1;
     }
 }
@@ -83,7 +83,7 @@ impl Budget {
 /// What one replacement may materialize: its own shape cap, its payload cap, and its slice of the pass pool.
 ///
 /// The two node quantities answer different questions and neither substitutes for the other. `nodes` bounds the *shape* of the value being built, so a single value cannot be arbitrarily wide; `pool` is what the whole pass has left, so replacements cannot multiply the module between them. A deep-copied closure region is not part of a value's shape, so it charges the pool alone -- but it must still *refuse* when the pool cannot afford it, which is the half that bounds growth rather than merely observing it.
-pub(super) struct ReifyBudget {
+pub struct ReifyBudget {
     nodes: usize,
     payload: usize,
     pool: usize,
@@ -92,17 +92,17 @@ pub(super) struct ReifyBudget {
 
 impl ReifyBudget {
     /// One replacement's own caps, drawing on all of [`MAX_REIFY_NODES`].
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self::within(MAX_REIFY_NODES)
     }
 
     /// One replacement bounded by both its own cap and what the pass's shared pool has left.
-    pub(super) fn within(pool: usize) -> Self {
+    pub fn within(pool: usize) -> Self {
         Self::within_capped(pool, MAX_REIFY_NODES)
     }
 
     /// [`Self::within`] under a tighter node cap — the description-containing candidate's budget, [`DESCRIPTION_COPY_NODE_LIMIT`].
-    pub(super) fn within_capped(pool: usize, nodes: usize) -> Self {
+    pub fn within_capped(pool: usize, nodes: usize) -> Self {
         Self {
             nodes,
             payload: MAX_REIFY_BYTES,
@@ -112,14 +112,14 @@ impl ReifyBudget {
     }
 
     /// Nodes this replacement materialized, to charge against the pass pool.
-    pub(super) fn spent(&self) -> usize {
+    pub fn spent(&self) -> usize {
         self.spent
     }
 
     /// Charge `amount` against both this replacement's cap and the pass pool.
     ///
     /// A deep-copied closure region is charged here rather than to the pool alone. Charging it to the pool alone would decline fewer replacements, which sounds better and is much worse: the declines are what stop `deep_copy_function` running over large regions, and without them lowering grows faster than the module it lowers. The cap refuses early and cheaply; that is its value here.
-    pub(super) fn bulk(&mut self, amount: usize) -> Result<(), Bail> {
+    pub fn bulk(&mut self, amount: usize) -> Result<(), Bail> {
         if amount > self.nodes || amount > self.pool {
             return Err(Bail::TooBig);
         }
@@ -129,7 +129,7 @@ impl ReifyBudget {
         Ok(())
     }
 
-    pub(super) fn node(&mut self) -> Result<(), Bail> {
+    pub fn node(&mut self) -> Result<(), Bail> {
         if self.nodes == 0 || self.pool == 0 {
             return Err(Bail::TooBig);
         }
@@ -139,7 +139,7 @@ impl ReifyBudget {
         Ok(())
     }
 
-    pub(super) fn payload(&mut self, amount: usize) -> Result<(), Bail> {
+    pub fn payload(&mut self, amount: usize) -> Result<(), Bail> {
         if amount > self.payload {
             return Err(Bail::TooBig);
         }

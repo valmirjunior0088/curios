@@ -167,7 +167,7 @@ mod tests;
 /// **Both halves are needed and neither is this stage's to invent.** Termination is decided once, above Core, by the certifier's walk, and arrives on [`Function::total`](crate::Function::total). Freedom from effects is the interprocedural [`Summary`], which is ANF's and dissolves at this boundary — item granularity and per-function behavior become the entry's initialization code. So the conjunction is computed from the two where both are in hand, by the lowering into CPS, whose functions carry only it, and by the rebase, which leaves a recursion it may drop to the placement that reads the same fact below.
 ///
 /// A mutable allocation is excluded because a program can tell one from another of equal contents; an immutable one is not, which is the case this exists for — a list built and never read is a list that need not be built.
-pub(crate) fn droppable_functions(source: &Module) -> BTreeMap<FunctionId, bool> {
+pub fn droppable_functions(source: &Module) -> BTreeMap<FunctionId, bool> {
     let summary = Summary::analyze(source, &Analysis::analyze(source));
     source
         .function_ids()

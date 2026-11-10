@@ -1251,7 +1251,7 @@ where
     observe(Stage::Anf(&anf_module));
 
     // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so CPS's whole-module fixpoint sees only the live slice (see `curios_anf::optimize`). Verified rather than verifying: erasure sealed this very module through `finalize`, which verified it.
-    curios_anf::optimize_verified(&mut anf_module);
+    curios_anf::optimize(&mut anf_module);
 
     observe(Stage::AnfOptm(&anf_module));
 

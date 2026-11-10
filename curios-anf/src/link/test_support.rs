@@ -3,7 +3,7 @@
 use crate::*;
 
 /// A fragment declaring the family `Digit` of `count` constructors without a payload, and nothing else, with the constructors in their order.
-pub(super) fn digits(count: usize) -> (Module, FamilyId, Vec<ConstructorId>) {
+pub fn digits(count: usize) -> (Module, FamilyId, Vec<ConstructorId>) {
     let mut builder = Builder::new();
     let family = builder.family(Some("Digit".into()));
     let constructors = (0..count)
@@ -18,7 +18,7 @@ pub(super) fn digits(count: usize) -> (Module, FamilyId, Vec<ConstructorId>) {
 }
 
 /// A fragment importing `Digit`, of `count` constructors, and constructing the one at `position`, bound as its one item.
-pub(super) fn digit(count: usize, position: usize) -> (Module, FamilyId) {
+pub fn digit(count: usize, position: usize) -> (Module, FamilyId) {
     let mut builder = Builder::new();
     let family = builder.import_family(Some("Digit".into()), count);
     let constructor = builder.import_constructor(family, position, Some(format!("d{position}")), 0);

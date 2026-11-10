@@ -11,7 +11,7 @@ use {
 };
 
 /// Deep-copy `source` and everything it lexically owns into fresh identities, rewriting each free value named in `substitution` to its replacement atom. With `self_reference` given, a `Function(source)` reference in the copy is kept pointing there rather than at the copy — the spine specializer passes the original target so the copy's self-recursion stays generic for its fold to re-specialize. Returns the fresh identity of the copied `source`, or `None` if the region references a tombstoned entity.
-pub(super) fn deep_copy_function(
+pub fn deep_copy_function(
     module: &mut Module,
     source: FunctionId,
     substitution: &BTreeMap<ValueId, Atom>,

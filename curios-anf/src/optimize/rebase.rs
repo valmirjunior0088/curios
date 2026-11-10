@@ -341,7 +341,7 @@ enum Leaf {
 }
 
 /// Rebase every recognized function, module-wide.
-pub(super) fn rebase_monoid_recursion(module: &mut Module) {
+pub fn rebase_monoid_recursion(module: &mut Module) {
     curios_profile::profile!("rebase_monoid_recursion");
     // Targets: self-recursive functions bound by a `Functions` statement (anywhere — item or block), recognized one at a time. Collect first; rewriting appends statements and functions but never disturbs another target's blocks.
     let targets: Vec<(StatementId, FunctionId)> = module

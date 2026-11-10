@@ -31,10 +31,7 @@ fn performs(behavior: &LocalBehavior) -> bool {
 /// Check one group's computed members: no initializer evaluates itself, and none performs an effect.
 ///
 /// Hands back the members that read themselves where nothing outside their own initializers reads them — see [`Module::unforced`](super::Module::unforced).
-pub(super) fn check_group(
-    module: &Module,
-    values: &[RecValue],
-) -> Result<Vec<CycleStep>, VerifyError> {
+pub fn check_group(module: &Module, values: &[RecValue]) -> Result<Vec<CycleStep>, VerifyError> {
     let computed: Vec<ValueId> = values.iter().map(|member| member.value).collect();
     let mut summaries = Summaries::default();
     let mut unforced = Vec::new();
@@ -106,7 +103,7 @@ pub(super) fn check_group(
 /// What applying `function` does, as a module that imports it is told: whether it performs, and which of its parameters it applies.
 ///
 /// What it reads is left out. A value it reads is one its own module binds, and no initializer of another module is among those, a declaration being erased after everything it names.
-pub(super) fn interface(module: &Module, function: FunctionId) -> Interface {
+pub fn interface(module: &Module, function: FunctionId) -> Interface {
     let mut summaries = Summaries::default();
     summaries.function(module, function);
     summaries.settle(module);

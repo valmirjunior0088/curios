@@ -99,14 +99,14 @@ impl std::error::Error for VerifyError {}
 
 /// A structural rule a malformed module broke. Only a faulty producer makes one, so [`Module::verify`] panics on it; it is a value here only so this crate's tests can say which rule fired.
 #[derive(Debug, Clone)]
-pub(crate) struct StructuralFault {
-    pub(crate) rule: StructuralRule,
-    pub(crate) detail: String,
+pub struct StructuralFault {
+    pub rule: StructuralRule,
+    pub detail: String,
 }
 
 impl StructuralFault {
     /// Abort on the fault, as a fault in the compiler rather than a refusal of the program it compiled.
-    pub(crate) fn raise(&self) -> ! {
+    pub fn raise(&self) -> ! {
         panic!(
             "the erased module is malformed ({:?}), a fault in the compiler rather than the program: {}",
             self.rule, self.detail
@@ -116,7 +116,7 @@ impl StructuralFault {
 
 /// The structural rules, one identity per distinct check. A dead identity and a broken schema link each break one documented invariant stated at several sites, so each shares an identity across them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum StructuralRule {
+pub enum StructuralRule {
     NoEntry,
     BlockOwnedTwice,
     StatementOwnedTwice,
@@ -221,7 +221,7 @@ impl Module {
 
 /// Whether the module under check is a finished program, which owes an entry block, or a fragment, which does not.
 #[derive(Clone, Copy)]
-pub(crate) enum Entry {
+pub enum Entry {
     Required,
     Absent,
 }

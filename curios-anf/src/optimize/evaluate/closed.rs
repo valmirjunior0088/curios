@@ -107,7 +107,7 @@ enum Kind {
 /// Fold every closed call the interpreter can finish, module-wide. Returns whether anything was installed — a curried chain folds one application per round, so the driver iterates until quiescent.
 ///
 /// Under the `profile` feature each round samples its ledger — the closed candidates found, the bails by reason, the replacements installed and the residual calls among them — so a round's cost reads beside its yield. A residual call is the one replacement that leaves an `Apply` behind for the next round to find again, which is why it is counted apart.
-pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
+pub fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::profile!("evaluate_closed_terms");
     let plans = plan(module, every_statement(module).into_iter());
     curios_profile::sample!("evaluate::candidates", plans.len());
@@ -130,7 +130,7 @@ pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
 }
 
 /// [`evaluate_closed_terms`] over the top-level items at `from` and after, and no other statement: one round of [`evaluate_since`](crate::evaluate_since).
-pub(crate) fn evaluate_closed_items(module: &mut Module, from: usize) -> bool {
+pub fn evaluate_closed_items(module: &mut Module, from: usize) -> bool {
     curios_profile::profile!("evaluate_closed_items");
     let candidates = module.items()[from..]
         .iter()

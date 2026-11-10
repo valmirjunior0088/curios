@@ -18,7 +18,7 @@ use {
 };
 
 /// Check that `value` can fully materialize — the same budget charges and closure gates as [`reify`], with no module mutation — so a failed reification never strands half-emitted statements in the arena.
-pub(super) fn reify_check(
+pub fn reify_check(
     module: &Module,
     value: &Value,
     budget: &mut ReifyBudget,
@@ -77,7 +77,7 @@ pub(super) fn reify_check(
 }
 
 /// [`reify_check`] over a list of values.
-pub(super) fn reify_check_all(
+pub fn reify_check_all(
     module: &Module,
     values: &[Value],
     budget: &mut ReifyBudget,
@@ -90,7 +90,7 @@ pub(super) fn reify_check_all(
 }
 
 /// Materialize `value` into `module`, appending construction statements to `out` in dependency order, and return the atom naming the result. The caller has already run [`reify_check`], so failure cannot strand emitted statements.
-pub(super) fn reify(
+pub fn reify(
     module: &mut Module,
     value: &Value,
     budget: &mut ReifyBudget,
@@ -212,7 +212,7 @@ fn reify_closure(
 }
 
 /// Reify each value in order, collecting the atoms that name them.
-pub(super) fn reify_all(
+pub fn reify_all(
     module: &mut Module,
     values: &[Value],
     budget: &mut ReifyBudget,
@@ -237,7 +237,7 @@ type Specialization = (FunctionId, Vec<(ValueId, Atom)>);
 /// The first three facts are stable while a pass reifies -- it only appends, and the item list is rebuilt afterwards -- so each is computed once per pass rather than per closure, where the item-bound set would walk every item and the copy weight the whole region, each on the probe *and* again on the real run: thousands of full walks per round on a combinator-heavy module.
 ///
 /// The two memos are the exception. Reifying a closure deep-copies its whole region, and the same specialization is reached along two independent axes: within one replacement, because a combinator names a sub-parser twice (`alt(a, a)`), and across replacements, because many definitions name one shared sub-parser. Without [`ReifyScope::local`] the first axis costs `2^depth` copies where it costs one per level with it, and without [`ReifyScope::shared`] the second costs a copy per referencing definition. Only the first is unconditionally safe to reuse, which is what [`ReifyScope::reusable`] arbitrates.
-pub(super) struct ReifyScope {
+pub struct ReifyScope {
     item_bound: Option<BTreeSet<FunctionId>>,
     /// The values top-level items bind, computed on first use like [`ReifyScope::item_bound`]. See [`ReifyScope::free_values_settled`].
     item_values: Option<BTreeSet<ValueId>>,
@@ -259,7 +259,7 @@ pub(super) struct ReifyScope {
 
 impl ReifyScope {
     /// Every fact here is computed on first use, not on construction. A caller that reifies no closure -- a literal constructor spine, typically -- must not pay for the item walk at all, which an eager scope would charge it.
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             item_bound: None,
             item_values: None,
@@ -278,7 +278,7 @@ impl ReifyScope {
     /// Drop the previous replacement's copies before reifying the next one's value.
     ///
     /// The memo is scoped to one replacement because a copy is bound where it is spliced: the `Functions` statement goes immediately before *its* candidate, so the function it binds is in scope for that candidate and for nothing that does not follow it. Carrying an atom into the next replacement would name a function bound in a block that need not dominate it. The pass-stable facts above are untouched. `owner` is the block the candidate stands in, which [`ReifyScope::escapes_knot`] reads, and `candidate` the function whose call it folds where its replacement holds a description, which [`ReifyScope::reaches_candidate`] reads.
-    pub(super) fn begin_replacement(
+    pub fn begin_replacement(
         &mut self,
         position: Option<usize>,
         owner: Option<BlockId>,
@@ -293,7 +293,7 @@ impl ReifyScope {
     /// Whether copying `function` for the current candidate would copy a call back to the function the candidate calls.
     ///
     /// A description that loops — a write resent until the stream has taken it all, a read retried until bytes arrive — calls its own function again from its bind's continuation, a closure the description captures. Folding a closed call of such a function and copying the description it answers copies that call too, closed, so the next round folds it into another copy: the loop is unrolled a level a round, for as many rounds as the evaluator runs, and the stage after deletes the copies. A copy whose region reaches the candidate's function, directly or through the functions it calls, is therefore declined, and the loop stays the call it was. A copy that never comes back to it still folds: the description a constant `print` answers reaches the write loop without being a call of `print`.
-    pub(super) fn reaches_candidate(&mut self, module: &Module, function: FunctionId) -> bool {
+    pub fn reaches_candidate(&mut self, module: &Module, function: FunctionId) -> bool {
         let Some(candidate) = self.candidate else {
             return false;
         };
@@ -325,14 +325,14 @@ impl ReifyScope {
     }
 
     /// The functions and values `function`'s region names and does not bind, `None` where it reaches a tombstoned entity.
-    pub(super) fn free(&mut self, module: &Module, function: FunctionId) -> Option<&Free> {
+    pub fn free(&mut self, module: &Module, function: FunctionId) -> Option<&Free> {
         self.regions.of(module, function).map(|facts| &facts.free)
     }
 
     /// Whether copying `function` for the current candidate would carry it out of the knot initializer it is bound in.
     ///
     /// A recursive value's dictionary of methods is built by its initializer, so the closures it holds are functions bound *inside* that initializer, and a call that projects one — `Show/show(dict)` — is a closed candidate whose result is such a closure. Materialized as a copy where the candidate stands, the copy carries the same candidate, so the next round folds it again into another copy: the recursive dispatch is unrolled one level per round, linearly for two members that resolve through each other and exponentially once a member also reaches itself, and only the round limit ends it. A copy taken *within* the initializer's own blocks is the fold a parser knot's construction relies on and stays; one taken outside them — at item level, or inside any function's body, the knot's own included — is the unrolling, and is declined so the candidate stays the call it was.
-    pub(super) fn escapes_knot(&mut self, module: &Module, function: FunctionId) -> bool {
+    pub fn escapes_knot(&mut self, module: &Module, function: FunctionId) -> bool {
         let knot_inits = self
             .knot_inits
             .get_or_insert_with(|| knot_bound_functions(module));
@@ -364,7 +364,7 @@ impl ReifyScope {
     /// Withdraw everything this replacement contributed to the module-wide memo.
     ///
     /// **For a group that turned out not to be bindable at item level.** The position is chosen before reification, because [`ReifyScope::record`] needs it; whether the group it produces is *closed* at item level can only be read off the group afterwards. A replacement that loses that bet keeps its copies — they are spliced into its own block — but must take back the claim that a later candidate can name them, which is what `local` holds the keys for.
-    pub(super) fn withdraw_replacement(&mut self) {
+    pub fn withdraw_replacement(&mut self) {
         self.shared
             .retain(|specialization, _| !self.local.contains_key(specialization));
     }
@@ -382,14 +382,14 @@ impl ReifyScope {
             .get_or_insert_with(|| item_bound_functions(module))
     }
 
-    pub(super) fn is_item_bound(&mut self, module: &Module, function: FunctionId) -> bool {
+    pub fn is_item_bound(&mut self, module: &Module, function: FunctionId) -> bool {
         self.item_bound(module).contains(&function)
     }
 
     /// Whether every value the copy would still name after substitution is one it can name from anywhere.
     ///
     /// **The assumption [`reify_closure`] states, checked.** A free value the captures do not cover is kept verbatim on the reasoning that it is a top-level identity — and when it is not, the copy leaves the block that bound it still naming it. The source module verifies, so such a value is in scope *there*; the copy is spliced at the group's splice point and may be reused from any later candidate, and neither has to be inside that block. `outward_ok` asks this question about functions and deliberately not about values, because a free value is ordinarily substituted away; this asks it about the ones that are not.
-    pub(super) fn free_values_settled(&mut self, module: &Module, closure: &Closure) -> bool {
+    pub fn free_values_settled(&mut self, module: &Module, closure: &Closure) -> bool {
         let Some((_, free)) = self.free(module, closure.function) else {
             return false;
         };
@@ -406,7 +406,7 @@ impl ReifyScope {
     }
 
     /// Whether every function `function`'s region names outside itself is bound by a top-level item, and so in scope at an arbitrary splice site.
-    pub(super) fn outward_ok(&mut self, module: &Module, function: FunctionId) -> bool {
+    pub fn outward_ok(&mut self, module: &Module, function: FunctionId) -> bool {
         let item_bound = self
             .item_bound
             .get_or_insert_with(|| item_bound_functions(module));
@@ -416,7 +416,7 @@ impl ReifyScope {
     }
 
     /// What deep-copying `function` would materialize.
-    pub(super) fn weigh(&mut self, module: &Module, function: FunctionId) -> Option<usize> {
+    pub fn weigh(&mut self, module: &Module, function: FunctionId) -> Option<usize> {
         self.regions.of(module, function).map(|facts| facts.weight)
     }
 }
@@ -612,7 +612,7 @@ fn knot_bound_functions(module: &Module) -> BTreeMap<FunctionId, BlockId> {
 /// Every value bound at item level: an item's result and the binders of its right-hand side, and a recursive group's computed members.
 ///
 /// Computed once for a reification pass and handed to each check, because the item list does not change while a pass reifies: rebuilding it per closure would walk the whole item list ten thousand times a round on a combinator-heavy module, a second cost with the same shape as the copying itself.
-pub(super) fn item_bound_values(module: &Module) -> BTreeSet<ValueId> {
+pub fn item_bound_values(module: &Module) -> BTreeSet<ValueId> {
     let mut bound = BTreeSet::<ValueId>::new();
     for &item in module.items() {
         match module.statement(item) {
@@ -632,7 +632,7 @@ pub(super) fn item_bound_values(module: &Module) -> BTreeSet<ValueId> {
 }
 
 /// The functions top-level items bind.
-pub(super) fn item_bound_functions(module: &Module) -> BTreeSet<FunctionId> {
+pub fn item_bound_functions(module: &Module) -> BTreeSet<FunctionId> {
     let mut item_bound = BTreeSet::<FunctionId>::new();
     for &item in module.items() {
         match module.statement(item) {

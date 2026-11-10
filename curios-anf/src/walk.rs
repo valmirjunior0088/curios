@@ -98,7 +98,7 @@ impl Terminator {
 /// Every control block reachable from `root` — the block itself and the sub-blocks of its statements, transitively — without entering a nested function's body. Iterative, deterministic order.
 ///
 /// A recursive group's *value* members are reached, its *function* members are not, and the asymmetry is the same one the sentence above draws. A computed member's `init` is an inline block of this function, run where the group is entered; a function member has a body of its own, which a caller walks by following the group's functions. Omitting an init block makes it invisible to every consumer here — and to a deep copy that decides what it owns by this walk, invisible reads as *outward*, so the copy keeps pointing at the original's block and the two come to own it jointly.
-pub(crate) fn control_blocks(module: &Module, root: BlockId) -> Vec<BlockId> {
+pub fn control_blocks(module: &Module, root: BlockId) -> Vec<BlockId> {
     let mut blocks = Vec::new();
     let mut seen = BTreeSet::new();
     let mut work = vec![root];

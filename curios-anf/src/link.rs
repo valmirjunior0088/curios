@@ -100,12 +100,19 @@ impl Linked {
 /// Where a module's arenas and its item list stood: what is at or past it was added since. The default is where an empty module stands, which every module is past.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Mark {
-    pub(crate) values: usize,
-    pub(crate) functions: usize,
-    pub(crate) blocks: usize,
-    pub(crate) statements: usize,
-    pub(crate) rec_groups: usize,
-    pub(crate) items: usize,
+    values: usize,
+    functions: usize,
+    blocks: usize,
+    statements: usize,
+    rec_groups: usize,
+    items: usize,
+}
+
+impl Mark {
+    /// Where the module's item list stood: the items at or past it were added since.
+    pub fn items(&self) -> usize {
+        self.items
+    }
 }
 
 /// Where the identities of a module go in the one its contents are written into: its values, blocks and functions each by a place of its own, the values that stand for an atom of the other, and its tables.

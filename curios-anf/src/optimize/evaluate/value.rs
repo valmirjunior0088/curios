@@ -10,7 +10,7 @@ use {
 
 /// A compile-time runtime value. Aggregates are `Rc`-shared so an environment clones freely; a closure names its module function and carries its resolved local captures.
 #[derive(Clone)]
-pub(super) enum Value {
+pub enum Value {
     /// The unit value — the carrier of an erased proof or type slot.
     Unit,
     Bool(bool),
@@ -29,16 +29,16 @@ pub(super) enum Value {
     Closure(Rc<Closure>),
 }
 
-pub(super) struct Closure {
-    pub(super) function: FunctionId,
-    pub(super) env: RefCell<Vec<(ValueId, Value)>>,
+pub struct Closure {
+    pub function: FunctionId,
+    pub env: RefCell<Vec<(ValueId, Value)>>,
 }
 
 /// An immutable window over shared list elements — the list mirror of [`Binary`], so a suffix or a slice is a start and a length over the same allocation rather than a copy of the elements.
 ///
 /// This is the runtime's own shape, not an evaluator convenience: `ListRest` and `ListSlice` are windows over one rope, and the peel the interpreter performs has to cost what the door's `emit_peel` costs, or a walk the program takes in linear time is taken here in quadratic.
 #[derive(Clone)]
-pub(super) struct ListWindow {
+pub struct ListWindow {
     items: Rc<[Value]>,
     start: usize,
     len: usize,
@@ -46,7 +46,7 @@ pub(super) struct ListWindow {
 
 impl ListWindow {
     /// A window over all of `items`.
-    pub(super) fn new(items: Vec<Value>) -> Self {
+    pub fn new(items: Vec<Value>) -> Self {
         let len = items.len();
         Self {
             items: Rc::from(items),
@@ -56,7 +56,7 @@ impl ListWindow {
     }
 
     /// The `len`-long window at `start` within this one, or `None` when it runs past the end — the bounds a slice traps on.
-    pub(super) fn window(&self, start: usize, len: usize) -> Option<Self> {
+    pub fn window(&self, start: usize, len: usize) -> Option<Self> {
         (start <= self.len && len <= self.len - start).then(|| Self {
             items: Rc::clone(&self.items),
             start: self.start + start,
@@ -75,7 +75,7 @@ impl Deref for ListWindow {
 
 impl Value {
     /// Whether this value holds an erased description anywhere — a closure stamped at its birth by erasure's `thunk`, directly or through captures and containers. A candidate holding one gets the tight description budget: the host runs a description once per force, so a big replacement is a sequencing chain's suffix riding along, while the small staged residuals the collapse pins protect pass untouched.
-    pub(super) fn contains_description(&self, module: &Module) -> bool {
+    pub fn contains_description(&self, module: &Module) -> bool {
         match self {
             Value::Unit
             | Value::Bool(_)
@@ -103,7 +103,7 @@ impl Value {
     }
 
     /// The value as an interned constant, if it is a leaf.
-    pub(super) fn as_constant(&self) -> Option<Constant> {
+    pub fn as_constant(&self) -> Option<Constant> {
         Some(match self {
             Value::Unit => Constant::Unit,
             Value::Bool(value) => Constant::Bool(*value),
@@ -120,7 +120,7 @@ impl Value {
     }
 
     /// The leaf value of an interned constant.
-    pub(super) fn from_constant(constant: &Constant) -> Value {
+    pub fn from_constant(constant: &Constant) -> Value {
         match constant {
             Constant::Unit => Value::Unit,
             Constant::Bool(value) => Value::Bool(*value),
@@ -134,14 +134,14 @@ impl Value {
     }
 
     /// The value as a machine natural, declining one no `u32` holds — every consumer is an index or a count, which a wider value cannot be.
-    pub(super) fn nat(&self) -> Result<u32, Bail> {
+    pub fn nat(&self) -> Result<u32, Bail> {
         match self {
             Value::Nat(value) => u32::try_from(value).ok().ok_or(Bail::Unsupported),
             _ => Err(Bail::Unsupported),
         }
     }
 
-    pub(super) fn bool_(&self) -> Result<bool, Bail> {
+    pub fn bool_(&self) -> Result<bool, Bail> {
         match self {
             Value::Bool(value) => Ok(*value),
             _ => Err(Bail::Unsupported),
@@ -151,7 +151,7 @@ impl Value {
 
 /// Why one evaluation stopped without producing a value. Only [`Bail::Effect`] can convert into a residual (a tail-position effect); every other reason leaves the candidate untouched.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Bail {
+pub enum Bail {
     /// An effectful computation reached outside the candidate's tail.
     Effect,
     /// Per-candidate or shared step fuel exhausted.

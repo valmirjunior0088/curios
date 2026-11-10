@@ -7,7 +7,7 @@
 //! Arena identities are globally unique and never shadowed, so flat maps to their CPS counterparts suffice; source hints are carried onto the CPS values and functions they lower to.
 
 mod census;
-pub(crate) use census::*;
+pub use census::*;
 
 mod emitter;
 use emitter::*;

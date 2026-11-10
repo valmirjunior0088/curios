@@ -6,8 +6,9 @@
 
 use {
     super::{
-        Atom, BlockId, Constant, ConstantId, FunctionId, Module, SequenceGrain, Statement,
-        StatementId, Terminator, ValueId, edge, sequence_get_op, sequence_rest_op,
+        Atom, BlockId, Constant, ConstantId, ConstructorId, FamilyEncoding, FamilyId, FunctionId,
+        Layout, Module, ProductId, SequenceGrain, Statement, StatementId, Terminator, ValueId,
+        edge, sequence_get_op, sequence_rest_op,
     },
     curios_abi::Handle,
     curios_num::{Binary, Natural},
@@ -16,35 +17,195 @@ use {
 
 /// One computed member: a write-once result cell, a capacity-one initializer channel, and its forcing function.
 #[derive(Clone, Copy)]
-pub(super) struct KnotMember {
-    pub(super) result: curios_cps::ValueId,
-    pub(super) initializer: curios_cps::ValueId,
-    pub(super) force: curios_cps::FunctionId,
+pub struct KnotMember {
+    pub result: curios_cps::ValueId,
+    pub initializer: curios_cps::ValueId,
+    pub force: curios_cps::FunctionId,
 }
 
 /// The CPS module being built, with the erased-to-CPS correspondence that every write consults.
-pub(super) struct Emitter<'a> {
+pub struct Emitter<'a> {
     source: &'a Module,
-    pub(super) module: curios_cps::Module,
-    pub(super) values: BTreeMap<ValueId, curios_cps::Atom>,
-    pub(super) functions: BTreeMap<FunctionId, curios_cps::FunctionId>,
+    module: curios_cps::Module,
+    values: BTreeMap<ValueId, curios_cps::Atom>,
+    functions: BTreeMap<FunctionId, curios_cps::FunctionId>,
     /// Computed members of recursive knots, mapped to its result cell, initializer channel, and forcing function. A reference to such a member lowers to a call of that function at the referencing region's entry, so the member is computed on first use, once, and the tie is invisible to everything but this lowering.
-    pub(super) knot_members: BTreeMap<ValueId, KnotMember>,
+    knot_members: BTreeMap<ValueId, KnotMember>,
+    /// What every nominal shape's CPS heap type is and what it is called, memoized across the lowering: rows it registers in `module`.
+    layout: Layout<'a>,
 }
 
 impl<'a> Emitter<'a> {
-    pub(super) fn new(source: &'a Module) -> Self {
+    pub fn new(source: &'a Module) -> Self {
         Self {
             source,
             module: curios_cps::Module::new(),
             values: BTreeMap::new(),
             functions: BTreeMap::new(),
             knot_members: BTreeMap::new(),
+            layout: Layout::new(source),
         }
     }
 
+    /// Hand over the module built: the lowering is done with it.
+    pub fn into_module(self) -> curios_cps::Module {
+        self.module
+    }
+
+    /// Add `node` to the module, under a fresh identity.
+    pub fn add_node(&mut self, node: curios_cps::Node) -> curios_cps::NodeId {
+        self.module.add_node(node)
+    }
+
+    /// The node at `id`, where one stands there.
+    pub fn node(&self, id: curios_cps::NodeId) -> Option<&curios_cps::Node> {
+        self.module.node(id)
+    }
+
+    /// A fresh CPS value, with the hint it is printed by.
+    pub fn add_value(&mut self, debug_name: Option<String>) -> curios_cps::ValueId {
+        self.module.add_value(debug_name)
+    }
+
+    /// A function identity to be defined later, so a body may name it before it exists.
+    pub fn reserve_function(&mut self) -> curios_cps::FunctionId {
+        self.module.reserve_function()
+    }
+
+    /// Define the function reserved as `id`.
+    pub fn define_function(&mut self, id: curios_cps::FunctionId, function: curios_cps::Function) {
+        self.module.define_function(id, function);
+    }
+
+    /// A continuation identity to be defined later, so a jump may name it before it exists.
+    pub fn reserve_continuation(&mut self) -> curios_cps::ContinuationId {
+        self.module.reserve_continuation()
+    }
+
+    /// Define the continuation reserved as `id`.
+    pub fn define_continuation(
+        &mut self,
+        id: curios_cps::ContinuationId,
+        continuation: curios_cps::Continuation,
+    ) {
+        self.module.define_continuation(id, continuation);
+    }
+
+    /// Keep `function` out of line: no pass inlines it.
+    pub fn keep_out_of_line(&mut self, function: curios_cps::FunctionId) {
+        self.module.keep_out_of_line(function);
+    }
+
+    /// The module's suspension row, registered on first use.
+    pub fn suspension_row(&mut self) -> curios_cps::RowId {
+        self.module.suspension_row()
+    }
+
+    /// Make `entry` the module's entry function.
+    pub fn set_entry(&mut self, entry: curios_cps::FunctionId) {
+        self.module.set_entry(entry);
+    }
+
+    /// Reserve the CPS function an arena function lowers to, and record the mapping.
+    pub fn bind_function(&mut self, arena: FunctionId) -> curios_cps::FunctionId {
+        let id = self.module.reserve_function();
+        self.functions.insert(arena, id);
+        id
+    }
+
+    /// Let `arena` stand for `atom` from here on, handing back what it stood for before.
+    pub fn stand_for(
+        &mut self,
+        arena: ValueId,
+        atom: curios_cps::Atom,
+    ) -> Option<curios_cps::Atom> {
+        self.values.insert(arena, atom)
+    }
+
+    /// Put back what `arena` stood for before a scope rebound it ([`Emitter::stand_for`]): `previous`, or nothing.
+    pub fn restore_value(&mut self, arena: ValueId, previous: Option<curios_cps::Atom>) {
+        match previous {
+            Some(atom) => {
+                self.values.insert(arena, atom);
+            }
+            None => {
+                self.values.remove(&arena);
+            }
+        }
+    }
+
+    /// Whether any computed member of a recursive knot is recorded.
+    pub fn has_knot_members(&self) -> bool {
+        !self.knot_members.is_empty()
+    }
+
+    /// Record `knot` as the storage and forcing function of the computed member `value`.
+    pub fn note_knot_member(&mut self, value: ValueId, knot: KnotMember) {
+        self.knot_members.insert(value, knot);
+    }
+
+    /// The forcing function of the computed member `value`.
+    pub fn knot_force(&self, value: ValueId) -> curios_cps::FunctionId {
+        self.knot_members[&value].force
+    }
+
+    /// Whether every row of `schema`'s width shares it ([`Layout::is_shared`]).
+    pub fn is_shared(&self, schema: ProductId) -> bool {
+        self.layout.is_shared(schema)
+    }
+
+    /// The slot each of `schema`'s fields occupies in its heap type.
+    pub fn product_slots(&mut self, schema: ProductId) -> Vec<usize> {
+        self.layout.product_slots(&mut self.module, schema)
+    }
+
+    /// The arity every construction of `schema` carries.
+    pub fn product_width(&mut self, schema: ProductId) -> usize {
+        self.layout.product_width(&mut self.module, schema)
+    }
+
+    /// The heap type `schema` lowers to.
+    pub fn product_identity(&mut self, schema: ProductId) -> curios_cps::RowId {
+        self.layout.product_identity(&mut self.module, schema)
+    }
+
+    /// How `family`'s values are represented.
+    pub fn family_encoding(&self, family: FamilyId) -> FamilyEncoding {
+        self.layout.family_encoding(family)
+    }
+
+    /// The family `constructor` builds.
+    pub fn constructor_family(&self, constructor: ConstructorId) -> FamilyId {
+        self.layout.constructor_family(constructor)
+    }
+
+    /// `constructor`'s tag.
+    pub fn constructor_tag(&self, constructor: ConstructorId) -> u32 {
+        self.layout.constructor_tag(constructor)
+    }
+
+    /// The slot each of `constructor`'s relevant fields occupies in its family's heap type.
+    pub fn constructor_slots(&mut self, constructor: ConstructorId) -> Vec<usize> {
+        self.layout.constructor_slots(&mut self.module, constructor)
+    }
+
+    /// The row value `constructor` builds of `fields`.
+    pub fn constructor_row(
+        &mut self,
+        constructor: ConstructorId,
+        fields: Vec<curios_cps::Atom>,
+    ) -> curios_cps::ValueExpr {
+        self.layout
+            .constructor_row(&mut self.module, constructor, fields)
+    }
+
+    /// The heap type `family` lowers to.
+    pub fn row_identity(&mut self, family: FamilyId) -> curios_cps::RowId {
+        self.layout.row_identity(&mut self.module, family)
+    }
+
     /// Allocate the CPS value representing an arena value, carrying its source hint and the register its type names, and record the mapping — the single choke point for every binder that names a source value.
-    pub(super) fn bind_value(&mut self, arena: ValueId) -> curios_cps::ValueId {
+    pub fn bind_value(&mut self, arena: ValueId) -> curios_cps::ValueId {
         let register = self
             .source
             .value(arena)
@@ -61,13 +222,13 @@ impl<'a> Emitter<'a> {
         value
     }
 
-    pub(super) fn arena_value_name(&self, id: ValueId) -> Option<String> {
+    pub fn arena_value_name(&self, id: ValueId) -> Option<String> {
         self.source
             .value(id)
             .and_then(|value| value.debug_name.clone())
     }
 
-    pub(super) fn lower_callee(&self, atom: Atom) -> curios_cps::Callee {
+    pub fn lower_callee(&self, atom: Atom) -> curios_cps::Callee {
         match self.lower_atom(atom) {
             curios_cps::Atom::Fun(function) => curios_cps::Callee::Known(function),
             curios_cps::Atom::Value(value) => curios_cps::Callee::Closure(value),
@@ -77,7 +238,7 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    pub(super) fn lower_atom(&self, atom: Atom) -> curios_cps::Atom {
+    pub fn lower_atom(&self, atom: Atom) -> curios_cps::Atom {
         match atom {
             Atom::Value(value) => self
                 .values
@@ -94,7 +255,7 @@ impl<'a> Emitter<'a> {
         }
     }
 
-    pub(super) fn lower_constant(&self, constant: ConstantId) -> curios_cps::Literal {
+    pub fn lower_constant(&self, constant: ConstantId) -> curios_cps::Literal {
         match self.source.constant(constant).expect("live constant") {
             // Unit, Bool, and Byte collapse onto the Nat runtime carrier here, at the one-way door — never earlier.
             Constant::Unit => curios_cps::Literal::Nat(Natural::zero()),
@@ -112,10 +273,7 @@ impl<'a> Emitter<'a> {
     }
 
     /// A parameterless continuation over `body`, for a switch arm.
-    pub(super) fn continuation_of(
-        &mut self,
-        body: curios_cps::NodeId,
-    ) -> curios_cps::ContinuationId {
+    pub fn continuation_of(&mut self, body: curios_cps::NodeId) -> curios_cps::ContinuationId {
         let continuation = self.module.reserve_continuation();
         self.module.define_continuation(
             continuation,
@@ -128,7 +286,7 @@ impl<'a> Emitter<'a> {
         continuation
     }
 
-    pub(super) fn jump(
+    pub fn jump(
         &mut self,
         target: curios_cps::ContinuationId,
         args: Vec<curios_cps::Atom>,
@@ -147,7 +305,7 @@ impl<'a> Emitter<'a> {
     /// **The one place the compiler says how a sequence is taken apart.** Both eliminations reach it, `FoldSequence`'s step and `UnconsSequence`'s cons arm, so the convention is encoded once rather than by each, where a change to a window's operands could leave the two disagreeing. `at` and `after` name one offset a step apart, and both callers already hold both — the fold as its loop's two indices, the peel as the literals `0` and `1`.
     ///
     /// Neither read names an extent. `sequence_rest_op` takes a start and lets the value decide how much follows, so there is no count for a caller to derive and none for two of them to derive differently.
-    pub(super) fn emit_peel(
+    pub fn emit_peel(
         &mut self,
         grain: SequenceGrain,
         sequence: &curios_cps::Atom,
@@ -175,7 +333,7 @@ impl<'a> Emitter<'a> {
     }
 
     /// Redirect each marked construction slot through a fresh value the caller settles: the atom is replaced in place, and the returned bindings are what [`Self::wrap_settles`] chains in front of the construction node. A store into a field the census marked indexed-only is where the value's whole future is known — it will only ever be indexed — so it is made (or proven) flat exactly there.
-    pub(super) fn settle_stores(
+    pub fn settle_stores(
         &mut self,
         marked: &[bool],
         atoms: &mut [curios_cps::Atom],
@@ -190,7 +348,7 @@ impl<'a> Emitter<'a> {
     }
 
     /// Chain the settle bindings in front of `node`, preserving their field order.
-    pub(super) fn wrap_settles(
+    pub fn wrap_settles(
         &mut self,
         settles: Vec<(curios_cps::ValueId, curios_cps::Atom)>,
         node: curios_cps::NodeId,
@@ -209,14 +367,14 @@ impl<'a> Emitter<'a> {
     }
 
     /// The knot members a block's eager region references directly — its statements' operands, its terminator, and the control sub-blocks reachable without entering a function body or a nested group's initializer, each of which forces its own members at its own entry.
-    pub(super) fn block_member_refs(&self, block: BlockId) -> Vec<ValueId> {
+    pub fn block_member_refs(&self, block: BlockId) -> Vec<ValueId> {
         match self.source.block(block) {
             Some(block) => self.eager_member_refs(&block.statements, &block.terminator),
             None => Vec::new(),
         }
     }
 
-    pub(super) fn eager_member_refs(
+    pub fn eager_member_refs(
         &self,
         statements: &[StatementId],
         terminator: &Terminator,
@@ -231,7 +389,7 @@ impl<'a> Emitter<'a> {
     }
 
     /// Every value referenced across an eager region rooted at `statements` and closed by `terminator`, descending through control sub-blocks but never into a function body or a nested group's initializer — a thunk, like a function, takes its own reads at its entry, and forcing an outer member because a nested initializer names it would force it before the nested member is ever read, which is a cycle by need never meets.
-    pub(super) fn eager_value_refs(
+    pub fn eager_value_refs(
         &self,
         statements: &[StatementId],
         terminator: &Terminator,
@@ -279,7 +437,7 @@ impl<'a> Emitter<'a> {
     // === Statements ======================================================
 
     /// Force a member through the ordinary cell and channel operations. Before any force, every initializer has been queued. A filled result is cached; an empty result and a queued initializer is unforced; both empty means reentrant forcing. Taking the initializer releases the channel's reference before it runs, and this function captures only the storage, so completed knots do not retain initializer-only captures.
-    pub(super) fn define_force(&mut self, knot: KnotMember, hint: Option<String>) {
+    pub fn define_force(&mut self, knot: KnotMember, hint: Option<String>) {
         let return_cont = self.module.reserve_continuation();
         let produced = self.module.add_value(None);
         let accepted = self.module.add_value(None);
