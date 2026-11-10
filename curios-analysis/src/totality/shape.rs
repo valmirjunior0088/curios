@@ -17,7 +17,7 @@ use {
 ///
 /// Carriers are kept apart so a `Bytes` layer can never be mistaken for a `List` layer. Well-typed code could not confuse them, but the size order is only as trustworthy as the identities it compares.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Tag {
+pub enum Tag {
     /// An inductive constructor, by tag alone.
     ///
     /// The owning type is deliberately not part of the identity, because a freshly minted arm binder has no recorded type to read it from. Dropping it manufactures no false decrease, and what carries that is the order rather than the identity: a shape *is* the measure, so two values of one shape have one measure and a strict containment is a strict decrease whichever family a tag was declared in, a [`Shape::Atom`] leaf denoting one value wherever it stands and so holding the containment under every instantiation. The identities alone would not carry it, a closed leaf — a nullary constructor's, a literal's, a free monoid's identity — naming no binder at all.
@@ -34,7 +34,7 @@ pub(super) enum Tag {
 
 /// Which native free monoid a run or a [`Tag::Empty`] belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Carriers {
+pub enum Carriers {
     Unary,
     Bytes,
     List,
@@ -44,7 +44,7 @@ pub(super) enum Carriers {
 ///
 /// A node shares what it holds, so a shape is copied in one step and the shape of a term that holds one subterm twice holds that subterm's shape once: a reading costs the term's graph, where a tree owned outright costs every path through it ([`Grader::shape_of`](super::Grader::shape_of)).
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Shape {
+pub enum Shape {
     /// A binder the analysis tracks but cannot see inside.
     Atom(Free),
     /// A constructor applied to its arguments.
@@ -67,12 +67,12 @@ pub(super) enum Shape {
 
 impl Shape {
     /// `tag` applied to `kids`.
-    pub(super) fn node(tag: Tag, kids: impl IntoIterator<Item = Shape>) -> Shape {
+    pub fn node(tag: Tag, kids: impl IntoIterator<Item = Shape>) -> Shape {
         Shape::Node(tag, kids.into_iter().collect())
     }
 
     /// `count` successors over `tail`. Zero successors are the tail itself, and a run landing on another run merges, so the canonicity the comparisons assume is established here rather than at every builder.
-    pub(super) fn unary_run(count: Natural, tail: Shape) -> Shape {
+    pub fn unary_run(count: Natural, tail: Shape) -> Shape {
         if count == Natural::from(0usize) {
             return tail;
         }
@@ -89,7 +89,7 @@ impl Shape {
     }
 
     /// `heads` elements over `tail`, front first — the [`Shape::unary_run`] rule for the element carriers.
-    pub(super) fn elem_run(carrier: Carriers, heads: Vec<Shape>, tail: Shape) -> Shape {
+    pub fn elem_run(carrier: Carriers, heads: Vec<Shape>, tail: Shape) -> Shape {
         if heads.is_empty() {
             return tail;
         }
@@ -116,7 +116,7 @@ impl Shape {
     }
 
     /// Whether these are the same value. `Opaque` is deliberately unequal to itself: it means "not read", not "read and found identical".
-    pub(super) fn same_as(&self, other: &Shape) -> bool {
+    pub fn same_as(&self, other: &Shape) -> bool {
         match (self, other) {
             (Shape::Atom(left), Shape::Atom(right)) => left == right,
             (Shape::Node(left, left_kids), Shape::Node(right, right_kids)) => {
@@ -162,7 +162,7 @@ impl Shape {
     }
 
     /// Whether `self` occurs strictly inside `whole`.
-    pub(super) fn proper_subterm_of(&self, whole: &Shape) -> bool {
+    pub fn proper_subterm_of(&self, whole: &Shape) -> bool {
         match whole {
             Shape::Node(_, kids) => kids
                 .iter()
@@ -214,7 +214,7 @@ impl Shape {
     }
 
     /// This argument's size against a parameter whose expanded value is `parameter` — the whole size order, applied to one entry.
-    pub(super) fn against(&self, parameter: &Shape) -> Size {
+    pub fn against(&self, parameter: &Shape) -> Size {
         // An arithmetic decrease names the binder it is below, so it grades only against a parameter still standing for exactly that binder. A parameter an enclosing arm has refined to a constructor is a different value, and withholding the claim there is the conservative reading rather than a missed case.
         if let Shape::Smaller(below) = self {
             return match parameter {

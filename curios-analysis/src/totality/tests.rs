@@ -439,7 +439,7 @@ fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
         [Shape::Atom(w), Shape::Atom(below)],
     );
     let mut context = SizeContext::default();
-    context.open(Some((a, intro)), None, vec![below]);
+    context.open(Some((a, intro.clone())), None, vec![below]);
     let applied = Term::apply(
         Term::free_var(&below),
         [Term::free_var(&y), Term::free_var(&r)],
@@ -450,7 +450,8 @@ fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
     let Ok(shape) = grader.shape_of(&applied);
     assert_eq!(shape.against(&parameter), LESS);
 
-    context.payloads.clear();
+    let mut context = SizeContext::default();
+    context.open(Some((a, intro)), None, Vec::new());
     let mut grader = Grader::new(&mut kernel, &context);
     let Ok(shape) = grader.shape_of(&applied);
     assert_eq!(shape.against(&parameter), Size::Unknown);

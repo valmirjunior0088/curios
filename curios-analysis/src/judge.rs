@@ -30,7 +30,7 @@ use curios_core::{
 /// Two halves, paired because every site that needs one needs both. The shape half asks whether the head could move at all; anything else is already weak-head normal, so forcing it spends budget to learn nothing. The scope half is a *safety* precondition rather than an optimization: a term whose [`reach`](Term::reach) is non-zero still sits under enclosing binders, and reduction assumes free occurrences — it would panic on a dangling index rather than refuse.
 ///
 /// `Metavar` is excluded, which is the reading `whnf` itself takes — a metavariable is a stuck neutral, weak-head normal already. The kernel hands this seam meta-free terms; where the elaborator hands it one holding a metavariable, declining to force it leaves the term opaque, which is the refusing direction for every caller.
-pub(crate) fn forceable(term: &Term) -> bool {
+pub fn forceable(term: &Term) -> bool {
     matches!(
         &**term,
         Subterm::Var(_)

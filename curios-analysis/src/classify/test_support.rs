@@ -17,7 +17,7 @@ fn fresh(hint: Option<&str>) -> Free {
 }
 
 /// A reducer that reduces nothing, so an atom is the operand as it was written.
-pub(super) struct Inert;
+pub struct Inert;
 
 impl Reducer for Inert {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
@@ -39,7 +39,7 @@ impl Reducer for Inert {
 }
 
 /// A reducer that folds intrinsics all the way down, for a reading that must take a rebuilt operation's fold rather than inspect its shape. `reduce_intrinsic` reduces its own operands through this seam, so one pass suffices for the terms the suite builds.
-pub(super) struct Folding;
+pub struct Folding;
 
 impl Reducer for Folding {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
@@ -62,14 +62,14 @@ impl Reducer for Folding {
     }
 }
 
-pub(super) fn lit(n: u32) -> Term {
+pub fn lit(n: u32) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(n as usize)))
 }
 
-pub(super) fn sym(index: u32, hint: &'static str) -> Term {
+pub fn sym(index: u32, hint: &'static str) -> Term {
     Term::free_var(&Free::local(u64::from(index), Some(hint)))
 }
 
-pub(super) fn add(left: Term, right: Term) -> Term {
+pub fn add(left: Term, right: Term) -> Term {
     Term::intrinsic(Intrinsic::nat_add(left, right))
 }

@@ -9,10 +9,10 @@ use {curios_core::CallMatrix, std::collections::HashSet};
 /// How far a group's transitive closure may outgrow one call for each ordered pair of its members.
 ///
 /// Closure is worst-case exponential in the number of call sites. The prelude's largest group closes in tens of matrices; a group that blows past its bound is classified `Partial`, which is the conservative direction. The bound grows with the group ([`closure_limit`]), since members that all reach each other close to a call for every ordered pair of them whatever they descend on, and this is the room left for the matrices a pair may hold beyond its first.
-pub(super) const CLOSURE_LIMIT: usize = 4096;
+pub const CLOSURE_LIMIT: usize = 4096;
 
 /// The largest closure a group of `members` may reach: a call for each ordered pair of them, and [`CLOSURE_LIMIT`] beside.
-pub(super) fn closure_limit(members: usize) -> usize {
+pub fn closure_limit(members: usize) -> usize {
     CLOSURE_LIMIT.saturating_add(members.saturating_mul(members))
 }
 
@@ -29,7 +29,7 @@ pub struct Call {
 /// The closure is what makes mutual recursion work without the analysis knowing which members were declared together: `/std/Cli/check`'s `problems` calls `beneath` which calls back, and only the composite path is a cycle.
 ///
 /// By generator extension: every product of call matrices is a shorter product followed by its last factor, so extending each discovered element by the *generators* alone reaches the whole closure — `|closure| × |calls|` compositions, not `|closure|²`. The difference matters for a group whose closure dwarfs its calls, as one member handing its parameters on permuted closes to every permutation of them. The set is hashed rather than ordered because its one consumer runs an order-independent `all`.
-pub(super) fn close(calls: Vec<Call>) -> Option<Vec<Call>> {
+pub fn close(calls: Vec<Call>) -> Option<Vec<Call>> {
     let members = calls
         .iter()
         .flat_map(|call| [call.caller, call.callee])

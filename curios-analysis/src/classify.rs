@@ -318,7 +318,7 @@ pub fn atoms_of(
     Ok(atoms)
 }
 
-/// The opaque atoms of `term`, each once, in the order a walk meets them, and `term` itself, forced, where it is no node: [`atoms_of`] for a term read with nothing beside it, which a reader asks that compares the term with none and classes its atoms among those of every term it read before ([`Classes::join`]).
+/// The opaque atoms of `term`, each once, in the order a walk meets them, and `term` itself, forced, where it is no node: `atoms_of` for a term read with nothing beside it, which a reader asks that compares the term with none and classes its atoms among those of every term it read before ([`Classes::join`]).
 pub fn atoms_in(reducer: &mut impl Reducer, term: &Term) -> Result<Vec<Term>, ReduceError> {
     let mut atoms = Vec::new();
     let mut walk = Walk::new(reducer, Reading::Collected(&mut atoms));
@@ -818,7 +818,7 @@ pub fn classed(
         .then_some((classed_this, classed_that)))
 }
 
-/// `term` as the readers read it under `classes`, handed back whether or not anything moved: [`classed`] for a term read with nothing beside it, so a reader that keeps its classes holds one spelling of a term from one reading to the next.
+/// `term` as the readers read it under `classes`, handed back whether or not anything moved: `classed` for a term read with nothing beside it, so a reader that keeps its classes holds one spelling of a term from one reading to the next.
 pub fn classed_in(
     reducer: &mut impl Reducer,
     term: &Term,
@@ -836,11 +836,7 @@ pub fn classed_in(
 /// **Two nodes that are one term up to universe instances are one.** Each is a value of a carrier that holds no type, which a universe instance is no part of ([`curios_core::same_atom`]).
 ///
 /// **A residual is not followed.** A reader that pairs all but one operand of each side hands the other two back for a checker to compare, and here they are spelled already: two that were one are one term, which the reader pairs, and two that are left are two.
-pub(crate) fn agree(
-    reducer: &mut impl Reducer,
-    this: &Term,
-    that: &Term,
-) -> Result<bool, ReduceError> {
+pub fn agree(reducer: &mut impl Reducer, this: &Term, that: &Term) -> Result<bool, ReduceError> {
     if this == that || this.erased_universes() == that.erased_universes() {
         return Ok(true);
     }

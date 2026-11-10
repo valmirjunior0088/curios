@@ -22,13 +22,15 @@ mod guard;
 use guard::*;
 
 mod matrix;
-pub use matrix::*;
+pub use matrix::Call;
+use matrix::*;
 
 mod shape;
 use shape::*;
 
 mod grade;
-pub use grade::*;
+use grade::*;
+pub use grade::{SizeContext, binder_bounds, grade, handed, nonzero_by, refined_by_arm};
 
 #[cfg(test)]
 mod tests;
@@ -809,7 +811,13 @@ pub fn known_to_terminate<E: Env>(
     Ok(group_totality(env, &RecGroup::closing(known))?.is_total())
 }
 
-/// [`yields_a_sort`] where `undetermined` answers for a codomain it cannot settle: one with no value, as `None`, and one that reduces to no sort, arrow or tuple type, as what it reduces to. A type stuck on a member not known to terminate may be a sort once that member's value is, which no checker will ever read, so a group asking whether it owes descent answers yes where the codomain names one; and a signature asked before its group's bodies are elaborated may hold a level they settle, so no value there is no answer yet (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`).
+/// Whether a sort is extractable from this type: reachable by peeling arrows to the codomain, or by projecting a tuple component. A sort in a *parameter* is not extractable — `(A : Type) -> A` denotes a value, not a type.
+///
+/// **Reduced at every step rather than read.** A declared type is a term like any other, so `U` — a definition whose value is `Type` — yields a sort and says so only once forced, and so does `(n : Nat) -> U`. Reading the spelling let a member escape the descent gate by being declared through an alias, and the gate is what stops a member erasure deletes from being assumed at its own type before its body is checked against it. An alias is not a different claim.
+///
+/// Each binder is opened over a fresh identity before the walk descends past it, because a scope's body carries loose indices and reducing one would be reducing a term that is not there. Nothing is assumed at those binders: reduction meets an unknown name as a stuck neutral, which is all this needs.
+///
+/// `undetermined` answers for a codomain it cannot settle: one with no value, as `None`, and one that reduces to no sort, arrow or tuple type, as what it reduces to. A type stuck on a member not known to terminate may be a sort once that member's value is, which no checker will ever read, so a group asking whether it owes descent answers yes where the codomain names one; and a signature asked before its group's bodies are elaborated may hold a level they settle, so no value there is no answer yet (`curios-cert`'s `check_group`, `curios-elab`'s `Turns`). The reduction is a [`Probe`], so the budget's refusal is no answer at all and propagates.
 pub fn yields_a_sort_where<E: Env>(
     env: &mut E,
     type_: &Term,
@@ -859,15 +867,4 @@ pub fn blocker(reduced: &Term) -> Option<&Term> {
             _ => return None,
         };
     }
-}
-
-/// Whether a sort is extractable from this type: reachable by peeling arrows to the codomain, or by projecting a tuple component. A sort in a *parameter* is not extractable — `(A : Type) -> A` denotes a value, not a type.
-///
-/// **Reduced at every step rather than read.** A declared type is a term like any other, so `U` — a definition whose value is `Type` — yields a sort and says so only once forced, and so does `(n : Nat) -> U`. Reading the spelling let a member escape the descent gate by being declared through an alias, and the gate is what stops a member erasure deletes from being assumed at its own type before its body is checked against it. An alias is not a different claim.
-///
-/// Each binder is opened over a fresh identity before the walk descends past it, because a scope's body carries loose indices and reducing one would be reducing a term that is not there. Nothing is assumed at those binders: reduction meets an unknown name as a stuck neutral, which is all this needs.
-///
-/// A reduction with no value answers **yes**. The gate then demands descent, which is the refusing direction, and a declared type that cannot be reduced is not one to take on trust. The reduction is a [`Probe`], so the budget's refusal is no answer at all and propagates.
-pub fn yields_a_sort<E: Env>(env: &mut E, type_: &Term) -> Result<bool, E::Error> {
-    yields_a_sort_where(env, type_, &|reduced| reduced.is_none())
 }

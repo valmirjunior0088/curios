@@ -264,7 +264,7 @@ impl Split {
 }
 
 /// One fresh binder per entry of a parameter telescope, carrying the declared hints so a diagnostic reads in the user's own names.
-pub(crate) fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> Vec<Free> {
+pub fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> Vec<Free> {
     params
         .labels()
         .into_iter()
@@ -276,7 +276,7 @@ pub(crate) fn binders<E: Env, B: Bound>(env: &mut E, params: &Telescope<B>) -> V
 }
 
 /// Split an opened telescope into `(label, type)` entries, minting a fresh binder per entry so each later type holds free occurrences rather than dangling de Bruijn indices — the precondition for reducing it at all.
-pub(crate) fn labelled<E: Env, B: Bound>(
+pub fn labelled<E: Env, B: Bound>(
     env: &mut E,
     telescope: &Telescope<B>,
 ) -> Vec<(MemberLabel, Term)> {
@@ -536,7 +536,7 @@ struct Walk<'a, E: Env> {
 /// The `rec` member `term` is a folded call to, if it is one: the node [`Term::rec_proj`] builds, standing bare or under any number of applications.
 ///
 /// These are exactly the shapes [`curios_core::RecGroup::member_body`] substitutes for a recursive occurrence, so they are the shapes a cycle in the walk is built from. The relation is [`curios_core::Subterm::spine_rec_proj`]'s and is asked of it rather than spelled again here: a member whose result is a function, applied past its own parameters, stands under two applications and not one, which a reader of an application's immediate head would take for a neutral no demand ever unfolds. A head that has yet to unfold to one — a definition's name, a group with a computed tail — carries no key and forces unguarded.
-pub(crate) fn rec_member(term: &Term) -> Option<(RecGroup, usize)> {
+pub fn rec_member(term: &Term) -> Option<(RecGroup, usize)> {
     term.spine_rec_proj()
         .map(|(group, index)| (group.clone(), index))
 }

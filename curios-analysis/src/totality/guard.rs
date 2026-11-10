@@ -11,7 +11,7 @@ use {
 
 /// How a [`Guard`] relates its binder to its literal, always read with the binder on the left.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Relation {
+pub enum Relation {
     Lt,
     Le,
     Gt,
@@ -22,7 +22,7 @@ pub(super) enum Relation {
 
 impl Relation {
     /// The same relation with the operands exchanged, for a guard written with its literal first (`10 > n`).
-    pub(super) fn flipped(self) -> Relation {
+    pub fn flipped(self) -> Relation {
         match self {
             Relation::Lt => Relation::Gt,
             Relation::Le => Relation::Ge,
@@ -35,14 +35,14 @@ impl Relation {
 }
 
 /// A boolean scrutinee read as a comparison between a tracked binder and a `Nat` literal — the only shape from which an arm can conclude that the binder is not zero.
-pub(super) struct Guard {
-    pub(super) atom: Free,
-    pub(super) literal: Natural,
-    pub(super) relation: Relation,
+pub struct Guard {
+    pub atom: Free,
+    pub literal: Natural,
+    pub relation: Relation,
 }
 
 impl Guard {
-    pub(super) fn read(term: &Term) -> Option<Guard> {
+    pub fn read(term: &Term) -> Option<Guard> {
         let (left, right, relation) = match &**term {
             Subterm::Intrinsic(Intrinsic::NatLt(left, right)) => (left, right, Relation::Lt),
             Subterm::Intrinsic(Intrinsic::NatLe(left, right)) => (left, right, Relation::Le),
@@ -77,7 +77,7 @@ impl Guard {
     /// Whether the arm in which this guard evaluated to `taken` proves the binder is not zero.
     ///
     /// Each row is the arm's fact about `atom` followed by what it takes for that fact to exclude zero: `atom >= k` excludes it only for `k >= 1`, while `atom > k` excludes it for every `k`.
-    pub(super) fn establishes_nonzero(&self, taken: bool) -> bool {
+    pub fn establishes_nonzero(&self, taken: bool) -> bool {
         let zero = Natural::from(0usize);
         let one = Natural::from(1usize);
 

@@ -303,14 +303,14 @@ pub fn intrinsics_agree(
 }
 
 /// What reading a pair through the carriers' algebra came to.
-pub(crate) enum Read {
+pub enum Read {
     Decided(Outcome),
     /// Nothing decided: the pair as the reading respelled it, which is what the congruence reads.
     Undecided(Box<(Intrinsic, Intrinsic)>),
 }
 
 /// Steps 3 to 6 over one pair: the decision diagram, the connective trees, the comparisons' views and the peels. It asks its reducer to reduce and nothing else, so the classification holds a node to another by it ([`agree`](crate::agree)) as the chain reads a pair by it.
-pub(crate) fn read(
+pub fn read(
     driver: &mut impl Reducer,
     this: Intrinsic,
     that: Intrinsic,

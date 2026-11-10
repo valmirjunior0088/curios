@@ -262,7 +262,7 @@ fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
 
 // The descent gate reads a declared type, and a declared type is a term like any other.
 //
-// A `rec` member that erasure deletes must descend, or assuming it at its own type certifies `rec f : False = f`. Which members those are is decided in two halves, both asked semantically: whether the type is a *proposition*, and whether it *yields a sort* (`curios_analysis::yields_a_sort`, by reduction). So `U` — an ordinary definition whose value is `Type` — counts, and `Down` below, productive and not descending, is refused; read off the spelling, it would be assumed at a type that is `Type` in every sense but the syntactic one.
+// A `rec` member that erasure deletes must descend, or assuming it at its own type certifies `rec f : False = f`. Which members those are is decided in two halves, both asked semantically: whether the type is a *proposition*, and whether it *yields a sort* (`curios_analysis::yields_a_sort_where`, by reduction). So `U` — an ordinary definition whose value is `Type` — counts, and `Down` below, productive and not descending, is refused; read off the spelling, it would be assumed at a type that is `Type` in every sense but the syntactic one.
 //
 // Nothing is forged from it here: the whole-module obligation refuses the *use* of a partial type anyway, so what the gate guards is the local guarantee it exists to give — `check_group`'s own claim that a member erasure deletes has been shown to terminate before its body is checked against it. An alias is not a different claim, and reading the spelling would make it one.
 //

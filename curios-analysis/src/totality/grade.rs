@@ -28,7 +28,7 @@ fn readable(term: &Term) -> bool {
 /// How deep a refinement chain may be expanded.
 ///
 /// Each nested `match` on a binder introduced by an outer arm adds one level — `raw_trimmed` reaches three — so this is generous. It exists only so a pathological or cyclic refinement map cannot loop.
-pub(super) const EXPAND_FUEL: usize = 16;
+pub const EXPAND_FUEL: usize = 16;
 
 /// The binder an arm refines for the size order, read off its scrutinee: the arm's case stands for what a binder scrutinee is within the arm, and for nothing where the scrutinee is an expression.
 ///
@@ -48,25 +48,25 @@ pub fn refined_by_arm(scrutinee: &Term) -> Option<Free> {
 #[derive(Default)]
 pub struct SizeContext {
     /// What each binder has been refined to by the arms enclosing the position being walked.
-    pub(super) refined: BTreeMap<Free, Shape>,
+    refined: BTreeMap<Free, Shape>,
     /// The binders an enclosing arm has established are not zero.
     ///
     /// This is what makes an arithmetic decrease sound rather than merely plausible: `n / k` is below `n` only when `n` is nonzero, and without the guard `let loop(n: Nat) -> Nat = loop(n / 10);` would be accepted while looping forever at zero.
-    pub(super) nonzero: BTreeSet<Free>,
+    nonzero: BTreeSet<Free>,
     /// The binders the enclosing inductive arms bound as constructor payloads.
     ///
     /// An application whose head is one of these reads as the payload itself, which is what grades `below(y, r)` below the `intro(x, below)` an arm refined the scrutinee to. A head bound anywhere else — a parameter, a lambda binder — is not in the set and reads as any other application does.
-    pub(super) payloads: BTreeSet<Free>,
+    payloads: BTreeSet<Free>,
     /// The binders of a lambda a call hands a parameter its callee applies as a summary states ([`Applications`](curios_core::Applications)), each with how it stands to the caller's parameters it was graded against: what an application of the parameter hands it, wherever the callee applies it.
-    pub(super) assumed: BTreeMap<Free, Standing>,
+    assumed: BTreeMap<Free, Standing>,
     /// One entry per scope [`SizeContext::enter`] has opened and [`SizeContext::exit`] has yet to close.
-    pub(super) scopes: Vec<Undo>,
+    scopes: Vec<Undo>,
 }
 
 /// What one [`SizeContext::enter`] changed, so its [`SizeContext::exit`] puts back exactly that and nothing else.
 ///
 /// Recorded on the way in rather than recomputed on the way out, because only the entering side can tell the difference that matters: a binder an outer arm had already refined, or already knew nonzero, must be left standing as that outer arm left it.
-pub(super) struct Undo {
+pub struct Undo {
     /// The refined binders, each with what it stood for before, empty when the scope refined nothing.
     refined: Vec<(Free, Option<Shape>)>,
     /// The binder this scope added to `nonzero`, `None` when it added none — an already-known binder included.
@@ -328,16 +328,16 @@ pub fn nonzero_by<E: Env>(env: &mut E, head: &Term, taken: bool) -> Result<Optio
 }
 
 /// The reader of terms as sizes: a checker to force through, the context the arms established, and what it has read.
-pub(super) struct Grader<'a, E: Env> {
-    pub(super) env: &'a mut E,
-    pub(super) context: &'a SizeContext,
+pub struct Grader<'a, E: Env> {
+    env: &'a mut E,
+    context: &'a SizeContext,
     /// The shape of each term read so far. The context stands for as long as the reader does, so a term reads as one shape however often it is met: an argument that holds a subterm twice — sixty `let`s each pairing the one before it with itself, handed whole to the member — is read in its size, where a reading per occurrence builds every path through it.
     read: HashMap<Term, Shape>,
 }
 
 impl<'a, E: Env> Grader<'a, E> {
     /// A reader under `context` that has read nothing.
-    pub(super) fn new(env: &'a mut E, context: &'a SizeContext) -> Self {
+    pub fn new(env: &'a mut E, context: &'a SizeContext) -> Self {
         Self {
             env,
             context,
@@ -346,7 +346,7 @@ impl<'a, E: Env> Grader<'a, E> {
     }
 
     /// The value a binder currently stands for, following the refinements the enclosing arms established.
-    pub(super) fn expand(&self, var: &Free, fuel: usize) -> Shape {
+    pub fn expand(&self, var: &Free, fuel: usize) -> Shape {
         if fuel == 0 {
             return Shape::Atom(*var);
         }
@@ -390,7 +390,7 @@ impl<'a, E: Env> Grader<'a, E> {
     /// A constructor, a free-monoid layer, and a recognised arithmetic decrease read directly; everything else goes to [`Grader::unfolded_shape`], which sees through the definitions standing between a term and its shape. That fallback carries most of what the size order knows — an operator resolves a witness, so even `n - 1` reaches here as a projection — and it is not bounded by a step count; see [`readable`] for what bounds it instead.
     ///
     /// Each term is read once ([`Grader::read`]): a binder is looked up as it stands, and anything else is remembered.
-    pub(super) fn shape_of(&mut self, term: &Term) -> Result<Shape, E::Error> {
+    pub fn shape_of(&mut self, term: &Term) -> Result<Shape, E::Error> {
         if let Subterm::Var(var) = &**term {
             return Ok(match var.as_free() {
                 Some(free) => self.expand(free, EXPAND_FUEL),
@@ -572,7 +572,7 @@ impl<'a, E: Env> Grader<'a, E> {
     /// Read a boolean scrutinee as a comparison against a literal.
     ///
     /// Neither spelling arrives as an intrinsic: an operator (`n < 10`) resolves a witness and comes through as a projection out of it, and a named comparison (`Nat/lt(n, 10)`) stays an application of a one-line `/sys` wrapper. The same unfolding [`Grader::shape_of`] uses is what exposes the intrinsic under both, and it is the same [`Probe`].
-    pub(super) fn guard(&mut self, head: &Term) -> Result<Option<Guard>, E::Error> {
+    pub fn guard(&mut self, head: &Term) -> Result<Option<Guard>, E::Error> {
         if let Some(guard) = Guard::read(head) {
             return Ok(Some(guard));
         }
