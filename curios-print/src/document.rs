@@ -39,16 +39,8 @@ pub enum Printer {
     Concat(Vec<Printer>),
     /// Emitted one indentation level deeper.
     Indent(Box<Printer>),
-    /// Emitted on a line of its own: where something is already written on the line, a newline and the document one indentation level deeper; at the start of a line, the document as it stands. Its break is mandatory where it is taken, so the fits scan fails on it as on a hard [`Printer::Line`] and no group containing one renders flat.
-    OwnLine(Box<Printer>),
-    /// Emitted flat on the line it is reached on where the whole of its flat form fits the room left there, and otherwise broken on a line of its own, as [`Printer::OwnLine`] places one. Whole is what sets it apart from a [`Printer::Group`], which asks of its first line alone: a newline it writes, a mandatory break or an own-line block breaks it at any width. The fits scan measures it as a nested group, so a group holding one renders flat only where it fits flat too, and one holding a mandatory break never does.
+    /// Emitted flat on the line it is reached on where the whole of its flat form fits the room left there, and otherwise broken on a line of its own: where something is already written on the line, a newline and the document one indentation level deeper; at the start of a line, the document as it stands. Whole is what sets it apart from a [`Printer::Group`], which asks of its first line alone: a newline it writes or a mandatory break breaks it at any width. The fits scan measures it as a nested group, so a group holding one renders flat only where it fits flat too, and one holding a mandatory break never does.
     OwnLineIfBroken(Box<Printer>),
-    /// A document not built yet.
-    ///
-    /// The one closure variant, and it earns its place: a printer for a recursive IR is written as a recursive function, so *building* a document descends as deep as the term even though [`run_printer`](crate::run_printer) does not. Deferring a child turns that descent into work on the interpreter's stack — the builder is called when the interpreter reaches it, from a frame one deep rather than `n`.
-    ///
-    /// `Option` so the interpreter can take the thunk out: a type with a `Drop` impl cannot have a field moved away.
-    Deferred(Option<Box<dyn FnOnce() -> Printer>>),
     /// A layout choice point: `flat` when the enclosing [`Printer::Group`] renders on one line, a newline (plus pending indentation) when it breaks — or unconditionally when no group encloses it, since the top of a document is broken context. `hard` marks a mandatory break: it always emits a newline, and the fits scan fails on it, so no group containing one ever renders flat.
     Line { flat: String, hard: bool },
     /// The width-adaptive *sequence*: its items are laid out left to right, and each gap independently becomes a space or a newline according to whether the item after it still fits the line.
@@ -86,14 +78,9 @@ impl Printer {
             Printer::Text(_) | Printer::Named { .. } | Printer::Mark(_) | Printer::Ends => true,
             Printer::Concat(parts) => parts.is_empty(),
             Printer::Fill { items, .. } => items.is_empty(),
-            Printer::Indent(inner)
-            | Printer::OwnLine(inner)
-            | Printer::OwnLineIfBroken(inner)
-            | Printer::Group(inner) => {
+            Printer::Indent(inner) | Printer::OwnLineIfBroken(inner) | Printer::Group(inner) => {
                 matches!(**inner, Printer::Text(_))
             }
-            // Holds a thunk, never a child document.
-            Printer::Deferred(_) => true,
             Printer::Line { .. } => true,
             Printer::IfBreak { .. } => true,
         }
@@ -122,10 +109,8 @@ impl Drop for Printer {
                     pending.extend(mem::take(items).into_iter().map(|item| item.printer));
                 }
                 Printer::Indent(inner)
-                | Printer::OwnLine(inner)
                 | Printer::OwnLineIfBroken(inner)
                 | Printer::Group(inner) => pending.push(inner.take()),
-                Printer::Deferred(_) => {}
                 Printer::Line { .. } => {}
                 Printer::IfBreak { .. } => {}
                 Printer::Mark(_) => {}

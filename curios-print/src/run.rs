@@ -183,19 +183,19 @@ impl<'a, 'b, 'c> PrinterState<'a, 'b, 'c> {
     }
 
     /// The members of a block end here — see [`Printer::Ends`]. What was written past the last of them is due and takes its line now, at their indentation; the document offers this line start, so nothing hangs from it.
-    fn ends(&mut self, rest: &mut [Step]) -> Result<(), fmt::Error> {
+    fn ends(&mut self, rest: &[Step]) -> Result<(), fmt::Error> {
         self.meet(rest);
         self.pay(false)
     }
 
     /// A newline the document writes, taken with the work still ahead of it — see [`PrinterState::meet`].
-    fn line_ends(&mut self, rest: &mut [Step]) -> Result<(), fmt::Error> {
+    fn line_ends(&mut self, rest: &[Step]) -> Result<(), fmt::Error> {
         self.meet(rest);
         self.newline()
     }
 
     /// Bring the cursor up to the character the document writes next, where the original holds it in reach. What the original holds ahead of that character has then arrived: a comment written behind something the document leaves out — a parenthesis the tree does not record, a list's last comma — is taken while the line it was written on is still open, and not with the first character of the next.
-    fn meet(&mut self, rest: &mut [Step]) {
+    fn meet(&mut self, rest: &[Step]) {
         let Some((original, cursor)) = self.following else {
             return;
         };
@@ -456,7 +456,7 @@ pub struct Annotation {
 
 /// One node of [`fits`]'s walk, with the facts about its surroundings its verdict depends on.
 struct Measured<'a> {
-    node: &'a mut Printer,
+    node: &'a Printer,
     /// The layout mode this node renders under: `true` inside a fitting [`Printer::Group`], where every soft [`Printer::Line`] emits its flat spelling.
     flat: bool,
     /// Inside the measured group's own subtree, where a mandatory break refuses flatness instead of ending the line.
@@ -514,38 +514,28 @@ impl Arriving<'_> {
 }
 
 /// The next character of document text still to be written that is not blank, found through the renderer's remaining work without taking any of it. An [`Printer::IfBreak`] is read in the mode its step was queued under, which is the one a line that ends here leaves it in.
-///
-/// Forces every [`Printer::Deferred`] on the way in place, as [`fits`] does and for its reason; what it forces is what printing consumes next.
-fn ahead(rest: &mut [Step]) -> Option<char> {
+fn ahead(rest: &[Step]) -> Option<char> {
     let visible = |text: &str| text.chars().find(|char| !char.is_whitespace());
-    let mut rest = rest.iter_mut().rev();
-    let mut stack: Vec<(&mut Printer, bool)> = Vec::new();
+    let mut rest = rest.iter().rev();
+    let mut stack: Vec<(&Printer, bool)> = Vec::new();
 
     loop {
         let Some((node, flat)) = stack.pop() else {
             match rest.next()? {
                 Step::Dedent => {}
-                Step::Fill(filling) => stack.extend(filling.items.iter_mut().rev().map(|item| {
-                    (
-                        &mut item.printer,
-                        matches!(filling.style, FillStyle::Atomic),
+                Step::Fill(filling) => {
+                    stack.extend(
+                        filling.items.iter().rev().map(|item| {
+                            (&item.printer, matches!(filling.style, FillStyle::Atomic))
+                        }),
                     )
-                })),
+                }
                 Step::Print(printer, mode) => stack.push((printer, *mode)),
             }
             continue;
         };
 
-        if let Printer::Deferred(slot) = &mut *node {
-            let thunk = slot
-                .take()
-                .expect("a deferred thunk is present until forced");
-            *node = thunk();
-            stack.push((node, flat));
-            continue;
-        }
-
-        match &mut *node {
+        match node {
             Printer::Text(text) | Printer::Named { text, .. } => {
                 if let Some(found) = visible(text) {
                     return Some(found);
@@ -560,17 +550,15 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
                 }
             }
             Printer::Concat(parts) => {
-                stack.extend(parts.iter_mut().rev().map(|part| (part, flat)));
+                stack.extend(parts.iter().rev().map(|part| (part, flat)));
             }
             Printer::Fill { items, .. } => {
-                stack.extend(items.iter_mut().rev().map(|item| (&mut item.printer, flat)));
+                stack.extend(items.iter().rev().map(|item| (&item.printer, flat)));
             }
-            Printer::Indent(inner)
-            | Printer::OwnLine(inner)
-            | Printer::OwnLineIfBroken(inner)
-            | Printer::Group(inner) => stack.push((inner, flat)),
+            Printer::Indent(inner) | Printer::OwnLineIfBroken(inner) | Printer::Group(inner) => {
+                stack.push((inner, flat))
+            }
             Printer::Line { .. } | Printer::Mark(_) | Printer::Ends => {}
-            Printer::Deferred(_) => unreachable!("forced above"),
         }
     }
 }
@@ -581,10 +569,10 @@ fn ahead(rest: &mut [Step]) -> Option<char> {
 ///
 /// An atomic [`Printer::Fill`] directly inside the measured group is measured with its gap spaces, and running out of room inside one decides the scan in favor: the fill wraps at that gap. Nested groups and structural fills must fit wholly flat instead: treating their overflow as a successful flat layout would leave the enclosing group's other parts flat across their breaks. Beyond the measured group a mandatory gap or a wrapping fill can end the line.
 ///
-/// Measuring forces every [`Printer::Deferred`] it reaches, replacing the node in place with the built document — the thunk is `FnOnce`, so a peek that discarded the result would lose it. The bounded lookahead is what keeps that cheap: at most one line width of document is ever materialized per decision, and what is materialized is exactly what printing consumes next. Iterative, like every other walk over this type.
+/// Iterative, like every other walk over this type.
 fn fits(
-    root: &mut Printer,
-    rest: &mut [Step],
+    root: &Printer,
+    rest: &[Step],
     available: usize,
     inside: bool,
     whole: bool,
@@ -605,7 +593,7 @@ fn fits(
         filling: false,
         strict: false,
     }]);
-    let mut rest_iter = rest.iter_mut().rev();
+    let mut rest_iter = rest.iter().rev();
 
     loop {
         let Some(Measured {
@@ -629,13 +617,13 @@ fn fits(
                     {
                         return true;
                     }
-                    let items = &mut filling.items;
+                    let items = &filling.items;
                     used += items.len();
                     if used > available {
                         return true;
                     }
-                    stack.extend(items.iter_mut().rev().map(|item| Measured {
-                        node: &mut item.printer,
+                    stack.extend(items.iter().rev().map(|item| Measured {
+                        node: &item.printer,
                         flat: true,
                         inside: false,
                         filling: true,
@@ -655,25 +643,6 @@ fn fits(
                 }
             }
         };
-
-        // Materialization is handled before the descent match: the arms below push reborrows of `node`'s interior onto the shared stack, which makes the scrutinee borrow loop-wide — an in-match `*node = built` could never coexist with it.
-        if matches!(*node, Printer::Deferred(_)) {
-            let Printer::Deferred(slot) = &mut *node else {
-                unreachable!("just matched");
-            };
-            let thunk = slot
-                .take()
-                .expect("a deferred thunk is present until forced");
-            *node = thunk();
-            stack.push(Measured {
-                node,
-                flat,
-                inside,
-                filling,
-                strict,
-            });
-            continue;
-        }
 
         // Text of either kind, measured a character at a time: within the group each one that is not blank steps the cursor's copy, and the first to follow a comment refuses flatness.
         let mut measure = |spelling: &str, used: &mut usize| -> Option<bool> {
@@ -699,7 +668,7 @@ fn fits(
             None
         };
 
-        match &mut *node {
+        match node {
             Printer::Text(text) | Printer::Named { text, .. } => {
                 if let Some(verdict) = measure(text, &mut used) {
                     return verdict;
@@ -725,7 +694,7 @@ fn fits(
                 flat: on_flat,
                 broken,
             } => {
-                let spelling = if flat { &*on_flat } else { &*broken };
+                let spelling = if flat { on_flat } else { broken };
                 if let Some(verdict) = measure(spelling, &mut used) {
                     return verdict;
                 }
@@ -740,7 +709,7 @@ fn fits(
             Printer::Ends => {}
             // Reversed, because the stack pops last-in first.
             Printer::Concat(parts) => {
-                stack.extend(parts.iter_mut().rev().map(|part| Measured {
+                stack.extend(parts.iter().rev().map(|part| Measured {
                     node: part,
                     flat,
                     inside,
@@ -756,8 +725,8 @@ fn fits(
                 if used > available {
                     return filling;
                 }
-                stack.extend(items.iter_mut().rev().map(|item| Measured {
-                    node: &mut item.printer,
+                stack.extend(items.iter().rev().map(|item| Measured {
+                    node: &item.printer,
                     flat: true,
                     inside,
                     filling,
@@ -771,8 +740,6 @@ fn fits(
                 filling,
                 strict,
             }),
-            // Mandatory where it is taken, as a hard line is: no group holding one renders flat, and beyond the group it may end the line.
-            Printer::OwnLine(_) => return !inside,
             // A nested group inside a fitting parent must fit wholly flat, including any fills it holds. Only an atomic fill in the measured group itself may wrap without breaking that group. A block that takes its own line only where it breaks is measured as one.
             Printer::Group(inner) | Printer::OwnLineIfBroken(inner) => stack.push(Measured {
                 node: inner,
@@ -781,7 +748,6 @@ fn fits(
                 filling,
                 strict: strict || inside,
             }),
-            Printer::Deferred(_) => unreachable!("materialized above"),
         }
     }
 }
@@ -861,47 +827,32 @@ fn run<'b, 'c>(
                     stack.push(Step::Dedent);
                     stack.push(Step::Print(inner.take(), flat));
                 }
-                // Nothing written on the line yet is the line it wants; otherwise it takes the next, a level deeper, the level dropped once it is printed.
-                Printer::OwnLine(inner) if state.should_indent => {
-                    stack.push(Step::Print(inner.take(), flat));
-                }
-                Printer::OwnLine(inner) => {
-                    state.indent_by += state.indent_step;
-                    stack.push(Step::Dedent);
-                    stack.push(Step::Print(inner.take(), flat));
-                    state.line_ends(&mut stack)?;
-                }
-                Printer::Deferred(thunk) => {
-                    if let Some(thunk) = thunk.take() {
-                        stack.push(Step::Print(thunk(), flat));
-                    }
-                }
                 // A hard line breaks even under a fitting group — the fits scan only guarantees the first line, and a mandatory break is mandatory.
-                Printer::Line { hard: true, .. } => state.line_ends(&mut stack)?,
+                Printer::Line { hard: true, .. } => state.line_ends(&stack)?,
                 Printer::Line { flat: spelling, .. } => match flat {
                     true => state.text(spelling)?,
-                    false => state.line_ends(&mut stack)?,
+                    false => state.line_ends(&stack)?,
                 },
                 Printer::Fill { items, style } => {
                     // The first item is printed directly, so `Step::Fill` always owns a *gap* and never has to ask whether one is due.
                     let mut items = mem::take(items);
                     if !items.is_empty() {
-                        let mut first = items.remove(0);
+                        let first = items.remove(0);
                         let first_fits = matches!(style, FillStyle::Atomic)
                             || state.width.is_none_or(|width| {
                                 let room = width.saturating_sub(state.effective_column());
                                 match items.is_empty() {
                                     true => fits(
-                                        &mut first.printer,
-                                        &mut stack,
+                                        &first.printer,
+                                        &stack,
                                         room,
                                         true,
                                         false,
                                         state.following,
                                     ),
                                     false => fits(
-                                        &mut first.printer,
-                                        &mut [],
+                                        &first.printer,
+                                        &[],
                                         room,
                                         true,
                                         false,
@@ -922,20 +873,20 @@ fn run<'b, 'c>(
                             matches!(style, FillStyle::Atomic),
                         ));
                         if !first_fits && !state.should_indent {
-                            state.line_ends(&mut stack)?;
+                            state.line_ends(&stack)?;
                         }
                     }
                 }
-                // Flat where it fits the room left, as a group is decided; broken where it does not, on a line of its own as `OwnLine` places one.
+                // Flat where it fits the room left, as a group is decided; broken where it does not, on a line of its own: where something is already written on the line, the next one, a level deeper, the level dropped once it is printed.
                 Printer::OwnLineIfBroken(inner) => {
-                    let mut inner = inner.take();
+                    let inner = inner.take();
                     let inner_fits = flat
                         || match state.width {
                             Some(_) if !state.suffix.is_empty() => false,
                             // Measured at any width, since a block that writes a newline is no line's whole.
                             width => fits(
-                                &mut inner,
-                                &mut stack,
+                                &inner,
+                                &stack,
                                 width.map_or(usize::MAX, |width| {
                                     width.saturating_sub(state.effective_column())
                                 }),
@@ -950,12 +901,12 @@ fn run<'b, 'c>(
                             state.indent_by += state.indent_step;
                             stack.push(Step::Dedent);
                             stack.push(Step::Print(inner, false));
-                            state.line_ends(&mut stack)?;
+                            state.line_ends(&stack)?;
                         }
                     }
                 }
                 Printer::Group(inner) => {
-                    let mut inner = inner.take();
+                    let inner = inner.take();
                     let inner_fits = flat
                         || match state.width {
                             // Unbounded: everything fits.
@@ -963,8 +914,8 @@ fn run<'b, 'c>(
                             // A comment already taken onto this line ends it, so nothing measured now can render flat over the break it forces. Asked here rather than in the scan because it is a fact about the line already written, not about the document ahead.
                             Some(_) if !state.suffix.is_empty() => false,
                             Some(width) => fits(
-                                &mut inner,
-                                &mut stack,
+                                &inner,
+                                &stack,
                                 width.saturating_sub(state.effective_column()),
                                 true,
                                 false,
@@ -981,11 +932,11 @@ fn run<'b, 'c>(
                     state.text(&spelling)?;
                 }
                 Printer::Mark(at) => state.reach(*at),
-                Printer::Ends => state.ends(&mut stack)?,
+                Printer::Ends => state.ends(&stack)?,
             },
             // A gap is measured after the previous item has actually rendered. Structural items keep their groups even when they start on a fresh line; an atomic fill forces each item flat.
             Step::Fill(mut filling) => {
-                let mut item = filling.items.remove(0);
+                let item = filling.items.remove(0);
                 // Whether the item shares the line, where a line is open for it to share.
                 let placed = (!state.should_indent).then(|| {
                     let room = match state.width {
@@ -1001,22 +952,8 @@ fn run<'b, 'c>(
                             || filling.flat
                             || (filling.previous_compact && item.compact))
                         && match filling.items.is_empty() {
-                            true => fits(
-                                &mut item.printer,
-                                &mut stack,
-                                room,
-                                true,
-                                false,
-                                state.following,
-                            ),
-                            false => fits(
-                                &mut item.printer,
-                                &mut [],
-                                room,
-                                true,
-                                false,
-                                state.following,
-                            ),
+                            true => fits(&item.printer, &stack, room, true, false, state.following),
+                            false => fits(&item.printer, &[], room, true, false, state.following),
                         }
                 });
                 let atomic = matches!(filling.style, FillStyle::Atomic);
@@ -1028,7 +965,7 @@ fn run<'b, 'c>(
                 // Written with the item already queued, so a line that ends here sees what follows it.
                 match placed {
                     Some(true) => state.text(" ")?,
-                    Some(false) => state.line_ends(&mut stack)?,
+                    Some(false) => state.line_ends(&stack)?,
                     None => {}
                 }
             }
@@ -1094,7 +1031,7 @@ pub fn render_annotated(
     (text, rendering.annotations.into_inner())
 }
 
-/// Hand every [`Printer::Named`] in `printer` to `visit` — its text, and where it was written — in the order a render emits them, before anything measures them: what a name prints as is the caller's to decide there, so the layout is the one its final text takes. Forces every [`Printer::Deferred`] it reaches in place, as a render would, and iteratively, like every other walk over this type.
+/// Hand every [`Printer::Named`] in `printer` to `visit` — its text, and where it was written — in the order a render emits them, before anything measures them: what a name prints as is the caller's to decide there, so the layout is the one its final text takes. Iterative, like every other walk over this type.
 pub fn each_named(
     printer: &mut Printer,
     mut visit: impl FnMut(&mut String, Option<&Range<usize>>),
@@ -1102,31 +1039,20 @@ pub fn each_named(
     let mut stack = vec![printer];
 
     while let Some(node) = stack.pop() {
-        if let Printer::Deferred(slot) = &mut *node {
-            let thunk = slot
-                .take()
-                .expect("a deferred thunk is present until forced");
-            *node = thunk();
-            stack.push(node);
-            continue;
-        }
-
         match node {
             Printer::Named { text, written } => visit(text, written.as_ref()),
             Printer::Concat(parts) => stack.extend(parts.iter_mut().rev()),
             Printer::Fill { items, .. } => {
                 stack.extend(items.iter_mut().rev().map(|item| &mut item.printer))
             }
-            Printer::Indent(inner)
-            | Printer::OwnLine(inner)
-            | Printer::OwnLineIfBroken(inner)
-            | Printer::Group(inner) => stack.push(inner),
+            Printer::Indent(inner) | Printer::OwnLineIfBroken(inner) | Printer::Group(inner) => {
+                stack.push(inner)
+            }
             Printer::Text(_)
             | Printer::Line { .. }
             | Printer::IfBreak { .. }
             | Printer::Mark(_)
             | Printer::Ends => {}
-            Printer::Deferred(_) => unreachable!("forced above"),
         }
     }
 }

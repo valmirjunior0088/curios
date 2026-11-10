@@ -1,22 +1,7 @@
 use {
     super::*,
-    std::{cell::Cell, fmt, rc::Rc},
+    std::{cell::Cell, fmt},
 };
-
-/// Defers building a document until the interpreter reaches it.
-///
-/// Wrap a printer's *recursive* calls in this and building stops descending: each child is built from the interpreter's frame rather than from inside its parent's, so a document nests as deep as the term without the builder doing the same. See [`Printer::Deferred`].
-fn deferred<F>(f: F) -> Printer
-where
-    F: FnOnce() -> Printer + 'static,
-{
-    Printer::Deferred(Some(Box::new(f)))
-}
-
-/// `printer` on a line of its own: where something is already written on the current line, a newline and `printer` one indentation level deeper; at the start of a line, `printer` as it stands, so a block placed where a line begins anyway costs no blank line and no extra level. No [`group`] containing one renders flat.
-fn own_line(printer: Printer) -> Printer {
-    Printer::OwnLine(Box::new(printer))
-}
 
 /// A document nests as deep as the term it prints, and both walks over it — printing and freeing — must survive that. Depth is not steps, so no reduction budget bounds either one; only an explicit stack does.
 fn nested(depth: usize) -> Printer {
@@ -179,24 +164,6 @@ fn a_broken_group_indents_its_continuation_lines() {
 }
 
 #[test]
-fn measurement_forces_each_thunk_at_most_once() {
-    let forced = Rc::new(Cell::new(0usize));
-    let counter = Rc::clone(&forced);
-    let document = group(flat([
-        pure("aaa"),
-        line(),
-        deferred(move || {
-            counter.set(counter.get() + 1);
-            pure("bbb")
-        }),
-    ]));
-
-    // The scan forces the thunk to measure it; printing then consumes the materialized document rather than forcing again.
-    assert_eq!(render(document, Some(7)), "aaa bbb");
-    assert_eq!(forced.get(), 1);
-}
-
-#[test]
 fn if_break_spells_per_mode_without_breaking() {
     // The broken-only trailing comma: absent flat, present broken — and never the cause of the break.
     let document = || {
@@ -295,12 +262,8 @@ fn a_blank_line_inside_an_indent_carries_no_trailing_whitespace() {
 
 #[test]
 fn a_name_respelled_before_rendering_is_laid_out_at_its_new_width() {
-    // The long spelling overruns ten columns and the short one fits: the group renders flat only because the name was respelled before anything measured it, including the one a thunk builds.
-    let mut document = group(flat([
-        named("/long/path/a"),
-        line(),
-        deferred(|| named("/long/path/b")),
-    ]));
+    // The long spelling overruns ten columns and the short one fits: the group renders flat only because the name was respelled before anything measured it.
+    let mut document = group(flat([named("/long/path/a"), line(), named("/long/path/b")]));
     let mut seen = Vec::new();
     each_named(&mut document, |text, _| {
         seen.push(text.clone());
@@ -316,21 +279,6 @@ fn a_name_respelled_before_rendering_is_laid_out_at_its_new_width() {
             .map(|annotation| annotation.name.as_str())
             .collect::<Vec<_>>(),
         ["a", "b"]
-    );
-}
-
-#[test]
-fn a_block_on_its_own_line_breaks_only_after_written_text_and_one_level_deeper() {
-    let block = || own_line(flat([pure("a"), hard_line(), pure("b")]));
-
-    assert_eq!(render(flat([pure("x: "), block()]), None), "x:\n  a\n  b");
-    assert_eq!(render(block(), None), "a\nb");
-    assert_eq!(
-        render(
-            group(flat([pure("f("), soft_line(), block(), pure(")")])),
-            Some(80)
-        ),
-        "f(\na\nb)"
     );
 }
 
