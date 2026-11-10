@@ -1,6 +1,21 @@
 //! The law table: what each family states, and that every declaration it makes is well formed.
 
-use crate::*;
+use crate::{declaration::round_trip, *};
+
+/// Every law [`TABLE`] states, in its order.
+fn laws() -> Vec<(Declared, Law)> {
+    TABLE
+        .iter()
+        .flat_map(|declared| {
+            declared.families.iter().flat_map(move |family| {
+                family
+                    .laws(declared.carrier, declared.operation)
+                    .into_iter()
+                    .map(move |law| (*declared, law))
+            })
+        })
+        .collect()
+}
 
 #[test]
 fn a_unit_at_both_sides_states_both_laws() {

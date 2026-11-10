@@ -5,55 +5,59 @@
 //! No term is named here, and the crate depends on `curios-num` alone, which `README.md` decides and states what the crate may and may not grow into.
 
 mod atom;
-pub use atom::*;
+pub use atom::{Atom, Monomial, Rank, Tie};
 
 mod bitwise;
-pub use bitwise::*;
+pub use bitwise::{Pair, Reduct, power_of_two};
 
 mod boolean;
-pub use boolean::*;
+pub use boolean::{
+    Agreement, BooleanPair, Connected, Formula, Nested, Node, Valuation, same_leaves,
+};
 
 mod combination;
-pub use combination::*;
+pub use combination::{Cancelled, Coefficient, Combination, Progress, Summand};
 
 mod declaration;
-pub use declaration::*;
+pub use declaration::{Carrier, Observed, Operation};
 
 mod division;
-pub use division::*;
+pub use division::{Divided, FloorSplit, Half, cofactor, euclid_split, floor_law, signed_cofactor};
 
 mod euclid;
-pub use euclid::*;
+pub use euclid::{Recombination, Wanted};
 
 mod lattice;
-pub use lattice::*;
+pub use lattice::{Kept, Lattice};
 
 mod law;
-pub use law::*;
+pub use law::{Constant, Declared, Expr, Family, Law, Position, TABLE, declares};
 
 mod magnitude;
-pub use magnitude::*;
+pub use magnitude::Scale;
 
 mod measure;
-pub use measure::*;
+pub use measure::{
+    Concatenated, Cut, Joining, Seam, Span, Split, join, locate, seam_window, split, total,
+};
 
 mod order;
-pub use order::*;
+pub use order::{Comparison, Modular, Side};
 
 mod outcome;
-pub use outcome::*;
+pub use outcome::{Conclusion, Deduction};
 
 mod product;
-pub use product::*;
+pub use product::{distribute, distribution_size, pair_factors};
 
 mod sign;
-pub use sign::*;
+pub use sign::{SignBit, SignForm, SignMagnitude};
 
 mod view;
-pub use view::*;
+pub use view::{LinearForm, Part};
 
 mod word;
-pub use word::*;
+pub use word::{Alphabet, Packed, Run, Segment, Stripped, Window, Word, same_position};
 
 #[cfg(test)]
 mod test_support;

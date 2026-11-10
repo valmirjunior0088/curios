@@ -168,7 +168,7 @@ impl Modular {
         }
     }
 
-    /// Whether two sums are equal at no value: their floors differ modulo the gcd of their divisors ([`apart_modulo`]), below zero as above it, since the argument needs every monomial to be an integer and nothing more.
+    /// Whether two sums are equal at no value: their floors differ modulo the gcd of their divisors (`apart_modulo`), below zero as above it, since the argument needs every monomial to be an integer and nothing more.
     pub fn apart(&self, other: &Self) -> bool {
         let difference = (self.floor.clone() - other.floor.clone()).magnitude();
         apart_modulo(

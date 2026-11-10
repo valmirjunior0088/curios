@@ -4,12 +4,12 @@ use {crate::*, std::collections::HashMap};
 
 /// A constant beside a sorted multiset of symbolic names.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct Number {
-    pub(crate) constant: usize,
-    pub(crate) names: Vec<&'static str>,
+pub struct Number {
+    pub constant: usize,
+    pub names: Vec<&'static str>,
 }
 
-pub(crate) fn n(constant: usize, names: &[&'static str]) -> Number {
+pub fn n(constant: usize, names: &[&'static str]) -> Number {
     let mut names = names.to_vec();
     names.sort();
     Number { constant, names }
@@ -17,9 +17,9 @@ pub(crate) fn n(constant: usize, names: &[&'static str]) -> Number {
 
 /// Bases that are windows of another base, and roots that are concatenations of named chunks.
 #[derive(Default)]
-pub(crate) struct Toy {
-    pub(crate) windows: HashMap<&'static str, (&'static str, Number)>,
-    pub(crate) concatenations: HashMap<&'static str, Vec<&'static str>>,
+pub struct Toy {
+    pub windows: HashMap<&'static str, (&'static str, Number)>,
+    pub concatenations: HashMap<&'static str, Vec<&'static str>>,
 }
 
 impl Alphabet for Toy {

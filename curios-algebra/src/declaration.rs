@@ -223,7 +223,7 @@ impl Operation {
         }
     }
 
-    /// Whether this operation, declared at `carrier`, applied to the result of `inner`, declared at `inner_carrier`, is `inner`'s operand: a conversion undoing the conversion it is applied to. That holds where the two convert between one pair of carriers in opposite directions and the round trip through `inner` is the identity on its source — [`round_trip`]'s table.
+    /// Whether this operation, declared at `carrier`, applied to the result of `inner`, declared at `inner_carrier`, is `inner`'s operand: a conversion undoing the conversion it is applied to. That holds where the two convert between one pair of carriers in opposite directions and the round trip through `inner` is the identity on its source — `round_trip`'s table.
     ///
     /// A carrier pair names one conversion in each direction, which is what lets a round trip be read off the carriers alone.
     pub fn undoes(self, carrier: Carrier, inner: Operation, inner_carrier: Carrier) -> bool {

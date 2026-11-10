@@ -825,21 +825,6 @@ pub fn declares(carrier: Carrier, operation: Operation, family: Family) -> bool 
     })
 }
 
-/// Every law [`TABLE`] states, in its order.
-pub fn laws() -> Vec<(Declared, Law)> {
-    TABLE
-        .iter()
-        .flat_map(|declared| {
-            declared.families.iter().flat_map(move |family| {
-                family
-                    .laws(declared.carrier, declared.operation)
-                    .into_iter()
-                    .map(move |law| (*declared, law))
-            })
-        })
-        .collect()
-}
-
 /// The carrier an operation's operands are of: a conversion's source, and otherwise the carrier it is declared at.
 fn operand_carrier(carrier: Carrier, operation: Operation) -> Carrier {
     match operation {

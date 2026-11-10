@@ -3,7 +3,7 @@
 use super::*;
 
 /// Whether the formulas rooted at `left` and `right` agree at every assignment of `formula`'s atoms, each evaluated at every one: the truth table, which needs nothing but the formula's meaning.
-pub(super) fn tabled(formula: &Formula, left: usize, right: usize) -> bool {
+pub fn tabled(formula: &Formula, left: usize, right: usize) -> bool {
     let mut values = vec![false; formula.nodes.len()];
     (0..1u64 << formula.atoms).all(|assignment| {
         for (position, node) in formula.nodes.iter().enumerate() {
@@ -21,7 +21,7 @@ pub(super) fn tabled(formula: &Formula, left: usize, right: usize) -> bool {
 }
 
 /// Whether the diagram finds the formulas rooted at `left` and `right` to agree, charged nothing.
-pub(super) fn diagrammed(formula: &Formula, left: usize, right: usize) -> bool {
+pub fn diagrammed(formula: &Formula, left: usize, right: usize) -> bool {
     let mut agreement = formula.agreement(left, right);
     loop {
         if let Ok(Some(agree)) = agreement.step(|_| Ok::<(), ()>(())) {
@@ -31,7 +31,7 @@ pub(super) fn diagrammed(formula: &Formula, left: usize, right: usize) -> bool {
 }
 
 /// The literal the diagram values the formula rooted at `root` as, where it is one.
-pub(super) fn valued(formula: &Formula, root: usize) -> Option<bool> {
+pub fn valued(formula: &Formula, root: usize) -> Option<bool> {
     let mut valuation = formula.valuation(root);
     loop {
         if let Ok(Some(value)) = valuation.step(|_| Ok::<(), ()>(())) {
@@ -41,7 +41,7 @@ pub(super) fn valued(formula: &Formula, root: usize) -> Option<bool> {
 }
 
 /// What the diagram charges for valuing the formula rooted at `root`, in its units.
-pub(super) fn valuation_charged(formula: &Formula, root: usize) -> u64 {
+pub fn valuation_charged(formula: &Formula, root: usize) -> u64 {
     let mut valuation = formula.valuation(root);
     let mut spent = 0u64;
     loop {
@@ -56,7 +56,7 @@ pub(super) fn valuation_charged(formula: &Formula, root: usize) -> u64 {
 }
 
 /// What the diagram charges for deciding the formulas rooted at `left` and `right`, in its units.
-pub(super) fn charged(formula: &Formula, left: usize, right: usize) -> u64 {
+pub fn charged(formula: &Formula, left: usize, right: usize) -> u64 {
     let mut agreement = formula.agreement(left, right);
     let mut spent = 0u64;
     loop {
@@ -71,15 +71,15 @@ pub(super) fn charged(formula: &Formula, left: usize, right: usize) -> u64 {
 }
 
 /// A fixed sequence of numbers, the same in every run, that formulas are drawn from.
-pub(super) struct Draws(u64);
+pub struct Draws(u64);
 
 impl Draws {
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Draws(0x9E37_79B9_7F4A_7C15)
     }
 
     /// A number below `bound`.
-    pub(super) fn below(&mut self, bound: usize) -> usize {
+    pub fn below(&mut self, bound: usize) -> usize {
         self.0 = self
             .0
             .wrapping_mul(6_364_136_223_846_793_005)
@@ -88,7 +88,7 @@ impl Draws {
     }
 
     /// Two formulas of up to twelve leaves each over the first `atoms` atoms of `formula`, appended; their roots' positions.
-    pub(super) fn pair(&mut self, formula: &mut Formula, atoms: usize) -> (usize, usize) {
+    pub fn pair(&mut self, formula: &mut Formula, atoms: usize) -> (usize, usize) {
         let size = 1 + self.below(12);
         let left = self.formula(formula, atoms, size);
         let size = 1 + self.below(12);
@@ -97,7 +97,7 @@ impl Draws {
     }
 
     /// A formula of `size` leaves over the first `atoms` atoms of `formula`, each connective and each leaf's atom and polarity drawn, appended; its root's position.
-    pub(super) fn formula(&mut self, formula: &mut Formula, atoms: usize, size: usize) -> usize {
+    pub fn formula(&mut self, formula: &mut Formula, atoms: usize, size: usize) -> usize {
         if size <= 1 {
             return match self.below(8) {
                 0 => formula.push(Node::Literal(self.below(2) == 0)),
