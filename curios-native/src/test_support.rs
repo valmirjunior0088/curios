@@ -19,7 +19,7 @@ pub use mock_host::{MockHost, MockHostBuilder, MockIo, SocketEvent};
 
 use {
     super::*,
-    curios_abi::HostOp,
+    curios_abi::{HostOp, HostOps},
     log::{LevelFilter, Log, Metadata, Record, set_logger, set_max_level},
     std::sync::{Arc, Mutex, Once},
     wasmtime::{Caller, Instance, Linker, Memory, Store, Val},
@@ -71,7 +71,7 @@ impl GuestInstance {
             let mut store = guest_store(engine, GUEST_HEAP);
 
             Linker::new(engine)
-                .instantiate(&mut store, &code.0)
+                .instantiate(&mut store, code.module())
                 .map(|instance| (store, instance))
                 .map_err(|error| error.to_string())
         })??;
@@ -288,11 +288,8 @@ pub fn run_within_heap<H: HostOps + Send + Sync + 'static>(
 ) -> Result<u8, String> {
     let host = Arc::new(host);
 
-    instantiate(
-        shared_engine(),
+    compiled.run_in(
         heap,
-        &compiled.module,
-        &compiled.foreigns,
         ForeignBindings::empty(),
         host_rows(Arc::clone(&host)),
         host,
@@ -315,13 +312,5 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
         });
     }
 
-    instantiate(
-        shared_engine(),
-        GUEST_HEAP,
-        &compiled.module,
-        &compiled.foreigns,
-        bindings,
-        answers,
-        host,
-    )
+    compiled.run_in(GUEST_HEAP, bindings, answers, host)
 }

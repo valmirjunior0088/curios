@@ -1,6 +1,6 @@
 //! Sockets: a listener's address, a loopback connect, a TLS upgrade driven by the reads and writes that follow, and how each kind of end is reported.
 
-use {super::test_support::*, super::*, crate::*};
+use {super::test_support::*, super::*};
 
 /// Every entry in the handle table is one [`OsResource`], so the enum's size is what a plain file or an unconnected socket costs to hold. The two TLS variants are boxed because a `rustls` connection carries its record buffers inline, and unboxed it would set the size of every other kind.
 ///

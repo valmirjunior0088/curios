@@ -6,11 +6,11 @@
 
 use {
     crate::{bindings_of, engine, linked_of, optimize, to_cwasm},
-    curios_abi::ForeignStore,
+    curios_abi::{ForeignStore, HostOps},
     curios_browser::page,
     curios_common::{Qualifier, Source},
     curios_module::{Overlay, RootSource, UnitSource, open_entrypoint, supply_entrypoint},
-    curios_native::{Compiled, HostOps, TestEnd},
+    curios_native::{Compiled, TestEnd},
     curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, TestModule, TestRecord},
     curios_surface::{Entrypoint, Form},

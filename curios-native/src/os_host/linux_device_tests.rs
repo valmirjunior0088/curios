@@ -2,7 +2,6 @@
 
 use {
     super::{test_support::*, *},
-    crate::*,
     curios_abi::errno,
     rustix::termios::ControlModes,
 };

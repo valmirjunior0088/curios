@@ -1,11 +1,10 @@
 use {
-    crate::{
-        Answer, ChildExit, ChildHandles, ClockReading, Direction, Failure, FileKind, FileStat,
+    crate::{Direction, Table, lookup_address, names_a_variable, serial_frame, serial_speed},
+    curios_abi::{
+        Answer, ChildExit, ChildHandles, ClockReading, ClosedCode, Failure, FileKind, FileStat,
         Handle, HostOps, Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled,
-        StdioMode, Table, Termination, TtySize, lookup_address, names_a_variable, serial_frame,
-        serial_speed,
+        StdioMode, Termination, TtySize, errno, event,
     },
-    curios_abi::{ClosedCode, errno, event},
     std::{
         collections::{BTreeSet, HashMap, VecDeque},
         future,

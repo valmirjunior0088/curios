@@ -3,10 +3,11 @@
 use {
     crate::test_support::*,
     crate::tests::test_support::*,
+    curios_abi::Termination,
     curios_common::{fill, test_support::*},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::{ForeignBindings, Termination, test_support::*},
+    curios_native::{ForeignBindings, test_support::*},
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
 };

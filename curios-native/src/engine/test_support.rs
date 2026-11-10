@@ -6,7 +6,7 @@ use super::*;
 
 impl Answers {
     /// Replace how the row declared as `name` is entered with a trampoline that marshals for itself — how a test puts a reply in front of the guest that no checked answer would give.
-    pub(crate) fn replace_raw<F>(&mut self, name: &str, f: F)
+    pub fn replace_raw<F>(&mut self, name: &str, f: F)
     where
         F: Fn(&mut Caller<'_, Guest>, &[Val], &mut [Val]) -> wasmtime::Result<()>
             + Send

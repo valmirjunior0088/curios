@@ -1,12 +1,12 @@
 use {
     super::{
-        Answer, Handle, HostOps, Lift, Lower, Mode, Plugin, Refusal, Replied, Reply, SerialFlow,
-        SerialOp, SerialParity, Settled, StdioMode, anyref_array_type, bool_of, filled,
+        BundledPlugin, Lift, Lower, Plugin, Replied, Reply, anyref_array_type, bool_of, filled,
         i8_array_type, longs_array_type, words_array_type,
     },
     curios_abi::{
-        Answered, Carrier, ENTRY, ForeignFunction, ForeignStore, HostOp, LANE_IN, Namespace, PANIC,
-        RowReply, WireReturn, WireType, for_each_host_op,
+        Answer, Answered, Carrier, ENTRY, ForeignFunction, ForeignStore, Handle, HostOp, HostOps,
+        LANE_IN, Mode, Namespace, PANIC, Refusal, RowReply, SerialFlow, SerialOp, SerialParity,
+        Settled, StdioMode, WireReturn, WireType, for_each_host_op,
     },
     std::{
         collections::{HashMap, hash_map::Entry},
@@ -43,7 +43,7 @@ pub fn validate(bytes: &[u8]) -> Result<(), String> {
 const GUEST_STACK: usize = 1 << 30;
 
 /// The heap a program's live set may grow to, in bytes: the bound every store states to the engine ([`Guest`]), so a program whose live set grows without end stops on the engine's own refusal to grow it. The decision and its reason are this crate's `README.md`, "The heap is sized ahead of its churn".
-pub(crate) const GUEST_HEAP: usize = 4 << 30;
+pub const GUEST_HEAP: usize = 4 << 30;
 
 /// What a program's store holds beside its instances: the bound its heap, and each memory a module declares, may grow to, which the engine asks of the store's limiter before it grows one.
 pub struct Guest {
@@ -60,7 +60,7 @@ impl Guest {
 }
 
 /// A store against `engine` whose heap grows to `heap` bytes and no further: every store a module runs in.
-pub(crate) fn guest_store(engine: &Engine, heap: usize) -> Store<Guest> {
+pub fn guest_store(engine: &Engine, heap: usize) -> Store<Guest> {
     let mut store = Store::new(engine, Guest::bounded(heap));
     store.limiter(|guest| &mut guest.limits);
 
@@ -73,7 +73,7 @@ const HOST_RESERVE: usize = 16 << 20;
 /// Run `enter` on a thread whose stack is a module's, and answer what it answers.
 ///
 /// **Every entry into a module goes through here**, because the engine's limit bounds a stack and reserves none: where the thread's own stack ends first, the process aborts with no trap. So the limit [`shared_engine`] sets and the stack this thread is built with are one constant, and no caller's thread — a system's main thread, a test's two mebibytes — is what a module runs on. A panic on the thread reaches the caller as itself.
-pub(crate) fn on_guest_stack<T: Send>(enter: impl FnOnce() -> T + Send) -> Result<T, String> {
+pub fn on_guest_stack<T: Send>(enter: impl FnOnce() -> T + Send) -> Result<T, String> {
     thread::scope(|scope| {
         let guest = thread::Builder::new()
             .name("guest".to_owned())
@@ -156,7 +156,7 @@ fn wire_func_type(engine: &Engine, params: &[WireType], results: &[WireType]) ->
 }
 
 /// A type-erased implementation of one import: the closure wasmtime calls, already wrapped in its [`Lift`] and [`Reply`] plumbing.
-pub(crate) type Trampoline =
+pub type Trampoline =
     Arc<dyn Fn(&mut Caller<'_, Guest>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
 /// Ask an answer for its reply to a call's operands: written into the call's results at once, or the future of one handed back for the host to file.
@@ -172,14 +172,14 @@ type Settle =
 
 /// How an answer is entered: asked once a call's operands are lifted, and, where it handed back a future, settled from what the future came to.
 #[derive(Clone)]
-pub(crate) struct Entered {
+pub struct Entered {
     ask: Ask,
     settle: Settle,
 }
 
 impl Entered {
     /// An answer `trampoline` gives at once, which settles nothing.
-    pub(crate) fn now(trampoline: Trampoline) -> Self {
+    pub fn now(trampoline: Trampoline) -> Self {
         Self {
             ask: Arc::new(move |caller, params, results| {
                 trampoline(caller, params, results).map(|()| None)
@@ -258,14 +258,14 @@ impl fmt::Display for Returned {
 
 /// What an answer takes and comes back with, as its implementation states them: what the link holds to the row.
 #[derive(Clone)]
-pub(crate) struct Stated {
+pub struct Stated {
     params: Vec<WireType>,
     returned: Returned,
 }
 
 impl Stated {
     /// What a row's own declaration states: what an answer resolved against the row itself crosses as.
-    pub(crate) fn declared(function: &ForeignFunction) -> Self {
+    pub fn declared(function: &ForeignFunction) -> Self {
         let signature = function.signature();
 
         Self {
@@ -279,7 +279,7 @@ impl Stated {
 ///
 /// Each answer stands beside `T`, how it is entered: an [`Entered`] where a program is run, and nothing where its link is only checked ([`ForeignBindings::check`]). The comparison is the same code either way.
 #[derive(Clone)]
-pub(crate) struct Answers<T = Entered> {
+pub struct Answers<T = Entered> {
     rows: HashMap<String, (Stated, T)>,
     /// The names answered more than once, in the order the second answer arrived: what the link refuses, since [`ForeignBindings::define`] refuses nothing.
     twice: Vec<String>,
@@ -296,7 +296,7 @@ impl<T> Default for Answers<T> {
 
 impl<T> Answers<T> {
     /// Record the answer to the row declared as `name`: what it states, and how it is entered.
-    pub(crate) fn record(&mut self, name: String, stated: Stated, entered: T) {
+    pub fn record(&mut self, name: String, stated: Stated, entered: T) {
         match self.rows.entry(name) {
             Entry::Occupied(taken) => self.twice.push(taken.key().clone()),
             Entry::Vacant(free) => {
@@ -401,12 +401,30 @@ impl Answers {
 /// Nothing is checked where an answer is recorded. What it is held to is the program's own declaration of the row, which the program carries ([`Compiled`]), so a disagreement is refused where the two meet, at the link, by one comparison for every answer.
 #[derive(Clone, Default)]
 pub struct ForeignBindings {
-    pub(crate) answers: Answers,
+    answers: Answers,
     /// The modules resolved for the program, each instantiated into the program's own store where a run begins, and answering there the rows it was resolved for.
-    pub(crate) modules: Vec<Arc<Plugin>>,
+    modules: Vec<Arc<Plugin>>,
 }
 
 impl ForeignBindings {
+    /// The modules resolved here as a bundle carries them, each as the machine code a launcher reads back, written out by `written`: writing machine code out is a compiler's operation, so the crate that links one supplies it. What was resolved and held to the program's rows is what travels, each module beside the answers it was held to: nothing is compiled a second time, no other module can stand in the executable for the one that was checked, and a claim on a row the program does not reach is left behind.
+    pub fn bundled(
+        &self,
+        written: impl Fn(&MachineCode) -> Result<Vec<u8>, String>,
+    ) -> Result<Vec<BundledPlugin>, String> {
+        self.modules
+            .iter()
+            .map(|module| module.bundled(&written))
+            .collect()
+    }
+}
+
+impl ForeignBindings {
+    /// Answer, ahead of the host, the rows `module` was resolved for.
+    pub(crate) fn add_module(&mut self, module: Plugin) {
+        self.modules.push(Arc::new(module));
+    }
+
     /// No answers of one's own: every row the program reaches is left to the host, which answers the standard library's. Follow with one [`define`](Self::define) for each row to answer ahead of it.
     pub fn empty() -> Self {
         Self::default()
@@ -630,7 +648,7 @@ macro_rules! declare_host_rows {
         $variant:ident: fn $name:ident($($p:ident: $t:ty),* $(,)?) -> $r:ty { $($contract:tt)* }
     )*) => {
         /// What `host` answers of the rows the standard library declares.
-        pub(crate) fn host_rows<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> Answers {
+        pub fn host_rows<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> Answers {
             let mut answers = Answers::default();
 
             $(
@@ -650,7 +668,7 @@ for_each_host_op!(declare_host_rows);
 
 /// A process exit requested via `proc_exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap. Made only when a [`Termination`](curios_abi::Termination) reply is encoded, so a host method answering the row cannot return into the guest.
 #[derive(Debug)]
-pub(crate) struct ExitTrap(pub(crate) u8);
+pub struct ExitTrap(pub u8);
 
 impl fmt::Display for ExitTrap {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -673,7 +691,7 @@ impl fmt::Display for PanicTrap {
 impl Error for PanicTrap {}
 
 /// What a run answers of how a program ended: one reading where its entry returned, of the result it handed back, and one where `proc_exit` unwound it, of the code. A trap is neither, and is every run's error alike.
-pub(crate) trait Ended: Sized + Send {
+pub trait Ended: Sized + Send {
     /// The entry returned `result`, read while the store it lives in is open.
     fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, String>;
 
@@ -725,7 +743,7 @@ impl Ended for TestEnd {
 ///
 /// **Holding one is what makes instantiating safe, and making one is where the trust is taken.** Machine code read back from bytes is run on trust, since nothing can check that the bytes are a compiler's output. So there are two ways to one and no third: [`MachineCode::of`] takes the module a compiler made on [`shared_engine`], which is `curios-cranelift`'s to call since this crate links no compiler, and [`MachineCode::deserialize`] reads bytes back, its caller vouching for them.
 #[derive(Clone)]
-pub struct MachineCode(pub(crate) Module);
+pub struct MachineCode(Module);
 
 impl MachineCode {
     /// The machine code `module` is: an engine made it, so nothing is read back and nothing is vouched for.
@@ -757,8 +775,8 @@ impl MachineCode {
 ///
 /// **It carries the rows it imports.** The machine code names each `ffi` import and types it by its carriers alone, which cannot tell a `Nat` from an `Int`: what an import is declared as lives in the compilation, and travels here beside the code, so a run holds whatever answers a row to that row's own declaration and no caller hands the rows over a second time.
 pub struct Compiled {
-    pub(crate) module: Module,
-    pub(crate) foreigns: ForeignStore,
+    module: Module,
+    foreigns: ForeignStore,
 }
 
 impl Compiled {
@@ -782,6 +800,25 @@ impl Compiled {
             .map_err(|error| format!("failed to load wasm module: {error}"))
     }
 
+    /// Run the program in a store whose heap grows to `heap` bytes, `bindings` answering its rows ahead of `host`'s and `waiter` waiting between its turns: what [`Compiled::run`] and [`Compiled::run_test`] do at the bound every program has, and a test does at the one it asks for.
+    pub(crate) fn run_in<E: Ended>(
+        &self,
+        heap: usize,
+        bindings: ForeignBindings,
+        host: Answers,
+        waiter: Arc<dyn HostOps + Send + Sync>,
+    ) -> Result<E, String> {
+        instantiate(
+            shared_engine(),
+            heap,
+            &self.module,
+            &self.foreigns,
+            bindings,
+            host,
+            waiter,
+        )
+    }
+
     /// Run the program under `host`, returning the process exit code: `0` when `main` returns normally, otherwise the code passed to `proc_exit`. `bindings` answers rows ahead of the host, a program's own `foreign` declarations among them (pass [`ForeignBindings::empty`] where the host answers every row the program reaches).
     pub fn run<H: HostOps + Send + Sync + 'static>(
         &self,
@@ -790,15 +827,7 @@ impl Compiled {
     ) -> Result<u8, String> {
         let host = Arc::new(host);
 
-        instantiate(
-            shared_engine(),
-            GUEST_HEAP,
-            &self.module,
-            &self.foreigns,
-            bindings,
-            host_rows(Arc::clone(&host)),
-            host,
-        )
+        self.run_in(GUEST_HEAP, bindings, host_rows(Arc::clone(&host)), host)
     }
 
     /// [`Compiled::run`] for a program compiled as a test program, returning how its run ended: the verdict its entry answered, or the exit that left it unanswered.
@@ -809,20 +838,12 @@ impl Compiled {
     ) -> Result<TestEnd, String> {
         let host = Arc::new(host);
 
-        instantiate(
-            shared_engine(),
-            GUEST_HEAP,
-            &self.module,
-            &self.foreigns,
-            bindings,
-            host_rows(Arc::clone(&host)),
-            host,
-        )
+        self.run_in(GUEST_HEAP, bindings, host_rows(Arc::clone(&host)), host)
     }
 }
 
 /// Instantiate `module` against `engine` in a store whose heap grows to `heap` bytes, wire up the host imports, and run its entrypoint, returning what the run asking reads of how it ended. `foreigns` holds the rows the module's `ffi` imports are declared as, `bindings` the answers a module or an embedder gives, `host` the ones the host gives itself, and `waiter` the host that waits between a suspending program's turns and files what a row answers later.
-pub(crate) fn instantiate<E: Ended>(
+pub fn instantiate<E: Ended>(
     engine: &Engine,
     heap: usize,
     module: &Module,

@@ -7,7 +7,8 @@
 //! **Closing a port discards what it has not sent.** Left to itself, Linux holds the last close of a serial device until its output has drained — thirty seconds by default when the device takes none — whatever the descriptor's flags, and macOS discards the output of a non-blocking one instead; neither is a close that never waits and loses nothing. So the port drops its unsent output as it closes, which bounds the kernel's wait to what the hardware already holds, and the wait a program wants is `serial_drain`'s: `tcdrain` run by [`blocking`](crate::blocking()), its call answered later. A thread of the pool per drain under way is the native host's cost for a wait neither system offers without blocking.
 
 use {
-    super::{Failure, SerialOp, failure_from_error},
+    super::failure_from_error,
+    curios_abi::{Failure, SerialOp},
     rustix::{
         fs::OFlags,
         io::{Errno, retry_on_intr},
@@ -88,7 +89,7 @@ fn apply(fd: &OwnedFd, termios: &mut Termios, speed: u32) -> rustix::io::Result<
 ///
 /// A terminal class entry is a serial device when a device stands behind it, which a console, a virtual terminal and a pseudo-terminal have none of, and when its driver found the port: the 8250 driver registers its legacy ports whether or not a chip answers, and reports one that did not as type `0`. A device udev named under `/dev/serial/by-id` is listed by that name, the first in byte order where it has several, and any other by its node.
 #[cfg(target_os = "linux")]
-pub(crate) fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
+pub fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
     // Filed last to first, so the name left under a node is the first in byte order.
     let mut links = fs::read_dir("/dev/serial/by-id")
         .map(|links| links.flatten().map(|link| link.path()).collect::<Vec<_>>())
@@ -131,7 +132,7 @@ pub(crate) fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
 
 /// The serial devices the system has, each by a path an open takes, sorted: the callout devices, `/dev/cu.*`, which open without waiting for carrier as their dial-in twins `/dev/tty.*` do not promise.
 #[cfg(not(target_os = "linux"))]
-pub(crate) fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
+pub fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
     let mut devices = Vec::new();
 
     for entry in fs::read_dir("/dev")? {
@@ -148,11 +149,11 @@ pub(crate) fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
 }
 
 /// An open serial port: the descriptor `serial_open` configured, non-blocking from the open itself, so a read or a write that cannot progress answers `WouldBlock` as it does on a pipe to a child.
-pub(crate) struct SerialPort(OwnedFd);
+pub struct SerialPort(OwnedFd);
 
 impl SerialPort {
     /// Open the device at `path` and set it raw at `speed`, with the control modes `frame` names; `EINVAL` when the device took another frame or speed than those.
-    pub(crate) fn open(path: &[u8], speed: u32, frame: ControlModes) -> rustix::io::Result<Self> {
+    pub fn open(path: &[u8], speed: u32, frame: ControlModes) -> rustix::io::Result<Self> {
         // Non-blocking from the open rather than switched after it, because opening a port whose carrier line is down waits for carrier until `CLOCAL` is set, and `CLOCAL` is set on a descriptor already open. `NOCTTY` keeps the port from becoming this process's controlling terminal, and `CLOEXEC` keeps a spawned child from holding it past the program's own close. No exclusive hold is taken: whether `TIOCEXCL` refuses a second open differs by kernel, by device and by privilege, so the row promises only what every kernel does.
         let fd = rustix::fs::open(
             path,
@@ -179,7 +180,7 @@ impl SerialPort {
     }
 
     /// Apply `op`: a modem line set to the level `on`, or what the device sent and the program has not read dropped.
-    pub(crate) fn control(&self, op: SerialOp, on: bool) -> rustix::io::Result<()> {
+    pub fn control(&self, op: SerialOp, on: bool) -> rustix::io::Result<()> {
         match op {
             SerialOp::Dtr => self.set_modem_lines(TIOCM_DTR, on),
             SerialOp::Rts => self.set_modem_lines(TIOCM_RTS, on),
@@ -188,7 +189,7 @@ impl SerialPort {
     }
 
     /// The wait for the port to send what it has accepted, to run off the host's thread: `tcdrain` on a duplicate of the descriptor, so the port may close under it — the close discards the unsent output, which is what the wait was for, and the wait ends.
-    pub(crate) fn drain(&self) -> Result<impl FnOnce() + Send + 'static, Failure> {
+    pub fn drain(&self) -> Result<impl FnOnce() + Send + 'static, Failure> {
         let port = self.0.try_clone().map_err(failure_from_error)?;
 
         // The wait's own outcome is not reported: a port that can no longer send says so to the write or the control that meets it next, and the wait's end means only that there is nothing left to wait for.

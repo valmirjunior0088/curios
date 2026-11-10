@@ -7,8 +7,10 @@
 //! Every fallible step of spawning comes before the child exists: the arguments are checked, each piped stream's pipe is made with the parent's end non-blocking, the reaper's pipe is made, and the reaper thread is started, waiting for the child to be handed to it. Once the child exists nothing can fail, so there is no half-spawned state to unwind.
 
 use {
-    super::{ChildExit, Failure, StdioMode, failure_from_error},
+    super::failure_from_error,
+    curios_abi::{ChildExit, Failure, StdioMode},
     rustix::{
+        fd::{AsFd, BorrowedFd},
         fs::{OFlags, fcntl_getfl, fcntl_setfl},
         io::Errno,
         process::{Pid, Signal, WaitId, WaitIdOptions, kill_process, waitid},
@@ -31,20 +33,25 @@ use {
 type End = Option<Result<ChildExit, Failure>>;
 
 /// A running child as the host files it: `done` is the read end of a pipe the reaper writes to once it has recorded the end, so a watch sees the exit; `end` then holds it; `pid` is what `proc_kill` addresses while no end is recorded. Dropping it closes the pipe's read end; the reaper's later write fails with `EPIPE` and is discarded, and the child is reaped regardless.
-pub(crate) struct Running {
-    pub(crate) done: OwnedFd,
+pub struct Running {
+    done: OwnedFd,
     end: Arc<Mutex<End>>,
     pid: Pid,
 }
 
 impl Running {
+    /// The read end of the pipe the reaper writes to once it has recorded the end: what a watch waits on to see the exit.
+    pub fn done(&self) -> BorrowedFd<'_> {
+        self.done.as_fd()
+    }
+
     /// How the child ended, once the reaper has recorded it.
-    pub(crate) fn end(&self) -> End {
+    pub fn end(&self) -> End {
         *self.end.lock().unwrap()
     }
 
     /// `SIGKILL` the child if no end is recorded, under the lock the reaper records one under — so a pid the reaper has reaped, and the OS may have handed to another process, is never signaled. An ended child answers `ok` unsignaled.
-    pub(crate) fn kill(&self) -> Result<(), Failure> {
+    pub fn kill(&self) -> Result<(), Failure> {
         let end = self.end.lock().unwrap();
 
         if end.is_some() {
@@ -56,11 +63,11 @@ impl Running {
 }
 
 /// Everything `proc_spawn` hands back: the running child and the parent's end of each piped stream, already non-blocking.
-pub(crate) struct Spawned {
-    pub(crate) child: Running,
-    pub(crate) stdin: Option<OwnedFd>,
-    pub(crate) stdout: Option<OwnedFd>,
-    pub(crate) stderr: Option<OwnedFd>,
+pub struct Spawned {
+    pub child: Running,
+    pub stdin: Option<OwnedFd>,
+    pub stdout: Option<OwnedFd>,
+    pub stderr: Option<OwnedFd>,
 }
 
 /// An OS errno as the failure the row reports.
@@ -135,7 +142,7 @@ fn reap(mut child: Child, end: &Mutex<End>) {
 }
 
 /// Start the program `argv[0]` with the arguments after it, in `cwd` unless it is empty, with `env`'s `NAME=VALUE` entries laid over the inherited environment (an entry without `=` names a variable set to the empty string), and each standard stream wired as its mode says. Arguments no program can take are refused with `EINVAL` before anything is made.
-pub(crate) fn spawn(
+pub fn spawn(
     argv: &[Vec<u8>],
     cwd: &[u8],
     env: &[Vec<u8>],

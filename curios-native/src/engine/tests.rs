@@ -2,9 +2,10 @@
 
 use {
     super::*,
-    crate::{test_support::*, *},
+    crate::test_support::*,
     curios_abi::{
-        ForeignFunction, ForeignStore, HostOp, WireResults, WireReturn, WireSignature, WireType,
+        ForeignFunction, ForeignStore, HostOp, Termination, WireResults, WireReturn, WireSignature,
+        WireType,
     },
     std::sync::Arc,
     wasmtime::Linker,

@@ -4,8 +4,7 @@
 
 use {
     super::{ExitTrap, Guest},
-    crate::{Handle, HostOps},
-    curios_abi::{ADVANCE, DEADLOCK},
+    curios_abi::{ADVANCE, DEADLOCK, Handle, HostOps},
     wasmtime::{
         AnyRef, AsContextMut, Func, Instance, OwnedRooted, RootScope, Rooted, Store, TypedFunc,
     },
@@ -36,7 +35,7 @@ enum Turned {
 /// Run `entry` turn by turn under `host`, answering what the program yielded.
 ///
 /// A suspension on no handle can never be advanced, since no wait could end: its cancel is run to its end, [`DEADLOCK`] is reported on standard error, and the run ends with code `1`, as an exit does.
-pub(super) fn run_turns(
+pub fn run_turns(
     store: &mut Store<Guest>,
     instance: &Instance,
     entry: Func,

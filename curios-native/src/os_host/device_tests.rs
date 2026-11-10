@@ -2,7 +2,6 @@
 
 use {
     super::{test_support::*, *},
-    crate::*,
     curios_abi::errno,
     curios_common::test_support::*,
     rustix::{

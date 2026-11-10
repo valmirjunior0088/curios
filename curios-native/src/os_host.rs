@@ -1,12 +1,14 @@
 use {
     super::{Running, SerialPort, Spawned, Table, os_child, serial_devices},
     crate::{
-        Answer, ChildExit, ChildHandles, ClockReading, Direction, Failure, FileKind, FileStat,
-        Handle, HostOps, Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled,
-        StdioMode, Termination, TtySize, blocking, failure_from_error, lookup_address,
-        names_a_variable, serial_frame, serial_speed,
+        Direction, blocking, failure_from_error, lookup_address, names_a_variable, serial_frame,
+        serial_speed,
     },
-    curios_abi::event,
+    curios_abi::{
+        Answer, ChildExit, ChildHandles, ClockReading, Failure, FileKind, FileStat, Handle,
+        HostOps, Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode,
+        Termination, TtySize, event,
+    },
     rustix::{
         event::{
             FdSetElement, FdSetIter, PollFd, PollFlags, Timespec, fd_set_insert,
@@ -202,7 +204,7 @@ fn descriptor<'a>(
             OsResource::Descriptor(fd) | OsResource::Fifo(fd) => Some((fd.as_fd(), asked)),
             OsResource::Serial(port) => Some((port.as_fd(), asked)),
             // The reaper's pipe read end: ready to read once the child's end is recorded, which is when `proc_wait` answers.
-            OsResource::Child { running, .. } => Some((running.done.as_fd(), asked)),
+            OsResource::Child { running, .. } => Some((running.done(), asked)),
             // A TLS stream is watched through its socket, for what `rustls` itself needs while the handshake is under way and for the guest's own interest afterwards.
             OsResource::ClientTls(stream) => {
                 Some((stream.sock.as_fd(), tls_watch(&stream.conn, asked)))

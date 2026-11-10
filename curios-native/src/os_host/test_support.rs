@@ -2,7 +2,6 @@
 
 use {
     super::*,
-    crate::*,
     curios_abi::event,
     rustix::pty::{OpenptFlags, grantpt, openpt, ptsname, unlockpt},
 };

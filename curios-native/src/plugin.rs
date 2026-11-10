@@ -96,7 +96,7 @@ impl fmt::Display for Subject {
 }
 
 /// A module resolved against the rows a program reaches: refused if no plugin can be made of it, and each export that answers a reached row held to that row's declaration. Nothing is instantiated here: an instance is made where a program is run ([`Plugin::instantiate`]), so one resolution serves every run of the program.
-pub(crate) struct Plugin {
+pub struct Plugin {
     subject: Subject,
     compiled: MachineCode,
     /// Whether the module follows the canonical ABI's conventions, which its allocator's name says.
@@ -105,6 +105,24 @@ pub(crate) struct Plugin {
 }
 
 impl Plugin {
+    /// This module as a bundle carries it: its machine code written out by `written`, beside the answers it was held to.
+    pub fn bundled(
+        &self,
+        written: &impl Fn(&MachineCode) -> Result<Vec<u8>, String>,
+    ) -> Result<BundledPlugin, String> {
+        Ok(BundledPlugin {
+            package: self.subject.package.clone(),
+            name: self.subject.name.clone(),
+            answers: self
+                .rows
+                .iter()
+                .map(|row| (row.function.name().to_string(), row.export.clone()))
+                .collect(),
+            payload: written(&self.compiled)
+                .map_err(|error| format!("{} could not be written out: {error}", self.subject))?,
+        })
+    }
+
     /// Refuse a `module` that is not a plugin before it can become one.
     ///
     /// The checks are the whole of what "a plugin" means, each made of the module's own types and refused by name rather than left to a `LinkError` that would report one missing import and stop.
@@ -113,7 +131,7 @@ impl Plugin {
             package: module.package.clone(),
             name: module.name.clone(),
         };
-        let compiled = &module.code.0;
+        let compiled = module.code.module();
 
         // Every import at once, rather than whichever one a linker would reach first.
         let demanded = compiled
@@ -154,14 +172,14 @@ impl Plugin {
     }
 
     /// The rows the module was resolved for, each as the program declares it.
-    pub(crate) fn answers(&self) -> impl Iterator<Item = &Arc<ForeignFunction>> {
+    pub fn answers(&self) -> impl Iterator<Item = &Arc<ForeignFunction>> {
         self.rows.iter().map(|row| &row.function)
     }
 
     /// The names the module exports, for a refusal to list.
     fn exports(&self) -> Vec<String> {
         self.compiled
-            .0
+            .module()
             .exports()
             .map(|export| export.name().to_string())
             .collect()
@@ -170,7 +188,7 @@ impl Plugin {
     /// Instantiate the module into `store`, the store of the program about to run, and answer in `answers` each row it was resolved for.
     ///
     /// A trampoline holds the instance's handles and enters them through the caller it is called with, which is that same store: the module's frames are counted where the program's are.
-    pub(crate) fn instantiate(
+    pub fn instantiate(
         self: &Arc<Self>,
         store: &mut Store<Guest>,
         answers: &mut Answers,
@@ -179,7 +197,7 @@ impl Plugin {
 
         // Instantiating runs the module's start function, an entry into it like any other, on the stack the program is about to run on.
         let instance = Linker::new(shared_engine())
-            .instantiate(&mut *store, &self.compiled.0)
+            .instantiate(&mut *store, self.compiled.module())
             .map_err(|error| {
                 format!(
                     "{subject} could not be instantiated: {}",
@@ -470,7 +488,7 @@ impl Row {
             }
         };
 
-        let found = exported(&plugin.compiled.0, export)
+        let found = exported(plugin.compiled.module(), export)
             .ok_or_else(|| format!("{subject} exports `{export}`, which is no function"))?;
         let expected = (
             params
@@ -620,32 +638,6 @@ impl Row {
     }
 }
 
-impl ForeignBindings {
-    /// The modules resolved here as a bundle carries them, each as the machine code a launcher reads back, written out by `written`: writing machine code out is a compiler's operation, so the crate that links one supplies it. What was resolved and held to the program's rows is what travels, each module beside the answers it was held to: nothing is compiled a second time, no other module can stand in the executable for the one that was checked, and a claim on a row the program does not reach is left behind.
-    pub fn bundled(
-        &self,
-        written: impl Fn(&MachineCode) -> Result<Vec<u8>, String>,
-    ) -> Result<Vec<BundledPlugin>, String> {
-        self.modules
-            .iter()
-            .map(|module| {
-                Ok(BundledPlugin {
-                    package: module.subject.package.clone(),
-                    name: module.subject.name.clone(),
-                    answers: module
-                        .rows
-                        .iter()
-                        .map(|row| (row.function.name().to_string(), row.export.clone()))
-                        .collect(),
-                    payload: written(&module.compiled).map_err(|error| {
-                        format!("{} could not be written out: {error}", module.subject)
-                    })?,
-                })
-            })
-            .collect()
-    }
-}
-
 /// Resolve the modules a program's packages declared against `foreigns`, the rows the program reaches, into the bindings a run of it instantiates them from.
 ///
 /// **The coverage rule is checked against the store rather than against the manifests.** The [`ForeignStore`] is what actually holds the rows the program imports, so a check over it cannot disagree with what the module demands — where a check over manifests would have to predict a declaration's qualified name from its source position, which is a second derivation of something the compilation already computed.
@@ -677,7 +669,7 @@ pub fn plugin_bindings(
             resolved.rows.push(row);
         }
 
-        bindings.modules.push(Arc::new(resolved));
+        bindings.add_module(resolved);
     }
 
     // A declaration is claimed once within a module, which states its answers by declaration, and across a package's modules, whose manifest is refused otherwise; two modules handed over for one declaration all the same are refused where a run admits its bindings, as any row answered twice is.

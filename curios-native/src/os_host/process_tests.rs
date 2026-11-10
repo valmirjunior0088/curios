@@ -3,7 +3,6 @@
 use {
     super::test_support::*,
     super::*,
-    crate::*,
     std::{num::NonZeroU32, thread, time::Duration},
 };
 

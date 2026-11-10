@@ -2,11 +2,11 @@
 
 use {
     crate::test_support::*,
-    curios_abi::ForeignStore,
+    curios_abi::{ForeignStore, HostOps},
     curios_common::fill,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
-    curios_native::{ForeignBindings, HostOps, OsHost, blocking, test_support::*},
+    curios_native::{ForeignBindings, OsHost, blocking, test_support::*},
     curios_pipeline::compile_with_prelude,
     curios_surface::Entrypoint,
 };

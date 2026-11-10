@@ -2,7 +2,6 @@
 
 use {
     super::*,
-    crate::*,
     curios_abi::{HostOps, event},
 };
 

@@ -1,6 +1,8 @@
 use {
-    super::{Element, ExitTrap, Guest, Handle, Returned, Termination},
-    curios_abi::{Encoded, HostOp, ReplyShape, WireLeaf, WireReply, WireType, WireValue},
+    super::{Element, ExitTrap, Guest, Returned},
+    curios_abi::{
+        Encoded, Handle, HostOp, ReplyShape, Termination, WireLeaf, WireReply, WireType, WireValue,
+    },
     wasmtime::{
         ArrayRef, ArrayRefPre, ArrayType, Caller, Engine, FieldType, HeapType, Mutability, RefType,
         StorageType, Val, ValType,
@@ -140,12 +142,12 @@ lower_tuple!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5);
 lower_tuple!(A a 0, B b 1, C c 2, D d 3, E e 4, F f 5, G g 6);
 
 /// The GC array type an `i8` byte array (`Bytes`) allocates under — shared by every wire shape that carries raw bytes, whether directly (`Vec<u8>`) or as `List(Bytes)`'s per-element `Bytes` (`Vec<Vec<u8>>`), and by `engine.rs`'s `host_func_type`, which describes the same shape for a host import's static function type.
-pub(crate) fn i8_array_type(engine: &Engine) -> ArrayType {
+pub fn i8_array_type(engine: &Engine) -> ArrayType {
     ArrayType::new(engine, FieldType::new(Mutability::Var, StorageType::I8))
 }
 
 /// The GC array type a list of references allocates under — a `(mut (ref null any))` element array, shared by `Vec<Vec<u8>>`'s `Bytes` and `Vec<Handle>`'s tokens, and by `engine.rs`'s `host_func_type` for the same reason. A list of scalars crosses as [`longs_array_type`] or [`words_array_type`] instead.
-pub(crate) fn anyref_array_type(engine: &Engine) -> ArrayType {
+pub fn anyref_array_type(engine: &Engine) -> ArrayType {
     ArrayType::new(
         engine,
         FieldType::new(
@@ -156,7 +158,7 @@ pub(crate) fn anyref_array_type(engine: &Engine) -> ArrayType {
 }
 
 /// The GC array type a list of `Nat` or `Int` crosses as, `(mut i64)` — one element per slot, the guest's `$longs` — and `engine.rs`'s `host_func_type` describes the same shape. The guest narrows each element on the way out and boxes each on the way back, as it does a scalar, so neither side reads the other's representation of a number.
-pub(crate) fn longs_array_type(engine: &Engine) -> ArrayType {
+pub fn longs_array_type(engine: &Engine) -> ArrayType {
     ArrayType::new(
         engine,
         FieldType::new(Mutability::Var, StorageType::ValType(ValType::I64)),
@@ -164,7 +166,7 @@ pub(crate) fn longs_array_type(engine: &Engine) -> ArrayType {
 }
 
 /// The GC array type a list of `Bool` crosses as, `(mut i32)` — one word per element, the guest's `$words`.
-pub(crate) fn words_array_type(engine: &Engine) -> ArrayType {
+pub fn words_array_type(engine: &Engine) -> ArrayType {
     ArrayType::new(
         engine,
         FieldType::new(Mutability::Var, StorageType::ValType(ValType::I32)),
@@ -172,7 +174,7 @@ pub(crate) fn words_array_type(engine: &Engine) -> ArrayType {
 }
 
 /// Lower `values` as a flat array of `array_type`, the guest's `$longs` or `$words`.
-pub(crate) fn lower_scalars(
+pub fn lower_scalars(
     caller: &mut Caller<'_, Guest>,
     array_type: ArrayType,
     values: impl IntoIterator<Item = Val>,
@@ -370,9 +372,9 @@ fn written(
 /// A host's reply to one call of the row `op`, as its binding answers it.
 ///
 /// Lowering writes the reply as its type encodes it, which is what makes it a value of the row's wire types. The guest reads it unchecked, and nothing here holds it to more than its type: what a row promises beyond that is its host's to keep, and the hosts' own tests' to hold.
-pub(crate) struct Replied<R> {
-    pub(crate) op: HostOp,
-    pub(crate) reply: R,
+pub struct Replied<R> {
+    pub op: HostOp,
+    pub reply: R,
 }
 
 impl<R: WireReply> Reply for Replied<R> {
@@ -447,7 +449,7 @@ where
 }
 
 /// Fill `replies` with a value of each of `results`, a reply nothing reads: a zero for a scalar, an empty payload for a reference, and null for an option, whose carrier admits it.
-pub(crate) fn filled(
+pub fn filled(
     caller: &mut Caller<'_, Guest>,
     results: &[WireType],
     replies: &mut [Val],

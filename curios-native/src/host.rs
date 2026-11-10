@@ -1,12 +1,8 @@
 //! The native adapter's own concerns, and the contract it speaks in.
 //!
-//! The wire contract — the [`Handle`]/[`Failure`]/[`Mode`] semantic types, the payloads and the [`HostOps`] trait — is authored once in `curios-abi` and re-exported here so the rest of the runtime names it unqualified. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
+//! The wire contract — the [`Handle`](curios_abi::Handle)/[`Failure`]/[`Mode`](curios_abi::Mode) semantic types, the payloads and the [`HostOps`](curios_abi::HostOps) trait — is authored once in `curios-abi`, and every module of the runtime imports it from there. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
-pub use curios_abi::{
-    Answer, ChildExit, ChildHandles, ClockReading, Failure, FileKind, FileStat, Handle, HostOps,
-    Later, Mode, Refusal, SerialFlow, SerialOp, SerialParity, Settled, StdioMode, Termination,
-    TtySize,
-};
+use curios_abi::{Failure, SerialFlow, SerialParity};
 
 use {
     rustix::{io::Errno, termios::ControlModes},
@@ -14,7 +10,7 @@ use {
 };
 
 /// The control-mode bits a serial frame sets, or `None` for a setting `serial_open` refuses: 7 or 8 data bits and 1 or 2 stop bits, beside the parity and flow control a closed code has already decided. Both hosts ask it and [`serial_speed`], so a setting the native host refuses before it opens anything is one the scripted host refuses too.
-pub(crate) fn serial_frame(
+pub fn serial_frame(
     data_bits: u64,
     parity: SerialParity,
     stop_bits: u64,
@@ -47,19 +43,19 @@ pub(crate) fn serial_frame(
 }
 
 /// The speed a serial open sets, or `None` for one `serial_open` refuses: zero, which a terminal reads as hanging the line up rather than as a speed, and anything past what a speed setting holds. Both hosts ask it, as they ask [`serial_frame`].
-pub(crate) fn serial_speed(baud: u64) -> Option<u32> {
+pub fn serial_speed(baud: u64) -> Option<u32> {
     u32::try_from(baud).ok().filter(|&speed| speed != 0)
 }
 
 /// Which way a stream row moves bytes: what a request of nothing is checked against without moving any, and what a stream open only the other way refuses with `EBADF`.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Direction {
+pub enum Direction {
     Read,
     Write,
 }
 
 /// The `host:port` a lookup asks for, or the failure that refuses it before any lookup starts: a host that is not UTF-8 names nothing a resolver can find, which is `NotFound`, and a port past 65535 is no port, which is `EINVAL`. Both hosts ask it, so a lookup the native host refuses is one the scripted host refuses too.
-pub(crate) fn lookup_address(host: &[u8], port: u64) -> Result<String, Failure> {
+pub fn lookup_address(host: &[u8], port: u64) -> Result<String, Failure> {
     let host = str::from_utf8(host).map_err(|_| Failure::NotFound)?;
     let port = u16::try_from(port).map_err(|_| failure_from_error(Error::from(Errno::INVAL)))?;
 
@@ -67,12 +63,12 @@ pub(crate) fn lookup_address(host: &[u8], port: u64) -> Result<String, Failure> 
 }
 
 /// Whether `name` can name an environment variable at all: an empty name cannot, nor one holding the `=` that ends a name in `NAME=VALUE` or the NUL that ends a C string. Both hosts ask it, so such a name is absent from either.
-pub(crate) fn names_a_variable(name: &[u8]) -> bool {
+pub fn names_a_variable(name: &[u8]) -> bool {
     !name.is_empty() && !name.contains(&b'=') && !name.contains(&0)
 }
 
 /// Map an `io::Error` to its [`Failure`]. The named kinds map to named failures; anything else with an errno surfaces raw through `Other(errno)`. An errno-less failure (e.g. `write_all`'s synthesized `WriteZero`) is unclassifiable, so it reports the catch-all `Other(0)`; callers that can name it (e.g. a failed `dns_lookup` → `NotFound`) map it at the call site.
-pub(crate) fn failure_from_error(error: Error) -> Failure {
+pub fn failure_from_error(error: Error) -> Failure {
     match error.kind() {
         ErrorKind::NotFound => Failure::NotFound,
         ErrorKind::PermissionDenied => Failure::PermissionDenied,
