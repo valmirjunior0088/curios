@@ -48,12 +48,16 @@ description = "The Curios programming language: a dependently typed functional l
 license = "Apache-2.0"
 
 [workspace.lints.rust]
+unnameable_types = "warn"
 warnings = "deny"
 
 [workspace.lints.clippy]
 allow_attributes = "warn"
 allow_attributes_without_reason = "warn"
+field_scoped_visibility_modifiers = "warn"
 iter_over_hash_type = "warn"
+partial_pub_fields = "warn"
+redundant_pub_crate = "warn"
 unused_self = "warn"
 
 [workspace.lints.rustdoc]
