@@ -92,11 +92,6 @@ pub fn to_core(
     Ok((definitions, entry))
 }
 
-/// The term `term` writes, read on its own.
-pub fn term_to_core(term: &crate::Term<CoreText>) -> Result<Term, ReadError> {
-    core_read(term, &mut Reader::new(None))
-}
-
 /// The row a foreign form states: its name, the path it is declared at unless `#{name = "…"}` states another, and its signature.
 fn row_read(row: &TopForeign<CoreText>) -> Result<ForeignFunction, ReadError> {
     let name = match row

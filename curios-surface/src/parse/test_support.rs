@@ -8,7 +8,7 @@ use {
 };
 
 // The radix carries the written width, so a fixture numeral takes the width its own decimal spelling has — which is what the parser reads back for it.
-pub(super) fn num_lit(magnitude: u32, sign: Sign) -> Term {
+pub fn num_lit(magnitude: u32, sign: Sign) -> Term {
     Subterm::NumLit(NumLit {
         magnitude: magnitude.into(),
         radix: Radix::Dec(magnitude.to_string().len()),
@@ -17,11 +17,11 @@ pub(super) fn num_lit(magnitude: u32, sign: Sign) -> Term {
     .into()
 }
 
-pub(super) fn name(label: &str) -> Term {
+pub fn name(label: &str) -> Term {
     Subterm::Name(Name::from([label.to_string()])).into()
 }
 
-pub(super) fn cond_arm(condition: Term, body: Term) -> ChooseArm {
+pub fn cond_arm(condition: Term, body: Term) -> ChooseArm {
     ChooseArm {
         test: ChooseTest::Cond(condition),
         body,
@@ -29,7 +29,7 @@ pub(super) fn cond_arm(condition: Term, body: Term) -> ChooseArm {
 }
 
 /// The captured comment texts of one parse, in offset order.
-pub(super) fn comments_of(source: &str) -> Vec<String> {
+pub fn comments_of(source: &str) -> Vec<String> {
     let source = Source::inline(source);
     let (_, comments) = Module::parse_with_comments(&source).expect("fixture parses");
     comments
@@ -39,7 +39,7 @@ pub(super) fn comments_of(source: &str) -> Vec<String> {
 }
 
 /// The source text a label's span covers — what a report about it would underline.
-pub(super) fn spelled(label: &Label) -> String {
+pub fn spelled(label: &Label) -> String {
     let span = label.span().expect("a parsed label carries a span");
     span.source.text[span.start..span.end].to_string()
 }

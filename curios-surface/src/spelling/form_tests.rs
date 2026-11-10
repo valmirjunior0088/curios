@@ -1,6 +1,7 @@
 //! The forms a print writes: a foreign call, a tuple type, a successor and a numeral operand, a family's parameters and indices, a lambda and its body, a non-finite float, an append, and the bound a print keeps.
 
 use {
+    super::test_support::*,
     super::*,
     crate::ELIDED,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
@@ -142,7 +143,7 @@ fn spelling_of(names: &[(Global, Vec<Plicity>)]) -> Rc<Spelling> {
     }
     Rc::new(
         Spelling::default()
-            .with_short_names(Rc::new(build_shorten(&globals)))
+            .with_short_names(Rc::new(build_shorten(&[], &globals)))
             .with_nominal_plicities(Rc::new(plicities)),
     )
 }

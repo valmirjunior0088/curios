@@ -1,11 +1,11 @@
 //! The names a print spells: a binder suffixed beside a like-named global or label, a reader's own declaration claiming its bare name, suffixes counted across a scope, and a level a metavariable heads.
 
-use {super::*, curios_core::UniverseMetaId};
+use {super::test_support::*, super::*, curios_core::UniverseMetaId};
 
 #[test]
 fn a_binder_hinted_like_a_shortened_global_is_suffixed() {
     let global = Global::Authored(Qualifier::from(["main", "helper"]));
-    let shorten = build_shorten(std::slice::from_ref(&global));
+    let shorten = build_shorten(&[], std::slice::from_ref(&global));
     assert_eq!(shorten.get(&global).as_deref(), Some("helper"));
 
     let binder = Free::local(0, Some("helper"));
@@ -46,7 +46,7 @@ fn a_readers_own_declaration_claims_the_bare_name_before_its_environment() {
     let own = Global::Authored(Qualifier::from(["Holds"]));
     let nested = Global::Authored(Qualifier::from(["std", "Bool", "Holds"]));
 
-    let shorten = build_shorten_layered(std::slice::from_ref(&own), std::slice::from_ref(&nested));
+    let shorten = build_shorten(std::slice::from_ref(&own), std::slice::from_ref(&nested));
 
     assert_eq!(shorten.get(&own).as_deref(), Some("Holds"));
     assert_eq!(shorten.get(&nested).as_deref(), Some("Bool/Holds"));
@@ -89,7 +89,7 @@ fn a_nested_own_declaration_does_not_claim_its_bare_label() {
     let outer = Global::Authored(Qualifier::from(["std", "Vec", "nil"]));
 
     let own = [own_type, own_ctor];
-    let shorten = build_shorten_layered(&own, std::slice::from_ref(&outer));
+    let shorten = build_shorten(&own, std::slice::from_ref(&outer));
 
     // The type itself does sit at the unit root, so it takes its label and the environment's twin gives way.
     assert_eq!(shorten.get(&own_type).as_deref(), Some("Vec"));
@@ -133,7 +133,7 @@ fn like_named_binders_take_the_least_free_suffixes() {
             .chain([Mention::Declaration(taken)])
             .collect(),
     };
-    let shorten = build_shorten(std::slice::from_ref(&taken));
+    let shorten = build_shorten(&[], std::slice::from_ref(&taken));
     let rename = build_rename(
         &names,
         &Spelling::default().with_short_names(Rc::new(shorten)),

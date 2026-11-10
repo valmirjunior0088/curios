@@ -23,7 +23,7 @@ use {
     std::iter,
 };
 
-pub(super) fn parse_pub<'a>(state: ParserState<'a>) -> Parsed<'a, bool> {
+pub fn parse_pub<'a>(state: ParserState<'a>) -> Parsed<'a, bool> {
     parse_keyword("pub")
         .map(|()| true)
         .or(pure(false))
@@ -40,7 +40,7 @@ const DOC_BEFORE_TEST: &str =
 /// The head of a later member of an `and` group: its documentation comment, its `pub`, and the `and` itself.
 ///
 /// Recoverable when there is no documentation, since the absence of `and` is how a group ends. With one, the keyword after the block — past a `pub` — decides: `and` makes it this group's next member, so a failure past it is the diagnosis; another word makes it the next item's, so the group ends recoverably and the item loop reads the block again; anything else is nothing the block may document.
-pub(super) fn parse_and_head<'a, D: Grammar>(
+pub fn parse_and_head<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, (Option<Doc>, D::Fields, bool)> {
     parse_doc
@@ -80,7 +80,7 @@ fn documented<'a, T: 'a>(doc: &Option<Doc>, parser: impl Parser<'a, T> + 'a) -> 
 // A `test` declaration: `test name = body;`. `pub` is refused by name: a test's identifier is its report line, not an export.
 //
 // Like `satisfy`, `test` stays a contextual word everywhere else, and the label is exactly how far that reaches. The label's own refusal stays recoverable because the head is already eaten when this runs: its failure sits past the item loop's choice point, so uncaught it would abort the loop rather than end it, and `test(1)` could not be a program's tail. Past the label there is nothing to fall through to — `test name` is two names in a row and so no term at all — so the rest commits and reports its own fault.
-pub(super) fn parse_top_test<'a>(vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_test<'a>(vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         (match vis_pub {
             true => {
@@ -95,7 +95,7 @@ pub(super) fn parse_top_test<'a>(vis_pub: bool) -> impl Parser<'a, TopItem> {
 }
 
 /// A test past its word: its name, its value and the `;` after it, the value committed past the label.
-pub(super) fn parse_test_member<'a, D: Grammar>(fields: D::Fields) -> impl Parser<'a, TopTest<D>> {
+pub fn parse_test_member<'a, D: Grammar>(fields: D::Fields) -> impl Parser<'a, TopTest<D>> {
     move |state: ParserState<'a>| {
         D::declaring(
             fields.clone(),
@@ -111,7 +111,7 @@ pub(super) fn parse_test_member<'a, D: Grammar>(fields: D::Fields) -> impl Parse
 }
 
 /// One member of a `let` group past its word, or past the `and` of a later one: its name and its signature.
-pub(super) fn parse_let_member<'a, D: Grammar>(
+pub fn parse_let_member<'a, D: Grammar>(
     doc: Option<Doc>,
     fields: D::Fields,
     vis_pub: bool,
@@ -125,7 +125,7 @@ pub(super) fn parse_let_member<'a, D: Grammar>(
     })
 }
 
-pub(super) fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         parse_let_member::<Program>(doc.clone(), (), vis_pub)
             .flat_map(move |first| {
@@ -199,7 +199,7 @@ fn refuse_qualified_wire_name<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 }
 
 // One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Byte`/`Flt`/`Bytes`/`Handle` are literal keywords here, and `List(T)` and `Option(T)` take a leaf.
-pub(super) fn parse_wire_type<'a>(state: ParserState<'a>) -> Parsed<'a, WireType> {
+pub fn parse_wire_type<'a>(state: ParserState<'a>) -> Parsed<'a, WireType> {
     refuse_qualified_wire_name
         .and_keep(mark().and(parse_identifier.map_err(WIRE_TYPE_EXPECTED)))
         .flat_map(|(start, name)| match name {
@@ -351,7 +351,7 @@ fn parse_wire_word<'a>(state: ParserState<'a>) -> Parsed<'a, WireReturn> {
 }
 
 // `(T, T, ...) -> R`: the operands a row takes, none included, and what its call answers. An operand is its wire type alone and so is a bare result, while a braced result names its fields, because a row of two or more results reaches the guest as a tuple type whose labels it projects by.
-pub(super) fn parse_wire_signature<'a>(state: ParserState<'a>) -> Parsed<'a, WireSignature> {
+pub fn parse_wire_signature<'a>(state: ParserState<'a>) -> Parsed<'a, WireSignature> {
     parse_literal("(")
         .and_keep(sep_by0_trailing(parse_wire_type, || parse_literal(",")))
         .and_drop(parse_literal(")"))
@@ -362,12 +362,12 @@ pub(super) fn parse_wire_signature<'a>(state: ParserState<'a>) -> Parsed<'a, Wir
 }
 
 // `foreign name(T, ...) -> R;` — a function with no body, bound to an implementation where the program is linked. The list follows the name as a function definition's does, with no colon: a row's signature is not its type.
-pub(super) fn parse_top_foreign<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_foreign<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
     parse_foreign_member::<Program>(doc, (), vis_pub).map(TopItem::Foreign)
 }
 
 /// A foreign row past its word: its name, its signature and the `;` after it.
-pub(super) fn parse_foreign_member<'a, D: Grammar>(
+pub fn parse_foreign_member<'a, D: Grammar>(
     doc: Option<Doc>,
     fields: D::Fields,
     vis_pub: bool,
@@ -383,11 +383,7 @@ pub(super) fn parse_foreign_member<'a, D: Grammar>(
     )
 }
 
-pub(super) fn parse_top_mod<'a>(
-    doc: Option<Doc>,
-    vis_pub: bool,
-    start: Mark,
-) -> impl Parser<'a, TopItem> {
+pub fn parse_top_mod<'a>(doc: Option<Doc>, vis_pub: bool, start: Mark) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         parse_declared_label
             .flat_map(move |label| {
@@ -420,7 +416,7 @@ pub(super) fn parse_top_mod<'a>(
 }
 
 // Like `parse_name`, but additionally accepts an empty absolute path. The leading `/` is only consumed when followed by an identifier — so for `use /{X};` the path is empty-abs (consumes nothing) and `/` is left for `parse_use_group` to consume as its separator. Raw segments, and no trailing-whitespace consumption at all: the group separator follows the path tightly, so `use /std /{X};` is refused like any other whitespace inside a path.
-pub(super) fn parse_use_path<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
+pub fn parse_use_path<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
     spanned(
         take_exact("/")
             .and_keep(parse_identifier_raw)
@@ -467,7 +463,7 @@ pub(super) fn parse_use_path<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
     .parse(state)
 }
 
-pub(super) fn parse_group_item<'a>(state: ParserState<'a>) -> Parsed<'a, GroupItem> {
+pub fn parse_group_item<'a>(state: ParserState<'a>) -> Parsed<'a, GroupItem> {
     parse_keyword("mod")
         .and_keep(parse_declared_label)
         .map(GroupItem::Mod)
@@ -479,7 +475,7 @@ pub(super) fn parse_group_item<'a>(state: ParserState<'a>) -> Parsed<'a, GroupIt
 }
 
 // The `{` is the prefix that discriminates a group, so the rest commits and owns its fault. Left recoverable, a missing `}` would fail here and fall through to `parse_use_group`'s last alternative, whose committed refusal outranks the offset — so a reader who forgot one brace would be told at length how to write the group already on their screen, with the caret on the `/` before it.
-pub(super) fn parse_brace_group<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<GroupItem>> {
+pub fn parse_brace_group<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<GroupItem>> {
     parse_literal("{")
         .and_keep(commit(
             sep_by0_trailing(parse_group_item, || parse_literal(",")).and_drop(parse_literal("}")),
@@ -487,7 +483,7 @@ pub(super) fn parse_brace_group<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<Gr
         .parse(state)
 }
 
-pub(super) fn parse_use_group<'a>(state: ParserState<'a>) -> Parsed<'a, UseGroup> {
+pub fn parse_use_group<'a>(state: ParserState<'a>) -> Parsed<'a, UseGroup> {
     take_exact("/")
         .and_keep(parse_brace_group)
         .map(UseGroup::Named)
@@ -501,7 +497,7 @@ pub(super) fn parse_use_group<'a>(state: ParserState<'a>) -> Parsed<'a, UseGroup
 }
 
 // The span reaches back to the mark the dispatch took before `pub`, as a `mod`'s does, and closes on the `;` rather than on the whitespace after it: it is what a report about the whole declaration underlines.
-pub(super) fn parse_top_use<'a>(vis_pub: bool, start: Mark) -> impl Parser<'a, TopItem> {
+pub fn parse_top_use<'a>(vis_pub: bool, start: Mark) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         parse_use_path
             .and(parse_use_group)
@@ -521,7 +517,7 @@ pub(super) fn parse_top_use<'a>(vis_pub: bool, start: Mark) -> impl Parser<'a, T
 }
 
 // A payload binder, plain or `@` (implicit at the constructor function): `m : Nat` (named) or a bare type (positional), under either mark. A payload is no other grammar's, so `use` is refused where it stands.
-pub(super) fn parse_induct_payload_field<'a, D: Grammar>(
+pub fn parse_induct_payload_field<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, CasePayloadParam<D>> {
     mark()
@@ -547,9 +543,7 @@ pub(super) fn parse_induct_payload_field<'a, D: Grammar>(
 const CASE_STATES_ITS_PAYLOAD: &str =
     "a constructor is declared with its payload list, empty where it carries nothing: `| red()`";
 
-pub(super) fn parse_top_induct_case<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, TopCase<D>> {
+pub fn parse_top_induct_case<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, TopCase<D>> {
     parse_doc
         .flat_map(|doc| {
             // As `parse_and_head` decides: a bar makes the block this case's, `and` or `pub` hand it to the group's next member, and anything else is nothing it may document.
@@ -602,9 +596,7 @@ pub(super) fn parse_top_induct_case<'a, D: Grammar>(
 }
 
 // A declaration's parameter: `name : type`, `@name : type` to make it implicit at the type-constructor function (it is implicit at the value constructors either way — the mark's only job is the type constructor, where unmarked parameters are written out), or `use Concept(args)`, a premise the type names the dictionary of. A plain or `@` parameter is always named: the declaration's own types are what mention it.
-pub(super) fn parse_induct_param<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, FuncTypeParam<D>> {
+pub fn parse_induct_param<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, FuncTypeParam<D>> {
     mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
@@ -643,7 +635,7 @@ fn parse_declaration_params<'a, D: Grammar>(
 }
 
 // A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional, and an index is always written, so a mark is refused where it stands.
-pub(super) fn parse_induct_index<'a, D: Grammar>(
+pub fn parse_induct_index<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, (Option<String>, Term<D>)> {
     mark()
@@ -673,9 +665,7 @@ fn parse_representation_sort<'a, D: Grammar>(
 }
 
 // The head's arity after the `:` — either an index telescope landing in a sort, `(n : Nat) -> Prop`, or a bare sort, `Prop`. The sort is mandatory: an index telescope must state where it lands (`-> Sort`), and a sortless head is a parse error, never an implicit `Type`.
-pub(super) fn parse_induct_arity<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, InductArity<D>> {
+pub fn parse_induct_arity<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, InductArity<D>> {
     parse_literal("(")
         .and_keep(sep_by0_trailing(parse_induct_index, || parse_literal(",")))
         .and_drop(parse_literal(")"))
@@ -685,7 +675,7 @@ pub(super) fn parse_induct_arity<'a, D: Grammar>(
         .parse(state)
 }
 
-pub(super) fn parse_top_induct_body<'a, D: Grammar>(
+pub fn parse_top_induct_body<'a, D: Grammar>(
     doc: Option<Doc>,
     fields: D::Fields,
     vis_pub: bool,
@@ -751,7 +741,7 @@ pub(super) fn parse_top_induct_body<'a, D: Grammar>(
     }
 }
 
-pub(super) fn parse_top_induct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_induct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         parse_top_induct_body::<Program>(doc.clone(), (), vis_pub)
             .flat_map(|first| {
@@ -774,7 +764,7 @@ pub(super) fn parse_top_induct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Pars
 }
 
 /// A universe sort: exactly `Type` or `Prop`. The result sort of a struct or an inductive head is always one of these two — the only universes — so the sort position parses this targeted form rather than a generic `parse_term`. A generic term parser is both too loose and, for a struct, greedily eats the `{` opening the field block.
-pub(super) fn parse_sort<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_sort<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_prop.or(parse_type).parse(state)
 }
 
@@ -809,7 +799,7 @@ const CONCEPT_STATES_ITS_SORT: &str =
     "a concept states its sort before its fields: `concept Shape(A: Type): Type { … }`";
 
 // One structure of a `struct` item, after its `pub` and keyword: the name, the parameters, the result sort with its own `pub`, and the fields.
-pub(super) fn parse_struct_member<'a, D: Grammar>(
+pub fn parse_struct_member<'a, D: Grammar>(
     doc: Option<Doc>,
     fields: D::Fields,
     vis_pub: bool,
@@ -845,7 +835,7 @@ pub(super) fn parse_struct_member<'a, D: Grammar>(
 }
 
 // A `struct` item: one structure, or a `struct A … and B …` group whose fields name one another. Each member takes its own `pub`, before `struct` for the first and before `and` for the rest.
-pub(super) fn parse_top_struct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_struct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         parse_struct_member::<Program>(doc.clone(), (), vis_pub)
             .flat_map(|first| {
@@ -867,9 +857,7 @@ pub(super) fn parse_top_struct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Pars
 }
 
 // A concept field: `label : term`, the signature sugar `label(params) -> term` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar (mirroring top-level `let`'s function sugar) — or `use Concept(args)`, a superclass edge, whose type must be a concept application, checked at lowering. A method takes no mark.
-pub(super) fn parse_concept_field<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, ConceptField<D>> {
+pub fn parse_concept_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ConceptField<D>> {
     let method = parse_declared_label
         .and(
             parse_literal("(")
@@ -925,7 +913,7 @@ pub(super) fn parse_concept_field<'a, D: Grammar>(
 // One concept of a `concept` item, after its `pub` and keyword — the struct member's shape with concept fields.
 //
 // Like `test`, `concept` stays a contextual word everywhere else, and the label is how far that reaches: `concept Name` is two names in a row and so no term at all, so past the label the rest commits and reports its own fault, which is what lets the item loop recover past a broken concept.
-pub(super) fn parse_concept_member<'a, D: Grammar>(
+pub fn parse_concept_member<'a, D: Grammar>(
     doc: Option<Doc>,
     fields: D::Fields,
     vis_pub: bool,
@@ -963,7 +951,7 @@ pub(super) fn parse_concept_member<'a, D: Grammar>(
 }
 
 // A `concept` item: one concept, or a `concept A … and B …` group whose method types name one another's dictionaries. Each member takes its own `pub`, as a `struct` group's do.
-pub(super) fn parse_top_concept<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_concept<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         parse_concept_member::<Program>(doc.clone(), (), vis_pub)
             .flat_map(|first| {
@@ -985,7 +973,7 @@ pub(super) fn parse_top_concept<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Par
 }
 
 // A witness field: `label = term`, or the definition sugar `label(params) = term` — the tuple-field grammar with the label mandatory, kept as written in the AST node (`func_params`); `into_core` undoes the sugar.
-pub(super) fn parse_witness_field<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessField> {
+pub fn parse_witness_field<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessField> {
     parse_tuple_field_prefix
         // As in `parse_tuple_field`: past the `=` the implementation must follow, so a mistake in it is the diagnosis rather than the `}` the entry list falls back to.
         .and(commit(parse_term))
@@ -1067,7 +1055,7 @@ const WITNESS_NEVER_PUB: &str =
     "a witness is never `pub`: it is reached by resolution, not by name";
 
 // A witness declaration is anonymous: `satisfy Concept(args) { … }`, or a group `satisfy C(A) { … } and D(B) { … }` of witnesses that resolve through one another. The keyword is *not* a commit point: `satisfy` is contextual, so a program's tail may call a function of that name, and the dispatch keeps this arm recoverable for it. A witness has no `pub`, so neither does an `and` member, and one written here is refused by name as a test's is.
-pub(super) fn parse_top_witness<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
+pub fn parse_top_witness<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         (match vis_pub {
             true => fail(WITNESS_NEVER_PUB).boxed(),
@@ -1102,7 +1090,7 @@ const NOT_A_TOP_LEVEL_ITEM: &str = "Expected a top-level item: one of 'mod', 'us
 /// **A `pub` in front makes every arm commit, because it removes the fall-through those refusals stay recoverable for.** `pub` is a keyword, so no term begins with one: after reading it there is no tail for a failed item to become, and an unrecognized head after it names no item rather than ending the item loop. Leaving those arms recoverable would throw the diagnosis away where it matters most. A module recovers it — `Module::parse_items_end` re-runs the item parser once input remains — but an entrypoint's grammar runs `parse_term` instead, which tries a local `let` at the `pub`, fails one token in, and wins [`Parser::or`]'s furthest-failure tie-break over the real error the arm has just let backtrack. Every mistake inside a `pub let` in a program would then report `Expected keyword 'let', obtained 'pub'` against the `let`, and the refusals `parse_top_witness` and `parse_top_test` write by hand for a `pub` they cannot accept would never reach a reader.
 ///
 /// **A documentation comment in front makes every arm commit too, and for the same reason.** Once a `---` block is read there is nothing else it can be: a program's tail is not documented, an unrecognized head after it names no item, and the block itself is the diagnosis. The head is then read committed as well, so a block at the end of a file reports itself rather than the item loop's generic end.
-pub(crate) fn parse_top_item<'a>(state: ParserState<'a>) -> Parsed<'a, TopItem> {
+pub fn parse_top_item<'a>(state: ParserState<'a>) -> Parsed<'a, TopItem> {
     parse_doc
         .flat_map(|doc| {
             let head = parse_pub.and(parse_identifier_raw);

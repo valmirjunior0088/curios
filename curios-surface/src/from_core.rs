@@ -78,7 +78,7 @@ impl<'a> Frame<'a> {
 }
 
 /// How a form of core's one table of intrinsics ([`intrinsic_form`]) has its pieces written, as a tree of the dialect `D`: each term it holds, and each declaration of `/sys` it names. A report writes a Core term's for its reader ([`Frame`]); the printer writes the surface tree `/sys` is built as, each piece as it stands.
-pub(crate) trait Writer<T, D: Dialect = Program> {
+pub trait Writer<T, D: Dialect = Program> {
     fn operand(&self, operand: T) -> Option<Term<D>>;
 
     /// The declaration of `/sys` at `path` ([`intrinsic_global`]), as a name.
@@ -158,7 +158,7 @@ fn named(spelled: &str) -> Term {
 }
 
 /// [`named`], as the name itself.
-pub(crate) fn name_of(spelled: &str) -> Name {
+pub fn name_of(spelled: &str) -> Name {
     let (absolute, path) = match spelled.strip_prefix('/') {
         Some(path) => (true, path),
         None => (false, spelled),
@@ -870,7 +870,7 @@ fn written_field(field: &curios_core::Field, frame: Frame) -> Option<Field> {
 }
 
 /// An intrinsic as its one table writes it ([`intrinsic_form`]): a declaration of `/sys` named as `writer` names it, a literal as the grammar spells it.
-pub(crate) fn written_intrinsic<T, D: Dialect>(
+pub fn written_intrinsic<T, D: Dialect>(
     form: IntrinsicForm<T>,
     writer: &impl Writer<T, D>,
 ) -> Option<Term<D>> {

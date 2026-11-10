@@ -1924,16 +1924,16 @@ impl<D: CoreWritten> TreePrinter<D> {
 const CORE_TEXT: TreePrinter<CoreText> = TreePrinter { options: () };
 
 /// One item of a `.crsc`, as the formatter writes it.
-pub(crate) fn print_core_item(item: CoreItem) -> Printer {
+pub fn print_core_item(item: CoreItem) -> Printer {
     CORE_TEXT.core_item(item)
 }
 
 /// The entry a `.crsc` closes with, as the formatter writes it.
-pub(crate) fn print_core_entry(entry: CoreEntry) -> Printer {
+pub fn print_core_entry(entry: CoreEntry) -> Printer {
     CORE_TEXT.core_entry(entry)
 }
 
-pub(crate) fn print_term(term: Term) -> Printer {
+pub fn print_term(term: Term) -> Printer {
     PROGRAM.term(term)
 }
 
@@ -1995,7 +1995,7 @@ fn print_top_mod(item: TopMod) -> Printer {
 /// Which imports read as one paragraph is the author's to say: a facade's `mod x; use x/{…}` stacks, and the file's imports that follow its last facade stand apart from it, which no rule over the two items alone can tell from the facade's own lines.
 ///
 /// Shared with [`crate::format::emit`], which prints a *file*'s items, so the two cannot disagree about what a module looks like.
-pub(crate) fn between_items(
+pub fn between_items(
     previous: Option<&TopItem>,
     next: &TopItem,
     written_apart: Option<bool>,
@@ -2015,7 +2015,7 @@ pub(crate) fn between_items(
     }
 }
 
-pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
+pub fn print_module_items(items: Vec<TopItem>) -> Printer {
     let mut parts = Vec::with_capacity(items.len() * 2);
     let mut previous: Option<&TopItem> = None;
 
@@ -2126,7 +2126,7 @@ fn print_witness_entry(field: WitnessField) -> Printer {
     }
 }
 
-pub(crate) fn print_top_item(item: TopItem) -> Printer {
+pub fn print_top_item(item: TopItem) -> Printer {
     match item {
         TopItem::Mod(m) => print_top_mod(m),
         TopItem::Use(u) => print_top_use(u),

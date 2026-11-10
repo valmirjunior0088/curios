@@ -143,7 +143,7 @@ fn render(printer: Printer, original: &Original<'_>) -> String {
 /// The parsed file as one document: items separated by exactly one blank line — except a `use` following a `use` or a `mod X;`, which keeps the separation it was written with, stacked as the corpus writes its import heads and its `mod X; use X/{…}` pairs, or one blank line apart however many were written — and the tail last.
 ///
 /// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately would give each its own renderer, and a comment belonging to neither would have to be spliced in as text by this function. Nothing here handles comments.
-pub(crate) fn emit(input: &FormatInput, original: &Original<'_>) -> String {
+pub fn emit(input: &FormatInput, original: &Original<'_>) -> String {
     let mut parts: Vec<Printer> = Vec::new();
     let mut previous: Option<&TopItem> = None;
 

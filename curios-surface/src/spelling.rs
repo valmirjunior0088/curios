@@ -35,7 +35,7 @@ use {
 //
 // axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — whatever axis (b) spells it as — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
-// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility. Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. A dump writes every global by its absolute path, as Core text proper does. Renders without a reader — the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead (built by `build_shorten` over `Definitions::module_symbols`), each qualified path's shortest unambiguous `/`-suffix, through `build_shorten_layered` where the unit a reader wrote is known, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility. Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. A dump writes every global by its absolute path, as Core text proper does. Renders without a reader — the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead ([`Shorten`], over the symbols of the unit a reader wrote and then of the units around it, [`Spelling::with_lexicons`]), each qualified path's shortest unambiguous `/`-suffix, the reader's unit first, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; `wonder --stage`'s dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
@@ -670,24 +670,6 @@ impl Shorten {
     }
 }
 
-/// [`Shorten`] over `symbols` alone, with no reader's tier.
-pub fn build_shorten(symbols: &[Global]) -> Shorten {
-    build_shorten_layered(&[], symbols)
-}
-
-/// [`Shorten`] for a render a reader looks at from inside `own`'s unit, over `predecessors`, the globals around it; a global listed in both is the reader's.
-pub fn build_shorten_layered(own: &[Global], predecessors: &[Global]) -> Shorten {
-    let own = Symbols::of(own.iter().copied());
-    let around = Symbols::of(
-        predecessors
-            .iter()
-            .copied()
-            .filter(|name| !own.contains(name)),
-    );
-
-    Shorten::over(Rc::new(own), [Rc::new(around)])
-}
-
 /// Where the identities a render mints for the binders it opens begin: above every index a compilation mints, which counts up from zero one binder at a time and does not reach half of a `u64` in any computation that ends.
 const PRINTED: u64 = 1 << 63;
 
@@ -733,7 +715,7 @@ impl Minting {
     }
 
     /// Allow a render of `terms` together their child documents, as [`Minting::allow`] allows one term's.
-    pub(crate) fn allow_all(&self, terms: &[Term]) {
+    pub fn allow_all(&self, terms: &[Term]) {
         let nodes = terms
             .iter()
             .map(|term| u64::try_from(term.distinct_nodes()).unwrap_or(u64::MAX))
@@ -780,7 +762,7 @@ impl Minting {
     }
 
     /// The label the next binder a render opens is printed under: the identity minted from where the render meets it and the hint its scope remembers — none for a `constant` scope, which never had binders written.
-    pub(crate) fn label(&self, label: Option<&Label>) -> Free {
+    pub fn label(&self, label: Option<&Label>) -> Free {
         let name = self.local(label.and_then(Label::hint_symbol));
         self.record(&name);
         name
@@ -2415,7 +2397,7 @@ fn module_written(module: &Qualifier, spelling: &Spelling) -> CoreValue<Shown> {
 }
 
 /// The concepts a record's superclass edges reach, read off each edge's type, as a concept's are where its fields elaborate.
-pub(crate) fn concept_supers_read_off(name: Global, record: &StructDecl) -> Vec<Global> {
+pub fn concept_supers_read_off(name: Global, record: &StructDecl) -> Vec<Global> {
     let mut parameters = Vec::new();
     let mut cursor = record.arity.cursor();
     while cursor.entry().is_some() {
@@ -2496,3 +2478,5 @@ fn definition_fields(
 mod form_tests;
 #[cfg(test)]
 mod spelling_tests;
+#[cfg(test)]
+mod test_support;

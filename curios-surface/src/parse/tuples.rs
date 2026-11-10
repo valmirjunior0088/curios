@@ -19,7 +19,7 @@ use {
     std::iter,
 };
 
-pub(super) fn parse_intrinsic<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_intrinsic<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_bool_intrinsic
         // A numeral's dangling dot is refused ahead of both numeral forms, and a number reads its decimal form first: `5.0` is a `Flt`, not the integer `5` projected.
         .or(refuse_dangling_dot)
@@ -33,7 +33,7 @@ pub(super) fn parse_intrinsic<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<
         .parse(state)
 }
 
-pub(super) fn parse_parens<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_parens<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_literal("(")
         .and_keep(parse_term::<D>)
         .and_drop(parse_literal(")"))
@@ -41,16 +41,14 @@ pub(super) fn parse_parens<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
 }
 
 // A tuple type's field: [`parse_field_member`], and a mark refused where none of its forms read the field.
-pub(super) fn parse_tuple_type_field<'a, D: Grammar>(
+pub fn parse_tuple_type_field<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, TupleTypeParam<D>> {
     parse_field_member.or(refuse_field_mark).parse(state)
 }
 
 // A Σ-type / struct-declaration field, past whatever mark its site takes: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
-pub(super) fn parse_field_member<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, TupleTypeParam<D>> {
+pub fn parse_field_member<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, TupleTypeParam<D>> {
     parse_label
         .and(
             parse_literal("(")
@@ -118,7 +116,7 @@ fn refuse_keyword_field_label<'a, D: Grammar>(
         .parse(state)
 }
 
-pub(super) fn parse_tuple_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_tuple_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_literal("{")
         .and_keep(sep_by0_trailing(parse_tuple_type_field, || {
             parse_literal(",")
@@ -137,7 +135,7 @@ pub(super) fn parse_tuple_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed
 type TupleFieldPrefix<D> = (String, Option<Vec<FieldSugarParam<D>>>);
 
 // The committing prefix of a labeled tuple/struct-literal field: `label =` or the definition sugar `label(params) =`. It fails recoverably, so a positional field that merely starts with an identifier or an application backtracks cleanly; the `=` is guarded against `==` and `=>` via `not_ahead`, mirroring the bind arm's idiom, since `(a == b, 2)` is a positional field whose value begins with a name and must not be read as the label `a`. The sugar's list is a call's as far as its closing parenthesis — `f(@A, use dict, x)` is both — so a member the sugar refuses is held until the `=` and raised past it.
-pub(super) fn parse_tuple_field_prefix<'a, D: Grammar>(
+pub fn parse_tuple_field_prefix<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, TupleFieldPrefix<D>> {
     parse_identifier
@@ -167,9 +165,7 @@ pub(super) fn parse_tuple_field_prefix<'a, D: Grammar>(
 }
 
 // A tuple-literal / struct-literal field: `label = value`, the definition sugar `label(params) = value` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar — or a positional value.
-pub(super) fn parse_tuple_field<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, TupleField<D>> {
+pub fn parse_tuple_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, TupleField<D>> {
     parse_tuple_field_prefix
         // Past a guarded `=` the value must follow: no positional field can hold one at its top level, so the field owns the diagnosis rather than falling back to the positional reading and leaving the enclosing `}` or `)` to complain at the label.
         .and(commit(parse_term::<D>))
@@ -186,7 +182,7 @@ pub(super) fn parse_tuple_field<'a, D: Grammar>(
         .parse(state)
 }
 
-pub(super) fn parse_tuple<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_tuple<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     // Two committing prefixes distinguish a tuple literal from a parenthesized term: a first field followed by a comma (`(x,` / `(a = 1,`), or a named first field alone (`(a = 1)` / `(f(x) = e)` — the `=` already disambiguates, so the one-element form needs no trailing comma).
 
     parse_literal("(")
@@ -211,9 +207,7 @@ pub(super) fn parse_tuple<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
 }
 
 // A struct-literal entry: a `..base` spread (no term begins with `..` — a leading-dot float has a single dot — so the prefix commits), a `use <term>` fill for a concept's `use`-marked field (the call-site argument form — a mark can never begin a field label or value), or a field, plain or under `@`: after the mark comes the field as a plain one is written, `label = value` or the value alone, and `@_` holds a hidden field's place. Spread position and multiplicity are core elaboration's job.
-pub(super) fn parse_struct_entry<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, StructLitEntry<D>> {
+pub fn parse_struct_entry<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, StructLitEntry<D>> {
     parse_literal("..")
         .and_keep(parse_term::<D>)
         .map(StructLitEntry::Spread)
@@ -237,7 +231,7 @@ pub(super) fn parse_struct_entry<'a, D: Grammar>(
 }
 
 // A struct literal: `Name { … }` or `Name(args) { … }`, where a list with nothing written, `Name() { … }`, is kept as the application it is and not read as the bare name. The trailing `{` is the commit point — it distinguishes the literal from a bare name / name-application (no brace) and from a Σ-type `{ x : A }` (no head name), so there is no grammar conflict. Plain entries reuse the tuple-value grammar (`= value` or positional) and `use <term>` fills a concept's `use`-marked field; the head's arguments are a call's, marks included, since an applied head is an application of the type former.
-pub(super) fn parse_struct_lit<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_struct_lit<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_name
         .and(
             parse_literal("(")

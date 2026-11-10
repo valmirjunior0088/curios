@@ -15,55 +15,55 @@ use {
 };
 
 /// What refuses a binder after `use` where the site declares.
-pub(super) const USE_HAS_NO_BINDER: &str = "a `use` member has no binder: a witness is reached by resolution, never by name, so the premise is written alone — `use Show(A)`";
+pub const USE_HAS_NO_BINDER: &str = "a `use` member has no binder: a witness is reached by resolution, never by name, so the premise is written alone — `use Show(A)`";
 
 /// What refuses a binder after `use` where the site binds.
-pub(super) const USE_BINDS_NOTHING: &str = "a `use` member has no binder: a witness is reached by resolution, never by name, so the member is written `use _`";
+pub const USE_BINDS_NOTHING: &str = "a `use` member has no binder: a witness is reached by resolution, never by name, so the member is written `use _`";
 
 /// What refuses `use _` where the site declares.
-pub(super) const USE_PLACE_STATES_NO_TYPE: &str =
+pub const USE_PLACE_STATES_NO_TYPE: &str =
     "`use _` holds a place and states no type: a signature writes the premise — `use Show(A)`";
 
 /// What refuses a plain or `@` member written as its type alone in a definition's telescope.
-pub(super) const DEFINITION_NAMES_ITS_MEMBERS: &str = "a definition names its plain and `@` parameters: write `x: T` or `@x: T`, with `_` in the name's place where the body never names it";
+pub const DEFINITION_NAMES_ITS_MEMBERS: &str = "a definition names its plain and `@` parameters: write `x: T` or `@x: T`, with `_` in the name's place where the body never names it";
 
 /// What refuses a type after `use` where the site binds.
-pub(super) const BINDER_STATES_NO_USE_TYPE: &str = "a `use` member is written `use _` here: its type is the expected function type's to state, and a function that must state one is a `let` with a telescope";
+pub const BINDER_STATES_NO_USE_TYPE: &str = "a `use` member is written `use _` here: its type is the expected function type's to state, and a function that must state one is a `let` with a telescope";
 
 /// What refuses a type after `@` where the site binds.
-pub(super) const BINDER_FOLLOWS_IMPLICIT: &str =
+pub const BINDER_FOLLOWS_IMPLICIT: &str =
     "after `@` a binder is read here, not a type: write `@_`, or `@_: T` to state the type";
 
 /// What refuses a `use` member among a constructor's payload.
-pub(super) const PAYLOAD_TAKES_NO_USE: &str =
+pub const PAYLOAD_TAKES_NO_USE: &str =
     "a constructor's payload takes no `use` member: a payload is plain or `@`";
 
 /// What refuses a mark on an index.
-pub(super) const INDEX_TAKES_NO_MARK: &str =
+pub const INDEX_TAKES_NO_MARK: &str =
     "an index takes no mark: a family's indices are always written";
 
 /// What refuses a `use` member among a structure's fields.
-pub(super) const STRUCT_FIELD_TAKES_NO_USE: &str = "a structure's field takes no `use` member: its premise is a `use` parameter — `struct S(K: Type, use C(K))` — and a field is plain or `@`";
+pub const STRUCT_FIELD_TAKES_NO_USE: &str = "a structure's field takes no `use` member: its premise is a `use` parameter — `struct S(K: Type, use C(K))` — and a field is plain or `@`";
 
 /// What refuses an `@` member among a concept's fields.
-pub(super) const CONCEPT_FIELD_TAKES_NO_IMPLICIT: &str =
+pub const CONCEPT_FIELD_TAKES_NO_IMPLICIT: &str =
     "a concept's field takes no `@`: it is a method, or a superclass written `use Concept(args)`";
 
 /// What refuses a mark on a field of a tuple type.
-pub(super) const TUPLE_FIELD_TAKES_NO_MARK: &str = "a tuple type's field takes no mark: a hidden field is a structure's — `struct S: Type { n: Nat, @Holds(0 < n) }`";
+pub const TUPLE_FIELD_TAKES_NO_MARK: &str = "a tuple type's field takes no mark: a hidden field is a structure's — `struct S: Type { n: Nat, @Holds(0 < n) }`";
 
 /// What refuses a mark on a field of a struct pattern.
-pub(super) const STRUCT_PATTERN_TAKES_NO_MARK: &str = "a struct pattern takes no mark: a hidden field takes no position, and one that has a label is read by it — `label = binder`";
+pub const STRUCT_PATTERN_TAKES_NO_MARK: &str = "a struct pattern takes no mark: a hidden field takes no position, and one that has a label is read by it — `label = binder`";
 
 /// What refuses a `use` member in a constructor pattern.
-pub(super) const PATTERN_TAKES_NO_USE: &str =
+pub const PATTERN_TAKES_NO_USE: &str =
     "a pattern takes no `use` member: a constructor's payload is plain or `@`";
 
 /// A member a site read, or the report of the form it read in that member's place.
-pub(super) type Read<T> = Result<T, ParserError>;
+pub type Read<T> = Result<T, ParserError>;
 
 /// The mark a member or an argument is written under: `use`, `@`, or nothing.
-pub(super) fn parse_mark<'a>(state: ParserState<'a>) -> Parsed<'a, Plicity> {
+pub fn parse_mark<'a>(state: ParserState<'a>) -> Parsed<'a, Plicity> {
     parse_keyword("use")
         .map(|()| Plicity::Witness)
         .or(parse_literal("@").map(|()| Plicity::Implicit))
@@ -72,7 +72,7 @@ pub(super) fn parse_mark<'a>(state: ParserState<'a>) -> Parsed<'a, Plicity> {
 }
 
 /// The report that the text from `start` to here breaks `rule`, as the read a site holds in a member's place.
-pub(super) fn refused<'a, T: 'a>(
+pub fn refused<'a, T: 'a>(
     start: &Mark,
     rule: &'static str,
 ) -> impl Parser<'a, Read<T>> + use<'a, T> {
@@ -80,7 +80,7 @@ pub(super) fn refused<'a, T: 'a>(
 }
 
 /// The members a site read, or the first report among them raised as the site's own. Called past the token that makes the text this site's, which is what lets the report commit.
-pub(super) fn members<'a, T: 'a>(read: Vec<Read<T>>) -> impl Parser<'a, Vec<T>> {
+pub fn members<'a, T: 'a>(read: Vec<Read<T>>) -> impl Parser<'a, Vec<T>> {
     move |state: ParserState<'a>| {
         (match read.into_iter().collect::<Result<Vec<_>, _>>() {
             Ok(members) => pure(members).boxed(),
@@ -91,7 +91,7 @@ pub(super) fn members<'a, T: 'a>(read: Vec<Read<T>>) -> impl Parser<'a, Vec<T>> 
 }
 
 /// One read raised where it stands, for a site no other grammar reads.
-pub(super) fn raised<'a, T: 'a>(read: impl Parser<'a, Read<T>>) -> impl Parser<'a, T> {
+pub fn raised<'a, T: 'a>(read: impl Parser<'a, Read<T>>) -> impl Parser<'a, T> {
     move |state: ParserState<'a>| {
         read.flat_map(|read| match read {
             Ok(member) => pure(member).boxed(),
@@ -102,7 +102,7 @@ pub(super) fn raised<'a, T: 'a>(read: impl Parser<'a, Read<T>>) -> impl Parser<'
 }
 
 /// Whether a member ends here: at the separator, or at the bracket that closes its list.
-pub(super) fn member_ends<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
+pub fn member_ends<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     look_ahead(
         parse_literal(",")
             .or(parse_literal(")"))
@@ -122,7 +122,7 @@ fn parse_wildcard<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 }
 
 /// What follows `use` where the site declares: the premise's type. A binder before it, or a bare `_` in its place, is read whole and reported; `start` is where the mark was written.
-pub(super) fn parse_premise<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read<Term<D>>> {
+pub fn parse_premise<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read<Term<D>>> {
     let (bound, placed) = (start.clone(), start);
 
     move |state: ParserState<'a>| {
@@ -139,7 +139,7 @@ pub(super) fn parse_premise<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read
 }
 
 /// What follows `use` where the site declares and its binder may be read by a later member: in Core text the word it binds and its type, `use d: Show(A)`, or its type alone; in a program its type alone, as [`parse_premise`] reads it.
-pub(super) fn parse_named_premise<'a, D: Grammar>(
+pub fn parse_named_premise<'a, D: Grammar>(
     start: Mark,
 ) -> impl Parser<'a, Read<(Option<String>, Term<D>)>> {
     move |state: ParserState<'a>| {
@@ -157,7 +157,7 @@ pub(super) fn parse_named_premise<'a, D: Grammar>(
 }
 
 /// What follows `use` where the site binds: `_`, the member's place. A name or a type there is read whole and reported; `start` is where the mark was written.
-pub(super) fn parse_place<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read<()>> {
+pub fn parse_place<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read<()>> {
     let (named, typed) = (start.clone(), start);
 
     move |state: ParserState<'a>| {

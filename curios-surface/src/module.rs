@@ -560,17 +560,17 @@ impl Entrypoint {
 }
 
 /// The formatter's parse product, one grammar for both file kinds: top-level items followed by an *optional* tail expression — a program has one, a prelude-style module file does not. The item/tail interlock is the entrypoint grammar's own: a top-level `let` requires its annotation, so an unannotated binding falls through to the tail as a local `let` term.
-pub(crate) struct FormatInput {
-    pub(crate) module: Module,
+pub struct FormatInput {
+    pub module: Module,
     /// Each item's span, parallel to `module.items` — the items themselves carry none.
-    pub(crate) item_spans: Vec<Span>,
+    pub item_spans: Vec<Span>,
     /// The tail expression when the file is a program; its own term span carries its position.
-    pub(crate) tail: Option<Term>,
+    pub tail: Option<Term>,
     /// Every comment the parse consumed, ascending.
-    pub(crate) comments: Vec<Span>,
+    pub comments: Vec<Span>,
 }
 
-pub(crate) fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, ParserError> {
+pub fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, ParserError> {
     clear_comments();
     curios_profile::profile!("parse", group = "format");
     let (module, item_spans, tail) = run_parser(

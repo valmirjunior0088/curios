@@ -450,14 +450,14 @@ fn parse_core_entry<'a>(state: ParserState<'a>) -> Parsed<'a, Option<CoreEntry>>
 }
 
 /// What the formatter reads a `.crsc` as: its file, each item's span parallel to its items, and every comment the parse consumed, ascending.
-pub(crate) struct CoreFormatInput {
+pub struct CoreFormatInput {
     pub file: CoreFile,
     pub item_spans: Vec<Span>,
     pub comments: Vec<Span>,
 }
 
 /// `source` read whole as a file of Core text, for the formatter: each item's span kept beside it, as a module's are ([`parse_for_format`](crate::parse_for_format)), and the comments the parse consumed.
-pub(crate) fn parse_core_for_format(source: &Arc<Source>) -> Result<CoreFormatInput, ParserError> {
+pub fn parse_core_for_format(source: &Arc<Source>) -> Result<CoreFormatInput, ParserError> {
     clear_comments();
     let (items, entry) = run_parser(
         parse_file_head

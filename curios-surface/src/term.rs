@@ -115,7 +115,7 @@ impl<D: Dialect> TupleTypeParam<D> {
 }
 
 /// The Π-type a signature written `label(params) -> output` stands for, placed from its label to its result type where both were written: a report about the type stands on the signature its reader wrote, as one about a plain field's type stands on that type.
-pub(crate) fn signature_type<D: Dialect>(
+pub fn signature_type<D: Dialect>(
     label: Option<&Label>,
     params: &[FuncTypeParam<D>],
     output: &Term<D>,

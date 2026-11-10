@@ -1,9 +1,9 @@
 //! Core text proper: each node in its form, under the decorator stating every field its form does not build.
 
 use {
+    super::*,
     crate::{
-        CoreFile, CoreText, ReadError, Refusal, Spellable, Spelling, parse_whole_term,
-        term_to_core, to_core,
+        CoreFile, CoreText, ReadError, Refusal, Spellable, Spelling, parse_whole_term, to_core,
     },
     curios_common::{Qualifier, Source},
     curios_core::{
@@ -15,6 +15,11 @@ use {
     curios_num::Floating,
     std::rc::Rc,
 };
+
+/// The term `term` writes, read on its own.
+fn term_to_core(term: &crate::Term<CoreText>) -> Result<Term, ReadError> {
+    core_read(term, &mut Reader::new(None))
+}
 
 /// `term` as Core text proper writes it.
 fn written(term: &Term) -> String {

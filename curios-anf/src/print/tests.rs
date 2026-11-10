@@ -517,7 +517,7 @@ fn a_reached_row_pulls_in_the_rows_its_field_shapes_name() {
     assert!(printed.contains("product ~p2$Outer(held:product/~p1)"));
 }
 
-/// A field name two reached rows share cannot name a field on its own, so a projection through it takes its schema — `build_shorten`'s shortest-unambiguous rule, applied to fields.
+/// A field name two reached rows share cannot name a field on its own, so a projection through it takes its schema — `curios_surface::Shorten`'s shortest-unambiguous rule, applied to fields.
 #[test]
 fn a_projection_qualifies_a_field_name_two_reached_rows_share() {
     let mut builder = Builder::new();

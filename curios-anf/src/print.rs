@@ -753,7 +753,7 @@ impl Printer<'_, '_, '_, '_> {
         }
     }
 
-    /// The field of a projection. Nothing else on the line names the schema, so a name some other reached row also carries takes its own — `build_shorten`'s shortest-unambiguous rule, applied to fields.
+    /// The field of a projection. Nothing else on the line names the schema, so a name some other reached row also carries takes its own — `curios_surface::Shorten`'s shortest-unambiguous rule, applied to fields.
     fn field(&self, schema: ProductId, index: u32) -> String {
         let label = self.field_label(schema, index);
         if self.reach.ambiguous_fields.contains(&label) {

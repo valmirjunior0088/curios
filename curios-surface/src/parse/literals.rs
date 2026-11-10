@@ -12,21 +12,21 @@ use {
     },
 };
 
-pub(super) fn parse_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_keyword("Type")
         .map(|()| Subterm::Type)
         .map(Into::into)
         .parse(state)
 }
 
-pub(super) fn parse_prop<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_prop<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_keyword("Prop")
         .map(|()| Subterm::Prop)
         .map(Into::into)
         .parse(state)
 }
 
-pub(super) fn parse_caller_sort<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_caller_sort<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_keyword("Sort")
         .map(|()| Subterm::Sort)
         .map(Into::into)
@@ -39,7 +39,7 @@ const SIGN_LEADS_A_LITERAL: &str = "expected a numeral, `inf.0` or `nan.0` after
 // A numeric literal: an optional sign glued to its magnitude. The sign must touch the magnitude; `- 42` (spaced) is the subtraction operator, not a negative literal.
 //
 // The sign is read once, here, so what stands behind one is this production's to say. Read by each magnitude for itself, a sign that touched none failed three alternatives at one offset, and the report was the first one's word: `Expected 'inf.0'`.
-pub(super) fn parse_number<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_number<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     let flt = |value| Term::from(Subterm::Literal(Literal::Flt(value)));
 
     mark()
@@ -86,7 +86,7 @@ fn parse_num_lit<'a, D: Grammar>(sign: Sign) -> impl Parser<'a, Term<D>> {
 }
 
 // `5.` refused by the rule, rather than read as the numeral `5` — or the name `5`, since a digit is an identifier character — with a `.` left over for the enclosing form to report as the token it did not expect. A dot followed by a digit is a float literal; anything else after a numeral's dot is nothing the grammar spells. Tried before the float and the numeral, since a committed refusal that ties a caught sibling on offset loses [`Parser::or`]'s tie-break to it, and the dot is consumed so the failure is past the choice point, with the caret on it.
-pub(super) fn refuse_dangling_dot<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn refuse_dangling_dot<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     take_while(|char: char| char.is_ascii_digit())
             .flat_map(|digits| match digits.is_empty() {
                 true => fail("expected a numeral").boxed(),
@@ -114,7 +114,7 @@ fn not_ahead_digit<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 }
 
 // A character literal is a monomorphic, proof-certified `/std/Char` value.
-pub(super) fn parse_char_lit<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_char_lit<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     take_exact("'")
         .and_keep(parse_char_value)
         .and_drop(take_exact("'"))
@@ -124,7 +124,7 @@ pub(super) fn parse_char_lit<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'
         .parse(state)
 }
 
-pub(super) fn parse_usize_raw<'a>(state: ParserState<'a>) -> Parsed<'a, usize> {
+pub fn parse_usize_raw<'a>(state: ParserState<'a>) -> Parsed<'a, usize> {
     take_while(|char: char| char.is_ascii_digit())
         .flat_map(|digits| match digits.parse::<usize>() {
             Ok(value) => pure(value).boxed(),
@@ -134,7 +134,7 @@ pub(super) fn parse_usize_raw<'a>(state: ParserState<'a>) -> Parsed<'a, usize> {
 }
 
 // `tag` takes the digit count, so the written width rides along with the base — see [`Radix`].
-pub(super) fn parse_radix<'a>(
+pub fn parse_radix<'a>(
     prefix: &'static str,
     radix: u32,
     tag: fn(usize) -> Radix,
@@ -155,7 +155,7 @@ pub(super) fn parse_radix<'a>(
     }
 }
 
-pub(super) fn parse_nat_digits<'a>(state: ParserState<'a>) -> Parsed<'a, NatLiteral> {
+pub fn parse_nat_digits<'a>(state: ParserState<'a>) -> Parsed<'a, NatLiteral> {
     parse_radix("0x", 16, Radix::Hex)
         .or(parse_radix("0b", 2, Radix::Bin))
         .or(
@@ -264,7 +264,7 @@ fn decimal_parts(digits: &str) -> Option<(Natural, i32)> {
     ))
 }
 
-pub(super) fn parse_string_chunk<'a>(state: ParserState<'a>) -> Parsed<'a, String> {
+pub fn parse_string_chunk<'a>(state: ParserState<'a>) -> Parsed<'a, String> {
     take_while(|char| char != '\\' && char != '"' && char != '\n')
         .flat_map(|chunk| match chunk.is_empty() {
             true => fail("empty chunk").boxed(),
@@ -319,7 +319,7 @@ fn parse_unicode_escape<'a>(state: ParserState<'a>) -> Parsed<'a, char> {
     )).parse(state)
 }
 
-pub(super) fn parse_char_value<'a>(state: ParserState<'a>) -> Parsed<'a, char> {
+pub fn parse_char_value<'a>(state: ParserState<'a>) -> Parsed<'a, char> {
     take_exact("\\")
         .and_keep(
             take_exact("n")
@@ -342,7 +342,7 @@ pub(super) fn parse_char_value<'a>(state: ParserState<'a>) -> Parsed<'a, char> {
         ).parse(state)
 }
 
-pub(super) fn parse_string_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_string_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     take_exact("\"")
         .and_keep(many0(parse_string_chunk))
         .and_drop(take_exact("\"").or(refuse_line_break_in_string))
@@ -386,9 +386,7 @@ fn parse_block_piece<'a>(state: ParserState<'a>) -> Parsed<'a, BlockPiece<'a>> {
 /// The rules the body is read under, in order: the leading whitespace the non-blank lines and the closer's line share is removed from each line, so a block reads at the indentation of the code around it and content indented past the closer keeps the difference; a whitespace-only line becomes an empty line and takes no part in that prefix; trailing whitespace is stripped from every line; then the escapes stand, translated after the stripping so `\u{20}` spells a space the stripping would take, and a backslash before a newline joins the two lines. The escapes are the one-line form's — a `"` inside is itself and three quotes are spelled `\"""` — so the two spellings differ in nothing but the newlines and the indentation.
 ///
 /// Refusals are the delimiters': an opener followed by anything but a newline, and a closer that is not alone on its line, each named from where it stands.
-pub(super) fn parse_block_string_literal<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, Term<D>> {
+pub fn parse_block_string_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     mark()
         .flat_map(|open| {
             take_exact("\"\"\"")
@@ -523,7 +521,7 @@ fn parse_bytes_entry<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Bytes
 }
 
 // A `Bytes` literal `x[0x48, b, ..rest]` (empty `x[]`) — the packed sibling of the `List` literal, told apart by the letter glued to the bracket. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. The glue is what keeps `x` usable as an ordinary binder — `x [1]` is the binder `x` followed by a list, not a `Bytes` literal — and an identifier merely ending in the letter never starts one, since the name parser reaches `nx[…]` first.
-pub(super) fn parse_bytes_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_bytes_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_literal("x[")
         // The glued letter and bracket are the discriminating prefix — `x [1]` is a binder and a list, `x[1]` can be nothing but this — so what follows is the diagnosis. Left to backtrack, a bad entry would send the grammar back to reading the letter as a bare name, which succeeds and throws the entry's report away: the enclosing form's own complaint would then stand at the bracket, asking for the `;` or `)` that follows the literal rather than naming the entry or the missing `]`. The `List` sibling below needs none of this only because nothing else consumes a bare `[`.
         .and_keep(commit(
@@ -535,7 +533,7 @@ pub(super) fn parse_bytes_literal<'a, D: Grammar>(state: ParserState<'a>) -> Par
 }
 
 // One entry of a `List` literal: a `..` spread contributing a whole list, or a plain element. Unlike a `Bytes` literal, brackets and commas delimit, so spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
-pub(super) fn parse_list_entry<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ListEntry<D>> {
+pub fn parse_list_entry<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ListEntry<D>> {
     parse_literal("..")
         .and_keep(parse_term::<D>)
         .map(ListEntry::Spread)
@@ -544,7 +542,7 @@ pub(super) fn parse_list_entry<'a, D: Grammar>(state: ParserState<'a>) -> Parsed
 }
 
 // An `List` literal `[e0, ..rest, e1, …]` (empty `[]`) — the native contiguous-sequence sibling of the packed binary literals. Builds a `Literal::List` directly (the element type is an implicit the literal cannot name; core elaboration infers it); spreads splice in place, any position and count.
-pub(super) fn parse_list_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_list_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_literal("[")
         .and_keep(sep_by0_trailing(parse_list_entry, || parse_literal(",")))
         .and_drop(parse_literal("]"))
@@ -553,7 +551,7 @@ pub(super) fn parse_list_literal<'a, D: Grammar>(state: ParserState<'a>) -> Pars
         .parse(state)
 }
 
-pub(super) fn parse_bool_intrinsic<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+pub fn parse_bool_intrinsic<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_keyword("false")
         .map(|()| Subterm::Literal(Literal::Bool(false)))
         .or(parse_keyword("true").map(|()| Subterm::Literal(Literal::Bool(true))))

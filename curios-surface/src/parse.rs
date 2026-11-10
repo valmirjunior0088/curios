@@ -15,13 +15,14 @@ use match_expr::*;
 
 mod expr;
 use expr::*;
-pub(crate) use expr::{op_precedence, parse_term};
+pub use expr::{op_precedence, parse_term};
 
 mod top_level;
-pub(crate) use top_level::*;
+pub use top_level::parse_top_item;
+use top_level::*;
 
 mod core_text;
-pub(crate) use core_text::{CoreFormatInput, parse_core_for_format};
+pub use core_text::{CoreFormatInput, parse_core_for_format};
 
 #[cfg(test)]
 mod test_support;
@@ -49,7 +50,7 @@ const MEMO_MATCH_PATTERN: u32 = 3;
 const MEMO_TERM_BEFORE_ARROW: u32 = 4;
 
 /// What the grammar reads in one dialect and not the other ([`Dialect`]): the productions of the forms only Core text writes. A program has none, so where Core text reads one the program's grammar fails without consuming, and what stands there is refused as a token it did not expect.
-pub(crate) trait Grammar: Dialect {
+pub trait Grammar: Dialect {
     /// Whether a `use` member is written with the word its binder is read by: in Core text, where a witness binder is a variable, and not in a program, where resolution reaches it.
     const NAMES_WITNESSES: bool;
 
@@ -105,7 +106,7 @@ fn record_comment(span: Span) {
     COMMENTS.with(|comments| comments.borrow_mut().insert(span.start, span));
 }
 
-pub(crate) fn clear_comments() {
+pub fn clear_comments() {
     COMMENTS.with(|comments| comments.borrow_mut().clear());
 }
 
@@ -122,7 +123,7 @@ fn comment_ending_at(end: usize) -> Option<Span> {
 }
 
 /// The recorded comments in ascending offset order, leaving the table empty.
-pub(crate) fn take_comments() -> Vec<Span> {
+pub fn take_comments() -> Vec<Span> {
     COMMENTS.with(|comments| {
         std::mem::take(&mut *comments.borrow_mut())
             .into_values()
@@ -131,7 +132,7 @@ pub(crate) fn take_comments() -> Vec<Span> {
 }
 
 /// The term `source` holds, whole, in the dialect `D`.
-pub(crate) fn parse_whole_term<D: Grammar>(source: &Arc<Source>) -> Result<Term<D>, ParserError> {
+pub fn parse_whole_term<D: Grammar>(source: &Arc<Source>) -> Result<Term<D>, ParserError> {
     curios_profile::profile!("parse", group = "term");
     run_parser(
         parse_whitespace
@@ -142,9 +143,7 @@ pub(crate) fn parse_whole_term<D: Grammar>(source: &Arc<Source>) -> Result<Term<
 }
 
 /// The formatter's optional tail: a whole term when one follows, `None` at end of input. The term comes first so that a tail garbled past its first token commits under [`Parser::or`]'s progress rule and is refused with the term's own message at its own position — what the compiler reports for the same program. A module file's items end at end of input, where the term fails without progress, and the alternative answers `None`.
-pub(crate) fn parse_optional_term<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, Option<Term<D>>> {
+pub fn parse_optional_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Option<Term<D>>> {
     parse_term::<D>
         .map(Some)
         .or(take_eof().map(|()| None))
@@ -166,7 +165,7 @@ const DOC_TRAILING: &str =
 const DOC_TWICE: &str = "two documentation comments precede one declaration; join them, since an empty `---` line is a paragraph break";
 
 /// What refuses a `---` block followed by anything but what it may document.
-pub(crate) const DOC_BEFORE_NOTHING: &str = "a documentation comment `---` must immediately precede what it documents: a declaration, a constructor, a field or a concept method";
+pub const DOC_BEFORE_NOTHING: &str = "a documentation comment `---` must immediately precede what it documents: a declaration, a constructor, a field or a concept method";
 
 /// What refuses a term standing past a program's final one. It states the rule and not the reader's intent: that the term before it is an action is nothing the grammar knows, so the sequencing form is given as what is written where it is one.
 const PROGRAM_CLOSES_WITH_ONE_TERM: &str = "a program closes with one term, the description it performs, and this is a second: an action that runs before the last is sequenced, as `let _ = …!;`";
@@ -177,7 +176,7 @@ const PROGRAM_TAKES_NO_SEMICOLON: &str = "a program closes with one term, the de
 /// The end of a program: its input exhausted past the final term. What stands there in its place is refused as what it is, rather than left for `take_eof` to report as a token the grammar did not expect: a documentation block, which documents nothing; a `;`, which closes a declaration and no term; and a second term, where a program has one.
 ///
 /// The last two consume what they refuse, so each stands past the choice point and outranks `take_eof` in [`Parser::or`]'s tie-break, with its caret on what it read. Whether a term stands there is probed and the probe's own failure dropped: what begins no term is still a token the end of input was expected in place of, and not a term that was wanted.
-pub(crate) fn parse_program_end<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ()> {
+pub fn parse_program_end<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ()> {
     take_eof()
         .or(look_ahead(take_exact("---")).and_keep(commit(fail(DOC_BEFORE_NOTHING))))
         .or(mark()
@@ -195,14 +194,14 @@ pub(crate) fn parse_program_end<'a, D: Grammar>(state: ParserState<'a>) -> Parse
 }
 
 /// The head of a file: a byte-order mark where one leads it, then blanks and comments. The mark is no part of the program, so it is passed over where it stands and every span keeps the file's own offsets; nothing writes one back, and a mark anywhere else is a character the grammar does not take.
-pub(crate) fn parse_file_head<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
+pub fn parse_file_head<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     take_exact("\u{FEFF}")
         .or(pure(()))
         .and_keep(parse_whitespace)
         .parse(state)
 }
 
-pub(crate) fn parse_whitespace<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
+pub fn parse_whitespace<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     // A `many0` loop over comment-then-whitespace runs, not recursion per comment line: an N-line comment banner would otherwise nest N native frames.
     take_while(is_blank)
         .and(many0(|| {
@@ -253,7 +252,7 @@ fn parse_doc_line<'a>(state: ParserState<'a>) -> Parsed<'a, String> {
 }
 
 /// The source from the head a documentation block runs up to.
-pub(crate) fn text_after(doc: &Doc) -> &str {
+pub fn text_after(doc: &Doc) -> &str {
     match &doc.span {
         Some(span) => &span.source.text[span.end..],
         None => "",
@@ -261,7 +260,7 @@ pub(crate) fn text_after(doc: &Doc) -> &str {
 }
 
 /// The keyword at the head a documentation block runs up to, past a `pub` if one is written, which decides whom the block belongs to: `and` opens a later member of the group being parsed, another word opens the next item, and anything else — a closing token, `end`, the end of input — is nothing the block may document.
-pub(crate) fn word_after(doc: &Doc) -> &str {
+pub fn word_after(doc: &Doc) -> &str {
     let rest = text_after(doc);
     let (first, after) = word_at(rest);
     match first {
@@ -284,7 +283,7 @@ fn word_at(text: &str) -> (&str, &str) {
 /// The documentation comment above what comes next, or `None` when there is none: consecutive `---` lines, then the whitespace and plain comments up to the documented head. A second block before that head is refused, so a stray block far above can never be silently absorbed into a declaration's prose.
 ///
 /// The head itself is not parsed here. Every caller reads it next and decides what a block may precede, committing the failure when there was a block: a documentation comment followed by nothing it may document is the diagnosis, never a reason to backtrack.
-pub(crate) fn parse_doc<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Doc>> {
+pub fn parse_doc<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Doc>> {
     mark()
         .and(many0(parse_doc_line))
         .flat_map(|(start, lines)| match lines.is_empty() {
@@ -309,7 +308,7 @@ fn parse_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
 }
 
 // The identifier characters alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bytes` literal's `\..` spread operand.
-pub(super) fn parse_identifier_raw<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
+pub fn parse_identifier_raw<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
     take_while(is_identifier_char)
         .flat_map(|identifier| match identifier.is_empty() {
             true => fail("Expected identifier").boxed(),
@@ -334,12 +333,12 @@ fn parse_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
 // A *declaration's own* name — the word after `let`, `mod`, `induct`, `struct`, `concept`, `foreign` or `test`, and each selector of a `use` group. [`parse_label`] with its keyword refusal committed: these positions sit past the prefix that discriminates them, so the refusal is the branch's diagnosis rather than a guess, and `Parser::or` must not discard it for a sibling that happened to read further before giving up.
 //
 // Uncommitted, it would be discarded every time: `let match : Nat = 1;` would report at second hand through the struct-pattern alternative, as `path 'match' contains a reserved keyword` with the caret past the word, and `use /std/{match}` as `Expected '}', obtained 'm'`, which names the brace for a mistake about a name.
-pub(super) fn parse_declared_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
+pub fn parse_declared_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
     parse_label_owning(true).parse(state)
 }
 
 /// A declared label and what follows it, the failure of the rest named for the label ([`tagging`]): what lets a loop recovering past the item say which declaration broke.
-pub(super) fn declared<'a, T: 'a>(rest: impl Parser<'a, T>) -> impl Parser<'a, (Label, T)> {
+pub fn declared<'a, T: 'a>(rest: impl Parser<'a, T>) -> impl Parser<'a, (Label, T)> {
     move |state: ParserState<'a>| {
         parse_declared_label
             .flat_map(move |label| {
@@ -366,7 +365,7 @@ fn parse_label_owning<'a>(owns_the_fault: bool) -> impl Parser<'a, Label> {
     }
 }
 
-pub(super) fn reserved_keyword(word: &str) -> String {
+pub fn reserved_keyword(word: &str) -> String {
     format!("'{word}' is a reserved keyword, so it cannot be a name")
 }
 

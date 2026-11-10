@@ -3,35 +3,52 @@
 //! [`Term`]s keep sugar as written, which `README.md` decides; `curios-module`'s lowering undoes it.
 
 mod names;
-pub use names::*;
+pub use names::{ArchivedLabel, ArchivedName, Label, Name};
 
 mod nat;
-pub use nat::*;
+pub use nat::{NatLiteral, Radix};
 
 mod intrinsic;
-pub use intrinsic::*;
+pub use intrinsic::{BytesSegment, Intrinsic, ListEntry, Literal};
 
 mod dialect;
-pub use dialect::*;
+use dialect::*;
+pub use dialect::{
+    CoreEntry, CoreFile, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
+    CoreValue, Decorated, DecoratorField, Dialect, Program, Unwritable,
+};
 
 mod term;
-pub use term::*;
+use term::*;
+pub use term::{
+    Apply, Argument, BytesPattern, Choose, ChooseArm, ChooseTest, Field, Func, FuncParam,
+    FuncSugarParam, FuncType, FuncTypeParam, Infix, Let, LetBinding, LetGroup, LetSignature,
+    ListPattern, Match, MatchPattern, MatchPatternField, MatrixArm, NatPattern, NumLit, Pattern,
+    PatternField, Proj, ProofLiteral, StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple,
+    TupleField, TupleType, TupleTypeParam, func_sugar_params, func_sugar_type_params,
+};
 
 mod spell;
-pub use spell::*;
+pub use spell::spell;
 
 mod from_core;
-pub use from_core::*;
+pub use from_core::written_pattern;
+use from_core::*;
 
 mod spelling;
-pub use spelling::*;
+use spelling::*;
+pub use spelling::{
+    DisplayNames, FormScope, IntrinsicForm, IntrinsicOperand, Islands, LiteralEntry, ReaderNames,
+    ReaderPosition, Rename, Shorten, Spellable, Spelled, Spelling, build_rename, display_names,
+    intrinsic_form, intrinsic_former, intrinsic_global,
+};
 
 mod core_text;
 use core_text::*;
-pub use core_text::{ReadError, Refusal, term_to_core, to_core};
+pub use core_text::{ReadError, Refusal, to_core};
 
 mod format;
-pub use format::*;
+pub use format::Formatted;
 
 mod print;
 use print::*;
@@ -45,7 +62,13 @@ mod parse;
 use parse::*;
 
 mod module;
-pub use module::*;
+use module::*;
+pub use module::{
+    ArchivedGroupItem, ArchivedTopUse, ArchivedUseGroup, CasePayloadParam, ConceptField, Doc,
+    Entrypoint, Form, GroupItem, Module, StructField, TopBroken, TopCase, TopConcept, TopForeign,
+    TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, UseGroup,
+    WitnessField,
+};
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_surface::test_support` says at its use site that the caller reached for scaffolding rather than product API.
 #[cfg(any(test, feature = "test-support"))]
