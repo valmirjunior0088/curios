@@ -5,19 +5,21 @@
 //! Why the magnitudes are sealed rather than re-exported, and why one carrier serves both layers rather than a layer of free functions beside it, are `README.md`'s decisions; why the dependency is named here and nowhere else is `documentation/design/one-crate-is-the-authority-for-one-external-concern.md`'s.
 
 mod natural;
-pub use natural::*;
+pub use natural::{ArchivedNatural, Natural, OutOfRange};
 
 mod integer;
-pub use integer::*;
+pub use integer::{ArchivedInteger, Integer};
 
 mod floating;
-pub use floating::*;
+pub use floating::{ArchivedFloating, ArchivedRounding, Floating, Rounding};
 
 mod binary;
-pub use binary::*;
+pub use binary::{ArchivedBinary, Binary};
 
 mod scalar;
-pub use scalar::*;
+pub use scalar::ScalarTrap;
+use scalar::*;
 
 mod archive;
-pub use archive::*;
+use archive::*;
+pub use archive::{IntegerBytes, NaturalBytes, OwnedBuffer};

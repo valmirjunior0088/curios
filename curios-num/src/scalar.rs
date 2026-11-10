@@ -27,6 +27,6 @@ pub enum ScalarTrap {
 }
 
 /// Whether a result of `bits` fits the caller's `allowance`, in bits.
-pub(crate) fn within(bits: Option<u64>, allowance: u64) -> bool {
+pub fn within(bits: Option<u64>, allowance: u64) -> bool {
     bits.is_some_and(|bits| bits <= allowance)
 }
