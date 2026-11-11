@@ -30,7 +30,7 @@ pub struct Vec(T: Type, n: Nat): pub Type {
 }
 ```
 
-That length is not a comment, and nobody has to remember to check it. Try telling the compiler that an empty vector holds one element:
+That length is not a comment, and nobody has to remember to check it. Try telling the compiler that an empty vector holds one element, in `vector.crs`:
 
 ```crs
 use /std/{Nat, Vec};
@@ -38,6 +38,8 @@ use /std/{Nat, Vec};
 let empty: Vec(Nat, 0) = Vec/nil();
 let single: Vec(Nat, 1) = empty;
 ```
+
+Then ask what it makes of that, with `curios wonder vector.crs`:
 
 ```text
 while elaborating single:
@@ -54,17 +56,13 @@ type mismatch
 
 ## What you get
 
-- Dependent function and tuple types, indexed inductive families, and pattern matching that works out exhaustiveness for you
-- Crashes become type errors — `/` wants a nonzero divisor, `List/get` an index in range, and the check you would write anyway is the proof
-- A cumulative universe hierarchy, with levels inferred rather than written by hand
-- A proof-irrelevant `Prop`, so proofs weigh nothing at runtime
-- Erased arguments — type-level information that guides checking and then vanishes from the output
-- Concepts and witnesses for ad-hoc polymorphism
-- Packed `Bytes` as a primitive carrier, with a full bitwise vocabulary — `not`, `shl`, `shr`, `rotl` and `rotr`
-- A standard library for collections, formatting, IO, networking, tasks, time, randomness, arbitrary-precision integers, JSON, and TOML
-- One lowering pipeline from source to WebAssembly, whether you run it natively or in a browser tab
-- Foreign declarations answered by a WebAssembly module the manifest names and pins by hash, folded into the executable by `curios compile`
-- Editor support over `curios wonder --server` — a tree-sitter grammar, with Zed and VS Code extensions
+- Crashes become type errors — `/` wants a nonzero divisor, and the guard you would write is the proof
+- IO where non-blocking is not a suggestion — a wait suspends only the branch that waits
+- Proofs and erased arguments guide checking and then vanish, so they cost nothing at runtime
+- Dependent types and indexed families, with universe levels inferred rather than written by hand
+- One pipeline from source to WebAssembly, run natively, in a browser tab, or as one executable
+- A standard library for collections, IO, networking, time, randomness, JSON and TOML
+- Editor support over `curios wonder --server`, with a tree-sitter grammar and Zed and VS Code extensions
 
 ## Try it
 
@@ -116,7 +114,7 @@ use /hello/{message};
 Fmt/print("%\n")(message)
 ```
 
-Note what the program imports. `lib` and `exe` are spellings nothing can refer to, so `/hello` is unambiguously the _mount_ — a package's own name never has to mean two things at once. Delete either file and the package is happily just the other one.
+Note what the program imports: `/hello`, the package's own name, which is where its library is [mounted](documentation/usage.md#what-a-package-is-made-of). Delete either file and the package is happily just the other one.
 
 A package is also what gets folded into a standalone native executable, runtime and all:
 

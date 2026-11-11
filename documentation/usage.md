@@ -71,7 +71,7 @@ A loose file brings no project with it — no dependencies, not even the library
 
 ## The surface
 
-Ten commands, and `wonder`'s seven queries — eleven commands where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
+Ten commands, and `wonder`'s six queries — eleven commands where the compiler was built with the `profile` feature, which carries [`profile`](#profile) as it carries `--profile`. What each takes and leaves:
 
 | Command | Subject | Its own arguments | Writes | Store |
 | --- | --- | --- | --- | --- |
@@ -80,7 +80,7 @@ Ten commands, and `wonder`'s seven queries — eleven commands where the compile
 | [`document`](#document) | a library | `--std <DIR>`, `-o`/`--output <DIR>` | pages | reads, files what it built; none under `--std` |
 | [`test`](#test) | anything | `--target <TARGET>`, `--port <PORT>`, `--filter <PREFIX>` | nothing | reads, files what it built |
 | [`curate`](#curate) | the governing package | — | materialized sources | none |
-| [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--path`, `--url`, `--rev`, `--refresh`, `--check` | one manifest row | files what it delivered |
+| [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--target <TARGET>` for `foreign`, `--path`, `--url`, `--rev` for `dependency`, `--refresh`, `--check` | one manifest row | files what it delivered |
 | [`new`](#new) | — | `<DIR>` | a package | none |
 | [`lint`](#lint) | anything | — | nothing | reads, files the units it compiled from disk |
 | [`format`](#format) | files, any number | `--check`, `--width <COLUMNS>` | the files, rewritten | none |
@@ -253,7 +253,7 @@ Exactly one delivery form is required. `--path` and `--url` say where the row po
 | --- | --- |
 | `--path <PATH>` | a module the package carries, or a package belonging to a **separate project** on disk. A module's path is plain and relative, as an executable's is, because the module is inside this package; a `source = "path"` dependency reaches out of this project entirely, so `../json` is exactly what it is for. A package of your *own* project is a `member` of the umbrella that enumerates it, which is a different row and not this command's business |
 | `--url <URL>` | a module fetched once and filed in the shared store, or — with `--rev` — a repository |
-| `--rev <REV>` | the revision to pin. Alone on an existing row, it re-pins that row's own URL to a new revision, which is how a dependency is moved forward without restating where it comes from |
+| `--rev <REV>` | a dependency's revision to pin. Alone on an existing row, it re-pins that row's own URL to a new revision, which is how a dependency is moved forward without restating where it comes from |
 | `--refresh` | deliver again whatever the row already names and pin what arrives. The only spelling permitted to overwrite a hash that was not asked to move |
 | `--check` | write nothing and exit nonzero if the manifest would change. The delivery still happens — what a row *should* say cannot be known without it — and only the write is withheld |
 
@@ -495,7 +495,7 @@ A running program's own exit code passes through untouched, so `0` never hides a
 
 `run --target browser` serves until it is stopped, so it ends by the signal that stops it, or with `1` before it serves: a page that cannot be built, a port that is taken. `test --target browser` serves until every selected test has a verdict, then exits as `test` exits, and ends with `1` before it serves for the same reasons.
 
-The tri-state describes a command line that parsed. One that did not — an unknown command, an unknown flag, no command at all — also exits 2, with the usage message on stderr rather than a compiler report; `--help` and `--version` exit 0.
+The tri-state describes a command line that parsed. One that did not — an unknown command, an unknown flag, no command at all — exits 1, with the usage message on stderr rather than a compiler report; `--help` and `--version` exit 0.
 
 ## Flags
 

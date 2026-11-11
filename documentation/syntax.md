@@ -103,7 +103,7 @@ Elaboration chooses `Nat`, `Bool`, `Byte`, `Int`, or `Flt` from context. A *nega
 
 A numeral is unconstrained where the term it is written in has read all of its parts and none has given the numeral its type: a call its arguments and its expected type, a list or a structure literal its entries, a `match` its arms, an operator both operands. So `g(5, b)` and `g(b, 5)` are read alike, `b` giving the numeral its type in either order, and the numerals that share one type take one default together: `Int` where one of them is signed, and `Nat` otherwise.
 
-`-42` is one literal. `- 42` is parsed as an operator occurrence and is not a signed literal. The space is load-bearing.
+`-42` is one literal. `- 42` is none: between two operands it is a subtraction, and with no operand before it it is refused. The space is load-bearing.
 
 A floating-point literal has a decimal point with at least one decimal digit on each side. It may have a sign and an `e` or `E` exponent.
 
@@ -443,7 +443,7 @@ A definition that holds a goal is read by every other declaration as a name of i
 
 `let`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term: type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
 
-An infix operand is an applied atom: a literal, name, sort (`Type`/`Prop`), tuple, tuple type, structure literal, goal, `match`, `choose`, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A `match` and a `choose` are atoms because `end` closes them, so nothing after one can be read as part of it. A whole-term form is not an operand; parenthesize it to use it as one.
+An infix operand is an applied atom: a literal, name, sort (`Type`, `Prop` or `Sort`), tuple, tuple type, structure literal, goal, `match`, `choose`, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A `match` and a `choose` are atoms because `end` closes them, so nothing after one can be read as part of it. A whole-term form is not an operand; parenthesize it to use it as one.
 
 ```crs
 1 + match flag | true => 1 | false => 0 end
@@ -469,9 +469,11 @@ Both operands of an operator have the same type. `==` and `!=` are two separate 
 
 An operator's result type is whatever its concept's method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
 
+`&&` and `||` are calls of `And/and` and `Or/or`, as `+` is of `Add/add`, and not conditionals: neither operand is a fact in the other. So `x != 0 && 10 / x > 1` is refused, and `choose | x != 0 => 10 / x > 1 | _ => false end` is how the guard reaches the division.
+
 `/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/NonZero(b)`, which is `Holds(b != 0)`: by reduction where `b` is a literal, and from the facts in scope — a hypothesis or a guard that `b != 0`, or that `0 < b`, which is the same proposition at `Nat` — otherwise ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail ([A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md)).
 
-Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
+Operator notation always uses witness resolution, including intrinsic operands. `/std` declares the witnesses for the intrinsic types and for some of its own, and a `satisfy` declaration enables the same notation for any other type.
 
 `+` also joins two texts, as `Str/concat` does: `"Hello, " + name`. Both operands are texts; a text built from values of other types is written with `Fmt/render`.
 
@@ -935,9 +937,9 @@ A declaration is in scope of its own body, so it may recurse with nothing said. 
 | Form | A later member is written | The group closes with |
 | --- | --- | --- |
 | Local `let` | `and name: T = …` | one `;` |
-| Top-level `let` | `and`, its own `pub`, then `name: T = …` | one `;` |
-| `induct` | `and`, its own markers, then a head and its cases | one `end` |
-| `struct`, `concept` | `and`, its own markers, then a whole declaration | the last member's `}` |
+| Top-level `let` | its own `pub`, `and`, then `name: T = …` | one `;` |
+| `induct` | its own `pub`, `and`, then a head and its cases | one `end` |
+| `struct`, `concept` | its own `pub`, `and`, then a whole declaration | the last member's `}` |
 | `satisfy` | `and`, then a whole witness | the last member's `}` |
 
 A local group's first member may be a pattern; every later one is a plain name stating its type, since a body mentioning the binding cannot be the source of it.
@@ -1042,7 +1044,7 @@ Structures whose fields name one another are declared as one group with `and`; a
 
 ```crs
 pub struct Node: pub Type { value: Nat, next: Option(Edge) }
-and Edge: pub Type { weight: Nat, to: Node }
+pub and Edge: pub Type { weight: Nat, to: Node }
 ```
 
 ### Structure literals
