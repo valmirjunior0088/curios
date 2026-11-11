@@ -317,6 +317,8 @@ Each subject names files, and what several subjects name is rewritten once: no s
 
 There is one canonical style, and its one setting is the width a line is written within: 50 through 100 columns, counted in characters, and 100 where nothing states another. A file takes its width from one place. Where a package governs it — the package whose manifest is nearest above the file, or the one `--manifest` names — that is the package's [`[format]`](#the-manifest) table, or its umbrella's, and a `--width` given for such a file is refused before anything is written. Standard input and a file no package governs take `--width`. So the command line, `--check` and an editor's server format a file one way, and `curios format --width 80 - < file.crs` shows a package's file at another width without rewriting it. The rule and what it rejected are [A file is formatted at the width one place states](design/tools/a-file-is-formatted-at-the-width-one-place-states.md)'s.
 
+The canonical form writes no byte-order mark, and writes a character that prints as nothing or as a blank inside a literal by its escape, `\u{200D}`, so that a reader sees it.
+
 Formatting is verified before anything is written — the output must reparse to exactly the same program or Core text, with every comment preserved — so a formatter defect refuses rather than corrupts.
 
 ## `wonder`
