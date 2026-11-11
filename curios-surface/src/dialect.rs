@@ -4,7 +4,7 @@
 //!
 //! **What Core text writes beyond a program.** An operand under a decorator, `#{field = value, …} operand`, a witness named by its identity and an intrinsic node by its variant ([`CoreForm`]); a declaration's head, the decorator before it and the absolute name it declares ([`CoreHead`]); the decorator before a case; a `use` binder's word, where a program's witness binder has none; and the file a `.crsc` is ([`CoreFile`]), whose items are joined into groups by `and` whatever their kinds, and whose entry states its type.
 //!
-//! **What a print shows and no grammar reads back is a dialect too**, [`Shown`]: Core text's forms over its own terms, and the forms only a bounded print or a reader's spelling writes ([`ShownForm`]). A dump, a kernel's refusal and a report's term are shown, since each may elide; a tree no parser makes a shown one, so none is ever read as Core text.
+//! **What a print shows and no grammar reads back is a dialect too**, [`Shown`]: Core text's forms over its own terms, and the forms only a bounded print or a reader's spelling writes ([`ShownForm`]). A dump, a certifier's refusal and a report's term are shown, since each may elide; a tree no parser makes a shown one, so none is ever read as Core text.
 
 use {
     crate::{Label, Term, TopConcept, TopForeign, TopInduct, TopLet, TopStruct, TopTest},
@@ -27,7 +27,7 @@ pub trait Dialect: Clone + fmt::Debug + PartialEq + 'static {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Program;
 
-/// Core written as text, with nothing left to an elaborator: a `.crsc` file, and what a dump and a kernel's refusal print.
+/// Core written as text, with nothing left to an elaborator: a `.crsc` file, and what a dump and a certifier's refusal print.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CoreText;
 

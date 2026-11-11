@@ -155,7 +155,7 @@ fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
     );
 }
 
-// The dead arm of a dispatched guard proves its dual too. `<=` is dispatched through `Cmp`, so the guard's intrinsic spelling is one each checker reaches only by resolving the witness, and the reducer can decide it besides: the quotient is below 64, so the procedure folds `63 < cp % 4096 / 64` to `false` and the false arm is never reached. It is still checked, and the arm's equation answers the dual `true` before the procedure folds it — in both checkers, which is what this asserts by certifying: a kernel meeting the resolved spelling only as the reduct of the written one, after the fold, would refuse what the elaborator accepts. `/std/Str/Valid`'s three-byte decoding is this shape.
+// The dead arm of a dispatched guard proves its dual too. `<=` is dispatched through `Cmp`, so the guard's intrinsic spelling is one each checker reaches only by resolving the witness, and the reducer can decide it besides: the quotient is below 64, so the procedure folds `63 < cp % 4096 / 64` to `false` and the false arm is never reached. It is still checked, and the arm's equation answers the dual `true` before the procedure folds it — in both checkers, which is what this asserts by certifying: a certifier meeting the resolved spelling only as the reduct of the written one, after the fold, would refuse what the elaborator accepts. `/std/Str/Valid`'s three-byte decoding is this shape.
 #[test]
 fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
     let source = r#"
@@ -308,9 +308,9 @@ fn a_bound_the_guards_do_not_imply_is_still_stuck() {
     );
 }
 
-// A guard's fact holds under a second match on a variable the guard names. The kernel checks that arm with the variable substituted by its case value, so the guard's equation has to follow the substitution, or the kernel refuses what the elaborator, which keeps the variable spelled, accepts: the `0` arm states the bound as the guard wrote it and with the case value written, and both discharge.
+// A guard's fact holds under a second match on a variable the guard names. The certifier checks that arm with the variable substituted by its case value, so the guard's equation has to follow the substitution, or the certifier refuses what the elaborator, which keeps the variable spelled, accepts: the `0` arm states the bound as the guard wrote it and with the case value written, and both discharge.
 //
-// Mutation-checked: without `Kernel::restate_refinements` at `assume_case_value` the kernel refuses the program, its expected type reading `0` for `i`.
+// Mutation-checked: without `Certifier::restate_refinements` at `assume_case_value` the certifier refuses the program, its expected type reading `0` for `i`.
 #[test]
 fn a_guards_fact_holds_under_a_match_on_a_variable_it_names() {
     let source = r#"

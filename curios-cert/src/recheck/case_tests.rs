@@ -1,4 +1,4 @@
-//! A case read at its scrutinee's own instance: the parameters it opens at, the arms that instance excuses, the variable an arm refines and the motive it is checked at, each of a module the elaborator would not build, written as Core text and put to the kernel with nothing in scope, declaring the propositions it uses.
+//! A case read at its scrutinee's own instance: the parameters it opens at, the arms that instance excuses, the variable an arm refines and the motive it is checked at, each of a module the elaborator would not build, written as Core text and put to the certifier with nothing in scope, declaring the propositions it uses.
 
 use {
     super::test_support::*,
@@ -633,7 +633,7 @@ let /undecided : (n: #NatType) ->
 /std/Bool/False
 "#;
 
-// The elaborator refuses all three arms, as a reader wrote them; the kernel withdraws a refused arm only where its scrutinee computes to another case, so it is one no reduction takes, which `excused`'s is and `taken`'s and `undecided`'s are not.
+// The elaborator refuses all three arms, as a reader wrote them; the certifier withdraws a refused arm only where its scrutinee computes to another case, so it is one no reduction takes, which `excused`'s is and `taken`'s and `undecided`'s are not.
 //
 // Mutation-checked at `unless_never_taken`: with a refused arm withdrawn whatever its scrutinee computes to, `taken` and `undecided` are admitted.
 #[test]

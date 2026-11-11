@@ -2,7 +2,7 @@
 //!
 //! The rule is `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`. Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices and no Π being subsumed is formed; passing a *name* forms it, which is what these compile.
 //!
-//! Both checkers decide the same relation, and `curios_cert`'s `kernel::infer::tests::sort` puts the same two propositions to the kernel under these names. Rename both or neither.
+//! Both checkers decide the same relation, and `curios_cert`'s `certifier::infer::tests::sort` puts the same two propositions to the certifier under these names. Rename both or neither.
 
 use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
@@ -135,7 +135,7 @@ fn the_head_rules_still_decide_a_bare_sort() {
     });
 }
 
-// A type that is a sort or a function type only under an arm's case is subsumed there as the one the case makes it: under `k(0) = true`, `S(k(0))` is `Type`, so `Bool` stands at it and `Holds(true)` does not, and `H(k(0))` is a function type into `Type`, so a family of small types stands at it and a predicate does not. `curios-cert`'s `kernel::infer::tests::sort` puts the same propositions to the kernel under this name. Each refusal's control is a type, or a family of types, at the arm.
+// A type that is a sort or a function type only under an arm's case is subsumed there as the one the case makes it: under `k(0) = true`, `S(k(0))` is `Type`, so `Bool` stands at it and `Holds(true)` does not, and `H(k(0))` is a function type into `Type`, so a family of small types stands at it and a predicate does not. `curios-cert`'s `certifier::infer::tests::sort` puts the same propositions to the certifier under this name. Each refusal's control is a type, or a family of types, at the arm.
 #[test]
 fn what_an_arms_case_makes_a_sort_or_a_function_type_is_subsumed_as_one_there() {
     let declarations = r#"
@@ -179,7 +179,7 @@ fn what_an_arms_case_makes_a_sort_or_a_function_type_is_subsumed_as_one_there() 
     }
 }
 
-// A level entailment rather than a conversion. A member of an `and` group used at a type one level up needs `1 ≤ u` of the group's own instance, a group being monomorphic in its universes, and the elaborator records exactly that in the scheme it generalizes; the kernel's entailment reaches the hypotheses before it decides a level's *constant* part structurally, since a parameter ranges over every natural when nothing is assumed and a hypothesis is what puts a floor under it.
+// A level entailment rather than a conversion. A member of an `and` group used at a type one level up needs `1 ≤ u` of the group's own instance, a group being monomorphic in its universes, and the elaborator records exactly that in the scheme it generalizes; the certifier's entailment reaches the hypotheses before it decides a level's *constant* part structurally, since a parameter ranges over every natural when nothing is assumed and a hypothesis is what puts a floor under it.
 #[test]
 fn a_group_member_is_used_a_level_up_by_its_sibling() {
     assert_eq!(
@@ -237,7 +237,7 @@ fn a_rung_waits_on_a_family_its_sibling_solves() {
     assert_eq!(run(source), b"ok");
 }
 
-// What is no sort and no function type is the equation it was, the spine rule with it: `Handler(true)` against `Handler(c)` solves `c` by the two calls' spines, a function type against a type that waits on `c`. And a sort reached only by forcing a recursive call is read as the kernel reads it, a type held at the `Type` the call comes to.
+// What is no sort and no function type is the equation it was, the spine rule with it: `Handler(true)` against `Handler(c)` solves `c` by the two calls' spines, a function type against a type that waits on `c`. And a sort reached only by forcing a recursive call is read as the certifier reads it, a type held at the `Type` the call comes to.
 #[test]
 fn a_pair_that_is_no_sort_and_no_function_type_is_the_equation_it_was() {
     let source = r#"
@@ -511,7 +511,7 @@ fn a_type_that_is_a_proposition_in_one_case_is_at_no_sort_left_to_a_caller() {
     });
 }
 
-// The same fact through a codomain the argument computes rather than a `Sort` left to a caller: `F(c) : S(c)` is a proposition at `true` and a type at `false`, so `F` is admitted, and what keeps a type one sort under every case is that `F(c)` is no type while `c` is open. At `true` two values are one by irrelevance, read off `F`'s declaration at the argument, and at `false` they stay apart. `curios-cert`'s `kernel::convert::tests::irrelevance` puts the two comparisons to the kernel under this name. The refusals derive from the two values one at `true`, and from a binder at `S(c)`, which is a type wherever `c` is open.
+// The same fact through a codomain the argument computes rather than a `Sort` left to a caller: `F(c) : S(c)` is a proposition at `true` and a type at `false`, so `F` is admitted, and what keeps a type one sort under every case is that `F(c)` is no type while `c` is open. At `true` two values are one by irrelevance, read off `F`'s declaration at the argument, and at `false` they stay apart. `curios-cert`'s `certifier::convert::tests::irrelevance` puts the two comparisons to the certifier under this name. The refusals derive from the two values one at `true`, and from a binder at `S(c)`, which is a type wherever `c` is open.
 #[test]
 fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argument_decides_one() {
     control(
@@ -555,7 +555,7 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
     });
 }
 
-// A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart. The elaborator refuses the definition for deciding its sort; the kernel, handed it all the same, refuses it at the assignment that states `Type`. The control states `Prop`, into which a proposition is matched.
+// A definition generic in a sort stands at `Type` at one use, where matching a proposition of two constructors into it would tell its proofs apart. The elaborator refuses the definition for deciding its sort; the certifier, handed it all the same, refuses it at the assignment that states `Type`. The control states `Prop`, into which a proposition is matched.
 #[test]
 fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
     control(
@@ -608,7 +608,7 @@ fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
     });
 }
 
-// Two values of a sort left to a caller are one only where it states `Prop`, so a definition holding any two of them one is true at `Prop` alone, and used at `Type` it would carry `Holds(true)` to `Holds(false)`. The elaborator checks the declaration once with the sort unknown, where no two values are one for being proofs. `curios-cert`'s `recheck::assignment_tests` puts the definition, and the same as a group, to the kernel under this name. Rename both or neither. The control states `Prop`, where two values are one.
+// Two values of a sort left to a caller are one only where it states `Prop`, so a definition holding any two of them one is true at `Prop` alone, and used at `Type` it would carry `Holds(true)` to `Holds(false)`. The elaborator checks the declaration once with the sort unknown, where no two values are one for being proofs. `curios-cert`'s `recheck::assignment_tests` puts the definition, and the same as a group, to the certifier under this name. Rename both or neither. The control states `Prop`, where two values are one.
 #[test]
 fn two_values_of_a_sort_left_to_a_caller_are_not_one() {
     control(
@@ -623,7 +623,7 @@ fn two_values_of_a_sort_left_to_a_caller_are_not_one() {
     .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
-// Two instances of one family apart in a sort are two types, whatever else they share: `Ph` takes no parameter, and its one payload holds the irrelevance a proposition grants, so a value built at `Prop` and read at `Type` would hand `Eq()(false, true)` over. `curios-cert`'s `recheck::sort_tests` puts two such instances to the kernel under this name. The control reads the value at the `Prop` it was built at.
+// Two instances of one family apart in a sort are two types, whatever else they share: `Ph` takes no parameter, and its one payload holds the irrelevance a proposition grants, so a value built at `Prop` and read at `Type` would hand `Eq()(false, true)` over. `curios-cert`'s `recheck::sort_tests` puts two such instances to the certifier under this name. The control reads the value at the `Prop` it was built at.
 #[test]
 fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
     control(
@@ -657,7 +657,7 @@ fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
     });
 }
 
-// A proposition at a family's parameter that wants a type. `curios_cert`'s `recheck::proposition_tests` puts the module to the kernel under this name. The control's parameter is a type.
+// A proposition at a family's parameter that wants a type. `curios_cert`'s `recheck::proposition_tests` puts the module to the certifier under this name. The control's parameter is a type.
 #[test]
 fn a_proposition_is_no_parameter_a_type_is_wanted_at() {
     control(
@@ -679,7 +679,7 @@ fn a_proposition_is_no_parameter_a_type_is_wanted_at() {
     .by_elaborator_in("/held", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
-// A sort left to a caller is one each use states, so what a declaration claims of a value at it holds at both: `Box(A)` has one inhabitant at a proposition and two at `Bool`, and `generic`, holding any two boxes one, would carry `Holds(true)` to `Holds(false)` at `Type`. The control is the same claim made at `Prop`. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name, refused at the assignment that states `Type`.
+// A sort left to a caller is one each use states, so what a declaration claims of a value at it holds at both: `Box(A)` has one inhabitant at a proposition and two at `Bool`, and `generic`, holding any two boxes one, would carry `Holds(true)` to `Holds(false)` at `Type`. The control is the same claim made at `Prop`. `curios-cert`'s `recheck::shape_tests` puts the route to the certifier under this name, refused at the assignment that states `Type`.
 #[test]
 fn a_struct_at_a_sort_left_to_a_caller_has_one_inhabitant_only_at_prop() {
     control(

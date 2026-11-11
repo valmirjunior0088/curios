@@ -59,7 +59,7 @@ Settled 2026-10-13.
 
 ## Rejected
 
-- **A type asked of the kernel again.** The elaborator settled it, and a second derivation is a second answer that may be spelled another way.
+- **A type asked of the certifier again.** The elaborator settled it, and a second derivation is a second answer that may be spelled another way.
 - **A record of names by place for every name.** A written name's term holds its place and what it resolved to; the record is for the names no term holds.
 - **A record in the lowering alone, made before the elaborator's is designed**: two records of one kind, each with a home of its own.
 

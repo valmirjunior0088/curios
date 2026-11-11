@@ -2,7 +2,7 @@
 
 use {curios_cert::Globals, curios_core::Item, curios_unit::Unit};
 
-/// The kernel's environment for a root walked after `predecessors`: each read where it stands with the record its unit carries, as the build mounts it.
+/// The certifier's environment for a root walked after `predecessors`: each read where it stands with the record its unit carries, as the build mounts it.
 pub fn certified<'a>(predecessors: &[&'a Unit]) -> Globals<'a> {
     let mut globals = Globals::default();
     for root in predecessors {

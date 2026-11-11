@@ -6,7 +6,7 @@
 //!
 //! > Do the two checkers see different inputs?
 //!
-//! Reduction, conversion, and the typing judgment stay **duplicated**. The elaborator's versions see metavariables, refinements, expected types, parked goals, and memoized derivations; the kernel's see finished terms and no caches at all. Different inputs and different strategies are where a systematic mistake is both likely and expensive, and where two verdicts are genuinely two samples.
+//! Reduction, conversion, and the typing judgment stay **duplicated**. The elaborator's versions see metavariables, refinements, expected types, parked goals, and memoized derivations; the certifier's see finished terms and no caches at all. Different inputs and different strategies are where a systematic mistake is both likely and expensive, and where two verdicts are genuinely two samples.
 //!
 //! One part of conversion is shared all the same, because it is algebra rather than strategy: what two intrinsics are to each other — the carriers' peels, laws and views, and the congruence read off an operation's signature — which [`convert_intrinsics`](crate::convert_intrinsics) states once and each checker discharges by its own judgment. Two copies would buy a second transcription of one function, which a slip could make disagree without either copy holding a second opinion about arithmetic. What holds it is what holds any shared rule: the algebra's own tests over bare atoms and concrete values, and the law grid, held through both checkers, as integration evidence.
 //!
@@ -14,11 +14,11 @@
 //!
 //! # The concession this records
 //!
-//! [`Env`] is environment queries only — nothing it answers is a judgment, so an analysis needing no more than `Env` borrows no opinion from its driver. [`Judge`] adds conversion, which *is* a judgment, and an analysis requiring it takes its driver's word on convertibility. That is a real concession and the split exists to keep it visible in the type system rather than buried in a call graph: today `invert` is the only consumer of [`Judge`], and if its products are ever emitted as certificates the kernel type-checks instead, `Judge` losing its last implementor is the signal the concession is gone.
+//! [`Env`] is environment queries only — nothing it answers is a judgment, so an analysis needing no more than `Env` borrows no opinion from its driver. [`Judge`] adds conversion, which *is* a judgment, and an analysis requiring it takes its driver's word on convertibility. That is a real concession and the split exists to keep it visible in the type system rather than buried in a call graph: today `invert` is the only consumer of [`Judge`], and if its products are ever emitted as certificates the certifier type-checks instead, `Judge` losing its last implementor is the signal the concession is gone.
 //!
 //! # Errors belong to the driver
 //!
-//! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The kernel's failures are `curios_cert::Error`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
+//! Both traits report through an associated [`Env::Error`] rather than through [`ReduceError`](curios_core::ReduceError). The certifier's failures are `curios_cert::Error`s and the elaborator's are spanned diagnostics that name the offending term, and a shared analysis should not have to know which. This is the rule `ReduceError` already states from the other direction — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 
 use curios_core::{
     Applications, Bound, Exhaustion, Free, Global, InductDecl, Polarity, StructDecl, Subterm, Term,
@@ -29,7 +29,7 @@ use curios_core::{
 ///
 /// Two halves, paired because every site that needs one needs both. The shape half asks whether the head could move at all; anything else is already weak-head normal, so forcing it spends budget to learn nothing. The scope half is a *safety* precondition rather than an optimization: a term whose [`reach`](Term::reach) is non-zero still sits under enclosing binders, and reduction assumes free occurrences — it would panic on a dangling index rather than refuse.
 ///
-/// `Metavar` is excluded, which is the reading `whnf` itself takes — a metavariable is a stuck neutral, weak-head normal already. The kernel hands this seam meta-free terms; where the elaborator hands it one holding a metavariable, declining to force it leaves the term opaque, which is the refusing direction for every caller.
+/// `Metavar` is excluded, which is the reading `whnf` itself takes — a metavariable is a stuck neutral, weak-head normal already. The certifier hands this seam meta-free terms; where the elaborator hands it one holding a metavariable, declining to force it leaves the term opaque, which is the refusing direction for every caller.
 pub fn forceable(term: &Term) -> bool {
     matches!(
         &**term,
@@ -45,9 +45,9 @@ pub fn forceable(term: &Term) -> bool {
 
 /// What a shared analysis may ask of the checker running it, beyond the terms it was handed.
 ///
-/// Deliberately small, and for the same reason `Kernel` is: every method here is a way for an answer to come from something other than the term in hand. A new one should have to argue for itself.
+/// Deliberately small, and for the same reason `Certifier` is: every method here is a way for an answer to come from something other than the term in hand. A new one should have to argue for itself.
 pub trait Env {
-    /// How this checker reports a failure. The kernel's is `curios_cert::Error`; the elaborator's is its spanned diagnostic. Either says whether it is the budget's refusal, which an analysis reading a term as a [`Probe`](curios_core::Probe) propagates while it reads any other failure as nothing to read.
+    /// How this checker reports a failure. The certifier's is `curios_cert::Error`; the elaborator's is its spanned diagnostic. Either says whether it is the budget's refusal, which an analysis reading a term as a [`Probe`](curios_core::Probe) propagates while it reads any other failure as nothing to read.
     type Error: Exhaustion;
 
     /// Reduce to weak-head normal form, then force a `rec` head — a position that demands a value rather than a normal form.
@@ -65,7 +65,7 @@ pub trait Env {
     /// `&mut self` for the *implementors'* sake — both mint from an interior counter and could take `&self`, but the elaborator's method is spelled `&mut` and a trait should not force a signature change to satisfy it.
     fn fresh(&mut self, hint: Option<&str>) -> Free;
 
-    /// Whether the local `name` is in scope of the walk in progress. A local may carry a definition — the elaborator keeps a `let` as one, where the kernel hands an analysis its terms by value and answers none — which [`Env::unfold`] answers.
+    /// Whether the local `name` is in scope of the walk in progress. A local may carry a definition — the elaborator keeps a `let` as one, where the certifier hands an analysis its terms by value and answers none — which [`Env::unfold`] answers.
     fn is_local(&self, name: &Free) -> bool;
 
     /// What the local `name` unfolds to through its *definition* — never through a refinement, which a definitions-only reading needs no invariant about.
@@ -82,7 +82,7 @@ pub trait Env {
 
     /// How the family `name` uses its parameter at `index`, as this checker holds it: [`Polarity::Mixed`], never `Unused`, where it holds no vector for the name or the vector ends before `index`.
     ///
-    /// Asked of the checker rather than read off the entry it hands back, because which vector a family answers with is the checker's own record. The elaborator's is the one its entry carries; the kernel's is the one its own walk filed, which no entry holds, so reading the entry would have it keep a second copy of every registry entry in scope to put its vector there.
+    /// Asked of the checker rather than read off the entry it hands back, because which vector a family answers with is the checker's own record. The elaborator's is the one its entry carries; the certifier's is the one its own walk filed, which no entry holds, so reading the entry would have it keep a second copy of every registry entry in scope to put its vector there.
     fn polarity(&self, name: &Global, index: usize) -> Polarity;
 
     /// Whether this checker judged the family `name` and holds the vector it filed for it. Strict positivity reads a family it reaches outside the set it analyses as a sink of the occurrence relation only where it was judged, since one not judged yet may reach the set again through what nothing has read ([`positivity_vectors`](crate::positivity_vectors)).
@@ -90,12 +90,12 @@ pub trait Env {
 
     /// How the definition `name` applies its parameters, as the record this checker reads it by files it ([`Applications`]): `None` where nothing is filed. A read of what was concluded of `name`, as its totality is.
     ///
-    /// Asked of the checker for the reason [`Env::polarity`] is: the kernel's is the one its own walk filed of the definition, the elaborator's the one its publication filed.
+    /// Asked of the checker for the reason [`Env::polarity`] is: the certifier's is the one its own walk filed of the definition, the elaborator's the one its publication filed.
     fn applications(&self, name: &Global) -> Option<Applications>;
 
     /// How two instances of the family `name` compare in its `index`th universe parameter, as this checker holds it: [`Variance::Invariant`], never irrelevant, where it holds no vector for the name or the vector ends before `index`.
     ///
-    /// Asked of the checker for the reason [`Env::polarity`] is. The elaborator's vector is the one its entry carries, which is what this answers unless a checker says otherwise; the kernel's is the one its own walk filed.
+    /// Asked of the checker for the reason [`Env::polarity`] is. The elaborator's vector is the one its entry carries, which is what this answers unless a checker says otherwise; the certifier's is the one its own walk filed.
     fn variance(&self, name: &Global, index: usize) -> Variance {
         self.induct_decl(name)
             .map(|declaration| declaration.variance(index))
@@ -114,6 +114,6 @@ pub trait Judge: Env {
     /// Whether `this` and `that` are convertible *at* `type_`, so that proof irrelevance and eta fire at the terms' real sort.
     fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error>;
 
-    /// Whether the type `type_` inhabits a sort below the universe `universe`: its sort as the checker's lookup classifies it, held to `universe` by subsumption. The kernel decides the levels under the declaration's constraints; the elaborator, which infers a declaration's levels, records the relation the answer needs where nothing refuses it, which is how the declaration comes to state it. `false` where either is no sort the lookup can read.
+    /// Whether the type `type_` inhabits a sort below the universe `universe`: its sort as the checker's lookup classifies it, held to `universe` by subsumption. The certifier decides the levels under the declaration's constraints; the elaborator, which infers a declaration's levels, records the relation the answer needs where nothing refuses it, which is how the declaration comes to state it. `false` where either is no sort the lookup can read.
     fn sort_below(&mut self, type_: &Term, universe: &Term) -> Result<bool, Self::Error>;
 }

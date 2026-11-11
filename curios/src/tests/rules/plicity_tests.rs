@@ -1,6 +1,6 @@
 //! A binder's mark: part of a function type's identity, and no part of what a call, an arm or a projection reduces to.
 //!
-//! The rule is `documentation/design/theory/plicity-is-part-of-function-identity.md`. The kernel's halves are `curios_cert`'s `plicity_distinguishes_two_function_types`, `a_function_type_is_below_none_of_other_marks` and `a_lambda_of_other_marks_does_not_check_against_a_function_type`.
+//! The rule is `documentation/design/theory/plicity-is-part-of-function-identity.md`. The certifier's halves are `curios_cert`'s `plicity_distinguishes_two_function_types`, `a_function_type_is_below_none_of_other_marks` and `a_lambda_of_other_marks_does_not_check_against_a_function_type`.
 
 use {
     super::test_support::*, crate::tests::test_support::*, curios_common::Plicity,

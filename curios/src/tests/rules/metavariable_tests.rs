@@ -2,7 +2,7 @@
 
 use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
-// **A solution keeps the universe instance its spelling had.** `k`'s `@x` is born at the call, outside the arm whose scrutinee, `h(Eq()(0, 0))`, is refined to the case, and solved inside it against `w`'s type — with that refinement suppressed, since it was not born under it, so its solution holds outside the arm. Born inside, it would be solved under the refinement and never reach the suppressed spelling this pins. Under suppression the elaborator's reducer keeps the probe as spelled rather than the refinement's key, which erases universe instances by design, being a spelling to look up by: a value committed from the key would hold a bare `/std/Eq/Eq`, which the kernel refuses as an occurrence stating no instance.
+// **A solution keeps the universe instance its spelling had.** `k`'s `@x` is born at the call, outside the arm whose scrutinee, `h(Eq()(0, 0))`, is refined to the case, and solved inside it against `w`'s type — with that refinement suppressed, since it was not born under it, so its solution holds outside the arm. Born inside, it would be solved under the refinement and never reach the suppressed spelling this pins. Under suppression the elaborator's reducer keeps the probe as spelled rather than the refinement's key, which erases universe instances by design, being a spelling to look up by: a value committed from the key would hold a bare `/std/Eq/Eq`, which the certifier refuses as an occurrence stating no instance.
 #[test]
 fn an_inferred_value_under_a_refined_proof_keeps_its_universe_instance() {
     assert_eq!(

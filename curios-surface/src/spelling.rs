@@ -1,4 +1,4 @@
-//! How Core is spelled: the naming policy a term is written by ([`Spelling`]), which the writer of Core text (`core_text`) builds every term's tree through — as Core text proper for a dump and a kernel's refusal, and in its reader's spelling for every term a reader is shown, a term the translation to the surface tree declines among them. A report's term is translated back to the surface tree ([`from_core()`]) and printed as source is, through the same policy.
+//! How Core is spelled: the naming policy a term is written by ([`Spelling`]), which the writer of Core text (`core_text`) builds every term's tree through — as Core text proper for a dump and a certifier's refusal, and in its reader's spelling for every term a reader is shown, a term the translation to the surface tree declines among them. A report's term is translated back to the surface tree ([`from_core()`]) and printed as source is, through the same policy.
 
 use {
     crate::{
@@ -29,13 +29,13 @@ use {
 
 // === Source-style names (diagnostics) ========================================
 //
-// Core spells names for the kernel's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`/std/Vec/Vec`, `/sys/Nat/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the default one changes nothing, so a faithful render ([`Spellable::faithful`]) leaves names untouched.
+// Core spells names for the certifier's convenience, not the reader's: every binder is opened under a `Context::fresh` gensym (`n#15`, `(n#0 : Nat) -> …`) and every global is its fully-qualified canonical path (`/std/Vec/Vec`, `/sys/Nat/Nat`). A [`Spelling`] rewrites both back toward what the user wrote; the default one changes nothing, so a faithful render ([`Spellable::faithful`]) leaves names untouched.
 //
 // The configuration is threaded, not ambient. `Display::fmt` has no parameter channel, and thread-locals installed around a render would make a term's spelling depend on an enclosing frame nobody could see from the call, and "should this consumer erase universes?" a question answered by accident of where the installer sat rather than by the consumer. [`Spelled`] restores the parameter: `term.spelled(&spelling)` is an ordinary value that implements `Display`, and every printer function threads a `Frame` carrying that spelling beside the binder depth.
 //
 // axis (a) — local binders: a *rename map* (built by `build_rename` over `display_names`) alpha-renames the whole fragment — free vars *and* binder labels. A source hint is used bare when unique; distinct names sharing a hint, or shadowing a global's displayed rendering — whatever axis (b) spells it as — take minimal `hint2`, `hint3`, … suffixes, so no two binders ever read alike. A hintless (compiler-minted) binder spells `_` — or is elided — at its label site when nothing references it, and borrows the fallback hint `x` when something does: `_` in a reference position would read as a hole and could not co-spell with its binder.
 //
-// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility. Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. A dump writes every global by its absolute path, as Core text proper does. Renders without a reader — the kernel's refusals, and a report a caller could hand no spellings — take a *shorten map* instead ([`Shorten`], over the symbols of the unit a reader wrote and then of the units around it, [`Spelling::with_lexicons`]), each qualified path's shortest unambiguous `/`-suffix, the reader's unit first, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (b) — globals. A report spells each one as name resolution would find it from where its reader stands ([`ReaderNames`]): the shortest of a declaration of the reader's module by its label, a path into one of its child modules, an import in scope at the reader's definition as it was written, and an absolute path whose audience includes the reader — the text stage's [`Spellings`], since only it sees re-exports and visibility. Where none reaches it this printer writes it in full, and the reader's printer declines the term ([`Spelling::reached`]). A suffix unique among the unit's symbols is not the same thing: `Ord` is such a suffix and resolves nowhere `/std/Ord` was not imported. A dump writes every global by its absolute path, as Core text proper does. Renders without a reader — the certifier's refusals, and a report a caller could hand no spellings — take a *shorten map* instead ([`Shorten`], over the symbols of the unit a reader wrote and then of the units around it, [`Spelling::with_lexicons`]), each qualified path's shortest unambiguous `/`-suffix, the reader's unit first, so its declarations settle their own spelling before what surrounds them competes for it. Why reports spell for a reader is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // axis (c) — universe instances: a flag suppressing the `.{…}` an instantiated nominal head carries. The surface language has no spelling for an instance — solved (`Option.{0}`) or unsolved (`Eq.{?u271}`) alike — so a diagnostic that shows one asks the reader to decode elaboration state. This is the display twin of `project_erased_universes`, which the goal-report path applies structurally; errors carry raw terms all the way to the formatter, so they suppress at the printer instead. Diagnostics set it; `wonder --stage`'s dumps deliberately do not, because a dump is read *about* the compiler and its levels are the point.
 //
@@ -47,7 +47,7 @@ use {
 //
 // axis (g) — grouping: a flag under which a nested concatenation spells as the operand it is, `[..[..a, ..b], ..c]`, rather than splicing its entries into the enclosing literal. The splice is right everywhere the reader wants the program quoted rather than its lowering, and it is what makes two terms that differ only in how a run is grouped render as one string — which a mismatch report cannot afford, since grouping is a difference conversion can refuse on. The report's escalation sets it, first, because it changes nothing unless a nesting is present; nothing else does.
 //
-// axis (h) — witnesses: the witness binders in scope where a reader stands ([`ReaderPosition`]), so that a reader's printer declines a term that refers to one, the grammar writing no name beside the witness mark. Which witnesses a report's term leaves out is settled before the term reaches a printer: the elaborator writes it as a program writes it where the reader stands, a witness resolution puts back there an open slot (`curios-elab`'s `written`). This printer prints a witness as it stands, which is what a dump, a kernel's refusal and a term a reader's printer declines are read as. Reports set it. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
+// axis (h) — witnesses: the witness binders in scope where a reader stands ([`ReaderPosition`]), so that a reader's printer declines a term that refers to one, the grammar writing no name beside the witness mark. Which witnesses a report's term leaves out is settled before the term reaches a printer: the elaborator writes it as a program writes it where the reader stands, a witness resolution puts back there an open slot (`curios-elab`'s `written`). This printer prints a witness as it stands, which is what a dump, a certifier's refusal and a term a reader's printer declines are read as. Reports set it. Why is `documentation/design/tools/a-diagnostic-spells-what-its-reader-can-write.md`.
 //
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
@@ -68,7 +68,7 @@ pub struct Spelling {
     string_literal: Option<Global>,
     /// axis (g) — whether a nested concatenation keeps its grouping instead of being spliced into the enclosing literal.
     grouped: bool,
-    /// axis (b) for a reader: how the unit's names can be written and where its definitions sit, so a global is spelled as resolution would find it from where the reader stands. Takes precedence over the shorten map, which stays what a render without a reader — a dump, a kernel refusal — spells by.
+    /// axis (b) for a reader: how the unit's names can be written and where its definitions sit, so a global is spelled as resolution would find it from where the reader stands. Takes precedence over the shorten map, which stays what a render without a reader — a dump, a certifier refusal — spells by.
     names: Option<Rc<ReaderNames>>,
     /// Where the reader stands (axes (b) and (h)).
     reader: ReaderPosition,
@@ -78,7 +78,7 @@ pub struct Spelling {
     translated: bool,
     /// Whether the reader's printer declined a term this spelling rendered. Shared by a spelling's copies and begun anew where a reader is placed ([`Spelling::for_reader`]), so it is one report's to read.
     declined: Rc<Cell<bool>>,
-    /// Whether a term is written as Core text proper, every field it holds stated, or in its reader's spelling: what a dump and a kernel's refusal are read as, and what reads back as the term ([`Spelling::core_text`]).
+    /// Whether a term is written as Core text proper, every field it holds stated, or in its reader's spelling: what a dump and a certifier's refusal are read as, and what reads back as the term ([`Spelling::core_text`]).
     core_text: bool,
     /// Whether a term is written whole, however far its tree outgrows its graph: Core text a reader reads back, where a dump and a report are bounded and elide what is past their bound ([`Minting::elides`]).
     whole: bool,
@@ -451,7 +451,7 @@ impl Spelling {
         self
     }
 
-    /// This spelling writing Core text as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a kernel's refusal does: a decorated term stays on the line it is reached on where it fits there whole, and otherwise its decorator takes a line of its own and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line; the text is rendered at [`LINE_WIDTH`], which decides what fits.
+    /// This spelling writing Core text as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a certifier's refusal does: a decorated term stays on the line it is reached on where it fits there whole, and otherwise its decorator takes a line of its own and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line; the text is rendered at [`LINE_WIDTH`], which decides what fits.
     pub fn written_as_text(mut self) -> Self {
         self.as_text = true;
         self
@@ -463,7 +463,7 @@ impl Spelling {
         self
     }
 
-    /// How a kernel refusal of `definitions` is written: as Core text proper ([`Spelling::core_text`]), a refusal being read about the compiler, with globals shortened against the lexicons of its unit and of `scope` (axis (b)), a nominal family's implicit parameters marked (axis (d)), a `Str` literal as its text (axis (f)) — and every universe shown, unlike an elaboration diagnostic, since a kernel refusal is often about the universes.
+    /// How a certifier refusal of `definitions` is written: as Core text proper ([`Spelling::core_text`]), a refusal being read about the compiler, with globals shortened against the lexicons of its unit and of `scope` (axis (b)), a nominal family's implicit parameters marked (axis (d)), a `Str` literal as its text (axis (f)) — and every universe shown, unlike an elaboration diagnostic, since a certifier refusal is often about the universes.
     pub fn for_refusal(
         definitions: &Definitions,
         scope: &[&Lexicon],

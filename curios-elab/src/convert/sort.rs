@@ -144,7 +144,7 @@ fn classify_under(
             }
             // An intrinsic *value* in type position is not a shape this can classify, and unlike the formers above it is not expected.
             //
-            // Listed exhaustively rather than caught by a wildcard, because the wildcard's answer is *wrong* for any former added after it: it pins the level at 0 while `curios-cert`'s `sort_of_intrinsic` reads the parameter's, and nothing catches the disagreement until the fixed prelude's kernel recheck reports a ground `Type` against a `Type.{u}`, naming no item. Every other intrinsic match in the workspace is exhaustive; this one has to be too, so a new former forces a level decision at compile time instead of inheriting a default.
+            // Listed exhaustively rather than caught by a wildcard, because the wildcard's answer is *wrong* for any former added after it: it pins the level at 0 while `curios-cert`'s `sort_of_intrinsic` reads the parameter's, and nothing catches the disagreement until the fixed prelude's certifier recheck reports a ground `Type` against a `Type.{u}`, naming no item. Every other intrinsic match in the workspace is exhaustive; this one has to be too, so a new former forces a level decision at compile time instead of inheriting a default.
             Intrinsic::Bytes(..)
             | Intrinsic::BytesAnd { .. }
             | Intrinsic::BytesAppend { .. }
@@ -253,7 +253,7 @@ fn classify_under(
             | Intrinsic::NatXor(..)
             | Intrinsic::NatMin(..)
             | Intrinsic::NatMax(..) => {
-                // An operation stuck on its operands is a neutral of the type its signature produces, so one producing a sort — a read of a list of types, a fold whose result is a type — is a type at that sort, as the kernel's lookup reads it. One producing anything else is no type, and takes the fallback.
+                // An operation stuck on its operands is a neutral of the type its signature produces, so one producing a sort — a read of a list of types, a fold whose result is a type — is a type at that sort, as the certifier's lookup reads it. One producing anything else is no type, and takes the fallback.
                 let produced = match intrinsic.signature(&context.syntax()).produced {
                     Produced::Fixed(produced) => Some(reduce(context, produced)?),
                     Produced::Sort => None,
@@ -349,7 +349,7 @@ fn classify_under(
     })
 }
 
-/// Whether `type_`, as written, is an application of a declaration that lands in `Prop` — the kernel's rule, `curios-cert`'s `declared_into_prop`, which states why a proposition is known by its head and why only a declaration's word is taken.
+/// Whether `type_`, as written, is an application of a declaration that lands in `Prop` — the certifier's rule, `curios-cert`'s `declared_into_prop`, which states why a proposition is known by its head and why only a declaration's word is taken.
 pub fn declared_into_prop(
     context: &mut Context,
     binders: &Binders,

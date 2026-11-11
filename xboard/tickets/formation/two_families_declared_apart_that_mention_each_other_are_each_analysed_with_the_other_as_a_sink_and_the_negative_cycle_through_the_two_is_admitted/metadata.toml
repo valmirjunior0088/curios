@@ -5,9 +5,9 @@ status = "fixed"
 [[witness]]
 what = "Curry's paradox through `/A`, which holds a function out of `/B`, declared before `/B`, which holds an `/A`"
 source = "curry_through_a_family_declared_after.crsc"
-refused = [{ by = "kernel", error = "NotPositive" }]
+refused = [{ by = "certifier", error = "NotPositive" }]
 
 [[witness]]
 what = "the same cycle with `/A`'s payload a definition placed before both families"
 source = "curry_through_a_definition_before_both.crsc"
-refused = [{ by = "kernel", error = "NotPositive" }]
+refused = [{ by = "certifier", error = "NotPositive" }]

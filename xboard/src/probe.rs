@@ -30,7 +30,7 @@ impl Probe {
         self.answer.admitted()
     }
 
-    /// What `checker` made of the proof. The kernel is not asked where nothing built it a module to judge.
+    /// What `checker` made of the proof. The certifier is not asked where nothing built it a module to judge.
     fn said(&self, checker: Checker) -> &'static str {
         let refused = self
             .answer
@@ -40,7 +40,7 @@ impl Probe {
 
         match (refused, checker) {
             (true, _) => "refused",
-            (false, Checker::Kernel) if !self.answer.kernel_asked() => "not asked",
+            (false, Checker::Certifier) if !self.answer.certifier_asked() => "not asked",
             (false, _) => "admitted",
         }
     }

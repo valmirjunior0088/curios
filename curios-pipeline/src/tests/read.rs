@@ -61,18 +61,18 @@ fn a_unit_read_from_core_text_holds_no_lowering_and_restores_as_it_was_stored() 
 }
 
 #[test]
-fn a_unit_read_from_core_text_is_refused_by_the_kernels_own_verdict() {
+fn a_unit_read_from_core_text_is_refused_by_the_certifiers_own_verdict() {
     let Err(refused) = compiled("let /lib/bad : #NatType = #BoolType;\n", None) else {
-        panic!("the kernel refuses a type standing where a number does");
+        panic!("the certifier refuses a type standing where a number does");
     };
 
     assert!(
-        matches!(&refused, Unmade::Kernel(verdict) if matches!(verdict.error, curios_cert::Error::Mismatch { .. })),
+        matches!(&refused, Unmade::Certifier(verdict) if matches!(verdict.error, curios_cert::Error::Mismatch { .. })),
         "{refused:?}"
     );
 }
 
-/// The kernel decides over a baseline what it adopts, so a text read again over its earlier reading is the unit a whole compile of it is.
+/// The certifier decides over a baseline what it adopts, so a text read again over its earlier reading is the unit a whole compile of it is.
 #[test]
 fn a_unit_read_over_its_earlier_reading_is_the_unit_read_whole() {
     let text = "let /lib/one : #NatType = 1;\nlet /lib/two : #NatType = 2;\n";
@@ -97,7 +97,7 @@ const FORGED: &str = "#{value_sort = Prop}\nlet /lib/T : Type = #BoolType;\nlet 
 const CROSSED: &str =
     "((h: /lib/H(false)) => h)(((k: /lib/H(true)) => k)(#{node = Variant} /sys/Bool/True/qed()))\n";
 
-/// What the kernel says of the term `text` closes with, read as Core text over the prelude and `units` and put at `False` as a module built by hand is.
+/// What the certifier says of the term `text` closes with, read as Core text over the prelude and `units` and put at `False` as a module built by hand is.
 fn closing_over(units: &[&Unit], text: &str) -> Vec<Verdict> {
     with_prelude(|prelude| {
         let scope = prelude
@@ -126,7 +126,7 @@ fn closing_over(units: &[&Unit], text: &str) -> Vec<Verdict> {
     })
 }
 
-// A unit stores the module its kernel's walk handed back, so a unit after it reads `/lib/T` by the sort the walk stated its value inhabits, `Type`, and not by the decorator the unit's text arrived with: the two calls of `/lib/H` stay apart.
+// A unit stores the module its certifier's walk handed back, so a unit after it reads `/lib/T` by the sort the walk stated its value inhabits, `Type`, and not by the decorator the unit's text arrived with: the two calls of `/lib/H` stay apart.
 //
 // Mutation-check: have `compile_read` store the module as it arrived rather than `rechecked.definitions`, and the closing term is admitted at `False`.
 #[test]
@@ -149,7 +149,7 @@ fn a_value_sort_a_unit_arrives_with_is_not_what_a_unit_after_it_reads() {
 
 // `/lib/T`'s terms are its baseline's, so the walk over the baseline does not judge it again and hands it back with what the baseline's walk stated of it, `Type`, whatever its decorator says now; a unit after it reads that, and the two calls of `/lib/H` stay apart.
 //
-// Mutation-check: have `kernel::stating::carried_marks` keep the item's own `value_sort` in place of the baseline's, and the closing term is admitted at `False`.
+// Mutation-check: have `certifier::stating::carried_marks` keep the item's own `value_sort` in place of the baseline's, and the closing term is admitted at `False`.
 #[test]
 fn a_value_sort_an_item_its_baseline_holds_arrives_with_is_the_baselines() {
     let first = compiled("let /lib/T : Type = #BoolType;\n", None).expect("the unit is made");

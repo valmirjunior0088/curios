@@ -11,7 +11,7 @@
 
 **Rationale.**
 
-- **The kernel stays free of literal types**, and a literal arrives carrying the structure and certificates library code consumes, which erasure makes free at run time.
+- **The certifier stays free of literal types**, and a literal arrives carrying the structure and certificates library code consumes, which erasure makes free at run time.
 - **One mechanism realizes every literal**: `elaborate_num_lit`'s candidate table with a shape default, the `switch` the match compiler emits for `Nat` dispatch, and the certified-value emitter. An enum rather than a flag makes a signed, radixed or out-of-range character unrepresentable.
 - **A default is no fact about the order a term is written in.** Taken where the numeral is read, `g(5, b)` defaults the numeral to `Nat` and refuses a `b` of another type, where `g(b, 5)` compiles; taken once the call has read both, the argument that states the type gives it in either order, and two numerals that must share a type are defaulted as one.
 - **Every value reads back.** A report prints what its reader can write ([A diagnostic spells what its reader can write](../tools/a-diagnostic-spells-what-its-reader-can-write.md)), so a carrier's literals cover its values, and reading back is a property of the grammar rather than of library names a printer must know. The non-finite spelling is [R7RS Scheme's](https://standards.scheme.org/corrected-r7rs/r7rs-Z-H-12.html); unlike R7RS, `-nan.0` is its own value, since term identity is bitwise and a NaN's sign is observable. An overflowing decimal is far more often a mistake than a request for an infinity.
@@ -19,7 +19,7 @@
 
 **Rejected.**
 
-- **Kernel-intrinsic character and string types.**
+- **Certifier-intrinsic character and string types.**
 - **A default held to the end of the declaration**, as Lean's and Rust's are: a value stands in the types after it here, and whatever reads the type before then, a match, a projection, a call, would have to wait in its turn. **The first of two literals at one type synthesized and the second held to it**, which answers a call's literals in the order of its slots.
 - **A `character: bool` beside the numeral's fields**, which admits the bogus pairings.
 - **Matching a `Char` scrutinee by projecting its `code` field in the match compiler**, which would teach pattern compilation a library representation and hide a projection `Char/to_nat` states in the source.

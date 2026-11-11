@@ -77,7 +77,7 @@ fn each_record_digests_the_index_it_sits_ahead_of() {
     }
 }
 
-/// **What a compilation believes of the prelude is what the establishing walk concluded, asked of the restored bytes.** The build walks each root with the kernel and panics on the first refusal, then images the unit beside the record that walk filed (`curios-prelude/compile.rs`); every compilation mounts those bytes and never walks them again ([the soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s second boundary), so the three things a mount reads off the record are asked here and nowhere else.
+/// **What a compilation believes of the prelude is what the establishing walk concluded, asked of the restored bytes.** The build walks each root with the certifier and panics on the first refusal, then images the unit beside the record that walk filed (`curios-prelude/compile.rs`); every compilation mounts those bytes and never walks them again ([the soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s second boundary), so the three things a mount reads off the record are asked here and nowhere else.
 ///
 /// The record must **cover** its unit: `Globals::partial` reads a classification only where it does, so a root whose record named fewer definitions than the root holds would have every proof in scope of it classified afresh from its terms, every group among them read as one no walk typed. It must file a **vector for every former**: positivity composes through the vector the certifier filed, an entry with none answers `Mixed`, and `file_scope_polarities` would recompute the library's on every compile. And the unit must carry no **positional identity**, the rule the build asserts on the value before it is imaged (`validate_stored_identities`), asked again over what was restored, since an index two compilations can both hand out aliases silently rather than failing.
 #[test]
@@ -198,17 +198,17 @@ fn stored_prelude_measurements() {
                 .unwrap_or_else(|| "?".to_string());
             let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
 
-            // Certified, then erased through the kernel that certified it, as the build makes the root.
+            // Certified, then erased through the certifier that accepted it, as the build makes the root.
             let globals = certified(&prelude[..index]);
             let start = Instant::now();
-            let (rechecked, mut kernel) =
+            let (rechecked, mut certifier) =
                 certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
             let certification = start.elapsed();
-            let heaviest = kernel.heaviest_declaration();
+            let heaviest = certifier.heaviest_declaration();
 
             let start = Instant::now();
             erase_unit(
-                &mut kernel,
+                &mut certifier,
                 Erasures::of(&cores, &places, &records, &units),
                 &zonked,
             )

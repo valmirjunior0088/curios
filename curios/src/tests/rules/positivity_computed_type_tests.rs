@@ -147,7 +147,7 @@ fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
     });
 }
 
-// A recursive occurrence that only a sort left to a caller would uncover. At `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands: one the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios-cert`'s `recheck::sort_tests` puts the same declaration to the kernel under this name. The control's arm holds no occurrence.
+// A recursive occurrence that only a sort left to a caller would uncover. At `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands: one the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios-cert`'s `recheck::sort_tests` puts the same declaration to the certifier under this name. The control's arm holds no occurrence.
 #[test]
 fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
     control(
@@ -170,7 +170,7 @@ fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
     );
 }
 
-// A parameter that only a sort left to a caller would uncover. `F`'s `B` stands in the arm of a match on `h`, which at `Prop` is its arm, an equation between two proofs being one, and holds `B` left of an arrow. `F` is decided as it is stated, where the match stands, so `G`, holding an `F` at `Prop` with itself at `B`, reaches itself through what the checker cannot see through. `curios-cert`'s `recheck::assignment_tests` puts the same declarations to the kernel under this name. Rename both or neither. The control's `G` holds an `F` at `{}` in `B`.
+// A parameter that only a sort left to a caller would uncover. `F`'s `B` stands in the arm of a match on `h`, which at `Prop` is its arm, an equation between two proofs being one, and holds `B` left of an arrow. `F` is decided as it is stated, where the match stands, so `G`, holding an `F` at `Prop` with itself at `B`, reaches itself through what the checker cannot see through. `curios-cert`'s `recheck::assignment_tests` puts the same declarations to the certifier under this name. Rename both or neither. The control's `G` holds an `F` at `{}` in `B`.
 #[test]
 fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_at_mixed() {
     control(

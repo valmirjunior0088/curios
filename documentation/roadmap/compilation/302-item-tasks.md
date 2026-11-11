@@ -46,7 +46,7 @@ Take demonstrated compiler-scaling violations first under the filing order, then
 Each lands alone, on its own check.
 
 1. **A term representation that crosses threads.** Needs the interned names a unit carries, so that the measurement includes what interning removes. Measured: the prelude build's wall time, the compile time of the corpus in `programs/` and peak memory on a release build without `profile`, before and after, with one worker. Use warm-ups and repeated interleaved baseline and candidate runs; report medians and spans with their conditions. Set the acceptable single-worker trade-off from these readings before proceeding to the executor; no percentage from another checker is assumed.
-2. **The executor, and the gate holding one worker and many to the same bytes.** The seam and the two executors land first, with the differential; then, each switched on alone and measured: the kernel behind elaboration, elaboration by item, parsing and lowering by file and module, erasure by item, and the independent jobs — `curios test`'s library and executables, `format` and `lint` over their files, and `wonder`'s analysts.
+2. **The executor, and the gate holding one worker and many to the same bytes.** The seam and the two executors land first, with the differential; then, each switched on alone and measured: the certifier behind elaboration, elaboration by item, parsing and lowering by file and module, erasure by item, and the independent jobs — `curios test`'s library and executables, `format` and `lint` over their files, and `wonder`'s analysts.
 
 ## Verification
 

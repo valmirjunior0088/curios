@@ -19,7 +19,7 @@ const RECORD: &str = r#"
     [[witness]]
     what = "a module"
     source = "a_module.crsc"
-    refused = [{ by = "kernel", error = "Mismatch", within = "entry" }, { by = "reader" }]
+    refused = [{ by = "certifier", error = "Mismatch", within = "entry" }, { by = "reader" }]
 "#;
 
 /// A ticket's record whose one witness is a history: a program mounted at `/lib`, its record of `/lib/one` withheld, and Core text read over it.
@@ -30,7 +30,7 @@ const HISTORY: &str = r#"
 
     [[witness]]
     what = "a history"
-    refused = [{ by = "elaborator" }, { by = "reader" }, { by = "kernel" }]
+    refused = [{ by = "elaborator" }, { by = "reader" }, { by = "certifier" }]
 
     [[witness.step]]
     mount = "/lib"
@@ -84,7 +84,7 @@ fn a_ticket_reads_from_its_record_and_its_witnesses_texts() {
             module.expect[0].error,
             &module.expect[0].within
         ),
-        (Checker::Kernel, Some("Mismatch"), &Some(Within::Entry))
+        (Checker::Certifier, Some("Mismatch"), &Some(Within::Entry))
     );
     assert_eq!(
         (module.expect[1].by, module.expect[1].error),
@@ -153,7 +153,7 @@ fn a_day_the_calendar_does_not_have_is_refused() {
 fn an_error_its_checker_does_not_raise_is_refused() {
     let record = RECORD.replace(r#"error = "Mismatch""#, r#"error = "Banana""#);
 
-    assert!(refusal(&record).contains("the kernel raises no error named `Banana`"));
+    assert!(refusal(&record).contains("the certifier raises no error named `Banana`"));
 }
 
 #[test]
@@ -229,7 +229,7 @@ fn a_history_reads_its_steps_and_closes_with_its_proof() {
     assert!(matches!(&history.proof, Proof::Module(text) if text == "0"));
     assert_eq!(
         history.asked(),
-        [Checker::Elaborator, Checker::Reader, Checker::Kernel]
+        [Checker::Elaborator, Checker::Reader, Checker::Certifier]
     );
 }
 

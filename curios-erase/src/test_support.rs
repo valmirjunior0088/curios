@@ -67,7 +67,7 @@ pub fn nominal(path: &str) -> curios_core::Global {
     curios_core::Global::Authored(Qualifier::from([path]))
 }
 
-/// A binder no fixture spells, minted far above where the kernel mints: a process-wide counter keeps two in one test apart.
+/// A binder no fixture spells, minted far above where the certifier mints: a process-wide counter keeps two in one test apart.
 #[cfg(test)]
 pub fn fresh(hint: Option<&str>) -> curios_core::Free {
     static MINTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1_000_000);
@@ -78,20 +78,20 @@ pub fn fresh(hint: Option<&str>) -> curios_core::Free {
     )
 }
 
-/// `unit` certified with nothing in scope and erased through the kernel that certified it, as the driver erases a unit it compiles.
+/// `unit` certified with nothing in scope and erased through the certifier that accepted it, as the driver erases a unit it compiles.
 #[cfg(test)]
 pub fn erase_alone(
     unit: &curios_core::Zonked<curios_core::Definitions>,
 ) -> Result<ErasedUnit, Error> {
     let globals = Globals::default();
-    let (rechecked, mut kernel) = certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut certifier) = certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(
         rechecked.verdicts.is_empty(),
         "the fixture is certified: {:?}",
         rechecked.verdicts
     );
 
-    erase_unit(&mut kernel, Erasures::nothing(), unit)
+    erase_unit(&mut certifier, Erasures::nothing(), unit)
 }
 
 /// A reference to the top-level definition `path` names, at no levels: what elaboration leaves for one generalized over none. Fixture-only.
@@ -158,14 +158,14 @@ pub fn try_erase(
 ) -> Result<curios_anf::Module, Error> {
     let program = zonked(&stating(program, type_));
     let globals = Globals::default();
-    let (rechecked, mut kernel) = certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut certifier) = certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(
         rechecked.verdicts.is_empty(),
         "the fixture is certified: {:?}",
         rechecked.verdicts
     );
 
-    erase_program(&mut kernel, Erasures::nothing(), &program).map(ErasedProgram::into_module)
+    erase_program(&mut certifier, Erasures::nothing(), &program).map(ErasedProgram::into_module)
 }
 
 #[cfg(test)]

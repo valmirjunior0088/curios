@@ -304,9 +304,9 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
 
         let unit = zonked(&unit);
         let globals = Globals::default();
-        let (_, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+        let (_, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
         let places = curios_core::Places::of(unit.as_definitions());
-        kernel.read(|reader| {
+        certifier.read(|reader| {
             for _ in 0..opened {
                 reader.fresh(None);
             }

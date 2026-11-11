@@ -71,7 +71,7 @@ const POWER: &str =
 
 /// A runaway as a whole program: its definitions, its one claim closed by `Eq/refl()`, and an entrypoint that reads none of them.
 pub fn runaway(shape: Runaway) -> String {
-    // What reads the claim after it, where a row measures what the kernel made of it: the kernel files what a judgment cost it where it begins the next.
+    // What reads the claim after it, where a row measures what the certifier made of it: the certifier files what a judgment cost it where it begins the next.
     let mut reader = String::new();
     let (imports, definitions, claim) = match shape {
         Runaway::Spin => (
@@ -246,7 +246,7 @@ fn a_power_widened_at_every_step_is_reduced_inside_its_budget() {
     assert!(report.contains("type mismatch"), "{report}");
 }
 
-/// One term built by two recursions, the second opened alone a step at a time, is held one by both checkers inside four hundred thousand units. The kernel nests a comparison at every step it opens, so what holds its depth is what each level costs it to reach, and no charge of its own.
+/// One term built by two recursions, the second opened alone a step at a time, is held one by both checkers inside four hundred thousand units. The certifier nests a comparison at every step it opens, so what holds its depth is what each level costs it to reach, and no charge of its own.
 #[test]
 fn a_side_opened_alone_a_step_at_a_time_is_held_inside_its_budget() {
     assert_eq!(

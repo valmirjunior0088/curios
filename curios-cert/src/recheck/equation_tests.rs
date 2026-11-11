@@ -1,4 +1,4 @@
-//! An arm's case equation, held to the arm that records it: no equation answers a term it was not recorded for — not one an arm's restatement left naming no local, not one an inner arm's equation reduces it to, not one read past the arm that restated it or the arm that assumed it, not the recorded one inside the arm that restated it, past a bracket that arm closed, and not the scrutinee of a refused sibling — each a module the elaborator would not build, written as Core text and put to the kernel with nothing in scope, declaring the propositions it uses.
+//! An arm's case equation, held to the arm that records it: no equation answers a term it was not recorded for — not one an arm's restatement left naming no local, not one an inner arm's equation reduces it to, not one read past the arm that restated it or the arm that assumed it, not the recorded one inside the arm that restated it, past a bracket that arm closed, and not the scrutinee of a refused sibling — each a module the elaborator would not build, written as Core text and put to the certifier with nothing in scope, declaring the propositions it uses.
 
 use {super::test_support::*, crate::*, curios_common::fill};
 
@@ -284,7 +284,7 @@ fn a_readers_answer_through_a_restated_guard_answers_nothing_after_the_split() {
     );
 }
 
-/// The guard is the match on `h(p) == h(q)`, `k(m(r))` at `true` and `k(m2)` at `false`, and its `true` arm assumes it `true`. The `true` arm of the split on `c` re-types `p` and `q` at `{}`, so the guard, restated there, settles to `k(m(r))`; `inside` asks `k(m(s))`, which no reader takes apart and which the kernel's conversion holds one with `k(m(r))`, `r` and `s` being proofs of one proposition, so the restatement answers it. After the split `after` asks the same.
+/// The guard is the match on `h(p) == h(q)`, `k(m(r))` at `true` and `k(m2)` at `false`, and its `true` arm assumes it `true`. The `true` arm of the split on `c` re-types `p` and `q` at `{}`, so the guard, restated there, settles to `k(m(r))`; `inside` asks `k(m(s))`, which no reader takes apart and which the certifier's conversion holds one with `k(m(r))`, `r` and `s` being proofs of one proposition, so the restatement answers it. After the split `after` asks the same.
 const A_CONVERSIONS_ANSWER_UNDER_A_SPLIT: &str = r#"
 ((c: #BoolType, h: (x: match c: (x2) => Type
         | false =>
@@ -362,7 +362,7 @@ const A_CONVERSIONS_ANSWER_UNDER_A_SPLIT: &str = r#"
 )
 "#;
 
-// What the kernel's conversion answered of a restated guard inside the split, asked from inside reduction, goes with the restatement: `after` is refused. Kept past the split, the answer would type `after`, and at `c := false`, `p := 0`, `q := 1`, `k` the identity, `m(_) := false`, `m2 := true`, where the guard is `true`, `Holds(k(m(s)))` is `Holds(false)`, so the closing term would be admitted at `False`.
+// What the certifier's conversion answered of a restated guard inside the split, asked from inside reduction, goes with the restatement: `after` is refused. Kept past the split, the answer would type `after`, and at `c := false`, `p := 0`, `q := 1`, `k` the identity, `m(_) := false`, `m2 := true`, where the guard is `true`, `Holds(k(m(s)))` is `Holds(false)`, so the closing term would be admitted at `False`.
 //
 // Mutation-checked at `Scope::restate`: with no equation restated, the module is admitted, the recorded guard settling inside the split.
 #[test]

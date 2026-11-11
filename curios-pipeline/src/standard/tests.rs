@@ -1395,7 +1395,7 @@ const REFUSED: [&str; 0] = [];
 /// The `let`s of the library whose printed form elaborates and is not proved to be the `let`: none.
 const UNPROVED: [&str; 0] = [];
 
-/// The `let`s of the library whose printed form or whose proof elaboration accepts and the kernel refuses: none.
+/// The `let`s of the library whose printed form or whose proof elaboration accepts and the certifier refuses: none.
 const UNCERTIFIED: [&str; 0] = [];
 
 /// One `#[test]` per part the library is read back in, and the number of parts [`parts_of`] deals its files into, declared from one list so the two cannot disagree.
@@ -1446,9 +1446,9 @@ fn parts_of(files: &[(PathBuf, Qualifier, String)]) -> Vec<usize> {
     parts
 }
 
-/// **A report's term reads back.** Beside every `let` of the library two declarations are written: its type and its body as a report raised in it prints them, and a proof by `Eq/refl()` that what those declare is the `let`. The files are lowered and elaborated as the library, over the archive, and the kernel walks what comes of it. So each printed term is accepted where its reader stands, and is the term it was printed from by the conversion of each checker, at the universe levels that checker is handed: a printed term states none, and elaboration solves for them. A `let` not known to terminate is named by no type, so what is written for one is that it has its printed type.
+/// **A report's term reads back.** Beside every `let` of the library two declarations are written: its type and its body as a report raised in it prints them, and a proof by `Eq/refl()` that what those declare is the `let`. The files are lowered and elaborated as the library, over the archive, and the certifier walks what comes of it. So each printed term is accepted where its reader stands, and is the term it was printed from by the conversion of each checker, at the universe levels that checker is handed: a printed term states none, and elaboration solves for them. A `let` not known to terminate is named by no type, so what is written for one is that it has its printed type.
 ///
-/// A `let` the translation declines, one naming what its module cannot among them, has nothing written beside it, and each is listed ([`DECLINED`]). One refused as printed, or whose proof is, is found by leaving it out and compiling again, so every `let` that does not read back is named, and not the first alone ([`REFUSED`], [`UNPROVED`]); and the proofs the kernel refuses are listed with the `let`s they are of ([`UNCERTIFIED`]).
+/// A `let` the translation declines, one naming what its module cannot among them, has nothing written beside it, and each is listed ([`DECLINED`]). One refused as printed, or whose proof is, is found by leaving it out and compiling again, so every `let` that does not read back is named, and not the first alone ([`REFUSED`], [`UNPROVED`]); and the proofs the certifier refuses are listed with the `let`s they are of ([`UNCERTIFIED`]).
 ///
 /// **In parts, and once.** Read back whole the library is one test several times the length of any other, so it is read back a part at a time, a `#[test]` each ([`read_back_in_parts`]), and the parts run side by side; what a part writes beside the `let`s of its files is elaborated over the archive, which keeps every declaration the source wrote. And a `let` listed as refused or as unproved is left out before the first compile, so a library nothing has changed in is elaborated once: the listed ones are then written alone, where what is refused of them is what is still to be listed.
 fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
@@ -1701,7 +1701,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
             refused_of(&error, &beside);
         }
 
-        // The kernel's own walk: a declaration the source wrote stands on the verdict filed with the archive, and each one written beside it is judged.
+        // The certifier's own walk: a declaration the source wrote stands on the verdict filed with the archive, and each one written beside it is judged.
         let finished = Zonked::project(&recompiled.definitions)
             .unwrap_or_else(|refusal| panic!("what elaboration finished is finished: {refusal}"));
         let places = recompiled
@@ -1764,7 +1764,7 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         }
         if uncertified != known_uncertified || uncertified.len() != judged.verdicts.len() {
             found.push(format!(
-                "of the {} declarations written beside a `let` the kernel refuses {}, those of {:?}, where {:?} are the `let`s of this part known to be refused theirs:\n{}",
+                "of the {} declarations written beside a `let` the certifier refuses {}, those of {:?}, where {:?} are the `let`s of this part known to be refused theirs:\n{}",
                 beside.len(),
                 judged.verdicts.len(),
                 names(&uncertified),

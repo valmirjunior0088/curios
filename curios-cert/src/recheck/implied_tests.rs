@@ -1,4 +1,4 @@
-//! What a declaration's form implies, as the kernel takes it, written as Core text and put with nothing in scope: a family's former and constructors are definitions it checks as any other, under names declared once, typed by what the module holds under each name and never by what the form would have made, and a concept's method is no definition at all.
+//! What a declaration's form implies, as the certifier takes it, written as Core text and put with nothing in scope: a family's former and constructors are definitions it checks as any other, under names declared once, typed by what the module holds under each name and never by what the form would have made, and a concept's method is no definition at all.
 
 use {
     super::test_support::*,
@@ -15,7 +15,7 @@ fn method() -> Global {
     Global::Authored(Qualifier::from(["C", "bot"]))
 }
 
-/// A method named by its path is the node lowering writes before elaboration settles it on a dictionary, so the kernel meets it as elaboration-only: no constant stands at the method's type for it to be typed by.
+/// A method named by its path is the node lowering writes before elaboration settles it on a dictionary, so the certifier meets it as elaboration-only: no constant stands at the method's type for it to be typed by.
 #[test]
 fn a_method_named_by_its_path_is_refused_as_elaboration_only() {
     let verdicts = core_text_verdicts(&fill!(
@@ -32,7 +32,7 @@ fn a_method_named_by_its_path_is_refused_as_elaboration_only() {
     );
 }
 
-/// A method is its concept's field, and no definition: named as a declaration, its path names nothing the kernel holds.
+/// A method is its concept's field, and no definition: named as a declaration, its path names nothing the certifier holds.
 #[test]
 fn a_method_named_as_a_declaration_names_nothing() {
     let verdicts = core_text_verdicts(&fill!(

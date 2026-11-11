@@ -6,7 +6,7 @@
 //!
 //! **Within it, an answer is what asking again would give, for as long as what it read stands**, as that decision states: how long a table keeps an answer is a cost, and never what a declaration elaborates to. Under [`Caches::wholesale`] every boundary clears every table, and `curios-pipeline`'s `std_memo_census` requires `/std` to elaborate to one module both ways.
 //!
-//! **A reduct has one of two lives within it**, as the kernel's memos have them (`curios-cert`'s `memos` module). One whose term and reduct are both [`lasting`] reads nothing a scope holds: no equation is recorded under a spelling that names no local, reduction puts no question to conversion about a term that names none, and such a term names no local definition and no level a rewrite moves. It stands for the declaration, and only a change to a definition it may have read clears it: a redefinition, and a rollback, since a definition still being elaborated may hold a solution the rollback unwinds. Every other reduct goes at each boundary of the scope as well.
+//! **A reduct has one of two lives within it**, as the certifier's memos have them (`curios-cert`'s `memos` module). One whose term and reduct are both [`lasting`] reads nothing a scope holds: no equation is recorded under a spelling that names no local, reduction puts no question to conversion about a term that names none, and such a term names no local definition and no level a rewrite moves. It stands for the declaration, and only a change to a definition it may have read clears it: a redefinition, and a rollback, since a definition still being elaborated may hold a solution the rollback unwinds. Every other reduct goes at each boundary of the scope as well.
 //!
 //! **A bracket of the scope is no boundary of the window around it.** A settlement withholds the frames from its entry's inwards and restores them, and a judgment standing on held frames sets the live ones aside and takes them back; what the live window remembered is what asking again gives once either closes, so each sets it aside at its entry and hands it back at its exit ([`Caches::enter_window`]). What a settlement remembered is kept for the next settlement made under the same refinements, for as long as the deepest frame it read still stands and what else it rests on does (`Frames::begin_reads`, `Frame::settled_windows`, [`Footing`]).
 //!
@@ -106,13 +106,13 @@ pub struct ElaborationStamp {
 pub struct Caches {
     /// Reducts that may read the scope, for as long as it stands as it did: every boundary of the scope clears them. [`Caches::begin_declaration`] clears every table where the budget is restored, so every node one holds was built under that budget, a hit on it is free, and nothing charges an insertion; a table that outlived the declaration would carry across an item boundary what the work after finalization reduced — the witness goals retried and the parked ones drained — and whether a declaration could afford its reductions would depend on that.
     ///
-    /// **One table for each of the two reductions**, as the kernel's local-bearing memos have: the first for a judgment's, which may ask the elaborator's conversion at a stuck fold, at a missed equation and at a stuck elimination's atoms, and the second for plain reduction, which asks nothing (`Context::plainly`). A term's reduct under one is not its reduct under the other.
+    /// **One table for each of the two reductions**, as the certifier's local-bearing memos have: the first for a judgment's, which may ask the elaborator's conversion at a stuck fold, at a missed equation and at a stuck elimination's atoms, and the second for plain reduction, which asks nothing (`Context::plainly`). A term's reduct under one is not its reduct under the other.
     reduction: [HashMap<Term, Term>; 2],
     /// The reducts that stand for the declaration: a [`lasting`] term's, where its reduct is lasting too. See the module documentation for what clears them.
     lasting: [HashMap<Term, Term>; 2],
     /// The second door into [`Caches::lasting`], as [`Caches::reduction_erased`] is into [`Caches::reduction`]: it lives with the table it indexes.
     lasting_erased: [HashMap<Term, Term>; 2],
-    /// What a closed term is forced to (`reduce`'s `force_rec`), kept apart from its reduct as the kernel's memos and the closed machine's keep the two demands apart: forced, a recursive call is the value its fold computes, and plain, it is the folded call itself. Served to a plain probe, a forced value would answer a term the plain reduction leaves folded with its unfolding, as a forced reduction happened to have run first. Of the two lives as the reducts are, the scoped one first.
+    /// What a closed term is forced to (`reduce`'s `force_rec`), kept apart from its reduct as the certifier's memos and the closed machine's keep the two demands apart: forced, a recursive call is the value its fold computes, and plain, it is the folded call itself. Served to a plain probe, a forced value would answer a term the plain reduction leaves folded with its unfolding, as a forced reduction happened to have run first. Of the two lives as the reducts are, the scoped one first.
     forced: [HashMap<Term, Term>; 2],
     lasting_forced: [HashMap<Term, Term>; 2],
     /// The reduction table's second door, for the terms mentioning no local binder: each universe-erased spelling to the first exact key stored under it. A reduct is the same function of its term whatever the levels in it and whatever sorts its instances state, so two spellings differing only in those — two occurrences of one term, each at universe metavariables of its own, or one written with metavariables and read with them solved — are one computation; the exact table cannot see that, and every one of them re-ran the fold. A probe that misses the exact table asks here, and a hit is served through [`AcrossUniverses`], which rewrites the stored reduct's levels and sorts to the asking spelling's where the asking spelling is the stored one carried, or declines.
@@ -141,10 +141,10 @@ pub struct Caches {
     oracle: Vec<HashMap<Keyed<ElaborationKey>, (Term, Term)>>,
     /// Whether a binder is itself a proof — assumed at a proposition — for each binder a stuck form naming it has put to the entries in scope (`reduce`'s `proofs_named`). A binder's identity is minted once, so an entry is never another binder's, and the table goes with the declaration.
     proofs: HashMap<Free, bool>,
-    /// One tick per *write* to any kernel store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `Context::get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
+    /// One tick per *write* to any certifier store — definitions, refinements, assumptions, name/metavariable minting, solves, parked/deferred work, the witness table. `Context::get_or_init_elaborated` snapshots it around a candidate sub-elaboration: an unchanged stamp certifies the run was pure (replaying it would be the identity on the context), which is what makes skipping the replay on a later cache hit sound.
     mutation_stamp: Entropy,
-    /// A recorded scrutinee against itself as the kernel spells it — solved metavariables materialized, local definitions substituted, refined variables as their values — kept where no metavariable in it is left unsolved: what the filter in front of an entry reads (`reduce`'s `could_settle`), which would otherwise rebuild the scrutinee at every stuck form. It rests on the solutions, the definitions and the refinements in the window, so it goes wherever the reducts do, and a bracket sets it aside with them ([`Caches::enter_window`]). Behind a cell because the filter runs while the entries are borrowed.
-    kernel_spellings: RefCell<HashMap<Term, Term>>,
+    /// A recorded scrutinee against itself as the certifier spells it — solved metavariables materialized, local definitions substituted, refined variables as their values — kept where no metavariable in it is left unsolved: what the filter in front of an entry reads (`reduce`'s `could_settle`), which would otherwise rebuild the scrutinee at every stuck form. It rests on the solutions, the definitions and the refinements in the window, so it goes wherever the reducts do, and a bracket sets it aside with them ([`Caches::enter_window`]). Behind a cell because the filter runs while the entries are borrowed.
+    certifier_spellings: RefCell<HashMap<Term, Term>>,
     /// Every name a lookup found no definition for, and not defined since: what a remembered reduct can be stuck on — in a table of either life, a window set aside or one a frame keeps — and so the names a fresh definition can unstick one of ([`Caches::retain_reductions_without`]). Kept across every clear of the tables, since a window outlives one; a name leaves it where it is defined. A name minted for a binding is defined before anything reduces under it, so its definition reads no reduct. Behind a cell because a definition is looked up through a shared reference.
     absent: RefCell<HashSet<Mention>>,
     /// Monotonic universe-solver writes are tracked separately. Elaboration entries may survive them only when their keys and results contain no transitively unresolved universe meta; reducts survive them outright, being parametric in levels (see `Context::cached_reduced`); rollback/finalization clears every cache at the non-monotonic boundaries.
@@ -190,7 +190,7 @@ impl Bracket {
 pub struct Window {
     bracket: Bracket,
     scoped: [Scoped; 2],
-    kernel_spellings: HashMap<Term, Term>,
+    certifier_spellings: HashMap<Term, Term>,
     /// The classifications the elaborator's conversion classed, a judgment's alone, set aside where the bracket reaches a judgment's reduction.
     classified: HashMap<Term, Rc<Classification>>,
     /// The stamps its sorts and verdicts were judged under.
@@ -281,7 +281,7 @@ impl Caches {
             && footing.redefinitions == self.redefinitions
     }
 
-    /// Record a write to a kernel store, poisoning any elaboration-cache insert whose computation spans it.
+    /// Record a write to a certifier store, poisoning any elaboration-cache insert whose computation spans it.
     pub fn note_write(&mut self) {
         self.mutation_stamp.fresh();
     }
@@ -408,7 +408,7 @@ impl Caches {
         table.insert(term, Rc::new(classification));
     }
 
-    /// Every reduct and forced value of both reductions and both lives, the second doors indexing the reducts, the classifications the elaborator's conversion classed, the sorts read through them, and the scrutinees remembered as the kernel spells them.
+    /// Every reduct and forced value of both reductions and both lives, the second doors indexing the reducts, the classifications the elaborator's conversion classed, the sorts read through them, and the scrutinees remembered as the certifier spells them.
     fn clear_reductions(&mut self) {
         self.clear_lasting();
         self.clear_scope();
@@ -437,7 +437,7 @@ impl Caches {
         }
     }
 
-    /// The reducts and forced values that may read the scope, with the reducts' second doors and the closed runs' answers of that life, the classifications the elaborator's conversion classed, the sorts, and the scrutinees remembered as the kernel spells them.
+    /// The reducts and forced values that may read the scope, with the reducts' second doors and the closed runs' answers of that life, the classifications the elaborator's conversion classed, the sorts, and the scrutinees remembered as the certifier spells them.
     fn clear_scope(&mut self) {
         let tables = self
             .reduction
@@ -452,7 +452,7 @@ impl Caches {
         }
         self.classified.clear();
         self.clear_sorts();
-        self.kernel_spellings.get_mut().clear();
+        self.certifier_spellings.get_mut().clear();
     }
 
     /// A lookup found no definition for `name`: a reduct remembered from here on may be stuck on its absence.
@@ -521,13 +521,13 @@ impl Caches {
         }
     }
 
-    /// `term` as the kernel spells it, where that has been remembered.
-    pub fn kernel_spelling_get(&self, term: &Term) -> Option<Term> {
-        self.kernel_spellings.borrow().get(term).cloned()
+    /// `term` as the certifier spells it, where that has been remembered.
+    pub fn certifier_spelling_get(&self, term: &Term) -> Option<Term> {
+        self.certifier_spellings.borrow().get(term).cloned()
     }
 
-    pub fn kernel_spelling_insert(&self, term: Term, spelled: Term) {
-        self.kernel_spellings.borrow_mut().insert(term, spelled);
+    pub fn certifier_spelling_insert(&self, term: Term, spelled: Term) {
+        self.certifier_spellings.borrow_mut().insert(term, spelled);
     }
 
     /// Whether the binder `name` is a proof, where that has been asked.
@@ -553,7 +553,7 @@ impl Caches {
             for scoped in &mut window.scoped {
                 scoped.clear();
             }
-            window.kernel_spellings.clear();
+            window.certifier_spellings.clear();
         }
     }
 
@@ -764,7 +764,7 @@ impl Caches {
         let mut window = Window {
             bracket,
             scoped: Default::default(),
-            kernel_spellings: mem::take(self.kernel_spellings.get_mut()),
+            certifier_spellings: mem::take(self.certifier_spellings.get_mut()),
             classified: HashMap::new(),
             judged_at: self.sorts_at.clone(),
         };
@@ -795,7 +795,7 @@ impl Caches {
             self.sorts[index] = scoped.sorts;
             self.same[index] = scoped.same;
         }
-        *self.kernel_spellings.get_mut() = window.kernel_spellings;
+        *self.certifier_spellings.get_mut() = window.certifier_spellings;
         if window.bracket.reductions().contains(&0) {
             self.classified = window.classified;
         }

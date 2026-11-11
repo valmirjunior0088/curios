@@ -315,7 +315,7 @@ impl Region {
     }
 }
 
-// What the two checkers say of a cell, asked without erasing or emitting it: the elaborator's refusal as a compilation prints it, or what the kernel refuses of the program the elaborator built. A cell is about its levels, which both have judged by then, and compiled whole the matrix costs a minute a test.
+// What the two checkers say of a cell, asked without erasing or emitting it: the elaborator's refusal as a compilation prints it, or what the certifier refuses of the program the elaborator built. A cell is about its levels, which both have judged by then, and compiled whole the matrix costs a minute a test.
 fn judged(source: &str) -> Result<Vec<String>, String> {
     let entrypoint = source.parse::<Entrypoint>().expect("the cell parses");
     let checked = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
@@ -336,7 +336,7 @@ fn accepted(source: &str) {
     match judged(source) {
         Ok(verdicts) => assert!(
             verdicts.is_empty(),
-            "the kernel refuses: {source}\n{verdicts:?}"
+            "the certifier refuses: {source}\n{verdicts:?}"
         ),
         Err(message) => panic!("refused: {source}\n{message}"),
     }
@@ -460,7 +460,7 @@ fn a_bang_sequences_a_decided_action_below_its_region() {
     }
 }
 
-// Over `Try` the base monad is an implicit that unification solves from the action. It is committed as its check rebuilt it, at the domain `Try/bind` takes it at, so the kernel is handed the same monad whichever side solved it. A family is committed at an occurrence of its own, so a bare nominal former read off the action, `Option` under `Try`, is no monad of the action's level alone: the region binds a payload a level above it.
+// Over `Try` the base monad is an implicit that unification solves from the action. It is committed as its check rebuilt it, at the domain `Try/bind` takes it at, so the certifier is handed the same monad whichever side solved it. A family is committed at an occurrence of its own, so a bare nominal former read off the action, `Option` under `Try`, is no monad of the action's level alone: the region binds a payload a level above it.
 #[test]
 fn a_monads_own_bind_sequences_a_decided_action_below_its_region() {
     for region in [&RESULT, &OPTION, &STATE, &TRY, &TRY_LAMBDA, &TRY_OPTION] {

@@ -1,4 +1,4 @@
-//! Marks: the ones a registry entry declares, and the written ones the kernel holds to them.
+//! Marks: the ones a registry entry declares, and the written ones the certifier holds to them.
 
 use {
     super::test_support::*,
@@ -8,13 +8,13 @@ use {
     curios_core::{Free, Subterm},
 };
 
-/// A constructor's marks are read by one kernel rule, the arm's, which holds each binder an arm writes to the payload it binds ([`an_arm_binds_under_its_payloads_marks`]). No other rule reads them, and a constructor's *value* carries none: the same declaration under its honest mark and under a lying one, with a value of it and no match over it, must produce the same verdicts. That each binder has a mark is no one's to check: a mark is its telescope entry's own, so a signature a mark short of its binders cannot be written, and the same holds of the marks a declaration's parameters stand under in its arity.
+/// A constructor's marks are read by one certifier rule, the arm's, which holds each binder an arm writes to the payload it binds ([`an_arm_binds_under_its_payloads_marks`]). No other rule reads them, and a constructor's *value* carries none: the same declaration under its honest mark and under a lying one, with a value of it and no match over it, must produce the same verdicts. That each binder has a mark is no one's to check: a mark is its telescope entry's own, so a signature a mark short of its binders cannot be written, and the same holds of the marks a declaration's parameters stand under in its arity.
 ///
 /// That reason is an *inventory*: every consumer of a registry entry, read against the clauses. An inventory is exactly the kind of claim that goes stale as code moves, and the polarity vector beside it on the same entry has `curios-analysis`'s `a_carried_polarity_vector_is_recomputed_rather_than_believed` and this crate's `a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys` holding its own version of this. This holds the plicity half executably instead.
 ///
-/// The lie is merely wrong — an `Implicit` mark where the declaration says `Explicit`. What must not happen is this kernel quietly deciding a value of the family *differently* because of it, which is what a nominal rule reading the marks outside an arm would introduce without any clause noticing.
+/// The lie is merely wrong — an `Implicit` mark where the declaration says `Explicit`. What must not happen is this certifier quietly deciding a value of the family *differently* because of it, which is what a nominal rule reading the marks outside an arm would introduce without any clause noticing.
 ///
-/// The control is [`a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector`]: the same lie beside a genuine error. Without it, "the kernel ignores the mark" and "the kernel ignores this module" read alike.
+/// The control is [`a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector`]: the same lie beside a genuine error. Without it, "the certifier ignores the mark" and "the certifier ignores this module" read alike.
 #[test]
 fn a_constructors_mark_decides_nothing_of_its_value() {
     assert_eq!(
@@ -55,7 +55,7 @@ fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
             SYNTAX
         )
         .is_empty(),
-        "the kernel accepted a constructor application at the wrong payload count",
+        "the certifier accepted a constructor application at the wrong payload count",
     );
 }
 
@@ -120,7 +120,7 @@ fn an_arm_binds_under_its_payloads_marks() {
     );
 }
 
-/// A former's η-form applied over its whole list is built as the node it applies, and the β-step reads neither its binder's mark nor its binder's type (`curios_core::former_eta`): what the kernel then types is the node, by the former's own parameter. So an η-form of `S` whose binder stands under a mark `S`'s parameter does not take builds `S(Nat)` and is accepted as `S(Nat)`, and one whose binder states a type `S`'s parameter does not take cannot carry an argument through it: `S(3)` is refused as `S` refuses it.
+/// A former's η-form applied over its whole list is built as the node it applies, and the β-step reads neither its binder's mark nor its binder's type (`curios_core::former_eta`): what the certifier then types is the node, by the former's own parameter. So an η-form of `S` whose binder stands under a mark `S`'s parameter does not take builds `S(Nat)` and is accepted as `S(Nat)`, and one whose binder states a type `S`'s parameter does not take cannot carry an argument through it: `S(3)` is refused as `S` refuses it.
 ///
 /// The control is the first module, accepted: refusing every type spelled as an applied η-form would pass the refusal alone.
 #[test]

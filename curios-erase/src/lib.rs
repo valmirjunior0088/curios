@@ -6,7 +6,7 @@
 //!
 //! Core classifies and traverses; the builder owns construction. An item erases into a fragment of its own, which names what another item binds as an import ([`ErasedItem`]), and a unit holds its items' fragments ([`ErasedUnit`]). Production compilation erases the fixed prelude once at compiler build time, imaged by `curios-prelude`, and every later unit reads how its names are bound ([`Erasures`]). [`erase_unit`] erases a unit, the prelude's included, and [`erase_program`] is the same walk with the entry erased and what it reaches linked into one module.
 //!
-//! **Erasure reads the module the kernel certified, through the kernel that certified it** ([`curios_cert::Reader`]): every type the walk is directed by is the kernel's reading of a term it accepted, at the sorts it judged. An item that leaves sorts to its caller erases at each assignment of them ([`ErasedForms`], [`Sorts`]), and a level carries nothing at run time, so no universe reaches ANF.
+//! **Erasure reads the module the certifier accepted, through the certifier that accepted it** ([`curios_cert::Reader`]): every type the walk is directed by is the certifier's reading of a term it accepted, at the sorts it judged. An item that leaves sorts to its caller erases at each assignment of them ([`ErasedForms`], [`Sorts`]), and a level carries nothing at run time, so no universe reaches ANF.
 
 mod error;
 pub use error::{ErasedName, Error};

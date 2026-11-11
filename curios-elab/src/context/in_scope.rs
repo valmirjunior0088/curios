@@ -32,7 +32,7 @@ pub struct Defined<'a> {
     /// What the name unfolds to: a definition's body, a group's member as the group's projection, and nothing where the definition is a proof ([`curios_core::Definition::proof`]).
     pub body: Option<&'a Term>,
     pub universe_context: &'a UniverseContext,
-    /// What its unit's elaboration concluded of it as it published it ([`crate::Classified::totality`]), `Partial` where it filed nothing: elaboration's own conclusion, and the only answer this checker has. The kernel reads the certifier's record of the unit instead, which is what makes its verdict a second one ([`curios-cert`'s README](../../../curios-cert/README.md)).
+    /// What its unit's elaboration concluded of it as it published it ([`crate::Classified::totality`]), `Partial` where it filed nothing: elaboration's own conclusion, and the only answer this checker has. The certifier reads the certifier's record of the unit instead, which is what makes its verdict a second one ([`curios-cert`'s README](../../../curios-cert/README.md)).
     pub totality: Totality,
     /// How it applies its parameters, where its publication filed that ([`crate::Classified::applications`]).
     pub applications: Option<&'a Applications>,

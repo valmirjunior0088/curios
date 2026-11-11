@@ -16,7 +16,7 @@ use {
 ///
 /// `Box : Prop 1 | mk(a : Type 0)` is a legal declaration — a proposition at the level its payload fits under — and the large-elimination guard is what keeps a proposition holding a type from handing it back. Were the guard to admit `unbox` — `carries_information` reporting a universe-typed payload as carrying nothing, on the reasoning that erasure deletes a type either way — every step after that is ordinary: irrelevance makes `mk(A)` and `mk(B)` convertible at `Box`, so `refl` inhabits `Eq(@Box)(mk(A), mk(B))`; congruence through `unbox` carries that to `Eq(@Type 0)(A, B)` for *any* two types; and transport — the licensed singleton case, `refl`'s payload being pinned by its own targets — turns `()` into a proof of `False`.
 ///
-/// No surface program reaches it: `curios-elab`'s `singleton_eliminable` refuses `unbox` at every surface spelling. The fixtures in `crate::kernel::infer::eliminate::large_elimination_tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
+/// No surface program reaches it: `curios-elab`'s `singleton_eliminable` refuses `unbox` at every surface spelling. The fixtures in `crate::certifier::infer::eliminate::large_elimination_tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
 #[test]
 fn a_derivation_through_a_type_carrying_proposition_is_refused() {
     let verdicts = fixture_verdicts(&forgery(), 1_000_000, &Globals::default(), SYNTAX);
@@ -25,13 +25,13 @@ fn a_derivation_through_a_type_carrying_proposition_is_refused() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::LargeElimination(_))),
-        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+        "the certifier accepted a closed inhabitant of `False`: {verdicts:?}",
     );
 }
 
 /// (V) has two routes to a refusal, and no program reaches the second. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks whether the position is partial in itself, which blames nothing: whether it encloses a `rec` group the walk typed and found not to descend, or calls a host row that diverges.
 ///
-/// Across a kernel walk of the whole prelude and every program in `curios`'s test corpus the anonymous route refuses nothing: every surface spelling that would reach it is refused during elaboration, so no module carries it here — `rec b : False = b; b`, the shape `curios`'s `tests::rules` totality fixtures use, never arrives.
+/// Across a certifier walk of the whole prelude and every program in `curios`'s test corpus the anonymous route refuses nothing: every surface spelling that would reach it is refused during elaboration, so no module carries it here — `rec b : False = b; b`, the shape `curios`'s `tests::rules` totality fixtures use, never arrives.
 ///
 /// A call to `/std/Proc/exit` is the trigger that isolates this route rather than merely reaching it. A non-descending `rec` at a proof type is refused by `check_group`'s own local gate before the position walk runs, so it demonstrates that gate instead; an exit meets no gate of its own. `exit` here yields `Io({})`, the type `qed` holds, and `Held/qed(exit(@{}, 0))` is therefore well typed at a proposition while carrying a computation that does not terminate. That is (V)'s whole subject: erasure deletes the proof, the exit never fires, and the program continues holding a certificate for something no total term established.
 ///
@@ -53,7 +53,7 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
                 reached: None,
             }
         )),
-        "the kernel certified a proof carrying an exit: {verdicts:?}",
+        "the certifier accepted a proof carrying an exit: {verdicts:?}",
     );
 }
 
@@ -77,7 +77,7 @@ fn a_wait_inside_a_proof_is_refused_with_no_definition_to_blame() {
                 reached: None,
             }
         )),
-        "the kernel certified a proof enclosing a group that never descends: {verdicts:?}",
+        "the certifier accepted a proof enclosing a group that never descends: {verdicts:?}",
     );
 }
 
@@ -124,7 +124,7 @@ fn a_proposition_may_not_carry_a_computed_relevant_field() {
             .iter()
             .any(|verdict| verdict.name.as_ref() == Some(&wrap)
                 && matches!(verdict.error, Error::Mismatch { .. })),
-        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+        "the certifier accepted a closed inhabitant of `False`: {verdicts:?}",
     );
 }
 
@@ -226,7 +226,7 @@ let /H : (x: /T) -> Prop = (x: /T) => /std/Bool/Holds(x);
 )
 "#;
 
-// A definition's value sort is a publication `Sort::of` reads with nothing run, ahead of the irrelevance gate: read as the decorator states it, `/T` would be a proposition, `true` and `false` one at it, and the two calls of `/H` one by their spines, so the closing term would stand at `Holds(false)`, which is `False`. The kernel states the sort `/T`'s value inhabits itself, `Type`, and the two calls stay apart.
+// A definition's value sort is a publication `Sort::of` reads with nothing run, ahead of the irrelevance gate: read as the decorator states it, `/T` would be a proposition, `true` and `false` one at it, and the two calls of `/H` one by their spines, so the closing term would stand at `Holds(false)`, which is `False`. The certifier states the sort `/T`'s value inhabits itself, `Type`, and the two calls stay apart.
 #[test]
 fn a_value_sort_a_module_states_decides_no_comparison() {
     let verdicts = core_text_verdicts(&fill!(
@@ -285,7 +285,7 @@ let /H : (
 
 // A proposition may hold data, a payload at a sort its caller states being a proof at `Prop` and a `Bool` at `Type`, and its two values at `Bool` are one by irrelevance: the closing term stands at `/H` of `box(false)` because the two calls of `/H` are one by their spines. What keeps that from `False` is that no payload is taken out of the proposition into a type: `/H` is refused, and the closing term, read against `/H` as it stands, is not.
 //
-// Mutation-check: let the kernel's large-elimination guard take a proposition of one constructor into a type whatever its payloads, as though each were pinned, and the module is admitted whole.
+// Mutation-check: let the certifier's large-elimination guard take a proposition of one constructor into a type whatever its payloads, as though each were pinned, and the module is admitted whole.
 #[test]
 fn a_proposition_holding_a_payload_at_its_callers_sort_is_not_taken_apart_into_a_type() {
     let verdicts = core_text_verdicts(&fill!(
@@ -403,9 +403,9 @@ let /in_a_groups_tail : #NatType =
 (/spin(())).0
 "#;
 
-// The kernel records a position wherever it types a term at a proposition or a sort, so each is refused under the declaration that holds it: by the definition it reaches, or with no name to blame where it reaches a member of a group standing in a term, which it reads by value. `curios`'s `tests::rules::totality_partiality_tests` puts the positions a program writes to the elaborator under this name.
+// The certifier records a position wherever it types a term at a proposition or a sort, so each is refused under the declaration that holds it: by the definition it reaches, or with no name to blame where it reaches a member of a group standing in a term, which it reads by value. `curios`'s `tests::rules::totality_partiality_tests` puts the positions a program writes to the elaborator under this name.
 //
-// Mutation-checked at `Kernel::record_checked`: with every position dropped before it is recorded, nothing here is refused `NotTotal`.
+// Mutation-checked at `Certifier::record_checked`: with every position dropped before it is recorded, nothing here is refused `NotTotal`.
 #[test]
 fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
     let verdicts = core_text_verdicts(&fill!(
@@ -464,7 +464,7 @@ let /held : Type =
 /std/Bool/False
 "#;
 
-// An occurrence's parameters are checked as arguments are, by subsumption, which holds no proposition below a type: the head rule `kernel::infer::tests::sort`'s `the_head_rules_still_decide_a_bare_sort` pins, reached through a family's occurrence. `curios`'s `tests::rules::subsumption_tests` puts the program to the elaborator under this name.
+// An occurrence's parameters are checked as arguments are, by subsumption, which holds no proposition below a type: the head rule `certifier::infer::tests::sort`'s `the_head_rules_still_decide_a_bare_sort` pins, reached through a family's occurrence. `curios`'s `tests::rules::subsumption_tests` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `subsumes`: with two sorts compared by their levels whatever their qualities, `held` types.
 #[test]
@@ -535,7 +535,7 @@ let /f : (
 
 // The elimination whose conversion Carneiro (*The Type Theory of Lean*, 2019, §3.1) shows no checker decides transitively is refused at its source: a proposition is taken apart into data only where its indices pin every payload, and `below` is a proof no index pins. `curios`'s `tests::rules::proposition_elimination_tests` puts the program to the elaborator under this name.
 //
-// Mutation-checked at `guard_large_elimination` (`curios-cert/src/kernel/infer/eliminate.rs`): with the singleton rung excusing a payload whose type is a proposition, as Lean's subsingleton elimination does, `/f` is admitted.
+// Mutation-checked at `guard_large_elimination` (`curios-cert/src/certifier/infer/eliminate.rs`): with the singleton rung excusing a payload whose type is a proposition, as Lean's subsingleton elimination does, `/f` is admitted.
 #[test]
 fn a_proposition_holding_a_proof_cannot_be_eliminated_into_data() {
     let verdicts = core_text_verdicts(&fill!(

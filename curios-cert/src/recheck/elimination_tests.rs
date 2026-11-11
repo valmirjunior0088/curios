@@ -36,7 +36,7 @@ fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::NotASort(_))),
-        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+        "the certifier accepted a closed inhabitant of `False`: {verdicts:?}",
     );
 }
 
@@ -54,7 +54,7 @@ fn an_empty_elimination_where_a_propositions_two_constructors_differ_is_refused(
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::MissingArm { .. })),
-        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+        "the certifier accepted a closed inhabitant of `False`: {verdicts:?}",
     );
 }
 
@@ -75,11 +75,11 @@ fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
 
 /// Coverage holds the *sole-arm* elimination too, which is the shape reduction fires rather than leaves standing.
 ///
-/// A closed match with one arm, no catch-all and no payload named is its arm's body with its scrutinee unevaluated (`Cases::unread`, which the kernel's `whnf`, the closed machine and `curios-elab`'s reducer each state), so the arm's body stands at the elimination's own type whatever the scrutinee is. The vacuous elimination above is the shape `check_induct_arms` deliberately skips the large-elimination guard for; this is the shape whose arm the guard does reach and whose omission coverage must still decide.
+/// A closed match with one arm, no catch-all and no payload named is its arm's body with its scrutinee unevaluated (`Cases::unread`, which the certifier's `whnf`, the closed machine and `curios-elab`'s reducer each state), so the arm's body stands at the elimination's own type whatever the scrutinee is. The vacuous elimination above is the shape `check_induct_arms` deliberately skips the large-elimination guard for; this is the shape whose arm the guard does reach and whose omission coverage must still decide.
 ///
 /// `Pin(1)` below is inhabited by `Pin/no()`, and the `yes` arm's target `0` clashes with the index, so `specialize` reports the case impossible and no rule types that arm. Only coverage is left: `no` has no arm and is not impossible at `Pin(1)`. Excused, `forged(Pin/no())` would reduce to the `yes` arm's body — the sort `Prop`, a term nothing typed standing at `False`.
 ///
-/// Only a fixture reaches the kernel's own loop with this shape: `curios-elab` refuses the same sole-arm match with `MatrixUncovered` while the module is still being built, so no surface program leaves one behind and `curios`'s `tests::rules::index_tests` reads the elaborator's matrix rather than this.
+/// Only a fixture reaches the certifier's own loop with this shape: `curios-elab` refuses the same sole-arm match with `MatrixUncovered` while the module is still being built, so no surface program leaves one behind and `curios`'s `tests::rules::index_tests` reads the elaborator's matrix rather than this.
 ///
 /// Mutation-checked, which is what makes this a forgery rather than a refusal: with the coverage loop's `MissingArm` suppressed, the walk returns **zero** verdicts over this module, so the entry is certified at `False`.
 #[test]
@@ -90,7 +90,7 @@ fn a_sole_arm_elimination_must_still_rule_out_the_constructors_it_omits() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::MissingArm { .. })),
-        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+        "the certifier accepted a closed inhabitant of `False`: {verdicts:?}",
     );
 }
 
@@ -127,7 +127,7 @@ fn a_family_that_declares_one_tag_twice_is_refused() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::RepeatedTag(_))),
-        "the kernel certified a refutation of a constructor the declaration states: {verdicts:?}",
+        "the certifier accepted a refutation of a constructor the declaration states: {verdicts:?}",
     );
 }
 
@@ -172,7 +172,7 @@ fn a_motive_that_misreports_its_sort_does_not_skip_the_large_elimination_guard()
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::NotAMotive { .. })),
-        "the kernel eliminated a two-constructor proposition into `Nat`: {verdicts:?}",
+        "the certifier eliminated a two-constructor proposition into `Nat`: {verdicts:?}",
     );
 }
 
@@ -347,7 +347,7 @@ fn a_fold_motive_that_names_its_scrutinee_states_it_at_every_tail() {
             Error::Mismatch { expected, .. } => !expected.faithful().to_string().contains("+ 1"),
             _ => false,
         }),
-        "the kernel typed a fold's zero arm with its scrutinee at zero: {verdicts:?}",
+        "the certifier typed a fold's zero arm with its scrutinee at zero: {verdicts:?}",
     );
 }
 
@@ -509,7 +509,7 @@ fn pinned_sole_arm_definitions(over: Option<Free>, binders: Vec<(Plicity, Free)>
     )
 }
 
-/// A metavariable in the kernel's input must be refused, though the Match-arm rule's gate reads it as closed.
+/// A metavariable in the certifier's input must be refused, though the Match-arm rule's gate reads it as closed.
 ///
 /// `whnf`'s gate is `!term.has_local_free()`, where the closed machine's `accelerable` and `curios-elab`'s own `closed` also require no metavariable. So a match whose scrutinee is a metavariable and whose other parts name no local is closed to this reducer and open to the other two, and the closed branch of the sole-arm rule is the one with no comparison in it: `stated_payload` hands the payload over where `unread_payload` would put the stated instance beside the one the constructor builds and decline. What keeps the two from parting over a verdict is not the gate but the boundary in front of it — `Zonked::project` refuses a program carrying elaboration's own syntax, and `infer` refuses a `Metavar` with `NotCore` where a judgment meets one — and this holds that boundary, the fixture reaching the walk with `Zonked` bypassed as every fixture here does.
 #[test]
@@ -531,7 +531,7 @@ fn a_metavariable_the_match_gate_reads_as_closed_is_still_refused() {
 
 /// An arm whose arity its constructor's payload denies must be refused, which is what keeps the sole-arm rule's payload from ever being opened at the wrong count.
 ///
-/// The open branch of the kernel's rule filters on `payload.len() == arm.arity()` before it opens the arm, where `curios-elab`'s fires `unread()` ahead of that comparison. The two can only part on a module the kernel refuses outright, and this is the refusal: the payload a stated instance yields is as long as the constructor's signature, and `check_induct_arms` holds every arm's arity to that signature. The scrutinee is a binder, so the open branch is the one reduction takes.
+/// The open branch of the certifier's rule filters on `payload.len() == arm.arity()` before it opens the arm, where `curios-elab`'s fires `unread()` ahead of that comparison. The two can only part on a module the certifier refuses outright, and this is the refusal: the payload a stated instance yields is as long as the constructor's signature, and `check_induct_arms` holds every arm's arity to that signature. The scrutinee is a binder, so the open branch is the one reduction takes.
 #[test]
 fn an_arm_whose_arity_its_constructor_denies_is_refused() {
     let proof = Free::local(773, Some("p"));
@@ -927,7 +927,7 @@ let /split : (
 
 // A fold takes its identity arm at the last tail, where the scrutinee is no case of that arm, so each arm of one is checked at the motive opened at its case and under nothing else: the empty match inside the identity arm meets `v` at the scrutinee's own index, `s`'s target may meet it, and `s` is missing over every carrier. The case split's identity arm is taken once, at the scrutinee itself, where `n` stands at `0` and `s` is excused. The three refusals are all that stand between the module and `False`. `curios`'s `tests::rules::fold_tests` puts the program to the elaborator under this name.
 //
-// Mutation-checked at `check_free_monoid` (`curios-cert/src/kernel/infer.rs`): with the identity arm checked by `at` whether or not the cons arm reads its hypothesis, `/nat`, `/list` and `/bytes` are admitted and the walk returns no verdict.
+// Mutation-checked at `check_free_monoid` (`curios-cert/src/certifier/infer.rs`): with the identity arm checked by `at` whether or not the cons arm reads its hypothesis, `/nat`, `/list` and `/bytes` are admitted and the walk returns no verdict.
 #[test]
 fn a_match_inside_a_folds_identity_arm_learns_nothing_of_the_scrutinee() {
     let verdicts = core_text_verdicts(&fill!(
@@ -969,7 +969,7 @@ const THE_IDENTITY_ARM_OF_A_BYTES_FOLD: &str = r#"
 
 // The identity arm learns nothing of `xs`, so `h` stands at the type it was given and is refused at the motive, in the term the module closes with. `curios`'s `tests::rules::fold_tests` puts the program to the elaborator under this name.
 //
-// Mutation-checked at `check_free_monoid` (`curios-cert/src/kernel/infer.rs`), as the test above is: with the identity arm checked by `at`, `h` is retyped at `Holds(#NatEql(#BytesLen(x[]), 2))`, the term types at `False` and the walk returns no verdict.
+// Mutation-checked at `check_free_monoid` (`curios-cert/src/certifier/infer.rs`), as the test above is: with the identity arm checked by `at`, `h` is retyped at `Holds(#NatEql(#BytesLen(x[]), 2))`, the term types at `False` and the walk returns no verdict.
 #[test]
 fn the_identity_arm_of_a_bytes_fold_reads_its_scrutinee_at_no_case() {
     let verdicts = core_text_verdicts(&fill!(

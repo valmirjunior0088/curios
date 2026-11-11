@@ -12,7 +12,7 @@
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run *this* engine, through [`Env`]: it is a total function of post-zonk terms, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What differs is the obligation each driver hangs on the verdict. The elaborator's is positional and whole-module — obligations (T) and (V), seeded from what elaboration settled, turning a `Partial` classification into a rejection only where erasure deletes. The kernel's is local and self-derivable: a `rec` member whose declared type is a proof or yields a sort must descend, because assuming it at that type otherwise certifies `rec f : False = f`. Rejection by the *engine* is a classification, not an error — corecursive and productive definitions classify `Partial` and stay usable everywhere erasure keeps them.
+//! Both checkers run *this* engine, through [`Env`]: it is a total function of post-zonk terms, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What differs is the obligation each driver hangs on the verdict. The elaborator's is positional and whole-module — obligations (T) and (V), seeded from what elaboration settled, turning a `Partial` classification into a rejection only where erasure deletes. The certifier's is local and self-derivable: a `rec` member whose declared type is a proof or yields a sort must descend, because assuming it at that type otherwise certifies `rec f : False = f`. Rejection by the *engine* is a classification, not an error — corecursive and productive definitions classify `Partial` and stay usable everywhere erasure keeps them.
 //!
 //! # Discovery, grading, and closure are three things
 //!
@@ -725,7 +725,7 @@ impl<E: Env> Walk<'_, E> {
                 arguments: args, ..
             }) => self.walks(args),
 
-            // A binding's type and value, and then the tail, are each walked with every binder before them standing for its value, for the reason an applied lambda is: a `let` is a redex, and a binder aliasing an arm's payload is below the scrutinee exactly as the payload is. Binding `i` is stored under the `i` binders before it, so it is released against the values already in hand before it is walked, as the kernel checks it against the binders before it: a call in a binding's value reads what an earlier binding stands for as a call in the tail does.
+            // A binding's type and value, and then the tail, are each walked with every binder before them standing for its value, for the reason an applied lambda is: a `let` is a redex, and a binder aliasing an arm's payload is below the scrutinee exactly as the payload is. Binding `i` is stored under the `i` binders before it, so it is released against the values already in hand before it is walked, as the certifier checks it against the binders before it: a call in a binding's value reads what an earlier binding stands for as a call in the tail does.
             Subterm::Let(Let { bindings, tail }) => {
                 let mut values: Vec<Term> = Vec::with_capacity(bindings.len());
                 // Only a value that holds a group, or names a parameter a summarizing walk keeps a record of, is worth remembering: the rest are passed over as they stand. A copy of one names the parameter again with the same arguments, applied or used otherwise where the `let` binds it. Counted, since two `let`s may bind one term and the inner one leaves first.

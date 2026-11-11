@@ -5,4 +5,4 @@ status = "fixed"
 [[witness]]
 what = "a recursion graded below a data binder through the proof its index solution holds"
 source = "a_recursion_through_a_proofs_constructor.crsc"
-refused = [{ by = "kernel", error = "NotDescending" }]
+refused = [{ by = "certifier", error = "NotDescending" }]

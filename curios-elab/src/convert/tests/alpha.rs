@@ -64,11 +64,11 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     );
 }
 
-/// Reading `project_erased_universes` as a quotient by definitional equality rests on the premise `documentation/design/soundness/case-equations-and-their-key.md` refutes for the kernel's copy of the same reading: a `Type` payload embeds a level *in a term*, so two spellings the projection identifies can be two genuinely different values. `wrap(Type 0)` and `wrap(Type 1)` at a relevant `E` are the direct witness — two constructor values differing in a relevant payload, which the projection would collapse to one spelling and accept with no residue for the declaration boundary to refuse.
+/// Reading `project_erased_universes` as a quotient by definitional equality rests on the premise `documentation/design/soundness/case-equations-and-their-key.md` refutes for the certifier's copy of the same reading: a `Type` payload embeds a level *in a term*, so two spellings the projection identifies can be two genuinely different values. `wrap(Type 0)` and `wrap(Type 1)` at a relevant `E` are the direct witness — two constructor values differing in a relevant payload, which the projection would collapse to one spelling and accept with no residue for the declaration boundary to refuse.
 ///
-/// The fixture puts the identical goal, seeded with the identical declaration, to both checkers, each asked by itself (`documentation/design/soundness/conversion-is-one-relation-in-both-checkers.md` says why). A false acceptance here would be fenced twice — no surface program reaches it, a body-carried level being minimized rather than generalized (`curios`'s `tests::universes` holds that construction), and the kernel would still refuse a module elaborated through it on the compile path — but each fence is a fact about the neighbours, not about the rule.
+/// The fixture puts the identical goal, seeded with the identical declaration, to both checkers, each asked by itself (`documentation/design/soundness/conversion-is-one-relation-in-both-checkers.md` says why). A false acceptance here would be fenced twice — no surface program reaches it, a body-carried level being minimized rather than generalized (`curios`'s `tests::universes` holds that construction), and the certifier would still refuse a module elaborated through it on the compile path — but each fence is a fact about the neighbours, not about the rule.
 ///
-/// Under `identify_universe_levels` the pair of unequal ground levels declines the fast path with nothing inserted, and the structural payload comparison then refuses the goal as the universe inconsistency `1 ≤ 0` — which is what the assertion pins: an `Err` naming the universe arithmetic, where the kernel's boolean spells the same refusal as `Ok(false)`. The control is this file's first fixture, `value_conversion_does_not_unfold_terms_differing_only_by_universes`: the fast path's sound population — one computation at two identifiable instances — must keep converting without being evaluated.
+/// Under `identify_universe_levels` the pair of unequal ground levels declines the fast path with nothing inserted, and the structural payload comparison then refuses the goal as the universe inconsistency `1 ≤ 0` — which is what the assertion pins: an `Err` naming the universe arithmetic, where the certifier's boolean spells the same refusal as `Ok(false)`. The control is this file's first fixture, `value_conversion_does_not_unfold_terms_differing_only_by_universes`: the fast path's sound population — one computation at two identifiable instances — must keep converting without being evaluated.
 #[test]
 fn value_conversion_does_not_identify_distinct_type_payloads() {
     let e = nominal("E");
@@ -103,22 +103,22 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
         |level: Level| Term::variant(e, Vec::<Term>::new(), "wrap", vec![Term::type_at(level)]);
     let one = Level::zero().succ().expect("level zero has a successor");
 
-    // The differential's fixed side: the kernel, handed the identical declaration and the identical goal, refuses it at the payloads.
-    let mut kernel = curios_cert::Kernel::new(100_000, SYNTAX);
-    kernel
+    // The differential's fixed side: the certifier, handed the identical declaration and the identical goal, refuses it at the payloads.
+    let mut certifier = curios_cert::Certifier::new(100_000, SYNTAX);
+    certifier
         .declare_induct(&e, &declaration)
         .expect("a name is declared once");
     assert!(
         matches!(
             curios_cert::convert(
-                &mut kernel,
+                &mut certifier,
                 &e_type,
                 &wrap(Level::zero()),
                 &wrap(one.clone())
             ),
             Ok(false)
         ),
-        "the kernel refuses two constructor values differing in a relevant Type payload",
+        "the certifier refuses two constructor values differing in a relevant Type payload",
     );
 
     let mut context = context();
@@ -134,7 +134,7 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
     );
 }
 
-/// The elaborator's half of the kernel's fixture: like terms convert, and a sum against a literal clashes, both in the fold.
+/// The elaborator's half of the certifier's fixture: like terms convert, and a sum against a literal clashes, both in the fold.
 #[test]
 fn like_terms_convert_and_a_stuck_sum_clashes_with_a_literal() {
     let mut context = context();
@@ -172,7 +172,7 @@ fn func_is_alpha_equivalent() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
-/// Plicity is part of a function's identity, a literal's as a type's: two literals under one mark whose bodies differ by a β-step are one function, and two apart in a mark are two. The kernel's twin keeps the name.
+/// Plicity is part of a function's identity, a literal's as a type's: two literals under one mark whose bodies differ by a β-step are one function, and two apart in a mark are two. The certifier's twin keeps the name.
 #[test]
 fn plicity_distinguishes_two_function_literals() {
     let mut context = context();

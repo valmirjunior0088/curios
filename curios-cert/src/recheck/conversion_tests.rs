@@ -52,12 +52,12 @@ let /second : (p: #NatType, q: #NatType, a: #NatType, b: #NatType, m: #NatType) 
 
     for uncached in [false, true] {
         for (asked, definitions) in [("alone", &alone), ("after the inner pair", &after)] {
-            let mut kernel = match uncached {
-                false => Kernel::new(BUDGET, SYNTAX),
-                true => Kernel::uncached(BUDGET, SYNTAX),
+            let mut certifier = match uncached {
+                false => Certifier::new(BUDGET, SYNTAX),
+                true => Certifier::uncached(BUDGET, SYNTAX),
             };
             let verdicts =
-                super::verdicts_from(&mut kernel, definitions, None, &Globals::default(), None)
+                super::verdicts_from(&mut certifier, definitions, None, &Globals::default(), None)
                     .verdicts;
             assert!(
                 refused(&verdicts),

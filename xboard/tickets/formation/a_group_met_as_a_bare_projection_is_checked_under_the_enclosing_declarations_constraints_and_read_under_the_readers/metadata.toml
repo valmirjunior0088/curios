@@ -5,4 +5,4 @@ status = "fixed"
 [[witness]]
 what = "Hurkens' paradox over the products of a record a group's one member computes, licensed by `carrier@{u, v, w, x | u + 1 ≤ w, v ≤ w, v + 1 ≤ x, w + 1 ≤ x}` and read in `paradox@{u, v, w, x | u ≤ 0, w ≤ 0, 1 ≤ v}`"
 source = "a_bare_group_read_under_the_readers_constraints.crsc"
-refused = [{ by = "kernel", error = "Mismatch", within = "/paradox" }]
+refused = [{ by = "certifier", error = "Mismatch", within = "/paradox" }]

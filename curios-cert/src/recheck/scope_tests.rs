@@ -519,7 +519,7 @@ let /G : (b2: #BoolType) -> Prop =
 )
 "#;
 
-/// A module cannot make a name the kernel's registry knows stand for something else: every bound `Intrinsic::signature` states is built from the registry's `Holds`, so the one declared over an environment holding it is refused for the name before anything is judged, the closing term among it.
+/// A module cannot make a name the certifier's registry knows stand for something else: every bound `Intrinsic::signature` states is built from the registry's `Holds`, so the one declared over an environment holding it is refused for the name before anything is judged, the closing term among it.
 ///
 /// Mutation-checked against the environment's question in `redeclarations`: with a held name never asked after, the walk goes on, the module's `Holds` is refused where the walk writes it and the closing term beside it, the bound being the environment's. Put with nothing in scope, `HOLDS_RESTATED_TO_GAUGE_A_BYTE` is admitted, its closing term a proof of `False`: the bound's whole force is what the registry's name means.
 #[test]

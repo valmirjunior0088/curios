@@ -1,6 +1,6 @@
 //! A recursive group's members as its signatures and bodies read them: each by value once its turn finds it known to terminate, and standing for nothing until then, both checkers alike.
 //!
-//! The rule is `curios-cert`'s README, *A member is read by value once it is known to terminate*. The kernel's half is `curios_cert`'s `recheck::recursion_tests`, under the same names.
+//! The rule is `curios-cert`'s README, *A member is read by value once it is known to terminate*. The certifier's half is `curios_cert`'s `recheck::recursion_tests`, under the same names.
 
 use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
@@ -108,7 +108,7 @@ fn a_group_listing_itself_is_refused_for_not_descending() {
     });
 }
 
-// `f` and `g` each read the other's value at an argument below their own, so each member is known at its turn, `f` before `g`'s body is reached: `f`'s reading of `g` waits on `g`'s slot until `g`'s turn finds the two descend. The kernel takes every turn before typing a body, and the run puts the program to it whole, so this one has no Core text twin.
+// `f` and `g` each read the other's value at an argument below their own, so each member is known at its turn, `f` before `g`'s body is reached: `f`'s reading of `g` waits on `g`'s slot until `g`'s turn finds the two descend. The certifier takes every turn before typing a body, and the run puts the program to it whole, so this one has no Core text twin.
 #[test]
 fn two_members_reading_each_other_below_their_arguments_stand() {
     let source = r#"

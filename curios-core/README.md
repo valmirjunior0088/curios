@@ -1,6 +1,6 @@
 # curios-core
 
-The Curios core language: the term representation both checkers build on — what a term *is*, with no rule that judges one — including the intrinsic folds, the closed machine and the linear views a comparison is read through. The judgments live on either side: `curios-analysis` holds the rules both checkers run, `curios-cert` the kernel that only checks, `curios-elab` everything that makes the surface language work, and all three depend on this crate with none of those dependencies reversing ([An independent kernel re-checks what the elaborator accepts](../documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md)). The carriers' algebra is `curios-algebra`'s, over abstract atoms: this crate says which operation each intrinsic is (`Intrinsic::algebra`) and which terms are one atom (`atoms`), reads terms into the algebra's views, and rebuilds terms from what it concludes ([The carriers' algebra stays in conversion](../documentation/design/arithmetic/the-carriers-algebra-stays-in-conversion.md)). Local architecture belongs to the crate rustdoc.
+The Curios core language: the term representation both checkers build on — what a term *is*, with no rule that judges one — including the intrinsic folds, the closed machine and the linear views a comparison is read through. The judgments live on either side: `curios-analysis` holds the rules both checkers run, `curios-cert` the certifier that only checks, `curios-elab` everything that makes the surface language work, and all three depend on this crate with none of those dependencies reversing ([An independent certifier re-checks what the elaborator accepts](../documentation/design/soundness/an-independent-certifier-re-checks-what-the-elaborator-accepts.md)). The carriers' algebra is `curios-algebra`'s, over abstract atoms: this crate says which operation each intrinsic is (`Intrinsic::algebra`) and which terms are one atom (`atoms`), reads terms into the algebra's views, and rebuilds terms from what it concludes ([The carriers' algebra stays in conversion](../documentation/design/arithmetic/the-carriers-algebra-stays-in-conversion.md)). Local architecture belongs to the crate rustdoc.
 
 ## Design
 
@@ -62,7 +62,7 @@ The Curios core language: the term representation both checkers build on — wha
 
 ### Solving and satisfiability part company here
 
-**Decision.** A `UniverseContext` is data. Inferring the instance a program meant is the elaborator's universe solver's; deciding whether the resulting constraint set is satisfiable is each checker's own — the elaborator's by its solver, the kernel's by its own procedure in `curios-cert`.
+**Decision.** A `UniverseContext` is data. Inferring the instance a program meant is the elaborator's universe solver's; deciding whether the resulting constraint set is satisfiable is each checker's own — the elaborator's by its solver, the certifier's by its own procedure in `curios-cert`.
 
 **Rationale.** Inferring an instance is inference over that data, so it sits with the elaborator; deciding satisfiability admits a program, so each checker decides it for itself.
 
@@ -82,6 +82,6 @@ The Curios core language: the term representation both checkers build on — wha
 
 **Decision.** `builders` lives in this crate, though it is not trusted, because neither the surface lowering nor the elaborator, which both build terms with it, owns what a term is. A term is written by `curios-surface`. This crate keeps what a unit's names are spelled by, `lexicon`, which is data kept with the unit, and `Notation`, the hook a crate below the surface writes a term or a level through, handed the surface's printer by whoever reports.
 
-**Rationale.** A builder cannot admit a bad program: no judgment calls one. Core is written by one printer, beside the reader of what it writes, and a refusal the kernel reports is written by the printer its reporter hands it under the reporter's policy.
+**Rationale.** A builder cannot admit a bad program: no judgment calls one. Core is written by one printer, beside the reader of what it writes, and a refusal the certifier reports is written by the printer its reporter hands it under the reporter's policy.
 
 **Rejected.** The printer here, behind `Term`'s `Display`: a second printer of Core beside the surface's, writing a syntax nothing reads back.

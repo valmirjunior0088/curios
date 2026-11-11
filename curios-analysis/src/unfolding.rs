@@ -1,8 +1,8 @@
-//! What the kernel sees of a term that one of its checkers holds under local definitions.
+//! What the certifier sees of a term that one of its checkers holds under local definitions.
 //!
-//! The kernel hands every rule here its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition, so a term it holds may name a `let` where the kernel's copy of the same term has the value. Every rule that records or compares what the kernel sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is — has to read through those definitions, and this module is that reading, stated once. It reads through [`Env::unfold`] and nothing else, so a driver that answers no local definition, as the kernel does not, sees every term unchanged.
+//! The certifier hands every rule here its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition, so a term it holds may name a `let` where the certifier's copy of the same term has the value. Every rule that records or compares what the certifier sees — the locals a case's solution re-types, the variables an index equation may solve, the variable a scrutinee is — has to read through those definitions, and this module is that reading, stated once. It reads through [`Env::unfold`] and nothing else, so a driver that answers no local definition, as the certifier does not, sees every term unchanged.
 //!
-//! The spelling a guard's equation is recorded under reads a term whole, every definition substituted, and is not read here: the elaborator holds each definition by value from where it is made, as the kernel holds a `let` (`curios-elab`'s `Context::by_value`), where a reading from scratch would unfold a chain of definitions again at every spelling.
+//! The spelling a guard's equation is recorded under reads a term whole, every definition substituted, and is not read here: the elaborator holds each definition by value from where it is made, as the certifier holds a `let` (`curios-elab`'s `Context::by_value`), where a reading from scratch would unfold a chain of definitions again at every spelling.
 //!
 //! # Why one reading
 //!
@@ -17,7 +17,7 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// A term with the local definitions that reach given variables substituted, as the kernel has them, so a term is respelled no further than a substitution for those variables needs.
+/// A term with the local definitions that reach given variables substituted, as the certifier has them, so a term is respelled no further than a substitution for those variables needs.
 ///
 /// Memoized for one use, because a scope's terms share their `let`s. A name is recorded before its definition is read, so a definition that mentions itself — which the elaborator's scope holds — is read once rather than without end.
 pub struct Unfolding<'a, E> {
@@ -66,7 +66,7 @@ impl<'a, E: Env> Unfolding<'a, E> {
     }
 }
 
-/// The local variable `term` is, through local definitions that are themselves variables: `let t = s; … t …` is `s` to the kernel. `None` for a term that is, beneath its definitions, anything but a local variable.
+/// The local variable `term` is, through local definitions that are themselves variables: `let t = s; … t …` is `s` to the certifier. `None` for a term that is, beneath its definitions, anything but a local variable.
 pub fn beneath<'a, E: Env>(env: &'a E, term: &'a Term) -> Option<&'a Free> {
     let mut seen = BTreeSet::new();
     let mut term = term;
@@ -87,7 +87,7 @@ pub fn beneath<'a, E: Env>(env: &'a E, term: &'a Term) -> Option<&'a Free> {
     }
 }
 
-/// The locals the kernel's spelling of `terms` names: each local they mention, and in place of a local definition, the locals its definition names in turn. Their order is immaterial to every caller, which reads them only for membership.
+/// The locals the certifier's spelling of `terms` names: each local they mention, and in place of a local definition, the locals its definition names in turn. Their order is immaterial to every caller, which reads them only for membership.
 pub fn locals_beneath<E: Env>(env: &E, terms: &[Term]) -> Vec<Free> {
     let mut locals = Vec::new();
     let mut seen = BTreeSet::new();

@@ -73,7 +73,7 @@ pub fn elaborate_func_type_sized(
 
     let rebuilt = Term::func_type_marked(domains, output);
 
-    // Sized from its parts' sorts as typing read each, a Π into a proposition being one: where the kernel types it, which reads a part as it is written. Sized from the parts' reducts, a part whose written type sits above its reduct's, a call typed by its codomain or an occurrence at a level its value drops, leaves the former below the sort the kernel finds.
+    // Sized from its parts' sorts as typing read each, a Π into a proposition being one: where the certifier types it, which reads a part as it is written. Sized from the parts' reducts, a part whose written type sits above its reduct's, a call typed by its codomain or an occurrence at a level its value drops, leaves the former below the sort the certifier finds.
     let domains = levels.clone();
     levels.push(output_sort.level);
     let sort = Sort {

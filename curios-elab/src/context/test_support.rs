@@ -16,7 +16,7 @@ use {
 };
 
 impl Context<'_> {
-    /// A context whose caches clear every table at every boundary, as they did before an answer was kept for as long as what it read stands. Exists for one purpose: asserting that keeping an answer longer moves no elaborated term (`curios-pipeline`'s `std_memo_census`), as `curios-cert`'s `Kernel::uncached` asserts of the kernel's memos that switching them off moves no verdict.
+    /// A context whose caches clear every table at every boundary, as they did before an answer was kept for as long as what it read stands. Exists for one purpose: asserting that keeping an answer longer moves no elaborated term (`curios-pipeline`'s `std_memo_census`), as `curios-cert`'s `Certifier::uncached` asserts of the certifier's memos that switching them off moves no verdict.
     pub fn wholesale(budget: u64, syntax: SyntaxRegistry) -> Self {
         let mut context = Self::new(budget, syntax);
         context.typing.caches = Caches::wholesale();

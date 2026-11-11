@@ -24,12 +24,12 @@ Reserved with the layer it serves, and refined with it when the trigger is met:
 - **Evidence is keyed by what it is about.** A certificate is found under the canonical form of the formula it justifies, so the certifier's relation is a function of the question and never of where it was asked.
 - **It travels with the module.** A unit carries a table of the evidence its verdicts rest on, stored and validated as the unit is, and a later walk reads it there.
 - **Missing or failing evidence is a refusal**, never an acceptance, and a certificate is checked each time it is read.
-- **The checker is certifier-grade.** It meets the six clauses of [the kernel's design decision](../../design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md), lives inside the certifier's closure, and is held against certificates corrupted one step at a time, each corruption refused. The search that found a certificate is not trusted.
+- **The checker is certifier-grade.** It meets the six clauses of [the certifier's design decision](../../design/soundness/an-independent-certifier-re-checks-what-the-elaborator-accepts.md), lives inside the certifier's closure, and is held against certificates corrupted one step at a time, each corruption refused. The search that found a certificate is not trusted.
 - **The certifier's time is measured** before and after the layer opens, and reported with it.
 
 ## Rejected
 
 - **Hypotheses in conversion.** [A bound that follows from the facts in scope is proved by the elaborator](../../design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md)'s rejections give the Calculus of Congruent Inductive Constructions' own account of why its metatheory holds for the weak recursor only. This layer stays hypothesis-free.
-- **A trusted decision procedure in the kernel.** The certificate is checked; the search that found it is not trusted.
+- **A trusted decision procedure in the certifier.** The certificate is checked; the search that found it is not trusted.
 
 It retires when conversion decides the trigger's fact by a certificate the certifier checks, the evidence carried with its module as *The evidence's transport* holds it.

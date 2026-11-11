@@ -1,8 +1,8 @@
 //! A witness that resolves through a witness — its own entry, or another's.
 //!
-//! A witness declaration registers before its body elaborates, so a body may resolve the very entry it is defining. That makes the definition name itself, which no `let` can express: cross-definition value recursion exists only inside a `rec` item, so such a witness becomes a group of one and its self-reference is bound by that group rather than left free for the kernel to refuse.
+//! A witness declaration registers before its body elaborates, so a body may resolve the very entry it is defining. That makes the definition name itself, which no `let` can express: cross-definition value recursion exists only inside a `rec` item, so such a witness becomes a group of one and its self-reference is bound by that group rather than left free for the certifier to refuse.
 //!
-//! A cycle between *two* witnesses has no such binding unless the source declares it: one witness naming a later one is ordinary and works, because a declaration elaborates after what it reads, wherever each is written; two naming each other are declared as one `satisfy … and …` group, whose members register before any body elaborates and are bound in one another, and an undeclared pair is refused here, in the language's own terms, rather than reaching the kernel as an unbound internal name.
+//! A cycle between *two* witnesses has no such binding unless the source declares it: one witness naming a later one is ordinary and works, because a declaration elaborates after what it reads, wherever each is written; two naming each other are declared as one `satisfy … and …` group, whose members register before any body elaborates and are bound in one another, and an undeclared pair is refused here, in the language's own terms, rather than reaching the certifier as an unbound internal name.
 
 use {crate::tests::test_support::*, curios_common::fill};
 
@@ -153,7 +153,7 @@ fn a_witness_naming_a_later_witness_is_ordered_not_refused() {
     assert_eq!(run(source), b"4");
 }
 
-// Two witnesses resolving each other have no order to elaborate in: each needs the other before it can finish. Refused once, at the first of them as written, naming both and the way out — where the kernel would have said `unbound name /witness~1` about an id the reader cannot find in their own program.
+// Two witnesses resolving each other have no order to elaborate in: each needs the other before it can finish. Refused once, at the first of them as written, naming both and the way out — where the certifier would have said `unbound name /witness~1` about an id the reader cannot find in their own program.
 #[test]
 fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
     let source = r#"
@@ -180,7 +180,7 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
     );
 }
 
-// A definition and the witness it resolves to, each needing the other, are a cycle like two witnesses': `describe`'s goal resolves to `Show(Box)`, whose `show` calls `describe`. Refused by name in either order they are written in — where the elaborator once accepted both and the kernel refused `/describe` for ``unbound name `/witness~0` ``.
+// A definition and the witness it resolves to, each needing the other, are a cycle like two witnesses': `describe`'s goal resolves to `Show(Box)`, whose `show` calls `describe`. Refused by name in either order they are written in — where the elaborator once accepted both and the certifier refused `/describe` for ``unbound name `/witness~0` ``.
 #[test]
 fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_order() {
     let describe = "let describe(b: Box) -> Str = Show/show(b);";
@@ -211,7 +211,7 @@ fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_
         );
         assert!(
             !report.contains("unbound name"),
-            "the kernel was left to refuse the cycle:\n{report}"
+            "the certifier was left to refuse the cycle:\n{report}"
         );
         assert!(
             report.contains("no group holds a definition beside a witness")
@@ -239,7 +239,7 @@ fn mutual_recursion_hoisted_into_one_group_is_admitted() {
     assert_eq!(run(source), b"5");
 }
 
-// The declared form: one `satisfy … and …` group, every member registered before any body elaborates, so each resolves through the other's entry and the kernel meets one recursive group.
+// The declared form: one `satisfy … and …` group, every member registered before any body elaborates, so each resolves through the other's entry and the certifier meets one recursive group.
 #[test]
 fn a_witness_group_resolves_its_members_through_the_table() {
     let source = r#"

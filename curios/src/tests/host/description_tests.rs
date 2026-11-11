@@ -11,7 +11,7 @@ const CALLS: &str = r#"
     let through(f: File) -> Io({}) = Io/close(id(f));
 "#;
 
-/// Two definitions that unfold to one host call are one, as posed, applied and under a binder, and so is one whose operand converts with the other's: the kernel held two calls one only where nothing had unfolded either side.
+/// Two definitions that unfold to one host call are one, as posed, applied and under a binder, and so is one whose operand converts with the other's: the certifier held two calls one only where nothing had unfolded either side.
 #[test]
 fn two_calls_of_one_row_over_operands_that_convert_are_one() {
     for claim in [

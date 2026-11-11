@@ -184,7 +184,7 @@ impl Eraser<'_> {
         })
     }
 
-    /// What a poll of a cell the entry's suspension waits on answers: the option of `{}`, whose cells `Io/suspend` takes, at the sort the kernel reads `{}` in.
+    /// What a poll of a cell the entry's suspension waits on answers: the option of `{}`, whose cells `Io/suspend` takes, at the sort the certifier reads `{}` in.
     pub fn suspended_poll(&mut self, context: &mut Reader) -> Result<Polled, Error> {
         let unit = curios_core::Term::tuple_type_unit();
         let sort = inferred(context, &unit)?;

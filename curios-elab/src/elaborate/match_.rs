@@ -127,7 +127,7 @@ fn resolve_intrinsic_motive(
     check_motive(context, &shape, motive)
 }
 
-/// The result of a fold, by the rule every reader of one states — erasure's split-or-fold reading and the kernel's arm rule too: the induction hypothesis is assumed exactly when the arm reads it, and only a family types it, at the motive opened at the tail. An arm that may read it (`may_read_hypothesis`) keeps the family, seeded against the expected type. An arm that cannot is a case split, resolved as a `Bool` elimination is: ambient where the motive is elided and checked, since nothing needs the type a hypothesis would have had.
+/// The result of a fold, by the rule every reader of one states — erasure's split-or-fold reading and the certifier's arm rule too: the induction hypothesis is assumed exactly when the arm reads it, and only a family types it, at the motive opened at the tail. An arm that may read it (`may_read_hypothesis`) keeps the family, seeded against the expected type. An arm that cannot is a case split, resolved as a `Bool` elimination is: ambient where the motive is elided and checked, since nothing needs the type a hypothesis would have had.
 ///
 /// The rebuilt motive is what everything below opens: insertion saturates applications during elaboration, and a lowered (under-applied) motive body reaching the reducer would open a telescope at the wrong arity.
 fn resolve_fold_result(
@@ -158,14 +158,14 @@ pub fn holds_goal(term: &Term) -> bool {
         || term.any_child_term(&mut |child| holds_goal(child))
 }
 
-/// Whether a fold's written cons arm may read its induction hypothesis, the binder at `index`: it names the binder, or it holds a written goal, which stands for a term not yet written and may name anything in scope. Nothing else reaches the hypothesis without naming it — a metavariable is solved from types, and no type in scope mentions the hypothesis unless the arm does — so an arm that does neither elaborates to one that reads none, which is the occurrence the kernel and erasure read off the elaborated arm.
+/// Whether a fold's written cons arm may read its induction hypothesis, the binder at `index`: it names the binder, or it holds a written goal, which stands for a term not yet written and may name anything in scope. Nothing else reaches the hypothesis without naming it — a metavariable is solved from types, and no type in scope mentions the hypothesis unless the arm does — so an arm that does neither elaborates to one that reads none, which is the occurrence the certifier and erasure read off the elaborated arm.
 fn may_read_hypothesis<N: Arity>(arm: &Scope<N>, index: usize) -> bool {
     arm.uses(index) || holds_goal(arm.body())
 }
 
 /// One arm of a free-monoid elimination, at its case value: `body` is handed the type the arm is typed at and answers the arm. A case split's has the scrutinee refined to the case, the locals its solution re-types re-assumed, and the result taken there.
 ///
-/// An arm of a fold — an elimination whose cons arm reads its hypothesis — learns nothing of the scrutinee: the fold at the tail is the same arms over the tail, so reduction takes each at every tail of the value, where the scrutinee is no case of it. It is typed at the motive opened at its case value and under nothing else, the kernel's rule (`check_free_monoid`), and a hypothesis about the scrutinee rides in the motive.
+/// An arm of a fold — an elimination whose cons arm reads its hypothesis — learns nothing of the scrutinee: the fold at the tail is the same arms over the tail, so reduction takes each at every tail of the value, where the scrutinee is no case of it. It is typed at the motive opened at its case value and under nothing else, the certifier's rule (`check_free_monoid`), and a hypothesis about the scrutinee rides in the motive.
 fn fold_arm(
     context: &mut Context,
     head: &Term,
@@ -943,7 +943,7 @@ fn elaborate_bool_match(
     Ok(split.rebuild(false_case, true_case))
 }
 
-/// Whether a proposition may be matched into data: it declares one constructor, and that constructor's index targets pin every payload binder (matching a value against a target recovers the binder, as `Eq`'s `refl(z) : (z, z)` recovers `z`), decided by the walk both checkers share. Occurrence is not determination: `blur(a)` mentions `a` and pins nothing, since `blur` need not be injective. A payload that is a proof is not excused, since the arm would be handed the proof the match was given; and a second constructor the scrutinee's indices rule out is one the kernel counts all the same.
+/// Whether a proposition may be matched into data: it declares one constructor, and that constructor's index targets pin every payload binder (matching a value against a target recovers the binder, as `Eq`'s `refl(z) : (z, z)` recovers `z`), decided by the walk both checkers share. Occurrence is not determination: `blur(a)` mentions `a` and pins nothing, since `blur` need not be injective. A payload that is a proof is not excused, since the arm would be handed the proof the match was given; and a second constructor the scrutinee's indices rule out is one the certifier counts all the same.
 fn singleton_eliminable(
     context: &mut Context,
     name: &Global,
@@ -1103,7 +1103,7 @@ impl NominalSplit {
         armless: bool,
         defaulted: bool,
     ) -> Result<bool, Error> {
-        // A match with no arm is vacuous: the coverage check below proves every constructor ruled out at the scrutinee's indices, so nothing is eliminated. Any other is judged by the family's declared constructors, as the kernel judges it, so a second constructor the indices rule out here counts all the same. A catch-all default stands in for more than one constructor — a relevant result branching on an erased scrutinee's tag is exactly what this guard forbids — so it is never permitted here. (A prop-into-prop defaulted match never reaches this branch.)
+        // A match with no arm is vacuous: the coverage check below proves every constructor ruled out at the scrutinee's indices, so nothing is eliminated. Any other is judged by the family's declared constructors, as the certifier judges it, so a second constructor the indices rule out here counts all the same. A catch-all default stands in for more than one constructor — a relevant result branching on an erased scrutinee's tag is exactly what this guard forbids — so it is never permitted here. (A prop-into-prop defaulted match never reaches this branch.)
         let permitted = !defaulted && (armless || self.pinned);
         // Every other match on a proposition answers a proposition and nothing else. A result known for data is refused here, before an arm is read. One whose sort nothing has decided waits for the arms, which decide it where they are typed, and is held to `Prop` after them ([`hold_prop`]): so a match its arms make data is refused as this elimination, and not as a mismatch in an arm.
         Ok(match self.proposition && !permitted {
@@ -1215,7 +1215,7 @@ impl NominalSplit {
 
     /// Whether the arm for `tag` may be left out.
     ///
-    /// Inversion — checker-verified omission: a missing arm is accepted iff first-order unification of the scrutinee's actual indices against this case's targets finds a *definite* clash, in either direction — the answer a written arm is checked under, so an arm may be left out exactly where the kernel would type none of it. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
+    /// Inversion — checker-verified omission: a missing arm is accepted iff first-order unification of the scrutinee's actual indices against this case's targets finds a *definite* clash, in either direction — the answer a written arm is checked under, so an arm may be left out exactly where the certifier would type none of it. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
     pub fn ruled_out(&self, context: &mut Context, tag: &Atom) -> Result<bool, Error> {
         // An unindexed inductive has nothing to invert: every arm is reachable and a missing one is plainly missing.
         if self.actual_indices.is_empty() {
@@ -1271,7 +1271,7 @@ impl NominalSplit {
         let payload_plicities = payload.marks();
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
-        // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope below. Built at the scrutinee's own universe levels, because this value outlives the refinement: the motive is opened on it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq()(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the kernel) refuses it.
+        // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope below. Built at the scrutinee's own universe levels, because this value outlives the refinement: the motive is opened on it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq()(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the certifier) refuses it.
         let ctor_val = Term::variant_at(
             self.name,
             self.universes.clone(),
@@ -1287,7 +1287,7 @@ impl NominalSplit {
                 let ix_c = assume_payload(context, payload, labels);
                 open_arm(context, &self.head, &ctor_val)?;
 
-                // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the kernel's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved, and an error it raises is reported as one in an arm that may be left out. Refinements never justify the typing (the motive application does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
+                // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the certifier's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved, and an error it raises is reported as one in an arm that may be left out. Refinements never justify the typing (the motive application does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
                 let solutions = match solve_indices(context, &self.actual_indices, &ix_c, labels)? {
                     Invert::Solved(solutions) => solutions,
                     Invert::Impossible => {
@@ -1517,7 +1517,7 @@ fn eliminated_into_data(context: &mut Context, name: &Global, result_type: &Term
 
 /// Open a case's instantiated telescope under `labels`, each entered at its declared (dependent) type under its payload's mark, and answer the index targets the signature terminates in, stated over those binders. The caller holds the frame the assumptions live in.
 ///
-/// A written arm and an omitted one open their case the same way, so inversion is put the same question about both — which is also the question the kernel puts, its callers reaching the unifier through a payload open that assumes every binder.
+/// A written arm and an omitted one open their case the same way, so inversion is put the same question about both — which is also the question the certifier puts, its callers reaching the unifier through a payload open that assumes every binder.
 fn assume_payload(
     context: &mut Context,
     telescope: Telescope<Vec<Term>>,
@@ -1541,7 +1541,7 @@ fn assume_payload(
     }
 }
 
-/// Re-assume every local a case's solution re-types, at its specialized type: `curios_analysis::retyped` over `solutions` joined by the scrutinee's own (`curios_analysis::scrutinee_solution`), which is the list and the rule the kernel's arm applies. The arm's refinements make such a type *reduce* at the case, which is enough for the body's own conversions, but not for a metavariable born in the arm: it keeps the types of its birth context and checks its solution against them, retried outside the frame — `z : Sizes(s)` used as `(z).0` under `s := node(a, b)` has to be a tuple there, which the re-typed entry states outright.
+/// Re-assume every local a case's solution re-types, at its specialized type: `curios_analysis::retyped` over `solutions` joined by the scrutinee's own (`curios_analysis::scrutinee_solution`), which is the list and the rule the certifier's arm applies. The arm's refinements make such a type *reduce* at the case, which is enough for the body's own conversions, but not for a metavariable born in the arm: it keeps the types of its birth context and checks its solution against them, retried outside the frame — `z : Sizes(s)` used as `(z).0` under `s := node(a, b)` has to be a tuple there, which the re-typed entry states outright.
 fn retype_locals(
     context: &mut Context,
     head: &Term,

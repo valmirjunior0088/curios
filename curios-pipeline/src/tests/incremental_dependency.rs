@@ -249,7 +249,7 @@ pub induct Knot: pub Type
 end
 ";
 
-/// `module`, elaborated already, put to the kernel alone with the prelude and then `units` in scope.
+/// `module`, elaborated already, put to the certifier alone with the prelude and then `units` in scope.
 fn certified_after(definitions: &Definitions, units: &[&Unit]) -> Vec<curios_cert::Verdict> {
     let definitions = Zonked::project(definitions).expect("an elaborated module is zonked");
 
@@ -264,9 +264,9 @@ fn certified_after(definitions: &Definitions, units: &[&Unit]) -> Vec<curios_cer
     })
 }
 
-/// A family whose parameter turns negative only through a family it holds is composed through at the vector a whole compile files: `Arrow` respelled to take `T` to a function's domain leaves `Wrap`'s terms the baseline's, and `Knot`, tied through `Wrap` and admitted while `Arrow` held `T` as a payload, is refused by a kernel reading the recompiled `/dep`.
+/// A family whose parameter turns negative only through a family it holds is composed through at the vector a whole compile files: `Arrow` respelled to take `T` to a function's domain leaves `Wrap`'s terms the baseline's, and `Knot`, tied through `Wrap` and admitted while `Arrow` held `T` as a payload, is refused by a certifier reading the recompiled `/dep`.
 ///
-/// Mutation-checked: with every signature read taken to stand over a baseline, `Wrap` keeps the baseline's vector and the kernel admits `Knot`.
+/// Mutation-checked: with every signature read taken to stand over a baseline, `Wrap` keeps the baseline's vector and the certifier admits `Knot`.
 #[test]
 fn a_family_turned_negative_through_one_it_holds_is_composed_through_as_a_whole_compile_files_it() {
     let negative = ARROW.replace("| arrow(t: T)", "| arrow(f: (T) -> /std/Nat)");

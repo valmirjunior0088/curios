@@ -34,7 +34,7 @@ pub struct ErasedBaseline<'a> {
     pub dropped: &'a BTreeSet<curios_core::Global>,
     /// Where the module being erased holds each name.
     pub now: &'a curios_core::Places,
-    /// The record the kernel filed of the module being erased: what a part read of it is digested under.
+    /// The record the certifier filed of the module being erased: what a part read of it is digested under.
     pub recorded: &'a curios_core::Certification,
     /// What a store holds of items erased before, where an item to be erased may be taken from one of its records ([`ErasedUnit::complete`]).
     pub candidates: Option<&'a dyn Candidates>,

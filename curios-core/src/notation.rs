@@ -1,4 +1,4 @@
-//! The hook a crate below `curios-surface` writes Core through: a kernel's refusal names terms and levels, and what writes them is the surface crate's printer, handed in by whoever reports the refusal.
+//! The hook a crate below `curios-surface` writes Core through: a certifier's refusal names terms and levels, and what writes them is the surface crate's printer, handed in by whoever reports the refusal.
 
 use crate::{Level, Term};
 

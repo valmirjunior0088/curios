@@ -632,7 +632,7 @@ impl DerivationSyntax {
     }
 }
 
-/// The names specific to a derived `Spell` witness body: the concept's `spell` method, applied to each payload and resolved like any written call; and the renderers the body applies over the spelled pieces — `call` for a constructor over its payloads, `record` for a struct over its fields, and `hidden` for a member written under its mark. The re-parse grammar is spelled once, in `/std/Spell`, where the kernel re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
+/// The names specific to a derived `Spell` witness body: the concept's `spell` method, applied to each payload and resolved like any written call; and the renderers the body applies over the spelled pieces — `call` for a constructor over its payloads, `record` for a struct over its fields, and `hidden` for a member written under its mark. The re-parse grammar is spelled once, in `/std/Spell`, where the certifier re-certifies it on every prelude build; the derivation only ever emits an application of one of these.
 ///
 /// The body writer and [`Derivation::vocabulary`] both receive [`SyntaxRegistry::string`]: `curios_core::str_literal` names the scan certificate and constructs the carrier at every rendered piece, so a derived witness references those shared names too. They have one registry entry, shared with ordinary string literals.
 #[derive(Debug, Clone, Copy)]

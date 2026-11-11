@@ -257,7 +257,7 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// `term` by value: each local definition it names outside a metavariable's occurrence replaced by what that definition is by value, which it was read as where it was defined ([`ByValue`]), and each occurrence kept as it stands, as conversion reads a block's locals ([`read_outside_spines`](crate::read_outside_spines)): a spine is the scope its occurrence was born in, which no reading here changes, so reading into it would cost each spelling the scope. One substitution over what `term` holds, as the kernel reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
+    /// `term` by value: each local definition it names outside a metavariable's occurrence replaced by what that definition is by value, which it was read as where it was defined ([`ByValue`]), and each occurrence kept as it stands, as conversion reads a block's locals ([`read_outside_spines`](crate::read_outside_spines)): a spine is the scope its occurrence was born in, which no reading here changes, so reading into it would cost each spelling the scope. One substitution over what `term` holds, as the certifier reads a term through the values its `let`s were bound to (`curios-cert`'s `Scope::by_value`), where unfolding each definition in turn would read a chain of them again at every spelling.
     pub(crate) fn by_value(&self, term: &Term) -> Term {
         self.typing
             .frames
@@ -331,11 +331,11 @@ impl<'s> Context<'s> {
 
     /// Restate, for as long as the current frame stands, every equation in force whose scrutinee names `name`, under the value an arm has just refined `name` to: the equation is withheld, and its instance at `value` recorded in its place.
     ///
-    /// **The kernel's `Scope::restate`, in the elaborator's store.** The kernel reads the arm it checks with a case's solution substituted and assumes each equation in force again at that instance, the recorded one stepping aside. The elaborator keeps the variable spelled and refines it, so an equation recorded outside the arm still names it, and a fact written at the case value — `0 < List/len(xs)` under `match i < List/len(xs)` and then `match i | 0` — meets no key: the entry's reduced spelling is settled with the arm's frame withheld, and names the variable still. The instance is the same hypothesis read where the arm reads it, since what holds of the scrutinee at every value of the variable holds at the one the case fixes.
+    /// **The certifier's `Scope::restate`, in the elaborator's store.** The certifier reads the arm it checks with a case's solution substituted and assumes each equation in force again at that instance, the recorded one stepping aside. The elaborator keeps the variable spelled and refines it, so an equation recorded outside the arm still names it, and a fact written at the case value — `0 < List/len(xs)` under `match i < List/len(xs)` and then `match i | 0` — meets no key: the entry's reduced spelling is settled with the arm's frame withheld, and names the variable still. The instance is the same hypothesis read where the arm reads it, since what holds of the scrutinee at every value of the variable holds at the one the case fixes.
     ///
-    /// **The recorded equation steps aside, as the kernel's does**, so an equation stands once however deep the arms go: kept beside its instance it would double at every nested match on a variable it names. A term in the arm that still names the variable meets the instance because a key and a probe are spelled as the arm spells them ([`Context::spelled_as_refined`]).
+    /// **The recorded equation steps aside, as the certifier's does**, so an equation stands once however deep the arms go: kept beside its instance it would double at every nested match on a variable it names. A term in the arm that still names the variable meets the instance because a key and a probe are spelled as the arm spells them ([`Context::spelled_as_refined`]).
     ///
-    /// **An equation whose settlement would read the refinement is restated too**, though its scrutinee does not name the variable: one naming a local whose type, or whose definition, names it, read through to the end (`curios_analysis::reads_solved`, the rule the kernel restates by). The arm re-types such a local, and a settlement reads it at its type, so a spelling settled under the arm would rest on the arm while the equation outlives it. Its instance at `value` is its own spelling, so it is registered under its own key in the arm's frame, standing in for the recorded entry there ([`ScrutineeEntry::restates`]) rather than withholding it under a key it would share.
+    /// **An equation whose settlement would read the refinement is restated too**, though its scrutinee does not name the variable: one naming a local whose type, or whose definition, names it, read through to the end (`curios_analysis::reads_solved`, the rule the certifier restates by). The arm re-types such a local, and a settlement reads it at its type, so a spelling settled under the arm would rest on the arm while the equation outlives it. Its instance at `value` is its own spelling, so it is registered under its own key in the arm's frame, standing in for the recorded entry there ([`ScrutineeEntry::restates`]) rather than withholding it under a key it would share.
     ///
     /// An instance that names no local is recorded by neither checker: [`Context::withhold_closed_equations`], which a refinement runs next, withholds it as it withholds any equation the refinement closes. The value an equation assumes is left as it is, a variable in it being read through its refinement.
     fn restate_equations(&mut self, name: &Free, value: &Term) {
@@ -388,17 +388,17 @@ impl<'s> Context<'s> {
         self.typing.frames.spelled_as_refined(term)
     }
 
-    /// `term` as the kernel is handed it under the arms in force: its solved metavariables materialized, its local definitions substituted by value ([`Context::by_value`]), and every variable an arm refined spelled as the value it was refined to. The kernel reads the arm it checks with a case's solution substituted, where the elaborator records it and keeps the variable spelled, so this is the reading a rule shared with the kernel is judged on.
+    /// `term` as the certifier is handed it under the arms in force: its solved metavariables materialized, its local definitions substituted by value ([`Context::by_value`]), and every variable an arm refined spelled as the value it was refined to. The certifier reads the arm it checks with a case's solution substituted, where the elaborator records it and keeps the variable spelled, so this is the reading a rule shared with the certifier is judged on.
     ///
-    /// A solved metavariable is materialized first because it stands over a spine of the locals in scope where it was born, and would read as naming them: a guard written through a concept holds its witness as one, and names no local of its own once the witness is the global it resolved to. A definition's value was materialized where it was defined, and is again here for what has been solved since. An unsolved one is kept as it stands, its spine the scope it was born in: the kernel is handed none.
-    pub(crate) fn kernel_spelling(&self, term: &Term) -> Term {
+    /// A solved metavariable is materialized first because it stands over a spine of the locals in scope where it was born, and would read as naming them: a guard written through a concept holds its witness as one, and names no local of its own once the witness is the global it resolved to. A definition's value was materialized where it was defined, and is again here for what has been solved since. An unsolved one is kept as it stands, its spine the scope it was born in: the certifier is handed none.
+    pub(crate) fn certifier_spelling(&self, term: &Term) -> Term {
         let by_value = self.by_value(&zonk_solved_term_metas(self, term));
         self.spelled_as_refined(&zonk_solved_term_metas(self, &by_value))
     }
 
-    /// Withhold, for as long as the current frame stands, every equation in force whose scrutinee names no local as the kernel spells it now ([`Context::kernel_spelling`]).
+    /// Withhold, for as long as the current frame stands, every equation in force whose scrutinee names no local as the certifier spells it now ([`Context::certifier_spelling`]).
     ///
-    /// **The recording rule, read where the kernel reads it.** No checker records an equation under a spelling that mentions no local (`curios_analysis::records_case_equation`). The kernel restates the equations in force under an arm's solution, so a guard over a variable an arm inside refines to a closed value is, to the kernel, an equation about a closed term, which it does not record; the elaborator's key still names the variable, and left answering it would accept in that arm a proof the kernel refuses. A closed scrutinee computes, so nothing is lost where the arm is one a value reaches: the fact holds by reduction. Where it computes to another case than its guard assumed the arm is dead, and a proof resting on the guard is refused where it is written.
+    /// **The recording rule, read where the certifier reads it.** No checker records an equation under a spelling that mentions no local (`curios_analysis::records_case_equation`). The certifier restates the equations in force under an arm's solution, so a guard over a variable an arm inside refines to a closed value is, to the certifier, an equation about a closed term, which it does not record; the elaborator's key still names the variable, and left answering it would accept in that arm a proof the certifier refuses. A closed scrutinee computes, so nothing is lost where the arm is one a value reaches: the fact holds by reduction. Where it computes to another case than its guard assumed the arm is dead, and a proof resting on the guard is refused where it is written.
     fn withhold_closed_equations(&mut self) {
         if !self.typing.frames.has_scrutinee_refinements() {
             return;
@@ -408,7 +408,7 @@ impl<'s> Context<'s> {
             .frames
             .scrutinee_equations()
             .into_iter()
-            .filter(|(_, entry)| !records_case_equation(&self.kernel_spelling(&entry.original)))
+            .filter(|(_, entry)| !records_case_equation(&self.certifier_spelling(&entry.original)))
             .collect::<Vec<_>>();
         for (key, entry) in closed {
             self.typing.frames.withhold_scrutinee(key, entry);
@@ -528,7 +528,7 @@ impl<'s> Context<'s> {
 
     /// [`Frames::scrutinee_entry`](super::Frames::scrutinee_entry)'s value, with `probe` and the spelling the equation was registered on held to one universe instance, and declined where they cannot be ([`hold_at_one_instance`]). The two are read as their key spells them ([`key_spelling`]), so they differ in levels alone.
     ///
-    /// **The commitment is in the accessor, so no read of the store rests on an instance it has not held.** The key cannot carry this: it is computed when an arm is entered, which is before the levels in it are solved, and it is then compared for as long as the arm stands. The kernel needs none of it because it is handed a zonked module, where every instance is already ground and keying on the scrutinee itself is exact ([Case equations and their key](../../documentation/design/soundness/case-equations-and-their-key.md)).
+    /// **The commitment is in the accessor, so no read of the store rests on an instance it has not held.** The key cannot carry this: it is computed when an arm is entered, which is before the levels in it are solved, and it is then compared for as long as the arm stands. The certifier needs none of it because it is handed a zonked module, where every instance is already ground and keying on the scrutinee itself is exact ([Case equations and their key](../../documentation/design/soundness/case-equations-and-their-key.md)).
     ///
     /// A universe error declines. That is the direction the whole read moves in — fewer refinements fire, never more — so it can cost a reduction and never admit one.
     pub(crate) fn scrutinee_reduct(&mut self, canonical: &Term, probe: &Term) -> Option<Term> {

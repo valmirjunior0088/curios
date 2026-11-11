@@ -555,7 +555,7 @@ fn every_seed_is_on_the_side_each_checker_puts_it() {
 
 #[test]
 fn every_held_seed_the_table_does_not_list_closes_by_refl() {
-    // The admitting direction as an author meets it: a compilation, the elaborator and then the kernel over the proof it built.
+    // The admitting direction as an author meets it: a compilation, the elaborator and then the certifier over the proof it built.
     let listed = parted();
     for seeds in SEEDS {
         let rows = seeds

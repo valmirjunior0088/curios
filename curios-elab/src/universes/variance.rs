@@ -2,7 +2,7 @@
 //!
 //! The analysis itself lives in `curios-analysis/src/variance.rs` (see that module for the rule and its rationale) and is run by both checkers. It runs here twice for each declaration, for one reason each. When a family's group finalizes, because a later item of the same declaration may compare two of its instances: that vector is kept on the context's registry entry, and it is the one the unit carries. And as the declaration is published, where its telescopes are final and meta-free: that run writes nothing and holds the carried vector to what the declaration says.
 //!
-//! The same walk reads a definition, once, where its levels have closed ([`definition_variances`]): which of them its value holds. A definition whose value is a struct or tuple literal is read a field at a time as well ([`field_variances`]), since a projection of it is that field's value, and one whose value is a field of one of its binders is marked so ([`parameter_field`]), since applied in full it is that field of its argument. Those vectors are the elaborator's alone, since the kernel decides two instances of a definition by unfolding them, so nothing holds them to a second reading.
+//! The same walk reads a definition, once, where its levels have closed ([`definition_variances`]): which of them its value holds. A definition whose value is a struct or tuple literal is read a field at a time as well ([`field_variances`]), since a projection of it is that field's value, and one whose value is a field of one of its binders is marked so ([`parameter_field`]), since applied in full it is that field of its argument. Those vectors are the elaborator's alone, since the certifier decides two instances of a definition by unfolding them, so nothing holds them to a second reading.
 
 use {
     crate::{Context, Error, Published, zonk_solved_term_metas},
@@ -41,7 +41,7 @@ impl Families for Context<'_> {
     }
 }
 
-/// The registries as the structural arms read them, where no type is at hand for eta to apply two curried heads at: the families' vectors, no definition's, and a head short of its full application compared level by level, which is the kernel's rule for two instances that reduction leaves standing.
+/// The registries as the structural arms read them, where no type is at hand for eta to apply two curried heads at: the families' vectors, no definition's, and a head short of its full application compared level by level, which is the certifier's rule for two instances that reduction leaves standing.
 pub struct Structural<'a>(pub &'a Context<'a>);
 
 impl Families for Structural<'_> {
@@ -181,7 +181,7 @@ fn spliced(
 
 /// Which of a definition's universe parameters its value holds, read where its levels have closed: one entry per parameter of `universe_context`, none for a definition that takes none.
 ///
-/// **A definition that answers a type is walked.** Its body is applied at as many fresh binders as the outer telescope of its type holds and read as a family's telescopes are ([`held_levels`]). Forcing the application opens the lambdas the body is written as, so a parameter's annotation is never read, and the result sort is not handed over: both bound a level from below and say nothing of what the value holds. A lambda left inside the reduct is read with its binders' types, the kernel comparing them where two lambdas meet at no function type, and what the walk cannot see through marks every level it carries.
+/// **A definition that answers a type is walked.** Its body is applied at as many fresh binders as the outer telescope of its type holds and read as a family's telescopes are ([`held_levels`]). Forcing the application opens the lambdas the body is written as, so a parameter's annotation is never read, and the result sort is not handed over: both bound a level from below and say nothing of what the value holds. A lambda left inside the reduct is read with its binders' types, the certifier comparing them where two lambdas meet at no function type, and what the walk cannot see through marks every level it carries.
 ///
 /// **Any other definition is read as written.** Every level its body mentions beneath its own binders is held. The walk forces each closed part of what it reads, which for a type is how an alias is seen through and for a function's body is its closed computations run, the cost a vector exists to save; and a level a value's term mentions is nearly always one its instances differ in.
 ///

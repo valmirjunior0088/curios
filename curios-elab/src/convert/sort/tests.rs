@@ -131,7 +131,7 @@ fn a_type_naming_a_binder_its_walk_opened_is_not_remembered() {
 
 /// An application of a declaration that lands in `Prop` is a proposition by that declaration, and nothing is run to learn it: the argument below is one no budget reduces, and the application is classified. A declaration into `Type` says less than its reduct, so the same argument under one is run, and refused.
 ///
-/// The kernel's rule, held there by `curios-cert`'s `an_application_of_a_declaration_into_prop_is_a_proposition_unreduced`.
+/// The certifier's rule, held there by `curios-cert`'s `an_application_of_a_declaration_into_prop_is_a_proposition_unreduced`.
 #[test]
 fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
     let mut context = Context::with_default_budget(SYNTAX);

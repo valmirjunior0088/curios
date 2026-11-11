@@ -4,7 +4,7 @@
 
 use crate::tests::test_support::*;
 
-/// A block's type reads the block's local by value: `tag(n)` is typed `Eq()(n, n)` inside the block and `Eq()(2, 2)` where the block is left, which is how the kernel types a `let`. Left naming `n`, the binding after the block is refused for a type that reads `Eq()(n, n)`, and with nothing reading the type the kernel refuses the declaration for an unbound name.
+/// A block's type reads the block's local by value: `tag(n)` is typed `Eq()(n, n)` inside the block and `Eq()(2, 2)` where the block is left, which is how the certifier types a `let`. Left naming `n`, the binding after the block is refused for a type that reads `Eq()(n, n)`, and with nothing reading the type the certifier refuses the declaration for an unbound name.
 #[test]
 fn a_blocks_type_reads_its_local_by_value_where_the_block_is_left() {
     let output = run(r#"
@@ -79,7 +79,7 @@ fn a_block_gives_an_implicit_its_type_whichever_argument_is_read_first() {
     assert_eq!(output, b"0");
 }
 
-/// A solution that names a block's local reads it by value where the block is left. `wrap`'s `A` is solved inside the block to `Le(x)`, so the block is typed `Eq(@Le(x))(q, q)` there and `Eq(@Le(2))(p, p)` where it is left. Read with only the type's own names replaced, the solution kept `x`, and with nothing reading the type the kernel refused the declaration for an unbound name.
+/// A solution that names a block's local reads it by value where the block is left. `wrap`'s `A` is solved inside the block to `Le(x)`, so the block is typed `Eq(@Le(x))(q, q)` there and `Eq(@Le(2))(p, p)` where it is left. Read with only the type's own names replaced, the solution kept `x`, and with nothing reading the type the certifier refused the declaration for an unbound name.
 #[test]
 fn a_solution_naming_a_blocks_local_reads_it_by_value_where_the_block_is_left() {
     let output = run(r#"
@@ -108,7 +108,7 @@ fn a_solution_naming_a_blocks_local_reads_it_by_value_where_the_block_is_left() 
     assert_eq!(output, b"0");
 }
 
-/// A problem parked in a block solves an implicit the block left unsolved, and what it gives names no local where the block's type is read. `hold`'s `V` waits on `b`: the block ends with `Le(x) = sel(b, V)` parked and `V` unsolved, `settle` then gives `b`, and the parked problem, retried where `x` stands, offers `Le(x)`. `V` was restricted to the binders before the block's where the block ended, so the candidate is `Le(2)` and `r.1` is a `Tag(true, Le(2))`. Unrestricted, `V` took `Le(x)` through its spine and the kernel refused the declaration for an unbound name.
+/// A problem parked in a block solves an implicit the block left unsolved, and what it gives names no local where the block's type is read. `hold`'s `V` waits on `b`: the block ends with `Le(x) = sel(b, V)` parked and `V` unsolved, `settle` then gives `b`, and the parked problem, retried where `x` stands, offers `Le(x)`. `V` was restricted to the binders before the block's where the block ended, so the candidate is `Le(2)` and `r.1` is a `Tag(true, Le(2))`. Unrestricted, `V` took `Le(x)` through its spine and the certifier refused the declaration for an unbound name.
 #[test]
 fn a_problem_parked_in_a_block_solves_an_implicit_the_block_left_unsolved() {
     let output = run(r#"

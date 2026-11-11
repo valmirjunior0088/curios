@@ -163,7 +163,7 @@ fn a_program_suspended_on_no_handle_runs_its_cancel_and_ends_reporting_the_deadl
     assert_eq!(errors, curios_abi::DEADLOCK.as_bytes());
 }
 
-// The real host sleeps in the kernel until the timer's instant; the program reads the clock on both sides of the wait and reports through a file, since the real host's standard output cannot be captured.
+// The real host sleeps in the certifier until the timer's instant; the program reads the clock on both sides of the wait and reports through a file, since the real host's standard output cannot be captured.
 #[test]
 fn the_real_host_sleeps_a_suspension_on_a_timer_until_its_instant() {
     let root = curios_common::test_support::Temporary::new("host", "suspension-timer");

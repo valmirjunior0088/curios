@@ -33,7 +33,7 @@ fn a_metavariable_is_solved_through_the_cancellation() {
     );
 }
 
-// A metavariable is solved through the packed-literal view: `x[h]` is `append(x[], ?h)`, which no shape congruence relates to the folded literal `x[7]`, so the elaborator splits the literal at the spine's known lengths and solves `?h` from the last byte. The kernel then sees the solution, and the two spellings agree by reduction.
+// A metavariable is solved through the packed-literal view: `x[h]` is `append(x[], ?h)`, which no shape congruence relates to the folded literal `x[7]`, so the elaborator splits the literal at the spine's known lengths and solves `?h` from the last byte. The certifier then sees the solution, and the two spellings agree by reduction.
 #[test]
 fn a_metavariable_is_solved_through_the_packed_literal_view() {
     assert_eq!(

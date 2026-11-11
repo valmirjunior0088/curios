@@ -1,4 +1,4 @@
-//! Erasure's readings through the kernel's door ([`curios_cert::Reader`]): each a judgment the kernel makes, its refusal turned into erasure's ([`Error::reading`]), and the two walks erasure makes over what the door answers — a telescope opened a binder at a time, and a type read past its parameters to the half its end is in.
+//! Erasure's readings through the certifier's door ([`curios_cert::Reader`]): each a judgment the certifier makes, its refusal turned into erasure's ([`Error::reading`]), and the two walks erasure makes over what the door answers — a telescope opened a binder at a time, and a type read past its parameters to the half its end is in.
 
 use {
     crate::Error,
@@ -13,7 +13,7 @@ pub fn reduced(reader: &mut Reader, term: &curios_core::Term) -> Result<curios_c
         .map_err(|refusal| Error::reducing(term, refusal))
 }
 
-/// The type of `term` — a name's, a neutral's, a type former's sort — as the kernel infers it.
+/// The type of `term` — a name's, a neutral's, a type former's sort — as the certifier infers it.
 pub fn inferred(reader: &mut Reader, term: &curios_core::Term) -> Result<curios_core::Term, Error> {
     reader
         .infer(term)
@@ -43,7 +43,7 @@ pub fn advance_assumed(
     binder
 }
 
-/// Whether a value of type `type_` carries nothing at run time: a type, a proof, or a function that ultimately answers one, read past its parameters, each opened as a binder, to the half the kernel classifies its end in. The empty tuple is none of them, so `{}`, `{ .., {} }` and `X -> {}` are kept.
+/// Whether a value of type `type_` carries nothing at run time: a type, a proof, or a function that ultimately answers one, read past its parameters, each opened as a binder, to the half the certifier classifies its end in. The empty tuple is none of them, so `{}`, `{ .., {} }` and `X -> {}` are kept.
 ///
 /// **One reading's answer.** A domain that is a variable here is a proof where the variable is instantiated at a proposition, so a `false` says only that this reading keeps the value, and decides what a slot holds, never whether the slot is there; a `true` holds at every instantiation, since a sort, a proposition and a function into one stay what they are under any substitution.
 pub fn is_erasable(reader: &mut Reader, type_: &curios_core::Term) -> Result<bool, Error> {

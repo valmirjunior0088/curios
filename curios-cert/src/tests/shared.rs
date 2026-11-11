@@ -1,6 +1,6 @@
 //! Every function of the shared layer a judgment of this crate calls, listed: the roster.
 //!
-//! What a verdict reaches of the layer both checkers share is [`ROSTER`]: a function of `curios-analysis`, `curios-core`, `curios-algebra` or `curios-num` enters a judgment's reach by a line added there beside the import that calls it, and the test here fails where a module of the crate imports one the roster does not list, or the roster lists one no module imports. What holds each stands where the function is — the audit of conversion's laws, a differential against the path it shortens, a test that its cap refuses — and the grade it is held to is `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`'s.
+//! What a verdict reaches of the layer both checkers share is [`ROSTER`]: a function of `curios-analysis`, `curios-core`, `curios-algebra` or `curios-num` enters a judgment's reach by a line added there beside the import that calls it, and the test here fails where a module of the crate imports one the roster does not list, or the roster lists one no module imports. What holds each stands where the function is — the audit of conversion's laws, a differential against the path it shortens, a test that its cap refuses — and the grade it is held to is `documentation/design/soundness/an-independent-certifier-re-checks-what-the-elaborator-accepts.md`'s.
 //!
 //! **A list, and not a path.** Each module imports a shared function from the crate that defines it: a module re-exporting the layer inside the crate would be a second path to names their crates own, which `documentation/design/visibility-is-decided-at-each-hop.md` rules out. The list names the same reach, and each import says where the function is.
 //!
@@ -212,9 +212,9 @@ fn a_use_names_its_functions_and_not_its_types() {
 
 /// A function of the shared layer enters a judgment's reach through the roster alone, so the list is where a reader finds what a verdict calls and where a change to it is seen; and the roster lists nothing a judgment does not call, so it states the reach and no more.
 ///
-/// Mutation-checked both ways: `curios_analysis::refold` struck from the roster fails this for `kernel/whnf.rs`, and `curios_core::reduce` added to it fails this as imported nowhere.
+/// Mutation-checked both ways: `curios_analysis::refold` struck from the roster fails this for `certifier/whnf.rs`, and `curios_core::reduce` added to it fails this as imported nowhere.
 #[test]
-fn the_roster_is_what_the_kernel_imports() {
+fn the_roster_is_what_the_certifier_imports() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut found = Vec::new();
     sources(&root, &mut found);

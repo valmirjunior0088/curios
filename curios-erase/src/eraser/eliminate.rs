@@ -808,7 +808,7 @@ impl Eraser<'_> {
 
         self.builder.open_block();
         let outcome = self.in_arm(context, |lowering, context| {
-            // An arm whose case the indices rule out is one the kernel typed nothing of, and one no value reaches.
+            // An arm whose case the indices rule out is one the certifier typed nothing of, and one no value reaches.
             let Some(expected) = refine_arm(context, m, tag, &labels, &vars)? else {
                 return Ok(Outcome::Diverged(curios_anf::Terminator::Unreachable));
             };
@@ -891,7 +891,7 @@ impl Eraser<'_> {
         })
     }
 
-    /// Run `arm` in a frame of its own, as an arm whose case it puts in force is checked, with none of the types kept for the item in hand ([`Eraser::types`]): there the kernel binds a variable the case solves to its value and reads every type by value, so a type read outside the arm is not the one the kernel reads in it, and one read under the case is not the walk's once the arm is left.
+    /// Run `arm` in a frame of its own, as an arm whose case it puts in force is checked, with none of the types kept for the item in hand ([`Eraser::types`]): there the certifier binds a variable the case solves to its value and reads every type by value, so a type read outside the arm is not the one the certifier reads in it, and one read under the case is not the walk's once the arm is left.
     fn in_arm<T>(
         &mut self,
         context: &mut Reader,
@@ -905,7 +905,7 @@ impl Eraser<'_> {
     }
 }
 
-/// Enter the arm of `tag`, its payload under `labels`, as the kernel checked it, and hand back the arm body's expected type: `None` where the scrutinee's indices rule the case out, which the kernel typed nothing of. Typing-only: it touches the reader's frame and emits nothing.
+/// Enter the arm of `tag`, its payload under `labels`, as the certifier checked it, and hand back the arm body's expected type: `None` where the scrutinee's indices rule the case out, which the certifier typed nothing of. Typing-only: it touches the reader's frame and emits nothing.
 fn refine_arm(
     context: &mut Reader,
     m: &InductMatch<'_>,

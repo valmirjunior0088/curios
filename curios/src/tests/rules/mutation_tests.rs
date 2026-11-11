@@ -1,4 +1,4 @@
-//! Differential mutation of an elaborated module: the kernel must refuse a body it has no reason to accept.
+//! Differential mutation of an elaborated module: the certifier must refuse a body it has no reason to accept.
 //!
 //! Filed among the rules because it attacks the walk every rule's verdict passes through, rather than any one rule.
 
@@ -11,7 +11,7 @@ use {
     curios_surface::Spellable,
 };
 
-/// The compile path's walk over one fixture. Mutation edits bodies and sorts, never metavariables, so the zonk evidence re-projects for every mutant — and the kernel, not the wrapper, is what must catch the mutation.
+/// The compile path's walk over one fixture. Mutation edits bodies and sorts, never metavariables, so the zonk evidence re-projects for every mutant — and the certifier, not the wrapper, is what must catch the mutation.
 fn recheck(program: &Program, budget: u64) -> Vec<curios_cert::Verdict> {
     let zonked = Zonked::project(program).expect("a mutant stays zonked");
     recheck_with_prelude(&zonked, budget)
@@ -52,7 +52,7 @@ const SUBJECTS: &[(&str, &str)] = &[
 
 /// A term foreign to every *value* type: the sort itself.
 ///
-/// Picking a literal would mean recognizing the declaration it belongs to, and a declared type is rarely the intrinsic it reduces to — `Nat` reaches the kernel as `/sys/Nat/Nat`, so a structural test for `Intrinsic::NatType` misses it and substitutes a `0` that is perfectly well typed. `Type` inhabits no value type at all, which needs no recognition to be sure of; the subject below accordingly declares nothing at a sort.
+/// Picking a literal would mean recognizing the declaration it belongs to, and a declared type is rarely the intrinsic it reduces to — `Nat` reaches the certifier as `/sys/Nat/Nat`, so a structural test for `Intrinsic::NatType` misses it and substitutes a `0` that is perfectly well typed. `Type` inhabits no value type at all, which needs no recognition to be sure of; the subject below accordingly declares nothing at a sort.
 fn foreign_body() -> Term {
     Term::type_ground()
 }
@@ -109,7 +109,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
 
             assert!(
                 !recheck(&mutant, curios_elab::DEFAULT_BUDGET).is_empty(),
-                "{description}: the kernel accepted `{}` at `{}` with a body of another type entirely",
+                "{description}: the certifier accepted `{}` at `{}` with a body of another type entirely",
                 definition.name.faithful(),
                 definition.type_.faithful(),
             );
@@ -125,7 +125,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
 
 /// The same property from the other side: keep each body and give it another item's declared type.
 ///
-/// Body substitution asks whether the kernel notices a term that cannot inhabit its type; this asks whether it notices a *type* nothing in place inhabits. The two fail differently — the first is caught where the body is checked, the second can also surface downstream, where a consumer of the retyped definition stops fitting — and a checker that tracked only one of them would pass the earlier test and fail this one.
+/// Body substitution asks whether the certifier notices a term that cannot inhabit its type; this asks whether it notices a *type* nothing in place inhabits. The two fail differently — the first is caught where the body is checked, the second can also surface downstream, where a consumer of the retyped definition stops fitting — and a checker that tracked only one of them would pass the earlier test and fail this one.
 ///
 /// Pairs whose declared types are structurally identical are skipped: swapping those is not a mutation at all.
 #[test]
@@ -165,7 +165,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
 
                 assert!(
                     !recheck(&mutant, curios_elab::DEFAULT_BUDGET).is_empty(),
-                    "{description}: the kernel accepted `{}` redeclared at `{replacement:?}`",
+                    "{description}: the certifier accepted `{}` redeclared at `{replacement:?}`",
                     definition.name.faithful(),
                 );
                 mutated += 1;
@@ -265,7 +265,7 @@ fn a_body_grafted_across_an_index_is_refused() {
 
         assert!(
             !recheck(&grafted, curios_elab::DEFAULT_BUDGET).is_empty(),
-            "{description}: the kernel accepted a body whose index disagrees with its declaration",
+            "{description}: the certifier accepted a body whose index disagrees with its declaration",
         );
     }
 }

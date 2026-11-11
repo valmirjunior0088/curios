@@ -12,7 +12,7 @@ use {
     curios_surface::Spellable,
 };
 
-/// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] with the level on a nominal node. Where the node's family is irrelevant in the level, the key still keeps the two spellings apart — its guard reads no family's variance, the kernel's key being the scrutinee compared with every level — and the equation answers all the same at the stuck form reduction leaves, where each checker goes by what its conversion holds one: `Wrap.{0}(Nat)` and `Wrap.{1}(Nat)` are one type with nothing required of the two levels, so a call respelled in another argument as well is the scrutinee to a question that commits nothing. Where the family is invariant the two are two types and the call stays stuck. `curios-cert`'s `kernel::convert::tests::variance` holds the answers under this name.
+/// [`scrutinee_refinement_does_not_fire_at_another_ground_universe_instance`] with the level on a nominal node. Where the node's family is irrelevant in the level, the key still keeps the two spellings apart — its guard reads no family's variance, the certifier's key being the scrutinee compared with every level — and the equation answers all the same at the stuck form reduction leaves, where each checker goes by what its conversion holds one: `Wrap.{0}(Nat)` and `Wrap.{1}(Nat)` are one type with nothing required of the two levels, so a call respelled in another argument as well is the scrutinee to a question that commits nothing. Where the family is invariant the two are two types and the call stays stuck. `curios-cert`'s `certifier::convert::tests::variance` holds the answers under this name.
 ///
 /// Mutation-checked three ways: against a key guard handed the context's registries, under which the key itself answers; against a guard past the key that reads no variance; and against a question that reads a weak equation as a commit. Under each of the last two the calls at `Wrap` stay stuck.
 #[test]
@@ -131,7 +131,7 @@ fn a_self_entry_served_across_spellings_keeps_the_asking_binder_names() {
     );
 }
 
-/// A guard answers a term the carriers' readers hold equal to it: its sum commuted, and its dual with the sum commuted, neither a spelling the key is held under. The kernel's `whnf::question_tests` holds this proposition under this name, and `curios_analysis::answers` is the one rule both ask.
+/// A guard answers a term the carriers' readers hold equal to it: its sum commuted, and its dual with the sum commuted, neither a spelling the key is held under. The certifier's `whnf::question_tests` holds this proposition under this name, and `curios_analysis::answers` is the one rule both ask.
 #[test]
 fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
     let mut context = context();
@@ -169,7 +169,7 @@ fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
     );
 }
 
-/// The binders and terms the tests of what reduction asks conversion share, as the kernel's `whnf::question_tests` has them: `a`, `b`, `c` at `Nat`, `f: (Nat) -> Nat` and `h: (Bool) -> Nat`.
+/// The binders and terms the tests of what reduction asks conversion share, as the certifier's `whnf::question_tests` has them: `a`, `b`, `c` at `Nat`, `f: (Nat) -> Nat` and `h: (Bool) -> Nat`.
 struct Asked {
     a: Free,
     b: Free,
@@ -244,7 +244,7 @@ impl Asked {
     }
 }
 
-/// A guard answers a term the elaborator's own conversion holds equal to its scrutinee: a call respelled in its argument, the guard's dual over that call, and — where the scrutinee is no operation of the algebra — the call itself. The kernel's `whnf::question_tests` holds this proposition under this name.
+/// A guard answers a term the elaborator's own conversion holds equal to its scrutinee: a call respelled in its argument, the guard's dual over that call, and — where the scrutinee is no operation of the algebra — the call itself. The certifier's `whnf::question_tests` holds this proposition under this name.
 #[test]
 fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
     let mut context = context();
@@ -271,7 +271,7 @@ fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
     });
 }
 
-/// A shared analysis reads a term by plain reduction, which asks the elaborator's conversion nothing, in either order the two reductions are taken in: under a guard, the respelling a judgment's reduction answers by asking stays stuck through `Env::force`, so totality rests on no verdict of conversion's, and a reduct one of the two filed does not answer the other. The kernel's `whnf::question_tests` holds the first half under this name.
+/// A shared analysis reads a term by plain reduction, which asks the elaborator's conversion nothing, in either order the two reductions are taken in: under a guard, the respelling a judgment's reduction answers by asking stays stuck through `Env::force`, so totality rests on no verdict of conversion's, and a reduct one of the two filed does not answer the other. The certifier's `whnf::question_tests` holds the first half under this name.
 ///
 /// Mutation-checked: with `Env::force` reducing as a judgment does the respelling is `true` to the analysis, and with the judgment's reduction table read whichever reduction asks, the judgment's `true` answers the analysis in the first order.
 #[test]
@@ -296,7 +296,7 @@ fn a_shared_analysis_reads_a_term_by_reduction_that_asks_nothing() {
     });
 }
 
-/// A question reduction puts to conversion is answered by plain reduction, so an answer that needs a question answered inside a question is refused: under the guards `f(a + b) < 10` and `h(f(a + b) < 10) < 5`, the term `h(f(b + a) < 10) < 5` stays stuck, the second guard naming every binder it names. The kernel's `whnf::question_tests` holds this proposition under this name.
+/// A question reduction puts to conversion is answered by plain reduction, so an answer that needs a question answered inside a question is refused: under the guards `f(a + b) < 10` and `h(f(a + b) < 10) < 5`, the term `h(f(b + a) < 10) < 5` stays stuck, the second guard naming every binder it names. The certifier's `whnf::question_tests` holds this proposition under this name.
 ///
 /// Mutation-checked: with the lookup asking under plain reduction too, the question decides the argument and the term is `true`.
 #[test]
@@ -325,7 +325,7 @@ fn a_question_is_answered_by_reduction_that_asks_nothing() {
     });
 }
 
-/// The binders the tests of a call under two proofs share, as the kernel's `whnf::question_tests` has them: `a` at `Nat`, a proposition `bound`, two proofs of it, and `w: (n: Nat, at: bound) -> Nat`.
+/// The binders the tests of a call under two proofs share, as the certifier's `whnf::question_tests` has them: `a` at `Nat`, a proposition `bound`, two proofs of it, and `w: (n: Nat, at: bound) -> Nat`.
 struct Proved {
     a: Free,
     w: Free,
@@ -383,7 +383,7 @@ fn assumed<T>(
     })
 }
 
-/// A guard answers a call under another proof of its bound, and so does a match on the call itself: the form names a proof the scrutinee does not, so it is no reduct of it, and the filter in front of every entry passes over a binder that is itself a proof. The kernel's `whnf::question_tests` holds this proposition under this name.
+/// A guard answers a call under another proof of its bound, and so does a match on the call itself: the form names a proof the scrutinee does not, so it is no reduct of it, and the filter in front of every entry passes over a binder that is itself a proof. The certifier's `whnf::question_tests` holds this proposition under this name.
 ///
 /// Mutation-checked: with a proof counted as any other binder, both forms stay stuck.
 #[test]
@@ -403,7 +403,7 @@ fn a_guard_answers_a_call_under_another_proof_of_its_bound() {
     });
 }
 
-/// A form naming a binder the scrutinee does not, outside a proof, is put to no entry: `f(b + 0 * c) < 10` converts with the guard `f(b) < 10` and names `c`, which is no proof, so the form stays stuck. The kernel's `whnf::question_tests` holds this proposition under this name.
+/// A form naming a binder the scrutinee does not, outside a proof, is put to no entry: `f(b + 0 * c) < 10` converts with the guard `f(b) < 10` and names `c`, which is no proof, so the form stays stuck. The certifier's `whnf::question_tests` holds this proposition under this name.
 ///
 /// Mutation-checked: with the filter passing every binder, the form is asked about and is `true`.
 #[test]
@@ -436,7 +436,7 @@ fn a_form_naming_another_binder_outside_a_proof_is_put_to_no_equation() {
     });
 }
 
-/// An entry's reduced spelling is settled by the reduction that asks for it, once for each. Under the guard `f(a + b) < 10`, the inner guard `f(b + a) < 10 && c < 3`, registered in a frame of its own so the outer guard stands while it is settled, reduces to `c < 3` for a judgment, which asks its conversion about the left operand, and stands as written for plain reduction; so `c < 3` is `true` to a judgment and stuck to an analysis, whichever asked first. The kernel's `whnf::question_tests` holds this proposition under this name.
+/// An entry's reduced spelling is settled by the reduction that asks for it, once for each. Under the guard `f(a + b) < 10`, the inner guard `f(b + a) < 10 && c < 3`, registered in a frame of its own so the outer guard stands while it is settled, reduces to `c < 3` for a judgment, which asks its conversion about the left operand, and stands as written for plain reduction; so `c < 3` is `true` to a judgment and stuck to an analysis, whichever asked first. The certifier's `whnf::question_tests` holds this proposition under this name.
 ///
 /// Mutation-checked both ways: with the spelling read as a judgment's whichever reduction asks, plain reduction is handed `true` in the first order, and with it filed there whichever reduction settled it, the judgment meets plain reduction's spelling in the second and answers nothing.
 #[test]
@@ -475,7 +475,7 @@ fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
     });
 }
 
-/// A stuck fold is taken again over the atoms the elaborator's own conversion holds one, a fold that decides no more is left as plain reduction spells it, and plain reduction takes no fold again. The kernel's `whnf::question_tests` holds this proposition under this name.
+/// A stuck fold is taken again over the atoms the elaborator's own conversion holds one, a fold that decides no more is left as plain reduction spells it, and plain reduction takes no fold again. The certifier's `whnf::question_tests` holds this proposition under this name.
 #[test]
 fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
     let mut context = context();
@@ -514,7 +514,7 @@ fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
     assert!(plain.is_some());
 }
 
-/// A fold inside a question is not taken again, a question being answered by plain reduction: `h(f(a + b) == f(b + a)) == h(true)` stays stuck. The kernel's `whnf::question_tests` holds this proposition under this name.
+/// A fold inside a question is not taken again, a question being answered by plain reduction: `h(f(a + b) == f(b + a)) == h(true)` stays stuck. The certifier's `whnf::question_tests` holds this proposition under this name.
 ///
 /// Mutation-checked: with the fold taken again under plain reduction too, the question decides the argument and the comparison is `true`.
 #[test]
@@ -542,7 +542,7 @@ fn a_fold_inside_a_question_is_not_taken_again() {
     );
 }
 
-/// A stuck elimination takes the arm the carriers' algebra reads its scrutinee as, in both reductions: a `Bool` match on `(a < b && c < b) && ¬(a < b)` is its false arm and a structural `Nat` match on `(a + b + 1) * (b + a + 1)` its successor arm, and plain reduction takes both. The controls are a connective the decision diagram leaves open and a product with no floor, whose matches stand. The kernel's `whnf::question_tests` holds this proposition under this name.
+/// A stuck elimination takes the arm the carriers' algebra reads its scrutinee as, in both reductions: a `Bool` match on `(a < b && c < b) && ¬(a < b)` is its false arm and a structural `Nat` match on `(a + b + 1) * (b + a + 1)` its successor arm, and plain reduction takes both. The controls are a connective the decision diagram leaves open and a product with no floor, whose matches stand. The certifier's `whnf::question_tests` holds this proposition under this name.
 #[test]
 fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     let mut context = context();
@@ -604,7 +604,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     }
 }
 
-/// A stuck elimination classes its scrutinee's atoms in a judgment's reduction alone: a `Bool` match on `(f(a + b) < c && b < c) && ¬(f(b + a) < c)`, a contradiction once the elaborator's conversion holds the two calls one, is its false arm, and plain reduction, which asks nothing, leaves it standing. The control is the same connective over a call on another argument. The kernel's `whnf::question_tests` holds this proposition under this name.
+/// A stuck elimination classes its scrutinee's atoms in a judgment's reduction alone: a `Bool` match on `(f(a + b) < c && b < c) && ¬(f(b + a) < c)`, a contradiction once the elaborator's conversion holds the two calls one, is its false arm, and plain reduction, which asks nothing, leaves it standing. The control is the same connective over a call on another argument. The certifier's `whnf::question_tests` holds this proposition under this name.
 #[test]
 fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alone() {
     let mut context = context();
@@ -648,7 +648,7 @@ fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alo
     );
 }
 
-/// A guard over a local definition answers a term spelled over the definition's value: under `let n = a + 0` and the guard `f(n) < 5`, `f(a) < 5` is `true`. The kernel holds the guard by value, so the filter in front of its equation reads `a`; the elaborator's key names `n`, and its filter reads the scrutinee as the kernel spells it, or the form is put to no equation. `curios`'s `tests::matching` holds a program of this shape under this name, through both checkers.
+/// A guard over a local definition answers a term spelled over the definition's value: under `let n = a + 0` and the guard `f(n) < 5`, `f(a) < 5` is `true`. The certifier holds the guard by value, so the filter in front of its equation reads `a`; the elaborator's key names `n`, and its filter reads the scrutinee as the certifier spells it, or the form is put to no equation. `curios`'s `tests::matching` holds a program of this shape under this name, through both checkers.
 ///
 /// Mutation-checked: with the filter reading the scrutinee as written, `f(a) < 5` stays stuck.
 #[test]

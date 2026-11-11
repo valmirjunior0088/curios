@@ -1,15 +1,15 @@
 //! One unit compiled over a baseline: lowered whole, and each declaration kept as the baseline holds it where nothing its elaboration asked there moved, with every other elaborated and judged; and each erased form kept where what its erasure read digests as it did.
 //!
-//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand, makes the unit a version of the baseline's, and says which it lowered anew (`PreparedText::lowered_anew`). The elaborator walks what those could reach, through who asked what of the baseline's traces (`curios_elab::Traces`), keeps every declaration none of them reached without asking it, and keeps a reached one where nothing it asked moved, so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The kernel is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_erase::ErasedBaseline`).
+//! **A baseline is a [`Unit`] compiled from an earlier text of the same sources**, handed in by whatever the fold consults; nothing here knows where it came from. Which of its declarations stand is decided by no one stage for another. The lowering keeps a declaration whose text and resolutions stand, makes the unit a version of the baseline's, and says which it lowered anew (`PreparedText::lowered_anew`). The elaborator walks what those could reach, through who asked what of the baseline's traces (`curios_elab::Traces`), keeps every declaration none of them reached without asking it, and keeps a reached one where nothing it asked moved, so an edit elaborates again what read the part it changed and nothing behind that: a declaration elaborated again that came out as it was moves none of its readers. The certifier is handed the baseline whole and adopts a verdict by the reads its own walk filed ([Cached verdicts](../../documentation/design/soundness/cached-verdicts.md)). Erasure keeps the erased form of a declaration the elaborator kept where every question its erasure put is answered as it was, of the declarations around it and of the erased forms it read a binding in (`curios_erase::ErasedBaseline`).
 //!
 //! **A declaration lowered again is elaborated again.** Nothing compares two lowerings: an edit that leaves a declaration's meaning alone costs that declaration's elaboration, and what it comes to is compared part by part with what the baseline holds, by whatever read it.
 
 use {
     crate::{
-        Closing, CompileError, compile_unit, erasure_refusal, globals_after, kernel_refusal,
+        Closing, CompileError, certifier_refusal, compile_unit, erasure_refusal, globals_after,
         lowering_refusal, with_broken,
     },
-    curios_cert::{Baseline, Globals, Kernel, Rechecked, certify_definitions_over},
+    curios_cert::{Baseline, Certifier, Globals, Rechecked, certify_definitions_over},
     curios_common::{Candidates, SyntaxRegistry},
     curios_core::{Definitions, Entrypoint, Places, Zonked},
     curios_elab::{
@@ -188,9 +188,9 @@ pub fn compile_lowered_over(
     let core = Zonked::revised(&core, made_items.iter().map(|item| &core.items[*item]))
         .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
 
-    // The kernel is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped. The unit is erased through the kernel that judged it.
+    // The certifier is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped. The unit is erased through the certifier that judged it.
     let globals = globals_after(predecessors, moved);
-    let (rechecked, mut kernel) = recheck_over(
+    let (rechecked, mut certifier) = recheck_over(
         &core,
         &places,
         budget,
@@ -203,7 +203,7 @@ pub fn compile_lowered_over(
         syntax,
     );
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = kernel_refusal(
+        let refusal = certifier_refusal(
             verdict,
             core.as_definitions(),
             &predecessors.lexicons(),
@@ -212,7 +212,7 @@ pub fn compile_lowered_over(
         return Err(refuse(&lowered, refusal));
     }
     let certification = rechecked.certification;
-    // The unit is the module the kernel stated, so every mark it carries is the walk's own.
+    // The unit is the module the certifier stated, so every mark it carries is the walk's own.
     let core = core.map(|_| rechecked.definitions);
 
     // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and everything its erasure read digests as it did.
@@ -220,7 +220,7 @@ pub fn compile_lowered_over(
     let certifications = predecessors.certifications();
     let erased = predecessors.erased();
     let anf = erase_unit_over(
-        &mut kernel,
+        &mut certifier,
         Erasures::of(&cores, &scope_places, &certifications, &erased)
             .fixed(&fixed)
             .after(moved),
@@ -258,9 +258,9 @@ pub fn compile_lowered_over(
     ))
 }
 
-/// [`recheck`](crate::recheck) for a unit compiled over `baseline`, with the walk's own kernel: the walk is handed `globals`, the units in scope as its environment, and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
+/// [`recheck`](crate::recheck) for a unit compiled over `baseline`, with the walk's own certifier: the walk is handed `globals`, the units in scope as its environment, and the baseline's module and record whole, and adopts each of the baseline's verdicts that still stands, by the reads its own walk filed (`curios_cert::Baseline`).
 ///
-/// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the kernel's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, which of these `predecessors` are the units `baseline` was compiled after, `moved` naming the others ([`Cache::baseline`](crate::Cache::baseline)).
+/// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the certifier's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, which of these `predecessors` are the units `baseline` was compiled after, `moved` naming the others ([`Cache::baseline`](crate::Cache::baseline)).
 pub fn recheck_over<'s>(
     definitions: &Zonked<Definitions>,
     places: &'s Places,
@@ -272,7 +272,7 @@ pub fn recheck_over<'s>(
         ..
     }: Over<'s>,
     syntax: &SyntaxRegistry,
-) -> (Rechecked, Kernel<'s>) {
+) -> (Rechecked, Certifier<'s>) {
     certify_definitions_over(
         definitions,
         budget,

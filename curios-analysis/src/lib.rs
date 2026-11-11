@@ -1,6 +1,6 @@
 //! The analyses both Curios checkers run, and the seam they run behind.
 //!
-//! Each is a total function of the terms and declarations it is handed, and what differs between the two checkers' inputs arrives through [`Env`]: reduction, the local context and unfolding through a local's definition, fresh binders, and the registry fallback for declarations outside the analyzed set. `curios-elab` implements it over its elaboration `Context`; `curios-cert` implements it over its `Kernel`. Why the rules are shared rather than duplicated, and what that costs, is `README.md`'s decision, and `documentation/design/soundness/` argues them on that understanding.
+//! Each is a total function of the terms and declarations it is handed, and what differs between the two checkers' inputs arrives through [`Env`]: reduction, the local context and unfolding through a local's definition, fresh binders, and the registry fallback for declarations outside the analyzed set. `curios-elab` implements it over its elaboration `Context`; `curios-cert` implements it over its `Certifier`. Why the rules are shared rather than duplicated, and what that costs, is `README.md`'s decision, and `documentation/design/soundness/` argues them on that understanding.
 //!
 //! These rules admit terms, so they are inside the trusted base, which `cargo tree -p curios-cert -e normal` enumerates; why they are a crate of their own is `README.md`'s decision.
 

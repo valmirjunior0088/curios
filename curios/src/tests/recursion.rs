@@ -54,7 +54,7 @@ fn a_local_group_is_mutually_recursive() {
     assert_eq!(run(source), b"1");
 }
 
-/// A local recursive definition computes in a type stated in the function that declares it, as a top-level one does anywhere and a `let`-bound value does in its tail: both checkers read a member as its group there. `_held` leaves `Eq/refl`'s implicit to be solved, to a term that spells `halve` by value, and `_one_body` puts two definitions of one body to each other. The kernel typed a group's tail over members that stood for nothing, and refused each of the five where the elaborator accepted it.
+/// A local recursive definition computes in a type stated in the function that declares it, as a top-level one does anywhere and a `let`-bound value does in its tail: both checkers read a member as its group there. `_held` leaves `Eq/refl`'s implicit to be solved, to a term that spells `halve` by value, and `_one_body` puts two definitions of one body to each other. The certifier typed a group's tail over members that stood for nothing, and refused each of the five where the elaborator accepted it.
 #[test]
 fn a_local_recursive_definition_computes_in_a_type_where_it_is_declared() {
     let source = r#"
@@ -102,7 +102,7 @@ fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
     assert_eq!(run(source), b"13");
 }
 
-/// `Eq(@Nat)` is the relation `(Nat, Nat) -> Prop` with no lambda around it: an indexed family at its parameters is a family of its own, so it stands where a relation is expected and reflexivity inhabits its diagonal. Both checkers see the partial application, since the kernel re-checks the program.
+/// `Eq(@Nat)` is the relation `(Nat, Nat) -> Prop` with no lambda around it: an indexed family at its parameters is a family of its own, so it stands where a relation is expected and reflexivity inhabits its diagonal. Both checkers see the partial application, since the certifier re-checks the program.
 #[test]
 fn an_indexed_family_at_its_parameters_is_a_relation() {
     let source = r#"
@@ -405,7 +405,7 @@ fn a_rec_group_over_a_dependent_family_closes_without_expanding_its_own_members(
 
 #[test]
 fn a_descent_through_a_local_definition_is_graded_wherever_the_call_stands() {
-    // The call's argument names a `let` bound before it. In the tail the walk reads it as its value; in a later binding's value it once read the binding as stored, and refused a proof the kernel accepts.
+    // The call's argument names a `let` bound before it. In the tail the walk reads it as its value; in a later binding's value it once read the binding as stored, and refused a proof the certifier accepts.
     let source = r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
@@ -443,7 +443,7 @@ fn a_call_through_a_local_definition_that_does_not_descend_is_refused() {
     assert!(error(source).contains("not known to terminate"));
 }
 
-// A member not known to terminate stands for nothing in its group's bodies, as the kernel checks them: no judgment inside a body reads a member withheld, its own body or a sibling's, written before it or after it, at the top level or locally. `f` and `r` call themselves at `0`, nothing below their argument, and `h` closes a cycle with `g` that does not descend, so each is withheld at its turn and its bound stays undischarged. The elaborator once opened a member's slot into the body it was filled with, an earlier sibling's at once and its own or a later one's on retry, and so filled each bound here — each refused by the kernel.
+// A member not known to terminate stands for nothing in its group's bodies, as the certifier checks them: no judgment inside a body reads a member withheld, its own body or a sibling's, written before it or after it, at the top level or locally. `f` and `r` call themselves at `0`, nothing below their argument, and `h` closes a cycle with `g` that does not descend, so each is withheld at its turn and its bound stays undischarged. The elaborator once opened a member's slot into the body it was filled with, an earlier sibling's at once and its own or a later one's on retry, and so filled each bound here — each refused by the certifier.
 #[test]
 fn no_judgment_inside_a_group_reads_a_member_withheld_from_it() {
     let bounded = |member: &str, groups: &str| {
@@ -459,7 +459,7 @@ fn no_judgment_inside_a_group_reads_a_member_withheld_from_it() {
             error.contains(&fill!(
                 "nothing discharged /std/Bool/Holds(${member}(0) < List/len(@Nat, [1, 2, 3]))",
                 member,
-            )) && !error.contains("the kernel refused"),
+            )) && !error.contains("the certifier refused"),
             "{error}"
         );
     };
@@ -502,7 +502,7 @@ fn a_member_known_before_its_cycle_closes_is_read_by_value() {
     assert_eq!(run(&source("need(g(0), True/qed())")), b"0");
 }
 
-// A member known to terminate is read by value in its group's bodies, as its tail reads it, both checkers alike: `T` calls itself below its argument, so its turn finds it known, `T(2)` is `Nat` where `val`'s body states it, and `f`'s binder, which its body restates at `T(0)` from its signature written as a function or as a lambda, is the `Nat` the signature reads. With the bodies reading `T` as standing for nothing, the elaborator refused the annotation and the function, and the kernel the lambda.
+// A member known to terminate is read by value in its group's bodies, as its tail reads it, both checkers alike: `T` calls itself below its argument, so its turn finds it known, `T(2)` is `Nat` where `val`'s body states it, and `f`'s binder, which its body restates at `T(0)` from its signature written as a function or as a lambda, is the `Nat` the signature reads. With the bodies reading `T` as standing for nothing, the elaborator refused the annotation and the function, and the certifier the lambda.
 #[test]
 fn a_member_typed_at_a_sibling_reads_it_by_value() {
     let program = |group: &str| {
@@ -532,7 +532,7 @@ fn a_member_typed_at_a_sibling_reads_it_by_value() {
     }
 }
 
-// The type a body is checked at reads its group as the kernel reads it: `val`'s type `T(2)` unfolds `T`, known to terminate, through its own recursion to `Nat`, both where `val`'s body is checked at it and where a sibling's body reads `val` at it. Read with `T` standing for nothing, `T(2)` stopped at `T(1)` and both were refused.
+// The type a body is checked at reads its group as the certifier reads it: `val`'s type `T(2)` unfolds `T`, known to terminate, through its own recursion to `Nat`, both where `val`'s body is checked at it and where a sibling's body reads `val` at it. Read with `T` standing for nothing, `T(2)` stopped at `T(1)` and both were refused.
 #[test]
 fn a_group_signature_reads_its_members_bodies() {
     let source = r#"
@@ -548,7 +548,7 @@ fn a_group_signature_reads_its_members_bodies() {
     assert_eq!(run(source), b"3");
 }
 
-// A group's signatures are sorted with its members opaque, so `val: T(2)` is read at a stuck `T(2)` whose sort is `Type`; its bodies are checked with the members known to terminate unfolding, where `T(2)` reduces through `T`. The two readings cannot disagree on which sort `T(2)` is: `T`'s result sort holds every arm to `Type`, so an arm that is a proposition is refused where `T`'s body is checked, and no member's type folds to a `Prop` the opaque reading took for a `Type`. Refused by the elaborator, not the kernel.
+// A group's signatures are sorted with its members opaque, so `val: T(2)` is read at a stuck `T(2)` whose sort is `Type`; its bodies are checked with the members known to terminate unfolding, where `T(2)` reduces through `T`. The two readings cannot disagree on which sort `T(2)` is: `T`'s result sort holds every arm to `Type`, so an arm that is a proposition is refused where `T`'s body is checked, and no member's type folds to a `Prop` the opaque reading took for a `Type`. Refused by the elaborator, not the certifier.
 #[test]
 fn a_group_member_type_cannot_fold_to_a_proposition() {
     let error = error(
@@ -563,7 +563,7 @@ fn a_group_member_type_cannot_fold_to_a_proposition() {
     assert!(
         error.contains("inferred: Prop")
             && error.contains("expected: Type")
-            && !error.contains("the kernel refused"),
+            && !error.contains("the certifier refused"),
         "{error}"
     );
 }
@@ -586,7 +586,7 @@ fn a_slot_reached_from_its_own_solution_is_judged() {
     let refused = |groups: &str, tail: &str, diagnostic: &str| {
         let error = error(&program(groups, tail));
         assert!(
-            error.contains(diagnostic) && !error.contains("the kernel refused"),
+            error.contains(diagnostic) && !error.contains("the certifier refused"),
             "{error}"
         );
     };

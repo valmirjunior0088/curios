@@ -100,9 +100,9 @@ impl<'b> Row<'b> {
         }
     }
 
-    /// Whether the kernel judged any witness of the ticket. A program the elaborator refuses while it is still building the module never reaches it, so a ticket holding only such programs says nothing of the trusted base.
-    pub fn reaches_kernel(&self) -> bool {
-        self.answers.iter().any(Answer::kernel_asked)
+    /// Whether the certifier judged any witness of the ticket. A program the elaborator refuses while it is still building the module never reaches it, so a ticket holding only such programs says nothing of the trusted base.
+    pub fn reaches_certifier(&self) -> bool {
+        self.answers.iter().any(Answer::certifier_asked)
     }
 
     /// Whether any witness of the ticket was admitted at `False`.
@@ -224,10 +224,10 @@ impl fmt::Display for Report<'_> {
         let unreached = self
             .rows
             .iter()
-            .filter(|row| !row.reaches_kernel())
+            .filter(|row| !row.reaches_certifier())
             .collect::<Vec<_>>();
         if !unreached.is_empty() {
-            writeln!(formatter, "\nnot put to the kernel: {}", unreached.len())?;
+            writeln!(formatter, "\nnot put to the certifier: {}", unreached.len())?;
 
             for row in unreached {
                 writeln!(formatter, "  {}", row.ticket.title)?;

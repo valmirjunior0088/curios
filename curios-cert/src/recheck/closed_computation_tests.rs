@@ -116,7 +116,7 @@ let /lemma : (
 /lemma(false, /std/Bool/True/qed())
 "#;
 
-// The machine leaves a proof as written where its binder says it binds one: the constructor's wrapper at its proof binder, the arm at the payload `Pk`'s declaration states is a proof, and the `let` at its proof binder, so the fold no budget evaluates is never run and `b` reads `c`. Mutation checks: `ClosedHost::payload_proofs` answering no marks for the kernel, and `Machine::let_advance` ignoring `binds_proof`, each run the proof and refuse the closing term by `Reduce`.
+// The machine leaves a proof as written where its binder says it binds one: the constructor's wrapper at its proof binder, the arm at the payload `Pk`'s declaration states is a proof, and the `let` at its proof binder, so the fold no budget evaluates is never run and `b` reads `c`. Mutation checks: `ClosedHost::payload_proofs` answering no marks for the certifier, and `Machine::let_advance` ignoring `binds_proof`, each run the proof and refuse the closing term by `Reduce`.
 #[test]
 fn a_proof_payload_and_a_let_bound_proof_are_left_as_written_beside_the_data_read() {
     let verdicts = core_text_verdicts(&fill!(
@@ -435,7 +435,7 @@ let /lemma : (
 /lemma(false, /std/Bool/True/qed())
 "#;
 
-// An arm binds the values of a constructed value's payload, the kernel's rule on both sides: in order, past the family's parameter, with the implicit payload ahead of the plain ones and the one whose evaluation errors falling back to its spelling, so `b` reads `c`. The mutation check is `Machine::dispatch` running the payload without catching, which refuses the closing term by `Reduce`.
+// An arm binds the values of a constructed value's payload, the certifier's rule on both sides: in order, past the family's parameter, with the implicit payload ahead of the plain ones and the one whose evaluation errors falling back to its spelling, so `b` reads `c`. The mutation check is `Machine::dispatch` running the payload without catching, which refuses the closing term by `Reduce`.
 #[test]
 fn an_arm_binds_a_constructed_values_payload_in_order_past_a_parameter_and_an_implicit() {
     let verdicts = core_text_verdicts(&fill!(

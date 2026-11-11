@@ -158,7 +158,7 @@ impl InductDecl {
         self.arity.len()
     }
 
-    /// This declaration at one assignment of the sorts it leaves to a caller: every telescope it holds read at `qualities`, its level parameters its own still, and no sort left. What the kernel judges the entry at, and what erasure registers its row at, one assignment at a time.
+    /// This declaration at one assignment of the sorts it leaves to a caller: every telescope it holds read at `qualities`, its level parameters its own still, and no sort left. What the certifier judges the entry at, and what erasure registers its row at, one assignment at a time.
     pub fn at_qualities(&self, qualities: &[Quality]) -> Self {
         let mut at = self.clone();
         at.arity = instantiate_qualities(&at.arity, qualities);

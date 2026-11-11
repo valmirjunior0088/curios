@@ -74,7 +74,7 @@ impl From<ConceptField> for Method {
     }
 }
 
-/// A lowering-born constructor consumed by elaboration: born in `into_core`, eliminated by `elaborate`, never legitimate in reduced, converted, zonked, or erased terms, and refused at the kernel boundary. Grouping the members under one `Subterm` variant lets every post-elaboration consumer dismiss the class wholesale — one refusal arm at the kernel, one `unreachable!` in each downstream stage — so a future transient extends lowering, elaboration, and display without touching them. `Metavar` is deliberately not a member: conversion parks on metavariables and zonk consumes them, so its lifecycle is elaboration-internal rather than pre-elaboration.
+/// A lowering-born constructor consumed by elaboration: born in `into_core`, eliminated by `elaborate`, never legitimate in reduced, converted, zonked, or erased terms, and refused at the certifier boundary. Grouping the members under one `Subterm` variant lets every post-elaboration consumer dismiss the class wholesale — one refusal arm at the certifier, one `unreachable!` in each downstream stage — so a future transient extends lowering, elaboration, and display without touching them. `Metavar` is deliberately not a member: conversion parks on metavariables and zonk consumes them, so its lifecycle is elaboration-internal rather than pre-elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Transient {
@@ -247,7 +247,7 @@ pub struct Tuple {
     pub names: Vec<Option<String>>,
 }
 
-/// A projection's field is a slot of the head's field telescope in every post-elaboration term, said with what the head is a value of: a tuple's slot stands alone, and a structure's names the structure, which the kernel holds to the head's type. A projection so says which field it reads to a reader of the term alone, who asks its head's type of nobody: a hidden field's label, a plain field's place among the plain ones.
+/// A projection's field is a slot of the head's field telescope in every post-elaboration term, said with what the head is a value of: a tuple's slot stands alone, and a structure's names the structure, which the certifier holds to the head's type. A projection so says which field it reads to a reader of the term alone, who asks its head's type of nobody: a hidden field's label, a plain field's place among the plain ones.
 ///
 /// The other two forms are what an author writes, and exist only between `into_core` and `elaborate`, which resolves each against the head's type and rebuilds it as a slot: a `Label` names its field, and a `Position` — a written `.N`, or a positional field of a pattern — counts the plain fields, a hidden one taking no position.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -476,7 +476,7 @@ impl MatchResult {
     }
 }
 
-/// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction, erasure and conversion open the body positionally and never read the marks; the kernel holds them to the payload's where it types the arm. Kept beside the body (rather than in a second map) and sealed at the crate boundary behind [`InductArm::new`], so the two can never drift apart.
+/// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction, erasure and conversion open the body positionally and never read the marks; the certifier holds them to the payload's where it types the arm. Kept beside the body (rather than in a second map) and sealed at the crate boundary behind [`InductArm::new`], so the two can never drift apart.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct InductArm {
@@ -650,7 +650,7 @@ pub struct Let {
 impl Let {
     /// Whether this block's tail binds one binder per binding, which is what opening it over their values requires.
     ///
-    /// The count is a fact about a sibling field that nothing here relates it to, so it is asked rather than assumed: a reducer that opened the tail over the wrong number of values would reach `Scope::open`'s `assert!` and abort, where its rule is to stand stuck on every shape it cannot take (`curios-cert`'s README). A block answering `false` is refused where a module enters the kernel (`under_bindings`), so what a reducer meets answering `false` arrived another way.
+    /// The count is a fact about a sibling field that nothing here relates it to, so it is asked rather than assumed: a reducer that opened the tail over the wrong number of values would reach `Scope::open`'s `assert!` and abort, where its rule is to stand stuck on every shape it cannot take (`curios-cert`'s README). A block answering `false` is refused where a module enters the certifier (`under_bindings`), so what a reducer meets answering `false` arrived another way.
     pub fn opens(&self) -> bool {
         self.tail.arity() == self.bindings.len()
     }
@@ -694,7 +694,7 @@ pub struct RecMemberScopes {
 
 /// The shared knot of a mutually-recursive group. Every member type and body is scoped over the full group. `Rc` sharing is an implementation detail; equality and hashing remain structural through the scoped items.
 ///
-/// **A group binds no universe.** Its members' level and quality parameters are the enclosing declaration's, positionally, so an instance of that declaration substitutes them with every other level it binds and every reader of a member reads one thing. A group that bound its own would be a second reading of the same index — the one the kernel admitted Hurkens' paradox through, `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` — since a scope walk shadows what a positional reader substitutes. `check_group` therefore checks a member's terms as written, under the constraints the declaration holding the group assumed.
+/// **A group binds no universe.** Its members' level and quality parameters are the enclosing declaration's, positionally, so an instance of that declaration substitutes them with every other level it binds and every reader of a member reads one thing. A group that bound its own would be a second reading of the same index — the one the certifier admitted Hurkens' paradox through, `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` — since a scope walk shadows what a positional reader substitutes. `check_group` therefore checks a member's terms as written, under the constraints the declaration holding the group assumed.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct RecGroup {
@@ -839,7 +839,7 @@ impl RecGroup {
 
 /// A block of mutually recursive bindings with a tail in scope of the shared group.
 ///
-/// This is the *only* recursion form. A demanded member occurrence is this same node with a tail that selects one member — see [`Term::rec_proj`] — rather than a form of its own, so the rule that checks a group is the rule that checks an occurrence of it. A self-describing occurrence node is rejected for what it costs: a node well-formed standing alone is one no scope gates, and a kernel could type one from the group it carried without ever checking that group.
+/// This is the *only* recursion form. A demanded member occurrence is this same node with a tail that selects one member — see [`Term::rec_proj`] — rather than a form of its own, so the rule that checks a group is the rule that checks an occurrence of it. A self-describing occurrence node is rejected for what it costs: a node well-formed standing alone is one no scope gates, and a certifier could type one from the group it carried without ever checking that group.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Rec {
@@ -899,7 +899,7 @@ pub enum MetavarOrigin {
     Goal,
 }
 
-/// A metavariable's identity: a dense index into the elaborator's solution store (`Solutions`), minted monotonically by an `Entropy`. A newtype so it can never be confused with the other `usize`-shaped notions the kernel juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
+/// A metavariable's identity: a dense index into the elaborator's solution store (`Solutions`), minted monotonically by an `Entropy`. A newtype so it can never be confused with the other `usize`-shaped notions the certifier juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct MetavarId(pub usize);

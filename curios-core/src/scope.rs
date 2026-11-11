@@ -458,7 +458,7 @@ pub fn instantiate_qualities<B: Bound>(value: &B, qualities: &[Quality]) -> B {
 
 /// Substitute a scheme's own universe parameters by `arguments`: its level parameters by the levels the instance states, and its quality parameters by the qualities.
 ///
-/// A level parameter the instance supplies is replaced by the level it states, and every other level is left as it stands: a closed term names no parameter past its declaration's count, and an instance states every one of them (`curios-cert`'s `universe_escape` and `Kernel::check_instance`).
+/// A level parameter the instance supplies is replaced by the level it states, and every other level is left as it stands: a closed term names no parameter past its declaration's count, and an instance states every one of them (`curios-cert`'s `universe_escape` and `Certifier::check_instance`).
 ///
 /// Instance arity is the owning `UniverseContext`'s contract, checked against its declared `parameter_count` where the instance is typed.
 pub fn instantiate_universes<B: Bound>(

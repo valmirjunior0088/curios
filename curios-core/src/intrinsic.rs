@@ -55,7 +55,7 @@ pub fn wire_term(wire_type: &WireType, syntax: &SyntaxRegistry) -> Term {
     Subterm::Intrinsic(intrinsic).into()
 }
 
-/// The core type a row's results denote, as [`wire_term`] reads one wire type: the unit type for no result, the bare type for one, and a record of the named fields otherwise, each label bound by a binder `fresh` mints. The one reading of a row's guest-facing shape — the elaborator and the kernel both build the type of a host call through it, so the two cannot come to different answers about what a call yields, and the arity rule itself is `WireResults`'s to state.
+/// The core type a row's results denote, as [`wire_term`] reads one wire type: the unit type for no result, the bare type for one, and a record of the named fields otherwise, each label bound by a binder `fresh` mints. The one reading of a row's guest-facing shape — the elaborator and the certifier both build the type of a host call through it, so the two cannot come to different answers about what a call yields, and the arity rule itself is `WireResults`'s to state.
 pub fn wire_results_term(
     results: &WireResults,
     syntax: &SyntaxRegistry,
@@ -109,7 +109,7 @@ pub fn foreign_produced(
     Term::intrinsic(Intrinsic::io_type(result))
 }
 
-/// A foreign call's operand demands and result, in the vocabulary [`Intrinsic::signature`] states an intrinsic's in — so the kernel and the elaborator walk a host call with the operand handling they already share with the intrinsics, rather than a rule of each checker's own. The result is [`foreign_produced`]'s over `operands`, record labels bound by binders `fresh` mints.
+/// A foreign call's operand demands and result, in the vocabulary [`Intrinsic::signature`] states an intrinsic's in — so the certifier and the elaborator walk a host call with the operand handling they already share with the intrinsics, rather than a rule of each checker's own. The result is [`foreign_produced`]'s over `operands`, record labels bound by binders `fresh` mints.
 ///
 /// **The row is the whole statement.** It is the one its declaration states, carried on the term, and nothing the term says beside it reaches the type.
 pub fn foreign_signature(
@@ -149,7 +149,7 @@ pub enum Intrinsic<T = Term> {
     NatSub(T, T),
     NatMul(T, T),
     NatLt(T, T),
-    /// `non_zero` proves `0 < divisor`. Carried as a field rather than left to `/sys`'s declaration so the obligation survives into Core, where the kernel re-checks it; [`Intrinsic::signature`] states the proposition it must inhabit.
+    /// `non_zero` proves `0 < divisor`. Carried as a field rather than left to `/sys`'s declaration so the obligation survives into Core, where the certifier re-checks it; [`Intrinsic::signature`] states the proposition it must inhabit.
     NatDiv {
         dividend: T,
         divisor: T,
@@ -175,7 +175,7 @@ pub enum Intrinsic<T = Term> {
     ByteType,
     Byte(u8),
     ByteToNat(T),
-    /// `below` proves `nat < 256`, the domain the narrowing to `Byte` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the kernel a bare narrowing to admit.
+    /// `below` proves `nat < 256`, the domain the narrowing to `Byte` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the certifier a bare narrowing to admit.
     ///
     /// Masking instead would make the operation total by changing a value, which `documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md` forbids. Stating the domain is also what makes the constructor invertible, so `Byte/to_nat` can see back through it and a bound established in `Nat` survives the round trip.
     NatToByte {
@@ -239,7 +239,7 @@ pub enum Intrinsic<T = Term> {
     FltCopysign(T, T),
     NatToInt(T),
     NatToFlt(Rounding, T),
-    /// `non_neg` proves `0 <= int`, the domain the narrowing to `Nat` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the kernel a bare narrowing to admit.
+    /// `non_neg` proves `0 <= int`, the domain the narrowing to `Nat` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the certifier a bare narrowing to admit.
     IntToNat {
         int: T,
         non_neg: T,

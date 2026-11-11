@@ -54,7 +54,7 @@ impl<'a> Baseline<'a> {
             )
     }
 
-    /// Whether `item`, of `module`, is the baseline's own: the same names bound to the same terms under the same universe context, a group being its members' one fixed point, and the same registry entries under each name. Elaboration's stamps take no part, its proof marks and value sorts among them: the walk states those of every item it judges or takes by its own reading of the terms (`kernel::stating`), so an item whose terms are the baseline's is stated as the baseline's was.
+    /// Whether `item`, of `module`, is the baseline's own: the same names bound to the same terms under the same universe context, a group being its members' one fixed point, and the same registry entries under each name. Elaboration's stamps take no part, its proof marks and value sorts among them: the walk states those of every item it judges or takes by its own reading of the terms (`certifier::stating`), so an item whose terms are the baseline's is stated as the baseline's was.
     ///
     /// Each form is compared by a function that destructures it whole ([`definition_alike`], [`group_alike`]), so a field added to the representation is classified there or does not compile. That is the rule and not a courtesy: comparing by the fields someone thought of is how the `rec` form came to be compared by its group and its members' names and marks, and silently not by the universe context its members' levels mean, which admitted Hurkens' paradox through a group adopted under constraints no walk assumed.
     pub(crate) fn holds(&self, item: &Item) -> bool {
@@ -190,7 +190,7 @@ pub type Beside<'a> = (
     Option<&'a Applications>,
 );
 
-/// The certifier's digest of what a read reads of `name`, a declaration of the unit `module` is, held where `places` says, under the verdict and vectors `certification` files for it: of its body where `body`, and otherwise of its signature, as a walk digests a part it read of a unit in scope (`read_digest`). It is what a stage that reads declarations through the kernel records of a read and asks the read again by, so what it compares is the certifier's own digest. `Ok(None)` where the unit holds no such name.
+/// The certifier's digest of what a read reads of `name`, a declaration of the unit `module` is, held where `places` says, under the verdict and vectors `certification` files for it: of its body where `body`, and otherwise of its signature, as a walk digests a part it read of a unit in scope (`read_digest`). It is what a stage that reads declarations through the certifier records of a read and asks the read again by, so what it compares is the certifier's own digest. `Ok(None)` where the unit holds no such name.
 pub fn part_digest(
     definitions: &Definitions,
     places: &Places,
@@ -228,7 +228,7 @@ impl Readable<'_> {
     fn digest(&self, body: bool) -> Result<String, String> {
         let sharing = Sharing::new();
         if body {
-            // The sort a definition states for its value goes with what it unfolds to, since `Kernel::value_sort` records a body read where `Sort::of` asks a publication.
+            // The sort a definition states for its value goes with what it unfolds to, since `Certifier::value_sort` records a body read where `Sort::of` asks a publication.
             let unfolds = (
                 self.held.value.map(|value| sharing.share(value)),
                 self.held.value_sort.map(|sort| sharing.share(sort)),

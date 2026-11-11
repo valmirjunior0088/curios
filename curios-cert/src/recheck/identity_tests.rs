@@ -1,4 +1,4 @@
-//! Identities a walk is handed: a free local is refused before the kernel mints a binder that could alias it, and a bound variable no scope binds before a rule reads it as one.
+//! Identities a walk is handed: a free local is refused before the certifier mints a binder that could alias it, and a bound variable no scope binds before a rule reads it as one.
 
 use {
     super::test_support::*,
@@ -11,7 +11,7 @@ use {
     },
 };
 
-/// The indices a stray local is tried at: every one the kernel mints first, so a walk that let the local through would open a binder carrying the same identity at one of them.
+/// The indices a stray local is tried at: every one the certifier mints first, so a walk that let the local through would open a binder carrying the same identity at one of them.
 const COLLIDING: std::ops::Range<u64> = 0..4;
 
 /// `(x : Nat) => stray`, the function a capture turns into the identity.
@@ -53,9 +53,9 @@ fn holding(items: Vec<curios_core::Item>) -> Definitions {
     }
 }
 
-/// A definition mentioning a local no binder of its opens is refused, at every index the kernel could mint for the binder it opens.
+/// A definition mentioning a local no binder of its opens is refused, at every index the certifier could mint for the binder it opens.
 ///
-/// The kernel's counter starts at zero, so the local is one it can hand out again: opening `x` at the stray's index turns `(x : Nat) => stray` into the identity, which inhabits `(x : Nat) -> Nat`, and the judgment — which then sees a bound variable — accepts. The refusal is taken at the boundary for that reason. Mutation-checked: dropping it certifies the definition at the colliding index.
+/// The certifier's counter starts at zero, so the local is one it can hand out again: opening `x` at the stray's index turns `(x : Nat) => stray` into the identity, which inhabits `(x : Nat) -> Nat`, and the judgment — which then sees a bound variable — accepts. The refusal is taken at the boundary for that reason. Mutation-checked: dropping it certifies the definition at the colliding index.
 #[test]
 fn a_definition_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
@@ -72,7 +72,7 @@ fn a_definition_mentioning_a_free_local_is_refused() {
     }
 }
 
-/// The sort a definition states its value inhabits is a position of the definition, held to the boundary its type and body are: a stray local there is refused, at every index the kernel could mint.
+/// The sort a definition states its value inhabits is a position of the definition, held to the boundary its type and body are: a stray local there is refused, at every index the certifier could mint.
 #[test]
 fn a_stated_value_sort_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
@@ -95,7 +95,7 @@ fn a_stated_value_sort_mentioning_a_free_local_is_refused() {
     }
 }
 
-/// What a module states of a definition's value sort is read by nothing: the walk states the sort the value inhabits itself (`kernel::stating`). A statement holding a metavariable reduction discards, one carrying a universe parameter past the scheme, and one naming the wrong sort are each admitted, and `held : Type = Nat` is stated `Type 0` whatever it said.
+/// What a module states of a definition's value sort is read by nothing: the walk states the sort the value inhabits itself (`certifier::stating`). A statement holding a metavariable reduction discards, one carrying a universe parameter past the scheme, and one naming the wrong sort are each admitted, and `held : Type = Nat` is stated `Type 0` whatever it said.
 #[test]
 fn a_stated_value_sort_is_read_by_nothing() {
     let discarding = |argument: Term| {

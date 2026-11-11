@@ -18,7 +18,7 @@ use {
 };
 
 impl Convert {
-    /// Whether `this` and `that` are the same intrinsic operation on convertible operands, as far as the elaborator decides now — `curios-analysis`'s `convert_intrinsics`, the kernel's chain too, discharged the elaborator's way: a residual and every operand join the queue, and the levels compare by the elaborator's rule, which may constrain them.
+    /// Whether `this` and `that` are the same intrinsic operation on convertible operands, as far as the elaborator decides now — `curios-analysis`'s `convert_intrinsics`, the certifier's chain too, discharged the elaborator's way: a residual and every operand join the queue, and the levels compare by the elaborator's rule, which may constrain them.
     pub fn convert_intrinsic(
         &mut self,
         context: &mut Context,
@@ -152,7 +152,7 @@ impl Reducer for Elaborating<'_, '_> {
 }
 
 impl Driver for Elaborating<'_, '_> {
-    /// **A summand meets its own spelling only once its solved metavariables are substituted.** Every peel pairs by identity — a summand cancels against a summand, a leaf joins a leaf set, an atom is a decision diagram's variable — and while the signature holding them is being checked, two occurrences of `a + 1` are two terms: an operator reaches its concept through a witness metavariable of its own, solved to the one witness and not yet spliced. Unprepared, `f(a + 1) + f(c + 1)` against its commutation would share no summand, fall to the positional congruence, and be refused there as `a` against `c` — where the kernel, handed zonked terms, accepts the equation.
+    /// **A summand meets its own spelling only once its solved metavariables are substituted.** Every peel pairs by identity — a summand cancels against a summand, a leaf joins a leaf set, an atom is a decision diagram's variable — and while the signature holding them is being checked, two occurrences of `a + 1` are two terms: an operator reaches its concept through a witness metavariable of its own, solved to the one witness and not yet spliced. Unprepared, `f(a + 1) + f(c + 1)` against its commutation would share no summand, fall to the positional congruence, and be refused there as `a` against `c` — where the certifier, handed zonked terms, accepts the equation.
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic {
         let solved = zonk_solved_term_metas(self.context, &Term::intrinsic(intrinsic.clone()));
         match &*solved {
@@ -161,7 +161,7 @@ impl Driver for Elaborating<'_, '_> {
         }
     }
 
-    /// Solving-side only. The packed-literal view undoes exactly the constant folding that removed the spine spelling from the literal side — `append(x[], 0x01)` folds to `x[0x01]`, and no shape congruence relates the folded form to `append(x[], ?h)` — and the list view pairs what two lists are written to lead with, where the congruence would compare a run of one length with a run of another. The reducer's laws are untouched, and once the goals commit their solutions the two spellings agree by plain reduction, so the kernel needs no matching rule.
+    /// Solving-side only. The packed-literal view undoes exactly the constant folding that removed the spine spelling from the literal side — `append(x[], 0x01)` folds to `x[0x01]`, and no shape congruence relates the folded form to `append(x[], ?h)` — and the list view pairs what two lists are written to lead with, where the congruence would compare a run of one length with a run of another. The reducer's laws are untouched, and once the goals commit their solutions the two spellings agree by plain reduction, so the certifier needs no matching rule.
     fn solving_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool> {
         packed_literal_view(self.cmp, this, that).or_else(|| list_view(self.cmp, this, that))
     }

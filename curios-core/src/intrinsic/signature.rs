@@ -1,8 +1,8 @@
 //! What every intrinsic demands of its operands, and what it produces.
 //!
-//! An intrinsic's signature is fixed by the language, so it is a table, and the table is the specification. A table written as a checking procedure can be *executed* by one caller and read by none, which would leave each consumer its own copy — the kernel's rules, elaboration's, `/sys`'s declarations — in three crates, with nothing checking the three agree.
+//! An intrinsic's signature is fixed by the language, so it is a table, and the table is the specification. A table written as a checking procedure can be *executed* by one caller and read by none, which would leave each consumer its own copy — the certifier's rules, elaboration's, `/sys`'s declarations — in three crates, with nothing checking the three agree.
 //!
-//! This is the one statement. The kernel walks it to check, elaboration walks it to elaborate, and congruence walks it to compare each operand *at its own type* rather than at a flat `Type` — which is what lets proof irrelevance fire on a bound through the ordinary gate instead of through a rule about bounds.
+//! This is the one statement. The certifier walks it to check, elaboration walks it to elaborate, and congruence walks it to compare each operand *at its own type* rather than at a flat `Type` — which is what lets proof irrelevance fire on a bound through the ordinary gate instead of through a rule about bounds.
 //!
 //! A host call is stated in the same vocabulary. `foreign_signature` reads its demands off the row its declaration states, so both checkers type a foreign call with the walk they run for an intrinsic, and neither keeps a rule of its own for one.
 //!

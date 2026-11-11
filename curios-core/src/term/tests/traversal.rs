@@ -140,7 +140,7 @@ fn deep_terms_are_searched_without_native_recursion() {
     assert!(term.any_metavar(&mut |id| id == MetavarId(1)));
     assert!(!term.any_metavar(&mut |id| id == MetavarId(99)));
 
-    // Its sibling, which the kernel's motive check reaches: the needle is found under the spine, and one that never occurs is refused after walking it.
+    // Its sibling, which the certifier's motive check reaches: the needle is found under the spine, and one that never occurs is refused after walking it.
     assert!(term.mentions_term(&argument));
     assert!(!term.mentions_term(&Term::free_var(&Free::local(1, None))));
 }

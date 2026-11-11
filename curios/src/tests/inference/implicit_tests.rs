@@ -4,7 +4,7 @@ use crate::tests::test_support::*;
 
 #[test]
 fn an_implicit_solves_against_a_reduction_through_a_let() {
-    // `Eq/refl()`'s implicit must be solved against `through(x)`, whose weak-head form is a match stuck on `0 < x` with arms mentioning the `let`-bound `y`. The reducer substitutes a `let` as the kernel does, so the candidate names nothing the scope does not cover; binding `y` as a fresh context definition instead would leave a name the scope check refuses as out of scope.
+    // `Eq/refl()`'s implicit must be solved against `through(x)`, whose weak-head form is a match stuck on `0 < x` with arms mentioning the `let`-bound `y`. The reducer substitutes a `let` as the certifier does, so the candidate names nothing the scope does not cover; binding `y` as a fresh context definition instead would leave a name the scope check refuses as out of scope.
     let source = r#"
         use /std/{Nat, Eq, Str, Io};
 
@@ -181,7 +181,7 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
     assert_eq!(output, b"1");
 }
 
-/// A solution that holds a call of a recursive function names the function: `Eq/refl`'s implicit is solved to `f(n).count`, as the row states it. A candidate arrives reduced, a stuck call headed by its member's group, and committed so the solution would hold a copy of the callee, which its re-validation elaborates again and the kernel checks again.
+/// A solution that holds a call of a recursive function names the function: `Eq/refl`'s implicit is solved to `f(n).count`, as the row states it. A candidate arrives reduced, a stuck call headed by its member's group, and committed so the solution would hold a copy of the callee, which its re-validation elaborates again and the certifier checks again.
 #[test]
 fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
     let elaborated = core_elab(
@@ -219,7 +219,7 @@ fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
     assert!(!row.contains("node = Rec"), "{row}");
 }
 
-/// A solution met against a projection off a local definition is that projection: `Eq/refl`'s implicit is solved to `p.a`, as the row states it, where reducing it opens the definition into the match `make`'s body is and projects off that, which a report would print and the kernel receive.
+/// A solution met against a projection off a local definition is that projection: `Eq/refl`'s implicit is solved to `p.a`, as the row states it, where reducing it opens the definition into the match `make`'s body is and projects off that, which a report would print and the certifier receive.
 #[test]
 fn a_solution_met_against_a_projection_off_a_local_definition_is_that_projection() {
     let elaborated = core_elab(

@@ -99,7 +99,7 @@ pub fn contract_redexes(term: &Term) -> Term {
 
 /// `term` with every member of a top-level `rec` group it holds spelled by the member's name, at the universe instance it stands at: how a term the elaborator commits — a metavariable's solution, a proof it wrote — names a recursive definition it calls.
 ///
-/// Reduction opens a name to its group to see whether a call computes, and a call that does not compute stays headed by the group. Committed so, a solution holds a copy of the callee: re-validating it elaborates the callee's every member again, the kernel is handed the copy, and a copy that elaboration rebuilt under another spelling of one of its goals is another term to conversion, which unfolds the two side by side. The name is what the author wrote, and reduction opens it to the same group again.
+/// Reduction opens a name to its group to see whether a call computes, and a call that does not compute stays headed by the group. Committed so, a solution holds a copy of the callee: re-validating it elaborates the callee's every member again, the certifier is handed the copy, and a copy that elaboration rebuilt under another spelling of one of its goals is another term to conversion, which unfolds the two side by side. The name is what the author wrote, and reduction opens it to the same group again.
 ///
 /// Exact, where [`refold_recs`] is display's: a group is recognized by reduction's own record of the name it opened it from in the declaration in progress ([`Context::member_names`]), so the names are the definitions the declaration unfolded, none read back off the copy. A group neither records — a local `rec`, a group no name of this declaration's unfolded to — stands as it was.
 pub fn named_members(context: &Context, term: &Term) -> Term {

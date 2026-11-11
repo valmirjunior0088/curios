@@ -159,7 +159,7 @@ pub fn pub_fn_marked(
 ///
 /// **An entry states what is its own, and nothing the table gives.** Its label, the names its parameters take and the node are the roster's, and which node a name builds is a decision: `gt` is `lt` mirrored, and `Nat/to_flt` rounds ties to even. Each parameter's type and plicity, every bound and the result are `Intrinsic::signature`'s, read by [`projection`], so an entry cannot state a type the table does not.
 ///
-/// A proof parameter is an operand like any other, which is what carries its bound into Core: the node holds the proof, and the kernel re-checks it against the same row this declaration's type was read from.
+/// A proof parameter is an operand like any other, which is what carries its bound into Core: the node holds the proof, and the certifier re-checks it against the same row this declaration's type was read from.
 pub fn operation(label: &str, params: &[&str], syntax: &SyntaxRegistry, node: Intrinsic) -> Decl {
     let Some(Projection {
         params: telescope,

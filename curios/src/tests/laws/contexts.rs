@@ -183,7 +183,7 @@ const TYPED: &[Context] = &[
     ),
 ];
 
-/// A hole in an arm of a stuck elimination, which the kernel compares at `Type`.
+/// A hole in an arm of a stuck elimination, which the certifier compares at `Type`.
 const ARMS: &[Context] = &[
     any(
         "an arm of a Bool match",
@@ -354,7 +354,7 @@ impl Context {
 
 /// Every seed this context's hole takes, under it: the row's name, the row, and whether its seed holds.
 ///
-/// A hole that is a type takes every seed, as the argument of a family over the seed's type: `on(left)` against `on(right)`. A seed that was itself a type would write a `Type` on each side, each settling a level of its own where the elaborator is not asked to compare them, and a row keeps its levels out of what it asks: a level is a question the elaborator solves and the kernel judges.
+/// A hole that is a type takes every seed, as the argument of a family over the seed's type: `on(left)` against `on(right)`. A seed that was itself a type would write a `Type` on each side, each settling a level of its own where the elaborator is not asked to compare them, and a row keeps its levels out of what it asks: a level is a question the elaborator solves and the certifier judges.
 fn rows_under(context: &Context) -> Vec<(String, (String, String), bool)> {
     let lifts = context.only == TYPE;
     SEEDS

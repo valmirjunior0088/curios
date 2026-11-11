@@ -38,7 +38,7 @@ use {
 
 /// Record what a declaration's domains impose on its result sort, each at the level typing read it at, one level to each domain: the first `uniform_count` are parameters, one rung above the result's level, and the rest must fit under it.
 ///
-/// **Typing's level, not the reduct's**, the level the kernel sizes a domain at, which types it as written: "a former sized as typing read its parts sits where the kernel types it" (`documentation/design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md`). Read off a domain's reduct, an occurrence at a level its value drops — `/sys/List/List.{c}(Nat)`, which reduces to a node at `0`, or a type-valued definition's call — leaves the declaration's levels free to put the domain above its family, which the kernel refuses.
+/// **Typing's level, not the reduct's**, the level the certifier sizes a domain at, which types it as written: "a former sized as typing read its parts sits where the certifier types it" (`documentation/design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md`). Read off a domain's reduct, an occurrence at a level its value drops — `/sys/List/List.{c}(Nat)`, which reduces to a node at `0`, or a type-valued definition's call — leaves the declaration's levels free to put the domain above its family, which the certifier refuses.
 fn size_domains(
     context: &mut Context,
     declaration: &Global,
@@ -610,7 +610,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
     }
 
     if let Some(own) = own.filter(|_| recursive) {
-        // The witness is a recursive group of one, closed over the local it named itself by; its name is defined as the group's projection, so a later item reducing it meets the fold rather than a free name the kernel would refuse.
+        // The witness is a recursive group of one, closed over the local it named itself by; its name is defined as the group's projection, so a later item reducing it meets the fold rather than a free name the certifier would refuse.
         let definition = Definition {
             name: def.name,
             kind: def.kind.clone(),
@@ -942,7 +942,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     Ok(rec)
 }
 
-/// Record how each member of `rec` applies its parameters, as the kernel files it of the group it certifies. A budget that runs out leaves the group summarizing nothing, which grades a call through it as no summary does.
+/// Record how each member of `rec` applies its parameters, as the certifier files it of the group it certifies. A budget that runs out leaves the group summarizing nothing, which grades a call through it as no summary does.
 fn record_applications(context: &mut Context, rec: &RecItem) {
     let Ok(applied) = group_applications(context, &rec.group) else {
         return;
@@ -1625,7 +1625,7 @@ fn elaborate_definitions_suffix<'s>(
         "the entry read a declaration no item finished"
     );
 
-    // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `erase` sees elaborated telescopes, zonked where their declarations were published. An entry the context no longer holds was a refused or withheld item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach the kernel and erasure in its lowered form, which nothing zonked.
+    // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `erase` sees elaborated telescopes, zonked where their declarations were published. An entry the context no longer holds was a refused or withheld item's, taken out with it: the module carries the survivors' entries and no other, since an entry whose declaring item is absent would reach the certifier and erasure in its lowered form, which nothing zonked.
     let Survived {
         items,
         refusals,
@@ -1658,12 +1658,12 @@ fn elaborate_definitions_suffix<'s>(
 ///
 /// A stated type is a written type like any item's, and elaborating it is what makes it usable as an expectation: a universe-polymorphic head arrives instantiated, and an application of a type former reduces to the intrinsic it denotes. Left raw it would stay exactly as lowered, so `List(Nat)` would reach conversion as an `Apply` no unfolding could reconcile with the inferred `Intrinsic::ListType` — a mismatch reported between two spellings of the same type. Elaborating here rather than in the caller keeps it in the frame every item was just defined into, which is the scope its globals resolve against.
 ///
-/// The rebuilt entry carries the type it was judged at whether it was stated or inferred, because every stage after this one reads it there: the kernel rechecks the body against it, `zonk` walks it, and erasure seals the entry at it. Keeping only a written annotation would leave the program contract a compile supplies nowhere in the module, so the kernel would infer the body's type rather than check it, and erasure would take the type from a second channel.
+/// The rebuilt entry carries the type it was judged at whether it was stated or inferred, because every stage after this one reads it there: the certifier rechecks the body against it, `zonk` walks it, and erasure seals the entry at it. Keeping only a written annotation would leave the program contract a compile supplies nowhere in the module, so the certifier would infer the body's type rather than check it, and erasure would take the type from a second channel.
 fn elaborate_entry(
     context: &mut Context,
     entry: Option<&Entrypoint>,
 ) -> Result<Option<Entrypoint>, Error> {
-    // A unit with no entrypoint has none to elaborate and no type for one — the `Entrypoint` carries both, which is what keeps them one fact from here to the kernel.
+    // A unit with no entrypoint has none to elaborate and no type for one — the `Entrypoint` carries both, which is what keeps them one fact from here to the certifier.
     let Some(entry) = entry else {
         return Ok(None);
     };
@@ -1759,7 +1759,7 @@ fn finalize_and_check(
         .map_err(|error| error.settled(context))?;
     context.restore_budget();
 
-    // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the kernel have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
+    // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the certifier have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
     //
     // The entry's alone: every item's were decided as it was published, and took the terms it recorded, so what is left recorded is the entry's. One cache across both, which are seeded from the same recorded entries.
     let mut zonked = Zonked::default();
@@ -1827,7 +1827,7 @@ fn report_written_goals(
     reports
 }
 
-/// The erasure-obligation verdicts, as one error — how every caller but the path that reports them beside the kernel's verdicts consumes [`finalize_and_check`]'s report. Both obligations are reported when both fail: they are decided independently, and a reader fixing one is owed the other.
+/// The erasure-obligation verdicts, as one error — how every caller but the path that reports them beside the certifier's verdicts consumes [`finalize_and_check`]'s report. Both obligations are reported when both fail: they are decided independently, and a reader fixing one is owed the other.
 fn raise(outcome: Finalized) -> Result<(Definitions, Option<Entrypoint>), Error> {
     let Finalized {
         definitions,
@@ -1920,7 +1920,7 @@ pub fn elaborate_and_zonk_entry<'s>(
 
 /// [`elaborate_and_zonk_program`] with the erasure obligations *reported* rather than raised.
 ///
-/// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the kernel. Raising leaves no program, so whether the kernel would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_program`].
+/// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the certifier. Raising leaves no program, so whether the certifier would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_program`].
 pub fn elaborate_and_zonk_program_reporting<'s>(
     context: &mut Context<'s>,
     established: &'s Established<'_>,

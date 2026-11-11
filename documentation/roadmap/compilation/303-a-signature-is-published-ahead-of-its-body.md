@@ -17,7 +17,7 @@ A declaration is published whole, its signature with its body, so one that names
 The split is this specification's: [item tasks](302-item-tasks.md) schedules a declaration published in two parts as it schedules every other item.
 
 - Who forms the group: its author, by a form the surface does not have, or the compiler, where a cycle closes through a witness a goal resolved to, which no name in the source wrote.
-- What a definition and a witness that name each other are in a stored unit, a group holding both or a definition stated ahead of its body, and what each asks of the kernel, of the certifier's record and of erasure.
+- What a definition and a witness that name each other are in a stored unit, a group holding both or a definition stated ahead of its body, and what each asks of the certifier, of the certifier's record and of erasure.
 - Whether size-change reads a projection of a dictionary as the field it selects, and where that is no call.
 - Which signatures are published early: one that fixes its own universe context, as item tasks states, or every signature written out in full.
 

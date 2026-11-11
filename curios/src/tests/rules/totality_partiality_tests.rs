@@ -40,7 +40,7 @@ fn a_type_level_rec_cannot_tie_the_negative_knot() {
     });
 }
 
-// A term is a type where its type reduces to a sort, written as one or not: `_T`'s recursive call has type `_U(j + 1)`, which is no sort as written and is `Type` once `_U`'s match on a successor reduces, so the call is a type position, and one that does not descend is refused by the elaborator as the kernel refuses it. The control recurses on `j` under an arm that rules zero out, which descends.
+// A term is a type where its type reduces to a sort, written as one or not: `_T`'s recursive call has type `_U(j + 1)`, which is no sort as written and is `Type` once `_U`'s match on a successor reduces, so the call is a type position, and one that does not descend is refused by the elaborator as the certifier refuses it. The control recurses on `j` under an arm that rules zero out, which descends.
 #[test]
 fn a_term_whose_type_reduces_to_a_sort_is_a_type_position() {
     control(
@@ -445,7 +445,7 @@ fn a_payload_descent_is_sound_only_because_a_partial_producer_is_refused_as_a_pr
     refusals.by_elaborator_in("entry", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { erased: Erased::Proof, offender: Some(offender), .. } if *offender == global("/grow"))
     })
-        .by_kernel_in("entry", |error| matches!(error, curios_cert::Error::NotTotal { erased: Erased::Proof, .. }));
+        .by_certifier_in("entry", |error| matches!(error, curios_cert::Error::NotTotal { erased: Erased::Proof, .. }));
     // The payload-descending group is accepted, not blamed.
     refusals.not_by_elaborator(|error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { offender: Some(offender), .. } if *offender == global("/drop"))
@@ -483,7 +483,7 @@ fn a_type_reaching_a_partial_prelude_definition_is_rejected() {
     });
 }
 
-// The positions a program writes a proof or a type at, each reaching a definition not known to terminate: a `let` at a proposition, a structure's field, a case's payload, an implicit argument, a witness's method and the type a definition states. `curios_cert`'s `recheck::proposition_tests` puts the same positions to the kernel under this name, with the ones only Core text writes. The control states each position at `True` through `Claim`, its definitions answering at once.
+// The positions a program writes a proof or a type at, each reaching a definition not known to terminate: a `let` at a proposition, a structure's field, a case's payload, an implicit argument, a witness's method and the type a definition states. `curios_cert`'s `recheck::proposition_tests` puts the same positions to the certifier under this name, with the ones only Core text writes. The control states each position at `True` through `Claim`, its definitions answering at once.
 #[test]
 fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
     let refusals = control(
@@ -571,7 +571,7 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
     }
 }
 
-// A group standing in a term of a declaration that leaves a sort binds none of its own: `loop` answers `A`, a proof where the caller states `Prop`, and it does not descend. The elaborator owes a value at a sort left to a caller the termination a proof owes; the kernel reads the group at each assignment with `spin`, and at `Prop` it is a proof's recursion. `curios-cert`'s `recheck::assignment_tests` puts the same declaration to the kernel under this name. Rename both or neither. The control declares `spin` at `Type`, where a value's recursion owes nothing.
+// A group standing in a term of a declaration that leaves a sort binds none of its own: `loop` answers `A`, a proof where the caller states `Prop`, and it does not descend. The elaborator owes a value at a sort left to a caller the termination a proof owes; the certifier reads the group at each assignment with `spin`, and at `Prop` it is a proof's recursion. `curios-cert`'s `recheck::assignment_tests` puts the same declaration to the certifier under this name. Rename both or neither. The control declares `spin` at `Type`, where a value's recursion owes nothing.
 #[test]
 fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts() {
     control(
@@ -599,7 +599,7 @@ fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts
     .by_elaborator_in("/spin", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_kernel_in("/spin", |error| {
+    .by_certifier_in("/spin", |error| {
         matches!(
             error,
             curios_cert::Error::AtSorts { sorts, refusal }
@@ -609,7 +609,7 @@ fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts
     });
 }
 
-// A closed match whose one arm reads nothing is that arm with its scrutinee unread, and where the indices rule the arm out the kernel types none of it: so a call that never returns, at an instance no case builds, may be read only where nothing is erased, and the type and the proof that would read it are refused, while the elaborator types the arm a reader wrote. `curios_cert`'s `recheck::closed_computation_tests` puts the module to the kernel under this name. The control's call returns the case the arm names.
+// A closed match whose one arm reads nothing is that arm with its scrutinee unread, and where the indices rule the arm out the certifier types none of it: so a call that never returns, at an instance no case builds, may be read only where nothing is erased, and the type and the proof that would read it are refused, while the elaborator types the arm a reader wrote. `curios_cert`'s `recheck::closed_computation_tests` puts the module to the certifier under this name. The control's call returns the case the arm names.
 #[test]
 fn a_ruled_out_arm_a_closed_match_takes_is_reached_only_through_a_partial_call() {
     let refusals = control(

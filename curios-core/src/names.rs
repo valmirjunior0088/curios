@@ -4,7 +4,7 @@
 //!
 //! The rule holds because the *capability* is absent, not because every site remembers it. A spelling carrying structured facts is an undocumented wire format between stages, each fact recovered by a hand-rolled parser whose correctness rests on an invariant stated nowhere near the parse; `README.md` records what that cost. The types below unmerge the facts: [`Free`] discriminates global from local, [`Global`] discriminates an authored path from an anonymous witness, and [`Mint`] separates a binder's identity from its display hint. No path leads from a `Free` to a `&str` except through the printer, so reintroducing behavior-from-spelling means adding a method to a name type — which cannot happen by accident and appears in review as what it is. That is the property to preserve when extending this vocabulary.
 //!
-//! **A minted identity is private to the declaration that minted it.** A local's index and a metavariable's id are positions in counters that start at zero for each source declaration ([`Minted`]); and the place a witness whose signature spells no key is lowered under counts within the module that declares it ([`WitnessId`]). So none may outlive the compilation that assigned it: a scope remembers a binder's hint and never its identity (`Label`), a stored term carries no local and no metavariable (`validate_stored_identities`), and the kernel refuses a module mentioning a local it was not handed (`free_locals_of`). What crosses from one compilation to another is a [`Global`], whose meaning is its path.
+//! **A minted identity is private to the declaration that minted it.** A local's index and a metavariable's id are positions in counters that start at zero for each source declaration ([`Minted`]); and the place a witness whose signature spells no key is lowered under counts within the module that declares it ([`WitnessId`]). So none may outlive the compilation that assigned it: a scope remembers a binder's hint and never its identity (`Label`), a stored term carries no local and no metavariable (`validate_stored_identities`), and the certifier refuses a module mentioning a local it was not handed (`free_locals_of`). What crosses from one compilation to another is a [`Global`], whose meaning is its path.
 
 #[cfg(test)]
 mod tests;
@@ -105,7 +105,7 @@ pub enum Global {
 }
 
 impl Global {
-    /// This name as the compiler holds it, in full: what a dump, a kernel refusal and an erased program's debug name print, being read about the compiler. A report names a declaration through its reader's spelling (`curios-surface`'s `Spelling`), which is why a `Global` has no `Display` and this is asked for by name.
+    /// This name as the compiler holds it, in full: what a dump, a certifier refusal and an erased program's debug name print, being read about the compiler. A report names a declaration through its reader's spelling (`curios-surface`'s `Spelling`), which is why a `Global` has no `Display` and this is asked for by name.
     pub fn faithful(&self) -> Faithful<'_, Self> {
         Faithful(self)
     }
@@ -317,7 +317,7 @@ impl Free {
 
     /// The raw counter behind the binder's identity.
     ///
-    /// What a checker minting binders of its own must stay clear of: the kernel raises its counter above every local it is handed (`Kernel::assume`), and refuses a module or entry mentioning one it was not.
+    /// What a checker minting binders of its own must stay clear of: the certifier raises its counter above every local it is handed (`Certifier::assume`), and refuses a module or entry mentioning one it was not.
     pub fn index(&self) -> u64 {
         self.0.index
     }

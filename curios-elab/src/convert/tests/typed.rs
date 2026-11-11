@@ -11,7 +11,7 @@ use {
     },
 };
 
-/// A stuck elimination is typed by its result at its scrutinee: an ambient goal as written, and a family opened at the indices its scrutinee's type carries and then at the scrutinee. So where a child is compared with no type, an elimination at a proposition converges with a variable at it and with an elimination of another scrutinee, one at a record of units with a variable at it, and an indexed family's elimination is read at its scrutinee's index. The kernel's twin of this proposition shares the name.
+/// A stuck elimination is typed by its result at its scrutinee: an ambient goal as written, and a family opened at the indices its scrutinee's type carries and then at the scrutinee. So where a child is compared with no type, an elimination at a proposition converges with a variable at it and with an elimination of another scrutinee, one at a record of units with a variable at it, and an indexed family's elimination is read at its scrutinee's index. The certifier's twin of this proposition shares the name.
 ///
 /// The refusals are what the type does not decide: an elimination at a relevant type against a variable at it, and one at a proposition against a variable at another.
 ///
@@ -104,7 +104,7 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
     );
 }
 
-/// Two eliminations that state the instance they eliminate are compared by it: the two instances, and then the scrutinees at the instance, a typed position where two proofs are one unread and no lookup types either. Two variables nothing was assumed of converge there, and stay apart where the eliminations state no instance, where the two instances differ, and where one states its instance and the other none. The kernel's twin of this proposition shares the name.
+/// Two eliminations that state the instance they eliminate are compared by it: the two instances, and then the scrutinees at the instance, a typed position where two proofs are one unread and no lookup types either. Two variables nothing was assumed of converge there, and stay apart where the eliminations state no instance, where the two instances differ, and where one states its instance and the other none. The certifier's twin of this proposition shares the name.
 #[test]
 fn two_eliminations_are_compared_at_the_instance_they_state() {
     let mut context = context();
@@ -145,7 +145,7 @@ fn two_eliminations_are_compared_at_the_instance_they_state() {
     );
 }
 
-/// A constructor's value is typed by its declaration: the family at the value's parameters and at the index targets its constructor states. So where a child is compared with no type, a proof a constructor builds converges with a proof a variable names and with one another constructor builds. The kernel's twin of this proposition shares the name.
+/// A constructor's value is typed by its declaration: the family at the value's parameters and at the index targets its constructor states. So where a child is compared with no type, a proof a constructor builds converges with a proof a variable names and with one another constructor builds. The certifier's twin of this proposition shares the name.
 ///
 /// The refusals: two constructors of a relevant family, a constructor's value against a variable at it, and a proof against a variable at the family's other index.
 ///
@@ -231,7 +231,7 @@ fn a_constructors_value_is_typed_by_its_declaration() {
     );
 }
 
-/// An arm's binders are opened at the types its position gives them: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains. Two eliminations whose arms differ in which of two bound proofs they hand on are one term, as are two folds over a list of proofs, one handing on the head it peeled and the other a proof in scope. The kernel's twin of this proposition shares the name.
+/// An arm's binders are opened at the types its position gives them: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains. Two eliminations whose arms differ in which of two bound proofs they hand on are one term, as are two folds over a list of proofs, one handing on the head it peeled and the other a proof in scope. The certifier's twin of this proposition shares the name.
 ///
 /// The control for each is the same pair over a relevant family, where the two binders stay apart; and where no lookup types the scrutinee the arm's binders carry no type, under which the first pair stays apart too.
 ///
@@ -342,7 +342,7 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
     );
 }
 
-/// A motive's binders are opened at the types its family gives them: the index domains, and the scrutinee at the family over those binders. The kernel's twin of this proposition shares the name.
+/// A motive's binders are opened at the types its family gives them: the index domains, and the scrutinee at the family over those binders. The certifier's twin of this proposition shares the name.
 ///
 /// Two stuck eliminations of one scrutinee at a family indexed by a proposition, differing only inside their motives. Each motive body is `Wit(<index binder>, i)`, and `Wit`'s index type is its own parameter, so the index pair is compared at the motive's index binder — which is opened at `Prop`, its real type, and is a proposition there: the pair is discharged by irrelevance, as it is where the motive was typed.
 ///
@@ -480,7 +480,7 @@ fn a_struct_field_at_the_unit_type_converges_unread() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
-// The same discipline at a nominal proposition rather than the unit — the shape the proof-carrying idiom writes, and the proposition the kernel's twin of this test puts to its own copy.
+// The same discipline at a nominal proposition rather than the unit — the shape the proof-carrying idiom writes, and the proposition the certifier's twin of this test puts to its own copy.
 #[test]
 fn a_struct_field_at_a_proposition_is_not_read() {
     let mut context = context();
@@ -678,7 +678,7 @@ fn a_constructor_payload_at_the_unit_type_converges_unread() {
 
 /// Proof irrelevance at a *computed* proposition — a stuck `match` whose motive is `Prop`.
 ///
-/// Across the prelude's elaboration **every firing is at a computed proposition rather than a nominal `Prop` family**: validity predicates, the shape a decision procedure takes. So the tests that name irrelevance at a nominal family — `curios-cert`'s `any_two_inhabitants_of_a_proposition_convert` and its control — cover a shape the corpus never presents, and cover the *kernel's* copy, which no program reaches. This crate's copy is the one that does the work, and this fixture asserts it rather than leaving it to the prelude happening to be written with those predicates.
+/// Across the prelude's elaboration **every firing is at a computed proposition rather than a nominal `Prop` family**: validity predicates, the shape a decision procedure takes. So the tests that name irrelevance at a nominal family — `curios-cert`'s `any_two_inhabitants_of_a_proposition_convert` and its control — cover a shape the corpus never presents, and cover the *certifier's* copy, which no program reaches. This crate's copy is the one that does the work, and this fixture asserts it rather than leaving it to the prelude happening to be written with those predicates.
 ///
 /// What the fixture pins is the mechanism those firings rest on. `sort_of` classifies a stuck `Match` by reading its **motive**, not its arms — "a type-valued match: its sort is the motive" — so a match that cannot reduce is nonetheless a proposition when its motive says `Prop`, and irrelevance may then discharge a goal at it without examining either side. Two distinct neutrals convert there.
 ///

@@ -65,7 +65,7 @@ fn a_concatenation_of_chunks_against_the_empty_list_is_no_clash() {
     });
 }
 
-// `j + j` is `0` at `j = 0` and a successor everywhere else, so neither case's target clashes with it and each arm is written. `curios_cert`'s `recheck::case_tests` puts the module to the kernel under this name, with `j + 1` as the control a clash excuses. The control writes both arms where `j + j` may meet either target.
+// `j + j` is `0` at `j = 0` and a successor everywhere else, so neither case's target clashes with it and each arm is written. `curios_cert`'s `recheck::case_tests` puts the module to the certifier under this name, with `j + 1` as the control a clash excuses. The control writes both arms where `j + j` may meet either target.
 #[test]
 fn an_arm_absent_where_a_sum_may_meet_its_target_is_refused() {
     let refusals = control(
@@ -94,7 +94,7 @@ fn an_arm_absent_where_a_sum_may_meet_its_target_is_refused() {
     }
 }
 
-// The carriers' algebra concludes a clash only where every value of the scrutinee's variables keeps the two apart, and each index below meets its one case's target at some value: a floorless sum, a product and a truncated difference are each a successor somewhere, a power of a base that may be zero is zero at `a = 0`, and a window, a concatenation of chunks and a fill of unknown count are each empty somewhere. So no arm is excused and each empty match is refused. `curios_cert`'s `recheck::case_tests` puts the module to the kernel under this name, with the controls a clash does excuse beside it. Each control's index clashes with its case's target at every value — `0`, `a * 0` and `0 - b` against a successor, a successor against zero, and a window, a run and a fill each ending in or counting a byte against the empty value — so each empty match is excused.
+// The carriers' algebra concludes a clash only where every value of the scrutinee's variables keeps the two apart, and each index below meets its one case's target at some value: a floorless sum, a product and a truncated difference are each a successor somewhere, a power of a base that may be zero is zero at `a = 0`, and a window, a concatenation of chunks and a fill of unknown count are each empty somewhere. So no arm is excused and each empty match is refused. `curios_cert`'s `recheck::case_tests` puts the module to the certifier under this name, with the controls a clash does excuse beside it. Each control's index clashes with its case's target at every value — `0`, `a * 0` and `0 - b` against a successor, a successor against zero, and a window, a run and a fill each ending in or counting a byte against the empty value — so each empty match is excused.
 #[test]
 fn an_arm_absent_where_a_carriers_index_may_meet_its_target_is_refused() {
     let refusals = control(
@@ -192,7 +192,7 @@ fn an_arm_absent_where_a_carriers_index_clashes_with_its_target_is_excused() {
     );
 }
 
-// Irrelevance holds `[Pr/b()]` and `[Pr/a()]` one list, so `Ix/mk()` inhabits `Ix([Pr/b()])` and `forged` types at `False` wherever `absurd` does. A list's elements are terms and not decided values, so two runs whose heads are two of a proposition's constructors are no clash, and `mk` stays mandatory; `apart`'s `[]` against `[Pr/a()]` is a clash of length, which no element is read for, and is excused. `curios_cert`'s `recheck::case_tests` puts the module to the kernel under this name. The control's elements are values, whose constructors clash.
+// Irrelevance holds `[Pr/b()]` and `[Pr/a()]` one list, so `Ix/mk()` inhabits `Ix([Pr/b()])` and `forged` types at `False` wherever `absurd` does. A list's elements are terms and not decided values, so two runs whose heads are two of a proposition's constructors are no clash, and `mk` stays mandatory; `apart`'s `[]` against `[Pr/a()]` is a clash of length, which no element is read for, and is excused. `curios_cert`'s `recheck::case_tests` puts the module to the certifier under this name. The control's elements are values, whose constructors clash.
 #[test]
 fn two_lists_of_proofs_that_irrelevance_holds_one_do_not_clash() {
     control(
@@ -248,7 +248,7 @@ fn two_list_literals_apart_in_an_element_or_in_length_clash() {
     );
 }
 
-// Two `List` literals of one length are decided pointwise and two whose lengths differ by their lengths, and neither reads a clash where a value meets the case: two of a proposition's constructors are one value wherever they stand, in a list, in a pair or forced twice, and a chunk, an appended base and a window hold lengths no literal fixes. `curios_cert`'s `recheck::case_tests` puts the module to the kernel under this name. The control's elements are values of a type, whose constructors clash, each list index faces the empty list, which a run and an appended element are longer than, and the symbolic run forced beside a literal byte is two bytes long.
+// Two `List` literals of one length are decided pointwise and two whose lengths differ by their lengths, and neither reads a clash where a value meets the case: two of a proposition's constructors are one value wherever they stand, in a list, in a pair or forced twice, and a chunk, an appended base and a window hold lengths no literal fixes. `curios_cert`'s `recheck::case_tests` puts the module to the certifier under this name. The control's elements are values of a type, whose constructors clash, each list index faces the empty list, which a run and an appended element are longer than, and the symbolic run forced beside a literal byte is two bytes long.
 #[test]
 fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
     let refusals = control(

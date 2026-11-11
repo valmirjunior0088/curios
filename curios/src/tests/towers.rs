@@ -350,9 +350,9 @@ fn a_sixty_line_tower_compiles() {
     }
 }
 
-/// A tower of bounded lines compiles at sixty lines: each line names the one before three times, and the proof bounding the last is checked by folding comparisons over the whole tower, each side read for what it is at least and what bounds it, while the kernel remembers each line's reduct.
+/// A tower of bounded lines compiles at sixty lines: each line names the one before three times, and the proof bounding the last is checked by folding comparisons over the whole tower, each side read for what it is at least and what bounds it, while the certifier remembers each line's reduct.
 ///
-/// Mutation-checked: with a remembered reduct's hit adding its computation's identities to the counter, the kernel passes its identity space before seventeen lines; with the two `Nat` bound folds reading the tower once per path, every line doubles the time.
+/// Mutation-checked: with a remembered reduct's hit adding its computation's identities to the counter, the certifier passes its identity space before seventeen lines; with the two `Nat` bound folds reading the tower once per path, every line doubles the time.
 #[test]
 fn a_sixty_line_bounded_tower_compiles() {
     assert_eq!(compiles(&tower(Shape::Bounded, 60)), Ok(()));

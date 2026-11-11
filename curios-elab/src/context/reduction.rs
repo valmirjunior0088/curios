@@ -91,16 +91,16 @@ impl<'s> Context<'s> {
             .sort_insert(type_, self.typing.asking.plain(), sort);
     }
 
-    /// [`Context::kernel_spelling`] of a recorded scrutinee, remembered where no metavariable in it is left unsolved ([`Caches::kernel_spellings`](super::Caches::kernel_spellings)).
-    pub(crate) fn kernel_spelled(&self, term: &Term) -> Term {
-        if let Some(known) = self.typing.caches.kernel_spelling_get(term) {
+    /// [`Context::certifier_spelling`] of a recorded scrutinee, remembered where no metavariable in it is left unsolved ([`Caches::certifier_spellings`](super::Caches::certifier_spellings)).
+    pub(crate) fn certifier_spelled(&self, term: &Term) -> Term {
+        if let Some(known) = self.typing.caches.certifier_spelling_get(term) {
             return known;
         }
-        let spelled = self.kernel_spelling(term);
+        let spelled = self.certifier_spelling(term);
         if !spelled.any_metavar(&mut |id| self.metavar_solution(id).is_none()) {
             self.typing
                 .caches
-                .kernel_spelling_insert(term.clone(), spelled.clone());
+                .certifier_spelling_insert(term.clone(), spelled.clone());
         }
         spelled
     }
@@ -353,7 +353,7 @@ impl<'s> Context<'s> {
             .same_get(this, that, self.typing.asking.plain())
     }
 
-    /// Remember what the question asked at `asked` answered, where it is a verdict of the two terms alone: it wrote nothing, so answering it again from the table leaves the context as asking it again would; no question inside it was declined for a commit, which the solver's next move could answer otherwise; and no pair was left apart inside its own unfolding, a verdict of that path, which is the rule the kernel files its own by.
+    /// Remember what the question asked at `asked` answered, where it is a verdict of the two terms alone: it wrote nothing, so answering it again from the table leaves the context as asking it again would; no question inside it was declined for a commit, which the solver's next move could answer otherwise; and no pair was left apart inside its own unfolding, a verdict of that path, which is the rule the certifier files its own by.
     pub(crate) fn remember_same(&mut self, asked: &AskedAt, this: &Term, that: &Term, same: bool) {
         if self.typing.caches.stamps_unchanged(&asked.stamps)
             && self.typing.asking.declined() == asked.declined
@@ -388,7 +388,7 @@ impl<'s> Context<'s> {
         Ok(true)
     }
 
-    /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold, at a missed equation or at a stuck elimination's atoms — the kernel's `Kernel::plainly`, for the kernel's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frame::scrutinee_spellings`) are all filed by which reduction took them.
+    /// Run `read` with reduction plain: it asks the elaborator's conversion nothing, at a stuck fold, at a missed equation or at a stuck elimination's atoms — the certifier's `Certifier::plainly`, for the certifier's two readers. A question reduction puts to conversion is answered by it, which is what ends the regress, and a shared analysis reads a term by it (`Env::force`), since totality may rest on no verdict of conversion's. Each of the two keeps its own answers: the reducts, the sorts read through them and the settled spellings (`Frame::scrutinee_spellings`) are all filed by which reduction took them.
     pub(crate) fn plainly<R>(&mut self, read: impl FnOnce(&mut Self) -> R) -> R {
         let previous = self.typing.asking.set_plain(true);
         let answer = read(self);

@@ -189,11 +189,11 @@ fn a_retry_inside_a_retry_gives_the_outer_one_its_frames_back() {
     });
 }
 
-/// An equation whose scrutinee names no local once an arm refines a variable answers nothing in that arm, and answers again after it. The kernel restates the equations in force under an arm's solution and records none under a closed spelling, so an equation left answering here would accept in the arm a proof the kernel refuses.
+/// An equation whose scrutinee names no local once an arm refines a variable answers nothing in that arm, and answers again after it. The certifier restates the equations in force under an arm's solution and records none under a closed spelling, so an equation left answering here would accept in the arm a proof the certifier refuses.
 ///
-/// The control is an equation that names a second variable the arm does not refine: its instance still names a local, the kernel still records it, and it answers at that instance, the recorded spelling stepping aside for the arm.
+/// The control is an equation that names a second variable the arm does not refine: its instance still names a local, the certifier still records it, and it answers at that instance, the recorded spelling stepping aside for the arm.
 ///
-/// Mutation-checked: with `Context::refine` withholding no equation its refinement closes, the guard's instance at the arm's value is in force there, a closed term the kernel records nothing under.
+/// Mutation-checked: with `Context::refine` withholding no equation its refinement closes, the guard's instance at the arm's value is in force there, a closed term the certifier records nothing under.
 #[test]
 fn an_equation_a_refinement_closes_is_withheld_for_the_arm() {
     let mut context = context();

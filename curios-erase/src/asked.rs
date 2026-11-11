@@ -1,8 +1,8 @@
 //! What erasing each item of a unit read of the declarations around it, kept with the unit: the record a later erasure of the same unit keeps an item's erased forms by.
 //!
-//! **Erasure's own record.** An item's erased forms are a function of the item and of what erasing it read: of a declaration around it, its signature and its body as the kernel that certified the unit read them, and its kind where erasure reads the definition off its item; of another item's erased forms, how a name is bound in them, or the forms whole where an evaluation ran them ([`Part`]). Each part is noted once as the item is erased ([`Asked`]), and the unit keeps each item's record as its baseline half, with the digest of each part read of a declaration it does not hold ([`AskedItems`]).
+//! **Erasure's own record.** An item's erased forms are a function of the item and of what erasing it read: of a declaration around it, its signature and its body as the certifier that certified the unit read them, and its kind where erasure reads the definition off its item; of another item's erased forms, how a name is bound in them, or the forms whole where an evaluation ran them ([`Part`]). Each part is noted once as the item is erased ([`Asked`]), and the unit keeps each item's record as its baseline half, with the digest of each part read of a declaration it does not hold ([`AskedItems`]).
 //!
-//! **A part is digested by whoever reads it.** A signature and a body by the certifier's own digest ([`curios_cert::part_digest`]), so what a recompile compares of a declaration is what the kernel compares of it; a kind, a binding and forms whole by erasure's ([`declared_digest`], [`erased_digest`]).
+//! **A part is digested by whoever reads it.** A signature and a body by the certifier's own digest ([`curios_cert::part_digest`]), so what a recompile compares of a declaration is what the certifier compares of it; a kind, a binding and forms whole by erasure's ([`declared_digest`], [`erased_digest`]).
 //!
 //! **Completed where it is filed, and found by the item it erased.** A store's filing completes each record with the item's identity, the digest of each part read and the digest of the item's forms ([`Made`]), and names it by those, as the certifier's records are named ([`curios_common::candidate_name`]), so a later erasure of an item of that identity takes its forms out of the store where every part read digests now as it did. A constructive trace, which "additionally stores the resulting value" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value held by its identity in the store beside it.
 
@@ -27,9 +27,9 @@ use {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub enum Part {
-    /// Its signature as the kernel reads one: its type, its universe context, the registry entry its former carries, its totality and the entry's vectors.
+    /// Its signature as the certifier reads one: its type, its universe context, the registry entry its former carries, its totality and the entry's vectors.
     Signature,
-    /// What it unfolds to, as the kernel reads it.
+    /// What it unfolds to, as the certifier reads it.
     Body,
     /// What it is declared as and what it was generated from, read off its item.
     Kind,

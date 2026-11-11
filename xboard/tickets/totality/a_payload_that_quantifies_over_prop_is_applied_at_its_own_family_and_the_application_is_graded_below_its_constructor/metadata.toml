@@ -15,4 +15,4 @@ refused = [{ by = "elaborator", error = "UniverseInconsistency" }]
 [[witness]]
 what = "the recursion on what the payload returns of the scrutinee, as a term"
 source = "a_payload_applied_at_its_own_family.crsc"
-refused = [{ by = "kernel", error = "Oversized" }]
+refused = [{ by = "certifier", error = "Oversized" }]

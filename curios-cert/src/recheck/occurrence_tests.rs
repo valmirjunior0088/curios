@@ -22,7 +22,7 @@ use {
 ///
 /// `Sort::of` reads an `InductType`'s declaration to answer for it — `check_instance` for the universe width, then `result_sort` instantiated at those levels — so the occurrence must supply as many *parameters* and *indices* as the declaration declares: an arity validated against the scheme it instantiates rather than against itself, as the universe width is.
 ///
-/// Unchecked, both halves go wrong. Where the arity is merely carried, `let held : Type = F` for a one-parameter, one-index family would certify at no parameters, at no indices, and at two indices. Where the arity is *used*, eliminating over such a scrutinee reaches `InductDecl::indices_at`, whose `Telescope::open` asserts, and the process would panic. A panic refuses rather than admits, so it is inside what the soundness board permits of the Rust implementation (see `documentation/design/soundness/the-soundness-board.md`) — but a malformed occurrence is the *program's* fault, and the house rule is that a program's fault is an `Error`. The certifying half is the one that matters: a type the kernel blesses whose shape its own declaration contradicts.
+/// Unchecked, both halves go wrong. Where the arity is merely carried, `let held : Type = F` for a one-parameter, one-index family would certify at no parameters, at no indices, and at two indices. Where the arity is *used*, eliminating over such a scrutinee reaches `InductDecl::indices_at`, whose `Telescope::open` asserts, and the process would panic. A panic refuses rather than admits, so it is inside what the soundness board permits of the Rust implementation (see `documentation/design/soundness/the-soundness-board.md`) — but a malformed occurrence is the *program's* fault, and the house rule is that a program's fault is an `Error`. The certifying half is the one that matters: a type the certifier blesses whose shape its own declaration contradicts.
 ///
 /// Not reachable from a surface program — `curios-elab` builds a nominal occurrence saturated from the declaration it looked up — which is why this is constructed here.
 ///
@@ -41,7 +41,7 @@ fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
             verdicts
                 .iter()
                 .any(|verdict| matches!(verdict.error, Error::Arity { .. })),
-            "{label}: the kernel accepted an occurrence its declaration contradicts: {verdicts:?}",
+            "{label}: the certifier accepted an occurrence its declaration contradicts: {verdicts:?}",
         );
     }
 }
@@ -156,7 +156,7 @@ fn a_nominal_value_types_its_parameters() {
 ///
 /// **Synthesis needs no leg.** `synth_neutral`'s partial-application arm opens the head type's telescope at the arguments supplied, and each entry that remains is still under its own mark, so there is no vector beside the telescope to drift and this fixture keeps the lambda case alone.
 ///
-/// It is not reachable from a surface program — `curios-elab` emits saturated applications — and what is at stake is a program's fault aborting the kernel where an `Error` belongs.
+/// It is not reachable from a surface program — `curios-elab` emits saturated applications — and what is at stake is a program's fault aborting the certifier where an `Error` belongs.
 ///
 /// The control is [`a_saturated_application_in_a_type_position_is_accepted`]. It is the direction that matters: reduction must still fire on a well-formed application, and a guard that simply stopped reducing would pass every witness here while breaking every program.
 ///
@@ -280,7 +280,7 @@ fn a_nominal_occurrence_types_its_arguments() {
 
     assert!(
         !verdicts.is_empty(),
-        "the kernel certified a closed inhabitant of `False`",
+        "the certifier accepted a closed inhabitant of `False`",
     );
 }
 
@@ -362,7 +362,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
 
     assert!(
         !verdicts.is_empty(),
-        "the kernel certified a bogus occurrence standing as a tuple field type",
+        "the certifier accepted a bogus occurrence standing as a tuple field type",
     );
 }
 

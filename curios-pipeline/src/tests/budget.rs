@@ -91,7 +91,7 @@ fn value_over(sort: &str) -> String {
     source
 }
 
-/// Whether `source` is taken under `budget` over `scope` by everything that judges it: elaborated, certified by the kernel and erased.
+/// Whether `source` is taken under `budget` over `scope` by everything that judges it: elaborated, certified by the certifier and erased.
 fn checks(source: &str, budget: u64, scope: &[&Unit]) -> bool {
     let entrypoint = entrypoint_of(source);
 
@@ -126,9 +126,9 @@ fn erases(source: &str, budget: u64) -> bool {
         let program = Zonked::project(&program).expect("the elaborated program is zonked");
 
         let globals = crate::globals(predecessors);
-        let (_, mut kernel) = curios_cert::certify_program(&program, budget, &globals, SYNTAX);
+        let (_, mut certifier) = curios_cert::certify_program(&program, budget, &globals, SYNTAX);
         erase_program(
-            &mut kernel,
+            &mut certifier,
             Erasures::of(
                 &predecessors.cores(),
                 &predecessors.places(),
@@ -204,7 +204,7 @@ fn a_unit_erases_its_values_under_the_budget_one_of_them_takes() {
     );
 }
 
-/// A definition that leaves three sorts to its caller is taken under the budget it is taken under leaving none: the kernel judges it once at each of the eight assignments of them, each under the whole budget, so what it costs to accept is what one assignment costs.
+/// A definition that leaves three sorts to its caller is taken under the budget it is taken under leaving none: the certifier judges it once at each of the eight assignments of them, each under the whole budget, so what it costs to accept is what one assignment costs.
 #[test]
 fn a_definition_leaving_sorts_open_is_taken_under_the_budget_one_assignment_takes() {
     with_prelude(|prelude| {

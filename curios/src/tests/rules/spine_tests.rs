@@ -2,7 +2,7 @@
 
 use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
-// **The position this row is about is typed.** `p` and `q` inhabit one proposition, so they are interchangeable at their own type — and as arguments of an opaque head they meet the head's telescope rather than `ground`, where the goal type is `Type`, irrelevance is never asked, and the kernel would refuse what the elaborator accepts.
+// **The position this row is about is typed.** `p` and `q` inhabit one proposition, so they are interchangeable at their own type — and as arguments of an opaque head they meet the head's telescope rather than `ground`, where the goal type is `Type`, irrelevance is never asked, and the certifier would refuse what the elaborator accepts.
 //
 // A variable head has a typed context after all: it was assumed or declared at a function type, and its telescope is what its arguments inhabit, exactly as a declaration's field telescope is what a field inhabits. Reading it is a lookup rather than an inference, so the spine costs nothing more and conversion consults nothing new. A universe instance of a variable and a `rec` member carry one the same way, and so does an application or a projection of such a head. What remains untyped is a head that names no type here — a stuck elimination — and a binder carrying `ground_scope`'s stand-in, which is not a function type and so hands back no telescope.
 #[test]
@@ -10,7 +10,7 @@ fn a_spine_argument_compares_at_the_heads_domain() {
     assert_eq!(run(A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN), b"1");
 }
 
-// **A spine's arguments are compared at the types its head assigns under every head a lookup types.** Past a curried head and past a projected one the kernel compared the arguments at `Type`, so two proofs of one proposition stayed apart there where the elaborator, which reads the head's type whatever the head is, had accepted them. The refusal beside it is a relevant argument in the same position.
+// **A spine's arguments are compared at the types its head assigns under every head a lookup types.** Past a curried head and past a projected one the certifier compared the arguments at `Type`, so two proofs of one proposition stayed apart there where the elaborator, which reads the head's type whatever the head is, had accepted them. The refusal beside it is a relevant argument in the same position.
 #[test]
 fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
     assert_eq!(
@@ -48,7 +48,7 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
     );
 }
 
-// **The spines are compared on the pair as posed, at whatever type, and whatever spells the two calls.** At a function or a record type the kernel fires eta by the type, and tried after it the spine rule never ran: eta hands on each call applied or projected, no call of a definition at its head, both calls unfolded, and the two proofs were a stuck match's scrutinees. The kernel alone refused the first two programs. The third is the definition's call applied once more, a curried spine, which the kernel's rule did not look through and the elaborator's did. The fourth was the elaborator's to refuse: `Eq/refl()`'s implicit is solved to the first call, the goal that follows spells that side as the metavariable, and its rule read the side as written.
+// **The spines are compared on the pair as posed, at whatever type, and whatever spells the two calls.** At a function or a record type the certifier fires eta by the type, and tried after it the spine rule never ran: eta hands on each call applied or projected, no call of a definition at its head, both calls unfolded, and the two proofs were a stuck match's scrutinees. The certifier alone refused the first two programs. The third is the definition's call applied once more, a curried spine, which the certifier's rule did not look through and the elaborator's did. The fourth was the elaborator's to refuse: `Eq/refl()`'s implicit is solved to the first call, the goal that follows spells that side as the metavariable, and its rule read the side as written.
 //
 // The refusal beside it is two calls that differ in an argument that matters, which no spine comparison identifies.
 #[test]
@@ -84,7 +84,7 @@ fn two_calls_that_differ_in_a_relevant_argument_stay_apart() {
     });
 }
 
-// **Two calls of one definition converge wherever they sit, whichever rule reaches them.** The spine rules decide the pair only while it is still spelled as two calls. Under a lambda's body, a tuple's component, a `let`'s value, a list's element, a `match`'s scrutinee, an operation's operand and a projection's head, reduction reaches the call first and unfolds it, and the two proofs become a stuck elimination's scrutinees, which were compared at `Type` and held apart: by the kernel alone under the first two, by both checkers under the rest, and by the elaborator alone at a curried call read by reflexivity. A scrutinee is compared at the type a lookup gives it, where that is a proposition, so the unfolded forms converge and the verdict no longer follows which spelling survived. The last program is a proof past a stuck `match`'s head, an argument neither checker types, read the same way.
+// **Two calls of one definition converge wherever they sit, whichever rule reaches them.** The spine rules decide the pair only while it is still spelled as two calls. Under a lambda's body, a tuple's component, a `let`'s value, a list's element, a `match`'s scrutinee, an operation's operand and a projection's head, reduction reaches the call first and unfolds it, and the two proofs become a stuck elimination's scrutinees, which were compared at `Type` and held apart: by the certifier alone under the first two, by both checkers under the rest, and by the elaborator alone at a curried call read by reflexivity. A scrutinee is compared at the type a lookup gives it, where that is a proposition, so the unfolded forms converge and the verdict no longer follows which spelling survived. The last program is a proof past a stuck `match`'s head, an argument neither checker types, read the same way.
 //
 // The refusal beside it is two calls that differ in an argument that matters, under a `let`: the lookup types it at `Nat`, where nothing ends the comparison.
 #[test]
@@ -153,7 +153,7 @@ fn a_recursive_function_matching_its_proof_converts() {
     assert_eq!(run(A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS), b"1");
 }
 
-// **Irrelevance decides a goal before either side is reduced, in the elaborator as in the kernel, wherever nothing is flexible.** `spin` walks its argument, so the proof `spin(100000000000)` is a hundred billion steps from its constructor, and the same walk at a data type runs out of steps: a checker that reduced a proof to learn it equals another would never answer. Compared at the proposition, the two are one before either is read. Mutation-checked: without the check ahead of reduction the elaborator runs out of steps on exactly that goal.
+// **Irrelevance decides a goal before either side is reduced, in the elaborator as in the certifier, wherever nothing is flexible.** `spin` walks its argument, so the proof `spin(100000000000)` is a hundred billion steps from its constructor, and the same walk at a data type runs out of steps: a checker that reduced a proof to learn it equals another would never answer. Compared at the proposition, the two are one before either is read. Mutation-checked: without the check ahead of reduction the elaborator runs out of steps on exactly that goal.
 #[test]
 fn a_proof_is_not_reduced_to_compare_it_with_another() {
     assert_eq!(run(A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER), b"1");

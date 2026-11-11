@@ -1,6 +1,6 @@
 //! An application of a metavariable against a type former's node: the function it stands for is taken where the term that awaits it completes.
 //!
-//! `M(A)` against `Two(Nat, Bool)` holds at `M := (x) => Two(Nat, x)`, the imitation, and at `(x) => Two(x, Bool)` as well: one function among several, so conversion leaves the pair parked, and the call takes the imitation only once it has read every argument, where nothing else stated the function and every such pair gives it the same. Each program that compiles is run, so the kernel has judged what the elaborator admitted.
+//! `M(A)` against `Two(Nat, Bool)` holds at `M := (x) => Two(Nat, x)`, the imitation, and at `(x) => Two(x, Bool)` as well: one function among several, so conversion leaves the pair parked, and the call takes the imitation only once it has read every argument, where nothing else stated the function and every such pair gives it the same. Each program that compiles is run, so the certifier has judged what the elaborator admitted.
 
 use {crate::tests::test_support::*, curios_common::fill};
 

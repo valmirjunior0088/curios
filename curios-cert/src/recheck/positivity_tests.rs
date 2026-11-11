@@ -1,4 +1,4 @@
-//! Strict positivity as the kernel judges it, and the premise it rests on, of families the elaborator refuses before a module exists: a family nested in itself through an intrinsic carrier, and a family indexed by a declaration that holds it, written as Core text and put to the kernel with nothing in scope, declaring the propositions it uses.
+//! Strict positivity as the certifier judges it, and the premise it rests on, of families the elaborator refuses before a module exists: a family nested in itself through an intrinsic carrier, and a family indexed by a declaration that holds it, written as Core text and put to the certifier with nothing in scope, declaring the propositions it uses.
 
 use {super::test_support::*, crate::*, curios_common::fill};
 
@@ -149,7 +149,7 @@ end
 )
 "#;
 
-// `Bad` reaches itself only through the list, its index carrying the length a read at the head needs, and the term it closes with types at `False` once the family is admitted. `List` is covariant, so the arrow inside it counts where it stands, and the kernel's refusal of the family is the only one.
+// `Bad` reaches itself only through the list, its index carrying the length a read at the head needs, and the term it closes with types at `False` once the family is admitted. `List` is covariant, so the arrow inside it counts where it stands, and the certifier's refusal of the family is the only one.
 //
 // Mutation-checked at `curios-analysis`'s positivity walk: reading nothing through `ListType` admits the module whole.
 #[test]

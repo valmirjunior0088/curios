@@ -1,6 +1,6 @@
 //! A numeral whose type its term has yet to learn waits for it, whichever of the term's parts gives it.
 //!
-//! A numeral is a choice among the carriers it realizes at, and its default is taken only where nothing its term reads can still say otherwise: a later argument, an element, an arm or the expectation pins it as an earlier one does, and where none does, the numerals that wait on one type take one default together. Each program here is written in both orders and run, so the kernel has judged what the elaborator admitted.
+//! A numeral is a choice among the carriers it realizes at, and its default is taken only where nothing its term reads can still say otherwise: a later argument, an element, an arm or the expectation pins it as an earlier one does, and where none does, the numerals that wait on one type take one default together. Each program here is written in both orders and run, so the certifier has judged what the elaborator admitted.
 
 use {crate::tests::test_support::*, curios_common::fill};
 

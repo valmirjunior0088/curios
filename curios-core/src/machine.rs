@@ -22,11 +22,11 @@
 //!
 //! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, each argument under its binder's mark ([`eta_head`]), through the fresh binder identities [`Reducer::fresh_binder`] mints. Skipping the probe on the theory that conversion decides eta anyway would starve the elaborator's witness keying, which reads rigid heads off weak-head forms and would not find `Option` under `(A) => Option(A)`.
 //!
-//! **`Induct` arms bind payload values.** The kernel binds an arm to the scrutinee's payload directly; the elaborator binds projections of the original head, guarding annotation holes a reduced payload could carry. A closed, metavariable-free payload carries none, so the machine uses the kernel's rule on both sides.
+//! **`Induct` arms bind payload values.** The certifier binds an arm to the scrutinee's payload directly; the elaborator binds projections of the original head, guarding annotation holes a reduced payload could carry. A closed, metavariable-free payload carries none, so the machine uses the certifier's rule on both sides.
 //!
 //! # What a step costs
 //!
-//! A dispatch spends [`Cost::STEP`], an opening spends the kernel's beta formula, a frame is charged per new *peak* of machine depth at [`machine_frame`] — the few slots a [`Frame`] takes, priced honestly the way [`Cost::FRAME`] prices the native frame the recursive strategy takes — and every write to the memo is charged as the two handles it stores. That difference is the whole yield: a fold's per-element price falls from the native frame row to the transitions and openings the fold actually performs, and what the strategy amortized through its compilation-scoped memos the machine amortizes through its own, since its internal steps bypass the hosts' tables.
+//! A dispatch spends [`Cost::STEP`], an opening spends the certifier's beta formula, a frame is charged per new *peak* of machine depth at [`machine_frame`] — the few slots a [`Frame`] takes, priced honestly the way [`Cost::FRAME`] prices the native frame the recursive strategy takes — and every write to the memo is charged as the two handles it stores. That difference is the whole yield: a fold's per-element price falls from the native frame row to the transitions and openings the fold actually performs, and what the strategy amortized through its compilation-scoped memos the machine amortizes through its own, since its internal steps bypass the hosts' tables.
 //!
 //! # What a run leaves behind
 //!
@@ -615,7 +615,7 @@ impl Machine {
             Subterm::Let(let_) if !let_.opens() => Ok(Step::Value(Term::from(Subterm::Let(let_)))),
 
             Subterm::Let(Let { bindings, tail }) => {
-                // The kernel's zeta charge: one values vector, a ref vector per binding (triangular), and one substitution pass per binding.
+                // The certifier's zeta charge: one values vector, a ref vector per binding (triangular), and one substitution pass per binding.
                 let count = bindings.len() as u64;
                 host.spend(
                     Cost::collection(count)

@@ -1,4 +1,4 @@
-//! What conversion equates by a type's shape alone — eta, one inhabitant, a proposition's proofs — held where the shape leaves more than one value: a hidden member, a shape or a sort an arm, a `let` or a caller decides, and a proof's payload, each written as Core text and put to the kernel with nothing in scope, declaring the propositions it uses, and each closing on `False` were the refusal it meets not made.
+//! What conversion equates by a type's shape alone — eta, one inhabitant, a proposition's proofs — held where the shape leaves more than one value: a hidden member, a shape or a sort an arm, a `let` or a caller decides, and a proof's payload, each written as Core text and put to the certifier with nothing in scope, declaring the propositions it uses, and each closing on `False` were the refusal it meets not made.
 
 use {super::test_support::*, crate::*, curios_common::fill, curios_core::Quality};
 

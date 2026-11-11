@@ -143,7 +143,7 @@ fn unit_typed_neutrals_in_a_type_argument_converge() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
-/// Unit eta, by the goal's type: at the empty Σ and at a nominal struct that declares no field, any two terms converge whatever their shapes — two stuck applications of two heads, which the structural rule compares head against head and would refuse. It composes with the eta between two neutrals that reaches it: two variables at a record of units converge by their projections, each at its field's type, and two at a function into a unit by their applications. The kernel's twin of this proposition shares the name.
+/// Unit eta, by the goal's type: at the empty Σ and at a nominal struct that declares no field, any two terms converge whatever their shapes — two stuck applications of two heads, which the structural rule compares head against head and would refuse. It composes with the eta between two neutrals that reaches it: two variables at a record of units converge by their projections, each at its field's type, and two at a function into a unit by their applications. The certifier's twin of this proposition shares the name.
 ///
 /// The rule is the type's: at `Type` two variables stay apart, and so do two at a record or a struct that has a relevant field.
 ///
@@ -190,7 +190,7 @@ fn any_two_terms_converge_at_a_type_with_no_field() {
     assert_eq!(convert(&mut context, &one_field, &u, &v), Ok(false));
 }
 
-/// A nominal struct has no eta by its type, so what eta would decide between two terms at one is read off the type: any two converge at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record of such, another such struct — whatever their shapes. The kernel's twin of this proposition shares the name.
+/// A nominal struct has no eta by its type, so what eta would decide between two terms at one is read off the type: any two converge at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record of such, another such struct — whatever their shapes. The certifier's twin of this proposition shares the name.
 ///
 /// The refusals are the rule's bounds. One relevant field keeps two variables apart, at whatever depth it sits; and a struct that reaches itself, by its own fields or through another's, answers no where it is met again, which is what ends the walk. A struct nested in its own parameter is met again too, and is judged again: its declaration names no struct, and the parameter is what bounds the walk.
 ///
@@ -305,7 +305,7 @@ fn any_two_terms_converge_at_a_struct_with_one_inhabitant() {
     );
 }
 
-/// A goal's type is read forced: a member of a declaration group is folded in weak-head form, and every rule a type directs is keyed on the type's own shape. Two variables converge at a group's member that is a struct of a unit, closed or over a variable, the unit, a record of units or a function into a unit, and stay apart at one that is a struct or a record with a relevant field. The kernel's twin of this proposition shares the name.
+/// A goal's type is read forced: a member of a declaration group is folded in weak-head form, and every rule a type directs is keyed on the type's own shape. Two variables converge at a group's member that is a struct of a unit, closed or over a variable, the unit, a record of units or a function into a unit, and stay apart at one that is a struct or a record with a relevant field. The certifier's twin of this proposition shares the name.
 ///
 /// Mutation-checked: with the type read in weak-head form, the goal at the struct over a variable is refused; a closed type's forced form is the reduct the sort judgment left cached, and the other goals are met again by eta where the dispatch ends.
 #[test]
@@ -393,7 +393,7 @@ fn a_goals_type_is_read_forced() {
     );
 }
 
-/// Eta by the goal's type is fired ahead of every structural rule, whatever the two sides' shapes: two stuck applications of two heads converge at a record of units, by their projections, and at a function into a unit, by their applications, where the structural rule would set head against head and refuse. At a record with a relevant field the projections are compared, and the two stay apart. The kernel's twin of this proposition shares the name.
+/// Eta by the goal's type is fired ahead of every structural rule, whatever the two sides' shapes: two stuck applications of two heads converge at a record of units, by their projections, and at a function into a unit, by their applications, where the structural rule would set head against head and refuse. At a record with a relevant field the projections are compared, and the two stay apart. The certifier's twin of this proposition shares the name.
 ///
 /// Mutation-checked: with eta by the type left to the dispatch's last arm, the two goals a unit decides are refused.
 #[test]
@@ -484,7 +484,7 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
     assert_eq!(judged(Term::type_ground()), [Ok(false), Ok(false)]);
 }
 
-/// Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both: two proofs of one proposition converge at `Type`, and so do two variables at the empty record, at a record of units, at a function into a unit, at a struct that declares no field, at a struct of a unit and at a recursive definition's call that unfolds to one of these, at whatever depth; and two eliminations of two such proofs, whose scrutinees are compared with no type, are one term. It is what keeps a verdict from following whether a definition's call was unfolded before the pair was posed. The kernel's twin of this proposition shares the name.
+/// Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both: two proofs of one proposition converge at `Type`, and so do two variables at the empty record, at a record of units, at a function into a unit, at a struct that declares no field, at a struct of a unit and at a recursive definition's call that unfolds to one of these, at whatever depth; and two eliminations of two such proofs, whose scrutinees are compared with no type, are one term. It is what keeps a verdict from following whether a definition's call was unfolded before the pair was posed. The certifier's twin of this proposition shares the name.
 ///
 /// Neither side is expanded, and the refusals say what that keeps apart: two variables at a record with a relevant field, two proofs of two propositions and two numbers.
 ///
@@ -611,7 +611,7 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
     );
 }
 
-/// A literal's eta is the goal type's to refuse. At a type former that is not the literal's own the two sides are not of one type, and a literal with no field — whose walk compares nothing — would convert with anything: a lambda, the unit literal and a field-less struct's literal against a neutral at `Nat`, that struct's literal at another struct, and the unit literal against `1`, are refused. Each is still taken at the literal's own type, and at `Type`, which says nothing. The kernel's twin of this proposition shares the name.
+/// A literal's eta is the goal type's to refuse. At a type former that is not the literal's own the two sides are not of one type, and a literal with no field — whose walk compares nothing — would convert with anything: a lambda, the unit literal and a field-less struct's literal against a neutral at `Nat`, that struct's literal at another struct, and the unit literal against `1`, are refused. Each is still taken at the literal's own type, and at `Type`, which says nothing. The certifier's twin of this proposition shares the name.
 ///
 /// Mutation-checked: without the refusal in `eta_expand_func` the first goal is accepted, without the one in `eta_expand_tuple` the second and the last of the refused are, without the one in `eta_expand_struct` the two between are, and with a sort counted a former the goals at `Type` are refused.
 #[test]
@@ -667,7 +667,7 @@ fn eta_by_a_literal_is_refused_at_a_type_former_that_is_not_its_own() {
     );
 }
 
-/// A literal's eta is taken against every neutral inhabitant, a term whose head does not show its type, and against no other. A stuck elimination is one as a variable is: a lambda, a tuple literal and a struct literal each converge with the stuck elimination they expand, where no type directs the rule and at the struct's own type — the lambda past a fold, since one that only forwards reduces to what it forwards — and each near miss beside them — a binder dropped, two components swapped, two fields swapped — is refused. Against a head that shows another type — a number, a lambda, a constructor's value — the rule is not taken, and the unit literal's empty walk equates it with nothing. The kernel's twin of this proposition shares the name.
+/// A literal's eta is taken against every neutral inhabitant, a term whose head does not show its type, and against no other. A stuck elimination is one as a variable is: a lambda, a tuple literal and a struct literal each converge with the stuck elimination they expand, where no type directs the rule and at the struct's own type — the lambda past a fold, since one that only forwards reduces to what it forwards — and each near miss beside them — a binder dropped, two components swapped, two fields swapped — is refused. Against a head that shows another type — a number, a lambda, a constructor's value — the rule is not taken, and the unit literal's empty walk equates it with nothing. The certifier's twin of this proposition shares the name.
 ///
 /// Mutation-checked: with the set narrowed to a variable, a projection and an application the four held goals are refused, and with the rule taken against any term the unit literal converges with a number.
 #[test]

@@ -16,7 +16,7 @@ pub enum Stage<'a> {
     Core(&'a curios_core::Program, DumpScope<'a>),
     /// Core after elaboration and zonking, which is the program every later stage consumes. Metavariable-free by construction — each item is zonked strictly where it is published, which errors on an unsolved hole — with universes validated, positivity checked, totality recorded, and both erasure obligations gated. It carries the entry's own items only; the prelude is scope every later stage is seeded from, not a run of items in front of them.
     ///
-    /// The difference from [`Stage::Core`] is the absence of `Metavar` and every `Transient`, which is exactly what the independent kernel requires of an input: this is the stage `curios_cert::certify_definitions` takes, and [`Stage::Core`] is not.
+    /// The difference from [`Stage::Core`] is the absence of `Metavar` and every `Transient`, which is exactly what the independent certifier requires of an input: this is the stage `curios_cert::certify_definitions` takes, and [`Stage::Core`] is not.
     CoreElab(&'a curios_core::Program, DumpScope<'a>),
     Anf(&'a curios_anf::Module),
     AnfOptm(&'a curios_anf::Module),

@@ -10,13 +10,13 @@ fn refused(by: Checker, error: Option<&'static str>, within: Option<Within>) -> 
     Expected { by, error, within }
 }
 
-/// A witness the kernel is expected to refuse by `UntypedEntry`.
+/// A witness the certifier is expected to refuse by `UntypedEntry`.
 fn forged() -> Witness {
     Witness {
         what: "the forged proof".to_string(),
         steps: Vec::new(),
         proof: Proof::Program(String::new()),
-        expect: vec![refused(Checker::Kernel, Some("UntypedEntry"), None)],
+        expect: vec![refused(Checker::Certifier, Some("UntypedEntry"), None)],
     }
 }
 
@@ -24,9 +24,9 @@ fn admitted() -> Answer {
     Answer::Judged(Vec::new())
 }
 
-/// The kernel's refusal of the entry by `error`.
-fn by_kernel(error: curios_cert::Error) -> Answer {
-    Answer::Judged(vec![Refusal::Kernel(Verdict { name: None, error })])
+/// The certifier's refusal of the entry by `error`.
+fn by_certifier(error: curios_cert::Error) -> Answer {
+    Answer::Judged(vec![Refusal::Certifier(Verdict { name: None, error })])
 }
 
 /// The elaborator's refusal by `error`, while it was still building the module.
@@ -43,7 +43,7 @@ fn a_fixed_ticket_holds_while_its_witness_is_refused_and_regresses_when_it_is_ad
         standing(
             Status::Fixed,
             &[forged()],
-            &[by_kernel(curios_cert::Error::UntypedEntry)]
+            &[by_certifier(curios_cert::Error::UntypedEntry)]
         ),
         Standing::Holds
     );
@@ -59,23 +59,23 @@ fn a_refusal_holds_only_by_the_error_the_witness_names() {
     let Standing::Regressed(problems) = standing(
         Status::Fixed,
         &[forged()],
-        &[by_kernel(curios_cert::Error::UnclosedUniverses)],
+        &[by_certifier(curios_cert::Error::UnclosedUniverses)],
     ) else {
         panic!("a witness refused by another error holds nothing shut");
     };
 
-    assert!(problems[0].contains("not by the kernel's `UntypedEntry`"));
-    assert!(problems[0].contains("kernel `UnclosedUniverses`"));
+    assert!(problems[0].contains("not by the certifier's `UntypedEntry`"));
+    assert!(problems[0].contains("certifier `UnclosedUniverses`"));
 }
 
 #[test]
-fn a_refusal_expected_of_the_kernel_is_not_met_by_the_elaborators() {
+fn a_refusal_expected_of_the_certifier_is_not_met_by_the_elaborators() {
     let Standing::Regressed(problems) = standing(
         Status::Fixed,
         &[forged()],
         &[by_elaborator(curios_elab::Error::Poisoned)],
     ) else {
-        panic!("the elaborator's refusal stood in for the kernel's");
+        panic!("the elaborator's refusal stood in for the certifier's");
     };
 
     assert!(problems[0].contains("which was not asked"));
@@ -86,14 +86,14 @@ fn a_witness_naming_both_checkers_holds_only_where_both_refuse() {
     let both = Witness {
         expect: vec![
             refused(Checker::Elaborator, Some("Poisoned"), None),
-            refused(Checker::Kernel, Some("UntypedEntry"), None),
+            refused(Checker::Certifier, Some("UntypedEntry"), None),
         ],
         ..forged()
     };
-    let kernel = by_kernel(curios_cert::Error::UntypedEntry);
+    let certifier = by_certifier(curios_cert::Error::UntypedEntry);
 
     assert!(matches!(
-        standing(Status::Fixed, slice::from_ref(&both), &[kernel]),
+        standing(Status::Fixed, slice::from_ref(&both), &[certifier]),
         Standing::Regressed(_)
     ));
 
@@ -102,7 +102,7 @@ fn a_witness_naming_both_checkers_holds_only_where_both_refuse() {
             error: curios_elab::Error::Poisoned,
             reported: "a diagnostic".to_string(),
         },
-        Refusal::Kernel(Verdict {
+        Refusal::Certifier(Verdict {
             name: None,
             error: curios_cert::Error::UntypedEntry,
         }),
@@ -167,13 +167,13 @@ fn a_refusal_holds_only_where_the_witness_places_it() {
 
     let at_entry = Witness {
         expect: vec![refused(
-            Checker::Kernel,
+            Checker::Certifier,
             Some("UntypedEntry"),
             Some(Within::Entry),
         )],
         ..forged()
     };
-    let in_g = Answer::Judged(vec![Refusal::Kernel(Verdict {
+    let in_g = Answer::Judged(vec![Refusal::Certifier(Verdict {
         name: Some(declared("g")),
         error: curios_cert::Error::UntypedEntry,
     })]);
@@ -182,7 +182,7 @@ fn a_refusal_holds_only_where_the_witness_places_it() {
         standing(
             Status::Fixed,
             slice::from_ref(&at_entry),
-            &[by_kernel(curios_cert::Error::UntypedEntry)]
+            &[by_certifier(curios_cert::Error::UntypedEntry)]
         ),
         Standing::Holds
     );
@@ -195,7 +195,7 @@ fn a_refusal_holds_only_where_the_witness_places_it() {
 #[test]
 fn a_refusal_no_error_names_yet_holds_by_any_error_of_its_checker() {
     let unnamed = Witness {
-        expect: vec![refused(Checker::Kernel, None, None)],
+        expect: vec![refused(Checker::Certifier, None, None)],
         ..forged()
     };
 
@@ -203,7 +203,7 @@ fn a_refusal_no_error_names_yet_holds_by_any_error_of_its_checker() {
         standing(
             Status::Fixed,
             slice::from_ref(&unnamed),
-            &[by_kernel(curios_cert::Error::UnclosedUniverses)]
+            &[by_certifier(curios_cert::Error::UnclosedUniverses)]
         ),
         Standing::Holds
     );
@@ -227,7 +227,7 @@ fn an_open_ticket_whose_witnesses_are_refused_was_shut_without_saying_so() {
         standing(
             Status::Open,
             &[forged()],
-            &[by_kernel(curios_cert::Error::UntypedEntry)]
+            &[by_certifier(curios_cert::Error::UntypedEntry)]
         ),
         Standing::Shut
     );
@@ -242,12 +242,12 @@ fn an_open_ticket_whose_witness_is_refused_otherwise_fails_the_run() {
     let Standing::Unshown(problems) = standing(
         Status::Open,
         &[forged()],
-        &[by_kernel(curios_cert::Error::UnclosedUniverses)],
+        &[by_certifier(curios_cert::Error::UnclosedUniverses)],
     ) else {
         panic!("a witness refused by another error stood as a flaw it no longer shows");
     };
     assert!(
-        problems[0].contains("kernel `UnclosedUniverses`"),
+        problems[0].contains("certifier `UnclosedUniverses`"),
         "{problems:?}"
     );
     assert!(Standing::Unshown(problems).fails());
@@ -268,7 +268,7 @@ fn a_ticket_with_no_witness_holds() {
 }
 
 #[test]
-fn only_a_witness_the_kernel_judged_carries_a_ticket_to_it() {
+fn only_a_witness_the_certifier_judged_carries_a_ticket_to_it() {
     let ticket = Ticket {
         title: "A forged proof".to_string(),
         found_on: Date::new(2026, 1, 1).expect("a day the calendar has"),
@@ -282,8 +282,8 @@ fn only_a_witness_the_kernel_judged_carries_a_ticket_to_it() {
         standing: Standing::Open,
     };
 
-    assert!(!row(by_elaborator(curios_elab::Error::Poisoned)).reaches_kernel());
-    assert!(row(by_kernel(curios_cert::Error::UntypedEntry)).reaches_kernel());
+    assert!(!row(by_elaborator(curios_elab::Error::Poisoned)).reaches_certifier());
+    assert!(row(by_certifier(curios_cert::Error::UntypedEntry)).reaches_certifier());
 }
 
 /// A whole ticket, as its directory holds it: a part's record, the ticket's, and its witness's text. Its term proves `True`, so the checkers refuse it at `False`, as they refuse the witness of a flaw that is fixed.
@@ -328,5 +328,5 @@ fn a_run_puts_every_witness_and_says_where_its_ticket_stands() {
     assert!(printed.contains(
         "conversion — 1 ticket(s), the last found 2026-10-02\n    Are these two terms equal?"
     ));
-    assert!(printed.contains("not put to the kernel: 1"));
+    assert!(printed.contains("not put to the certifier: 1"));
 }

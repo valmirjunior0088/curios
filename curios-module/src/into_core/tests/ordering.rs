@@ -31,7 +31,7 @@ fn items_leave_the_lowering_as_they_are_written() {
     );
 }
 
-// A definition that names itself is the recursive group of one the kernel needs it to be, read off its body and never declared.
+// A definition that names itself is the recursive group of one the certifier needs it to be, read off its body and never declared.
 #[test]
 fn a_definition_that_names_itself_lowers_to_a_group_of_one() {
     assert_eq!(

@@ -352,7 +352,7 @@ fn a_fact_of_an_updates_base_is_spelled_through_the_base() {
     assert!(!error.contains("x.ok"), "{error}");
 }
 
-// A bound over a length reached by two routes discharges by evaluation. `Str/of_char(c).bytes` unfolds to `Char/to_utf8(c)`, whose body binds its code point with a `let`. The reducer substitutes a `let` as the kernel does, so both unfoldings spell one term; bound as a fresh definition per unfolding, the two lengths would come back spelled with differently named `code`s, the sum's cancellation would meet them as unequal, and `k + w <= k + w + 1` would be refused although conversion identifies the two.
+// A bound over a length reached by two routes discharges by evaluation. `Str/of_char(c).bytes` unfolds to `Char/to_utf8(c)`, whose body binds its code point with a `let`. The reducer substitutes a `let` as the certifier does, so both unfoldings spell one term; bound as a fresh definition per unfolding, the two lengths would come back spelled with differently named `code`s, the sum's cancellation would meet them as unequal, and `k + w <= k + w + 1` would be refused although conversion identifies the two.
 #[test]
 fn a_bound_over_one_length_reached_by_two_routes_discharges() {
     assert_eq!(

@@ -8,7 +8,7 @@
 //!
 //! # Shared, not duplicated
 //!
-//! Both checkers run this analysis, through [`Env`], for the reason the positivity analysis gives: it is a total function of the declarations, so a second implementation would be a second run on the same input. The elaborator computes a family's vector when its group finalizes, since a later item compares two of its instances, and again over the zonked module, which is the vector a unit carries. The kernel reads the carried vector while it walks the items and recomputes its module's after: a carried irrelevance its recomputation denies refuses the module.
+//! Both checkers run this analysis, through [`Env`], for the reason the positivity analysis gives: it is a total function of the declarations, so a second implementation would be a second run on the same input. The elaborator computes a family's vector when its group finalizes, since a later item compares two of its instances, and again over the zonked module, which is the vector a unit carries. The certifier reads the carried vector while it walks the items and recomputes its module's after: a carried irrelevance its recomputation denies refuses the module.
 
 use {
     crate::{Declarations, Env, binders, forceable, labelled, rec_member},

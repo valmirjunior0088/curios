@@ -69,18 +69,18 @@ pub enum Step {
 }
 
 impl Step {
-    /// What the step is put to: the checkers of the text it compiles, and the kernel for a record withheld, which is whose judgment a later build makes of it.
+    /// What the step is put to: the checkers of the text it compiles, and the certifier for a record withheld, which is whose judgment a later build makes of it.
     fn asked(&self) -> &'static [Checker] {
         match self {
             Step::Unit {
                 written: Written::Program,
                 ..
-            } => &[Checker::Elaborator, Checker::Kernel],
+            } => &[Checker::Elaborator, Checker::Certifier],
             Step::Unit {
                 written: Written::CoreText,
                 ..
-            } => &[Checker::Reader, Checker::Kernel],
-            Step::Withhold { .. } => &[Checker::Kernel],
+            } => &[Checker::Reader, Checker::Certifier],
+            Step::Withhold { .. } => &[Checker::Certifier],
         }
     }
 }
@@ -103,7 +103,7 @@ impl Witness {
             .chain(self.proof.asked())
             .collect::<Vec<_>>();
 
-        [Checker::Elaborator, Checker::Reader, Checker::Kernel]
+        [Checker::Elaborator, Checker::Reader, Checker::Certifier]
             .into_iter()
             .filter(|checker| asked.contains(checker))
             .collect()
@@ -113,9 +113,9 @@ impl Witness {
 /// The proof of `False` a witness alleges, by its text and the form it is written in, which says how it is put, over the units in scope: the prelude, and every unit its history compiled after it. Either way it supplies a term and the type it is put at, `/std/Bool/False`, is fixed beneath it: nothing a witness says of itself is read.
 #[derive(Debug, Clone)]
 pub enum Proof {
-    /// A source program whose tail is the term, put to the compiler as a compilation puts it: the elaborator, then the kernel over the module it built.
+    /// A source program whose tail is the term, put to the compiler as a compilation puts it: the elaborator, then the certifier over the module it built.
     Program(String),
-    /// A module built by hand, written as Core text closing with the term and stating no type for it: read over the units in scope, and put to the kernel alone with them in scope, through the walk a compilation puts a program to.
+    /// A module built by hand, written as Core text closing with the term and stating no type for it: read over the units in scope, and put to the certifier alone with them in scope, through the walk a compilation puts a program to.
     Module(String),
 }
 
@@ -127,11 +127,11 @@ impl Proof {
         }
     }
 
-    /// What the proof is put to, in the order it meets them: the step that builds its module, then the kernel.
+    /// What the proof is put to, in the order it meets them: the step that builds its module, then the certifier.
     pub fn asked(&self) -> [Checker; 2] {
         match self {
-            Proof::Program(_) => [Checker::Elaborator, Checker::Kernel],
-            Proof::Module(_) => [Checker::Reader, Checker::Kernel],
+            Proof::Program(_) => [Checker::Elaborator, Checker::Certifier],
+            Proof::Module(_) => [Checker::Reader, Checker::Certifier],
         }
     }
 }

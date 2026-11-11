@@ -52,7 +52,7 @@ impl Heaviest {
 struct Cost {
     verdict: &'static str,
     elaborator: Option<Heaviest>,
-    kernel: Option<Heaviest>,
+    certifier: Option<Heaviest>,
 }
 
 /// `source` compiled under `budget` with its stream filed at `stream`, and read back.
@@ -68,7 +68,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
     .expect("the stream opens");
     let verdict = match &answer {
         Ok(()) => "accepted",
-        Err(report) if report.contains("the kernel refused") => "kernel",
+        Err(report) if report.contains("the certifier refused") => "certifier",
         Err(report) if report.contains("ran out of steps") => "budget",
         Err(report) if report.contains("type mismatch") => "apart",
         Err(_) => "refused",
@@ -78,7 +78,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
     Cost {
         verdict,
         elaborator: Heaviest::of(&report, "curios_elab"),
-        kernel: Heaviest::of(&report, "curios_cert"),
+        certifier: Heaviest::of(&report, "curios_cert"),
     }
 }
 
@@ -90,7 +90,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
 /// cargo test --all-features --package curios --lib -- --ignored --nocapture runaway_measurements
 /// ```
 ///
-/// Counted, so the figures hold on any machine. The looks are the test profile's: a build with debug assertions asks every peel of a pair again, to hold their answers to each other (`curios-core`'s `peel_spine`), so a row whose comparisons peel reads fewer under the release compiler. Units are what a checker's heaviest judgment of the program spent of its budget, and looks how many times a term handed out its node while it was judged (`curios_core::take_looks`), both read off the stream the compilation files, kept under `curios/.artifacts/runaways/`. The verdict is the compilation's: `apart` for a mismatch, `budget` where the elaborator's budget ended it, `kernel` where the elaborator accepted and the kernel refused, `accepted` where both held it. The kernel judges a program only where the elaborator accepted it, and files what a judgment cost it where it begins the next, which a refused one never reaches.
+/// Counted, so the figures hold on any machine. The looks are the test profile's: a build with debug assertions asks every peel of a pair again, to hold their answers to each other (`curios-core`'s `peel_spine`), so a row whose comparisons peel reads fewer under the release compiler. Units are what a checker's heaviest judgment of the program spent of its budget, and looks how many times a term handed out its node while it was judged (`curios_core::take_looks`), both read off the stream the compilation files, kept under `curios/.artifacts/runaways/`. The verdict is the compilation's: `apart` for a mismatch, `budget` where the elaborator's budget ended it, `certifier` where the elaborator accepted and the certifier refused, `accepted` where both held it. The certifier judges a program only where the elaborator accepted it, and files what a judgment cost it where it begins the next, which a refused one never reaches.
 ///
 /// **What to read.** A row the budget ends spends the whole of it, and its looks say what a unit bought: looks that double with the budget buy the same for every unit, and looks that more than double buy more the longer the row runs, which is a place a unit is not yet a bound. A row answered inside the smaller budget reads the same at both, and one answered inside the larger alone reads there what its answer cost.
 ///
@@ -98,7 +98,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
 ///
 /// Over the checkers of `3b5c71a3c`, each claim read after it, two takings: the units and the looks the same at both.
 ///
-/// | runaway | budget | verdict | elaborator units | elaborator looks | looks a unit | kernel units | kernel looks | looks a unit |
+/// | runaway | budget | verdict | elaborator units | elaborator looks | looks a unit | certifier units | certifier looks | looks a unit |
 /// | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 /// | spin | 25 000 | budget | 25 000 | 101 439 | 4.1 | - | - | - |
 /// | spin | 50 000 | budget | 50 000 | 206 202 | 4.1 | - | - | - |
@@ -127,7 +127,7 @@ fn cost(budget: u64, source: &str, stream: &Path) -> Cost {
 ///
 /// **Seven rows read under three nodes a unit at either budget, and five read three or more: the spin, the classes, the image by the time it answers, the stacks and the walk.** The plain recursion reads 4.1 at either budget. The four pairs of calls whose unfolding meets them again are told apart at about one node a unit, and the recursions held by both checkers are held in what their program's definitions cost to elaborate. The product pays a square of its steps and reads one and a half nodes a unit, and the image 2.4 where its budget ends it and 3.1 by the time it answers.
 ///
-/// The classes read three nodes a unit and answer inside the smaller budget: every fold asks again which of its atoms are one, a question a unit at least, and one the elaborator has answered since it last wrote is answered for that unit alone (`same_uncommitted_inside`, `curios-elab/src/convert.rs`), so a unit buys a comparison only where the question is new. The stacks cost the elaborator its 44 294 units at near eight nodes each and the kernel 20 740 at twenty-two, and both checkers hold them inside the smaller budget. The walk costs the elaborator 108 224 units at near six nodes each and the kernel 44 196 at eleven, which reduces its claim a step of the recursion at a time, and the rounds cost the kernel 3 485 at one. A row's looks a unit count what its units buy and what readers that charge nothing read beside them, a key consed to a table's canonical node among them, so they move with those readers where the units stand still.
+/// The classes read three nodes a unit and answer inside the smaller budget: every fold asks again which of its atoms are one, a question a unit at least, and one the elaborator has answered since it last wrote is answered for that unit alone (`same_uncommitted_inside`, `curios-elab/src/convert.rs`), so a unit buys a comparison only where the question is new. The stacks cost the elaborator its 44 294 units at near eight nodes each and the certifier 20 740 at twenty-two, and both checkers hold them inside the smaller budget. The walk costs the elaborator 108 224 units at near six nodes each and the certifier 44 196 at eleven, which reduces its claim a step of the recursion at a time, and the rounds cost the certifier 3 485 at one. A row's looks a unit count what its units buy and what readers that charge nothing read beside them, a key consed to a table's canonical node among them, so they move with those readers where the units stand still.
 #[test]
 #[ignore = "measurement, counted: reports what a runaway costs at two budgets rather than asserting"]
 fn runaway_measurements() {
@@ -158,7 +158,7 @@ fn runaway_measurements() {
 
     println!(
         "{:<14} {:>9} {:<9} {:>10} {:>12} {:>7}   {:>10} {:>12} {:>7}",
-        "runaway", "budget", "verdict", "units", "looks", "a unit", "kernel", "looks", "a unit"
+        "runaway", "budget", "verdict", "units", "looks", "a unit", "certifier", "looks", "a unit"
     );
     for (label, shape, budget) in rows {
         for budget in [budget, 2 * budget] {
@@ -167,13 +167,13 @@ fn runaway_measurements() {
             let Cost {
                 verdict,
                 elaborator,
-                kernel,
+                certifier,
             } = cost(budget, &runaway(shape), &stream);
 
             println!(
                 "{label:<14} {budget:>9} {verdict:<9} {}   {}",
                 Heaviest::row(elaborator.as_ref()),
-                Heaviest::row(kernel.as_ref())
+                Heaviest::row(certifier.as_ref())
             );
         }
     }

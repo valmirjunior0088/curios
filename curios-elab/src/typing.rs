@@ -224,7 +224,7 @@ pub fn decided_sort_of(context: &mut Context, type_: &Term) -> Option<Option<Ext
 
 /// Hold `term`, of type `inferred`, to the type `expected`: the subsumption relation `A ≤ B`, as `curios_cert`'s `subsumes` decides it — `Type u ≤ Type v` and `Prop u ≤ Prop v` under the level algebra, `Π(x:A).B ≤ Π(x:A').B'` when `A ≡ A'` and `B ≤ B'`, and conversion otherwise. See `documentation/design/theory/subsumption-is-a-relation-not-a-traversal-order.md`.
 ///
-/// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Domains stay invariant, as they do in the kernel: reading one covariantly would hand a function that takes only small arguments a large one.
+/// **The function-type case is what makes this a relation rather than a traversal artifact.** Checking a λ against a Π pushes the comparison to the leaves, where a head-only rule suffices; checking a *name* against one does not, and the Π is formed and compared whole. Domains stay invariant, as they do in the certifier: reading one covariantly would hand a function that takes only small arguments a large one.
 ///
 /// It is asked of conversion at [`Relation::Below`](crate::Relation::Below), so the relation is the problem's and no property of a walk made here: a function type's domains are equations and its codomain keeps the relation, a pair that waits on a metavariable is parked as the subsumption it is, and its retry resumes as one.
 pub fn expect(
@@ -711,7 +711,7 @@ impl Context<'_> {
         }
     }
 
-    /// Hold each product a literal shaped, at a metavariable declared a `Type`, to that sort, now that the item has settled what the product's fields are. A product is sized where it is held to its metavariable, and a field still open there — a lambda, typed after it — is read as a type's whatever it comes to hold, so a record of propositions where a `Type` is declared would be the kernel's to refuse. It is refused here, as it is where every field is read before the product is held.
+    /// Hold each product a literal shaped, at a metavariable declared a `Type`, to that sort, now that the item has settled what the product's fields are. A product is sized where it is held to its metavariable, and a field still open there — a lambda, typed after it — is read as a type's whatever it comes to hold, so a record of propositions where a `Type` is declared would be the certifier's to refuse. It is refused here, as it is where every field is read before the product is held.
     fn hold_shapes(&mut self) -> Result<(), Error> {
         for shaped in self.take_shaped() {
             let Subterm::Metavar(metavar) = &*shaped.expected else {
@@ -1301,19 +1301,19 @@ fn retry_checking(
 
 /// Register a counterfactual match-arm refinement of a scrutinee, so a context hypothesis whose type mentions it reduces at the arm's value. The frame holding the refinement is scoped to the arm, so the (counterfactual) assumption does not leak. Three keyings, by head shape:
 ///
-/// - a `Var` reduces to the value (`refine`), and a local `let`'s definition is refined to the same value in turn: the kernel reads a scrutinee by value, so the one it matches on is the definition, and a name refined alone disagrees with the definition it unfolds to — the solver reifies a local definition into the solution it stores, and that spelling saw nothing;
+/// - a `Var` reduces to the value (`refine`), and a local `let`'s definition is refined to the same value in turn: the certifier reads a scrutinee by value, so the one it matches on is the definition, and a name refined alone disagrees with the definition it unfolds to — the solver reifies a local definition into the solution it stores, and that spelling saw nothing;
 /// - a projection — a `Bool`/`Nat` match on a tuple field — refines that projection (`refine_projection`);
 /// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)` — is recorded as written in the term-keyed scrutinee store (`refine_scrutinee`), where an occurrence spelled otherwise is met at the entry's reduced spelling.
 ///
-/// A scrutinee's *indices* are not refined here: an arm solves their equations with `curios_analysis::solve_indices`, the kernel's own function, and records the variables it solves. Keying a non-variable index — a constructor, a stuck application — as an equation on the index itself would record the reverse of what the inverter pins, or a fact the kernel does not have.
+/// A scrutinee's *indices* are not refined here: an arm solves their equations with `curios_analysis::solve_indices`, the certifier's own function, and records the variables it solves. Keying a non-variable index — a constructor, a stuck application — as an equation on the index itself would record the reverse of what the inverter pins, or a fact the certifier does not have.
 ///
-/// Nothing is recorded under a spelling [`records_case_equation`] refuses — one that mentions no local, which is where the kernel records none either — judged on the scrutinee as the kernel spells it, its local definitions substituted and the variables the arms around it refined spelled as their values ([`Context::kernel_spelling`]), and again on each spelling the term-keyed store would hold: an equation one checker records and the other does not reads a dead arm two ways.
+/// Nothing is recorded under a spelling [`records_case_equation`] refuses — one that mentions no local, which is where the certifier records none either — judged on the scrutinee as the certifier spells it, its local definitions substituted and the variables the arms around it refined spelled as their values ([`Context::certifier_spelling`]), and again on each spelling the term-keyed store would hold: an equation one checker records and the other does not reads a dead arm two ways.
 ///
 /// All three rest on one premise — the arm is reached only when the scrutinee *equals* the case's value — and every scrutinee has it, because a term of non-`Io` type denotes one value.
 ///
 /// That is a typing fact, not an analysis, because every host operation returns `Io`. `Cell/get(c)` denotes differently before and after a `Cell/set`, and an equation for it would read one term as `true` in one arm and `false` in a nested one — an equation between two `Bool` literals, and from there a closed inhabitant of `False` — but it has type `Io(T)`, which is opaque and has no cases, so it cannot be a scrutinee at all. And no inhabitant of `(Bool) -> Bool` performs an effect, so `f(true)` fixes a value for every possible caller binding, a binder `f` included.
 pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(), Error> {
-    if !records_case_equation(&context.kernel_spelling(head)) {
+    if !records_case_equation(&context.certifier_spelling(head)) {
         return Ok(());
     }
 
@@ -1339,7 +1339,7 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
                 .map(|(key, original)| (key, original, false))
                 .collect::<Vec<_>>();
 
-            // The kernel reads a term by value where reduction is entered, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The kernel's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it.
+            // The certifier reads a term by value where reduction is entered, so an occurrence reached by unfolding a definition spells the values the guard's local definitions stand for, where one written in the guard's own scope spells their names. The certifier's spelling is recorded beside the written one, as an alias: the exact lookup meets it, and settlement never reduces it.
             let unfolded = context.by_value(head);
             if unfolded != *head {
                 let erased = context.erased_by_value(head);
@@ -1351,7 +1351,7 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
             }
 
             spellings.retain(|(_, original, _)| {
-                records_case_equation(&context.kernel_spelling(original))
+                records_case_equation(&context.certifier_spelling(original))
             });
             context.refine_scrutinee_spellings(spellings, value);
         }
@@ -1368,7 +1368,7 @@ pub struct InductCase<'a> {
     pub actual_indices: &'a [Term],
 }
 
-/// Enter the arm of the constructor `tag` of a match on `head`, a value of `family`, as it was elaborated: each payload binder of `labels`, standing as `vars`, assumed at the constructor's signature `telescope`, the scrutinee refined to the value the case constructs, and the index equations to their most-general solution, as elaboration and the kernel solve them, both directions. Hands back the case's target indices and the value it constructs. Typing-only: it touches the context and builds nothing.
+/// Enter the arm of the constructor `tag` of a match on `head`, a value of `family`, as it was elaborated: each payload binder of `labels`, standing as `vars`, assumed at the constructor's signature `telescope`, the scrutinee refined to the value the case constructs, and the index equations to their most-general solution, as elaboration and the certifier solve them, both directions. Hands back the case's target indices and the value it constructs. Typing-only: it touches the context and builds nothing.
 pub fn enter_induct_case(
     context: &mut Context,
     head: &Term,
@@ -1430,7 +1430,7 @@ fn unreachable_arm(context: &mut Context, head: &Term, value: &Term) -> Option<T
         .then_some(case)
 }
 
-/// The guard of an arm around this one that the arm at `value` contradicts, with the case that guard always is there: where `head` is a variable, an equation in force — or one the arm already withholds — whose scrutinee names no local once the variable is spelled as `value`, and which computes to another case than the one its arm assumed. The arm is then never taken, and a proof resting on that guard fails in it, since the equation answers nothing there ([`Context::kernel_spelling`], and the withholding `Context::refine` does).
+/// The guard of an arm around this one that the arm at `value` contradicts, with the case that guard always is there: where `head` is a variable, an equation in force — or one the arm already withholds — whose scrutinee names no local once the variable is spelled as `value`, and which computes to another case than the one its arm assumed. The arm is then never taken, and a proof resting on that guard fails in it, since the equation answers nothing there ([`Context::certifier_spelling`], and the withholding `Context::refine` does).
 fn contradicted_guard(context: &mut Context, head: &Term, value: &Term) -> Option<(Term, Term)> {
     let solution = scrutinee_solution(&*context, head, value)?;
     let equations = context
@@ -1443,7 +1443,7 @@ fn contradicted_guard(context: &mut Context, head: &Term, value: &Term) -> Optio
 
     for entry in equations {
         let spelled = context
-            .kernel_spelling(&entry.original)
+            .certifier_spelling(&entry.original)
             .substitute(slice::from_ref(&solution));
         if records_case_equation(&spelled) {
             continue;
@@ -1504,7 +1504,7 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
 
 /// One application layer of `term` opened: its head reduced to a function and the body instantiated at the arguments as written, or `None` where `term` is no application or its head reduces to no function of its arity. No argument is reduced.
 ///
-/// A layer opens only at the arity it saturates, as the kernel's `resolved_spelling` does: a layer whose arguments do not match the lambda its head reduces to is left where it stands. An elaborated application is saturated against its head's type, so no program is known to reach the check; without it, a term built wrong would reach `Telescope::open`'s assertion as a panic.
+/// A layer opens only at the arity it saturates, as the certifier's `resolved_spelling` does: a layer whose arguments do not match the lambda its head reduces to is left where it stands. An elaborated application is saturated against its head's type, so no program is known to reach the check; without it, a term built wrong would reach `Telescope::open`'s assertion as a panic.
 pub fn open_layer(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
     let Subterm::Apply(apply) = &**term else {
         return Ok(None);

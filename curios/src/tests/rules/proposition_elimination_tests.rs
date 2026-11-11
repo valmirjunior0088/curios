@@ -74,7 +74,7 @@ fn a_proposition_holding_a_proof_cannot_be_eliminated_into_data() {
     .by_elaborator_in("/f", |error| matches!(error, Error::LargeElimOfProp { .. }));
 }
 
-// The guard counts the constructors a family declares, in the elaborator as in the kernel. `Side(n, 0)` leaves `left` alone and its payload is the index, so a guard that counted the arms the index left would admit `which`, which the kernel refuses. The refusal is the elaborator's own. The control's `Side` declares `left` alone, whose payload the index pins.
+// The guard counts the constructors a family declares, in the elaborator as in the certifier. `Side(n, 0)` leaves `left` alone and its payload is the index, so a guard that counted the arms the index left would admit `which`, which the certifier refuses. The refusal is the elaborator's own. The control's `Side` declares `left` alone, whose payload the index pins.
 #[test]
 fn a_constructor_an_index_rules_out_still_counts() {
     control(

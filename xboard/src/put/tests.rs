@@ -45,7 +45,7 @@ fn a_module_whose_term_proves_nothing_is_refused_at_false() {
         steps: Vec::new(),
         proof: Proof::Module("0".to_string()),
         expect: vec![Expected {
-            by: Checker::Kernel,
+            by: Checker::Certifier,
             error: Some("Mismatch"),
             within: None,
         }],
@@ -69,16 +69,16 @@ fn core_text_the_reader_refuses_is_refused_by_the_name_of_its_refusal() {
     };
     let answer = witness.proof.answer();
 
-    assert!(!answer.kernel_asked());
+    assert!(!answer.certifier_asked());
     assert_eq!(witness.unmet(&answer), None);
 }
 
 /// A text that does not parse has rotted, and no expectation meets it, so it fails whatever its witness expects.
 #[test]
-fn core_text_that_does_not_parse_is_refused_by_the_reader_with_the_kernel_not_asked() {
+fn core_text_that_does_not_parse_is_refused_by_the_reader_with_the_certifier_not_asked() {
     let answer = Proof::Module("let".to_string()).answer();
 
-    assert!(!answer.kernel_asked());
+    assert!(!answer.certifier_asked());
     assert!(matches!(answer.refusals(), [refusal] if refusal.by() == Some(Checker::Reader)));
 }
 
@@ -86,7 +86,7 @@ fn core_text_that_does_not_parse_is_refused_by_the_reader_with_the_kernel_not_as
 fn core_text_that_states_the_type_of_its_term_is_refused_by_the_reader() {
     let answer = Proof::Module("0\n: #NatType".to_string()).answer();
 
-    assert!(!answer.kernel_asked());
+    assert!(!answer.certifier_asked());
     assert!(
         matches!(answer.refusals(), [Refusal::Unread(reported)] if reported.contains("states the type"))
     );
@@ -126,10 +126,10 @@ fn carrier_read(withheld: &[Step], expect: Vec<Expected>) -> Witness {
     }
 }
 
-/// The kernel's refusal by `error`, standing `within`.
-fn by_kernel(error: &'static str, within: Within) -> Expected {
+/// The certifier's refusal by `error`, standing `within`.
+fn by_certifier(error: &'static str, within: Within) -> Expected {
     Expected {
-        by: Checker::Kernel,
+        by: Checker::Certifier,
         error: Some(error),
         within: Some(within),
     }
@@ -140,7 +140,7 @@ fn by_kernel(error: &'static str, within: Within) -> Expected {
 fn a_history_puts_its_proof_over_the_units_its_steps_compiled() {
     let witness = carrier_read(
         &[],
-        vec![by_kernel(
+        vec![by_certifier(
             "Mismatch",
             Within::Declaration("/paradox".to_string()),
         )],
@@ -156,7 +156,7 @@ fn a_history_puts_its_proof_over_the_units_its_steps_compiled() {
     );
 }
 
-/// The board's example of withholding: the carrier's record withheld whole, the build that reads it mounts the carrier with no verdict the kernel can adopt, so the paradox is refused as before and the totality it leaned on the carrier for is no longer granted.
+/// The board's example of withholding: the carrier's record withheld whole, the build that reads it mounts the carrier with no verdict the certifier can adopt, so the paradox is refused as before and the totality it leaned on the carrier for is no longer granted.
 #[test]
 fn a_record_withheld_is_believed_of_nothing_by_a_later_build() {
     let witness = carrier_read(
@@ -165,8 +165,8 @@ fn a_record_withheld_is_believed_of_nothing_by_a_later_build() {
             names: None,
         }],
         vec![
-            by_kernel("Mismatch", Within::Declaration("/paradox".to_string())),
-            by_kernel("NotTotal", Within::Entry),
+            by_certifier("Mismatch", Within::Declaration("/paradox".to_string())),
+            by_certifier("NotTotal", Within::Entry),
         ],
     );
 
@@ -184,7 +184,7 @@ fn a_step_the_reader_refuses_stops_the_history_and_says_where() {
         &Proof::Module("0".to_string()),
     );
 
-    assert!(!answer.kernel_asked());
+    assert!(!answer.certifier_asked());
     assert!(
         matches!(answer.refusals(), [Refusal::Unread(reported)] if reported.starts_with("in the step of `/lib`"))
     );

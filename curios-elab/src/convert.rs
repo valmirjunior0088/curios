@@ -130,7 +130,7 @@ pub fn convert(
     ))
 }
 
-/// Whether `this` and `that` convert at `Type` with no solution and no universe constraint committed: the comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved is not one, and asking commits nothing. Nor is a level equation tried: two levels the store does not already read as one are withheld ([`Context::withholds`]), so the step that would have joined them does not hold and the pair is read by its value, as the kernel reads two instances it finds apart, by unfolding. Two occurrences of one definition, each at an open level of its own that the value does not read, are one term here whatever the two levels close at. A weak equation the comparison recorded is no commitment: it requires nothing of its two levels, a nominal family being irrelevant in them, and it goes with the bracket. What a classing asks of two atoms (`intrinsic`'s `classes`), and what reduction asks of two stuck forms (`reduce`'s `asked_classes` and `asked_scrutinee`).
+/// Whether `this` and `that` convert at `Type` with no solution and no universe constraint committed: the comparison runs in the bracket a witness probe uses and is rolled back whatever it found, so a pair that would need a metavariable solved is not one, and asking commits nothing. Nor is a level equation tried: two levels the store does not already read as one are withheld ([`Context::withholds`]), so the step that would have joined them does not hold and the pair is read by its value, as the certifier reads two instances it finds apart, by unfolding. Two occurrences of one definition, each at an open level of its own that the value does not read, are one term here whatever the two levels close at. A weak equation the comparison recorded is no commitment: it requires nothing of its two levels, a nominal family being irrelevant in them, and it goes with the bracket. What a classing asks of two atoms (`intrinsic`'s `classes`), and what reduction asks of two stuck forms (`reduce`'s `asked_classes` and `asked_scrutinee`).
 pub fn same_uncommitted(
     context: &mut Context,
     this: &Term,
@@ -616,7 +616,7 @@ impl Convert {
         })
     }
 
-    /// A motive's binders, opened as elaboration opens them where it types the motive: the family's index domains and then the scrutinee at the family over those binders, or the scrutinee's own type for a carrier that has no index. Where no lookup typed the scrutinee, or the motive binds another count than its family states, they carry no type. The kernel opens a motive's the same way.
+    /// A motive's binders, opened as elaboration opens them where it types the motive: the family's index domains and then the scrutinee at the family over those binders, or the scrutinee's own type for a carrier that has no index. Where no lookup typed the scrutinee, or the motive binds another count than its family states, they carry no type. The certifier opens a motive's the same way.
     fn motive_binders(
         &mut self,
         context: &mut Context,
@@ -826,9 +826,9 @@ impl Convert {
         Ok(true)
     }
 
-    /// The relation's own rules, for a problem at below, both sides read forced as the kernel's `subsumes` reads them: two sorts of one quality add `lower ≤ upper`, and two function types of one plicity vector pose each domain as an equation and their codomains at below. Answers whether they decided the problem. A `Prop` against a `Type` is none of them, so it goes on as the equation it is not.
+    /// The relation's own rules, for a problem at below, both sides read forced as the certifier's `subsumes` reads them: two sorts of one quality add `lower ≤ upper`, and two function types of one plicity vector pose each domain as an equation and their codomains at below. Answers whether they decided the problem. A `Prop` against a `Type` is none of them, so it goes on as the equation it is not.
     ///
-    /// **A sort left to inference takes the quality of the first sort it meets.** The sort of a type the elaborator left to inference — an unannotated binder's, a motive's result, a parked term's — has a quality nothing has stated ([`UniverseMutation::fresh_sort`](crate::UniverseMutation::fresh_sort)), and holding it to a `Prop` or to a `Type` solves it ([`Context::same_quality`]), as holding it to another such sort makes the two one. The kernel has no such rule and needs none: a quality still open where its declaration closes is a type's, so no elaborated term holds one.
+    /// **A sort left to inference takes the quality of the first sort it meets.** The sort of a type the elaborator left to inference — an unannotated binder's, a motive's result, a parked term's — has a quality nothing has stated ([`UniverseMutation::fresh_sort`](crate::UniverseMutation::fresh_sort)), and holding it to a `Prop` or to a `Type` solves it ([`Context::same_quality`]), as holding it to another such sort makes the two one. The certifier has no such rule and needs none: a quality still open where its declaration closes is a type's, so no elaborated term holds one.
     ///
     /// Any other pair is the equation it is, taken from its written spelling through every step an equation takes: that is sufficient for a subsumption, and it is the whole of one wherever neither side can come to a sort or a function type. A problem those steps leave waiting on a metavariable keeps the relation it was asked at, so it resumes here.
     fn decide_below(
@@ -889,7 +889,7 @@ impl Convert {
 
     /// The value a folded recursive application forces to, or the one-step unfolding when forcing reaches no value — `None` only when neither moves.
     ///
-    /// Forcing first is what the kernel does on both sides of every comparison, and on a closed call it is one machine run. The fallback keeps what the one-step rule bought: a call restuck on a variable comes back folded from the force, and unfolding it once still lets the comparison meet a written body.
+    /// Forcing first is what the certifier does on both sides of every comparison, and on a closed call it is one machine run. The fallback keeps what the one-step rule bought: a call restuck on a variable comes back folded from the force, and unfolding it once still lets the comparison meet a written body.
     fn force_folded_call(context: &mut Context, apply: Apply) -> Result<Option<Term>, ReduceError> {
         let folded: Term = Subterm::Apply(apply.clone()).into();
         let forced = reduce_forced(context, folded.clone())?;
@@ -943,7 +943,7 @@ impl Convert {
         Ok(())
     }
 
-    /// What two recursive groups are, compared as the binders they are ([`Self::compare_rec`]): member for member their types and their bodies, every member of both opened at one shared label, so no member is unfolded and nothing recurs. It is asked in a run of its own, under the binders and inside the pairs of the problem that asks, so a pair it does not hold leaves nothing behind and goes on to what its caller does next; a group binds no universe, so both sides' members spell the levels of the declaration this comparison is judged in and no width is consulted, as the kernel asks it. A run that ends blocked has decided nothing, and says so: its caller neither holds the pair nor refuses it on that.
+    /// What two recursive groups are, compared as the binders they are ([`Self::compare_rec`]): member for member their types and their bodies, every member of both opened at one shared label, so no member is unfolded and nothing recurs. It is asked in a run of its own, under the binders and inside the pairs of the problem that asks, so a pair it does not hold leaves nothing behind and goes on to what its caller does next; a group binds no universe, so both sides' members spell the levels of the declaration this comparison is judged in and no width is consulted, as the certifier asks it. A run that ends blocked has decided nothing, and says so: its caller neither holds the pair nor refuses it on that.
     fn two_groups(
         context: &mut Context,
         binders: &Binders,
@@ -971,7 +971,7 @@ impl Convert {
     ///
     /// A `use` slot still open is never the spines' to solve: it would take whatever dictionary the other spine names, and under a definition that drops its premise — `let Shelf(b: Bool, use Key(Pick(b))) -> Type = List(Pick(b));` — that is a dictionary the same call takes no notice of where its implicit is written (`documentation/design/surface/concepts-resolve-with-global-coherence.md`). Where spines are held it is passed over, and the pair then goes on to reduction with what its other positions solved. Left open, the slot is resolved as every other is; and where the definition keeps its dictionary the reduced types hold it, and comparing them solves the slot there.
     ///
-    /// Nor may accepting a pair depend on whether the definition is universe-polymorphic, which one mentioning `Eq` is: its occurrences are instances of one global at levels minted per occurrence. So an instance head qualifies too, on two conditions that keep it an acceptance. Nothing in either spine may be flexible where spines are not held, because extending the rule to every polymorphic function and type former changes what `/std` elaborates to. And the heads are identified *after* the spines, because identifying two instances commits their levels equal — a commitment made only once the spines have earned it, never on the strength of an attempt that falls through, which is the reading `documentation/design/soundness/case-equations-and-their-key.md` gives a speculative match. The kernel compares the same pair the same way, before it unfolds either side.
+    /// Nor may accepting a pair depend on whether the definition is universe-polymorphic, which one mentioning `Eq` is: its occurrences are instances of one global at levels minted per occurrence. So an instance head qualifies too, on two conditions that keep it an acceptance. Nothing in either spine may be flexible where spines are not held, because extending the rule to every polymorphic function and type former changes what `/std` elaborates to. And the heads are identified *after* the spines, because identifying two instances commits their levels equal — a commitment made only once the spines have earned it, never on the strength of an attempt that falls through, which is the reading `documentation/design/soundness/case-equations-and-their-key.md` gives a speculative match. The certifier compares the same pair the same way, before it unfolds either side.
     fn compare_same_global_apply(
         context: &mut Context,
         binders: &Binders,
@@ -1362,7 +1362,7 @@ impl Convert {
         Ok(true)
     }
 
-    /// Two stuck eliminations, part by part. The motive's and the arms' binders are opened at the types their position gives them, read off the left elimination's scrutinee, which the right one's is posed as equal to: a constructor's arm at its telescope over the scrutinee's parameters, a cons arm at its carrier's domains and its hypothesis ([`Convert::cons_binders`]), a motive's as [`Convert::motive_binders`] opens them. So a proof an arm binds is one where the arm's body is compared, as it is in the kernel. Where no lookup types the scrutinee, or its family states no constructor of the arm's arity, the binders carry no type. An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
+    /// Two stuck eliminations, part by part. The motive's and the arms' binders are opened at the types their position gives them, read off the left elimination's scrutinee, which the right one's is posed as equal to: a constructor's arm at its telescope over the scrutinee's parameters, a cons arm at its carrier's domains and its hypothesis ([`Convert::cons_binders`]), a motive's as [`Convert::motive_binders`] opens them. So a proof an arm binds is one where the arm's body is compared, as it is in the certifier. Where no lookup types the scrutinee, or its family states no constructor of the arm's arity, the binders carry no type. An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
     fn compare_match(
         &mut self,
         context: &mut Context,
@@ -1371,7 +1371,7 @@ impl Convert {
     ) -> Result<bool, ReduceError> {
         let head = this.head.clone();
         let result = this.result.clone();
-        // Where the two matches state the instance they eliminate, the instances are posed as equal, the scrutinees at the instance, a typed position where two proofs are one unread, and the instance is the scrutinee's type with no lookup, as the kernel takes it. One that states an instance and one that states none are two terms.
+        // Where the two matches state the instance they eliminate, the instances are posed as equal, the scrutinees at the instance, a typed position where two proofs are one unread, and the instance is the scrutinee's type with no lookup, as the certifier takes it. One that states an instance and one that states none are two terms.
         let scrutinee = match (this.cases.stated().cloned(), that.cases.stated().cloned()) {
             (Some(this_stated), Some(that_stated)) => {
                 self.enqueue(Term::type_ground(), this_stated.clone(), that_stated);
@@ -1758,7 +1758,7 @@ impl Convert {
                 );
                 Ok(true)
             }
-            // Each projection at the type its field has, opened at the left side's preceding projections, as the kernel's Σ eta compares them: a field at a proposition or at a type with no field is decided by that type, where at `Type` two neutrals' projections never meet.
+            // Each projection at the type its field has, opened at the left side's preceding projections, as the certifier's Σ eta compares them: a field at a proposition or at a type with no field is decided by that type, where at `Type` two neutrals' projections never meet.
             Subterm::TupleType(TupleType { telescope, .. }) => {
                 let n = telescope.len();
                 let projections = |term: &Term| {
@@ -1769,7 +1769,7 @@ impl Convert {
                 self.enqueue_fields(projections(&this), projections(&that), Some(telescope));
                 Ok(true)
             }
-            // A nominal struct has no eta between two neutrals, here as in the kernel: projecting both poses their heads again, which only two equal heads pass, and what eta would decide besides is read off the type before the dispatch (`decided_by_its_type`).
+            // A nominal struct has no eta between two neutrals, here as in the certifier: projecting both poses their heads again, which only two equal heads pass, and what eta would decide besides is read off the type before the dispatch (`decided_by_its_type`).
             _ => Ok(false),
         }
     }
@@ -2041,7 +2041,7 @@ impl Convert {
             inverted
         };
 
-        // Re-validation: the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ and the refinements it was born under — nothing of an arm it is solved in, all of the arm it was born in — as an *oracle*, constraint parking suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. What is committed is the term the check rebuilt, as everywhere elaboration checks a term: the check compares a lambda's annotation with the domain it is checked at by subsumption and rebuilds the lambda at that domain, while the kernel compares the two by conversion, so a candidate committed as it came keeps an annotation the kernel refuses — `(T: Type 0) => Io(T)`, the reduct of `Io` at one instance, standing where `(Type 1) -> Type 1` is wanted — and which side of a problem solved the metavariable would decide whether the program certifies. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
+        // Re-validation: the (inverted) candidate must *check* against the metavariable's frozen result type, under its birth context Γ and the refinements it was born under — nothing of an arm it is solved in, all of the arm it was born in — as an *oracle*, constraint parking suppressed (see `Context::with_oracle`). Stable definitions are kept. Checking (rather than synthesizing then converting) admits candidates that are checkable but not inferable — a bare lambda whose domain only `result` knows, an unannotated tuple — which are still the correct solution at the frozen type. What is committed is the term the check rebuilt, as everywhere elaboration checks a term: the check compares a lambda's annotation with the domain it is checked at by subsumption and rebuilds the lambda at that domain, while the certifier compares the two by conversion, so a candidate committed as it came keeps an annotation the certifier refuses — `(T: Type 0) => Io(T)`, the reduct of `Io` at one instance, standing where `(Type 1) -> Type 1` is wanted — and which side of a problem solved the metavariable would decide whether the program certifies. The validation run itself can solve *other* metavariables (inference may mint and pin fresh implicits); the mark/rollback bracket unwinds those if the candidate is rejected, so a failed oracle leaves no fingerprints.
         let mark = context.solution_mark();
         let revalidated = context.at_birth(&born, |context| {
             context.with_frame(|context| {
@@ -2630,7 +2630,7 @@ impl Convert {
 
     /// Solve flex–rigid with the rigid side as the problem writes it, and otherwise with a candidate spelled under the refinements the metavariable was born under.
     ///
-    /// **The rigid side as written, wherever reduction changed it and that spelling passes every check.** The problem says the metavariable is that term, so it is a solution whatever refinements stand, and it keeps what reduction unfolded: a call by its name rather than its group's body, a projection off a local definition rather than off what the definition computes, a dictionary by its name rather than its methods. That is what a report shows of the solution, what re-validation elaborates again and what the kernel receives. A raw side headed by a solved metavariable spells what that one was solved to: an implicit another call hands on, as `Eq/sym` does each side of the equation it turns, holds the name its reduct no longer shows.
+    /// **The rigid side as written, wherever reduction changed it and that spelling passes every check.** The problem says the metavariable is that term, so it is a solution whatever refinements stand, and it keeps what reduction unfolded: a call by its name rather than its group's body, a projection off a local definition rather than off what the definition computes, a dictionary by its name rather than its methods. That is what a report shows of the solution, what re-validation elaborates again and what the certifier receives. A raw side headed by a solved metavariable spells what that one was solved to: an implicit another call hands on, as `Eq/sym` does each side of the equation it turns, holds the name its reduct no longer shows.
     ///
     /// **Otherwise the reduct, under the birth's refinements** — a written side out of scope where the metavariable was born, or one that does not re-check there. The drain reduces problems under the live frame, where the refinements of the arm the problem sits in apply — sound for discharging a problem, but not for committing a solution: a metavariable must not be pinned to a value that holds only inside an arm it was not born in (`?k := 0` because the nil arm refined `n := 0`). Where the refinements in view are its birth's — the metavariable solved in the arm it was born in — the reduct is committed as reduced; otherwise the original rigid term is re-reduced under its birth's alone and solved against that spelling. Refinements only ever *add* reductions, so a solution found this way still discharges the problem as it stands. A problem whose verdict changes at the birth's refinements is the other refinements' doing — nothing is globally forced, so it postpones rather than failing or committing.
     fn solve_at_birth(
@@ -2776,7 +2776,7 @@ impl Convert {
                 }
             }
 
-            // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the kernel's order, for the kernel's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof would spend the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
+            // Definitional proof irrelevance before either side is reduced, where neither side is flexible — the certifier's order, for the certifier's reason: reducing a proof to discover it equals another proof is work whose answer was already known. Here the work could be unbounded, too: under an arm's case equation a proof can reduce forever, and comparing it with another proof would spend the budget on a goal irrelevance decides outright. A side mentioning a metavariable still goes through the dispatch below, so it is solved against the other side rather than left dangling, and the check after that dispatch covers it.
             if !this.has_metavar()
                 && !that.has_metavar()
                 && is_prop_to(
@@ -2808,7 +2808,7 @@ impl Convert {
 
             let this = reduce(context, this)?;
             let that = reduce(context, that)?;
-            // Forced, as the kernel reads a goal's type: weak-head form leaves a member of a declaration group folded, and no rule keyed on the type's shape sees through it.
+            // Forced, as the certifier reads a goal's type: weak-head form leaves a member of a declaration group folded, and no rule keyed on the type's shape sees through it.
             let type_ = reduce_forced(context, type_)?;
 
             if this == that {
@@ -2949,12 +2949,12 @@ impl Convert {
                 continue;
             }
 
-            // A goal its type decides ahead of every structural rule, as the kernel decides it: the empty Σ, where eta leaves nothing to compare, and two neutrals at a nominal struct with one inhabitant by its shape, which has no eta by its type. Left to the dispatch, two sides of one shape — two stuck matches, two applications — would be compared structurally and refused, and conversion would not be transitive at the type. After the metavariable dispatch, as the check above is, so a flexible side is still solved.
+            // A goal its type decides ahead of every structural rule, as the certifier decides it: the empty Σ, where eta leaves nothing to compare, and two neutrals at a nominal struct with one inhabitant by its shape, which has no eta by its type. Left to the dispatch, two sides of one shape — two stuck matches, two applications — would be compared structurally and refused, and conversion would not be transitive at the type. After the metavariable dispatch, as the check above is, so a flexible side is still solved.
             if decided_by_its_type(context, &posed, &type_, &this, &that)? {
                 continue;
             }
 
-            // Where the problem's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand — a stuck elimination's scrutinee, a projection's head. What a type directs between two neutrals is then asked of the type a lookup gives both sides, as the kernel asks it.
+            // Where the problem's type is a sort, nothing has typed this pair: it is two types, or a child whose type was not at hand — a stuck elimination's scrutinee, a projection's head. What a type directs between two neutrals is then asked of the type a lookup gives both sides, as the certifier asks it.
             if matches!(&*type_, Subterm::Sort(_))
                 && by_their_own_type(context, &posed, &posed_pairs, &this, &that)?
             {
@@ -2970,7 +2970,7 @@ impl Convert {
                 relation,
             };
 
-            // Eta by the goal's type, ahead of every structural rule, as the kernel fires it: at a function type both sides are applied to fresh binders and at a record type both are projected, whatever their shapes. A lambda or a tuple literal is left to its own arm below, which is the same expansion with the literal opened in place. Left to the dispatch's last arm, two sides of one stuck shape would be compared structurally first — two stuck eliminations arm against arm, at `Type` — and held apart where each converts with the literal and the kernel, which projects them, accepts.
+            // Eta by the goal's type, ahead of every structural rule, as the certifier fires it: at a function type both sides are applied to fresh binders and at a record type both are projected, whatever their shapes. A lambda or a tuple literal is left to its own arm below, which is the same expansion with the literal opened in place. Left to the dispatch's last arm, two sides of one stuck shape would be compared structurally first — two stuck eliminations arm against arm, at `Type` — and held apart where each converts with the literal and the certifier, which projects them, accepts.
             let literal = |term: &Term| matches!(&**term, Subterm::Func(_) | Subterm::Tuple(_));
             if matches!(&*type_, Subterm::FuncType(_) | Subterm::TupleType(_))
                 && !literal(&this)
@@ -2984,7 +2984,7 @@ impl Convert {
                 continue;
             }
 
-            // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence below never sees: `curios-analysis`'s `connectives_agree` decides it equal or says nothing, and saying nothing leaves the pair to the dispatch as it was. The kernel asks the same function in its own fallback.
+            // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence below never sees: `curios-analysis`'s `connectives_agree` decides it equal or says nothing, and saying nothing leaves the pair to the dispatch as it was. The certifier asks the same function in its own fallback.
             if !matches!(
                 (&*this, &*that),
                 (Subterm::Intrinsic(_), Subterm::Intrinsic(_))
@@ -3030,7 +3030,7 @@ impl Convert {
                 (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
                     self.convert_intrinsic(context, this, that)?
                 }
-                // A host call is its declaration and its operands, each compared at the type its row demands of it, as the kernel compares two.
+                // A host call is its declaration and its operands, each compared at the type its row demands of it, as the certifier compares two.
                 (this @ Subterm::Foreign(_), that @ Subterm::Foreign(_)) => {
                     match foreign_congruence(&this.into(), &that.into(), &context.syntax()) {
                         Some(operands) => {
@@ -3086,7 +3086,7 @@ impl Convert {
                     let this_head = this_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
                     let that_head = that_a.head.as_rec_proj().map(|(g, i)| (g.clone(), i));
 
-                    // Two projections of one group at two universe instances are one head exactly when their levels are identified: the kernel decides the same pair by its levels under the item's hypotheses, and an elaborator that assumed it would hand the kernel a pair it refuses. Identified, the spines decide by congruence; two unequal ground levels are refused as the kernel refuses them; a pair that only an unsolved metavariable keeps from being a level question takes the delta step below, which is what solves the metavariable, *and* puts the two heads to the walk as a problem of their own, so the level question is decided once the metavariable is. They are posed at `Type`, where no eta opens them into the two calls again, so the problem parks where it is posed — the delta step alone could decide the pair structurally (a literal count reduces both matches to their zero arms) and accept it with the levels untouched, which is the pair the kernel refuses once the metavariable is zonked away; a pair the skeletons keep apart is two groups and takes the delta step alone.
+                    // Two projections of one group at two universe instances are one head exactly when their levels are identified: the certifier decides the same pair by its levels under the item's hypotheses, and an elaborator that assumed it would hand the certifier a pair it refuses. Identified, the spines decide by congruence; two unequal ground levels are refused as the certifier refuses them; a pair that only an unsolved metavariable keeps from being a level question takes the delta step below, which is what solves the metavariable, *and* puts the two heads to the walk as a problem of their own, so the level question is decided once the metavariable is. They are posed at `Type`, where no eta opens them into the two calls again, so the problem parks where it is posed — the delta step alone could decide the pair structurally (a literal count reduces both matches to their zero arms) and accept it with the levels untouched, which is the pair the certifier refuses once the metavariable is zonked away; a pair the skeletons keep apart is two groups and takes the delta step alone.
                     let instances = match (&this_head, &that_head) {
                         (Some((this_group, index)), Some((that_group, that_index)))
                             if index == that_index && this_group != that_group =>
@@ -3180,7 +3180,7 @@ impl Convert {
                         _ => self.compare_apply(context, this_a, that_a)?,
                     }
                 }
-                // A folded recursive call against anything that is not one is *forced* before it is compared, exactly as the kernel's conversion forces both sides: a closed scan then runs as one machine run rather than as one unfolding per round. Unfolding it a step at a time would make a `Str` literal's validity check quadratic in retention and superlinear in wall clock — every round re-reducing the next folded spelling, whose argument carries the scan's state unreduced, one `step` deeper per character, and storing it. Forcing that makes no progress — a call restuck on a variable — takes the one-step unfold, so a comparison against an unfolded body still meets it.
+                // A folded recursive call against anything that is not one is *forced* before it is compared, exactly as the certifier's conversion forces both sides: a closed scan then runs as one machine run rather than as one unfolding per round. Unfolding it a step at a time would make a `Str` literal's validity check quadratic in retention and superlinear in wall clock — every round re-reducing the next folded spelling, whose argument carries the scan's state unreduced, one `step` deeper per character, and storing it. Forcing that makes no progress — a call restuck on a variable — takes the one-step unfold, so a comparison against an unfolded body still meets it.
                 (Subterm::Apply(apply), other) if apply.head.spine_rec_proj().is_some() => {
                     let head = applied_head(&apply.head).clone();
                     match Self::force_folded_call(context, apply)? {
@@ -3239,7 +3239,7 @@ impl Convert {
                         (Some(this_index), Some(that_index)) => {
                             let this_term: Term = Subterm::Rec(this.clone()).into();
                             let that_term: Term = Subterm::Rec(that.clone()).into();
-                            // Two projections of one group at two universe instances are a level question before they are two groups: the member-wise comparison would commit the levels through the member types' sorts whatever the bodies then decide, an over-commitment the kernel's rule never makes, so the levels are identified only once nothing but levels keeps the sides apart, refused as the kernel refuses them, and parked while an unsolved metavariable is all that keeps the question open. Two groups the skeletons keep apart are one where they are one as binders, the one index of both being what pairs them. Two projections at *different* indices are asked neither: comparing their tails would only report that 0 is not 1.
+                            // Two projections of one group at two universe instances are a level question before they are two groups: the member-wise comparison would commit the levels through the member types' sorts whatever the bodies then decide, an over-commitment the certifier's rule never makes, so the levels are identified only once nothing but levels keeps the sides apart, refused as the certifier refuses them, and parked while an unsolved metavariable is all that keeps the question open. Two groups the skeletons keep apart are one where they are one as binders, the one index of both being what pairs them. Two projections at *different* indices are asked neither: comparing their tails would only report that 0 is not 1.
                             let mut undecided = false;
                             let decided = match this_index == that_index {
                                 false => None,
@@ -3269,7 +3269,7 @@ impl Convert {
                                 },
                             };
 
-                            // Two members no rule above decides are their two bodies, as the kernel forces both, and that once: met again inside their own unfolding they are apart, or wait where a metavariable left them undecided.
+                            // Two members no rule above decides are their two bodies, as the certifier forces both, and that once: met again inside their own unfolding they are apart, or wait where a metavariable left them undecided.
                             let nested =
                                 decided.is_none() && self.pairs.hold(&this_term, &that_term);
                             if nested {
@@ -3415,12 +3415,12 @@ impl Convert {
     }
 }
 
-/// Whether `type_`, a goal's type in weak-head normal form, is a type former. A literal's eta is refused at one that is not the literal's own, which each caller tells apart first: the two sides are not of one type there, and a literal with no field would convert with anything. A sort, an unsolved metavariable and a neutral type say nothing of the literal's type and keep the expansion — a sort is what a child nothing types is compared at. The kernel refuses the same goals by the same classifier.
+/// Whether `type_`, a goal's type in weak-head normal form, is a type former. A literal's eta is refused at one that is not the literal's own, which each caller tells apart first: the two sides are not of one type there, and a literal with no field would convert with anything. A sort, an unsolved metavariable and a neutral type say nothing of the literal's type and keep the expansion — a sort is what a child nothing types is compared at. The certifier refuses the same goals by the same classifier.
 fn another_former(context: &Context, type_: &Term) -> bool {
     type_.is_type_former(&context.syntax())
 }
 
-/// Whether `term`, in weak-head normal form, is a neutral inhabitant, which is all a literal's eta is taken against: every term whose head does not show its type ([`Subterm::shows_its_type`], `curios-core`). The kernel takes the rule against the same set, by the same classifier, and says why it is the set.
+/// Whether `term`, in weak-head normal form, is a neutral inhabitant, which is all a literal's eta is taken against: every term whose head does not show its type ([`Subterm::shows_its_type`], `curios-core`). The certifier takes the rule against the same set, by the same classifier, and says why it is the set.
 fn neutral(context: &Context, term: &Term) -> bool {
     !term.shows_its_type(&context.syntax())
 }

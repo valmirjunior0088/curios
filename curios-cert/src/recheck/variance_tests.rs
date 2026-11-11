@@ -151,7 +151,7 @@ fn definition_coercion() -> Definitions {
     }
 }
 
-// The kernel sets no level of a definition apart: `Families` is implemented in `curios-elab` alone and `convert`'s level comparison passes `&()`, so `held.{1}` read back at `held.{0}` is refused. What the elaborator concluded of a definition's vector is its own (`curios_elab::Vectors`), which Core holds nothing of, so a later unit's elaborator is wrong by it alone, and this is the second opinion that catches it.
+// The certifier sets no level of a definition apart: `Families` is implemented in `curios-elab` alone and `convert`'s level comparison passes `&()`, so `held.{1}` read back at `held.{0}` is refused. What the elaborator concluded of a definition's vector is its own (`curios_elab::Vectors`), which Core holds nothing of, so a later unit's elaborator is wrong by it alone, and this is the second opinion that catches it.
 #[test]
 fn a_definitions_instances_are_compared_at_every_level() {
     let refused = refusals(&definition_coercion());

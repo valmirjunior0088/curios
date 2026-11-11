@@ -68,7 +68,7 @@ fn a_constant_is_not_bounded_by_a_bare_parameter() {
 
 /// **A hypothesis is what puts a floor under a parameter**, and the rule above is the no-hypothesis case rather than the whole relation.
 ///
-/// A recursive group states exactly this constraint about its own levels: a member calling itself at `Type` — `pick(@Type, …)` for `pick(@A: Type, …)` — needs the group's `u` strictly above zero, and the elaborator records `1 ≤ u` in the scheme it generalizes. Deciding the constant part structurally, *before* the hypotheses are reached, would leave the premise sitting in `assumed` with nothing consulting it, and the kernel would refuse a declaration the elaborator's solver accepts — a two-checker disagreement on a program with nothing adversarial in it.
+/// A recursive group states exactly this constraint about its own levels: a member calling itself at `Type` — `pick(@Type, …)` for `pick(@A: Type, …)` — needs the group's `u` strictly above zero, and the elaborator records `1 ≤ u` in the scheme it generalizes. Deciding the constant part structurally, *before* the hypotheses are reached, would leave the premise sitting in `assumed` with nothing consulting it, and the certifier would refuse a declaration the elaborator's solver accepts — a two-checker disagreement on a program with nothing adversarial in it.
 #[test]
 fn a_hypothesis_bounds_a_constant_where_a_bare_parameter_does_not() {
     let u = param(0);
@@ -124,7 +124,7 @@ fn levels() -> Vec<Level> {
     levels
 }
 
-/// `Kernel::level_leq` is `structurally_leq(..) || entails(..)`, and the fast path runs first on every goal — so where the two diverge, the answer is decided by which one is asked. Only one divergence can admit: the structural test accepting a goal the oracle refuses.
+/// `Certifier::level_leq` is `structurally_leq(..) || entails(..)`, and the fast path runs first on every goal — so where the two diverge, the answer is decided by which one is asked. Only one divergence can admit: the structural test accepting a goal the oracle refuses.
 ///
 /// It cannot happen, and the reason is structural rather than empirical: the oracle's model starts from exactly the facts `structurally_leq` reads — `upper`'s atoms at their offsets, and its floor under the constant — and asks the goal of that model before firing any hypothesis, and firing only raises it. So the oracle contains the fast path whatever the hypotheses are, and the disjunction is `entails`. This sweeps the claim over every pair of levels above, under four hypothesis sets including a cyclic one and one that gains an offset.
 ///

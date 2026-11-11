@@ -2,7 +2,7 @@
 
 use {super::test_support::*, curios_analysis::Erased, curios_common::fill};
 
-/// A proof read off a `Type`-sorted carrier `build` makes, reached four ways: directly, through a witness, through a higher-order argument and through a field. Each refusal has `build` call itself, the box at `False`; the kernel's local gate does not fire there — `Box` is neither a proposition nor a sort — so these are the class the erasure obligations in `curios-cert` exist for.
+/// A proof read off a `Type`-sorted carrier `build` makes, reached four ways: directly, through a witness, through a higher-order argument and through a field. Each refusal has `build` call itself, the box at `False`; the certifier's local gate does not fire there — `Box` is neither a proposition nor a sort — so these are the class the erasure obligations in `curios-cert` exist for.
 const BUILT_DIRECT: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True};
@@ -118,13 +118,13 @@ fn a_proof_resting_on_a_partial_definition_is_refused_however_it_is_reached() {
             .by_elaborator_in(at, |error| {
                 matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
             })
-            .by_kernel_in(at, |error| {
+            .by_certifier_in(at, |error| {
                 matches!(error, curios_cert::Error::NotTotal { .. })
             });
     }
 }
 
-// A non-descending `rec` written *inline*, at a `Type`-sorted type so the kernel's local descent gate does not apply, inside a definition that is not itself a proof position. Nothing but the classification walk can see it: `make` has no name-level partiality to inherit and no proof-typed member to gate, so it is partial only if `locally_partial` descends into the `rec` group's member scopes rather than stopping at the node. The proof position is `bad`, which merely mentions `make`. The control binds `r` to a box it builds.
+// A non-descending `rec` written *inline*, at a `Type`-sorted type so the certifier's local descent gate does not apply, inside a definition that is not itself a proof position. Nothing but the classification walk can see it: `make` has no name-level partiality to inherit and no proof-typed member to gate, so it is partial only if `locally_partial` descends into the `rec` group's member scopes rather than stopping at the node. The proof position is `bad`, which merely mentions `make`. The control binds `r` to a box it builds.
 #[test]
 fn a_recursion_written_inline_under_a_carrier_is_still_partial() {
     control(
@@ -149,12 +149,12 @@ fn a_recursion_written_inline_under_a_carrier_is_still_partial() {
     .by_elaborator_in("/bad", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_kernel_in("/bad", |error| {
+    .by_certifier_in("/bad", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
 
-// Obligation (T) rather than (V): a *type* that reaches a definition not known to terminate. `spin` calling itself is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this from written type positions; the kernel from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for (T). The control's `spin` hands its argument back.
+// Obligation (T) rather than (V): a *type* that reaches a definition not known to terminate. `spin` calling itself is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this from written type positions; the certifier from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for (T). The control's `spin` hands its argument back.
 #[test]
 fn a_type_reaching_a_partial_definition_is_refused() {
     control(
@@ -170,12 +170,12 @@ fn a_type_reaching_a_partial_definition_is_refused() {
     .by_elaborator_in("/Sized", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_kernel_in("/Sized", |error| {
+    .by_certifier_in("/Sized", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
 
-// Saturating subtraction is not a descent: `n - 1` is `0` at `0`, so `bogus(0)` calls itself for ever. The declared result is a proposition, which obliges the group to descend, and an engine crediting `n - 1` as strictly smaller would certify a recursion that does not terminate, and `False` follows, erasure deleting the proof. The elaborator refuses through the reach obligation and the kernel through its own local gate: two rules, two crates, one program. The control subtracts in the arm that rules zero out, where `n - 1` is below `n`.
+// Saturating subtraction is not a descent: `n - 1` is `0` at `0`, so `bogus(0)` calls itself for ever. The declared result is a proposition, which obliges the group to descend, and an engine crediting `n - 1` as strictly smaller would certify a recursion that does not terminate, and `False` follows, erasure deleting the proof. The elaborator refuses through the reach obligation and the certifier through its own local gate: two rules, two crates, one program. The control subtracts in the arm that rules zero out, where `n - 1` is below `n`.
 #[test]
 fn saturating_subtraction_is_not_descent() {
     control(
@@ -199,7 +199,7 @@ fn saturating_subtraction_is_not_descent() {
     .by_elaborator_in("/bogus", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_kernel_in("/bogus", |error| {
+    .by_certifier_in("/bogus", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
@@ -228,7 +228,7 @@ fn permuting_arguments_is_not_descent() {
     .by_elaborator_in("/bogus", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_kernel_in("/bogus", |error| {
+    .by_certifier_in("/bogus", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
@@ -259,7 +259,7 @@ fn a_field_applied_off_a_structure_is_not_descent() {
         ("let bad = f;", "let bad: False = f(l());"),
     ])
     .by_elaborator_in("/f", |error| matches!(error, curios_elab::Error::PartialInErasedPosition { offender: Some(offender), .. } if *offender == global("/f")))
-    .by_kernel_in("/f", |error| matches!(error, curios_cert::Error::NotDescending { .. }));
+    .by_certifier_in("/f", |error| matches!(error, curios_cert::Error::NotDescending { .. }));
 }
 
 // An application of a payload is a child of its constructor, which is true of a value that is a finite tree (`curios-analysis`'s `totality`), the premise the paradox of trees breaks: `down` descends by it and is admitted, and `x`, whose payload hands back `x` itself, is a tree with no bottom for the descent to reach. A recursive binding is not known to terminate, so the proof that reaches it is refused at `x`, and the descent is never asked of it. The control applies `down` to nothing in particular.
@@ -285,7 +285,7 @@ fn a_value_that_is_its_own_child_is_not_known_to_terminate() {
     )
     .refused(&[("let bad = down;", "let bad: False = down(x);")])
     .by_elaborator_in("/bad", |error| matches!(error, curios_elab::Error::PartialInErasedPosition { offender: Some(offender), .. } if *offender == global("/x")))
-    .by_kernel_in("/bad", |error| matches!(error, curios_cert::Error::NotTotal { .. }));
+    .by_certifier_in("/bad", |error| matches!(error, curios_cert::Error::NotTotal { .. }));
 }
 
 // The size order reads an arm's case for a `Prop`-sorted scrutinee as for any other (`refined_by_arm`), so a recursion descends on an inductive proposition's constructors, and a proof irrelevance holds equal to the scrutinee is then graded below it. What stands between that reading and a closed inhabitant of `False` is coverage, and this is the shape that asks for it: `Q`'s index is a proof, so irrelevance makes `Q(v)` and `Q(Wit/s(v))` one type and the recursive call on the payload is well typed, and `Q/nil()` inhabits `Q(Wit/s(Wit/triv()))` for the same reason — a proof of `Q` at the scrutinee's own type whose payload the descent reads as smaller.
@@ -353,7 +353,7 @@ const A_RECURSION_AT_AN_INDEX_HOLDING_A_PROOF: &str = r#"
     /std/print("ok")
     "#;
 
-// `a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits` at every shape a program can carry the proof in: a relevant family holding one, a list and a tuple of them, a type family over a proposition, a proposition above level zero, and one declared in a group. The size order reads `step(q)` as a descent in each, and coverage keeps `base`'s arm, since no clash is concluded between two of a proposition's constructors wherever in an index they meet. `curios-cert`'s `recheck::case_tests` puts the shapes to the kernel under this name, a stated instance and a type a definition spells among them. Each control holds a value where its refusal holds a proof.
+// `a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits` at every shape a program can carry the proof in: a relevant family holding one, a list and a tuple of them, a type family over a proposition, a proposition above level zero, and one declared in a group. The size order reads `step(q)` as a descent in each, and coverage keeps `base`'s arm, since no clash is concluded between two of a proposition's constructors wherever in an index they meet. `curios-cert`'s `recheck::case_tests` puts the shapes to the certifier under this name, a stated instance and a type a definition spells among them. Each control holds a value where its refusal holds a proof.
 #[test]
 fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_omits() {
     let wit = r#"
@@ -463,7 +463,7 @@ fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_o
     }
 }
 
-// `S` is indexed by a proof of `W`, and its one payload is its index, so a match on an `S` proof fires with the proof unreduced and reads `v` off the index: `v` is `i`, no part of `s`, and the size order grades it below `s`. That reading is sound, a proof of `S(i)` ranking above `i` at its least derivation; what refuses the loop is that `S/mk(w)`, built around `h`'s own case, is nothing at or below `w`, so `h(base)`, which is `h(base)` for ever, starts no descending thread. `curios-cert`'s `recheck::recursion_tests` puts the module to the kernel under this name. The control's `W` has a case below another, and its `g` hands `h` its own index rather than a payload the cast reads, so the two descend.
+// `S` is indexed by a proof of `W`, and its one payload is its index, so a match on an `S` proof fires with the proof unreduced and reads `v` off the index: `v` is `i`, no part of `s`, and the size order grades it below `s`. That reading is sound, a proof of `S(i)` ranking above `i` at its least derivation; what refuses the loop is that `S/mk(w)`, built around `h`'s own case, is nothing at or below `w`, so `h(base)`, which is `h(base)` for ever, starts no descending thread. `curios-cert`'s `recheck::recursion_tests` puts the module to the certifier under this name. The control's `W` has a case below another, and its `g` hands `h` its own index rather than a payload the cast reads, so the two descend.
 #[test]
 fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
     control(
@@ -509,7 +509,7 @@ fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
             }
         )
     })
-    .by_kernel_in("/g", |error| {
+    .by_certifier_in("/g", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
@@ -554,12 +554,12 @@ fn a_call_passing_a_variable_an_arm_solved_is_graded_on_the_variable() {
             }
         )
     })
-    .by_kernel_in("/g", |error| {
+    .by_certifier_in("/g", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
 
-// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to stand at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios-cert`'s `recheck::recursion_tests` puts the module to the kernel under this name. The control recurses on `n` itself.
+// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to stand at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios-cert`'s `recheck::recursion_tests` puts the module to the certifier under this name. The control recurses on `n` itself.
 #[test]
 fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
     control(
@@ -640,7 +640,7 @@ fn an_accessibility_proof_built_by_self_reference_is_refused() {
             }
         )
     })
-    .by_kernel_in("/forever", |error| {
+    .by_certifier_in("/forever", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
@@ -670,7 +670,7 @@ fn a_partial_inhabitant_of_an_impossible_index_proves_nothing() {
     .by_elaborator_in("/bad", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_kernel_in("/bad", |error| {
+    .by_certifier_in("/bad", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
@@ -724,7 +724,7 @@ fn a_call_at_a_variable_an_index_inversion_solved_starts_no_descending_thread() 
             }
         )
     })
-    .by_kernel_in("/g", |error| {
+    .by_certifier_in("/g", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }

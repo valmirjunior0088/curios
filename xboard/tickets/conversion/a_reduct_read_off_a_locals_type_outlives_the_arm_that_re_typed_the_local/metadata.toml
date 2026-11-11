@@ -5,4 +5,4 @@ status = "fixed"
 [[witness]]
 what = "a match on a proof fired inside an arm at the payload the arm's case states, and answered again after the arm"
 source = "a_reduct_read_under_an_arms_retyping.crsc"
-refused = [{ by = "kernel", error = "Mismatch", within = "entry" }]
+refused = [{ by = "certifier", error = "Mismatch", within = "entry" }]

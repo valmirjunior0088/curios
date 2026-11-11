@@ -98,7 +98,7 @@ fn a_mismatch_says_what_was_not_compared() {
     assert!(shown(Some(Declined::Unpaired)).contains("not compared: no operand of one side"));
 }
 
-/// A spent budget is reported with the row of the charge it could not afford, what that charge was and what was left, as the kernel reports one.
+/// A spent budget is reported with the row of the charge it could not afford, what that charge was and what was left, as the certifier reports one.
 #[test]
 fn a_spent_budget_names_what_it_was_spent_on() {
     let error = Error::ConvertExhausted {

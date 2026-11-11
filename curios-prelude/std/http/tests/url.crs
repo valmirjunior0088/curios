@@ -62,7 +62,7 @@ test components_encode_and_decode =
         Test/equal(Url/query_pairs(Url/lit("http://h/?a=%zz&b=2")), Option/none()),
         Test/equal(Url/query_pairs(Url/lit("http://h/?a=%C3&b=2")), Option/none())]);
 
--- The decoding walk recurses on the bytes it reads, so it is total and a type may run it: what it answers is a proof the kernel discharges, an escape cut short among them.
+-- The decoding walk recurses on the bytes it reads, so it is total and a type may run it: what it answers is a proof the certifier discharges, an escape cut short among them.
 let _decodes_in_a_type: Eq()(Url/decode("a%20b+c%C3%A9"), Option/some("a b cé")) =
     Eq/refl();
 

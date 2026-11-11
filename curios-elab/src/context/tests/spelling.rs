@@ -1,4 +1,4 @@
-//! Spellings: a term read as the kernel is handed it under the arms in force ([`Context::kernel_spelling`]), its local definitions by value and its refined variables as their values, outside every metavariable occurrence.
+//! Spellings: a term read as the certifier is handed it under the arms in force ([`Context::certifier_spelling`]), its local definitions by value and its refined variables as their values, outside every metavariable occurrence.
 //!
 //! An unsolved metavariable's occurrence stands for the scope it was born in, which no spelling changes: it is kept as it stands, spine and all, as conversion keeps it where it reads a block's locals by value ([`read_outside_spines`]), and nothing is gathered from it.
 

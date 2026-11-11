@@ -15,4 +15,4 @@ step = [
     { mount = "/app", source = "app_x.crsc" },
     { source = "proof.crsc" },
 ]
-refused = [{ by = "kernel", error = "NotPositive", within = "/app/X" }]
+refused = [{ by = "certifier", error = "NotPositive", within = "/app/X" }]

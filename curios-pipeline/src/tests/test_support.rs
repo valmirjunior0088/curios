@@ -113,7 +113,7 @@ pub fn typecheck(source: &str) -> Result<(), String> {
     .map_err(String::from)
 }
 
-/// Elaborate `source` to its meta-free Core program and erase it as `compile_entrypoint` does — the program's own items erased over the archived prelude's erased forms and linked with what they reach — short of marking its functions' termination flags, which takes the kernel's records and is `erase_checked`'s.
+/// Elaborate `source` to its meta-free Core program and erase it as `compile_entrypoint` does — the program's own items erased over the archived prelude's erased forms and linked with what they reach — short of marking its functions' termination flags, which takes the certifier's records and is `erase_checked`'s.
 ///
 /// Over the archive rather than erased fresh: a compiled module carries the entry's own items alone, so a from-scratch erasure of it would leave every prelude name unbound. It is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
 pub fn erase_to_anf(source: &str) -> curios_anf::Module {
@@ -134,10 +134,10 @@ pub fn erase_to_anf(source: &str) -> curios_anf::Module {
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
         let globals = crate::globals(predecessors);
-        let (_, mut kernel) =
+        let (_, mut certifier) =
             curios_cert::certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
         erase_program(
-            &mut kernel,
+            &mut certifier,
             Erasures::of(
                 &predecessors.cores(),
                 &predecessors.places(),
@@ -749,7 +749,7 @@ pub fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
     placed
 }
 
-/// `f` names `spin` in an arm no reduction takes, a `false` arm under the literal `true`, which the kernel does not type: what it mentions there is in the totality it is classified at, and no read of `spin` is recorded.
+/// `f` names `spin` in an arm no reduction takes, a `false` arm under the literal `true`, which the certifier does not type: what it mentions there is in the totality it is classified at, and no read of `spin` is recorded.
 pub const UNTAKEN: &str = "use /std/{Nat};
 
 pub let spin(n: Nat) -> Nat = spin(n);

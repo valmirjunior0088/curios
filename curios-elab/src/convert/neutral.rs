@@ -26,7 +26,7 @@ use curios_surface::Spellable;
 ///
 /// A level a value does not hold is no difference to identify: the walk is handed the context's registries, a nominal family's vector and a definition's, and sets apart the pair at a position either calls irrelevant, so two instances apart in it alone are identified with nothing committed. Where the sides are identified, each pair set apart is recorded as a weak equation ([`UniverseSolver::add_weak_eq`](crate::UniverseSolver::add_weak_eq)), which the declaration's closing joins where it can.
 ///
-/// A head short of its full application, apart in such a level, is one term where the pair meets at its function type and two at any other, which `curried` says how to read. [`Curried::Declined`] answers [`Identification::Curried`] with nothing inserted, for a caller that goes on to the pair's type: reduction and eta decide it there, as the kernel decides it, and the verdict hands back the pairs it left, which are a weak equation each once the caller holds the two sides one. [`Curried::Compared`] keeps every level of it, for a caller no type directs.
+/// A head short of its full application, apart in such a level, is one term where the pair meets at its function type and two at any other, which `curried` says how to read. [`Curried::Declined`] answers [`Identification::Curried`] with nothing inserted, for a caller that goes on to the pair's type: reduction and eta decide it there, as the certifier decides it, and the verdict hands back the pairs it left, which are a weak equation each once the caller holds the two sides one. [`Curried::Compared`] keeps every level of it, for a caller no type directs.
 pub fn identify_universe_levels(
     context: &mut Context,
     this: &Term,
@@ -82,11 +82,11 @@ pub fn identify_universe_levels(
 
 /// Hold two spellings of one refinement key to one universe instance, answering whether they can be: every level the two differ in is committed equal, as [`identify_universe_levels`] commits two sides apart in levels alone, and every sort is held one ([`UniverseSolver::unify_qualities`](crate::UniverseSolver::unify_qualities)). Two unequal ground levels, two sorts that each state one and state two, and two sides apart in more than their universes decline the key with nothing inserted.
 ///
-/// A key erases its universes, every occurrence of a polymorphic scrutinee minting an instance of its own and the key being compared while they are open (`reduce`'s `shallow_scrutinee`). A hit then rests on the two instances being one: what it hands back is the arm's value for the scrutinee as the arm recorded it, and `Type u` embeds a level in a term, so two instances of one stuck call can be two values. Left unsaid, the two close wherever their own bounds put them, and where that is apart the elaborator has refined a term the kernel's key, which keeps its levels, does not answer. Committed, they close together, or the declaration is refused where its levels close.
+/// A key erases its universes, every occurrence of a polymorphic scrutinee minting an instance of its own and the key being compared while they are open (`reduce`'s `shallow_scrutinee`). A hit then rests on the two instances being one: what it hands back is the arm's value for the scrutinee as the arm recorded it, and `Type u` embeds a level in a term, so two instances of one stuck call can be two values. Left unsaid, the two close wherever their own bounds put them, and where that is apart the elaborator has refined a term the certifier's key, which keeps its levels, does not answer. Committed, they close together, or the declaration is refused where its levels close.
 ///
 /// **A sort is part of the instance.** A stuck call reached through a definition that has closed holds every sort its instance states decided, while the key the arm records, written in the declaration still being checked, holds a metavariable for each sort nothing has yet decided: a proof written `Eq/refl()` at both is `Type` in the one and open in the other. Two spellings apart in that alone are one instance once it is solved, as two apart in an open level are, so the walk pairs sorts beside levels and the commitment solves them with the levels.
 ///
-/// It reads no family's variance: the kernel's key is the scrutinee compared with every level, so a key let through on an irrelevant one would answer a term the kernel reduces before it answers. Past a key the guard is [`levels_clash_to_conversion`].
+/// It reads no family's variance: the certifier's key is the scrutinee compared with every level, so a key let through on an irrelevant one would answer a term the certifier reduces before it answers. Past a key the guard is [`levels_clash_to_conversion`].
 ///
 /// This is the one write a reduction makes to the solver, so a hit that makes it is noted as a question put to conversion is ([`Context::note_question`]): a scope rolled back past it withdraws the equations, and with them every reduct taken meanwhile. A question asked with nothing committed that meets one answers no, as it does wherever answering yes would commit (`same_uncommitted`).
 pub fn hold_at_one_instance(
@@ -132,7 +132,7 @@ pub fn hold_at_one_instance(
     Ok(held)
 }
 
-/// Whether two spellings disagree on a level decided on both sides, as conversion reads the pair: a level a nominal family or a definition applied in full is irrelevant in is no disagreement, two instances apart in it alone being one term. It commits nothing and only ever declines. The guard past a key, where a stuck form is put to an equation's reduced spelling and both checkers answer by what conversion holds one — the kernel by asking its own, so a pair this lets through is one the kernel answers as well. A curried head apart in two decided levels is a clash here, no type being at hand to say otherwise.
+/// Whether two spellings disagree on a level decided on both sides, as conversion reads the pair: a level a nominal family or a definition applied in full is irrelevant in is no disagreement, two instances apart in it alone being one term. It commits nothing and only ever declines. The guard past a key, where a stuck form is put to an equation's reduced spelling and both checkers answer by what conversion holds one — the certifier by asking its own, so a pair this lets through is one the certifier answers as well. A curried head apart in two decided levels is a clash here, no type being at hand to say otherwise.
 pub fn levels_clash_to_conversion(
     context: &Context,
     this: &Term,
@@ -146,7 +146,7 @@ pub fn levels_clash_to_conversion(
 
 /// Align two spellings' levels positionally and classify the first pair that decides the question, committing nothing.
 ///
-/// One walk over the pair, shared with the kernel: [`Term::level_differences`] answers whether the sides differ in nothing but levels and which level pairs they differ in, a ground `Type 0` counted as a level, and it walks the graph rather than the tree, so identifying two spellings costs what the spellings are and not what they unfold to.
+/// One walk over the pair, shared with the certifier: [`Term::level_differences`] answers whether the sides differ in nothing but levels and which level pairs they differ in, a ground `Type 0` counted as a level, and it walks the graph rather than the tree, so identifying two spellings costs what the spellings are and not what they unfold to.
 ///
 /// Every pair is checked before any verdict that would insert, because a decline that had already inserted would not be a fall-through — which is why the commitment lives in [`identify_universe_levels`] and the walk here hands back what it *would* commit.
 ///
@@ -320,7 +320,7 @@ impl Opened {
 
 /// The binders a conversion problem is posed under, each at the type its position gave it, innermost first.
 ///
-/// Conversion opens a binder at a fresh label and compares under it, and a lookup that meets the label reads its type here, as the kernel reads a binder it assumed. It is carried with the problem and installed nowhere. The elaborator's conversion is a worklist that parks what it cannot decide, so a problem outlives the step that opened its binders, and one retried later is retried under the binders it was posed under: no verdict follows whether a problem parked. A write to the [`Context`] would also invalidate its caches at every binder, which is why [`Opened`] is threaded too.
+/// Conversion opens a binder at a fresh label and compares under it, and a lookup that meets the label reads its type here, as the certifier reads a binder it assumed. It is carried with the problem and installed nowhere. The elaborator's conversion is a worklist that parks what it cannot decide, so a problem outlives the step that opened its binders, and one retried later is retried under the binders it was posed under: no verdict follows whether a problem parked. A write to the [`Context`] would also invalidate its caches at every binder, which is why [`Opened`] is threaded too.
 ///
 /// A label is fresh, so no binder here shadows another, or a name the context holds.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -429,7 +429,7 @@ pub fn synth_neutral(
                 _ => Ok(None),
             }
         }
-        // A slot read off what it is a slot of, as the kernel's lookup reads it: a written form and a slot of anything else have no type here.
+        // A slot read off what it is a slot of, as the certifier's lookup reads it: a written form and a slot of anything else have no type here.
         Subterm::Proj(Proj { head, field }) => {
             let Some(head_type) = synth_neutral(context, binders, opened, head)? else {
                 return Ok(None);
@@ -462,7 +462,7 @@ pub fn synth_neutral(
                 _ => Ok(None),
             }
         }
-        // A stuck elimination's type is its result at its scrutinee: its ambient goal as written, or its motive opened at the indices the scrutinee's type carries and then at the scrutinee. The elimination was checked against that result where it was typed, so this reads what typing established, as a variable's type is read off its binder; the kernel's lookup reads the same.
+        // A stuck elimination's type is its result at its scrutinee: its ambient goal as written, or its motive opened at the indices the scrutinee's type carries and then at the scrutinee. The elimination was checked against that result where it was typed, so this reads what typing established, as a variable's type is read off its binder; the certifier's lookup reads the same.
         Subterm::Match(Match { head, result, .. }) => {
             let mut indices = Vec::new();
             if let MatchResult::Family(motive) = result {

@@ -7,7 +7,7 @@ use {
         Declarations, Invert, PositivityRefusal, group_totality, invert_indices,
         positivity_vectors, test_support::*, variance_vectors,
     },
-    curios_cert::Kernel,
+    curios_cert::Certifier,
     curios_common::{InfixOp, Plicity, Qualifier},
     curios_core::{
         Apply, Argument, Arm, Bang, Carrier, Cases, Field, Free, Global, InductArm, InductType,
@@ -28,7 +28,7 @@ fn planted() -> Free {
 #[test]
 fn a_huge_literal_call_argument_grades_without_expansion() {
     // `rec f : (n: Nat) -> Nat = (n) => f(u64::MAX); f` — grading the literal argument must read the packed spine, not peel it: a unary expansion would loop once per successor, and the value is unbounded by the source that spelled it.
-    let mut kernel = Kernel::new(100_000, SYNTAX);
+    let mut certifier = Certifier::new(100_000, SYNTAX);
     let f = Free::local(1, Some("f"));
     let n = Free::local(2, Some("n"));
     let nat = || Term::intrinsic(Intrinsic::NatType);
@@ -51,14 +51,14 @@ fn a_huge_literal_call_argument_grades_without_expansion() {
     };
 
     // A constant argument never decreases, so the verdict is `Partial` — promptly.
-    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
+    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
 }
 
 /// Whether the engine finds a nullary self-call planted at one child position.
 ///
 /// The group is `rec f : Nat = <plant(f)>`, whose member takes no lambda and so has an empty parameter vector: a self-call from it is a 0x0 matrix, idempotent with no diagonal, so the verdict is `Partial` exactly when [`Walk::walk`] reached the planted occurrence and `Total` exactly when it did not. Nothing here needs to be well typed — the engine is a total function of post-zonk terms and types nothing — which is what lets one probe cover every child position of every variant.
 fn call_is_seen(body: Term) -> bool {
-    let mut kernel = Kernel::new(100_000, SYNTAX);
+    let mut certifier = Certifier::new(100_000, SYNTAX);
     let rec = Term::rec(
         vec![(planted(), Term::intrinsic(Intrinsic::NatType), body)],
         Term::free_var(&planted()),
@@ -67,7 +67,7 @@ fn call_is_seen(body: Term) -> bool {
         panic!("the fixture changed shape");
     };
 
-    group_totality(&mut kernel, group) == Ok(Totality::Partial)
+    group_totality(&mut certifier, group) == Ok(Totality::Partial)
 }
 
 /// The `index`th placeholder child: a literal no walk reads as anything, distinct from every other so that replacing one names one position.
@@ -525,10 +525,10 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
 ///
 /// The walk forces the `rec` head because a mutual `induct` group lowers its type constructors into one, then descends into what forcing exposed — and `RecGroup::member_body` substitutes `Term::rec_proj` for every recursive occurrence, so what it descends into holds the same group again. Each turn of the loop opens a fresh binder, so nothing about the term repeats for a memo on terms to catch, and `unfolded` cannot catch it either: it keys on `Free`, and an inline group has no name.
 ///
-/// Written against the kernel rather than as a Curios program because this is where the shared analysis is *the* subject: the elaborator has its own copy of the divergence, but the kernel's is the one on the soundness board, and a program-level fixture exercises the elaborator's first and aborts before reaching this one.
+/// Written against the certifier rather than as a Curios program because this is where the shared analysis is *the* subject: the elaborator has its own copy of the divergence, but the certifier's is the one on the soundness board, and a program-level fixture exercises the elaborator's first and aborts before reaching this one.
 #[test]
 fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
-    let mut kernel = kernel();
+    let mut certifier = certifier();
 
     let count = Free::local(1, Some("Count"));
     let n = Free::local(2, Some("n"));
@@ -563,27 +563,27 @@ fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
     let mut inducts = BTreeMap::new();
     inducts.insert(name, single_payload(payload, Term::type_ground()));
     for (entry_name, entry) in &inducts {
-        kernel
+        certifier
             .declare_induct(entry_name, entry)
             .expect("a name is declared once");
     }
 
-    let vectors = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()))
+    let vectors = positivity_vectors(&mut certifier, Declarations::of(&inducts, &BTreeMap::new()))
         .expect("a payload the walk cannot see through is admitted, not refused");
     assert_eq!(vectors.get(&name), Some(&Vec::new()));
 }
 
-/// Well-founded recursion's shape, put to the engine under the kernel: `rec f : (a : T) -> Nat = (a) => match a | c(g) => f(g(0)) end`, where `T`'s one constructor stores a function. The call descends on `a` only because `g(0)` reads as the payload `g` it came from — a function-typed payload is a branching node whose children are its applications. The control moves the applied function out of the constructor into a second parameter, `rec f : (a : T, g : (Nat) -> T) -> Nat = (a, g) => f(g(0), g)`, and is `Partial`: `g` is bound by no arm, so nothing relates `g(0)` to `a`, and a rule that read every application of a binder as a decrease would have accepted it.
+/// Well-founded recursion's shape, put to the engine under the certifier: `rec f : (a : T) -> Nat = (a) => match a | c(g) => f(g(0)) end`, where `T`'s one constructor stores a function. The call descends on `a` only because `g(0)` reads as the payload `g` it came from — a function-typed payload is a branching node whose children are its applications. The control moves the applied function out of the constructor into a second parameter, `rec f : (a : T, g : (Nat) -> T) -> Nat = (a, g) => f(g(0), g)`, and is `Partial`: `g` is bound by no arm, so nothing relates `g(0)` to `a`, and a rule that read every application of a binder as a decrease would have accepted it.
 #[test]
 fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
-    let mut kernel = kernel();
+    let mut certifier = certifier();
 
     let name = Global::Authored(Qualifier::from(["T"]));
     let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     let function = || Term::func_type([(Free::local(1, Some("n")), nat())], self_type.clone());
-    kernel
+    certifier
         .declare_induct(&name, &single_payload(function(), Term::type_ground()))
         .expect("a name is declared once");
 
@@ -611,7 +611,7 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
     let Subterm::Rec(Rec { group, .. }) = &*descending else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Total));
+    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Total));
 
     let control = Term::rec(
         vec![(
@@ -627,18 +627,18 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
     let Subterm::Rec(Rec { group, .. }) = &*control else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
+    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
 }
 
 /// A lambda applied to an arm's payload is graded as its contractum: the call inside reads the payload, which is below the scrutinee. This is the shape a convoy takes — an arm generalized over a hypothesis and applied back to it — and without the rule a proof that descends through one closes to an all-unknown matrix. The control applies the same lambda to an unrelated parameter, which must stay unread: the rule reads a binder as what it stands for, never as a decrease of its own.
 #[test]
 fn a_lambda_applied_to_the_arm_payload_descends() {
-    let mut kernel = kernel();
+    let mut certifier = certifier();
 
     let name = Global::Authored(Qualifier::from(["T"]));
     let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = || Term::intrinsic(Intrinsic::NatType);
-    kernel
+    certifier
         .declare_induct(
             &name,
             &single_payload(self_type.clone(), Term::type_ground()),
@@ -676,24 +676,24 @@ fn a_lambda_applied_to_the_arm_payload_descends() {
     let Subterm::Rec(Rec { group, .. }) = &*descending else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Total));
+    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Total));
 
     let control = group_over(Term::free_var(&b));
     let Subterm::Rec(Rec { group, .. }) = &*control else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
+    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
 }
 
 /// The same pair through a `let`: a binder aliasing the payload is below the scrutinee exactly as the payload is, and one aliasing an unrelated parameter is not.
 #[test]
 fn a_let_alias_of_the_arm_payload_descends() {
-    let mut kernel = kernel();
+    let mut certifier = certifier();
 
     let name = Global::Authored(Qualifier::from(["T"]));
     let self_type = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
     let nat = || Term::intrinsic(Intrinsic::NatType);
-    kernel
+    certifier
         .declare_induct(
             &name,
             &single_payload(self_type.clone(), Term::type_ground()),
@@ -730,13 +730,13 @@ fn a_let_alias_of_the_arm_payload_descends() {
     let Subterm::Rec(Rec { group, .. }) = &*descending else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Total));
+    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Total));
 
     let control = group_over(Term::free_var(&b));
     let Subterm::Rec(Rec { group, .. }) = &*control else {
         panic!("the fixture changed shape");
     };
-    assert_eq!(group_totality(&mut kernel, group), Ok(Totality::Partial));
+    assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
 }
 
 /// A key at a universe instance is the key the bare name is. At the top of a position the first direction leaves a key to index refinement, which may have refined it to the very binder it stands against, and a name at an instance is that key: solved against, the binder would be aliased to what reduces back to it.
@@ -744,14 +744,14 @@ fn a_let_alias_of_the_arm_payload_descends() {
 /// Mutation-checked: with the guard reading a bare variable and a projection alone, the binder is solved to the instance.
 #[test]
 fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
-    let mut kernel = kernel();
+    let mut certifier = certifier();
     let n = Global::Authored(Qualifier::from(["n"]));
     let k = Free::local(901, Some("k"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
-    kernel
+    certifier
         .declare(&n, &nat_type, &UniverseContext::default())
         .expect("a name is declared once");
-    kernel.assume(&k, &nat_type);
+    certifier.assume(&k, &nat_type);
     // At a level, since an instance that states none is its bare name.
     let instance = Term::instance(n, vec![Level::zero()]);
     let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
@@ -762,7 +762,7 @@ fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
         ("a literal", literal.clone(), Some(literal)),
     ] {
         let Invert::Solved(solutions) = invert_indices(
-            &mut kernel,
+            &mut certifier,
             slice::from_ref(&actual),
             &[Term::free_var(&k)],
             slice::from_ref(&k),
@@ -803,11 +803,11 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
     });
     let inducts = BTreeMap::from([(wide, single_payload(payload, Term::type_ground()))]);
     let declared = || {
-        let mut kernel = kernel();
-        kernel
+        let mut certifier = certifier();
+        certifier
             .declare_induct(&wide, &inducts[&wide])
             .expect("a name is declared once");
-        kernel
+        certifier
     };
     let structs = BTreeMap::new();
     let declarations = Declarations::of(&inducts, &structs);
@@ -817,7 +817,7 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
             "an index inverted against a target of its shape",
             matches!(
                 invert_indices(
-                    &mut kernel(),
+                    &mut certifier(),
                     &[doubled(Term::free_var(&x))],
                     &[doubled(Term::free_var(&z))],
                     slice::from_ref(&z),
@@ -842,22 +842,22 @@ fn every_walk_answers_a_doubling_term_in_its_own_size() {
     }
 }
 
-/// A `Bool` the kernel holds as `true`, or as a name with no value, for a match on it to fire or to stand stuck on a neutral.
-fn define_guard(kernel: &mut Kernel, guard: &Global, defined: bool) {
+/// A `Bool` the certifier holds as `true`, or as a name with no value, for a match on it to fire or to stand stuck on a neutral.
+fn define_guard(certifier: &mut Certifier, guard: &Global, defined: bool) {
     let bool_type = Term::intrinsic(Intrinsic::BoolType);
     match defined {
-        true => kernel.define(
+        true => certifier.define(
             guard,
             &bool_type,
             &Term::intrinsic(Intrinsic::Bool(true)),
             &UniverseContext::default(),
         ),
-        false => kernel.declare(guard, &bool_type, &UniverseContext::default()),
+        false => certifier.declare(guard, &bool_type, &UniverseContext::default()),
     }
     .expect("a name is declared once");
 }
 
-/// A payload type reduction cannot fire is read as nothing the walk concludes from: `Bad`'s constructor takes `match g | false => Nat | true => Bad end`, and with `g` a `Bool` the kernel holds no value for, the match is stuck on a neutral and `Env::force` hands it back as it stands. The walk reads a stuck form through its children at `Mixed`, so the self-occurrence in an arm is a non-strict path back and the set is refused by the rule — not for the budget, a stuck reduction being no refusal. The control defines `g` as `true`: the match fires to `Bad`, a strict self-occurrence, and the set is admitted, which says the refusal is the stuck shape's.
+/// A payload type reduction cannot fire is read as nothing the walk concludes from: `Bad`'s constructor takes `match g | false => Nat | true => Bad end`, and with `g` a `Bool` the certifier holds no value for, the match is stuck on a neutral and `Env::force` hands it back as it stands. The walk reads a stuck form through its children at `Mixed`, so the self-occurrence in an arm is a non-strict path back and the set is refused by the rule — not for the budget, a stuck reduction being no refusal. The control defines `g` as `true`: the match fires to `Bad`, a strict self-occurrence, and the set is admitted, which says the refusal is the stuck shape's.
 #[test]
 fn a_payload_stuck_on_a_neutral_is_read_at_mixed_and_refused() {
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
@@ -872,20 +872,21 @@ fn a_payload_stuck_on_a_neutral_is_read_at_mixed_and_refused() {
     );
 
     for defined in [false, true] {
-        let mut kernel = kernel();
-        define_guard(&mut kernel, &guard, defined);
+        let mut certifier = certifier();
+        define_guard(&mut certifier, &guard, defined);
         let mut inducts = BTreeMap::new();
         inducts.insert(
             bad_name,
             single_payload(payload.clone(), Term::type_ground()),
         );
         for (name, entry) in &inducts {
-            kernel
+            certifier
                 .declare_induct(name, entry)
                 .expect("a name is declared once");
         }
 
-        let verdict = positivity_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()));
+        let verdict =
+            positivity_vectors(&mut certifier, Declarations::of(&inducts, &BTreeMap::new()));
         match defined {
             false => assert!(
                 matches!(&verdict, Err(PositivityRefusal::NotPositive(refusal)) if refusal.name == bad_name),
@@ -902,7 +903,7 @@ fn a_payload_stuck_on_a_neutral_is_read_at_mixed_and_refused() {
     }
 }
 
-/// A call's argument reduction cannot fire is read as no size: `rec f : (a : T) -> Nat = (a) => match a | c(t) => f(match g | false => t | true => t end) end`, both arms of the inner match the payload `t`, and with `g` a `Bool` the kernel holds no value for, the inner match is stuck on a neutral. A reader that took either arm of a stuck match would grade the call below `a`; `Env::force` hands it back as it stands, the reader answers unread, and the group is `Partial`. The control defines `g` as `true`: the match fires to `t`, the payload, and the group is `Total`.
+/// A call's argument reduction cannot fire is read as no size: `rec f : (a : T) -> Nat = (a) => match a | c(t) => f(match g | false => t | true => t end) end`, both arms of the inner match the payload `t`, and with `g` a `Bool` the certifier holds no value for, the inner match is stuck on a neutral. A reader that took either arm of a stuck match would grade the call below `a`; `Env::force` hands it back as it stands, the reader answers unread, and the group is `Partial`. The control defines `g` as `true`: the match fires to `t`, the payload, and the group is `Total`.
 #[test]
 fn a_call_argument_stuck_on_a_neutral_grades_unread() {
     let name = Global::Authored(Qualifier::from(["T"]));
@@ -940,17 +941,17 @@ fn a_call_argument_stuck_on_a_neutral_grades_unread() {
     };
 
     for (defined, expected) in [(false, Totality::Partial), (true, Totality::Total)] {
-        let mut kernel = kernel();
-        kernel
+        let mut certifier = certifier();
+        certifier
             .declare_induct(
                 &name,
                 &single_payload(self_type.clone(), Term::type_ground()),
             )
             .expect("a name is declared once");
-        define_guard(&mut kernel, &guard, defined);
+        define_guard(&mut certifier, &guard, defined);
 
         assert_eq!(
-            group_totality(&mut kernel, group),
+            group_totality(&mut certifier, group),
             Ok(expected),
             "with `g` {}",
             if defined { "defined" } else { "a neutral" },

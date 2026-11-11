@@ -3,14 +3,14 @@ name = "curios-cert"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios certifier: the independent kernel deciding, from a finished term alone, whether the elaborator's output is well-typed"
+description = "The Curios certifier: the independent checker deciding, from a finished term alone, whether the elaborator's output is well-typed"
 
 [lints]
 workspace = true
 
 [features]
 profile = ["curios-profile/enabled", "curios-analysis/profile", "curios-core/profile"]
-# `test_support`: what a reading through the kernel spends, which `curios-erase`'s suite measures, the kernel's errors by name, which the soundness board's records name a refusal by, and a kernel and a walk with their memos off, which `curios-analysis`'s and `curios-prelude`'s suites reduce and measure under. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
+# `test_support`: what a reading through the certifier spends, which `curios-erase`'s suite measures, the certifier's errors by name, which the soundness board's records name a refusal by, and a certifier and a walk with their memos off, which `curios-analysis`'s and `curios-prelude`'s suites reduce and measure under. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness. **Never add this to `default`.**
 test-support = ["curios-common/test-support"]
 
 # Tests only. `curios-abi` is already inside this crate's normal graph through `curios-core` — the enumeration of the trusted base in this crate's `README.md` names it — so this adds nothing to what `cargo tree -p curios-cert -e normal` reaches. It is here so a fixture can forge an ABI row by hand.
@@ -18,11 +18,11 @@ test-support = ["curios-common/test-support"]
 curios-abi = { workspace = true }
 # The carriers and operations `Intrinsic::algebra` declares an intrinsic at, which a fixture reads against the row that types it. Inside this crate's normal graph through `curios-core`, as `curios-abi` is.
 curios-algebra = { workspace = true }
-# The shared syntax-registry stand-in in `curios_analysis::fixture`, which every kernel this crate's tests build is handed. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
+# The shared syntax-registry stand-in in `curios_analysis::fixture`, which every certifier this crate's tests build is handed. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-analysis = { workspace = true, features = ["test-support"] }
 # `declaring`, by which a fixture's module declares the entries it names: each carried by the definition of its name, or by the former it spells.
 curios-core = { workspace = true, features = ["test-support"] }
-# The printer a test renders a refusal through, as a reporter hands the kernel one ([`curios_core::Notation`]). Tests only: the kernel's own graph never reaches a printer.
+# The printer a test renders a refusal through, as a reporter hands the certifier one ([`curios_core::Notation`]). Tests only: the certifier's own graph never reaches a printer.
 curios-surface = { workspace = true }
 # `fill!`, by which a fixture splices a value into text whose own braces stay single. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-common = { workspace = true, features = ["test-support"] }

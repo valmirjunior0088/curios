@@ -488,7 +488,7 @@ fn first(name: &str, level: Level) -> Term {
     Term::proj(Term::instance(nominal(name), vec![level]), 0)
 }
 
-// A field of a definition applied in full is that field's value once the definition unfolds: two projections apart in a level the value drops are one term, and two apart in a level it holds are two. The kernel's twin of this proposition shares the name.
+// A field of a definition applied in full is that field's value once the definition unfolds: two projections apart in a level the value drops are one term, and two apart in a level it holds are two. The certifier's twin of this proposition shares the name.
 #[test]
 fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
     for (record, converts) in [("pair", true), ("held", false)] {

@@ -269,7 +269,7 @@ impl fmt::Display for QualityMetaId {
 
 /// What kind of universe a sort is, beside its level: of propositions, of types, or one not stated.
 ///
-/// Any two inhabitants of a proposition are one to conversion and a type's are not, so every judgment that reads a sort reads its quality. An open quality is neither: a parameter is a sort its declaration leaves to each caller, and a metavariable one its elaboration has not solved. The kernel judges no term that holds one.
+/// Any two inhabitants of a proposition are one to conversion and a type's are not, so every judgment that reads a sort reads its quality. An open quality is neither: a parameter is a sort its declaration leaves to each caller, and a metavariable one its elaboration has not solved. The certifier judges no term that holds one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub enum Quality {
@@ -505,7 +505,7 @@ pub struct UniverseContext {
 }
 
 impl UniverseContext {
-    /// The most sorts one declaration leaves to its caller. The kernel judges a declaration once at every assignment of them, so the count bounds what a declaration costs: two to its power judgments.
+    /// The most sorts one declaration leaves to its caller. The certifier judges a declaration once at every assignment of them, so the count bounds what a declaration costs: two to its power judgments.
     pub const QUALITY_LIMIT: usize = 8;
 
     pub fn empty() -> Self {
@@ -527,7 +527,7 @@ impl UniverseContext {
     ///
     /// A context is closed. Universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a constraint could still name, and elaboration is over by the time anything asks. A constraint naming a parameter past the count is not a stronger hypothesis but a meaningless one — instantiation substitutes an argument vector of the declared length, and a reference past its end has nothing to become — while a constraint carrying a metavariable is elaboration residue a zonked module cannot contain. Both are refused rather than interpreted.
     ///
-    /// **A method on the data, not a judgment.** A copy in each checker would be a second opinion worth nothing (see `documentation/design/soundness/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`): the predicate is too simple to have two genuine implementations — any "independent" rewrite would agree by construction rather than by independence — so two copies would buy a diff test over a copy of themselves. It lives here for the reason [`Level::structurally_leq`] does: it decides a property of the representation by looking at it, runs no solver, and admits nothing on its own. Deciding *satisfiability* is the opposite case and stays written twice — see `curios-cert`'s `satisfiable` for why.
+    /// **A method on the data, not a judgment.** A copy in each checker would be a second opinion worth nothing (see `documentation/design/soundness/an-independent-certifier-re-checks-what-the-elaborator-accepts.md`): the predicate is too simple to have two genuine implementations — any "independent" rewrite would agree by construction rather than by independence — so two copies would buy a diff test over a copy of themselves. It lives here for the reason [`Level::structurally_leq`] does: it decides a property of the representation by looking at it, runs no solver, and admits nothing on its own. Deciding *satisfiability* is the opposite case and stays written twice — see `curios-cert`'s `satisfiable` for why.
     pub fn is_closed(&self) -> bool {
         let within = |level: &Level| {
             level.params().all(|param| param.0 < self.parameter_count)

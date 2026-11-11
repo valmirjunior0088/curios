@@ -2,7 +2,7 @@
 
 use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
-// **Unit eta is the type's, in both checkers.** A type with no field — the empty Σ, a nominal struct that declares none — has one inhabitant, so any two terms convert at it, and each checker decides the goal by its type ahead of every structural rule. The elaborator reached the rule only between two sides no structural rule claimed and the kernel had it against a literal alone, so two variables elaborated and were refused by the kernel, and two applications or two stuck matches were refused by the elaborator, which held each equal to a variable. The first two programs are the ones that reached the kernel's refusal; the rest are the shapes, and the two eta rules that carry a goal to a unit.
+// **Unit eta is the type's, in both checkers.** A type with no field — the empty Σ, a nominal struct that declares none — has one inhabitant, so any two terms convert at it, and each checker decides the goal by its type ahead of every structural rule. The elaborator reached the rule only between two sides no structural rule claimed and the certifier had it against a literal alone, so two variables elaborated and were refused by the certifier, and two applications or two stuck matches were refused by the elaborator, which held each equal to a variable. The first two programs are the ones that reached the certifier's refusal; the rest are the shapes, and the two eta rules that carry a goal to a unit.
 //
 // The refusal beside it is what keeps the acceptance from reading as "any two records convert": one relevant field keeps two neutrals apart.
 #[test]
@@ -32,7 +32,7 @@ fn two_neutrals_at_a_record_with_a_relevant_field_stay_apart() {
     });
 }
 
-// **A nominal struct has no eta by its type, and what eta would decide is read off the type.** Two neutrals at a struct have no literal to open, so neither checker expands them: any two terms convert at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record or a struct of such — and are left to their heads otherwise. The elaborator projected two neutrals at a struct and compared the projections with no type, which decided nothing, and the kernel compared their heads; once a lookup typed those projections the elaborator accepted two variables at a struct of a unit and the kernel refused them, which is the first program.
+// **A nominal struct has no eta by its type, and what eta would decide is read off the type.** Two neutrals at a struct have no literal to open, so neither checker expands them: any two terms convert at a struct every field of which has one inhabitant — a unit, a proof, a function into a unit, a record or a struct of such — and are left to their heads otherwise. The elaborator projected two neutrals at a struct and compared the projections with no type, which decided nothing, and the certifier compared their heads; once a lookup typed those projections the elaborator accepted two variables at a struct of a unit and the certifier refused them, which is the first program.
 //
 // The refusals beside it are the rule's bounds: one relevant field keeps two neutrals apart, under whatever nesting, and a struct that reaches itself answers no where it is met again, which is what ends the walk — by its own fields or through another struct's, and asked inside its own declaration as after it.
 //
@@ -230,7 +230,7 @@ fn two_neutrals_stay_apart_where_a_lookup_gives_them_a_type_with_a_relevant_fiel
     });
 }
 
-// **A lookup types every side a position can hold without inferring, and a binder conversion opens carries its type.** Where a child is compared with no type, each checker read what a type directs off the type a lookup gave both sides, and three sides had none. A stuck elimination, so that one at a proposition met neither a variable at it nor an elimination of another scrutinee: its type is its result at its scrutinee. A constructor's value, so that a proof built by one did not meet a proof a variable names: its type is its declaration's. And a binder an arm opened, which the kernel assumed at a stand-in and the elaborator recorded no type for: it is opened at its constructor's field type, so two proofs an arm binds are one. Each program sets its pair as a tuple literal's component in a stuck elimination's arm, a child no type reaches.
+// **A lookup types every side a position can hold without inferring, and a binder conversion opens carries its type.** Where a child is compared with no type, each checker read what a type directs off the type a lookup gave both sides, and three sides had none. A stuck elimination, so that one at a proposition met neither a variable at it nor an elimination of another scrutinee: its type is its result at its scrutinee. A constructor's value, so that a proof built by one did not meet a proof a variable names: its type is its declaration's. And a binder an arm opened, which the certifier assumed at a stand-in and the elaborator recorded no type for: it is opened at its constructor's field type, so two proofs an arm binds are one. Each program sets its pair as a tuple literal's component in a stuck elimination's arm, a child no type reaches.
 //
 // The refusal beside each is the same pair at a relevant type.
 #[test]
@@ -346,7 +346,7 @@ fn two_binders_of_an_arm_at_a_relevant_type_stay_apart() {
     });
 }
 
-// **What one inhabitant reads of a struct is every field it holds, a hidden one among them.** `S`'s plain field is a unit and its hidden `k` a `Nat`, so two neutrals at `S` stay apart, where read off the plain fields alone `cast` would carry `F` from `S { @k = 1, u = () }` to `S { @k = 0, u = () }`, `True` to `False`. The control is the same pair at a struct whose hidden field is a unit too. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name.
+// **What one inhabitant reads of a struct is every field it holds, a hidden one among them.** `S`'s plain field is a unit and its hidden `k` a `Nat`, so two neutrals at `S` stay apart, where read off the plain fields alone `cast` would carry `F` from `S { @k = 1, u = () }` to `S { @k = 0, u = () }`, `True` to `False`. The control is the same pair at a struct whose hidden field is a unit too. `curios-cert`'s `recheck::shape_tests` puts the route to the certifier under this name.
 #[test]
 fn two_neutrals_at_a_struct_whose_relevant_field_is_hidden_stay_apart() {
     control(

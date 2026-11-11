@@ -26,7 +26,7 @@ pub type Demanded<'a> = (&'a curios_core::Term, curios_core::Operand);
 
 /// The operands `intrinsic` computes with, in order, each beside what [`Intrinsic::signature`](curios_core::Intrinsic::signature) demands of it.
 ///
-/// The roster is the one statement of an operand's type. Both checkers walk it, so an arm that spelled a type of its own could come to disagree with the one its operand was checked at, and erasure runs after the kernel, where a disagreement is a miscompilation rather than a refusal. Two operands are left out, a run holding nothing of either: one demanded as a type, and the proof of the operation's bound ([`Intrinsic::bound`](curios_core::Intrinsic::bound)) — erasure is where a proof stops existing, and nowhere else has to know.
+/// The roster is the one statement of an operand's type. Both checkers walk it, so an arm that spelled a type of its own could come to disagree with the one its operand was checked at, and erasure runs after the certifier, where a disagreement is a miscompilation rather than a refusal. Two operands are left out, a run holding nothing of either: one demanded as a type, and the proof of the operation's bound ([`Intrinsic::bound`](curios_core::Intrinsic::bound)) — erasure is where a proof stops existing, and nowhere else has to know.
 fn computed<'a>(context: &Reader, intrinsic: &'a curios_core::Intrinsic) -> Vec<Demanded<'a>> {
     let bound = intrinsic.bound();
 

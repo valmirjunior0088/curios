@@ -27,7 +27,7 @@ impl Cost {
     }
 }
 
-/// What each checker makes of `source`: the elaborator's side is the lowering, elaboration and erasure, the kernel's its walk over what the elaborator built — absent where the elaborator built nothing.
+/// What each checker makes of `source`: the elaborator's side is the lowering, elaboration and erasure, the certifier's its walk over what the elaborator built — absent where the elaborator built nothing.
 fn costs(source: &str) -> (Cost, Option<Cost>) {
     let entrypoint = source.parse::<Entrypoint>().expect("a tower parses");
 
@@ -52,10 +52,11 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
     };
 
     let module = Zonked::project(&checked.program).expect("a checked program is zonked");
-    let (verdicts, heaviest) = recheck_with_prelude_measured(&module, DEFAULT_BUDGET, |kernel| {
-        kernel.heaviest_declaration()
-    });
-    let kernel = Cost {
+    let (verdicts, heaviest) =
+        recheck_with_prelude_measured(&module, DEFAULT_BUDGET, |certifier| {
+            certifier.heaviest_declaration()
+        });
+    let certifier = Cost {
         verdict: match verdicts.is_empty() {
             true => "accepted",
             false => "refused",
@@ -64,7 +65,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
         looks: take_looks(),
     };
 
-    (elaborator, Some(kernel))
+    (elaborator, Some(certifier))
 }
 
 /// What every tower costs each checker at two heights.
@@ -75,7 +76,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 /// cargo test --all-features --package curios --lib -- --ignored --nocapture tower_measurements
 /// ```
 ///
-/// Counted, so the figures hold on any machine and in either profile. Units are what the heaviest declaration spent of its budget; looks are how many times a term handed out its node while the checker ran (`curios_core::take_looks`) — the lowering, elaboration and erasure on one side, the kernel's walk on the other. A checker that walks a tower's graph adds four lines' worth across four lines, as the chain's rows do; one that walks it once per path multiplies by sixteen.
+/// Counted, so the figures hold on any machine and in either profile. Units are what the heaviest declaration spent of its budget; looks are how many times a term handed out its node while the checker ran (`curios_core::take_looks`) — the lowering, elaboration and erasure on one side, the certifier's walk on the other. A checker that walks a tower's graph adds four lines' worth across four lines, as the chain's rows do; one that walks it once per path multiplies by sixteen.
 ///
 /// Looks are the column a walk cannot hide from. A hit on a remembered reduct is free, so a walk that only reads — the sort of a type — spends no unit however many paths it takes, and shows in looks alone.
 ///
@@ -83,7 +84,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 ///
 /// Over the checkers of `cf3aa6e85`, every row accepted by both.
 ///
-/// | tower | lines | elaborator units | elaborator looks | kernel units | kernel looks |
+/// | tower | lines | elaborator units | elaborator looks | certifier units | certifier looks |
 /// | --- | --- | --- | --- | --- | --- |
 /// | chain | 12 | 4 046 | 12 889 | 3 039 | 8 599 |
 /// | chain | 16 | 4 046 | 14 133 | 3 039 | 8 979 |
@@ -126,7 +127,7 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
 /// | bounded | 12 | 42 906 | 166 311 | 42 946 | 104 747 |
 /// | bounded | 16 | 56 358 | 232 501 | 56 298 | 150 467 |
 ///
-/// **No row multiplies.** A tower a checker walked once per path would read sixteen times the looks at sixteen lines that it reads at twelve, where a walk that visits each node once reads at most a third more. Every row but one reads under 27 per cent more, the most the arms in the kernel, 12 832 looks and then 16 228. The bounded tower, whose proof folds comparisons over every line, reads 166 311 and then 232 501 in the elaborator and 104 747 and then 150 467 in the kernel: more than its lines add, though far short of what a walk per path reads: its proof reduces each line's comparison over the lines before it, a square its units charge in step with what it costs, which is reduction's (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`). A row's units are its heaviest declaration's: they stand still across the two heights in every row but four, and in those move by under forty for the aliases, the arrows and the two towers, and by 13 452 in the elaborator and 13 352 in the kernel for the bounded tower, whose proof reduces each line's comparison.
+/// **No row multiplies.** A tower a checker walked once per path would read sixteen times the looks at sixteen lines that it reads at twelve, where a walk that visits each node once reads at most a third more. Every row but one reads under 27 per cent more, the most the arms in the certifier, 12 832 looks and then 16 228. The bounded tower, whose proof folds comparisons over every line, reads 166 311 and then 232 501 in the elaborator and 104 747 and then 150 467 in the certifier: more than its lines add, though far short of what a walk per path reads: its proof reduces each line's comparison over the lines before it, a square its units charge in step with what it costs, which is reduction's (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`). A row's units are its heaviest declaration's: they stand still across the two heights in every row but four, and in those move by under forty for the aliases, the arrows and the two towers, and by 13 452 in the elaborator and 13 352 in the certifier for the bounded tower, whose proof reduces each line's comparison.
 #[test]
 #[ignore = "measurement, counted: reports what a tower costs each checker rather than asserting"]
 fn tower_measurements() {
@@ -158,17 +159,17 @@ fn tower_measurements() {
 
     println!(
         "{:<20} {:<5} {:<9} {:>10} {:>12}   {:<9} {:>10} {:>12}",
-        "tower", "lines", "elaborator", "units", "looks", "kernel", "units", "looks"
+        "tower", "lines", "elaborator", "units", "looks", "certifier", "units", "looks"
     );
     for (label, shape) in shapes {
         for lines in [12usize, 16] {
-            let (elaborator, kernel) = costs(&tower(shape, lines));
-            let kernel = match kernel {
-                Some(kernel) => kernel.row(),
+            let (elaborator, certifier) = costs(&tower(shape, lines));
+            let certifier = match certifier {
+                Some(certifier) => certifier.row(),
                 None => "-".to_string(),
             };
 
-            println!("{label:<20} {lines:<5} {}   {kernel}", elaborator.row());
+            println!("{label:<20} {lines:<5} {}   {certifier}", elaborator.row());
         }
     }
 }

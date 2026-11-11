@@ -55,7 +55,7 @@ pub struct Frames<'s> {
     members: HashMap<Keyed<RecGroup>, Vec<Vec<Option<Global>>>>,
     /// How much of the refinement stack a settlement withholds from the inside, as the depth of the frame the entry being settled was registered in — `None` for none of it.
     ///
-    /// The bracket the kernel has. A refinement key's *reduced* spelling must rest only on equations that outlive it, which are the frames outside its own: an inner arm's equation retracts first, and the entry's own frame is the equation itself, which a reduction of the key would otherwise meet at its first probe and answer with the case value it is assuming. `curios-cert`'s `Scope::hide_refinements_from` withholds the same span for the same two reasons.
+    /// The bracket the certifier has. A refinement key's *reduced* spelling must rest only on equations that outlive it, which are the frames outside its own: an inner arm's equation retracts first, and the entry's own frame is the equation itself, which a reduction of the key would otherwise meet at its first probe and answer with the case value it is assuming. `curios-cert`'s `Scope::hide_refinements_from` withholds the same span for the same two reasons.
     withhold_refinements_from: Option<usize>,
     /// How many frames have been entered: the number the next one takes ([`Frame::number`]).
     entered: u64,
@@ -64,7 +64,7 @@ pub struct Frames<'s> {
 }
 
 impl<'s> Frames<'s> {
-    /// `term` with every variable an arm in force refined spelled as the value it was refined to, outside a metavariable's occurrence, which is kept as it stands as [`Context::by_value`](crate::Context::by_value) keeps it: how the kernel, which substitutes a case's solution through the arm it checks, spells a term of that arm. A refinement's value may name a variable an arm inside refined in turn, so the substitution is taken until the term names no refined variable outside an occurrence.
+    /// `term` with every variable an arm in force refined spelled as the value it was refined to, outside a metavariable's occurrence, which is kept as it stands as [`Context::by_value`](crate::Context::by_value) keeps it: how the certifier, which substitutes a case's solution through the arm it checks, spells a term of that arm. A refinement's value may name a variable an arm inside refined in turn, so the substitution is taken until the term names no refined variable outside an occurrence.
     ///
     /// A term that names none is returned as it is, for a walk over its free variables outside its occurrences: this is read at every probe of a refined head and at every stuck form put to the reduced spellings.
     pub fn spelled_as_refined(&self, term: &Term) -> Term {
@@ -862,7 +862,7 @@ impl<'s> Frames<'s> {
 
     /// Whether a frame that stands inside the one at depth `frame` withholds the equation `key` holds there, or holds an entry standing in for it.
     ///
-    /// **Past a settlement's ceiling too.** A settlement withholds the refinements of the frames from its own inwards, and an arm's step-aside is no refinement: the recorded equation steps aside in the arm that restated or withheld it from every lookup and every settlement made while the arm stands, as the kernel's `Scope::restate` has it, so a restatement settled with its own frame withheld settles under the arm's re-typing and goes with it, and the recorded equation settles only where the arm does not stand.
+    /// **Past a settlement's ceiling too.** A settlement withholds the refinements of the frames from its own inwards, and an arm's step-aside is no refinement: the recorded equation steps aside in the arm that restated or withheld it from every lookup and every settlement made while the arm stands, as the certifier's `Scope::restate` has it, so a restatement settled with its own frame withheld settles under the arm's re-typing and goes with it, and the recorded equation settles only where the arm does not stand.
     fn withheld_inside(&self, frame: usize, key: &Term) -> bool {
         self.refined_standing()
             .filter(|inner| frame < inner.depth)

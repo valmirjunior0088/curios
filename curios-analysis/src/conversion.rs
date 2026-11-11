@@ -13,7 +13,7 @@
 //! 9. two applications of one operation compared as values of what they produce;
 //! 10. the congruence, each operand at the type its operation declares.
 //!
-//! **The chain decides; each checker discharges.** What it cannot settle comes back — a residual pair, the congruence's levels and operands, or the atoms it needs classed before it can read on — rather than being compared here, because the two checkers compare differently and must: the elaborator enqueues and may solve, while the kernel compares in order, inside the pairs its goal stands in. Nothing here calls a judgment.
+//! **The chain decides; each checker discharges.** What it cannot settle comes back — a residual pair, the congruence's levels and operands, or the atoms it needs classed before it can read on — rather than being compared here, because the two checkers compare differently and must: the elaborator enqueues and may solve, while the certifier compares in order, inside the pairs its goal stands in. Nothing here calls a judgment.
 //!
 //! **Shared on the terms `curios-analysis` already states for itself.** The chain is algebra over the representation — the peels, the laws and the views are `curios-core`'s and `curios-algebra`'s, trusted by both checkers alike — and a second copy of it would be a second transcription of one function rather than a second opinion. What stays each checker's own is what does differ between them: the terms they are handed, how a residual is compared, and how levels are.
 //!
@@ -33,10 +33,10 @@ use {
 
 /// What a checker supplies to [`convert_intrinsics`] beyond its reduction.
 pub trait Driver: Reducer {
-    /// An intrinsic as this checker reads it before any peel does. The elaborator substitutes the metavariables it has solved, since two occurrences of one sum pair only once their witness metavariables are spliced; the kernel, handed finished terms, reads it as it is.
+    /// An intrinsic as this checker reads it before any peel does. The elaborator substitutes the metavariables it has solved, since two occurrences of one sum pair only once their witness metavariables are spliced; the certifier, handed finished terms, reads it as it is.
     fn prepare(&mut self, intrinsic: Intrinsic) -> Intrinsic;
 
-    /// The elaborator's solving views, each splitting a pair no congruence relates into goals the driver holds: a `Bytes` literal against an `append` or `concat` spine, at the spine's known lengths, and two lists that lead with written elements, one of them going on past its own, element by element. `Some(true)` once those goals are the driver's, `Some(false)` on a length clash no solution can repair, and `None` where no view applies. The kernel has none, since it compares what the elaborator's solutions already made agree by reduction.
+    /// The elaborator's solving views, each splitting a pair no congruence relates into goals the driver holds: a `Bytes` literal against an `append` or `concat` spine, at the spine's known lengths, and two lists that lead with written elements, one of them going on past its own, element by element. `Some(true)` once those goals are the driver's, `Some(false)` on a length clash no solution can repair, and `None` where no view applies. The certifier has none, since it compares what the elaborator's solutions already made agree by reduction.
     fn solving_view(&mut self, this: &Intrinsic, that: &Intrinsic) -> Option<bool>;
 
     /// The registry an operation's signature is read through.
@@ -59,7 +59,7 @@ pub enum Outcome {
     Residual(Term, Term),
     /// The two sides as one operation: what is left is its congruence.
     Congruence(Congruence),
-    /// The two sides as one commutative operation with no operand of one paired with an operand of the other. To the kernel, which is handed finished terms, they are unequal; to the elaborator they are unequal unless a metavariable still stands in one, which may pair them once it is solved.
+    /// The two sides as one commutative operation with no operand of one paired with an operand of the other. To the certifier, which is handed finished terms, they are unequal; to the elaborator they are unequal unless a metavariable still stands in one, which may pair them once it is solved.
     Unpaired,
 }
 
@@ -477,7 +477,7 @@ pub enum Agreement {
     Atoms(Vec<Term>),
 }
 
-/// Whether a `Bool` connective on either side agrees with the other side at every assignment of their atoms — the decision diagram both checkers put a connective to when the other side is no intrinsic at all, absorption's shape: `b || (b && c)` against the bare `b`, which the intrinsic chain never sees. Where each checker asks it is its own: the elaborator before its dispatch, the kernel in its fallback ahead of its unfolding retry.
+/// Whether a `Bool` connective on either side agrees with the other side at every assignment of their atoms — the decision diagram both checkers put a connective to when the other side is no intrinsic at all, absorption's shape: `b || (b && c)` against the bare `b`, which the intrinsic chain never sees. Where each checker asks it is its own: the elaborator before its dispatch, the certifier in its fallback ahead of its unfolding retry.
 ///
 /// The diagram keys an opaque atom on its spelling, as every reader in the chain does, so a pair it does not decide hands its atoms back to be classed, as the chain's step 7 hands its own: `p(a + b) || (p(b + a) && q)` against `p(a + b)` is absorption once the two leaves are one atom.
 pub fn connectives_agree(

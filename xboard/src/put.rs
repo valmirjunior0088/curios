@@ -32,12 +32,12 @@ pub fn false_type() -> Term {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Checker {
-    /// `curios-elab`, which builds the module of a program. A program the grammar refuses is counted here: no module exists for the kernel either way.
+    /// `curios-elab`, which builds the module of a program. A program the grammar refuses is counted here: no module exists for the certifier either way.
     Elaborator,
     /// `curios-surface`'s reader, which builds the module Core text writes. Text that does not parse is counted here, as a program the grammar refuses is the elaborator's.
     Reader,
     /// `curios-cert` and the layer it judges through: the trusted base.
-    Kernel,
+    Certifier,
 }
 
 impl Checker {
@@ -46,7 +46,7 @@ impl Checker {
         match self {
             Checker::Elaborator => <curios_elab::Error as Variants>::NAMES,
             Checker::Reader => <curios_surface::Refusal as Variants>::NAMES,
-            Checker::Kernel => <curios_cert::Error as Variants>::NAMES,
+            Checker::Certifier => <curios_cert::Error as Variants>::NAMES,
         }
     }
 }
@@ -56,7 +56,7 @@ impl fmt::Display for Checker {
         formatter.write_str(match self {
             Checker::Elaborator => "elaborator",
             Checker::Reader => "reader",
-            Checker::Kernel => "kernel",
+            Checker::Certifier => "certifier",
         })
     }
 }
@@ -75,10 +75,10 @@ pub enum Refusal {
         error: curios_elab::Error,
         reported: String,
     },
-    /// A module carrying what elaboration should have solved, refused by the evidence the kernel's walk takes a module with. Reported, and never what a witness expects: the kernel refuses such a module itself, and that refusal is the one a fix is held by.
+    /// A module carrying what elaboration should have solved, refused by the evidence the certifier's walk takes a module with. Reported, and never what a witness expects: the certifier refuses such a module itself, and that refusal is the one a fix is held by.
     Unfinished(ZonkedRefusal),
-    /// The kernel's refusal, and the item or registry entry it refused.
-    Kernel(Verdict),
+    /// The certifier's refusal, and the item or registry entry it refused.
+    Certifier(Verdict),
     /// A history stopped at the step of the unit claiming `mount` by what names no checker's error, held as it was reported: a program refused as a build reports it, a unit erasure refused, or the history's store. No expectation meets it, so a fix that refuses a unit before the proof writes that unit as Core text.
     Stopped { mount: String, reported: String },
 }
@@ -100,7 +100,7 @@ impl Refusal {
         match self {
             Refusal::Text(_) | Refusal::Elaborator { .. } => Some(Checker::Elaborator),
             Refusal::Unread(_) | Refusal::Read { .. } => Some(Checker::Reader),
-            Refusal::Unfinished(_) | Refusal::Kernel(_) => Some(Checker::Kernel),
+            Refusal::Unfinished(_) | Refusal::Certifier(_) => Some(Checker::Certifier),
             Refusal::Stopped { .. } => None,
         }
     }
@@ -126,9 +126,9 @@ impl Refusal {
 
                 format!("elaborator {}", variants.join(" "))
             }
-            Refusal::Unfinished(_) => "kernel, as unfinished".to_string(),
-            Refusal::Kernel(verdict) => format!(
-                "kernel `{}` {}",
+            Refusal::Unfinished(_) => "certifier, as unfinished".to_string(),
+            Refusal::Certifier(verdict) => format!(
+                "certifier `{}` {}",
                 verdict.error.variant_name(),
                 standing_at(verdict.name.as_ref())
             ),
@@ -147,7 +147,7 @@ impl fmt::Display for Refusal {
             | Refusal::Elaborator { reported, .. }
             | Refusal::Stopped { reported, .. } => formatter.write_str(reported),
             Refusal::Unfinished(refusal) => write!(formatter, "{refusal}"),
-            Refusal::Kernel(verdict) => {
+            Refusal::Certifier(verdict) => {
                 write!(
                     formatter,
                     "{}",
@@ -161,9 +161,9 @@ impl fmt::Display for Refusal {
 /// What putting a witness to the checkers answered.
 #[derive(Debug)]
 pub enum Answer {
-    /// Refused before a module existed for the kernel to judge: by the program's text, by the elaborator while it was building one, or by the reader of Core text; or a history stopped by what names no checker, which says nothing of whether the kernel was asked.
+    /// Refused before a module existed for the certifier to judge: by the program's text, by the elaborator while it was building one, or by the reader of Core text; or a history stopped by what names no checker, which says nothing of whether the certifier was asked.
     Unbuilt(Refusal),
-    /// Judged by the kernel, and for a program by the elaborator before it, with every refusal either made: none where the term was admitted at `False`.
+    /// Judged by the certifier, and for a program by the elaborator before it, with every refusal either made: none where the term was admitted at `False`.
     Judged(Vec<Refusal>),
 }
 
@@ -181,15 +181,15 @@ impl Answer {
         self.refusals().is_empty()
     }
 
-    /// Whether the kernel judged the witness: always for a module, and for a program only where the elaborator built one to hand it.
-    pub fn kernel_asked(&self) -> bool {
+    /// Whether the certifier judged the witness: always for a module, and for a program only where the elaborator built one to hand it.
+    pub fn certifier_asked(&self) -> bool {
         matches!(self, Answer::Judged(_))
     }
 }
 
-/// Put a source program to both checkers as a proof of `False`, over `predecessors`: the elaborator, then the kernel over the module it built. The pipeline states the type; nothing here or in the program chooses it.
+/// Put a source program to both checkers as a proof of `False`, over `predecessors`: the elaborator, then the certifier over the module it built. The pipeline states the type; nothing here or in the program chooses it.
 ///
-/// The elaborator's erasure obligations are reported rather than raised, so a program only it refuses still yields a module for the kernel to judge. A refusal while the module is being built leaves the kernel nothing to judge.
+/// The elaborator's erasure obligations are reported rather than raised, so a program only it refuses still yields a module for the certifier to judge. A refusal while the module is being built leaves the certifier nothing to judge.
 fn put_program(predecessors: Predecessors<'_>, source: &str) -> Answer {
     let entrypoint = match source.parse::<curios_surface::Entrypoint>() {
         Ok(entrypoint) => entrypoint,
@@ -221,13 +221,13 @@ fn put_program(predecessors: Predecessors<'_>, source: &str) -> Answer {
                     error: obligation.error,
                     reported: Report::render_all(&obligation.reported),
                 })
-                .chain(verdicts.into_iter().map(Refusal::Kernel))
+                .chain(verdicts.into_iter().map(Refusal::Certifier))
                 .collect(),
         ),
     }
 }
 
-/// Put a module built by hand to the kernel alone, with `predecessors` in scope, as a program closing with `body` stated at `type_`.
+/// Put a module built by hand to the certifier alone, with `predecessors` in scope, as a program closing with `body` stated at `type_`.
 fn put_module(
     predecessors: Predecessors<'_>,
     definitions: Definitions,
@@ -242,17 +242,17 @@ fn put_module(
         },
     };
 
-    // The walk takes a program only with the evidence that elaboration finished it, so one carrying what elaboration should have solved is refused here, by the layer the kernel judges through.
+    // The walk takes a program only with the evidence that elaboration finished it, so one carrying what elaboration should have solved is refused here, by the layer the certifier judges through.
     Answer::Judged(match Zonked::project(&program) {
         Err(refusal) => vec![Refusal::Unfinished(refusal)],
         Ok(program) => recheck(&program, DEFAULT_BUDGET, predecessors, &SYNTAX)
             .into_iter()
-            .map(Refusal::Kernel)
+            .map(Refusal::Certifier)
             .collect(),
     })
 }
 
-/// Read `text` as Core text over `predecessors`, and put the module it writes to the kernel alone, with them in scope, as a program closing with its term at `False`. The text states no type for its term: the board states it.
+/// Read `text` as Core text over `predecessors`, and put the module it writes to the certifier alone, with them in scope, as a program closing with its term at `False`. The text states no type for its term: the board states it.
 fn put_core_text(predecessors: Predecessors<'_>, text: &str) -> Answer {
     let unread = |reported: String| Answer::Unbuilt(Refusal::Unread(reported));
     let file = match text.parse::<CoreFile>() {
@@ -327,7 +327,9 @@ fn halted(Stopped { mount, why }: Stopped) -> Answer {
         Unbuilt::Unmade(Unmade::Unfinished(refusal)) => {
             Answer::Judged(vec![Refusal::Unfinished(*refusal)])
         }
-        Unbuilt::Unmade(Unmade::Kernel(verdict)) => Answer::Judged(vec![Refusal::Kernel(*verdict)]),
+        Unbuilt::Unmade(Unmade::Certifier(verdict)) => {
+            Answer::Judged(vec![Refusal::Certifier(*verdict)])
+        }
         Unbuilt::Unmade(Unmade::Erased(reported)) => {
             Answer::Judged(vec![Refusal::Stopped { mount, reported }])
         }

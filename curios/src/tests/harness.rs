@@ -15,7 +15,7 @@ use {
 
 #[test]
 fn the_description_schedules_every_rung() {
-    // The end-to-end scheduler, through the library: no index argument runs every test in declaration order. Two rungs, since a description is a verdict or an action — a proof is a `let` the kernel checks and never reaches a runner.
+    // The end-to-end scheduler, through the library: no index argument runs every test in declaration order. Two rungs, since a description is a verdict or an action — a proof is a `let` the certifier checks and never reaches a runner.
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Eq, Test};
@@ -304,7 +304,7 @@ fn a_test_body_is_checked_against_the_description_type() {
     assert!(error.contains("Test"), "unexpected error: {error}");
 }
 
-// A test program is judged as any program is, the tests its synthesized tail schedules with it, and a build holds no test to judge: the body is refused where the test program is compiled and nowhere else. It is one the kernel alone once refused — a bound filled through a recursive member's own body — and the elaborator refuses it now; no term only the kernel refuses is known to put in its place.
+// A test program is judged as any program is, the tests its synthesized tail schedules with it, and a build holds no test to judge: the body is refused where the test program is compiled and nowhere else. It is one the certifier alone once refused — a bound filled through a recursive member's own body — and the elaborator refuses it now; no term only the certifier refuses is known to put in its place.
 #[test]
 fn a_test_program_is_judged_and_a_build_holds_none_of_its_tests() {
     let source = r#"

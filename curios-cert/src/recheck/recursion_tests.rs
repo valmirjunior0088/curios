@@ -20,7 +20,7 @@ use {
 ///
 /// A selection with a node of its own — carrying its own copy of the group, well-formed standing alone and so gated by no scope — would need an arm of its own, and one answering `group.member_type(index)` outright would check nothing. The second module below is the sharper case: its group never recurses at all, so no totality rule is in play, and what would go unchecked is simply whether the body inhabits the type the group claims for it. `Absurd` is a proposition with no constructors, so either module would be a closed inhabitant of one.
 ///
-/// (V) seeds from the kernel's own typing, and one node for both spellings is one node for that walk to recognize as a recursion, where a second node would present its member scopes as a bound variable.
+/// (V) seeds from the certifier's own typing, and one node for both spellings is one node for that walk to recognize as a recursion, where a second node would present its member scopes as a bound variable.
 ///
 /// Reachable from no surface program — `curios-elab` builds a checked node — which is why this belongs here rather than in `curios/src/tests`, and why nothing in the corpus could have found it.
 ///
@@ -51,7 +51,7 @@ fn a_recursive_member_is_certified_only_with_its_group() {
                 .error
                 .rendered(&Spelling::default())
                 .contains(refusal)),
-            "{label}: the kernel certified a closed inhabitant of an empty proposition: {verdicts:?}",
+            "{label}: the certifier accepted a closed inhabitant of an empty proposition: {verdicts:?}",
         );
     }
 }
@@ -121,7 +121,7 @@ fn a_member_handed_bare_to_a_list_fold_does_not_descend() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
-        "the kernel certified a closed inhabitant of an empty proposition: {verdicts:?}",
+        "the certifier accepted a closed inhabitant of an empty proposition: {verdicts:?}",
     );
 }
 
@@ -334,7 +334,7 @@ fn grouped_at_absurd(name: Global, local: Free, body: Term) -> Program {
 
 /// An indirection does not launder a recursive occurrence past the call recorder: `rec f : Absurd = let g : Absurd = f; g` and `rec f : Absurd = ((g : Absurd) => g)(f)` are refused as `rec f : Absurd = f` is.
 ///
-/// A group's calls are the ones the kernel types, and [`Calls::record_call`](crate::Kernel) takes a head that *is* a member local. Neither spelling applies one: a `let` is bound and not substituted ([`under_bindings`](crate::infer)), so the tail's head is the alias, and a lambda applied on the spot is typed with its binder standing for the argument, so the body's head is that binder. A group whose calls were all spelled this way would close with no edge at all, and a group with no edges descends — which would certify `rec f : Absurd = f` under another spelling.
+/// A group's calls are the ones the certifier types, and [`Calls::record_call`](crate::Certifier) takes a head that *is* a member local. Neither spelling applies one: a `let` is bound and not substituted ([`under_bindings`](crate::infer)), so the tail's head is the alias, and a lambda applied on the spot is typed with its binder standing for the argument, so the body's head is that binder. A group whose calls were all spelled this way would close with no edge at all, and a group with no edges descends — which would certify `rec f : Absurd = f` under another spelling.
 ///
 /// What catches both is the bare occurrence the indirection has to pass through — the `let`'s value, checked where the `let` binds it, and the redex's argument, checked against its domain. `infer`'s `Var` rule records a member named anywhere but at an application's head as a call with no arguments, which grades as unknown throughout, so the verdict is the same as the direct spelling's.
 ///
@@ -372,7 +372,7 @@ fn an_indirection_does_not_launder_a_member_past_the_call_recorder() {
             verdicts
                 .iter()
                 .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
-            "{label}: a member reached through an indirection closed its group with no call, and the kernel certified a closed inhabitant of an empty proposition: {verdicts:?}",
+            "{label}: a member reached through an indirection closed its group with no call, and the certifier accepted a closed inhabitant of an empty proposition: {verdicts:?}",
         );
     }
 }
@@ -498,7 +498,7 @@ and /witness : (
 
 // The signature's typing of `loop(0)` is remembered, the group having no body under check there, and is never the answer in `loop`'s body, where a term naming a member is typed at every occurrence: the call is recorded and `loop` does not descend.
 //
-// Mutation-checked at `Kernel::infer_hit` and `Kernel::check_hit`: answering a term that names a member of a group whose body is being checked, the body's `loop(0)` is answered from the signature, no call is recorded, the group closes total and `loop(5)` is admitted at `False`.
+// Mutation-checked at `Certifier::infer_hit` and `Certifier::check_hit`: answering a term that names a member of a group whose body is being checked, the body's `loop(0)` is answered from the signature, no call is recorded, the group closes total and `loop(5)` is admitted at `False`.
 #[test]
 fn a_call_typed_first_in_a_siblings_signature_is_recorded_in_the_body() {
     let verdicts = core_text_verdicts(&fill!(
@@ -516,7 +516,7 @@ fn a_call_typed_first_in_a_siblings_signature_is_recorded_in_the_body() {
     );
 }
 
-/// A call below its parameter only to a judgment's reduction: `k + f(p) - f(q)` is `k` where the kernel's conversion holds `f(p)` and `f(q)` one atom, `{}` having one inhabitant, and stuck to plain reduction, which asks nothing. The annotation on `a` puts the argument to a judgment's reduction in the arm before the call is graded.
+/// A call below its parameter only to a judgment's reduction: `k + f(p) - f(q)` is `k` where the certifier's conversion holds `f(p)` and `f(q)` one atom, `{}` having one inhabitant, and stuck to plain reduction, which asks nothing. The annotation on `a` puts the argument to a judgment's reduction in the arm before the call is graded.
 const A_CALL_BELOW_ITS_PARAMETER_ONLY_TO_A_JUDGMENT: &str = r#"
 ((
     f: (z: {}) -> #NatType,

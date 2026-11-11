@@ -50,7 +50,7 @@ impl Expected {
                 })
             }
             (Checker::Reader, Refusal::Read { error, .. }) => named(error.refusal.variant_name()),
-            (Checker::Kernel, Refusal::Kernel(verdict)) => {
+            (Checker::Certifier, Refusal::Certifier(verdict)) => {
                 named(verdict.error.variant_name()) && stands(verdict.name.as_ref())
             }
             _ => false,
@@ -95,7 +95,7 @@ impl Witness {
             .iter()
             .find(|expected| !refusals.iter().any(|refusal| expected.meets(refusal)))
             .map(|expected| {
-                let asked = expected.by != Checker::Kernel || answer.kernel_asked();
+                let asked = expected.by != Checker::Certifier || answer.certifier_asked();
                 let nearest = refusals
                     .iter()
                     .find(|refusal| refusal.by() == Some(expected.by))

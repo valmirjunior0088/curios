@@ -1,4 +1,4 @@
-//! The kernel's view of a term held under local definitions.
+//! The certifier's view of a term held under local definitions.
 
 use {
     super::*,
@@ -56,7 +56,7 @@ fn a_definition_that_mentions_itself_is_read_once() {
     );
 }
 
-/// The locals the kernel's spelling names: a local as itself, a local definition as the locals its definition names in turn, and a top-level name not at all.
+/// The locals the certifier's spelling names: a local as itself, a local definition as the locals its definition names in turn, and a top-level name not at all.
 #[test]
 fn the_locals_beneath_a_definition_are_the_ones_it_names() {
     let s = Free::local(1, Some("s"));

@@ -144,7 +144,7 @@ fn a_classing_made_under_an_arms_equation_answers_nothing_after_the_arm() {
         .by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
-// What a guard's spelling settled under a split's re-typing answers is the split's: at `c = true` the operands are units and the guard is `k(0)`, inside a lambda there as anywhere in the arm, and after the split nothing says so. `curios-cert`'s `scope_tests` hold the kernel to the same terms. The control claims nothing past the split.
+// What a guard's spelling settled under a split's re-typing answers is the split's: at `c = true` the operands are units and the guard is `k(0)`, inside a lambda there as anywhere in the arm, and after the split nothing says so. `curios-cert`'s `scope_tests` hold the certifier to the same terms. The control claims nothing past the split.
 #[test]
 fn a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split() {
     control(r#"
@@ -273,7 +273,7 @@ fn a_literal_dispatch_reads_no_float() {
     );
 }
 
-// `A` and `B` are one group whose parameters share the name `n`, a `Nat` in one and a `Bool` in the other, and `mkA`'s payload states `n == 1` of its own family's. An `A(0)` holds a `Holds(0 == 1)`, so `forged`'s `qed` would fit only where the case were read at its sibling's parameter, or at another instance's, and `f` would hand it on at `False`. The kernel puts the same proposition as Core text under this name, in `curios-cert`'s `recheck::case_tests`. The control is an `A(1)`, which holds a `Holds(1 == 1)` that `qed` inhabits, and its arm runs.
+// `A` and `B` are one group whose parameters share the name `n`, a `Nat` in one and a `Bool` in the other, and `mkA`'s payload states `n == 1` of its own family's. An `A(0)` holds a `Holds(0 == 1)`, so `forged`'s `qed` would fit only where the case were read at its sibling's parameter, or at another instance's, and `f` would hand it on at `False`. The certifier puts the same proposition as Core text under this name, in `curios-cert`'s `recheck::case_tests`. The control is an `A(1)`, which holds a `Holds(1 == 1)` that `qed` inhabits, and its arm runs.
 #[test]
 fn a_case_reads_its_own_familys_parameter_in_a_group() {
     control(
@@ -307,7 +307,7 @@ fn a_case_reads_its_own_familys_parameter_in_a_group() {
     });
 }
 
-// A guard's spelling settled inside an arm of a split on an expression reads that arm's equation nowhere: under `g(c) = true` the operands are units, and `one` asks for the guard's spelling there, which is the stuck match whatever the arm knows, so after the split nothing says `k(0)`. Nothing before the split names `k`, so the guard is first settled inside it. `curios-cert`'s `recheck::equation_tests` hold the kernel to the same term. The control claims nothing past the split.
+// A guard's spelling settled inside an arm of a split on an expression reads that arm's equation nowhere: under `g(c) = true` the operands are units, and `one` asks for the guard's spelling there, which is the stuck match whatever the arm knows, so after the split nothing says `k(0)`. Nothing before the split names `k`, so the guard is first settled inside it. `curios-cert`'s `recheck::equation_tests` hold the certifier to the same term. The control claims nothing past the split.
 #[test]
 fn a_guard_settled_under_an_inner_arms_equation_answers_nothing_after_that_arm() {
     control(r#"
@@ -330,7 +330,7 @@ fn a_guard_settled_under_an_inner_arms_equation_answers_nothing_after_that_arm()
         .by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
-// A refused arm is not taken for one no reduction takes on the strength of its sibling's equation: under the `false` arm's `g(e) = false` the guard's proof is `False` and `g(e)` is forced to `false`, and the `true` arm, which hands `True/qed()` on at `False`, is refused. `curios-cert`'s `recheck::equation_tests` hold the kernel to the same program, where a refused arm can be withdrawn. The control states what the `true` arm proves.
+// A refused arm is not taken for one no reduction takes on the strength of its sibling's equation: under the `false` arm's `g(e) = false` the guard's proof is `False` and `g(e)` is forced to `false`, and the `true` arm, which hands `True/qed()` on at `False`, is refused. `curios-cert`'s `recheck::equation_tests` hold the certifier to the same program, where a refused arm can be withdrawn. The control states what the `true` arm proves.
 #[test]
 fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
     control(
@@ -416,7 +416,7 @@ fn a_guard_restated_in_a_nested_split_is_settled_nowhere_in_either_arm() {
     .by_elaborator_in("/f", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
-// The false arm of `x < y` knows `y <= x` over `Nat`, its guard's negation on a total order, and not over `Flt`, where against a NaN both directions are false: the arm stays typed at `Holds(y <= x)` and `qed` is refused there, where `forged` would be `False` at a NaN. `curios_cert`'s `recheck::equation_tests` puts the module to the kernel under this name. The control is the same program over `Nat`.
+// The false arm of `x < y` knows `y <= x` over `Nat`, its guard's negation on a total order, and not over `Flt`, where against a NaN both directions are false: the arm stays typed at `Holds(y <= x)` and `qed` is refused there, where `forged` would be `False` at a NaN. `curios_cert`'s `recheck::equation_tests` puts the module to the certifier under this name. The control is the same program over `Nat`.
 #[test]
 fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
     control(

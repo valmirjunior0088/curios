@@ -4,7 +4,7 @@ use {crate::tests::test_support::*, curios_common::fill};
 
 // === A scrutinee bound by `let` ===============================================
 //
-// The kernel reads a `let`-bound scrutinee by value, so what it matches on is the binding's definition, and it refines that. The elaborator binds the name to its definition and refines the name, and a metavariable solved against the name is stored as the definition — so refining a local binding refines its definition too, in both arms, whatever the scrutinee's type, or `refl`'s implicit below, `x`, would stay apart from `xp + 1`.
+// The certifier reads a `let`-bound scrutinee by value, so what it matches on is the binding's definition, and it refines that. The elaborator binds the name to its definition and refines the name, and a metavariable solved against the name is stored as the definition — so refining a local binding refines its definition too, in both arms, whatever the scrutinee's type, or `refl`'s implicit below, `x`, would stay apart from `xp + 1`.
 
 #[test]
 fn a_let_bound_scrutinee_is_refined_through_its_definition() {
@@ -75,7 +75,7 @@ fn a_chain_of_lets_is_refined_to_its_end() {
     assert_eq!(run(source), b"2");
 }
 
-// A definition that is itself a stuck expression is refined under its own spelling, as the kernel's case equation for the substituted scrutinee is.
+// A definition that is itself a stuck expression is refined under its own spelling, as the certifier's case equation for the substituted scrutinee is.
 #[test]
 fn a_let_bound_expression_scrutinee_is_refined_through_its_definition() {
     let source = r#"
@@ -92,7 +92,7 @@ fn a_let_bound_expression_scrutinee_is_refined_through_its_definition() {
     assert_eq!(run(source), b"2");
 }
 
-// A guard meets itself inside a definition that spells it over a `let`. `outside` binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; the arm refines the same guard spelled over `Byte/to_nat(c)`. The reducer substitutes a `let` as the kernel does, so the unfolded guard is the arm's own spelling rather than one over a fresh name the arm's key never mentions.
+// A guard meets itself inside a definition that spells it over a `let`. `outside` binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; the arm refines the same guard spelled over `Byte/to_nat(c)`. The reducer substitutes a `let` as the certifier does, so the unfolded guard is the arm's own spelling rather than one over a fresh name the arm's key never mentions.
 #[test]
 fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {
     assert_eq!(
@@ -112,7 +112,7 @@ fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {
     );
 }
 
-// A guard written over the arm's own `let` meets the same guard reached through a definition that spells the value. The arm binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; `outside` spells that guard over `Byte/to_nat(c)` itself. The kernel substitutes `n` before it records the arm's equation, and the elaborator records the equation under the kernel's spelling too: recorded over the name alone, its lookup filter would never let the probe, which names `c`, reach the key, and a settlement of the key would unfold `n` only where reduction touched it, leaving it named inside the branch `Bool/not`'s match keeps.
+// A guard written over the arm's own `let` meets the same guard reached through a definition that spells the value. The arm binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; `outside` spells that guard over `Byte/to_nat(c)` itself. The certifier substitutes `n` before it records the arm's equation, and the elaborator records the equation under the certifier's spelling too: recorded over the name alone, its lookup filter would never let the probe, which names `c`, reach the key, and a settlement of the key would unfold `n` only where reduction touched it, leaving it named inside the branch `Bool/not`'s match keeps.
 #[test]
 fn a_guard_over_a_let_meets_itself_spelled_over_the_value() {
     assert_eq!(
@@ -132,7 +132,7 @@ fn a_guard_over_a_let_meets_itself_spelled_over_the_value() {
     );
 }
 
-// Both sides of the guard spelled over a `let`: the arm's own, and the one inside `outside`, which is how `/std/Str/step` binds the byte it reads and how a proof walking its guards names it. Each side's `let` is met the way the kernel meets it — the definition's by substitution, the arm's by the equation's recorded kernel spelling — so they meet.
+// Both sides of the guard spelled over a `let`: the arm's own, and the one inside `outside`, which is how `/std/Str/step` binds the byte it reads and how a proof walking its guards names it. Each side's `let` is met the way the certifier meets it — the definition's by substitution, the arm's by the equation's recorded certifier spelling — so they meet.
 #[test]
 fn a_guard_over_a_let_meets_a_definition_that_binds_its_own() {
     assert_eq!(
@@ -153,7 +153,7 @@ fn a_guard_over_a_let_meets_a_definition_that_binds_its_own() {
     );
 }
 
-// A guard over a local definition answers a term written over the definition's value. The kernel reads the guard by value, so `Nat/in_range(m, 240, 244)` is its scrutinee as the kernel holds it; the elaborator's key names `n`, and it meets the term at the guard's reduced spelling, where the filter in front of the equation reads the guard as the kernel spells it. The control is the guard written over `m` itself. `curios-elab`'s `reduce::question_tests` holds the filter under this name.
+// A guard over a local definition answers a term written over the definition's value. The certifier reads the guard by value, so `Nat/in_range(m, 240, 244)` is its scrutinee as the certifier holds it; the elaborator's key names `n`, and it meets the term at the guard's reduced spelling, where the filter in front of the equation reads the guard as the certifier spells it. The control is the guard written over `m` itself. `curios-elab`'s `reduce::question_tests` holds the filter under this name.
 //
 // Mutation-checked: with the elaborator's filter reading the guard as written, the first program is refused at `True/qed()`, whose expected `Holds(Nat/in_range(m, 240, 244))` is no `True` there.
 #[test]

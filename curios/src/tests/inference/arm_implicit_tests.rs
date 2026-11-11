@@ -142,7 +142,7 @@ fn an_implicit_solves_in_an_arm_that_learns_the_hypothesis_from_inside_an_index(
     assert_eq!(run(&source), b"5");
 }
 
-// The arm above over a `let` of the scrutinee. The kernel has substituted the `let`, so its arm meets `s` and re-types `z`; the elaborator keeps `t` as a local definition, and `curios_analysis::scrutinee_solution` reads through it to the `s` the kernel sees, so `z : Sizes(s)` is re-typed too. The second program types its hypothesis over `t` itself, which `curios_analysis::retyped` reaches by reading `t` through to `s`.
+// The arm above over a `let` of the scrutinee. The certifier has substituted the `let`, so its arm meets `s` and re-types `z`; the elaborator keeps `t` as a local definition, and `curios_analysis::scrutinee_solution` reads through it to the `s` the certifier sees, so `z : Sizes(s)` is re-typed too. The second program types its hypothesis over `t` itself, which `curios_analysis::retyped` reaches by reading `t` through to `s`.
 #[test]
 fn an_implicit_solves_in_an_arm_over_a_let_bound_scrutinee() {
     for (label, arms) in [

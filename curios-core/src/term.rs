@@ -1510,7 +1510,7 @@ impl Hash for Term {
 
 /// Structural equality, walked with an explicit worklist.
 ///
-/// Native recursion would overflow the stack on a term deep enough rather than answer — which a kernel must not do, and which the step budget cannot prevent, because depth is not steps. Every other derivation over a term avoids native depth the same way (`Term::warm_scalars`, `traverse_rewrite_spine`).
+/// Native recursion would overflow the stack on a term deep enough rather than answer — which a certifier must not do, and which the step budget cannot prevent, because depth is not steps. Every other derivation over a term avoids native depth the same way (`Term::warm_scalars`, `traverse_rewrite_spine`).
 ///
 /// Two shortcuts carry the common cases before any of that: pointer identity (hash-consing makes shared structure genuinely common) and the cached hashes. Only a pair that is distinct-but-hash-equal reaches the walk.
 ///

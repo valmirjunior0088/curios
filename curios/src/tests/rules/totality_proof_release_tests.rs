@@ -36,7 +36,7 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
             }
         )
     })
-    .by_kernel_in("/boom", |error| {
+    .by_certifier_in("/boom", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -80,7 +80,7 @@ fn a_proof_at_a_polymorphic_head_is_rejected() {
             }
         )
     })
-    .by_kernel_in("/leak", |error| {
+    .by_certifier_in("/leak", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -130,7 +130,7 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
             }
         )
     })
-    .by_kernel_in("/leak", |error| {
+    .by_certifier_in("/leak", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
@@ -169,7 +169,7 @@ fn a_proof_at_a_fold_binder_head_is_rejected() {
             }
         )
     })
-    .by_kernel_in("/apply_it", |error| {
+    .by_certifier_in("/apply_it", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
@@ -210,7 +210,7 @@ fn a_proof_at_a_struct_projection_head_is_rejected() {
             }
         )
     })
-    .by_kernel_in("/leak", |error| {
+    .by_certifier_in("/leak", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -259,7 +259,7 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
             }
         )
     })
-    .by_kernel_in("/leak", |error| {
+    .by_certifier_in("/leak", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -309,7 +309,7 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
             }
         )
     })
-    .by_kernel_in("/f", |error| {
+    .by_certifier_in("/f", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
@@ -371,7 +371,7 @@ fn a_partial_value_reaching_a_type_through_an_argument_is_rejected() {
             }
         )
     })
-    .by_kernel_in("entry", |error| {
+    .by_certifier_in("entry", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -419,7 +419,7 @@ fn a_partial_argument_to_an_erased_call_is_still_reached() {
             }
         )
     })
-    .by_kernel_in("/use_it", |error| {
+    .by_certifier_in("/use_it", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -464,7 +464,7 @@ fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
             }
         )
     })
-    .by_kernel_in("/use_it", |error| {
+    .by_certifier_in("/use_it", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -509,7 +509,7 @@ fn a_partial_erased_scrutinee_is_still_reached() {
             }
         )
     })
-    .by_kernel_in("/use_it", |error| {
+    .by_certifier_in("/use_it", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -555,7 +555,7 @@ fn a_partial_scrutinee_under_an_erased_binding_is_still_reached() {
             }
         )
     })
-    .by_kernel_in("/use_it", |error| {
+    .by_certifier_in("/use_it", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -601,7 +601,7 @@ fn a_partial_proof_cannot_arrive_through_witness_resolution() {
             }
         )
     })
-    .by_kernel_in("/witness~/Trivial(Nat)", |error| {
+    .by_certifier_in("/witness~/Trivial(Nat)", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {
@@ -643,7 +643,7 @@ fn a_proof_reaching_a_partial_prelude_definition_is_rejected() {
             }
         )
     })
-    .by_kernel_in("/p", |error| {
+    .by_certifier_in("/p", |error| {
         matches!(
             error,
             curios_cert::Error::NotTotal {

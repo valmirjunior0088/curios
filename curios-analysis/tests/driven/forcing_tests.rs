@@ -19,17 +19,17 @@ fn an_outer_variable_at_a_sort_keeps_only_a_target_its_sort_holds() {
         ("the target's sort below the variable's", 5, true),
         ("above the variable's", 0, false),
     ] {
-        let mut kernel = kernel();
+        let mut certifier = certifier();
         let variable = Free::local(900, Some("X"));
-        kernel.assume(&variable, &Term::type_at(Level::constant(assumed)));
+        certifier.assume(&variable, &Term::type_at(Level::constant(assumed)));
 
         let Invert::Solved(solutions) = solve_indices(
-            &mut kernel,
+            &mut certifier,
             &[Term::free_var(&variable)],
             slice::from_ref(&target),
             &[],
         )
-        .expect("the kernel answers") else {
+        .expect("the certifier answers") else {
             panic!("{label}: a reachable case was reported unreachable");
         };
 
@@ -77,15 +77,15 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
             Verdict::Dropped,
         ),
     ] {
-        let mut kernel = kernel();
-        let family = declare(&mut kernel, "Forced", sort);
+        let mut certifier = certifier();
+        let family = declare(&mut certifier, "Forced", sort);
         let family_type = Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new());
         let binder = Free::local(900, Some("p"));
         let opaque_function = Free::local(901, Some("g"));
         let argument = Free::local(902, Some("x"));
 
-        kernel.assume(&binder, &family_type);
-        kernel.assume(
+        certifier.assume(&binder, &family_type);
+        certifier.assume(
             &opaque_function,
             &Term::func_type([(argument, family_type.clone())], family_type.clone()),
         );
@@ -100,7 +100,7 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
         let target = Term::free_var(&binder);
 
         let outcome = invert_indices(
-            &mut kernel,
+            &mut certifier,
             &[inhabitant("a"), inhabitant("b")],
             &[target.clone(), target],
             slice::from_ref(&binder),
@@ -135,7 +135,7 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
 
 /// The rule's third answer, which the pair above does not reach: a binder whose *type* is out of scope.
 ///
-/// `consolidate` decides a re-forcing by asking the `Judge` for the binder's assumed type and comparing the two forcings at it. With no assumption there is nothing to compare at, so it drops the binder's solutions — the conservative direction, leaving the binder unsolved and the arm still checked. No program reaches the branch: both kernel callers reach `invert_indices` through `open_payload`, which assumes every binder it opens before the body runs, so from the kernel it is unreachable by construction.
+/// `consolidate` decides a re-forcing by asking the `Judge` for the binder's assumed type and comparing the two forcings at it. With no assumption there is nothing to compare at, so it drops the binder's solutions — the conservative direction, leaving the binder unsolved and the arm still checked. No program reaches the branch: both certifier callers reach `invert_indices` through `open_payload`, which assumes every binder it opens before the body runs, so from the certifier it is unreachable by construction.
 ///
 /// It is pinned anyway, because the conservative answer is not the obvious one to write. `None => true` — no type, so nothing to disagree about, so keep the forcing — is the plausible slip, and it would accept a re-forcing that *no convertibility test ever decided*, which is the deletion rule discharging a constraint it never checked. Nothing else in the workspace would notice.
 ///
@@ -146,8 +146,8 @@ fn a_binder_whose_type_is_out_of_scope_drops_its_forcings() {
         ("a proposition", Term::prop()),
         ("a relevant family", Term::type_ground()),
     ] {
-        let mut kernel = kernel();
-        let family = declare(&mut kernel, "Forced", sort);
+        let mut certifier = certifier();
+        let family = declare(&mut certifier, "Forced", sort);
         let binder = Free::local(900, Some("p"));
 
         // Deliberately not assumed: this is the whole of the fixture.
@@ -156,7 +156,7 @@ fn a_binder_whose_type_is_out_of_scope_drops_its_forcings() {
         let target = Term::free_var(&binder);
 
         let outcome = invert_indices(
-            &mut kernel,
+            &mut certifier,
             &[inhabitant("a"), inhabitant("b")],
             &[target.clone(), target],
             slice::from_ref(&binder),
@@ -188,7 +188,7 @@ fn a_family_the_registry_cannot_answer_for_does_not_clash() {
     };
 
     // The subject: the family was never declared, so the sort read is blind.
-    let mut blind = kernel();
+    let mut blind = certifier();
     let family = Global::Authored(Qualifier::from(["Blind"]));
     let outcome = invert_indices(
         &mut blind,
@@ -214,7 +214,7 @@ fn a_family_the_registry_cannot_answer_for_does_not_clash() {
             false,
         ),
     ] {
-        let mut sighted = kernel();
+        let mut sighted = certifier();
         let family = declare(&mut sighted, "Blind", sort);
         let outcome = invert_indices(
             &mut sighted,
@@ -237,14 +237,14 @@ fn the_outer_direction_solves_a_variable_inside_an_index() {
     let actual = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
 
     for (label, local) in [("a local", true), ("a name no case refines", false)] {
-        let mut kernel = kernel();
+        let mut certifier = certifier();
         if local {
-            kernel.assume(&n, &Term::intrinsic(Intrinsic::NatType));
+            certifier.assume(&n, &Term::intrinsic(Intrinsic::NatType));
         }
 
         let Invert::Solved(solutions) =
-            solve_indices(&mut kernel, slice::from_ref(&actual), &[nat(1)], &[])
-                .expect("the kernel answers")
+            solve_indices(&mut certifier, slice::from_ref(&actual), &[nat(1)], &[])
+                .expect("the certifier answers")
         else {
             panic!("{label}: a reachable case was reported unreachable");
         };
@@ -261,22 +261,22 @@ fn the_outer_direction_solves_a_variable_inside_an_index() {
 /// Actuals `(n + 1, n + 1)` against targets `(k, 1)`: the first direction pins `k := n + 1`, and the second learns `n := 0` from the other position. Applied one after the other the pair would leave `k` naming a variable the same substitution replaces; composed, `k`'s value no longer mentions `n` at all.
 #[test]
 fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
-    let mut kernel = kernel();
+    let mut certifier = certifier();
     let n = Free::local(900, Some("n"));
     let k = Free::local(901, Some("k"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
-    kernel.assume(&n, &nat_type);
-    kernel.assume(&k, &nat_type);
+    certifier.assume(&n, &nat_type);
+    certifier.assume(&k, &nat_type);
 
     let actual = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
     let Invert::Solved(solutions) = solve_indices(
-        &mut kernel,
+        &mut certifier,
         &[actual.clone(), actual],
         &[Term::free_var(&k), nat(1)],
         slice::from_ref(&k),
     )
-    .expect("the kernel answers") else {
+    .expect("the certifier answers") else {
         panic!("a reachable case was reported unreachable");
     };
 
@@ -300,7 +300,7 @@ fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
 
 /// The outer direction's clash is held as the first direction's is: a local forced to two values a program tells apart leaves the case with no value, and one forced to two inhabitants of a proposition is forced to one value twice.
 ///
-/// Actuals `(x, x)` against targets `(a(), b())`, for a case with no binder. The first direction reads a variable as what may yet be the target, and decides nothing. The second solves `x` to each target in turn. At a relevant family the two clash and the case is impossible, which is what leaves a written arm untyped by the kernel and may leave it out. At a proposition the same two convert, so the case stays reachable: read as a clash there, an arm would go unchecked on the strength of two proofs being told apart.
+/// Actuals `(x, x)` against targets `(a(), b())`, for a case with no binder. The first direction reads a variable as what may yet be the target, and decides nothing. The second solves `x` to each target in turn. At a relevant family the two clash and the case is impossible, which is what leaves a written arm untyped by the certifier and may leave it out. At a proposition the same two convert, so the case stays reachable: read as a clash there, an arm would go unchecked on the strength of two proofs being told apart.
 #[test]
 fn an_outer_variable_forced_twice_clashes_only_where_its_forcings_are_told_apart() {
     for (label, sort, impossible) in [
@@ -315,10 +315,10 @@ fn an_outer_variable_forced_twice_clashes_only_where_its_forcings_are_told_apart
             false,
         ),
     ] {
-        let mut kernel = kernel();
-        let family = declare(&mut kernel, "Forced", sort);
+        let mut certifier = certifier();
+        let family = declare(&mut certifier, "Forced", sort);
         let x = Free::local(900, Some("x"));
-        kernel.assume(
+        certifier.assume(
             &x,
             &Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new()),
         );
@@ -329,31 +329,31 @@ fn an_outer_variable_forced_twice_clashes_only_where_its_forcings_are_told_apart
 
         assert!(
             matches!(
-                invert_indices(&mut kernel, &actuals, &targets, &[]),
+                invert_indices(&mut certifier, &actuals, &targets, &[]),
                 Ok(Invert::Solved(_))
             ),
             "{label}: the first direction decided what a variable may yet be",
         );
 
         let outcome =
-            solve_indices(&mut kernel, &actuals, &targets, &[]).expect("the kernel answers");
+            solve_indices(&mut certifier, &actuals, &targets, &[]).expect("the certifier answers");
         assert_eq!(matches!(outcome, Invert::Impossible), impossible, "{label}");
     }
 }
 
-/// A value is another case than an arm's where it names a case as it stands and the unifier that excuses an absent arm finds the two in a definite clash. Both checkers know an arm no reduction takes by this: the kernel types none, and the elaborator words its refusal of one.
+/// A value is another case than an arm's where it names a case as it stands and the unifier that excuses an absent arm finds the two in a definite clash. Both checkers know an arm no reduction takes by this: the certifier types none, and the elaborator words its refusal of one.
 ///
 /// The controls are what the rule must not answer: the arm's own case, a term that names no case as it stands — a variable, a successor over one — and two constructors of a proposition, which conversion holds to be one value.
 #[test]
 fn a_value_is_another_case_only_where_it_names_one_that_clashes() {
-    let mut kernel = kernel();
-    let relevant = declare(&mut kernel, "Relevant", Term::type_ground());
-    let proposition = declare(&mut kernel, "Proposition", Term::prop());
+    let mut certifier = certifier();
+    let relevant = declare(&mut certifier, "Relevant", Term::type_ground());
+    let proposition = declare(&mut certifier, "Proposition", Term::prop());
     let n = Free::local(900, Some("n"));
     let pred = Free::local(901, Some("pred"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
-    kernel.assume(&n, &nat_type);
-    kernel.assume(&pred, &nat_type);
+    certifier.assume(&n, &nat_type);
+    certifier.assume(&pred, &nat_type);
 
     let nat = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
     let bool_ = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
@@ -435,7 +435,8 @@ fn a_value_is_another_case_only_where_it_names_one_that_clashes() {
         ),
     ] {
         assert_eq!(
-            another_case(&mut kernel, &scrutinee, &case, &binders).expect("the kernel answers"),
+            another_case(&mut certifier, &scrutinee, &case, &binders)
+                .expect("the certifier answers"),
             expected,
             "{label}",
         );
@@ -449,7 +450,7 @@ fn a_value_is_another_case_only_where_it_names_one_that_clashes() {
 /// Mutation-checked: with `Walk::unify_index`'s `recurse` bracket removed, the run prints `has overflowed its stack` and aborts, which is a death and not a refusal.
 #[test]
 fn a_deep_pair_of_index_terms_is_inverted_on_the_default_stack() {
-    let mut kernel = kernel();
+    let mut certifier = certifier();
     let deep = |bottom: Term| {
         let mut term = bottom;
         for _ in 0..5_000 {
@@ -462,7 +463,7 @@ fn a_deep_pair_of_index_terms_is_inverted_on_the_default_stack() {
 
     assert!(matches!(
         solve_indices(
-            &mut kernel,
+            &mut certifier,
             slice::from_ref(&actual),
             slice::from_ref(&target),
             &[]
@@ -471,7 +472,7 @@ fn a_deep_pair_of_index_terms_is_inverted_on_the_default_stack() {
     ));
 }
 
-/// Two `List` literals over `Nat` apart in an element, or in their lengths, are no case a value meets: inverted pointwise as a tuple's fields are, and by length where the strip leaves runs alone, through the kernel that judges them. Mutation-checked: with `unify_node` reading two literals as any two words, the element pair is undecided, and with the strip reading no length, so is the length pair.
+/// Two `List` literals over `Nat` apart in an element, or in their lengths, are no case a value meets: inverted pointwise as a tuple's fields are, and by length where the strip leaves runs alone, through the certifier that judges them. Mutation-checked: with `unify_node` reading two literals as any two words, the element pair is undecided, and with the strip reading no length, so is the length pair.
 #[test]
 fn two_list_literals_apart_in_an_element_or_in_length_are_impossible() {
     let list = |items: &[u64]| {
@@ -488,8 +489,8 @@ fn two_list_literals_apart_in_an_element_or_in_length_are_impossible() {
         ("an element", list(&[0]), list(&[1])),
         ("a length", list(&[0]), list(&[1, 2])),
     ] {
-        let verdict =
-            solve_indices(&mut kernel(), &[actual], &[target], &[]).expect("the kernel answers");
+        let verdict = solve_indices(&mut certifier(), &[actual], &[target], &[])
+            .expect("the certifier answers");
 
         assert!(matches!(verdict, Invert::Impossible), "{label}");
     }

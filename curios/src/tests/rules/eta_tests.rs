@@ -49,7 +49,7 @@ fn an_expansion_that_swaps_its_components_is_not_eta() {
     });
 }
 
-// **Eta by a literal needs no type, so it holds where none directs it.** The elaborator fires eta by a side's shape at every goal, and the kernel by the goal's type, which a child it compares at `Type` does not have: a stuck elimination's arm, a projection's head, a lambda's body inside one, and — with no `match` written — the arms a definition unfolds to once a record's eta has projected its two calls. An expansion equal to its neutral at the goal was refused there, by the kernel alone, so conversion was no congruence in the trusted checker and the refusal reached the author as the kernel's. A lambda and a tuple literal against a neutral fire the rule by their own shape (`function_eta`, `tuple_eta`), as a struct literal always has.
+// **Eta by a literal needs no type, so it holds where none directs it.** The elaborator fires eta by a side's shape at every goal, and the certifier by the goal's type, which a child it compares at `Type` does not have: a stuck elimination's arm, a projection's head, a lambda's body inside one, and — with no `match` written — the arms a definition unfolds to once a record's eta has projected its two calls. An expansion equal to its neutral at the goal was refused there, by the certifier alone, so conversion was no congruence in the trusted checker and the refusal reached the author as the certifier's. A lambda and a tuple literal against a neutral fire the rule by their own shape (`function_eta`, `tuple_eta`), as a struct literal always has.
 //
 // The two refusals beside it are the near misses of the first fixtures, in the same position: the rule compares what the literal holds, and does not give up on functions and records there.
 #[test]
@@ -101,7 +101,7 @@ fn an_expansion_that_swaps_its_components_is_not_eta_in_an_arm() {
     });
 }
 
-// **A literal's eta is taken against every neutral, one set in both checkers.** The kernel took it against a variable, a projection and a stuck application, and the elaborator against any term, so a literal against a stuck elimination elaborated and was refused by the kernel alone: a tuple literal and a lambda in a stuck elimination's arm, where no type directs the rule, a tuple literal there against a definition that unfolds to one, and a struct literal at the struct's own type. A neutral is every term whose head does not show its type, which is what a shape can tell where the goal states no type.
+// **A literal's eta is taken against every neutral, one set in both checkers.** The certifier took it against a variable, a projection and a stuck application, and the elaborator against any term, so a literal against a stuck elimination elaborated and was refused by the certifier alone: a tuple literal and a lambda in a stuck elimination's arm, where no type directs the rule, a tuple literal there against a definition that unfolds to one, and a struct literal at the struct's own type. A neutral is every term whose head does not show its type, which is what a shape can tell where the goal states no type.
 //
 // The two refusals beside it are the near misses: the rule compares what the literal holds.
 #[test]
@@ -229,7 +229,7 @@ fn two_distinct_recursions_do_not_convert() {
     .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
-// **A hidden member is a slot of the value, and a literal's eta reads it.** `S`'s one relevant field, `k`, is hidden and its plain field is a unit, so an eta that walked only what an author writes would hold `S { @k = 0, u = () }` one with every `S`, and `cast` would carry `F` at `S { @k = 1, u = () }`, which is `True`, to `F` at `@k = 0`, which is `False`. The control is the literal that states the neutral's own `k`, which is its eta. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name.
+// **A hidden member is a slot of the value, and a literal's eta reads it.** `S`'s one relevant field, `k`, is hidden and its plain field is a unit, so an eta that walked only what an author writes would hold `S { @k = 0, u = () }` one with every `S`, and `cast` would carry `F` at `S { @k = 1, u = () }`, which is `True`, to `F` at `@k = 0`, which is `False`. The control is the literal that states the neutral's own `k`, which is its eta. `curios-cert`'s `recheck::shape_tests` puts the route to the certifier under this name.
 #[test]
 fn a_hidden_field_keeps_a_struct_literal_apart_from_a_neutral() {
     control(

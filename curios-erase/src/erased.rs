@@ -2,11 +2,11 @@
 //!
 //! **An item's erased form is its own.** An item erases into a fragment, a [`curios_anf::Module`] whose identities count from zero for it, so what a unit stores for a declaration says nothing of the declarations erased before it, and an edit to one renumbers no other. A name another item binds is not an identity of the fragment but an *import* of it, known by that name and the sorts it is read at ([`ErasedItem::values`], [`ErasedItem::functions`]), and so is the row of a structure or an inductive another item declares: the fragment holds a schema of its widths, known by the declaration and sorts it stands for.
 //!
-//! **An item that leaves sorts to its caller erases to a form at each assignment of them** ([`ErasedForms`]), as the kernel judges it at each: a form is read off the item's terms at its assignment, and an occurrence links the form at the sorts its instance states. Two assignments that erase alike are one form.
+//! **An item that leaves sorts to its caller erases to a form at each assignment of them** ([`ErasedForms`]), as the certifier judges it at each: a form is read off the item's terms at its assignment, and an occurrence links the form at the sorts its instance states. Two assignments that erase alike are one form.
 //!
 //! **A unit holds its items' erased forms and no arena**, which is what lets a unit compiled over a baseline erase the items it redoes and take every other's as it stands, and what leaves nothing for two units to be ordered by.
 //!
-//! **A unit keeps what erasing each item read.** An item's erased form is a function of its certified declaration and of what its erasure reads of the declarations around it: their signatures and bodies through the kernel that certified the unit, their kinds off their items, and how each name it uses is bound in the erased form of the item that declares it. Each is noted as the item is erased, and the unit keeps each item's record as its baseline half ([`AskedItems`]): a unit erased over this one keeps an erased form where everything its erasure read digests as it did, and nothing compiled after the unit reads the records.
+//! **A unit keeps what erasing each item read.** An item's erased form is a function of its certified declaration and of what its erasure reads of the declarations around it: their signatures and bodies through the certifier that certified the unit, their kinds off their items, and how each name it uses is bound in the erased form of the item that declares it. Each is noted as the item is erased, and the unit keeps each item's record as its baseline half ([`AskedItems`]): a unit erased over this one keeps an erased form where everything its erasure read digests as it did, and nothing compiled after the unit reads the records.
 //!
 //! **A scope is the units' own, borrowed.** Erasing an item reads another's erased form for one thing, how its name is bound — to nothing at run time, to a constant, to a value or to a function of some arity and interface — and reads it where the name is first used.
 
@@ -697,7 +697,7 @@ impl Form {
 
 /// The units in scope, as what erasing another reads: the Core each was certified as, where it holds each name, the record its certification filed, and its items' erased forms.
 ///
-/// The four describe the same units, in dependency order, and holding them in one value is the point: as several parameters nothing would say they correspond. The types the unit's erasure reads are the certifying kernel's, which holds these units mounted; what this adds is what the kernel does not hold — what kind of definition a name is, read off its item, how each name is bound, read off its erased form, and the record a part read of a unit is digested under.
+/// The four describe the same units, in dependency order, and holding them in one value is the point: as several parameters nothing would say they correspond. The types the unit's erasure reads are the certifying certifier's, which holds these units mounted; what this adds is what the certifier does not hold — what kind of definition a name is, read off its item, how each name is bound, read off its erased form, and the record a part read of a unit is digested under.
 #[derive(Clone, Copy, Default)]
 pub struct Erasures<'a> {
     cores: &'a [&'a curios_core::Definitions],

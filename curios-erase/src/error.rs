@@ -2,7 +2,7 @@
 //!
 //! **Erasure's refusals are what only erasing the program shows.** Two recursion rules `curios-anf`'s verifier holds a fragment to — values whose initializers evaluate one another, and an initializer that performs an effect — each named by the source names erasure minted the verifier's identities for; a natural case key past what a branch table holds; and the budget erasing an item spends, run out on a term it was reading. Each is worded as erasure's: the program was certified, and only erasing it stopped.
 //!
-//! **Anything else the kernel refuses of a term erasure reads is a fault of the compiler's**, since the kernel certified the term: reported as a term erasure could not read, with the kernel's refusal beneath it, and never as the kernel's verdict on the program.
+//! **Anything else the certifier refuses of a term erasure reads is a fault of the compiler's**, since the certifier accepted the term: reported as a term erasure could not read, with the certifier's refusal beneath it, and never as the certifier's verdict on the program.
 
 use {
     crate::ErasedNames,
@@ -35,12 +35,12 @@ impl ErasedName {
 /// Why erasure refused a program.
 #[derive(Debug)]
 pub enum Error {
-    /// The budget erasing an item spends, run out on reading `term`: the refused charge, as the kernel's reduction states it.
+    /// The budget erasing an item spends, run out on reading `term`: the refused charge, as the certifier's reduction states it.
     Exhausted {
         term: Box<curios_core::Term>,
         refusal: curios_core::ReduceError,
     },
-    /// A term the kernel certified and refused when erasure read it, with what it refused: a fault of the compiler's. `term` is absent where what was read is a declaration at an instance rather than a term.
+    /// A term the certifier accepted and refused when erasure read it, with what it refused: a fault of the compiler's. `term` is absent where what was read is a declaration at an instance rather than a term.
     Unreadable {
         term: Option<Box<curios_core::Term>>,
         refusal: Box<curios_cert::Error>,
@@ -73,7 +73,7 @@ impl From<curios_core::UniverseError> for Error {
 }
 
 impl Error {
-    /// What the kernel refused while erasure read `term`: the budget's exhaustion, erasure's own, and anything else a fault.
+    /// What the certifier refused while erasure read `term`: the budget's exhaustion, erasure's own, and anything else a fault.
     pub fn reading(term: &curios_core::Term, refusal: curios_cert::Error) -> Self {
         use curios_core::Exhaustion;
         match refusal.refusal() {
@@ -88,7 +88,7 @@ impl Error {
         }
     }
 
-    /// [`Error::reading`] for a refusal of the kernel's reduction.
+    /// [`Error::reading`] for a refusal of the certifier's reduction.
     pub fn reducing(term: &curios_core::Term, refusal: curios_core::ReduceError) -> Self {
         Self::reading(term, refusal.into())
     }
@@ -214,12 +214,12 @@ impl Error {
             }
             Self::Unreadable { term, refusal } => match term {
                 Some(term) => format!(
-                    "compiler fault: erasure could not read {}, which the kernel certified\n  the kernel refused it: {}",
+                    "compiler fault: erasure could not read {}, which the certifier accepted\n  the certifier refused it: {}",
                     term.spelled(spelling),
                     refusal.rendered(&curios_surface::Spelling::default())
                 ),
                 None => format!(
-                    "compiler fault: erasure could not read a declaration at its instance, which the kernel certified\n  the kernel refused it: {}",
+                    "compiler fault: erasure could not read a declaration at its instance, which the certifier accepted\n  the certifier refused it: {}",
                     refusal.rendered(&curios_surface::Spelling::default())
                 ),
             },

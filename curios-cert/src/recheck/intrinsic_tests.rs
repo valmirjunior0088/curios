@@ -1,4 +1,4 @@
-//! An intrinsic node as the kernel types it, written as Core text and put with nothing in scope: at what its variant produces and with each operand at what its variant demands, whatever the text around it states, so a bound proves the decision its own operands make, and a handle no host gave is a value of no proposition outside the description it stands in.
+//! An intrinsic node as the certifier types it, written as Core text and put with nothing in scope: at what its variant produces and with each operand at what its variant demands, whatever the text around it states, so a bound proves the decision its own operands make, and a handle no host gave is a value of no proposition outside the description it stands in.
 
 use {super::test_support::*, crate::*, curios_analysis::test_support::*, curios_common::fill};
 

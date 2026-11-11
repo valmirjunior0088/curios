@@ -26,7 +26,7 @@ pub enum Outcome {
 /// How one item's erasure reads the erased form of another: by a name the other declares, at the sorts it is read at.
 pub type Externals<'s> = &'s dyn Fn(&curios_core::Global, Sorts) -> Option<&'s ErasedItem>;
 
-/// How one item's erasure reads a `let` definition off the item that declares it, its own unit's or a unit in scope's: what kind of definition a name is, and its body, which the kernel's environment does not say.
+/// How one item's erasure reads a `let` definition off the item that declares it, its own unit's or a unit in scope's: what kind of definition a name is, and its body, which the certifier's environment does not say.
 pub type Declared<'s> = &'s dyn Fn(&curios_core::Global) -> Option<&'s curios_core::Definition>;
 
 /// The names a fragment's identities were minted for, by identity: what a refusal of the erased verifier, which holds identities and debug names alone, names a member and a callee by.

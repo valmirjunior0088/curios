@@ -249,7 +249,7 @@ pub fn cps_operations(module: &curios_cps::Module) -> Vec<String> {
     operations
 }
 
-/// Whether a `Nat` literal of `value` is an operand anywhere — how a constant baked into a kernel is found, since nothing names it.
+/// Whether a `Nat` literal of `value` is an operand anywhere — how a constant baked into a certifier is found, since nothing names it.
 pub fn reads_nat(module: &curios_cps::Module, value: u32) -> bool {
     module.nodes().iter().flatten().any(|node| {
         curios_cps::atoms(node).into_iter().any(|atom| {

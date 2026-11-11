@@ -1,10 +1,10 @@
 //! The sorts a form of a declaration is erased at.
 //!
-//! The kernel judges a declaration that leaves sorts to its caller at every assignment of `Prop` and `Type` to them, and reads no term at an open sort. Erasure follows it: such a declaration erases to a form at each assignment ([`ErasedForms`](crate::ErasedForms)), a form is known by its declaration's name and the sorts it was read at, and an occurrence links the form at the sorts its instance states.
+//! The certifier judges a declaration that leaves sorts to its caller at every assignment of `Prop` and `Type` to them, and reads no term at an open sort. Erasure follows it: such a declaration erases to a form at each assignment ([`ErasedForms`](crate::ErasedForms)), a form is known by its declaration's name and the sorts it was read at, and an occurrence links the form at the sorts its instance states.
 
 /// One assignment of `Prop` and `Type` to the sorts a declaration leaves open: as many sorts as it leaves, bit `i` set where sort `i` is `Type`. Its index is its place in [`curios_core::Quality::assignments`]' order, and a declaration that leaves none has the one empty assignment, [`Sorts::NONE`].
 ///
-/// Bits rather than a list, so a form's name is a copy: [`curios_core::UniverseContext::QUALITY_LIMIT`] bounds what a declaration may leave, and the kernel refuses one past it.
+/// Bits rather than a list, so a form's name is a copy: [`curios_core::UniverseContext::QUALITY_LIMIT`] bounds what a declaration may leave, and the certifier refuses one past it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct Sorts {
@@ -16,7 +16,7 @@ impl Sorts {
     /// The assignment of a declaration that leaves no sort open.
     pub const NONE: Sorts = Sorts { count: 0, types: 0 };
 
-    /// The assignment `qualities` states, each `Prop` or `Type`: what an occurrence's instance states, read where the kernel judged it, so none is open.
+    /// The assignment `qualities` states, each `Prop` or `Type`: what an occurrence's instance states, read where the certifier judged it, so none is open.
     pub fn of(qualities: &[curios_core::Quality]) -> Self {
         assert!(
             qualities.len() <= curios_core::UniverseContext::QUALITY_LIMIT,
@@ -30,7 +30,9 @@ impl Sorts {
                     curios_core::Quality::Type => types | (1 << sort),
                     curios_core::Quality::Prop => types,
                     open => {
-                        unreachable!("an instance the kernel judged states no open sort: {open:?}")
+                        unreachable!(
+                            "an instance the certifier judged states no open sort: {open:?}"
+                        )
                     }
                 });
 

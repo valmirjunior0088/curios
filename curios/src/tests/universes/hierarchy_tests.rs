@@ -263,7 +263,7 @@ fn a_recursive_call_a_level_above_its_group_is_refused_with_its_remedy() {
     );
 }
 
-// **A group's own levels are constrained by its own recursion, and the kernel has to read that.** A member used at a type one level up — `pick(@Type, …)` for `pick(@A: Type, …)` — needs `1 ≤ u` of the group's instance, a group being monomorphic in its universes. The elaborator records exactly that in the scheme, and the kernel's entailment reaches the hypotheses before it decides a level's constant part structurally, since a parameter bounds no constant until something assumes it does.
+// **A group's own levels are constrained by its own recursion, and the certifier has to read that.** A member used at a type one level up — `pick(@Type, …)` for `pick(@A: Type, …)` — needs `1 ≤ u` of the group's instance, a group being monomorphic in its universes. The elaborator records exactly that in the scheme, and the certifier's entailment reaches the hypotheses before it decides a level's constant part structurally, since a parameter bounds no constant until something assumes it does.
 //
 // Both spellings are here because the two-member group is incidental: the same demand raised inside one self-recursive member refuses identically, so what the rule turns on is the group instance rather than the sibling.
 #[test]
@@ -371,7 +371,7 @@ fn a_conflict_two_uses_close_alone_stands_at_one_and_notes_the_other() {
     );
 }
 
-// A type read off a list of types, or folded out of a list, sits at the sort its operation produces, so a term checked at one is classified where the kernel types it: `Head`'s accessor states its result as the head of a list of types, and `keep` its parameter as a type a fold computes. The kernel's lookup classified only a type former, and refused both where the elaborator had admitted them.
+// A type read off a list of types, or folded out of a list, sits at the sort its operation produces, so a term checked at one is classified where the certifier types it: `Head`'s accessor states its result as the head of a list of types, and `keep` its parameter as a type a fold computes. The certifier's lookup classified only a type former, and refused both where the elaborator had admitted them.
 #[test]
 fn a_type_read_off_a_list_or_a_fold_is_classified_at_its_sort() {
     let source = r#"
@@ -394,7 +394,7 @@ fn a_type_read_off_a_list_or_a_fold_is_classified_at_its_sort() {
     assert_eq!(run(source), b"classified");
 }
 
-// An arm's solution for an outer variable has the variable's own type: `X` is checked at `Code`'s index `Type` by subsumption, so it sits at a level of its own, and the case target `Type` it is solved to inhabits the level above that target's. The solution needs that level below `X`'s, which the declaration's levels are inferred to state, so `f`'s arm reads `x` at the target and `f2`'s reads it as a type, and the kernel, deciding under the stated scheme, takes the same solution. Solved with no such relation, the kernel's substitution was ill-typed and it refused `f` where the elaborator admitted it.
+// An arm's solution for an outer variable has the variable's own type: `X` is checked at `Code`'s index `Type` by subsumption, so it sits at a level of its own, and the case target `Type` it is solved to inhabits the level above that target's. The solution needs that level below `X`'s, which the declaration's levels are inferred to state, so `f`'s arm reads `x` at the target and `f2`'s reads it as a type, and the certifier, deciding under the stated scheme, takes the same solution. Solved with no such relation, the certifier's substitution was ill-typed and it refused `f` where the elaborator admitted it.
 #[test]
 fn an_arms_solution_has_its_variables_own_type() {
     let source = r#"

@@ -212,7 +212,7 @@ impl FlatLet {
         }
     }
 
-    /// Whether this definition's type or body names the definition itself — what makes a lone `let` the recursive group of one the kernel needs it to be.
+    /// Whether this definition's type or body names the definition itself — what makes a lone `let` the recursive group of one the certifier needs it to be.
     pub fn mentions_itself(&self) -> bool {
         self.type_.mentions_declaration(&self.name) || self.body.mentions_declaration(&self.name)
     }

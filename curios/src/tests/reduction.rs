@@ -6,7 +6,7 @@
 //!
 //! Both sequence carriers are measured, `Bytes` and `List`, whose *representations* differ.
 //!
-//! A second probe reads the same programs the other way round. [`type_level_sequence_cost_measurements`] divides one checker's cost into machinery and construction; [`kernel_memo_charge_measurements`] holds the program fixed and divides the *checkers*, because the compile path puts one budget to both and a user meets whichever demands more.
+//! A second probe reads the same programs the other way round. [`type_level_sequence_cost_measurements`] divides one checker's cost into machinery and construction; [`certifier_memo_charge_measurements`] holds the program fixed and divides the *checkers*, because the compile path puts one budget to both and a user meets whichever demands more.
 
 use {
     super::test_support::*,
@@ -134,20 +134,20 @@ fn floor(mut accepts: impl FnMut(u64) -> bool) -> Result<u64, u64> {
     Err(largest)
 }
 
-/// [`floor`] for the whole compile path, which puts the same budget to the elaborator and then to the kernel — so this reports whichever of the two demands more.
+/// [`floor`] for the whole compile path, which puts the same budget to the elaborator and then to the certifier — so this reports whichever of the two demands more.
 fn budget_floor(source: &str) -> Result<u64, u64> {
     floor(|budget| typecheck_within(budget, source).is_ok())
 }
 
-/// [`floor`] for elaboration alone, with the kernel not asked.
+/// [`floor`] for elaboration alone, with the certifier not asked.
 fn elaborator_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
     floor(|budget| typecheck_with_prelude(budget, entrypoint, &RootSource::none()).is_ok())
 }
 
-/// [`floor`] for the kernel alone, over a module elaboration already produced.
+/// [`floor`] for the certifier alone, over a module elaboration already produced.
 ///
-/// Elaborating once at the default budget and re-certifying the result is what separates the two counters: the module does not change with the budget the kernel is then given, so the sweep measures the kernel's own spend rather than a compile that fails earlier.
-fn kernel_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
+/// Elaborating once at the default budget and re-certifying the result is what separates the two counters: the module does not change with the budget the certifier is then given, so the sweep measures the certifier's own spend rather than a compile that fails earlier.
+fn certifier_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
     let module = typecheck_with_prelude(DEFAULT_BUDGET, entrypoint, &RootSource::none())
         .expect("the arm elaborates within the default budget")
         .program;
@@ -176,7 +176,7 @@ fn elaboration_time(source: &str) -> Duration {
 
 /// **The regression guard the measurement above cannot be.** A probe is ignored, so nothing runs it; and a cache hit charges nothing in either checker, so both absorb this entire class of defect and stay silent until a budget runs out. A quadratic length would go unnoticed that way, so the guard has to be an ordinary assertion at the ordinary budget.
 ///
-/// The two checkers price a memo hit alike — see [`kernel_memo_charge_measurements`] — so a construction defect surfaces as either checker's honest cost, and this guard is what catches it.
+/// The two checkers price a memo hit alike — see [`certifier_memo_charge_measurements`] — so a construction defect surfaces as either checker's honest cost, and this guard is what catches it.
 ///
 /// Both carriers, at an iteration count that costs a small multiple of the default budget when a length is quadratic in the spine's depth and a small fraction of it when a length is a fold.
 #[test]
@@ -277,13 +277,13 @@ fn type_level_sequence_cost_measurements() {
     }
 }
 
-/// What the kernel charges for a memo hit, read off the budget it forces.
+/// What the certifier charges for a memo hit, read off the budget it forces.
 ///
 /// ```sh
-/// cargo test --release --package curios -- --ignored --nocapture kernel_memo_charge_measurements
+/// cargo test --release --package curios -- --ignored --nocapture certifier_memo_charge_measurements
 /// ```
 ///
-/// The two floors are the same program put to the two checkers separately, at a budget swept independently for each: [`elaborator_floor`] does not ask the kernel, and [`kernel_floor`] re-certifies a module elaboration already produced. Their ratio is the quantity of interest. Both checkers reduce the same terms and neither is the reference implementation of the other, so a *small* divergence is expected and says only that two evaluators differ; a large one says the two are pricing differently, and the compile path takes the larger of the two, so it is the kernel's number a user meets.
+/// The two floors are the same program put to the two checkers separately, at a budget swept independently for each: [`elaborator_floor`] does not ask the certifier, and [`certifier_floor`] re-certifies a module elaboration already produced. Their ratio is the quantity of interest. Both checkers reduce the same terms and neither is the reference implementation of the other, so a *small* divergence is expected and says only that two evaluators differ; a large one says the two are pricing differently, and the compile path takes the larger of the two, so it is the certifier's number a user meets.
 ///
 /// It asserts nothing beyond each arm elaborating at all — a measurement that fails is a measurement with an opinion.
 ///
@@ -293,26 +293,26 @@ fn type_level_sequence_cost_measurements() {
 ///
 /// ```text
 /// Bytes
-///          n  floor elaborator  floor kernel  divergence
+///          n  floor elaborator  floor certifier  divergence
 ///        800            131072        131072          1x
 ///       1600            262144        262144          1x
 ///       3200            524288        524288          1x
 ///       6400           1048576       1048576          1x
 ///
 /// List
-///          n  floor elaborator  floor kernel  divergence
+///          n  floor elaborator  floor certifier  divergence
 ///        250             32768         32768          1x
 ///        500             65536         65536          1x
 ///       1000            131072        131072          1x
 ///       2000            262144        262144          1x
 /// ```
 ///
-/// **Parity holds, and structurally.** The two checkers run one shared evaluator for the closed accumulation, and the two floors are one power of two at every rung, which is as fine as the sweep tells them apart. Nor do they part on a `Str` literal, whose scan each demands once: [`str_literal_cost_measurements`] reads the kernel 24 units over the elaborator at every length.
+/// **Parity holds, and structurally.** The two checkers run one shared evaluator for the closed accumulation, and the two floors are one power of two at every rung, which is as fine as the sweep tells them apart. Nor do they part on a `Str` literal, whose scan each demands once: [`str_literal_cost_measurements`] reads the certifier 24 units over the elaborator at every length.
 ///
-/// **A memo hit is free in both checkers.** A kernel charging a hit the whole recorded cost of the computation it replaced would refuse for exhaustion programs the elaborator accepts within its budget — and since the compile path puts one budget to both and meets the larger, that refusal is what a user would meet, with no disagreement about any rule.
+/// **A memo hit is free in both checkers.** A certifier charging a hit the whole recorded cost of the computation it replaced would refuse for exhaustion programs the elaborator accepts within its budget — and since the compile path puts one budget to both and meets the larger, that refusal is what a user would meet, with no disagreement about any rule.
 #[test]
-#[ignore = "measurement, counted: reports what a memo hit costs the kernel rather than asserting"]
-fn kernel_memo_charge_measurements() {
+#[ignore = "measurement, counted: reports what a memo hit costs the certifier rather than asserting"]
+fn certifier_memo_charge_measurements() {
     type Build = fn(usize) -> String;
     let carriers: [(&str, [usize; 4], Build); 2] = [
         ("Bytes", [800, 1600, 3200, 6400], bytes_growing),
@@ -323,22 +323,22 @@ fn kernel_memo_charge_measurements() {
         println!("\n{carrier}");
         println!(
             "    {:>6}  {:>16}  {:>12}  {:>10}",
-            "n", "floor elaborator", "floor kernel", "divergence",
+            "n", "floor elaborator", "floor certifier", "divergence",
         );
 
         for n in ladder {
             let entrypoint = growing(n).parse::<Entrypoint>().expect("the arm parses");
             let elaborator = elaborator_floor(&entrypoint);
-            let kernel = kernel_floor(&entrypoint);
-            let divergence = match (elaborator, kernel) {
-                (Ok(elaborator), Ok(kernel)) => format!("{}x", kernel / elaborator),
+            let certifier = certifier_floor(&entrypoint);
+            let divergence = match (elaborator, certifier) {
+                (Ok(elaborator), Ok(certifier)) => format!("{}x", certifier / elaborator),
                 _ => "—".to_string(),
             };
 
             println!(
                 "    {n:>6}  {:>16}  {:>12}  {divergence:>10}",
                 floor_cell(elaborator),
-                floor_cell(kernel),
+                floor_cell(certifier),
             );
         }
     }
@@ -392,21 +392,25 @@ fn declaration_cost(source: &str) -> (Consumption, Consumption) {
     let elaborator = checked.consumption;
     let module =
         curios_core::Zonked::project(&checked.program).expect("the checked module is zonked");
-    let (verdicts, heaviest) = recheck_with_prelude_measured(&module, DEFAULT_BUDGET, |kernel| {
-        kernel.heaviest_declaration()
-    });
+    let (verdicts, heaviest) =
+        recheck_with_prelude_measured(&module, DEFAULT_BUDGET, |certifier| {
+            certifier.heaviest_declaration()
+        });
 
-    assert!(verdicts.is_empty(), "the kernel accepts it: {verdicts:?}");
+    assert!(
+        verdicts.is_empty(),
+        "the certifier accepts it: {verdicts:?}"
+    );
 
     (elaborator, heaviest)
 }
 
 /// One row of the table below: what a program cost each checker, split into depth and everything else.
 fn cost_row(label: &str, source: &str) {
-    let (elaborator, kernel) = declaration_cost(source);
+    let (elaborator, certifier) = declaration_cost(source);
     let divergence = match elaborator.units() {
         0 => 0.0,
-        units => kernel.units() as f64 / units as f64,
+        units => certifier.units() as f64 / units as f64,
     };
 
     println!(
@@ -414,9 +418,9 @@ fn cost_row(label: &str, source: &str) {
         elaborator.units(),
         elaborator.peak_depth(),
         elaborator.other_units(),
-        kernel.units(),
-        kernel.peak_depth(),
-        kernel.other_units(),
+        certifier.units(),
+        certifier.peak_depth(),
+        certifier.other_units(),
         divergence,
     );
 }
@@ -492,22 +496,23 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 
     let certified = |module: &curios_core::Program, budget: u64| {
         let module = curios_core::Zonked::project(module).expect("the checked module is zonked");
-        let (verdicts, heaviest) =
-            recheck_with_prelude_measured(&module, budget, |kernel| kernel.heaviest_declaration());
+        let (verdicts, heaviest) = recheck_with_prelude_measured(&module, budget, |certifier| {
+            certifier.heaviest_declaration()
+        });
         (verdicts.is_empty(), heaviest.units())
     };
     let (accepted, alone_units) = certified(&alone_module, DEFAULT_BUDGET);
-    assert!(accepted, "the kernel accepts `_b` alone");
+    assert!(accepted, "the certifier accepts `_b` alone");
     let (accepted, after_units) = certified(&after_module, DEFAULT_BUDGET);
-    assert!(accepted, "the kernel accepts `_b` after `_a`");
+    assert!(accepted, "the certifier accepts `_b` after `_a`");
 
     assert_eq!(
         after_units, alone_units,
-        "the kernel spends the same on `_b`"
+        "the certifier spends the same on `_b`"
     );
     assert!(
         !certified(&alone_module, alone_units - 1).0,
-        "one unit short, the kernel refuses `_b` alone"
+        "one unit short, the certifier refuses `_b` alone"
     );
     assert!(
         !certified(&after_module, alone_units - 1).0,
@@ -528,7 +533,7 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 /// Counted, at `9c543476a`. The unit columns do not depend on the profile — a debug run of a ladder reproduces its release units exactly — and the table carries no wall clock.
 ///
 /// ```text
-///   program                      units   depth      other       units   depth      other  kernel/elab
+///   program                      units   depth      other       units   depth      other  certifier/elab
 ///   Str literal, n=250           22188       1      21164       22212       1      21188     1.0x
 ///   Str literal, n=500           39438       1      38414       39462       1      38438     1.0x
 ///   Str literal, n=1000          73938       1      72914       73962       1      72938     1.0x
@@ -545,7 +550,7 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 ///
 /// **Cutting costs nothing a unit column sees.** The cut row, which cuts through `Str/before` at a position whose boundary is decided by the one byte there, spends exactly the bare `n=500` row's units on both checkers.
 ///
-/// **The `kernel/elab` column reads 1.0× on every `Str` row**, the kernel 24 units over the elaborator at each.
+/// **The `certifier/elab` column reads 1.0× on every `Str` row**, the certifier 24 units over the elaborator at each.
 ///
 /// **The `Bytes` row is the control**: the same bytes with no proof over them cost each checker under 2 300 units, so a `Str` literal's units are its validity's.
 #[test]
@@ -553,7 +558,7 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
 fn str_literal_cost_measurements() {
     println!(
         "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
-        "program", "units", "depth", "other", "units", "depth", "other", "kernel/elab",
+        "program", "units", "depth", "other", "units", "depth", "other", "certifier/elab",
     );
 
     for n in [250, 500, 1000, 2000, 4000, 8000] {
@@ -584,7 +589,7 @@ fn str_literal_cost_measurements() {
 /// cargo test --release --package curios -- --ignored --nocapture combinator_web_cost_measurements
 /// ```
 ///
-/// The third of the parity probes. [`str_literal_cost_measurements`] holds a proof fixed and divides one checker's cost; [`kernel_memo_charge_measurements`] divides the two checkers by budget floor; this one divides them on a program shape where they can part by an *exponent* without disagreeing about any rule — a scrutinee whose subject mentions a binder, which a checker reducing it once per arm to key its case refinement would pay for per definition in the web.
+/// The third of the parity probes. [`str_literal_cost_measurements`] holds a proof fixed and divides one checker's cost; [`certifier_memo_charge_measurements`] divides the two checkers by budget floor; this one divides them on a program shape where they can part by an *exponent* without disagreeing about any rule — a scrutinee whose subject mentions a binder, which a checker reducing it once per arm to key its case refinement would pay for per definition in the web.
 ///
 /// Three rows per size, differing only in what demands the web's value: nothing, a `match` at a binder, a `match` at a literal. The middle row is the one such keying would grow; the last is the control that says the trigger is the binder rather than the `match`.
 ///
@@ -595,7 +600,7 @@ fn str_literal_cost_measurements() {
 /// Counted, at `9c543476a`.
 ///
 /// ```text
-///   program                      units   depth      other       units   depth      other  kernel/elab
+///   program                      units   depth      other       units   depth      other  certifier/elab
 ///   web n=8, applied              4121       4         25        3676       3        604     0.9x
 ///   web n=8, scrutinized          4121       4         25        3676       3        604     0.9x
 ///   web n=8, closed               4121       4         25        3676       3        604     0.9x
@@ -621,7 +626,7 @@ fn str_literal_cost_measurements() {
 fn combinator_web_cost_measurements() {
     println!(
         "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
-        "program", "units", "depth", "other", "units", "depth", "other", "kernel/elab",
+        "program", "units", "depth", "other", "units", "depth", "other", "certifier/elab",
     );
 
     for rules in [8usize, 12, 13, 14, 20] {
@@ -645,14 +650,14 @@ fn combinator_web_cost_measurements() {
 /// The bound is stated against [`Cost::FRAME`] rather than as a literal because the quantity asserted is *that no per-character native frame is being paid at all*: a per-character price within even a quarter of the frame row means closed evaluation has fallen off the machine and back onto the recursive strategy, which is the silent cliff this guard exists to catch.
 #[test]
 fn a_str_literal_costs_transitions_rather_than_frames() {
-    let (elaborator_small, kernel_small) = declaration_cost(&str_literal(500, 0));
-    let (elaborator_large, kernel_large) = declaration_cost(&str_literal(1000, 0));
+    let (elaborator_small, certifier_small) = declaration_cost(&str_literal(500, 0));
+    let (elaborator_large, certifier_large) = declaration_cost(&str_literal(1000, 0));
 
     // The literal's scan runs on the machine's explicit stack, so doubling the literal moves guarded depth not at all.
-    assert_eq!(kernel_large.peak_depth(), kernel_small.peak_depth());
+    assert_eq!(certifier_large.peak_depth(), certifier_small.peak_depth());
     assert_eq!(elaborator_large.peak_depth(), elaborator_small.peak_depth());
 
-    let per_character = (kernel_large.units() - kernel_small.units()) / 500;
+    let per_character = (certifier_large.units() - certifier_small.units()) / 500;
     let frame = Cost::FRAME.get();
     assert!(
         per_character < frame / 4,
@@ -662,15 +667,15 @@ fn a_str_literal_costs_transitions_rather_than_frames() {
 
     // The two checkers run the same machine on the same closed terms, so agreement here is structural; the factor-two slack covers what each checker's own strategy spends around the machine.
     assert!(
-        kernel_large.units() < elaborator_large.units() * 2,
-        "kernel {} against elaborator {}",
-        kernel_large.units(),
+        certifier_large.units() < elaborator_large.units() * 2,
+        "certifier {} against elaborator {}",
+        certifier_large.units(),
         elaborator_large.units(),
     );
 
     // Flat in use count: a literal is checked once however many types mention it.
-    let (_, kernel_used) = declaration_cost(&str_literal(500, 3));
-    assert_eq!(kernel_used.units(), kernel_small.units());
+    let (_, certifier_used) = declaration_cost(&str_literal(500, 3));
+    assert_eq!(certifier_used.units(), certifier_small.units());
 }
 
 /// A user's own refinement over a packed carrier, `n` bytes long: an authored `rec` fold decides ASCII-ness, and a literal's proof of it is discharged by conversion running the closed fold — exactly the shape of `Str`'s validity check with nothing of `Str` in it.
@@ -704,12 +709,12 @@ fn ascii_refinement(n: usize) -> String {
 /// **The fixture the closed machine's acceptance asks for: a refinement that is not `Str`.** The machine fires on closedness, not on anything about strings, so a user's fold over a packed carrier gets the same flat depth and sub-frame per-element price a `Str` literal gets — asserted with the same two bounds as [`a_str_literal_costs_transitions_rather_than_frames`], so this cannot quietly hold for the prelude's type and not for a user's.
 #[test]
 fn a_user_refinement_over_a_packed_carrier_takes_the_same_machine() {
-    let (_, kernel_small) = declaration_cost(&ascii_refinement(500));
-    let (_, kernel_large) = declaration_cost(&ascii_refinement(1000));
+    let (_, certifier_small) = declaration_cost(&ascii_refinement(500));
+    let (_, certifier_large) = declaration_cost(&ascii_refinement(1000));
 
-    assert_eq!(kernel_large.peak_depth(), kernel_small.peak_depth());
+    assert_eq!(certifier_large.peak_depth(), certifier_small.peak_depth());
 
-    let per_element = (kernel_large.units() - kernel_small.units()) / 500;
+    let per_element = (certifier_large.units() - certifier_small.units()) / 500;
     assert!(
         per_element < Cost::FRAME.get() / 4,
         "an element costs {per_element} units against a {}-unit frame",
@@ -960,7 +965,7 @@ fn an_equation_costs_what_its_decision_costs() {
 
         for (checker, decided, equated) in [
             ("elaborator", decided.0, equated.0),
-            ("kernel", decided.1, equated.1),
+            ("certifier", decided.1, equated.1),
         ] {
             assert!(
                 equated.units() * 4 <= decided.units() * 5,
@@ -1030,7 +1035,7 @@ fn a_type_does_not_run_a_proof_it_only_binds() {
     assert!(
         proved_elaborated.units() * 4 <= plain_elaborated.units() * 5
             && proved_checked.units() * 4 <= plain_checked.units() * 5,
-        "the elaborator spends {} units with the proof computed and {} with it trivial, and the kernel {} and {}",
+        "the elaborator spends {} units with the proof computed and {} with it trivial, and the certifier {} and {}",
         proved_elaborated.units(),
         plain_elaborated.units(),
         proved_checked.units(),
@@ -1065,9 +1070,9 @@ const URL_OVER_BYTES_AT_32: u64 = 69_816;
 #[test]
 fn a_url_literal_read_as_text_costs_a_type_what_its_length_does() {
     let heavier = |characters: usize| {
-        let (elaborator, kernel) = declaration_cost(&url_literal(characters));
+        let (elaborator, certifier) = declaration_cost(&url_literal(characters));
 
-        elaborator.units().max(kernel.units())
+        elaborator.units().max(certifier.units())
     };
     let [short, middle, long] = [32, 64, 128].map(heavier);
 
@@ -1104,7 +1109,7 @@ fn primitive_claim(carrier: &str, parser: &str, input: &str) -> String {
 /// At `9c543476a`:
 ///
 /// ```text
-///   primitive            text elab      kernel  bytes elab      kernel
+///   primitive            text elab      certifier  bytes elab      certifier
 ///   literal                  70365       70286       17516       17437
 ///   take_while               47188       47109       10035        9956
 ///   char, byte               57134       57055       31182       31103
@@ -1157,27 +1162,27 @@ fn parse_primitive_measurements() {
 
     println!(
         "\n  {:<18}  {:>10}  {:>10}  {:>10}  {:>10}",
-        "primitive", "text elab", "kernel", "bytes elab", "kernel"
+        "primitive", "text elab", "certifier", "bytes elab", "certifier"
     );
     for (label, over_text, over_bytes) in rows {
         let input = match label {
             "until" => format!("\"{letters}b\""),
             _ => text.clone(),
         };
-        let (elaborator, kernel) = declaration_cost(&primitive_claim("Str", &over_text, &input));
+        let (elaborator, certifier) = declaration_cost(&primitive_claim("Str", &over_text, &input));
         let twin = over_bytes
             .map(|parser| declaration_cost(&primitive_claim("Bytes", &parser, &bytes)))
             .map_or_else(
                 || format!("{:>10}  {:>10}", "", ""),
-                |(elaborator, kernel)| {
-                    format!("{:>10}  {:>10}", elaborator.units(), kernel.units())
+                |(elaborator, certifier)| {
+                    format!("{:>10}  {:>10}", elaborator.units(), certifier.units())
                 },
             );
 
         println!(
             "  {label:<18}  {:>10}  {:>10}  {twin}",
             elaborator.units(),
-            kernel.units(),
+            certifier.units(),
         );
     }
 }
@@ -1195,7 +1200,7 @@ fn parse_primitive_measurements() {
 /// At `9c543476a`:
 ///
 /// ```text
-///   claim                        units   depth      other       units   depth      other  kernel/elab
+///   claim                        units   depth      other       units   depth      other  certifier/elab
 ///   Str/split                    30109       3      27037       28387       1      27363     0.9x
 ///   Str/split_once               19238       3      16166       18213       2      16165     0.9x
 ///   Str/lines                    27178       3      24106       25487       1      24463     0.9x
@@ -1206,9 +1211,9 @@ fn parse_primitive_measurements() {
 ///   Str/index_of                 26790       3      23718       20916       2      18868     0.8x
 /// ```
 ///
-/// **A builder holds no depth**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, and the elaborator's guarded depth is 3 on their rows as on every other, the kernel's 1.
+/// **A builder holds no depth**: `Str/split`, `Str/lines` and `Str/replace` hand on what they have built, and the elaborator's guarded depth is 3 on their rows as on every other, the certifier's 1.
 ///
-/// **The kernel spends about nine tenths of the elaborator's units on seven rows**, between 0.89 and 0.97, and 0.78 on `Str/index_of`.
+/// **The certifier spends about nine tenths of the elaborator's units on seven rows**, between 0.89 and 0.97, and 0.78 on `Str/index_of`.
 ///
 /// **`Flt/of_str` is a grammar run**: reading `"-Infinity"` runs the reader's `Parse(Str, Flt)` grammar over nine characters, so its row is what the grammar costs each checker.
 #[test]
@@ -1251,7 +1256,7 @@ fn type_level_claim_measurements() {
 
     println!(
         "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>10}  {:>6}  {:>9}  {:>7}",
-        "claim", "units", "depth", "other", "units", "depth", "other", "kernel/elab",
+        "claim", "units", "depth", "other", "units", "depth", "other", "certifier/elab",
     );
     for (label, left, right) in claims {
         cost_row(

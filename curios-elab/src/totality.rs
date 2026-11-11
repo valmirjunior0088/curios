@@ -312,7 +312,7 @@ fn checked_type_positions(
     Ok(positions)
 }
 
-/// Whether `type_` is a sort, as written or once it reduces: a type a definition computes, `U(j + 1)` where `U` matches on its argument, is one the kernel reads as a sort, which reading the written form alone misses. A type that does not reduce within the budget is read as none, and the kernel, which reduces it again, refuses what it then finds.
+/// Whether `type_` is a sort, as written or once it reduces: a type a definition computes, `U(j + 1)` where `U` matches on its argument, is one the certifier reads as a sort, which reading the written form alone misses. A type that does not reduce within the budget is read as none, and the certifier, which reduces it again, refuses what it then finds.
 fn reduces_to_a_sort(context: &mut Context, cache: &mut Zonked, type_: &Term) -> bool {
     if matches!(&**type_, Subterm::Sort(_)) {
         return true;
@@ -326,7 +326,7 @@ fn reduces_to_a_sort(context: &mut Context, cache: &mut Zonked, type_: &Term) ->
     sort
 }
 
-/// `term` with each local binding it names read as what the binding stands for: what a position reaches is what the kernel reads it by, which a label hides — a member of a local group stands for the group, and a `let`'s binding for whatever its value reaches. The values name no binding, each read by value where its block ended, so one substitution reads them all.
+/// `term` with each local binding it names read as what the binding stands for: what a position reaches is what the certifier reads it by, which a label hides — a member of a local group stands for the group, and a `let`'s binding for whatever its value reaches. The values name no binding, each read by value where its block ended, so one substitution reads them all.
 fn by_value(term: &Term, labels: &[(Free, Term)]) -> Term {
     match term.has_local_free() {
         true => term.substitute(labels),
@@ -458,7 +458,7 @@ impl Turns {
         self.refuse_where_owed(context, &|_| false, site)
     }
 
-    /// Once every turn is taken and what the bodies parked is retried. Every turn is taken again over the bodies as they stand now: a solution found since a member's turn may have given its body a call, so the members withheld are the ones the kernel withholds over the terms this group closes to. With one withheld, the group owes descent where a member's type yields a sort, or waits on a member withheld, which may be a sort once that member's value is and never will be read.
+    /// Once every turn is taken and what the bodies parked is retried. Every turn is taken again over the bodies as they stand now: a solution found since a member's turn may have given its body a call, so the members withheld are the ones the certifier withholds over the terms this group closes to. With one withheld, the group owes descent where a member's type yields a sort, or waits on a member withheld, which may be a sort once that member's value is and never will be read.
     pub fn close(
         &self,
         context: &mut Context,

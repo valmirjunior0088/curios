@@ -1,23 +1,23 @@
-//! What the driven suites share: a kernel, a family declared over a single payload, and the declarations a fixture states.
+//! What the driven suites share: a certifier, a family declared over a single payload, and the declarations a fixture states.
 
 use {
     curios_analysis::test_support::*,
-    curios_cert::Kernel,
+    curios_cert::Certifier,
     curios_common::{Plicity, Qualifier},
     curios_core::{Atom, Free, Global, InductDecl, InductParam, Telescope, Term, UniverseContext},
 };
 
-pub fn kernel() -> Kernel<'static> {
-    Kernel::new(100_000, SYNTAX)
+pub fn certifier() -> Certifier<'static> {
+    Certifier::new(100_000, SYNTAX)
 }
 
 /// A nullary family at `result_sort` with two nullary constructors, `a` and `b`.
 ///
 /// Two constructors is the point: it gives the family two closed inhabitants that are syntactically distinct, so whether they are *interchangeable* is decided by the family's sort and by nothing else.
-pub fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
+pub fn declare(certifier: &mut Certifier, path: &str, result_sort: Term) -> Global {
     let family = Global::Authored(Qualifier::from([path]));
 
-    kernel
+    certifier
         .declare_induct(
             &family,
             &InductDecl {

@@ -650,7 +650,7 @@ fn pin_decls() -> (Global, Global, BTreeMap<Global, InductDecl>) {
 ///
 /// `Pin(1)` is inhabited by `Pin/no()`, and the `yes` arm's target `0` clashes with the index, so `specialize` reports the case impossible and no rule types that arm. What stands between it and a closed inhabitant of `False` is coverage: `no` has no arm and is not impossible at `Pin(1)`. Were its absence excused, `forged(Pin/no())` would reduce to the `yes` arm's body — a closed match with one arm, no catch-all and no payload named is its arm's body with its scrutinee unevaluated, which is why the body below is the sort `Prop`, a term standing at `False` that nothing typed.
 ///
-/// Only a fixture reaches the kernel's own coverage loop with this shape: `curios-elab`'s matrix refuses the sole-arm match with `MatrixUncovered` while the module is still being built, so no surface program leaves one behind.
+/// Only a fixture reaches the certifier's own coverage loop with this shape: `curios-elab`'s matrix refuses the sole-arm match with `MatrixUncovered` while the module is still being built, so no surface program leaves one behind.
 pub fn sole_arm_forgery() -> Program {
     let (pin_name, _, mut decls) = pin_decls();
     let false_name = Global::Authored(Qualifier::from(["False"]));
@@ -2581,7 +2581,7 @@ pub fn computed_field_forgery() -> Definitions {
 
 /// The scheme both universe-occurrence fixtures below are built on: `def A<u, v | u + 1 <= v> : Type v = Type u`.
 ///
-/// Its constraint is load-bearing rather than decorative, which is the whole point of the shape: checking the body needs `Type (u + 1) <= Type v`, and that holds under this hypothesis and under nothing else. So an occurrence of `A` is legitimate exactly where it discharges the constraint at its own levels, and [`Kernel::check_instance`](crate::Kernel) is what does that.
+/// Its constraint is load-bearing rather than decorative, which is the whole point of the shape: checking the body needs `Type (u + 1) <= Type v`, and that holds under this hypothesis and under nothing else. So an occurrence of `A` is legitimate exactly where it discharges the constraint at its own levels, and [`Certifier::check_instance`](crate::Certifier) is what does that.
 pub fn scheme_context() -> UniverseContext {
     let ordered = UniverseConstraint {
         lower: Level::param(UniverseParam(0))
@@ -4060,7 +4060,7 @@ impl Walked for Program {
     }
 }
 
-/// The whole-module walk over a bare fixture, the evidence wrapper bypassed: the modules built here are adversarial by design — some deliberately carry what `Zonked` refuses — and the kernel's own refusals are the thing under test, so nothing may stand between a forged module and the walk.
+/// The whole-module walk over a bare fixture, the evidence wrapper bypassed: the modules built here are adversarial by design — some deliberately carry what `Zonked` refuses — and the certifier's own refusals are the thing under test, so nothing may stand between a forged module and the walk.
 pub fn fixture_verdicts(
     fixture: &impl Walked,
     budget: u64,
@@ -4080,7 +4080,7 @@ pub fn fixture_certified(
     let (definitions, entry) = fixture.parts();
 
     super::verdicts_from(
-        &mut Kernel::new(budget, syntax),
+        &mut Certifier::new(budget, syntax),
         definitions,
         entry,
         globals,
@@ -4176,7 +4176,7 @@ pub fn core_text_module(text: &str) -> Definitions {
     definitions
 }
 
-/// What the kernel says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it, over `globals`.
+/// What the certifier says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it, over `globals`.
 pub fn core_text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
     let (definitions, entry) = core_text_read(text);
     let program = Program {
@@ -4193,7 +4193,7 @@ pub fn core_text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
     fixture_verdicts(&program, BUDGET, globals, SYNTAX)
 }
 
-/// What the kernel says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
+/// What the certifier says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
 pub fn core_text_verdicts(text: &str) -> Vec<Verdict> {
     core_text_verdicts_over(text, &Globals::default())
 }
@@ -4226,7 +4226,7 @@ pub fn walked_among(
     let globals = Globals::default();
 
     super::verdicts_from(
-        &mut Kernel::new(BUDGET, SYNTAX),
+        &mut Certifier::new(BUDGET, SYNTAX),
         definitions,
         None,
         &globals,

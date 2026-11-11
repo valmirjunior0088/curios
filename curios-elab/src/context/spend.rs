@@ -60,7 +60,7 @@ impl Spend {
 
     /// Enter one guarded reduction level, charging [`Cost::FRAME`] when it is deeper than any level this declaration has reached before.
     ///
-    /// Per new peak rather than per call, for the reason `curios-cert`'s `Spend::enter_level` states in full: a level's native frame is reclaimed when the level returns, and reduction re-enters itself once per operand and once per spine link, so charging every call would price a stack the reduction is not holding. The kernel charges the same row the same way, which is what lets the two checkers' depth limits be compared.
+    /// Per new peak rather than per call, for the reason `curios-cert`'s `Spend::enter_level` states in full: a level's native frame is reclaimed when the level returns, and reduction re-enters itself once per operand and once per spine link, so charging every call would price a stack the reduction is not holding. The certifier charges the same row the same way, which is what lets the two checkers' depth limits be compared.
     pub fn enter_level(&self) -> Result<(), ReduceError> {
         let depth = self.depth.get() + 1;
         self.depth.set(depth);
@@ -101,7 +101,7 @@ impl Spend {
 
     /// The heaviest single judgment this context has made, the one in progress included: a declaration's elaboration, or one of the judgments of its final terms, each of which spends a budget restored for it.
     ///
-    /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
+    /// The counterpart of `curios-cert`'s `Certifier::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
     pub fn heaviest(&self) -> Consumption {
         self.heaviest.get().heavier_of(self.consumed())
     }

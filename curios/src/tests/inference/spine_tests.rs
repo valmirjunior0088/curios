@@ -1,6 +1,6 @@
 //! Two applications of one definition: what holding their spines equal would solve is taken where the term that awaits them completes.
 //!
-//! `rest(xs)` against `rest([1, 2])` holds at `xs := [1, 2]` and at every list with that tail: one answer among several, so conversion decides the pair by reduction and leaves it parked where reduction is stuck, and the call takes the spines' answer only once it has read every argument, where nothing else gave the implicit and every such pair gives it the same. Each program that compiles is run, so the kernel has judged what the elaborator admitted.
+//! `rest(xs)` against `rest([1, 2])` holds at `xs := [1, 2]` and at every list with that tail: one answer among several, so conversion decides the pair by reduction and leaves it parked where reduction is stuck, and the call takes the spines' answer only once it has read every argument, where nothing else gave the implicit and every such pair gives it the same. Each program that compiles is run, so the certifier has judged what the elaborator admitted.
 
 use {crate::tests::test_support::*, curios_common::fill};
 

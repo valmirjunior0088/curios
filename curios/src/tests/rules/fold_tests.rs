@@ -311,7 +311,7 @@ fn a_folds_identity_arm_refutes_no_proof_about_its_scrutinee() {
     });
 }
 
-// A fold takes its identity arm at the last tail, where the scrutinee is no case of that arm, so a match inside the arm meets `v` at the scrutinee itself and not at the arm's case: over each carrier `s`'s target may meet it there, and each empty match must name `s`. Specialized as a case split's arm is, the identity arm would excuse `s`, and `forged`, a fold at `1` whose last tail reaches the empty match with `v` a `V(1)` that `V/s(0)` inhabits, would be a closed inhabitant of `False`. The control is the same match as a case split, whose identity arm is taken once, at the scrutinee itself, where the case excuses `s`. `curios_cert`'s `recheck::elimination_tests` puts the module to the kernel under this name. Each control is that case split.
+// A fold takes its identity arm at the last tail, where the scrutinee is no case of that arm, so a match inside the arm meets `v` at the scrutinee itself and not at the arm's case: over each carrier `s`'s target may meet it there, and each empty match must name `s`. Specialized as a case split's arm is, the identity arm would excuse `s`, and `forged`, a fold at `1` whose last tail reaches the empty match with `v` a `V(1)` that `V/s(0)` inhabits, would be a closed inhabitant of `False`. The control is the same match as a case split, whose identity arm is taken once, at the scrutinee itself, where the case excuses `s`. `curios_cert`'s `recheck::elimination_tests` puts the module to the certifier under this name. Each control is that case split.
 #[test]
 fn a_match_inside_a_folds_identity_arm_learns_nothing_of_the_scrutinee() {
     let refusals = control(
@@ -360,7 +360,7 @@ fn a_match_inside_a_folds_identity_arm_learns_nothing_of_the_scrutinee() {
     }
 }
 
-// The fold ticket's identity arm over `Bytes`, whose witnesses state it for `Nat` and `List`: typed with `xs` at `x[]`, `h` would stand at `Holds(0 == 2)`, which is `False`, while reduction takes the arm at the last tail with `xs` still `x[1, 2]`. The arm learns nothing of `xs`, so `h` stands at the type it was given. `curios_cert`'s `recheck::elimination_tests` puts the term to the kernel under this name. The control states what `h` holds at every tail.
+// The fold ticket's identity arm over `Bytes`, whose witnesses state it for `Nat` and `List`: typed with `xs` at `x[]`, `h` would stand at `Holds(0 == 2)`, which is `False`, while reduction takes the arm at the last tail with `xs` still `x[1, 2]`. The arm learns nothing of `xs`, so `h` stands at the type it was given. `curios_cert`'s `recheck::elimination_tests` puts the term to the certifier under this name. The control states what `h` holds at every tail.
 #[test]
 fn the_identity_arm_of_a_bytes_fold_reads_its_scrutinee_at_no_case() {
     control(

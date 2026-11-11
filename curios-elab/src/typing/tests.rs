@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_analysis::test_support::*,
-    curios_cert::{Kernel, carries_information},
+    curios_cert::{Certifier, carries_information},
     curios_common::Qualifier,
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, MetavarId, Subterm, Telescope, Term,
@@ -67,9 +67,9 @@ fn metavariable_origins_are_read_once_per_node() {
 
 /// The predicate deciding what a `Prop` may carry is written twice, and this is where the two are put to each other.
 ///
-/// [`is_prop`] is this side's answer and `curios_cert::carries_information` is the kernel's. The large-elimination guard's singleton condition and the `Prop`-field rule both turn on one or the other, with the shared `pinned_by_targets` walk supplying the rest of each. A disagreement matters in one direction: a kernel that additionally exempted a position whose *type is a universe* — a position holding a type — reasoning that erasure deletes a type either way, would admit a closed inhabitant of `False`. `curios-cert/src/recheck/proposition_tests.rs` holds that derivation.
+/// [`is_prop`] is this side's answer and `curios_cert::carries_information` is the certifier's. The large-elimination guard's singleton condition and the `Prop`-field rule both turn on one or the other, with the shared `pinned_by_targets` walk supplying the rest of each. A disagreement matters in one direction: a certifier that additionally exempted a position whose *type is a universe* — a position holding a type — reasoning that erasure deletes a type either way, would admit a closed inhabitant of `False`. `curios-cert/src/recheck/proposition_tests.rs` holds that derivation.
 ///
-/// No compile could have observed the disagreement. This side refuses such a declaration during elaboration, so the kernel's copy is asked only about declarations that already passed here. So the comparison has to be made directly, as `curios-cert`'s `satisfy` module does for universe contexts.
+/// No compile could have observed the disagreement. This side refuses such a declaration during elaboration, so the certifier's copy is asked only about declarations that already passed here. So the comparison has to be made directly, as `curios-cert`'s `satisfy` module does for universe contexts.
 ///
 /// Both checkers are told the same single thing — one nullary `Prop`-sorted family — and nothing else, so a disagreement here is about the rule rather than about what either was handed. That declaration is unavoidable rather than convenient: `Prop` is itself `Type`-sorted, so no closed proposition can be built out of intrinsics and type formers alone. Without it the table would compare only *informative* types against each other, agreeing perfectly while testing nothing; the control below is what catches that.
 ///
@@ -77,7 +77,7 @@ fn metavariable_origins_are_read_once_per_node() {
 #[test]
 fn both_checkers_decide_non_informativeness_alike() {
     let mut context = Context::new(100_000, SYNTAX);
-    let mut kernel = Kernel::new(100_000, SYNTAX);
+    let mut certifier = Certifier::new(100_000, SYNTAX);
 
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let binder = |index: u64| Free::local(index, Some("x"));
@@ -97,7 +97,7 @@ fn both_checkers_decide_non_informativeness_alike() {
     context
         .register_induct(&held, declaration.clone())
         .expect("the family registers");
-    kernel
+    certifier
         .declare_induct(&held, &declaration)
         .expect("a name is declared once");
     let proof = || Term::induct_type(held, Vec::<Term>::new(), Vec::<Term>::new());
@@ -144,18 +144,18 @@ fn both_checkers_decide_non_informativeness_alike() {
     let mut verdicts = Vec::new();
     for (label, type_) in &types {
         let elaborator = is_prop(&mut context, type_).expect("the elaborator classifies it");
-        let kernel_says =
-            !carries_information(&mut kernel, type_).expect("the kernel classifies it");
+        let certifier_says =
+            !carries_information(&mut certifier, type_).expect("the certifier classifies it");
 
         assert_eq!(
             elaborator,
-            kernel_says,
-            "the two checkers disagree about `{label}`: the elaborator calls it {}, the kernel calls it {}",
+            certifier_says,
+            "the two checkers disagree about `{label}`: the elaborator calls it {}, the certifier calls it {}",
             match elaborator {
                 true => "non-informative",
                 false => "informative",
             },
-            match kernel_says {
+            match certifier_says {
                 true => "non-informative",
                 false => "informative",
             },
@@ -174,7 +174,7 @@ fn both_checkers_decide_non_informativeness_alike() {
     );
 }
 
-/// A guard's resolved spelling opens a layer only at the arity it saturates, as the kernel's `resolved_spelling` does: a two-parameter lambda applied to one argument stops the walk where it stands, where opening it would reach `Telescope::open`'s assertion as a panic. The control is the same lambda saturated, whose layer opens.
+/// A guard's resolved spelling opens a layer only at the arity it saturates, as the certifier's `resolved_spelling` does: a two-parameter lambda applied to one argument stops the walk where it stands, where opening it would reach `Telescope::open`'s assertion as a panic. The control is the same lambda saturated, whose layer opens.
 #[test]
 fn a_layer_whose_arguments_do_not_saturate_its_lambda_stops_the_walk() {
     let mut context = Context::with_default_budget(SYNTAX);

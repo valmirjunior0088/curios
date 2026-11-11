@@ -48,7 +48,7 @@ impl<'s> Context<'s> {
 
     /// The heaviest single judgment this context has made, the one in progress included: a declaration's elaboration, or one of the judgments of its final terms, each of which spends a budget restored for it (`Context::restore_budget`).
     ///
-    /// The counterpart of `curios-cert`'s `Kernel::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
+    /// The counterpart of `curios-cert`'s `Certifier::heaviest_declaration` on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
     pub fn heaviest_declaration(&self) -> Consumption {
         self.typing.spend.heaviest()
     }

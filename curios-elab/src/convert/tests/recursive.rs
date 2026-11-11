@@ -184,7 +184,7 @@ fn stepping(context: &mut Context, base: usize, by: usize, commuted: bool) -> Te
     )
 }
 
-/// Two recursive groups are compared as the binders they are: the same member of two groups is one where, member for member, their types and their bodies convert under one shared set of labels. The two here are one recursion whose step is `f(pred) + 2` in one and `2 + f(pred)` in the other. They are compared bare, and as two calls, whose heads are compared in a run of its own before their spines are posed. The kernel's twin shares the name.
+/// Two recursive groups are compared as the binders they are: the same member of two groups is one where, member for member, their types and their bodies convert under one shared set of labels. The two here are one recursion whose step is `f(pred) + 2` in one and `2 + f(pred)` in the other. They are compared bare, and as two calls, whose heads are compared in a run of its own before their spines are posed. The certifier's twin shares the name.
 #[test]
 fn two_groups_whose_bodies_convert_are_one() {
     let mut context = context();
@@ -301,7 +301,7 @@ fn shifting(context: &mut Context) -> Term {
     )
 }
 
-/// A pair of calls is unfolded against itself once, and met again inside that unfolding it is apart. The first two are one recursion over two orders of its arguments, which no comparison as binders holds; unfolded, they pose their two heads again one binder further in. The second two are two calls of one member that a second unfolding would reconcile, and the first poses the member against itself at two spines, which is where it stops. The calls one unfolding reconciles are still one. The kernel's twin shares the name.
+/// A pair of calls is unfolded against itself once, and met again inside that unfolding it is apart. The first two are one recursion over two orders of its arguments, which no comparison as binders holds; unfolded, they pose their two heads again one binder further in. The second two are two calls of one member that a second unfolding would reconcile, and the first poses the member against itself at two spines, which is where it stops. The calls one unfolding reconciles are still one. The certifier's twin shares the name.
 ///
 /// Mutation-checked: with a pair unfolded however often it is met, the budget, small here, runs out on the first two and the second two convert.
 #[test]
@@ -418,7 +418,7 @@ fn equirecursive(context: &mut Context, padded: bool) -> Term {
     Term::rec(items, Term::free_var(&member))
 }
 
-/// Two recursive types of two shapes that unfold alike are apart: no goal is held for having been met before. Both sides are the type `X = (X) -> Nat`, spelled as groups of two lengths, so no position pairs them as binders, and their two bodies are function types whose domains pose the two again. Inside their own unfolding the pair is apart. The kernel's twin shares the name.
+/// Two recursive types of two shapes that unfold alike are apart: no goal is held for having been met before. Both sides are the type `X = (X) -> Nat`, spelled as groups of two lengths, so no position pairs them as binders, and their two bodies are function types whose domains pose the two again. Inside their own unfolding the pair is apart. The certifier's twin shares the name.
 ///
 /// Mutation-checked: with a pair unfolded however often it is met, the budget, small here, runs out.
 #[test]
@@ -562,7 +562,7 @@ fn zonked(context: &Context, meta: UniverseMetaId) -> Level {
         .expect("levels zonk")
 }
 
-/// Two instances of one recursive group are one term exactly when their levels are identified, and the acceptance carries the identification: the pair is decided at the applied head, where the kernel decides it by its levels under the item's hypotheses. The kernel's twin of this proposition shares the name.
+/// Two instances of one recursive group are one term exactly when their levels are identified, and the acceptance carries the identification: the pair is decided at the applied head, where the certifier decides it by its levels under the item's hypotheses. The certifier's twin of this proposition shares the name.
 #[test]
 fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_under_the_hypotheses() {
     let mut context = context();
@@ -615,7 +615,7 @@ fn two_instances_a_metavariable_kept_apart_are_identified_where_the_unfolding_me
     );
 }
 
-/// Two instances of one recursive group at two unequal ground levels are refused — at the head, and again where the unfolding meets the pair once a metavariable that kept its skeletons apart is solved — because no commitment can join `Type 0` to `Type 1`; held there, it would be a pair the kernel refuses. The kernel's twin shares the name.
+/// Two instances of one recursive group at two unequal ground levels are refused — at the head, and again where the unfolding meets the pair once a metavariable that kept its skeletons apart is solved — because no commitment can join `Type 0` to `Type 1`; held there, it would be a pair the certifier refuses. The certifier's twin shares the name.
 #[test]
 fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_unfolding() {
     {
@@ -654,7 +654,7 @@ fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_un
     }
 }
 
-/// The same pair where the walk never recurs: a literal zero count lets the symmetric unfolding reduce both matches to their zero arms, so the hole is solved structurally before the recursive call is ever reached, and deciding the pair by that unfolding alone would accept it with the levels untouched — the pair the kernel refuses once it sees the hole zonked away. The two heads are put to the walk as a problem of their own, decided once the hole is: solvable, the pair converts with its levels identified; kept open by two distinct holes, the head problem parks without committing, and commits once both are solved.
+/// The same pair where the walk never recurs: a literal zero count lets the symmetric unfolding reduce both matches to their zero arms, so the hole is solved structurally before the recursive call is ever reached, and deciding the pair by that unfolding alone would accept it with the levels untouched — the pair the certifier refuses once it sees the hole zonked away. The two heads are put to the walk as a problem of their own, decided once the hole is: solvable, the pair converts with its levels identified; kept open by two distinct holes, the head problem parks without committing, and commits once both are solved.
 #[test]
 fn two_instances_kept_apart_only_by_a_metavariable_identify_their_levels_once_it_is_solved() {
     {

@@ -12,11 +12,11 @@ use {
     std::{fmt, rc::Rc},
 };
 
-/// What the checkers said of a program a rule refuses, put whole at the program contract as the soundness board puts a witness at `False` ([`examine_with_prelude`]): every error the elaborator raised or reported, each still wrapped in where it was raised, and every verdict of the kernel's where the elaborator built it a module.
+/// What the checkers said of a program a rule refuses, put whole at the program contract as the soundness board puts a witness at `False` ([`examine_with_prelude`]): every error the elaborator raised or reported, each still wrapped in where it was raised, and every verdict of the certifier's where the elaborator built it a module.
 pub struct Refusals {
     elaborator: Vec<curios_elab::Error>,
-    kernel: Vec<Verdict>,
-    /// Whether the kernel judged the program, which it does wherever the elaborator built it a module, its erasure obligations reported and not raised.
+    certifier: Vec<Verdict>,
+    /// Whether the certifier judged the program, which it does wherever the elaborator built it a module, its erasure obligations reported and not raised.
     judged: bool,
 }
 
@@ -65,7 +65,7 @@ fn refused(source: &str) -> Refusals {
             error: Some(error), ..
         }) => Refusals {
             elaborator: vec![*error],
-            kernel: Vec::new(),
+            certifier: Vec::new(),
             judged: false,
         },
         Err(Refused {
@@ -80,12 +80,12 @@ fn refused(source: &str) -> Refusals {
                 .into_iter()
                 .map(|obligation| obligation.error)
                 .collect(),
-            kernel: verdicts,
+            certifier: verdicts,
             judged: true,
         },
     };
     assert!(
-        !refusals.elaborator.is_empty() || !refusals.kernel.is_empty(),
+        !refusals.elaborator.is_empty() || !refusals.certifier.is_empty(),
         "admitted"
     );
 
@@ -158,13 +158,17 @@ impl Refusals {
         self
     }
 
-    /// The kernel refused the program `at` by an error `pattern` holds of.
-    pub fn by_kernel_in(&self, at: &str, pattern: impl Fn(&curios_cert::Error) -> bool) -> &Self {
+    /// The certifier refused the program `at` by an error `pattern` holds of.
+    pub fn by_certifier_in(
+        &self,
+        at: &str,
+        pattern: impl Fn(&curios_cert::Error) -> bool,
+    ) -> &Self {
         assert!(
-            self.kernel
+            self.certifier
                 .iter()
                 .any(|verdict| place(verdict.name.as_ref()) == at && pattern(&verdict.error)),
-            "not refused so by the kernel in `{at}`:\n{self}"
+            "not refused so by the certifier in `{at}`:\n{self}"
         );
 
         self
@@ -238,12 +242,12 @@ impl fmt::Display for Refusals {
             writeln!(formatter)?;
         }
         if !self.judged {
-            writeln!(formatter, "kernel not asked")?;
+            writeln!(formatter, "certifier not asked")?;
         }
-        for verdict in &self.kernel {
+        for verdict in &self.certifier {
             writeln!(
                 formatter,
-                "kernel {} in {}",
+                "certifier {} in {}",
                 verdict.error.variant_name(),
                 place(verdict.name.as_ref())
             )?;
@@ -1155,7 +1159,7 @@ pub const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
     /std/print(Nat/to_str(1))
     "#;
 
-// The same premise behind a stuck head. With the read an argument of the parameters `f`, `g` and `h`, weak-head reduction stops at the head without visiting it, so one spelling of the read would be refined to `true` in the outer arm and, after `Cell/fill(c, false)`, to `false` in the inner one — `h` carrying the outer arm's knowledge across, so `p` re-reads at `Eq()(false, true)` and `/std/Bool/false_neq_true` turns it into `/std/Bool/False`. Two heads rather than one because the kernel drops a nested refinement of a *single* key: `assume_case_value` reduces the inner scrutinee under the outer arm's equation, gets the literal `true` back, and `Scope::refine` skips a key with no local free. The read's type is `Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the argument is refused before any arm records an equation.
+// The same premise behind a stuck head. With the read an argument of the parameters `f`, `g` and `h`, weak-head reduction stops at the head without visiting it, so one spelling of the read would be refined to `true` in the outer arm and, after `Cell/fill(c, false)`, to `false` in the inner one — `h` carrying the outer arm's knowledge across, so `p` re-reads at `Eq()(false, true)` and `/std/Bool/false_neq_true` turns it into `/std/Bool/False`. Two heads rather than one because the certifier drops a nested refinement of a *single* key: `assume_case_value` reduces the inner scrutinee under the outer arm's equation, gets the literal `true` back, and `Scope::refine` skips a key with no local free. The read's type is `Io(Bool)`, which `f : (Bool) -> Bool` does not take, so the argument is refused before any arm records an equation.
 // The route no search over the term could close. The scrutinee is `f(true)` for a *parameter* `f`: nothing in it names an effect, and at the moment an arm records its equation the binder has no value to inspect, so whether `f(true)` performs one is a property of the environment rather than of the term. The caller's `(b) => Cell/fill(c, true)` has type `(Bool) -> Io(Bool)` and does not inhabit `(Bool) -> Bool`, so the *caller's argument* is refused and the derivation never reaches an arm, a refinement, or an equation. What removes the class is an effect discipline on the arrow rather than a walk over the term (see `documentation/design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md`), and [`a_parameter_headed_scrutinee_refines_again`] is what such a walk would cost.
 /// The description every fixture below takes apart, and the accepting control: `Io(False)` is built from an exit at a carrier with no constructors, so a program holding a description of a computation that yields `False` compiles and runs. What keeps it from being a proof is that nothing opens it.
 pub const A_DESCRIPTION_OF_A_CONTRADICTION_STILL_COMPILES: &str = r#"

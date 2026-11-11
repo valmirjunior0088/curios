@@ -1069,7 +1069,7 @@ end
 )
 "#;
 
-// A payload at a sort its family leaves to its caller is a proof at `Prop` and data at `Type`, and what its constructor states of it is stated once, of the declaration as written, and read at every assignment. At `Type` the closed match reads the payload `false` as data, so the closing term stands at `Holds(false)`, which is `False`, and `qed` is refused there: a payload bound at `Type` by what holds at `Prop`, as a proof no judgment reads, is still the value the match hands on. No mutation is claimed: it pins the reduct a closed computation reaches through such a payload, the verdict nearest the mark `kernel::stating::tests::a_binder_at_a_sort_left_to_the_caller_binds_no_proof` holds.
+// A payload at a sort its family leaves to its caller is a proof at `Prop` and data at `Type`, and what its constructor states of it is stated once, of the declaration as written, and read at every assignment. At `Type` the closed match reads the payload `false` as data, so the closing term stands at `Holds(false)`, which is `False`, and `qed` is refused there: a payload bound at `Type` by what holds at `Prop`, as a proof no judgment reads, is still the value the match hands on. No mutation is claimed: it pins the reduct a closed computation reaches through such a payload, the verdict nearest the mark `certifier::stating::tests::a_binder_at_a_sort_left_to_the_caller_binds_no_proof` holds.
 #[test]
 fn a_payload_at_a_sort_left_to_the_caller_is_read_as_data_at_type() {
     let verdicts = core_text_verdicts(&fill!(

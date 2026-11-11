@@ -2,9 +2,9 @@
 //!
 //! Erasure is directed by types. The walk carries the type each expression was checked against, and an elimination's head has none to carry: a call's callee, a projection's record, a match's scrutinee. Its type is read here — from what a name was assumed at, by opening a head's telescope at the arguments an application supplies, from the field a projection selects, from what a constructor or a literal states of itself.
 //!
-//! Nothing is checked. The term is certified, and judging it again would run the kernel's rules over what they already accepted. Every rule here is the type half of the kernel's, with the checks left where they were made, and what it asks of a name, a neutral or a type's head it asks of the kernel that certified the term ([`inferred`], [`reduced`]).
+//! Nothing is checked. The term is certified, and judging it again would run the certifier's rules over what they already accepted. Every rule here is the type half of the certifier's, with the checks left where they were made, and what it asks of a name, a neutral or a type's head it asks of the certifier that accepted the term ([`inferred`], [`reduced`]).
 //!
-//! **A term's type is read once per item, and once per arm.** A chain of eliminations asks for the type of each prefix of itself — the call for its callee's, the callee for its own head's — so an answer is kept ([`Eraser::types`]) rather than read again at every level above it. A name is minted once and assumed at one type, so what is kept about a term holds wherever the term stands, but in an arm: there the kernel binds a variable the case solves to its value and reads every type by value, so an arm is read with nothing kept from outside it and keeps nothing past it (`Eraser::in_arm`). A type kept across two arms would read one arm's family in the other, which shares its tags and widths and is not the row its value was built at (`curios`'s `tests::codegen::specialize`).
+//! **A term's type is read once per item, and once per arm.** A chain of eliminations asks for the type of each prefix of itself — the call for its callee's, the callee for its own head's — so an answer is kept ([`Eraser::types`]) rather than read again at every level above it. A name is minted once and assumed at one type, so what is kept about a term holds wherever the term stands, but in an arm: there the certifier binds a variable the case solves to its value and reads every type by value, so an arm is read with nothing kept from outside it and keeps nothing past it (`Eraser::in_arm`). A type kept across two arms would read one arm's family in the other, which shares its tags and widths and is not the row its value was built at (`curios`'s `tests::codegen::specialize`).
 
 use {
     super::Eraser,
@@ -31,7 +31,7 @@ impl Eraser<'_> {
         Ok(type_)
     }
 
-    /// One reading. A step is charged for each, as the kernel charges its typing walk, so the budget bounds this one too.
+    /// One reading. A step is charged for each, as the certifier charges its typing walk, so the budget bounds this one too.
     fn read_type(
         &mut self,
         context: &mut Reader,
@@ -194,7 +194,7 @@ impl Eraser<'_> {
             | curios_core::Subterm::TupleType(_)
             | curios_core::Subterm::InductType(_)
             | curios_core::Subterm::StructType(_) => inferred(context, term),
-            // A name, or a declaration at an instance: what it was assumed or defined at, as the kernel reads it.
+            // A name, or a declaration at an instance: what it was assumed or defined at, as the certifier reads it.
             curios_core::Subterm::Var(_) | curios_core::Subterm::Instance(_) => {
                 inferred(context, term)
             }
@@ -249,7 +249,7 @@ impl Eraser<'_> {
             .collect::<Vec<_>>();
         let member_refs = members.iter().collect::<Vec<_>>();
 
-        // Each member bound at its type to its selection, as the kernel's own group tail binds it.
+        // Each member bound at its type to its selection, as the certifier's own group tail binds it.
         let type_ = context.scoped(|context| {
             for (index, (name, member)) in names.iter().zip(group.iter()).enumerate() {
                 context.bind(

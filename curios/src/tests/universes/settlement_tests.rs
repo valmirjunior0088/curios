@@ -570,7 +570,7 @@ fn a_declaration_under_a_key_and_an_order_over_one_carrier_is_judged_alike() {
     assert_eq!(run(source), b"both");
 }
 
-// **A type former sits where its parts are typed, which is where the kernel types it.** A function type or a tuple type over a part whose written type is above its reduct's — a closed match typed by its motive, a call typed by its codomain, an associated type named through a witness at a level of its own — is sized from the part as typing read it. Sized from the part's reduct it sat a level short, and the kernel refused the sort the elaborator declared: `Over` at `Type` over a domain typed at its witness's level, and `listed`'s `List` at zero over a record of one.
+// **A type former sits where its parts are typed, which is where the certifier types it.** A function type or a tuple type over a part whose written type is above its reduct's — a closed match typed by its motive, a call typed by its codomain, an associated type named through a witness at a level of its own — is sized from the part as typing read it. Sized from the part's reduct it sat a level short, and the certifier refused the sort the elaborator declared: `Over` at `Type` over a domain typed at its witness's level, and `listed`'s `List` at zero over a record of one.
 #[test]
 fn a_type_former_is_sized_by_its_parts_as_they_are_written() {
     let source = r#"
@@ -628,7 +628,7 @@ fn a_sort_left_to_an_implicit_closes_as_the_type_written_there() {
     );
 }
 
-// An empty list literal is typed before anything says what it holds, so its type is a list of an open element, and each implicit that type is handed to, `id`'s and then `first`'s, is sized from it there. The open element is read at the level its own sort states, a bound the solver keeps once the element is known. Read at zero, each implicit closed at zero under an element at the declaration's own level, and the kernel refused a call the elaborator had admitted.
+// An empty list literal is typed before anything says what it holds, so its type is a list of an open element, and each implicit that type is handed to, `id`'s and then `first`'s, is sized from it there. The open element is read at the level its own sort states, a bound the solver keeps once the element is known. Read at zero, each implicit closed at zero under an element at the declaration's own level, and the certifier refused a call the elaborator had admitted.
 #[test]
 fn a_type_over_an_open_element_is_sized_by_the_level_the_element_is_born_at() {
     let source = r#"
@@ -656,7 +656,7 @@ let every(@T: Type, l: ${list}(T), pred: (T) -> Bool) -> Bool =
     end;
 let small(n: Nat) -> Bool = n < 10;";
 
-// A domain is sized at the level typing read it at, which is where the kernel types it, and not at its reduct's. `List(Nat)` is written at the level of `/sys/List`'s instance and reduces to a node at `0`, and `Wrap(Nat)` is written at the level of `Wrap`'s; with the call's implicit written, that instance is the struct's own parameter, and read off the reduct the field stood above the struct's sort, which the kernel refused. Each struct certifies, its implicit written and left out.
+// A domain is sized at the level typing read it at, which is where the certifier types it, and not at its reduct's. `List(Nat)` is written at the level of `/sys/List`'s instance and reduces to a node at `0`, and `Wrap(Nat)` is written at the level of `Wrap`'s; with the call's implicit written, that instance is the struct's own parameter, and read off the reduct the field stood above the struct's sort, which the certifier refused. Each struct certifies, its implicit written and left out.
 #[test]
 fn a_field_is_sized_at_the_level_its_written_type_stands_at() {
     for list in ["List", "Wrap"] {

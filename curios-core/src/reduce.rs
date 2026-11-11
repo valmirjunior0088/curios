@@ -31,7 +31,7 @@ impl ReduceError {
     }
 }
 
-/// A failure that may be a spent budget rather than a verdict on the term the budget was spent on — the one distinction a [`Probe`] reads, stated by each checker's own error: [`ReduceError`] here, the elaborator's diagnostic and the kernel's error where each is defined.
+/// A failure that may be a spent budget rather than a verdict on the term the budget was spent on — the one distinction a [`Probe`] reads, stated by each checker's own error: [`ReduceError`] here, the elaborator's diagnostic and the certifier's error where each is defined.
 pub trait Exhaustion {
     /// The budget's refusal this failure is or carries, or `None` for a verdict on the term — so a failure of one checker's vocabulary can hand the refusal on in reduction's ([`Probe::probed_refusal`]).
     fn refusal(&self) -> Option<&ReduceError>;
@@ -91,7 +91,7 @@ impl<T, E: Exhaustion> Probe<T, E> for Result<T, E> {
 
 /// The evaluator an intrinsic fold calls back into for its operands.
 ///
-/// Intrinsic folding is arithmetic on the representation and belongs here; deciding *how far* a term reduces — which definitions unfold, what a budget costs, which refinements are in scope, whether a `rec` is forced — is a strategy, and a strategy is a judgment. This trait is the seam between them: [`reduce_intrinsic`] states only that it needs its operands' values, and each consumer supplies the strategy it is entitled to. The elaborator's `Context` implements it with metavariable resolution and scrutinee refinement; a kernel implements it without either, and folds the same intrinsics.
+/// Intrinsic folding is arithmetic on the representation and belongs here; deciding *how far* a term reduces — which definitions unfold, what a budget costs, which refinements are in scope, whether a `rec` is forced — is a strategy, and a strategy is a judgment. This trait is the seam between them: [`reduce_intrinsic`] states only that it needs its operands' values, and each consumer supplies the strategy it is entitled to. The elaborator's `Context` implements it with metavariable resolution and scrutinee refinement; a certifier implements it without either, and folds the same intrinsics.
 ///
 /// The two reduction methods differ in what they do with a `rec` head: [`Reducer::reduce`] stops at one, treating the folded spelling as the normal form, while [`Reducer::reduce_forced`] unfolds it because an eliminator demands a value.
 ///
@@ -114,7 +114,7 @@ pub trait Reducer {
 
 /// The component `field` reads off `value`, a term in weak-head normal form: a tuple literal's by a tuple's slot, a literal of the structure a structure's slot names by that slot, and a constructor value's payload by a tuple's slot through the flat runtime view `(tag, payload...)`, where slot `i + 1` is payload component `i` and a structure has no tag to skip.
 ///
-/// `value` is handed back where the two do not meet, and the projection stays stuck: a neutral, a written form, a slot past the literal, or a slot of one thing over a literal of another, which elaboration never builds. The closed machine and the elaborator answer a projection through here. The kernel states the rule for itself where it reduces an open term, so a mistake in either statement shows where the two checkers reduce one term.
+/// `value` is handed back where the two do not meet, and the projection stays stuck: a neutral, a written form, a slot past the literal, or a slot of one thing over a literal of another, which elaboration never builds. The closed machine and the elaborator answer a projection through here. The certifier states the rule for itself where it reduces an open term, so a mistake in either statement shows where the two checkers reduce one term.
 pub fn project_literal(field: &Field, value: Term) -> Result<Term, Term> {
     let component = match (&*value, field) {
         (Subterm::Tuple(tuple), Field::Tuple(index)) => tuple.fields.get(*index),
@@ -137,7 +137,7 @@ pub fn project_literal(field: &Field, value: Term) -> Result<Term, Term> {
 
 /// What `func` contracts to under η: `f`, where its body opened at `binders` is `f` applied to them in order, each argument under its binder's mark, and `f` mentions none of them. A forwarding across a mark is none: `(@x) => f(x)` is a function at `(@x: A) -> B` and `f` one at `(x: A) -> B`, two types plicity holds apart. `binders` are fresh identities, one per binder, which the caller mints and charges for.
 ///
-/// The closed machine and the elaborator contract a function through here. The kernel states the rule for itself where it reduces an open term, as it does a projection's ([`project_literal`]).
+/// The closed machine and the elaborator contract a function through here. The certifier states the rule for itself where it reduces an open term, as it does a projection's ([`project_literal`]).
 pub fn eta_head(func: &Func, binders: &[Free]) -> Option<Term> {
     let occurrences = binders.iter().map(Term::free_var).collect::<Vec<_>>();
     let refs = occurrences.iter().collect::<Vec<_>>();

@@ -2,7 +2,7 @@
 
 use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
-// The guard reads the result's sort off the motive typed under its own binders, and a motive is held to land in a sort there. `F(i)` is the proposition `True` at `true` and `Nat` at `false`, so read at each arm's case the motive would pass the guard at `qa` and type `qb`'s arm as data out of a proposition of two constructors. Typed at the binder `i` it lands in no sort, and the match is refused at its motive before either arm is read. `curios-cert`'s `kernel::infer::eliminate::proof_match_tests` puts the same motive to the kernel under this name. The control's motive is a proposition at every index.
+// The guard reads the result's sort off the motive typed under its own binders, and a motive is held to land in a sort there. `F(i)` is the proposition `True` at `true` and `Nat` at `false`, so read at each arm's case the motive would pass the guard at `qa` and type `qb`'s arm as data out of a proposition of two constructors. Typed at the binder `i` it lands in no sort, and the match is refused at its motive before either arm is read. `curios-cert`'s `certifier::infer::eliminate::proof_match_tests` puts the same motive to the certifier under this name. The control's motive is a proposition at every index.
 #[test]
 fn a_motive_whose_sort_its_index_decides_is_no_motive() {
     control(
@@ -164,7 +164,7 @@ fn a_proposition_over_every_proposition_is_not_applied_at_itself() {
     });
 }
 
-// Berardi's route, where proof irrelevance meets a proposition that decides something: `F` answers `True` at `Two/a()` and `False` at `Two/b()`, irrelevance makes the two one value, so `F(Two/a())` and `F(Two/b())` would be one type and `True/qed()` a proof of `False`. A universe is relevant, so a match into `Prop` is the large elimination the guard refuses, as one into `Nat` is. `curios-cert`'s `kernel::infer::eliminate::proof_match_tests` puts the same elimination to the kernel under this name. The control's `Two` has the one bare constructor, which tells nothing, so it is taken into a universe as into any type.
+// Berardi's route, where proof irrelevance meets a proposition that decides something: `F` answers `True` at `Two/a()` and `False` at `Two/b()`, irrelevance makes the two one value, so `F(Two/a())` and `F(Two/b())` would be one type and `True/qed()` a proof of `False`. A universe is relevant, so a match into `Prop` is the large elimination the guard refuses, as one into `Nat` is. `curios-cert`'s `certifier::infer::eliminate::proof_match_tests` puts the same elimination to the certifier under this name. The control's `Two` has the one bare constructor, which tells nothing, so it is taken into a universe as into any type.
 #[test]
 fn a_proposition_with_two_constructors_does_not_eliminate_into_a_universe() {
     control(
@@ -450,7 +450,7 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
     }
 }
 
-// The singleton rung asks every payload to be pinned, a hidden one as a plain one. `Q/mk`'s plain `n` is its index and its hidden `k` is pinned by none, so `Q/mk(@0, 5)` and `Q/mk(@1, 5)` are one proof of `Q(5)`, and `read` telling them apart would carry `True` to `False` through `cast`. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name. The control is the same family with `k` an index too, read into data.
+// The singleton rung asks every payload to be pinned, a hidden one as a plain one. `Q/mk`'s plain `n` is its index and its hidden `k` is pinned by none, so `Q/mk(@0, 5)` and `Q/mk(@1, 5)` are one proof of `Q(5)`, and `read` telling them apart would carry `True` to `False` through `cast`. `curios-cert`'s `recheck::shape_tests` puts the route to the certifier under this name. The control is the same family with `k` an index too, read into data.
 #[test]
 fn a_hidden_payload_no_index_pins_is_not_read_out_of_a_proof() {
     control(
@@ -485,7 +485,7 @@ fn a_hidden_payload_no_index_pins_is_not_read_out_of_a_proof() {
     );
 }
 
-// Reduction reads a tuple's slot off a constructor's value through the flat runtime view `(tag, payload...)`, so `P/mk(1).1` would be `1`; a slot is typed off what it is a slot of, and a family's value is no tuple, so `get` is refused, where `P/mk(0)` and `P/mk(1)` being one proof would carry `True` to `False` through `cast`. `curios-cert`'s `recheck::shape_tests` puts the route to the kernel under this name. The control is the same slot read off a tuple.
+// Reduction reads a tuple's slot off a constructor's value through the flat runtime view `(tag, payload...)`, so `P/mk(1).1` would be `1`; a slot is typed off what it is a slot of, and a family's value is no tuple, so `get` is refused, where `P/mk(0)` and `P/mk(1)` being one proof would carry `True` to `False` through `cast`. `curios-cert`'s `recheck::shape_tests` puts the route to the certifier under this name. The control is the same slot read off a tuple.
 #[test]
 fn a_proofs_payload_is_read_by_no_tuple_slot() {
     control(

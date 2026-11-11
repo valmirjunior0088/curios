@@ -1,6 +1,6 @@
 //! The respelling grid: whether a verdict follows how a term is spelled, stated so that both answers are checked.
 //!
-//! A row is two spellings conversion equates at the top of an item, and a column is a position one of them is put in: the arm of a guard written as the other, a fold's operand, the arm of a second match on a variable the guard names. Where conversion is a congruence, stable under an arm's equation and under the substitution an arm performs, every cell holds, since a term stands wherever a term it converts with stands. A cell that does not is stated here as refused, or as the kernel's refusal of what the elaborator accepted, so the refused set is a record, and deciding one is a cell moving rather than a test appearing.
+//! A row is two spellings conversion equates at the top of an item, and a column is a position one of them is put in: the arm of a guard written as the other, a fold's operand, the arm of a second match on a variable the guard names. Where conversion is a congruence, stable under an arm's equation and under the substitution an arm performs, every cell holds, since a term stands wherever a term it converts with stands. A cell that does not is stated here as refused, or as the certifier's refusal of what the elaborator accepted, so the refused set is a record, and deciding one is a cell moving rather than a test appearing.
 //!
 //! **Each row's control is its first column.** A pair conversion does not equate outside every arm is no respelling, and a cell over it would be refused for that and say nothing of the position; so each row states the equation at the top of an item, and it is held.
 
@@ -103,10 +103,10 @@ const ORDERS: usize = 8;
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Answer {
     Held,
-    /// Refused by the elaborator, so the kernel is not asked.
+    /// Refused by the elaborator, so the certifier is not asked.
     Refused,
-    /// Accepted by the elaborator and refused by the kernel.
-    Kernel,
+    /// Accepted by the elaborator and refused by the certifier.
+    Certifier,
 }
 
 /// One cell: the row and column it stands at, the item's result and body, and the side it is stated on.
@@ -489,7 +489,7 @@ struct Substitution {
     /// The guard with the case's value written for the variable.
     at_case: &'static str,
     refused: &'static [Under],
-    kernel: &'static [Under],
+    certifier: &'static [Under],
 }
 
 /// The positions a guard's fact is put in under a second match.
@@ -515,7 +515,7 @@ const SUBSTITUTIONS: &[Substitution] = &[
         other: "_",
         at_case: "0 < List/len(xs)",
         refused: &[],
-        kernel: &[],
+        certifier: &[],
     },
     Substitution {
         guard: "a + b < 10",
@@ -524,7 +524,7 @@ const SUBSTITUTIONS: &[Substitution] = &[
         other: "_",
         at_case: "a + 0 < 10",
         refused: &[],
-        kernel: &[],
+        certifier: &[],
     },
     Substitution {
         guard: "g(flag) < 5",
@@ -533,7 +533,7 @@ const SUBSTITUTIONS: &[Substitution] = &[
         other: "false",
         at_case: "g(true) < 5",
         refused: &[],
-        kernel: &[],
+        certifier: &[],
     },
 ];
 
@@ -567,8 +567,8 @@ impl Substitution {
                     at: format!("`{guard}` under a match on `{variable}`, {under:?}"),
                     result: "{}".to_owned(),
                     body,
-                    stated: match (self.kernel.contains(under), self.refused.contains(under)) {
-                        (true, _) => Answer::Kernel,
+                    stated: match (self.certifier.contains(under), self.refused.contains(under)) {
+                        (true, _) => Answer::Certifier,
                         (false, true) => Answer::Refused,
                         (false, false) => Answer::Held,
                     },
@@ -598,7 +598,7 @@ fn program(binders: &str, cells: &[&Cell]) -> String {
 fn answer(binders: &str, cell: &Cell) -> Answer {
     match typecheck(&program(binders, &[cell])) {
         Ok(()) => Answer::Held,
-        Err(error) if error.contains("the kernel refused") => Answer::Kernel,
+        Err(error) if error.contains("the certifier refused") => Answer::Certifier,
         Err(_) => Answer::Refused,
     }
 }
@@ -675,8 +675,8 @@ fn a_comparison_guards_dual_is_answered_only_at_a_total_order() {
     let refusal =
         typecheck(&flt).expect_err("the dual of a `Flt` comparison guard is not answered");
     assert!(
-        refusal.contains("type mismatch") && !refusal.contains("the kernel refused"),
-        "the elaborator refuses the Flt dual as a type mismatch, not the kernel: {refusal}",
+        refusal.contains("type mismatch") && !refusal.contains("the certifier refused"),
+        "the elaborator refuses the Flt dual as a type mismatch, not the certifier: {refusal}",
     );
 }
 

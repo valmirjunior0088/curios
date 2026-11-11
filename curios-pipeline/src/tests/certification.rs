@@ -1,4 +1,4 @@
-//! The certifier's record a compiled unit files beside its definitions: what it covers, what it says, what it read, what an item-level recompile keeps of the baseline's, and the termination flags it marks on a sealed program; and that what the kernel alone refuses stops the fold's products.
+//! The certifier's record a compiled unit files beside its definitions: what it covers, what it says, what it read, what an item-level recompile keeps of the baseline's, and the termination flags it marks on a sealed program; and that what the certifier alone refuses stops the fold's products.
 
 use {
     super::test_support::*,
@@ -52,7 +52,7 @@ fn classified(unit: &Unit, symbol: &str) -> Option<Totality> {
     unit.certification().totality(&named(unit, symbol))
 }
 
-/// The top-level names `term` mentions outside a nominal value's parameters, each node visited once. The kernel counts a record literal's or a constructor application's parameters and never types them — the value's type is taken from them as written, and conversion compares them — so a name standing only there is neither typed nor unfolded.
+/// The top-level names `term` mentions outside a nominal value's parameters, each node visited once. The certifier counts a record literal's or a constructor application's parameters and never types them — the value's type is taken from them as written, and conversion compares them — so a name standing only there is neither typed nor unfolded.
 fn typed_mentions(term: &Term, visited: &mut HashSet<Term>, into: &mut BTreeSet<Global>) {
     term.walk(
         &mut (),
@@ -91,7 +91,7 @@ fn read_by<'a>(unit: &'a Unit, symbol: &str) -> &'a Reads {
         .unwrap_or_else(|| panic!("the record does not cover `{symbol}`"))
 }
 
-/// A unit the pipeline compiled carries the kernel's record of every definition it holds, each classified as the kernel's own closure found it.
+/// A unit the pipeline compiled carries the certifier's record of every definition it holds, each classified as the certifier's own closure found it.
 #[test]
 fn a_compiled_unit_files_the_certifiers_record_of_every_definition() {
     let unit = unit_of(SOURCE);
@@ -140,7 +140,7 @@ fn a_compiled_unit_files_what_judging_each_definition_read() {
     assert!(boxed.signatures.contains(&count) || boxed.bodies.contains(&count));
 }
 
-/// The kernel reads along the graph elaboration built, over the whole prelude. Every name a definition mentions where the kernel types is read — its signature where the name is typed, its body where a type naming it is typed by reducing it first — a group's own members excepted, which it types as the locals it opens, and a nominal value's parameters excepted, which it never types ([`typed_mentions`]); and nothing is read that the definition's item does not [reach](curios_core::Definitions::reaches) transitively — the graph an item-level recompile invalidates along, a declaring item reaching what its registry entry names. The first half is what catches a way of consulting the environment that records nothing, and the second what makes the record no coarser than the graph it refines. An arm no reduction takes is typed by no rule either: a name mentioned there alone is read only as the classification reads it, its signature, and this walk does not tell such an arm from one that is typed, so the arm is left out. Mutation-checked: recording no body read leaves the first half with 1 511 unread mentions.
+/// The certifier reads along the graph elaboration built, over the whole prelude. Every name a definition mentions where the certifier types is read — its signature where the name is typed, its body where a type naming it is typed by reducing it first — a group's own members excepted, which it types as the locals it opens, and a nominal value's parameters excepted, which it never types ([`typed_mentions`]); and nothing is read that the definition's item does not [reach](curios_core::Definitions::reaches) transitively — the graph an item-level recompile invalidates along, a declaring item reaching what its registry entry names. The first half is what catches a way of consulting the environment that records nothing, and the second what makes the record no coarser than the graph it refines. An arm no reduction takes is typed by no rule either: a name mentioned there alone is read only as the classification reads it, its signature, and this walk does not tell such an arm from one that is typed, so the arm is left out. Mutation-checked: recording no body read leaves the first half with 1 511 unread mentions.
 #[test]
 fn the_prelude_reads_along_the_graph_its_definitions_reach() {
     with_prelude(|prelude| {

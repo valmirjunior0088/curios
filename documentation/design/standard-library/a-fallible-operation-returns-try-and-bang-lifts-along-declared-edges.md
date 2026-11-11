@@ -9,7 +9,7 @@
 - **An error channel that is a monad lets `!` carry the failure as it carries the sequencing**, where `Io(Result(E, A))` on every fallible operation makes each caller match twice. A wrapper over the base gives every base the same early return and leaves `Result` a value with no effect.
 - **A witness for a partially applied family keys on its last parameter being the abstracted one**, so a family meant to be a monad orders its context first and its result last: base, error, value. Haskell's `Either e a` and Scala's `Either[E, A]` agree; value first is Rust's, whose `Result` is no monad.
 - **Auto-lifting needs a known target, obtained by waiting rather than divining.** Systems whose bind elaborates bottom-up (Idris, Agda) do not lift; Lean's do-elaborator postpones until the expected type is known and extracts the monad from it, and F* carries effect labels in the judgment. Curios's annotated signatures make the wait almost always zero.
-- **An embedding is a monad morphism**, so an inserted `Monad/lift` cannot change what a program means, while the downward direction is a runner (`block_on`, `State/run`) that decides things no compiler should decide silently. The finished term holds an ordinary `Monad/lift` application, so the kernel is untouched.
+- **An embedding is a monad morphism**, so an inserted `Monad/lift` cannot change what a program means, while the downward direction is a runner (`block_on`, `State/run`) that decides things no compiler should decide silently. The finished term holds an ordinary `Monad/lift` application, so the certifier is untouched.
 - **A premise on the base serves every base with one witness per edge** ([Concepts resolve with global coherence](../surface/concepts-resolve-with-global-coherence.md)).
 
 **Rejected.**

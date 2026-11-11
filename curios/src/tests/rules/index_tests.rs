@@ -285,7 +285,7 @@ fn two_proofs_forced_on_one_binder_do_not_clash() {
     });
 }
 
-// The same conflict met from the scrutinee's side. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, one variable twice, so no position clashes on its own and the unifier's first direction, which reads a variable as what may yet be the target, decides nothing. Its second direction solves `n` to each target, and the two forcings clash as two forcings of one binder do: no value of `Two(n, n)` is `mk()`, whatever `n` is. Both checkers ask both directions of an absent arm, by the call a written arm is specialized by, so an arm may be left out exactly where the kernel would type none of it — a goal the case would refine among them, where a written arm has no body, and a clash that stands behind a position the first direction gave up on.
+// The same conflict met from the scrutinee's side. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, one variable twice, so no position clashes on its own and the unifier's first direction, which reads a variable as what may yet be the target, decides nothing. Its second direction solves `n` to each target, and the two forcings clash as two forcings of one binder do: no value of `Two(n, n)` is `mk()`, whatever `n` is. Both checkers ask both directions of an absent arm, by the call a written arm is specialized by, so an arm may be left out exactly where the certifier would type none of it — a goal the case would refine among them, where a written arm has no body, and a clash that stands behind a position the first direction gave up on.
 #[test]
 fn a_variable_of_the_indices_forced_two_ways_excuses_the_arm() {
     assert_eq!(
@@ -602,7 +602,7 @@ fn an_unmentioned_payload_binder_is_not_forced() {
 //
 // The elaborator refuses at `unbox`, so the items after it never elaborate; they document the route rather than being checked. The certifier is where this rule needs backing up: `carries_information` counts a component whose type is a universe as carrying information, since erasure deleting a type either way is what the runtime observes, not what conversion observes.
 //
-// No surface program reaches that gate. The executable guarantee therefore lives beside the rule: `curios_cert::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds the whole derivation shut, and the two singleton fixtures in `curios_cert::kernel::infer::eliminate::large_elimination_tests` pin the predicate at both halves of the clause that admitted it. The control's `Box` is relevant, and the same derivation at one type stands.
+// No surface program reaches that gate. The executable guarantee therefore lives beside the rule: `curios_cert::recheck::tests::a_derivation_through_a_type_carrying_proposition_is_refused` holds the whole derivation shut, and the two singleton fixtures in `curios_cert::certifier::infer::eliminate::large_elimination_tests` pin the predicate at both halves of the clause that admitted it. The control's `Box` is relevant, and the same derivation at one type stands.
 #[test]
 fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
     control(
@@ -651,7 +651,7 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
     });
 }
 
-// An arm learns an outer variable from inside an index, as the kernel's arm rule does. `one()` targets `1` and the scrutinee's actual index is `n + 1`, so inside the arm `n` is `0`, and `Eq/refl()` inhabits `Eq()(n, 0)`. Both checkers solve an arm's index equations with the shared `curios_analysis::solve_indices`, which reaches the `n` inside `n + 1` where binding an index only when it is itself a variable would not. The refusal is the same arm claiming `Eq()(n, 1)`, which learning `n := 0` must refuse, its goal stated as the arm sees it, `Eq()(0, 1)`.
+// An arm learns an outer variable from inside an index, as the certifier's arm rule does. `one()` targets `1` and the scrutinee's actual index is `n + 1`, so inside the arm `n` is `0`, and `Eq/refl()` inhabits `Eq()(n, 0)`. Both checkers solve an arm's index equations with the shared `curios_analysis::solve_indices`, which reaches the `n` inside `n + 1` where binding an index only when it is itself a variable would not. The refusal is the same arm claiming `Eq()(n, 1)`, which learning `n := 0` must refuse, its goal stated as the arm sees it, `Eq()(0, 1)`.
 #[test]
 fn an_arm_learns_an_outer_variable_inside_an_index() {
     control(
@@ -680,7 +680,7 @@ fn an_arm_learns_an_outer_variable_inside_an_index() {
     );
 }
 
-// An arm whose index equations clash re-types no local, in either checker. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, so the case is unreachable and its written arm is checked as written: its goal is the ambient `Eq()(n, 7)` taken at the case, `Eq()(0, 7)`, and `h` keeps its type `Eq()(n, 7)`. Both re-type by the shared `curios_analysis::retyped` over the solution the case actually has, which a clash leaves empty, so the refusal is the elaborator's; re-typing by the goal's own substitution would re-type `h` to `Eq()(0, 7)`, accept the arm, and hand the kernel a program it refuses.
+// An arm whose index equations clash re-types no local, in either checker. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, so the case is unreachable and its written arm is checked as written: its goal is the ambient `Eq()(n, 7)` taken at the case, `Eq()(0, 7)`, and `h` keeps its type `Eq()(n, 7)`. Both re-type by the shared `curios_analysis::retyped` over the solution the case actually has, which a clash leaves empty, so the refusal is the elaborator's; re-typing by the goal's own substitution would re-type `h` to `Eq()(0, 7)`, accept the arm, and hand the certifier a program it refuses.
 #[test]
 fn an_unreachable_arm_retypes_no_local() {
     control(

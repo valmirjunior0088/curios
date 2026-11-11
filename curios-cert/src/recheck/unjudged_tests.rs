@@ -218,7 +218,7 @@ end
 
 // The instance is held to the scheme the entry states where `E` reads it, before `F`'s own judgment: `2 <= 0` does not hold, and `E` is refused for it.
 //
-// Mutation-check: have `Kernel::check_instance` check an instance's width alone, and `E` is admitted.
+// Mutation-check: have `Certifier::check_instance` check an instance's width alone, and `E` is admitted.
 #[test]
 fn an_instance_of_a_family_stored_after_it_is_held_to_the_familys_scheme() {
     let verdicts = verdicts_of(AN_INSTANCE_BEFORE_ITS_SCHEME_IS_JUDGED);
@@ -291,7 +291,7 @@ end
 
 // The cycle the formation ticket for two families declared apart closes, through a record: `A` reaches `B`, which no walk has judged where `A` is, so the occurrence reads as reaching `A` again at `Mixed`, and `B` reaches `A` through the record's function. Each is refused for its own part.
 //
-// Mutation-check: have the kernel's `Env::judged` answer yes for every family, and the module is admitted whole.
+// Mutation-check: have the certifier's `Env::judged` answer yes for every family, and the module is admitted whole.
 #[test]
 fn a_record_and_a_family_declared_apart_that_hold_each_other_negatively_are_each_refused() {
     let verdicts = verdicts_of(CURRY_THROUGH_A_RECORD_DECLARED_BEFORE);

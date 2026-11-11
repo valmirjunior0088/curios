@@ -1,4 +1,4 @@
-//! The eraser's entry points: a unit's items erased through the kernel that certified them, each into a form at every assignment of the sorts it leaves open and on a budget restored for it; a unit over a baseline keeping the forms the baseline has; a program's entry erased into a fragment of its own and linked; and what each item read of the declarations around it, recorded for a later erasure to ask.
+//! The eraser's entry points: a unit's items erased through the certifier that certified them, each into a form at every assignment of the sorts it leaves open and on a budget restored for it; a unit over a baseline keeping the forms the baseline has; a program's entry erased into a fragment of its own and linked; and what each item read of the declarations around it, recorded for a later erasure to ask.
 
 use {
     super::{Eraser, Outcome},
@@ -83,7 +83,7 @@ impl ErasedProgram {
         Self { module, defined }
     }
 
-    /// Mark every function a definition `certification` classifies `Total` erased to as total, at every form — see [`curios_anf::Function::total`]. The kernel judged the definition at each assignment of its sorts, so its totality holds of each form. Each is found through where its name was linked, so a definition that erased to anything but a function, or that the program does not reach, has nothing to mark, and a function no record names keeps the conservative `false`: a closure a top-level value was computed to among them, which its name is bound to and no declaration defines.
+    /// Mark every function a definition `certification` classifies `Total` erased to as total, at every form — see [`curios_anf::Function::total`]. The certifier judged the definition at each assignment of its sorts, so its totality holds of each form. Each is found through where its name was linked, so a definition that erased to anything but a function, or that the program does not reach, has nothing to mark, and a function no record names keeps the conservative `false`: a closure a top-level value was computed to among them, which its name is bound to and no declaration defines.
     ///
     /// Run on the linked program, once per record of what it was erased from: every unit's in scope and the entry's own. Nothing reads the flag before the back half lowers what this leaves.
     ///
@@ -110,13 +110,13 @@ impl ErasedProgram {
     }
 }
 
-/// Erase one unit's items through `kernel`, the kernel that certified the unit, each into its forms, over what its scope erased to.
+/// Erase one unit's items through `certifier`, the certifier that certified the unit, each into its forms, over what its scope erased to.
 ///
-/// What every reading reads is the kernel's: the unit's definitions as its walk defined them and the units in scope it mounted, each item read at each assignment of the sorts it leaves open, as the walk judged it. The items erase in the order the module stores them, every item after the items it reaches — so the erased form of every name an item uses is in hand when it is asked for.
+/// What every reading reads is the certifier's: the unit's definitions as its walk defined them and the units in scope it mounted, each item read at each assignment of the sorts it leaves open, as the walk judged it. The items erase in the order the module stores them, every item after the items it reaches — so the erased form of every name an item uses is in hand when it is asked for.
 ///
 /// **A unit and a program are erased by one walk, and only a program is linked.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`](curios_core::Program)), so [`erase_program`] runs this same walk, erases the entry at the type it states, which [`Zonked`](curios_core::Zonked) holds, and links what the entry reaches.
 pub fn erase_unit(
-    kernel: &mut curios_cert::Kernel<'_>,
+    certifier: &mut curios_cert::Certifier<'_>,
     scope: Erasures<'_>,
     definitions: &curios_core::Zonked<curios_core::Definitions>,
 ) -> Result<ErasedUnit, Error> {
@@ -124,13 +124,13 @@ pub fn erase_unit(
     grown(|| {
         let definitions = definitions.as_definitions();
         let places = curios_core::Places::of(definitions);
-        kernel.read(|reader| erase_items(reader, scope, (definitions, &places), None))
+        certifier.read(|reader| erase_items(reader, scope, (definitions, &places), None))
     })
 }
 
 /// [`erase_unit`] for a unit compiled over a baseline: an item keeps the erased forms `baseline` has for it, the baseline's own and no copy of them, where the elaborator kept its declaration and everything its erasure read there digests as it did (`over`), and every other is erased. The walk visits the items an edit could reach and no other; where the module is a version of the baseline's, the unit is a version of the baseline's unit.
 pub fn erase_unit_over(
-    kernel: &mut curios_cert::Kernel<'_>,
+    certifier: &mut curios_cert::Certifier<'_>,
     scope: Erasures<'_>,
     definitions: &curios_core::Zonked<curios_core::Definitions>,
     baseline: ErasedBaseline<'_>,
@@ -139,13 +139,13 @@ pub fn erase_unit_over(
     grown(|| {
         let definitions = definitions.as_definitions();
         let over = ErasedOver::new(baseline, definitions, scope);
-        kernel.read(|reader| erase_items(reader, scope, (definitions, baseline.now), Some(over)))
+        certifier.read(|reader| erase_items(reader, scope, (definitions, baseline.now), Some(over)))
     })
 }
 
-/// [`erase_unit`] for a program: its module erased over its scope through `kernel`, the kernel that certified the program, its entry erased at the type it states, and the two linked with what they reach of the scope — the module whose `ErasedProgram::into_module` the back half lowers.
+/// [`erase_unit`] for a program: its module erased over its scope through `certifier`, the certifier that certified the program, its entry erased at the type it states, and the two linked with what they reach of the scope — the module whose `ErasedProgram::into_module` the back half lowers.
 pub fn erase_program(
-    kernel: &mut curios_cert::Kernel<'_>,
+    certifier: &mut curios_cert::Certifier<'_>,
     scope: Erasures<'_>,
     program: &curios_core::Zonked<curios_core::Program>,
 ) -> Result<ErasedProgram, Error> {
@@ -154,7 +154,7 @@ pub fn erase_program(
         let definitions = &program.as_program().definitions;
         let places = curios_core::Places::of(definitions);
         let (body, type_) = program.entry();
-        kernel.read(|reader| {
+        certifier.read(|reader| {
             let own = erase_items(reader, scope, (definitions, &places), None)?;
             let entry = {
                 let externals = |name: &curios_core::Global, sorts: Sorts| {
@@ -177,7 +177,7 @@ pub fn erase_program(
     })
 }
 
-/// Erase `module`'s items in the order it stores them, each into its forms, but for those `over` keeps the baseline's erased forms of, which are not read. `places` says where `module` holds each name. What erasing each item read is kept with the unit ([`AskedItems`]): of the declarations around it, their signatures and bodies through the kernel's reads and their kinds off their items, of each erased form it read how a name is bound in, and of each erased form its evaluation ran, the form whole.
+/// Erase `module`'s items in the order it stores them, each into its forms, but for those `over` keeps the baseline's erased forms of, which are not read. `places` says where `module` holds each name. What erasing each item read is kept with the unit ([`AskedItems`]): of the declarations around it, their signatures and bodies through the certifier's reads and their kinds off their items, of each erased form it read how a name is bound in, and of each erased form its evaluation ran, the form whole.
 ///
 /// **Over a baseline whose module this one is a version of, the unit begins as the baseline's**, every item standing where the baseline holds it with what its erasure read, and the walk visits the items an edit could reach alone ([`ErasedOver`]); over any other, it is made item by item.
 pub fn erase_items(
@@ -365,7 +365,7 @@ fn foreign_parts<'t>(
         .filter(move |(name, _)| unit.place(name).is_none() && scope.recorded(name))
 }
 
-/// Erase `item` into a form at each assignment of the sorts it leaves to its caller, each read at its assignment as the kernel judged it, with what erasing them asked between them.
+/// Erase `item` into a form at each assignment of the sorts it leaves to its caller, each read at its assignment as the certifier judged it, with what erasing them asked between them.
 fn erase_forms(
     reader: &mut Reader,
     scope: Erasures<'_>,
@@ -437,7 +437,7 @@ fn universe_context(item: &curios_core::Item) -> &curios_core::UniverseContext {
     }
 }
 
-/// `item` at the assignment `sorts` of the sorts it leaves open, as the kernel judges it there: every term it holds read at the assignment, and no sort left. An item that leaves none, as it stands.
+/// `item` at the assignment `sorts` of the sorts it leaves open, as the certifier judges it there: every term it holds read at the assignment, and no sort left. An item that leaves none, as it stands.
 fn at_sorts(item: &curios_core::Item, sorts: Sorts) -> Cow<'_, curios_core::Item> {
     if sorts.is_none() {
         return Cow::Borrowed(item);
@@ -468,7 +468,7 @@ fn at_sorts(item: &curios_core::Item, sorts: Sorts) -> Cow<'_, curios_core::Item
     })
 }
 
-/// What erasing an item's forms asked, as it is asked: the kernel's reads of the declarations around it, read as the parts they are, the kinds and bodies erasure read off their items, and the erased forms it read. Nothing asked of a name the item declares is kept, as the item's own.
+/// What erasing an item's forms asked, as it is asked: the certifier's reads of the declarations around it, read as the parts they are, the kinds and bodies erasure read off their items, and the erased forms it read. Nothing asked of a name the item declares is kept, as the item's own.
 struct Asking<'a> {
     own: &'a [&'a curios_core::Global],
     asked: Asked,
@@ -488,7 +488,7 @@ impl<'a> Asking<'a> {
         }
     }
 
-    /// What the kernel read while erasure read through it, and the definitions erasure read the kind and body of off their items.
+    /// What the certifier read while erasure read through it, and the definitions erasure read the kind and body of off their items.
     fn read(&mut self, reads: curios_core::Reads, declared: Vec<curios_core::Global>) {
         for name in reads.signatures {
             self.note(name, Part::Signature);

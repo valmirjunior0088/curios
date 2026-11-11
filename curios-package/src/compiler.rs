@@ -2,7 +2,7 @@
 //!
 //! A cached verdict is keyed by two things: the terms it was reached about, and the compiler that reached it. This module is the second half.
 //!
-//! **Why the binary's contents, and not its version.** A version string does not move while a compiler is being developed, so keying on it would let a verdict outlive the kernel that reached it — the direction that *admits*, and the only one of the two that is a soundness question. GHC, Coq and Lean all tie their interface files to a version, which works because their users receive releases; it does not work for the machine the compiler is being written on.
+//! **Why the binary's contents, and not its version.** A version string does not move while a compiler is being developed, so keying on it would let a verdict outlive the certifier that reached it — the direction that *admits*, and the only one of the two that is a soundness question. GHC, Coq and Lean all tie their interface files to a version, which works because their users receive releases; it does not work for the machine the compiler is being written on.
 //!
 //! **Why not a per-build nonce.** It is trivially sound and it throws away every cache hit a reproducible rebuild should have kept, which for a compiler whose certification is the expensive step is most of the point. A digest moves exactly when the binary does and no more.
 //!

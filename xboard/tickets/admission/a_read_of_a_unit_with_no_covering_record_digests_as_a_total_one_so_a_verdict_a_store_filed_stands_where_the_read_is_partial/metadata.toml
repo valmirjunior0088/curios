@@ -12,4 +12,4 @@ step = [
     { withhold = "/lib" },
     { source = "proof.crsc" },
 ]
-refused = [{ by = "kernel", error = "NotTotal", within = "entry" }]
+refused = [{ by = "certifier", error = "NotTotal", within = "entry" }]

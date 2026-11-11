@@ -140,7 +140,7 @@ let month_admitted(m: Month) -> Bool/Holds(Bytes/all(Str/to_bytes(month_name(m))
 pub let of_timestamp(t: Timestamp) -> Option(Value) =
     of_utc(OffsetDateTime/of_timestamp(t, Offset/utc).date_time);
 
--- Decided over a parameter: over the date `of_timestamp` computes, each reading of the year reduces the calendar walk again, which exhausts the kernel run without its memo.
+-- Decided over a parameter: over the date `of_timestamp` computes, each reading of the year reduces the calendar walk again, which exhausts the certifier run without its memo.
 let of_utc(at: DateTime) -> Option(Value) =
     match rfc3339/four_digits(at.date)
     | some(fits) => Option/some(fixdate(at, @fits))

@@ -13,7 +13,7 @@ use {
 
 /// An [`Env`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
 ///
-/// Not a checker and not a mock of one. Those probes assert *traversal* structure — that a peeled prefix keeps its binder tail, and that a deep body walks to its bottom on the default test stack — over fixtures already in normal form, so "reduce to weak-head normal form" is the identity on every term they contain. Anything that needed real reduction would be asking a typing question, and those live under `tests/driven/`, driven by the actual kernel.
+/// Not a checker and not a mock of one. Those probes assert *traversal* structure — that a peeled prefix keeps its binder tail, and that a deep body walks to its bottom on the default test stack — over fixtures already in normal form, so "reduce to weak-head normal form" is the identity on every term they contain. Anything that needed real reduction would be asking a typing question, and those live under `tests/driven/`, driven by the actual certifier.
 ///
 /// They cannot be integration tests: [`Walk`] is an internal whose fields they set directly, and making it constructible from outside would mean publishing every one of them.
 #[derive(Default)]
@@ -355,11 +355,11 @@ fn a_ring_is_judged_whatever_its_size() {
 #[test]
 fn a_peeled_prefix_keeps_its_binder_tail() {
     // A cons `x[h, ..t]` rebuilt from arm binders peels its head and sticks on the binder `t`. The remainder must take the full `shape_of` dispatch — a binder reads as its atom — not a force, which cannot move a local and would file the tail as unread, losing the suffix agreement the descent grades by.
-    let mut kernel = Probe::default();
+    let mut certifier = Probe::default();
     let h = Free::local(2, Some("h"));
     let t = Free::local(3, Some("t"));
     let context = SizeContext::default();
-    let mut grader = Grader::new(&mut kernel, &context);
+    let mut grader = Grader::new(&mut certifier, &context);
 
     let single = Term::intrinsic(Intrinsic::BytesAppend {
         bytes: Term::intrinsic(Intrinsic::Bytes(Binary::empty())),
@@ -388,7 +388,7 @@ const DEEP: usize = 100_000;
 #[test]
 fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
     // `(((… f(n) …)))`: a program-generated tuple nest, the mild sibling of a packed literal — bounded by the size of the source that spelled it rather than by a value, and unbounded by anything the walk controls. The nest is inert to the size order (no arm, no refinement, nothing to force), so what it measures is the traversal's own depth, and the graded call at the bottom is the evidence the walk arrived there.
-    let mut kernel = Probe::default();
+    let mut certifier = Probe::default();
     let f = Free::local(1, Some("f"));
     let rec = Term::rec(
         vec![(f, Term::intrinsic(Intrinsic::NatType), Term::free_var(&f))],
@@ -407,7 +407,7 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
     let params = [n];
     let arities = vec![1];
     let mut walk = Walk {
-        env: &mut kernel,
+        env: &mut certifier,
         group,
         arities: &arities,
         caller: 0,
@@ -428,7 +428,7 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
 #[test]
 fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
     // The accessibility shape: `a` refined by an arm to `intro(w, below)`, and the call argument `below(y, r)`. A function-typed payload is a branching node whose children are its applications, so the application reads as the payload it came from and grades below the constructor for the reason the payload does. The control is the same application with `below` bound anywhere but a constructor pattern — outside the set, the head is a stuck binder the reduce-nothing environment cannot move, and the argument stays unread.
-    let mut kernel = Probe::default();
+    let mut certifier = Probe::default();
     let a = Free::local(2, Some("a"));
     let w = Free::local(3, Some("w"));
     let below = Free::local(4, Some("below"));
@@ -445,14 +445,14 @@ fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
         [Term::free_var(&y), Term::free_var(&r)],
     );
 
-    let mut grader = Grader::new(&mut kernel, &context);
+    let mut grader = Grader::new(&mut certifier, &context);
     let parameter = grader.expand(&a, EXPAND_FUEL);
     let Ok(shape) = grader.shape_of(&applied);
     assert_eq!(shape.against(&parameter), LESS);
 
     let mut context = SizeContext::default();
     context.open(Some((a, intro)), None, Vec::new());
-    let mut grader = Grader::new(&mut kernel, &context);
+    let mut grader = Grader::new(&mut certifier, &context);
     let Ok(shape) = grader.shape_of(&applied);
     assert_eq!(shape.against(&parameter), Size::Unknown);
 }
@@ -481,11 +481,11 @@ fn calls_in(group: &RecGroup, n: Free, body: &Term) -> usize {
 
 /// The calls a walk of `body` records for the one member of `group`, whose parameter is `n`, each as it was graded.
 fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
-    let mut kernel = Probe::default();
+    let mut certifier = Probe::default();
     let params = [n];
     let arities = vec![1];
     let mut walk = Walk {
-        env: &mut kernel,
+        env: &mut certifier,
         group,
         arities: &arities,
         caller: 0,

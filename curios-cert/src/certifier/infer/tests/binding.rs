@@ -1,0 +1,605 @@
+//! A `let` in the certifier: bound for typing, and read by value by everything that reads a term for more than its type.
+
+use {
+    crate::certifier::infer::test_support::*,
+    crate::*,
+    curios_core::{Intrinsic, Rec, Reducer, Subterm, Term, Totality},
+};
+
+/// `match v | true => Nat | false => Bool`: a type that is `Nat` exactly where `v` is `true`, which every fixture here reads a `Bool` through.
+fn family(v: Term) -> Term {
+    Term::bool_match(v, None, Term::type_ground(), bool_type(), nat_type())
+}
+
+/// A `let`'s tail is typed over its binder — a variable there has the binder's type — and the `let`'s own type is stated by value, since the binder closes with it.
+///
+/// Mutation-checked: with conversion comparing its terms as they are handed, the second binding's annotation is a name reduction has no value for.
+#[test]
+fn a_lets_tail_is_typed_over_its_binder_and_its_type_stated_by_value() {
+    let mut certifier = certifier();
+    let alias = binder(0, "T");
+    let y = binder(1, "y");
+
+    let term = Term::let_block(
+        vec![
+            (alias, Term::type_ground(), nat_type()),
+            (y, Term::free_var(&alias), nat(3)),
+        ],
+        Term::free_var(&y),
+    );
+
+    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+}
+
+/// Reduction reads by value where typing enters it: a lambda checks against a `let`-bound function type, which the rule reduces to find its telescope.
+///
+/// Mutation-checked: with a forced reduction taking its term as it is handed, the annotation's name reaches the reducer.
+#[test]
+fn a_lambda_checks_against_a_let_bound_function_type() {
+    let mut certifier = certifier();
+    let alias = binder(0, "T");
+    let f = binder(1, "f");
+    let x = binder(2, "x");
+
+    let arrow = Term::func_type([(x, nat_type())], nat_type());
+    let term = Term::let_block(
+        vec![
+            (alias, Term::type_ground(), arrow.clone()),
+            (
+                f,
+                Term::free_var(&alias),
+                Term::func([(x, nat_type())], Term::free_var(&x)),
+            ),
+        ],
+        Term::free_var(&f),
+    );
+
+    assert_eq!(infer(&mut certifier, &term), Ok(arrow));
+}
+
+/// An arm binds again the `let` its solution moves. `c` stands for `b`, and in the arm where `b` is `true` it stands for `true`: a substituted `let` would have had the solution substituted through its value, and a bound one is bound again at it.
+///
+/// Mutation-checked: with a binding over a local that stood for nothing leaving a moved `let` as it was, `family(c)` is stuck on `b` inside the arm that decided it.
+#[test]
+fn an_arm_binds_again_the_let_its_solution_moves() {
+    let mut certifier = certifier();
+    let b = binder(0, "b");
+    let c = binder(1, "c");
+    let z = binder(2, "z");
+
+    let arm = Term::let_(&z, family(Term::free_var(&c)), nat(3), nat(0));
+    let term = Term::func(
+        [(b, bool_type())],
+        Term::let_(
+            &c,
+            bool_type(),
+            Term::free_var(&b),
+            Term::bool_match(Term::free_var(&b), None, nat_type(), nat(0), arm),
+        ),
+    );
+
+    assert!(infer(&mut certifier, &term).is_ok());
+}
+
+/// A `let` that stands for a moved `let` moves with it: `d` is `c` and `c` is `b`, so where `b` is `true` so is `d`. Each is bound again from its value as written, and `d` after `c`, so `d` reads `c` where it now stands.
+///
+/// Mutation-checked: with the `let`s bound again innermost first, `d` is read through the `c` the arm has not yet moved.
+#[test]
+fn a_let_over_a_moved_let_moves_with_it() {
+    let mut certifier = certifier();
+    let b = binder(0, "b");
+    let c = binder(1, "c");
+    let d = binder(2, "d");
+    let z = binder(3, "z");
+
+    let arm = Term::let_(&z, family(Term::free_var(&d)), nat(3), nat(0));
+    let term = Term::func(
+        [(b, bool_type())],
+        Term::let_block(
+            vec![
+                (c, bool_type(), Term::free_var(&b)),
+                (d, bool_type(), Term::free_var(&c)),
+            ],
+            Term::bool_match(Term::free_var(&b), None, nat_type(), nat(0), arm),
+        ),
+    );
+
+    assert!(infer(&mut certifier, &term).is_ok());
+}
+
+/// And a `let` the solution re-types stays a `let`: bound again at its specialized type, it still stands for its value. `c` is `b` stated at a type that names `b`, and the arm reads `c`'s value through `family`.
+///
+/// Mutation-checked: with a re-typed `let` assumed at its new type, it stands for nothing and `family(c)` is stuck on it.
+#[test]
+fn a_let_an_arm_retypes_keeps_its_value() {
+    let mut certifier = certifier();
+    let b = binder(0, "b");
+    let c = binder(1, "c");
+    let v = binder(2, "v");
+    let z = binder(3, "z");
+
+    // `Bool` under either case, and stuck on a variable: a type that names `b` and says nothing more.
+    let carrier =
+        |at: Term| Term::bool_match(at, None, Term::type_ground(), bool_type(), bool_type());
+    let value = Term::bool_match(
+        Term::free_var(&b),
+        Some(&v),
+        carrier(Term::free_var(&v)),
+        Term::intrinsic(Intrinsic::Bool(false)),
+        Term::intrinsic(Intrinsic::Bool(true)),
+    );
+    let arm = Term::let_(&z, family(Term::free_var(&c)), nat(3), nat(0));
+    let term = Term::func(
+        [(b, bool_type())],
+        Term::let_(
+            &c,
+            carrier(Term::free_var(&b)),
+            value,
+            Term::bool_match(Term::free_var(&b), None, nat_type(), nat(0), arm),
+        ),
+    );
+
+    assert!(infer(&mut certifier, &term).is_ok());
+}
+
+/// A `let` bound again is typed again: what was remembered of a term naming it was read off the type and the value it had, and an arm that moves it gives it others. `w` is typed at `family(b)` before the match, and is a `Nat` in the arm where `b` is `true`.
+///
+/// Mutation-checked: with the typings left standing where a `let` is bound again, `w` answers inside the arm at the type it had outside.
+#[test]
+fn a_let_bound_again_is_typed_again() {
+    let mut certifier = certifier();
+    let b = binder(0, "b");
+    let w = binder(1, "w");
+    let before = binder(2, "before");
+    let v = binder(3, "v");
+    let z = binder(4, "z");
+
+    let value = Term::bool_match(
+        Term::free_var(&b),
+        Some(&v),
+        family(Term::free_var(&v)),
+        Term::intrinsic(Intrinsic::Bool(true)),
+        nat(3),
+    );
+    let arm = Term::let_(&z, nat_type(), Term::free_var(&w), nat(0));
+    let term = Term::func(
+        [(b, bool_type())],
+        Term::let_block(
+            vec![
+                (w, family(Term::free_var(&b)), value),
+                (before, family(Term::free_var(&b)), Term::free_var(&w)),
+            ],
+            Term::bool_match(Term::free_var(&b), None, nat_type(), nat(0), arm),
+        ),
+    );
+
+    assert!(infer(&mut certifier, &term).is_ok());
+}
+
+/// An elimination reads its scrutinee by value: `x` stands for `g(b)`, so the arm's equation is `g(b) = true`, kept under the spelling a substituted `let` leaves, and it answers `g(b)` written out in the arm.
+///
+/// Mutation-checked: with the scrutinee read as it is written, `x` is a variable the arm solves, and nothing is known of `g(b)`.
+#[test]
+fn an_elimination_reads_a_let_bound_scrutinee_by_value() {
+    let mut certifier = certifier();
+    let g = binder(0, "g");
+    let b = binder(1, "b");
+    let x = binder(2, "x");
+    let z = binder(3, "z");
+    let guard = Term::apply(Term::free_var(&g), [Term::free_var(&b)]);
+
+    let arm = Term::let_(&z, family(guard.clone()), nat(3), nat(0));
+    let term = Term::func(
+        [
+            (
+                g,
+                Term::func_type([(binder(4, "v"), bool_type())], bool_type()),
+            ),
+            (b, bool_type()),
+        ],
+        Term::let_(
+            &x,
+            bool_type(),
+            guard,
+            Term::bool_match(Term::free_var(&x), None, nat_type(), nat(0), arm),
+        ),
+    );
+
+    assert!(infer(&mut certifier, &term).is_ok());
+}
+
+/// A guard over a `let` of a variable answers a split on the variable inside its arm, and nothing after it: `y` stands for `c`, the arm at `true` of the split binds `y` again at `true`, and the guard's spelling settled there is the arm's alone. After the split `c` is open again, and `family(k(true))` is no type `3` has.
+#[test]
+fn a_guard_read_through_a_let_answers_a_split_inside_its_arm_and_nothing_after_it() {
+    let c = binder(0, "c");
+    let k = binder(1, "k");
+    let y = binder(2, "y");
+    let tested = |at: bool| Term::apply(Term::free_var(&k), [Term::intrinsic(Intrinsic::Bool(at))]);
+    let claimed = || family(tested(true));
+    let forged = |after: Term| {
+        // match c : Nat | false => 0 | true => let u : family(k(true)) = 3; 0 end
+        let split = Term::bool_match(
+            Term::free_var(&c),
+            None,
+            nat_type(),
+            nat(0),
+            Term::let_(&binder(3, "u"), claimed(), nat(3), nat(0)),
+        );
+        let arm = Term::let_(&binder(4, "w"), nat_type(), split, after);
+        let guard = Term::bool_match(
+            Term::free_var(&y),
+            None,
+            bool_type(),
+            tested(false),
+            tested(true),
+        );
+        Term::func(
+            [
+                (c, bool_type()),
+                (
+                    k,
+                    Term::func_type([(binder(5, "v"), bool_type())], bool_type()),
+                ),
+            ],
+            Term::let_(
+                &y,
+                bool_type(),
+                Term::free_var(&c),
+                Term::bool_match(guard, None, nat_type(), nat(0), arm),
+            ),
+        )
+    };
+
+    assert!(infer(&mut certifier(), &forged(nat(0))).is_ok());
+    let answered_after = Term::let_(&binder(6, "z"), claimed(), nat(3), nat(0));
+    assert!(infer(&mut certifier(), &forged(answered_after)).is_err());
+}
+
+/// A recorded position states what its term stands for: the obligations read a position for what it reaches, and a `let`-bound local's name reaches nothing. `h` stands for the proof `p`, and the position the tail records is `p`.
+///
+/// Mutation-checked: with a position recorded as it is written, one names the binder the certifier minted for `h`.
+#[test]
+fn a_recorded_position_is_stated_by_value() {
+    let mut certifier = certifier();
+    let proposition = binder(0, "P");
+    let proof = binder(1, "p");
+    let h = binder(2, "h");
+    certifier.assume(&proposition, &Term::prop());
+    certifier.assume(&proof, &Term::free_var(&proposition));
+
+    let term = Term::let_(
+        &h,
+        Term::free_var(&proposition),
+        Term::free_var(&proof),
+        Term::free_var(&h),
+    );
+    infer(&mut certifier, &term).expect("the `let` is typed");
+    let (positions, failure) = certifier.take_checked();
+
+    assert!(failure.is_none());
+    assert!(!positions.is_empty());
+    for position in &positions {
+        assert!(
+            position
+                .term
+                .mentions()
+                .locals()
+                .all(|name| *name == proposition || *name == proof),
+            "a position names a binder the `let` opened: {:?}",
+            position.term
+        );
+    }
+}
+
+/// A position that reaches a group that does not descend says so, though the group was typed where a `let` binds it and not inside the position's term: `stuck` is a `Bool` that never arrives, and the type stated over it holds the group once it is read by value.
+///
+/// Mutation-checked: with no `let`-bound local read as enclosing such a group, the type over `stuck` is recorded as reaching none.
+#[test]
+fn a_position_over_a_let_bound_partial_group_says_so() {
+    let mut certifier = certifier();
+    let f = binder(0, "f");
+    let stuck = binder(1, "stuck");
+    let alias = binder(2, "T");
+
+    let looping = Term::rec([(f, bool_type(), Term::free_var(&f))], Term::free_var(&f));
+    let term = Term::let_block(
+        vec![
+            (stuck, bool_type(), looping),
+            (alias, Term::type_ground(), family(Term::free_var(&stuck))),
+        ],
+        nat(0),
+    );
+    infer(&mut certifier, &term).expect("the `let` is typed");
+    let (positions, _) = certifier.take_checked();
+    let over_the_group = positions
+        .iter()
+        .filter(|position| position.term.has_group())
+        .collect::<Vec<_>>();
+
+    assert!(!over_the_group.is_empty());
+    assert!(
+        over_the_group
+            .iter()
+            .all(|position| position.encloses_partial)
+    );
+}
+
+/// A call is graded on what it passes: `k` stands for the predecessor, so `countdown(k)` descends as `countdown(pred)` does.
+///
+/// Mutation-checked: with a call's arguments graded as they are written, `k` is a binder nothing is known of and the group does not descend.
+#[test]
+fn a_call_through_a_let_bound_argument_is_graded_by_value() {
+    let mut certifier = certifier();
+    let countdown = binder(0, "countdown");
+    let n = binder(1, "n");
+    let motive = binder(2, "m");
+    let pred = binder(3, "pred");
+    let hypothesis = binder(4, "ih");
+    let k = binder(5, "k");
+
+    let signature = Term::func_type([(n, nat_type())], nat_type());
+    let body = Term::func(
+        [(n, nat_type())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&motive),
+            nat_type(),
+            nat(0),
+            &pred,
+            &hypothesis,
+            Term::let_(
+                &k,
+                nat_type(),
+                Term::free_var(&pred),
+                Term::apply(Term::free_var(&countdown), [Term::free_var(&k)]),
+            ),
+        ),
+    );
+    let term = Term::rec(
+        [(countdown, signature, body)],
+        Term::apply(Term::free_var(&countdown), [nat(3)]),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*term else {
+        panic!("the fixture changed shape");
+    };
+
+    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+    assert_eq!(certifier.group_verdict(group), Some(Totality::Total));
+}
+
+/// A recursive group is read by value: its verdict is filed under the group a substituted `let` leaves, which is the group a recorded position holds and the obligations look up.
+///
+/// Mutation-checked: with the group checked as it is written, its verdict is filed under a spelling that names the binder the certifier minted for `k`.
+#[test]
+fn a_group_under_a_let_is_filed_by_value() {
+    let mut certifier = certifier();
+    let k = binder(0, "k");
+    let f = binder(1, "f");
+
+    let group_over = |value: Term| Term::rec([(f, nat_type(), value)], Term::free_var(&f));
+    let term = Term::let_(&k, nat_type(), nat(5), group_over(Term::free_var(&k)));
+    let by_value = group_over(nat(5));
+    let Subterm::Rec(Rec { group, .. }) = &*by_value else {
+        panic!("the fixture changed shape");
+    };
+
+    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+    assert_eq!(certifier.group_verdict(group), Some(Totality::Total));
+}
+
+/// A member of a group that stands in a term is bound in the group's tail, as a `let` binds: `countdown(3)` computes there, so a type stated over it is the type it reduces to.
+///
+/// Mutation-checked: with the tail typed over members that stand for nothing, `countdown(3) == 0` is a `Bool` that never arrives, and the tail's `let` is refused.
+#[test]
+fn a_member_stands_for_its_group_in_the_groups_tail() {
+    let mut certifier = certifier();
+    let countdown = binder(0, "countdown");
+    let n = binder(1, "n");
+    let motive = binder(2, "m");
+    let pred = binder(3, "pred");
+    let hypothesis = binder(4, "ih");
+    let y = binder(5, "y");
+
+    let signature = Term::func_type([(n, nat_type())], nat_type());
+    let body = Term::func(
+        [(n, nat_type())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&motive),
+            nat_type(),
+            nat(0),
+            &pred,
+            &hypothesis,
+            Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
+        ),
+    );
+    let arrives = Term::intrinsic(Intrinsic::NatEql(
+        Term::apply(Term::free_var(&countdown), [nat(3)]),
+        nat(0),
+    ));
+    let term = Term::rec(
+        [(countdown, signature, body)],
+        Term::let_(&y, family(arrives), nat(7), Term::free_var(&y)),
+    );
+
+    let inferred = infer(&mut certifier, &term).expect("the member computes in the tail");
+    assert_eq!(whnf(&mut certifier, inferred).ok(), Some(nat_type()));
+}
+
+/// And a member not known to terminate stands for nothing in its group's own bodies: `countdown` calls itself at `3`, nothing below its argument, so its turn withholds it, and there `countdown(3) == 0` is a `Bool` that never arrives, and a type stated over it in the body is stuck where the same type in the tail is the one it reduces to. A value a body reads of a member that need not terminate is no fact the certifier holds, whoever wrote the term that reads it.
+///
+/// Mutation-checked: with every member read by value whatever its turn finds, `countdown(3)` computes in the body and its `let` is accepted.
+#[test]
+fn a_member_not_known_to_terminate_stands_for_nothing_in_its_bodies() {
+    let mut certifier = certifier();
+    let countdown = binder(0, "countdown");
+    let n = binder(1, "n");
+    let motive = binder(2, "m");
+    let pred = binder(3, "pred");
+    let hypothesis = binder(4, "ih");
+    let y = binder(5, "y");
+
+    let arrives = Term::intrinsic(Intrinsic::NatEql(
+        Term::apply(Term::free_var(&countdown), [nat(3)]),
+        nat(0),
+    ));
+    let signature = Term::func_type([(n, nat_type())], nat_type());
+    // (n) => match n | 0 => 0 | pred + 1 => let y : family(countdown(3) == 0) = 7; countdown(pred) end
+    let body = Term::func(
+        [(n, nat_type())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&motive),
+            nat_type(),
+            nat(0),
+            &pred,
+            &hypothesis,
+            Term::let_(
+                &y,
+                family(arrives),
+                nat(7),
+                Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
+            ),
+        ),
+    );
+    let term = Term::rec(
+        [(countdown, signature, body)],
+        Term::apply(Term::free_var(&countdown), [nat(3)]),
+    );
+
+    let inferred = infer(&mut certifier, &term);
+    assert!(
+        matches!(inferred, Err(Error::Mismatch { .. })),
+        "{inferred:?}"
+    );
+}
+
+/// A position in a group's tail that reaches the group says whether the group descends, as one over a `let`-bound group does: the type stated over `stuck` holds the group once it is read by value.
+///
+/// Mutation-checked: with a member bound as enclosing no such group, the type over `stuck` is recorded as reaching none.
+#[test]
+fn a_position_over_a_member_of_a_partial_group_says_so() {
+    let mut certifier = certifier();
+    let stuck = binder(0, "stuck");
+    let alias = binder(1, "T");
+
+    let term = Term::rec(
+        [(stuck, bool_type(), Term::free_var(&stuck))],
+        Term::let_(
+            &alias,
+            Term::type_ground(),
+            family(Term::free_var(&stuck)),
+            nat(0),
+        ),
+    );
+    infer(&mut certifier, &term).expect("the group and its tail are typed");
+    let (positions, _) = certifier.take_checked();
+    let over_the_group = positions
+        .iter()
+        .filter(|position| position.term.has_group())
+        .collect::<Vec<_>>();
+
+    assert!(!over_the_group.is_empty());
+    assert!(
+        over_the_group
+            .iter()
+            .all(|position| position.encloses_partial)
+    );
+}
+
+/// Reduction reads by value where it is entered: a `let`-bound name gives way to what it stands for.
+///
+/// Mutation-checked: with a reduction taking its term as it is handed, the name reaches the reducer, which has no value for it.
+#[test]
+fn reduction_reads_a_let_bound_name_by_value() {
+    let mut certifier = certifier();
+    let x = binder(0, "x");
+
+    let reduct = certifier.scoped(|certifier| {
+        certifier.bind(&x, &nat_type(), &nat(2), false);
+        whnf(certifier, Term::free_var(&x))
+    });
+
+    assert_eq!(reduct.ok(), Some(nat(2)));
+}
+
+/// Binding over a local that stood for nothing reads it again wherever the scope named it, whoever binds: `v`'s type and `c`'s value were taken while `b` stood for nothing, and once `b` stands for `true`, `v` is at `family(true)` and `c` stands for `true`.
+///
+/// Mutation-checked: with `Certifier::bind` leaving what named the local as it was, `v` stays at `family(b)`, and `c` hands reduction `b`, a `let`-bound name.
+#[test]
+fn binding_over_a_local_that_stood_for_nothing_reads_it_again_where_the_scope_named_it() {
+    let mut certifier = certifier();
+    let b = binder(0, "b");
+    let v = binder(1, "v");
+    let c = binder(2, "c");
+    let boolean = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+
+    certifier.scoped(|certifier| {
+        certifier.assume(&b, &bool_type());
+        certifier.assume(&v, &family(Term::free_var(&b)));
+        certifier.bind(&c, &bool_type(), &Term::free_var(&b), false);
+        certifier.bind(&b, &bool_type(), &boolean(true), false);
+
+        assert_eq!(certifier.local_type(&v), Some(&family(boolean(true))));
+        assert_eq!(
+            whnf(certifier, Term::free_var(&c)).ok(),
+            Some(boolean(true))
+        );
+    });
+}
+
+/// A remembered reduct is keyed on its term by value, so it never rests on what a `let`-bound name stood for when it was taken. An arm binds `x` again at another value; the reduct tables carry no binder and are not cleared when the arm is left, so an entry filed under a spelling that names `x` would answer for the outer `x` with what the inner one stood for.
+///
+/// Mutation-checked: with a forced reduction asking its table about the term as it is handed, the reduct taken under the arm's binding answers after the arm.
+#[test]
+fn a_remembered_reduct_does_not_rest_on_a_lets_binding() {
+    let mut certifier = certifier();
+    let n = binder(0, "n");
+    let x = binder(1, "x");
+    certifier.assume(&n, &nat_type());
+    let sum = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), Term::free_var(&n)));
+    let at = |value: usize| Term::intrinsic(Intrinsic::nat_add(nat(value), Term::free_var(&n)));
+
+    certifier.scoped(|certifier| {
+        certifier.bind(&x, &nat_type(), &nat(2), false);
+        let inside = certifier.scoped(|certifier| {
+            certifier.bind(&x, &nat_type(), &nat(3), false);
+            certifier.reduce_forced(sum.clone())
+        });
+        let outside = certifier.reduce_forced(sum.clone());
+
+        assert_eq!(inside.ok(), certifier.reduce_forced(at(3)).ok());
+        assert_eq!(outside.ok(), certifier.reduce_forced(at(2)).ok());
+    });
+}
+
+/// What an arm binds a moved `let` to is the arm's alone: `c` stands for `b`, so where `b` is `false` it is `false` again, whichever arm the walk takes first. Each split states `family(c)` at a value that fits its arm in one arm and the other case in the other, so a binding that outlived the arm it was made in would type the second at the first's case.
+#[test]
+fn a_let_an_arm_moves_stands_for_its_value_in_the_sibling_arm() {
+    let b = binder(0, "b");
+    let c = binder(1, "c");
+    let z = binder(2, "z");
+    let at = |value: Term| Term::let_(&z, family(Term::free_var(&c)), value, nat(0));
+    let split = |false_arm: Term, true_arm: Term| {
+        Term::func(
+            [(b, bool_type())],
+            Term::let_(
+                &c,
+                bool_type(),
+                Term::free_var(&b),
+                Term::bool_match(Term::free_var(&b), None, nat_type(), false_arm, true_arm),
+            ),
+        )
+    };
+    let boolean = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+
+    assert!(infer(&mut certifier(), &split(at(boolean(false)), at(nat(3)))).is_ok());
+    assert!(matches!(
+        infer(&mut certifier(), &split(at(nat(3)), at(nat(3)))),
+        Err(Error::Mismatch { inferred, .. }) if *inferred == nat_type()
+    ));
+    assert!(matches!(
+        infer(&mut certifier(), &split(at(boolean(false)), at(boolean(false)))),
+        Err(Error::Mismatch { inferred, .. }) if *inferred == bool_type()
+    ));
+}

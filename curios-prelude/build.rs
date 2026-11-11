@@ -1,6 +1,6 @@
 //! The fixed prelude's build, as Cargo runs it: the work is `compile.rs`'s, filed where the library that embeds the images reads them.
 //!
-//! The compiled crate is the verdict: the build panics on the first refusal of any stage, the kernel's among them, so the crate compiles only if the kernel accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
+//! The compiled crate is the verdict: the build panics on the first refusal of any stage, the certifier's among them, so the crate compiles only if the certifier accepted the whole prelude, and nothing can reach the prelude except through a crate that compiled.
 
 mod compile;
 use compile::*;

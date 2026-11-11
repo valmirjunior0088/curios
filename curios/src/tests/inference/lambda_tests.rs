@@ -1,6 +1,6 @@
 //! A lambda whose type its term has yet to learn is checked where that term completes, at the type its annotations state.
 //!
-//! A lambda read at a type nothing has given waits for a function type, since only an expectation can supply a hidden binder. Where the term that awaits its type has read its parts none is coming, and the lambda is checked at the type its annotations and body state, one whose every domain is annotated ahead of one with a domain left open. So a lambda bound through a call has its type on the next line, a lambda beside it types it whichever is read first, and a numeral in its body that its domain reaches waits with the domain. Each program that compiles is run, so the kernel has judged what the elaborator admitted.
+//! A lambda read at a type nothing has given waits for a function type, since only an expectation can supply a hidden binder. Where the term that awaits its type has read its parts none is coming, and the lambda is checked at the type its annotations and body state, one whose every domain is annotated ahead of one with a domain left open. So a lambda bound through a call has its type on the next line, a lambda beside it types it whichever is read first, and a numeral in its body that its domain reaches waits with the domain. Each program that compiles is run, so the certifier has judged what the elaborator admitted.
 
 use {crate::tests::test_support::*, curios_common::fill};
 

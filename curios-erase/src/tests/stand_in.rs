@@ -10,7 +10,7 @@ use {
     std::collections::BTreeMap,
 };
 
-/// Erasure's reader is handed no proof's body either: the kernel it reads through defines a definition marked a proof as unfolding to nothing, so a reduction leaves its name standing, and the definition beside it to its body.
+/// Erasure's reader is handed no proof's body either: the certifier it reads through defines a definition marked a proof as unfolding to nothing, so a reduction leaves its name standing, and the definition beside it to its body.
 #[test]
 fn a_proofs_body_is_withheld_from_erasures_reader() {
     let p = fresh(Some("P"));
@@ -53,15 +53,15 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
     );
 
     let globals = Globals::default();
-    let (rechecked, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
-    kernel.read(|reader| {
+    certifier.read(|reader| {
         assert_eq!(reader.head(&reference("lemma")), Ok(reference("lemma")));
         assert_eq!(reader.head(&reference("two")), Ok(nat_lit(2)));
     });
 }
 
-/// A decided bound's stand-in is shaped without evaluating its subject. `H(b)` is a match on `b` whose arms are the proposition `Top`, `c` folds `Nat` two hundred thousand times, and `head` hands `need` the proof `Top/qed()` of `H(c)`, which the kernel accepts by evaluating `c`. At a fresh `b`, `H(b)` is a match on it whose every arm is no function type, so no instance of it is one and the stand-in is the unit constant: erasing `head` charges under a tenth of what reducing `H(c)` alone does, where shaping the stand-in by that reduction ran the fold a second time.
+/// A decided bound's stand-in is shaped without evaluating its subject. `H(b)` is a match on `b` whose arms are the proposition `Top`, `c` folds `Nat` two hundred thousand times, and `head` hands `need` the proof `Top/qed()` of `H(c)`, which the certifier accepts by evaluating `c`. At a fresh `b`, `H(b)` is a match on it whose every arm is no function type, so no instance of it is one and the stand-in is the unit constant: erasing `head` charges under a tenth of what reducing `H(c)` alone does, where shaping the stand-in by that reduction ran the fold a second time.
 #[test]
 fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
     let (b, p, pred, ih) = (
@@ -128,13 +128,13 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
         [],
     ));
     let globals = Globals::default();
-    let (rechecked, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
 
-    erase_unit(&mut kernel, Erasures::nothing(), &unit).expect("the unit erases");
+    erase_unit(&mut certifier, Erasures::nothing(), &unit).expect("the unit erases");
     // `head` is the last item erased, on a budget restored for it.
-    let erasing = kernel.read(|reader| reader.consumed().units());
-    let reducing = kernel.read(|reader| {
+    let erasing = certifier.read(|reader| reader.consumed().units());
+    let reducing = certifier.read(|reader| {
         reader.restore_budget();
         crate::reduced(reader, &bound).expect("the bound reduces");
         reader.consumed().units()

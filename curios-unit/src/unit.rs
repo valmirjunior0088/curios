@@ -40,7 +40,7 @@ enum Written {
 #[curios_archive::archived]
 struct Produced {
     written: Written,
-    /// Elaborated and zonked, as the kernel handed it back: elaboration's items, with every proof mark and value sort the kernel stated of them. This is what a successor's elaboration and the kernel's walk over it read where it stands.
+    /// Elaborated and zonked, as the certifier handed it back: elaboration's items, with every proof mark and value sort the certifier stated of them. This is what a successor's elaboration and the certifier's walk over it read where it stands.
     ///
     /// **Stored without its items, which are read by item.** A compilation after the unit reads the declarations it names, so the unit stores the module's outline — each item's names and what each is declared as — and each item as an object of the store, a member of a run consed with the items filed beside it, and a unit restored holds a module whose items are each read when something first asks ([`curios_core::WithoutItems`], [`Definitions::with_items`]).
     #[archived_with(curios_core::WithoutItems)]
@@ -322,7 +322,7 @@ impl Produced {
 
 /// One compiled and certified unit: everything a later unit needs in order to be compiled against it.
 ///
-/// What a compilation produced, and the record the certifier's walk over it left — so a predecessor always carries the kernel's own verdicts on its definitions, and a later walk never has to ask whether it does. Made only by [`Unit::new`], which takes the record, and cloned as a handle is: each stage's artifact is held by pointer.
+/// What a compilation produced, and the record the certifier's walk over it left — so a predecessor always carries the certifier's own verdicts on its definitions, and a later walk never has to ask whether it does. Made only by [`Unit::new`], which takes the record, and cloned as a handle is: each stage's artifact is held by pointer.
 ///
 /// The serialized form of this is what a store files under an address covering its mounts, its predecessors and the compiler that judged them, beside a [`Record`](crate::Record) of the files it was compiled from.
 #[derive(Clone)]
@@ -348,7 +348,7 @@ impl Unit {
         }
     }
 
-    /// Assemble a unit read from Core text: claiming `mounts`, declaring the rows `foreigns` holds, its module `core` as the kernel stated it, erased to `erased`, and the record the certifier's walk over it left. Nothing elaborated it, so it filed no traces, and it holds no lowering ([`Unit::text`]).
+    /// Assemble a unit read from Core text: claiming `mounts`, declaring the rows `foreigns` holds, its module `core` as the certifier stated it, erased to `erased`, and the record the certifier's walk over it left. Nothing elaborated it, so it filed no traces, and it holds no lowering ([`Unit::text`]).
     pub fn read(
         mounts: Vec<Mount>,
         foreigns: ForeignStore,
@@ -396,7 +396,7 @@ impl Unit {
         self.unit.text()
     }
 
-    /// This unit's elaborated module as the kernel handed it back — what a successor's elaboration and judgment read rather than re-check.
+    /// This unit's elaborated module as the certifier handed it back — what a successor's elaboration and judgment read rather than re-check.
     pub fn core(&self) -> &Definitions {
         self.unit.core()
     }

@@ -56,7 +56,7 @@ pub enum Unbuilt {
     Unparsed(String),
     /// Core text the reader refused.
     Read(Box<ReadError>),
-    /// Core text read to a module the kernel or erasure refused.
+    /// Core text read to a module the certifier or erasure refused.
     Unmade(Unmade),
     /// What the history's store held or did not, and what its directory would not take.
     Stored(String),

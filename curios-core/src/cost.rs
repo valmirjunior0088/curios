@@ -198,7 +198,7 @@ const fn units_of(value: u64, divisor: u64) -> u64 {
 
 /// The measured native frame of one guarded reduction level, rounded up to a power of two.
 ///
-/// **Measured, not guessed.** Taken on `aarch64-apple-darwin` by instrumenting `Kernel::spend` to record the address of a stack local, reducing a right-nested `Nat/add` chain at depths 100, 200, 400 and 800, and taking the median descent between consecutive observations inside one stack segment — the min/max span is useless here, because `recurse` moves the walk onto a fresh 32 MiB segment and the addresses stop being comparable across the jump. Every depth reported the same figure to the byte:
+/// **Measured, not guessed.** Taken on `aarch64-apple-darwin` by instrumenting `Certifier::spend` to record the address of a stack local, reducing a right-nested `Nat/add` chain at depths 100, 200, 400 and 800, and taking the median descent between consecutive observations inside one stack segment — the min/max span is useless here, because `recurse` moves the walk onto a fresh 32 MiB segment and the addresses stop being comparable across the jump. Every depth reported the same figure to the byte:
 ///
 /// | Profile | Bytes per level | Units |
 /// | --- | --- | --- |
@@ -207,7 +207,7 @@ const fn units_of(value: u64, divisor: u64) -> u64 {
 ///
 /// **The release figure is the one charged**, rounded up to 1024, and the debug figure is recorded rather than used. A charge has to be a property of the program rather than of the build that checked it — the same reason the unit is target-independent — and release is the compiler that ships. What the divergence means in practice is that a debug build takes about thirteen times the stack this charges for, which `recurse` absorbs by growing rather than aborting.
 ///
-/// **It is a recipe rather than a probe, and that is a deliberate exception.** Retaking it needs six lines of temporary instrumentation inside `Kernel::spend`, and leaving those in the product to keep a probe reproducible would put a measurement hook on the hottest path in the trusted base. The recipe above is complete enough to retype in a few minutes.
+/// **It is a recipe rather than a probe, and that is a deliberate exception.** Retaking it needs six lines of temporary instrumentation inside `Certifier::spend`, and leaving those in the product to keep a probe reproducible would put a measurement hook on the hottest path in the trusted base. The recipe above is complete enough to retype in a few minutes.
 const FRAME_UNITS: u64 = 1024;
 
 impl Default for Cost {

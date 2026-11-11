@@ -46,7 +46,7 @@ pub fn is_keyword(word: &str) -> bool {
 
 /// A resolved module path: the segment sequence from the module root (see the module docs above for why it lives in this crate). The empty qualifier *is* the root, not a degenerate case.
 ///
-/// **A reference to the one allocation of its path**, interned once per process. A qualifier is copied and compared far more often than it is built: every reference in every Core term names one, and the mentions memoized on every node are keyed by them, so an owned clone would put the cost on the kernel's hottest structure, and a shared `Rc` would keep every term on one thread. Interning makes a copy a pointer copy and equality a pointer comparison — exact rather than a fast path, since two equal paths are one allocation.
+/// **A reference to the one allocation of its path**, interned once per process. A qualifier is copied and compared far more often than it is built: every reference in every Core term names one, and the mentions memoized on every node are keyed by them, so an owned clone would put the cost on the certifier's hottest structure, and a shared `Rc` would keep every term on one thread. Interning makes a copy a pointer copy and equality a pointer comparison — exact rather than a fast path, since two equal paths are one allocation.
 #[derive(Clone, Copy)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct Qualifier {

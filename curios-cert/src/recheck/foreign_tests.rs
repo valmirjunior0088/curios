@@ -10,11 +10,11 @@ use {
 
 /// A forged ABI row cannot hand the guest an inhabitant of a proposition, because a wire signature cannot name one.
 ///
-/// The foreign wire contract is enforced by the *grammar*, as `curios-surface`'s `parse::tests::foreign` shows of `top_foreign_rejects_non_wire_type`: `parse_wire_type` is a closed keyword grammar, so `foreign bad : False` never parses and neither checker is asked — the rule is the parser's. As a statement about where the rule is enforced that is right. As a soundness statement it understates the position, and it leaves open the question that matters: a host call is the one place an *embedder* supplies a value the compiler never saw, so what happens if a module reaches the kernel with the rule already broken?
+/// The foreign wire contract is enforced by the *grammar*, as `curios-surface`'s `parse::tests::foreign` shows of `top_foreign_rejects_non_wire_type`: `parse_wire_type` is a closed keyword grammar, so `foreign bad : False` never parses and neither checker is asked — the rule is the parser's. As a statement about where the rule is enforced that is right. As a soundness statement it understates the position, and it leaves open the question that matters: a host call is the one place an *embedder* supplies a value the compiler never saw, so what happens if a module reaches the certifier with the rule already broken?
 ///
 /// It cannot be broken, and the reason is representational rather than a check. `Subterm::Foreign` carries a `ForeignFunction`, whose `signature` is a `WireSignature` over `WireType`, a closed enum of wire carriers. No variant denotes a nominal type, so no row, forged by hand or not, can *say* its result is a proposition. And `infer`'s rule does not read a type off the term: it **constructs** the result through `foreign_signature` over that enum and checks each operand against its own wire type, so what a row claims about its name — the part a forgery controls — never reaches the type at all.
 ///
-/// A null result, recorded as one: nothing here was found to be wrong. What the fixture pins is that the boundary holds from Core and not merely from the parser, which is the half no surface program can reach and no fixture covered. The row below is a forgery — a name no store would issue — and the kernel is then made to type its call.
+/// A null result, recorded as one: nothing here was found to be wrong. What the fixture pins is that the boundary holds from Core and not merely from the parser, which is the half no surface program can reach and no fixture covered. The row below is a forgery — a name no store would issue — and the certifier is then made to type its call.
 ///
 /// The control is [`a_forged_foreign_row_still_inhabits_its_wire_type`], the same call at the type its signature does denote. A fixture that refused every foreign call would pin nothing about propositions.
 #[test]
@@ -33,7 +33,7 @@ fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
-        "the kernel let a forged host row inhabit a proposition: {verdicts:?}",
+        "the certifier let a forged host row inhabit a proposition: {verdicts:?}",
     );
 }
 
@@ -77,7 +77,7 @@ fn a_foreign_row_cannot_be_held_at_another_wire_type() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
-        "the kernel let a row take another wire type than its own: {verdicts:?}",
+        "the certifier let a row take another wire type than its own: {verdicts:?}",
     );
 }
 
@@ -107,7 +107,7 @@ fn a_declaration_beside_a_row_cannot_take_its_answer_out_of_io() {
             .iter()
             .any(|verdict| verdict.name == Some(global("gone"))
                 && matches!(verdict.error, Error::Mismatch { .. })),
-        "the kernel let a declaration beside a row take its answer out of `Io`: {verdicts:?}",
+        "the certifier let a declaration beside a row take its answer out of `Io`: {verdicts:?}",
     );
 }
 

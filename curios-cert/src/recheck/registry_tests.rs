@@ -18,7 +18,7 @@ use {
 ///
 /// The sizing check walks a constructor telescope's **domains** — each must sit at or below the family's declared level — and stops there, so the terminal the telescope ends in, `Family(params, indices)`, is typed by clause 9 of [`check_induct_decl`](crate::check_induct_decl). In a module the elaborator built, a constructor wrapper's declared type ends in that terminal too, so checking the wrapper's body types the targets again — but a module need not carry the wrappers.
 ///
-/// The module below carries the registry entry and no items at all, and its index target is an unsolved metavariable — precisely what the elaborator's strict zonk promises has been eliminated. Relying on the lowering to type it would make the guarantee the elaborator's word rather than the kernel's, which is the dependency the two-checker split exists to remove.
+/// The module below carries the registry entry and no items at all, and its index target is an unsolved metavariable — precisely what the elaborator's strict zonk promises has been eliminated. Relying on the lowering to type it would make the guarantee the elaborator's word rather than the certifier's, which is the dependency the two-checker split exists to remove.
 ///
 /// It is reachable from no surface program — the elaborator builds registry and bindings from one declaration — which is why it belongs here rather than in `curios/src/tests`. The diagnostic is asserted rather than bare failure, since a module this small could fail for unrelated reasons and still look guarded.
 ///
@@ -36,7 +36,7 @@ fn a_registry_index_target_is_checked_rather_than_believed() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::NotCore(_))),
-        "the kernel certified a module carrying an unsolved metavariable: {verdicts:?}",
+        "the certifier accepted a module carrying an unsolved metavariable: {verdicts:?}",
     );
 }
 
@@ -59,7 +59,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
 
 /// A constructor's index target may be a *proof*, and no judgment in the walk types it.
 ///
-/// Definitional proof irrelevance accepts without inspecting either term, and what makes that correct is that every inhabitant of a proposition is total, which is (V)'s job (see `documentation/design/soundness/totality-of-the-erased-program.md`). The premise that argument needs is that **(V) inspects every `Prop`-typed term in the accepted module** — and for the kernel's own (V), seeded from its own typing rather than from the elaborator's hook, that reduces to whether the walk types every such term.
+/// Definitional proof irrelevance accepts without inspecting either term, and what makes that correct is that every inhabitant of a proposition is total, which is (V)'s job (see `documentation/design/soundness/totality-of-the-erased-program.md`). The premise that argument needs is that **(V) inspects every `Prop`-typed term in the accepted module** — and for the certifier's own (V), seeded from its own typing rather than from the elaborator's hook, that reduces to whether the walk types every such term.
 ///
 /// A constructor's index target is where that needs a clause. `Totals::classify` reads the items the walk judges and nothing else, and the module below has none; `free_locals_of` is the only other pass that reads a registry entry, and it collects free locals rather than partiality; and the sizing check walks a constructor telescope's domains and stops at the terminal. So only typing the target puts `check_group`'s local gate — which refuses a proof-typed member whose group does not descend — in front of it.
 ///
@@ -86,7 +86,7 @@ fn a_partial_proof_in_a_registry_index_target_is_refused() {
                     .rendered(&Spelling::default())
                     .contains("does not descend")
         }),
-        "the kernel certified a non-descending proof standing as a constructor's index target: {verdicts:?}",
+        "the certifier accepted a non-descending proof standing as a constructor's index target: {verdicts:?}",
     );
 }
 
@@ -109,11 +109,11 @@ fn a_real_proof_in_a_registry_index_target_is_accepted() {
 ///
 /// `curios-elab`'s `validate_universes` refuses the disagreement outright — "inductive Foo and its type-former definition have different universe contexts" — and it is one of three such agreement clauses, the others pairing a `struct` with its type-former and a `concept` with its structure entry. All three are elaborator-only, and one concept stored twice with the agreement checked in one place is a shape worth constructing rather than assuming.
 ///
-/// The kernel certifies it, in both directions of the mismatch, and the reason it may is that it never reads the agreement: it reads each scheme where that scheme is *authoritative*. An `InductType` occurrence is checked and instantiated against the registry entry's context; the definition is checked under its own. Neither is ever consulted for the other's question, so there is nothing for a disagreement to corrupt.
+/// The certifier accepts it, in both directions of the mismatch, and the reason it may is that it never reads the agreement: it reads each scheme where that scheme is *authoritative*. An `InductType` occurrence is checked and instantiated against the registry entry's context; the definition is checked under its own. Neither is ever consulted for the other's question, so there is nothing for a disagreement to corrupt.
 ///
-/// The second fixture is what makes that a demonstration rather than a hope. It claims `Foo` at instance `[u, u]` inhabits the sort `Foo`'s registry gives instance `[u, v]`, and the kernel refuses with a `Mismatch` of `Type u` against `Type v` — the registry's `result_sort` applied faithfully to the levels the *occurrence* supplied. A kernel that read the definition's scheme here, or conflated the two, would accept it.
+/// The second fixture is what makes that a demonstration rather than a hope. It claims `Foo` at instance `[u, u]` inhabits the sort `Foo`'s registry gives instance `[u, v]`, and the certifier refuses with a `Mismatch` of `Type u` against `Type v` — the registry's `result_sort` applied faithfully to the levels the *occurrence* supplied. A certifier that read the definition's scheme here, or conflated the two, would accept it.
 ///
-/// The verdict: this is the elaborator being strict, not the certifier being permissive. The distinction is not that the elaborator is merely cautious — the agreement is load-bearing *for the elaborator*, which reads a scheme from whichever of its two copies is in hand. It is not load-bearing for a checker that reads each in its own place. No rule was added: making the kernel enforce an elaborator construction invariant it does not consult would be the kernel believing elaborator output, which is the thing this crate exists not to do.
+/// The verdict: this is the elaborator being strict, not the certifier being permissive. The distinction is not that the elaborator is merely cautious — the agreement is load-bearing *for the elaborator*, which reads a scheme from whichever of its two copies is in hand. It is not load-bearing for a checker that reads each in its own place. No rule was added: making the certifier enforce an elaborator construction invariant it does not consult would be the certifier believing elaborator output, which is the thing this crate exists not to do.
 ///
 /// Both routes by which a disagreement *could* have mattered are closed already, and by this same file: an ill-scoped level (`a_level_naming_an_undeclared_universe_parameter_is_refused`) and an instance of the wrong width (`a_universe_instance_narrower_than_its_scheme_is_refused`).
 #[test]
@@ -129,7 +129,7 @@ fn a_registry_and_its_type_former_may_declare_different_schemes() {
                 SYNTAX,
             ),
             Vec::new(),
-            "{label}: the kernel refused a disagreement it never consults",
+            "{label}: the certifier refused a disagreement it never consults",
         );
     }
 }

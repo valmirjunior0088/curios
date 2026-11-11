@@ -82,7 +82,7 @@ fn recursive_members_cannot_silently_discard_different_universe_contexts() {
 
 /// Every local the terms of the items handed in mention is found, with the name owning the position — and nothing of an item not handed in.
 ///
-/// What the kernel refuses before it mints a binder of its own, since a binder aliasing a free local silently identifies two terms that differ. Leaving an item out is the control: a walk over a baseline hands in the items whose terms are not the baseline's, and the walk that filed the baseline refused a local of its own in the others.
+/// What the certifier refuses before it mints a binder of its own, since a binder aliasing a free local silently identifies two terms that differ. Leaving an item out is the control: a walk over a baseline hands in the items whose terms are not the baseline's, and the walk that filed the baseline refused a local of its own in the others.
 #[test]
 fn every_local_a_term_mentions_is_found() {
     let mentioned = Free::local(4_242, Some("y"));
@@ -171,7 +171,7 @@ fn a_stored_unit_may_not_carry_a_metavariable() {
 
 /// A bound variable no scope in the unit binds is refused at the same seam, for a reason of its own.
 ///
-/// A loose index is not an identity a counter handed out — it is an index with no binder, which `Mentions` answers nothing for, so the free-local clause above sees none of it. Stored, it is read at whatever depth the term it is spliced under happens to give it, which is a different term with no error anywhere; and handed to a walk, it is what the kernel refuses by `Error::NotClosed`.
+/// A loose index is not an identity a counter handed out — it is an index with no binder, which `Mentions` answers nothing for, so the free-local clause above sees none of it. Stored, it is read at whatever depth the term it is spliced under happens to give it, which is a different term with no error anywhere; and handed to a walk, it is what the certifier refuses by `Error::NotClosed`.
 #[test]
 fn a_stored_unit_may_not_carry_a_loose_bound_variable() {
     let definitions = stored(Term::var(Var::bound(2)));

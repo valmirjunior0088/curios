@@ -4,9 +4,9 @@ use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
 // The arm rule at its one arm with no case value of its own. A `| _ =>` catch-all binds nothing and refines no index, so the only instance it can be checked at is the scrutinee's — which is the instance the elimination then hands its caller.
 //
-// This is a disagreement between the two checkers rather than a route to `False`: the elaborator checks the catch-all at the actual scrutinee, and a kernel opening the motive's scrutinee binder at the family *type* `/Three` would refuse this program with `/Three` standing in both term positions of the `Eq`. That direction fails closed — nothing well-typed inhabits an expectation with a type substituted for a value — but the certifier's own judgment is the one that matters, and it would establish nothing about the scrutinee for any catch-all it accepted. No prelude catch-all has a scrutinee-dependent motive, so this fixture is where the rule is asked.
+// This is a disagreement between the two checkers rather than a route to `False`: the elaborator checks the catch-all at the actual scrutinee, and a certifier opening the motive's scrutinee binder at the family *type* `/Three` would refuse this program with `/Three` standing in both term positions of the `Eq`. That direction fails closed — nothing well-typed inhabits an expectation with a type substituted for a value — but the certifier's own judgment is the one that matters, and it would establish nothing about the scrutinee for any catch-all it accepted. No prelude catch-all has a scrutinee-dependent motive, so this fixture is where the rule is asked.
 //
-// The instance is pinned where the rule lives, in `curios_cert::kernel::infer::eliminate::coverage_tests`: `a_catch_all_sees_its_own_scrutinee` with its control `a_catch_all_at_another_value_of_the_family_is_refused`, which asserts the expectation itself so that not checking the catch-all cannot pass for closing the hole.
+// The instance is pinned where the rule lives, in `curios_cert::certifier::infer::eliminate::coverage_tests`: `a_catch_all_sees_its_own_scrutinee` with its control `a_catch_all_at_another_value_of_the_family_is_refused`, which asserts the expectation itself so that not checking the catch-all cannot pass for closing the hole.
 #[test]
 fn a_catch_all_is_checked_at_its_scrutinee() {
     assert_eq!(run(A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE), b"1");
@@ -251,7 +251,7 @@ fn a_description_is_not_what_it_yields() {
     .by_elaborator_in("/_one", |error| matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "/std/Eq/Eq(Type)(Io(/Empty), Io(/Empty))" && pinned(expected) == "/std/Eq/Eq(Type)(Io(/Empty), /Empty)"));
 }
 
-// A description is taken apart by no elimination: matched by a family's case, projected, or split by a `Bool` case form. `curios_cert`'s `recheck::intrinsic_tests` puts the module to the kernel under this name. The control takes apart a `Wrap`, a record and a `Bool`.
+// A description is taken apart by no elimination: matched by a family's case, projected, or split by a `Bool` case form. `curios_cert`'s `recheck::intrinsic_tests` puts the module to the certifier under this name. The control takes apart a `Wrap`, a record and a `Bool`.
 #[test]
 fn a_description_is_taken_apart_by_no_elimination() {
     control(

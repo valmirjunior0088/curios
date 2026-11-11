@@ -119,7 +119,7 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
             types_elaborated.push(type_);
         }
 
-        // A group is read through its slots while its bodies are checked, as the kernel's `check_group` reads one: each member's name is defined as its protected slot, the type a body is checked at and a member is assumed at reads the group through the slots, and a slot reads through once its member's turn finds it known to terminate (`Turns`). A reading of a member not yet known parks on its slot, and one of a member withheld waits for good.
+        // A group is read through its slots while its bodies are checked, as the certifier's `check_group` reads one: each member's name is defined as its protected slot, the type a body is checked at and a member is assumed at reads the group through the slots, and a slot reads through once its member's turn finds it known to terminate (`Turns`). A reading of a member not yet known parks on its slot, and one of a member withheld waits for good.
         let mut slots = Vec::with_capacity(items.len());
         let mut through = Vec::with_capacity(items.len());
         for (label, type_) in labels.iter().zip(&types_elaborated) {
@@ -209,7 +209,7 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
     })
 }
 
-/// The type a block answers where it ends, from `type_`, its tail's. The block's frame leaves with what each label stands for, so the type names none of them: `values` pairs each label with what it stands for, in binding order. It is how the kernel types a `let`, which reads a term by value (`curios-cert`'s `Scope::by_value`).
+/// The type a block answers where it ends, from `type_`, its tail's. The block's frame leaves with what each label stands for, so the type names none of them: `values` pairs each label with what it stands for, in binding order. It is how the certifier types a `let`, which reads a term by value (`curios-cert`'s `Scope::by_value`).
 ///
 /// A label the type itself names is read as its value, and so is one in the solution of a metavariable the type holds, which is read as that solution first. One in the spine of an unsolved metavariable is the argument a later solution is read through, which a problem parked in the block may still give: the metavariable is restricted to the binders that remain ([`Context::block_restriction`]). Whatever still names a label, a hole something else fills among it, is read by value where it stands, its spine with it.
 fn leaving(context: &mut Context, type_: Term, values: &[(Free, Term)]) -> Term {

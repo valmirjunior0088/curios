@@ -77,9 +77,9 @@ pub struct NotPositive {
 
 /// The declaration set an analysis runs over: the `induct` and `struct` entries of one declaration, a group's taken together.
 ///
-/// **These are analyzed; every other is consulted.** A family the walk meets outside the set answers from its driver's registry ([`Env::induct_decl`], [`Env::struct_decl`]), by the vector the entry held there carries. Which vector that is is the driver's to say, and each checker reads only its own: the elaborator's entry carries the vector it wrote as that declaration was published, and the kernel's the vector its own walk computed and filed, never the one elaboration stamped on the entry a module carries. An entry with no vector answers `Mixed`.
+/// **These are analyzed; every other is consulted.** A family the walk meets outside the set answers from its driver's registry ([`Env::induct_decl`], [`Env::struct_decl`]), by the vector the entry held there carries. Which vector that is is the driver's to say, and each checker reads only its own: the elaborator's entry carries the vector it wrote as that declaration was published, and the certifier's the vector its own walk computed and filed, never the one elaboration stamped on the entry a module carries. An entry with no vector answers `Mixed`.
 ///
-/// A name is one declaration, and the set is read by name. A name in both registries would be read as the inductive wherever it is asked for, the record never analysed, so the kernel refuses a module that holds one, and lowering refuses the declaration that would produce one.
+/// A name is one declaration, and the set is read by name. A name in both registries would be read as the inductive wherever it is asked for, the record never analysed, so the certifier refuses a module that holds one, and lowering refuses the declaration that would produce one.
 #[derive(Clone, Copy)]
 pub struct Declarations<'a> {
     inducts: &'a BTreeMap<Global, InductDecl>,
@@ -119,7 +119,7 @@ impl<'a> Declarations<'a> {
 
 /// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order — and [`PositivityRefusal::Exhausted`] wherever the driver refused a reduction, so that a vector handed back is the declarations' own.
 ///
-/// The set is exactly what to analyze: the entries one declaration declares, in either checker. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was judged — sound because a declaration judged before the one analysed cannot mention it, so every out-of-set declaration the driver judged ([`Env::judged`]) is a sink of the occurrence relation. One it has not judged is none: the kernel registers every family of a module before it judges any, so a family stored after the one analysed and outside its declaration may reach it again through what nothing has read, and its occurrence is read as reaching the declaration walked at [`Polarity::Mixed`]. The elaborator never meets one, refusing a declaration that reaches one stored after it outside its group.
+/// The set is exactly what to analyze: the entries one declaration declares, in either checker. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was judged — sound because a declaration judged before the one analysed cannot mention it, so every out-of-set declaration the driver judged ([`Env::judged`]) is a sink of the occurrence relation. One it has not judged is none: the certifier registers every family of a module before it judges any, so a family stored after the one analysed and outside its declaration may reach it again through what nothing has read, and its occurrence is read as reaching the declaration walked at [`Polarity::Mixed`]. The elaborator never meets one, refusing a declaration that reaches one stored after it outside its group.
 pub fn positivity_vectors<E: Env>(
     env: &mut E,
     declarations: Declarations<'_>,

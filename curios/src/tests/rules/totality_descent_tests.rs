@@ -354,7 +354,7 @@ fn a_call_through_a_parameter_bound_function_does_not_descend() {
             }
         )
     })
-    .by_kernel_in("/loop", |error| {
+    .by_certifier_in("/loop", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
@@ -558,12 +558,12 @@ fn a_recursion_that_hands_its_arguments_on_exchanged_does_not_descend() {
     .by_elaborator_in("/swap", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_kernel_in("/swap", |error| {
+    .by_certifier_in("/swap", |error| {
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
 
-// A member named only in its own motive is a call, at an argument nothing is below. `curios_cert`'s `recheck::recursion_tests` puts the module to the kernel under this name. The control's motive names no member.
+// A member named only in its own motive is a call, at an argument nothing is below. `curios_cert`'s `recheck::recursion_tests` puts the module to the certifier under this name. The control's motive names no member.
 #[test]
 fn a_member_named_only_in_its_own_motive_is_a_call_its_group_must_descend_on() {
     control(
@@ -589,7 +589,7 @@ fn a_member_named_only_in_its_own_motive_is_a_call_its_group_must_descend_on() {
     });
 }
 
-// A lambda applied on the spot to the caller's own argument, whose binder an arm splits and whose call hands the binder back: `again(x)` is `again(n)`. `curios_cert`'s `recheck::recursion_tests` puts the module to the kernel under this name. The control's arm hands on the predecessor.
+// A lambda applied on the spot to the caller's own argument, whose binder an arm splits and whose call hands the binder back: `again(x)` is `again(n)`. `curios_cert`'s `recheck::recursion_tests` puts the module to the certifier under this name. The control's arm hands on the predecessor.
 #[test]
 fn a_call_handing_back_a_lambdas_binder_does_not_descend() {
     control(
@@ -639,7 +639,7 @@ fn a_call_in_a_callback_descends_where_its_callee_applies_it_below() {
     .by_elaborator_in("/Zeroed", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_kernel_in("/Zeroed", |error| {
+    .by_certifier_in("/Zeroed", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
@@ -674,7 +674,7 @@ fn a_callback_its_callee_hands_on_is_graded_as_unrelated() {
     .by_elaborator_in("/Zeroed", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
-    .by_kernel_in("/Zeroed", |error| {
+    .by_certifier_in("/Zeroed", |error| {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }

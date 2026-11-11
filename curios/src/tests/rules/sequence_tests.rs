@@ -318,7 +318,7 @@ fn a_surrogate_is_neither_text_nor_a_character() {
     .by_elaborator_in("/edge", |error| matches!(error, curios_elab::Error::UninferredImplicit { bound, reduct: Some(reduct), .. } if pinned(bound) == "/std/Char/Valid/Valid(55296)" && pinned(reduct) == "/sys/Bool/False"));
 }
 
-// The kernel's half of `a_surrogate_is_neither_text_nor_a_character`: the kernel reads no privacy and discharges nothing, so a value built past the elaborator is held by the field its literal states alone. `c` is elaborated at `A`, whose validity reduces to `True`, and its code is rewritten to the surrogate `U+D800` with the elaborated proof kept, which the field then states at `Valid(55296)`, reducing to `False`.
+// The certifier's half of `a_surrogate_is_neither_text_nor_a_character`: the certifier reads no privacy and discharges nothing, so a value built past the elaborator is held by the field its literal states alone. `c` is elaborated at `A`, whose validity reduces to `True`, and its code is rewritten to the surrogate `U+D800` with the elaborated proof kept, which the field then states at `Valid(55296)`, reducing to `False`.
 #[test]
 fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_field() {
     let source = r#"
@@ -336,7 +336,7 @@ fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_fiel
     assert_eq!(
         recheck_with_prelude(&control, DEFAULT_BUDGET),
         Vec::new(),
-        "the kernel accepts `c` at `A`"
+        "the certifier accepts `c` at `A`"
     );
     let name = Global::Authored(Qualifier::from(["c"]));
     let mut forged = 0;
@@ -364,11 +364,11 @@ fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_fiel
             verdicts.as_slice(),
             [Verdict { name: Some(refused), error: curios_cert::Error::Mismatch { .. } }] if *refused == name
         ),
-        "the kernel refuses the forged `c` alone, as a mismatch: {verdicts:?}"
+        "the certifier refuses the forged `c` alone, as a mismatch: {verdicts:?}"
     );
 }
 
-// A match and a projection force what they read, so where a fold answers a recursive call — its step returning the accumulator, its initial value the call — both checkers force the call before reading it: `f(1)` is `7`, `c3`'s type is `Bool`, `S` is `Bool` and `p`'s instance is `True`. Read at the fold's unforced answer, `f`'s step stands neutral and `y` is refused by both checkers, and the elaborator and the kernel part on `c3` and `s`. `curios_cert`'s `recheck::closed_computation_tests` puts the module to the kernel under this name.
+// A match and a projection force what they read, so where a fold answers a recursive call — its step returning the accumulator, its initial value the call — both checkers force the call before reading it: `f(1)` is `7`, `c3`'s type is `Bool`, `S` is `Bool` and `p`'s instance is `True`. Read at the fold's unforced answer, `f`'s step stands neutral and `y` is refused by both checkers, and the elaborator and the certifier part on `c3` and `s`. `curios_cert`'s `recheck::closed_computation_tests` puts the module to the certifier under this name.
 #[test]
 fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
     assert_eq!(
@@ -393,7 +393,7 @@ fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
     );
 }
 
-// Two byte runs are apart by their lengths only where those lengths differ: `x[c, d]` against `x[1, 2]` is one value at `c = 1` and `d = 2`, so the fold of `!=` stays stuck on the two bytes and `qed` does not inhabit it, where `forged` would be `False`. `curios_cert`'s `recheck::intrinsic_tests` puts the module to the kernel under this name. The control's literal run is three bytes long, which no two bytes meet.
+// Two byte runs are apart by their lengths only where those lengths differ: `x[c, d]` against `x[1, 2]` is one value at `c = 1` and `d = 2`, so the fold of `!=` stays stuck on the two bytes and `qed` does not inhabit it, where `forged` would be `False`. `curios_cert`'s `recheck::intrinsic_tests` puts the module to the certifier under this name. The control's literal run is three bytes long, which no two bytes meet.
 #[test]
 fn byte_runs_of_one_length_are_not_apart_by_their_lengths() {
     control(

@@ -27,7 +27,7 @@ impl<'a> Predecessors<'a> {
 
     /// The units themselves, in dependency order.
     ///
-    /// For a consumer that needs more than one projection at a time — the kernel's environment is built from each unit's module *and* its certification together, which the driver assembles beside the walk that reads it.
+    /// For a consumer that needs more than one projection at a time — the certifier's environment is built from each unit's module *and* its certification together, which the driver assembles beside the walk that reads it.
     pub fn units(&self) -> &'a [&'a Unit] {
         self.units
     }
@@ -47,7 +47,7 @@ impl<'a> Predecessors<'a> {
             .collect()
     }
 
-    /// The elaborated module of each predecessor, for the kernel's environment and for a report that spells a predecessor's name.
+    /// The elaborated module of each predecessor, for the certifier's environment and for a report that spells a predecessor's name.
     pub fn cores(&self) -> Vec<&'a Definitions> {
         self.units.iter().map(|unit| unit.core()).collect()
     }

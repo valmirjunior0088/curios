@@ -73,7 +73,7 @@ fn a_name_a_unit_in_scope_declares_written_over_a_baseline_is_refused_for_it() {
     let (places, now) = (Places::of(&baseline), Places::of(&edited));
 
     let rechecked = super::verdicts_from(
-        &mut Kernel::new(BUDGET, SYNTAX),
+        &mut Certifier::new(BUDGET, SYNTAX),
         &edited,
         None,
         &globals,

@@ -1,4 +1,4 @@
-//! Which guards an arm records an equation under: only a spelling that mentions a local, the same rule in both checkers, so a dead arm under a closed guard is refused where it is written rather than accepted and then refused by the kernel.
+//! Which guards an arm records an equation under: only a spelling that mentions a local, the same rule in both checkers, so a dead arm under a closed guard is refused where it is written rather than accepted and then refused by the certifier.
 
 use crate::tests::test_support::*;
 
@@ -9,7 +9,7 @@ fn assert_refused_in_a_dead_arm(source: &str) {
         error.contains("type mismatch")
             && error.contains("this arm is never taken: its guard")
             && error.contains("is always false")
-            && !error.contains("the kernel refused"),
+            && !error.contains("the certifier refused"),
         "expected the elaborator to refuse the dead arm, got: {error}"
     );
 }
@@ -36,7 +36,7 @@ fn a_bound_given_up_in_a_dead_arm_says_the_arm_is_never_taken() {
     );
 }
 
-/// A dispatch whose method ignores its locals resolves to a spelling that mentions none, `Nat/lt(3, 2)`. The written guard `x == y` is recorded; the resolved one is not, in either checker, so a proof about it is refused in the arm. Mutation-checked with the other three: removing the rule from `refine_head` accepts all four in the elaborator and leaves the kernel to refuse them.
+/// A dispatch whose method ignores its locals resolves to a spelling that mentions none, `Nat/lt(3, 2)`. The written guard `x == y` is recorded; the resolved one is not, in either checker, so a proof about it is refused in the arm. Mutation-checked with the other three: removing the rule from `refine_head` accepts all four in the elaborator and leaves the certifier to refuse them.
 #[test]
 fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {
     assert_refused_in_a_dead_arm(
@@ -109,7 +109,7 @@ fn a_guard_over_a_global_projection_records_nothing() {
     );
 }
 
-/// The kernel reads a local definition by value, so the guard it meets is the closed term the definition names; the elaborator judges the guard in that spelling too.
+/// The certifier reads a local definition by value, so the guard it meets is the closed term the definition names; the elaborator judges the guard in that spelling too.
 #[test]
 fn a_guard_over_a_local_definition_of_a_closed_term_records_nothing() {
     assert_refused_in_a_dead_arm(
@@ -158,12 +158,12 @@ fn assert_refused_under_a_contradicted_guard(source: &str) {
     assert!(
         error.contains("type mismatch")
             && error.contains("this arm is never taken: in it the guard")
-            && !error.contains("the kernel refused"),
+            && !error.contains("the certifier refused"),
         "expected the elaborator to refuse the dead arm, got: {error}"
     );
 }
 
-/// A second match on a variable the guard names, at a value the guard excludes. The kernel checks that arm with the variable substituted, so the guard is a closed comparison there and no equation is recorded for it; the elaborator, which keeps the variable spelled, withholds its own in that arm, and the proof is refused where it is written. Mutation-checked with the two below: with `Context::refine` withholding nothing the elaborator accepts all three and the kernel refuses them.
+/// A second match on a variable the guard names, at a value the guard excludes. The certifier checks that arm with the variable substituted, so the guard is a closed comparison there and no equation is recorded for it; the elaborator, which keeps the variable spelled, withholds its own in that arm, and the proof is refused where it is written. Mutation-checked with the two below: with `Context::refine` withholding nothing the elaborator accepts all three and the certifier refuses them.
 #[test]
 fn a_guard_an_inner_case_contradicts_answers_nothing_in_that_arm() {
     assert_refused_under_a_contradicted_guard(
@@ -264,7 +264,7 @@ fn a_guard_under_the_case_that_contradicts_it_records_nothing() {
     );
 }
 
-/// A second match on a variable an arm around it already fixed: the kernel matches on the value the variable was substituted by, a literal, so the inner arm at another literal refines nothing and is dead. The elaborator judges the scrutinee in that spelling too, and leaves the variable at the value the outer arm gave it. Mutation-checked: with `refine_head` judging the scrutinee with its refined variables still spelled, the elaborator refines the variable again, accepts the proof, and the kernel refuses it.
+/// A second match on a variable an arm around it already fixed: the certifier matches on the value the variable was substituted by, a literal, so the inner arm at another literal refines nothing and is dead. The elaborator judges the scrutinee in that spelling too, and leaves the variable at the value the outer arm gave it. Mutation-checked: with `refine_head` judging the scrutinee with its refined variables still spelled, the elaborator refines the variable again, accepts the proof, and the certifier refuses it.
 #[test]
 fn a_second_match_on_a_variable_an_arm_fixed_refines_nothing() {
     let error = error(
@@ -290,7 +290,7 @@ fn a_second_match_on_a_variable_an_arm_fixed_refines_nothing() {
     assert!(
         error.contains("type mismatch")
             && error.contains("this arm is never taken: its guard n is always 5")
-            && !error.contains("the kernel refused"),
+            && !error.contains("the certifier refused"),
         "expected the elaborator to refuse the dead arm, got: {error}"
     );
 }
@@ -317,7 +317,8 @@ fn a_contradiction_claimed_in_a_dead_arm_is_refused_as_one_that_does_not_follow(
         "#,
     );
     assert!(
-        !error.contains("which is the compiler's fault") && !error.contains("the kernel refused"),
+        !error.contains("which is the compiler's fault")
+            && !error.contains("the certifier refused"),
         "expected the bound to be refused as not following, got: {error}"
     );
 }

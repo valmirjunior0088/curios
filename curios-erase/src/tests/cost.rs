@@ -39,9 +39,9 @@ fn chain_cost(
     // On a grown stack, as every entry point erases: a chain this deep is walked a frame a level.
     grown(|| {
         let globals = Globals::default();
-        let (_, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+        let (_, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
         let places = curios_core::Places::of(unit.as_definitions());
-        kernel.read(|reader| {
+        certifier.read(|reader| {
             erase_through(reader, unit.as_definitions(), &places).expect("the unit erases");
 
             reader.consumed().units()
@@ -208,9 +208,9 @@ fn erasure_answers_a_doubling_term_in_its_own_size() {
 fn an_erasure_out_of_budget_is_refused_in_erasures_words() {
     let unit = zonked(&module(Vec::new(), nat_lit(0)).definitions);
     let globals = Globals::default();
-    let (_, mut kernel) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (_, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     let sum = curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(nat_lit(2), nat_lit(3)));
-    let error = kernel.read(|reader| {
+    let error = certifier.read(|reader| {
         // The whole budget spent, as a reading that ran out of it leaves it.
         reader.restore_budget();
         reader

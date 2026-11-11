@@ -8,7 +8,7 @@ The values of the Curios intrinsic carriers: the unbounded `Natural` and `Intege
 
 **Decision.** `Natural` and `Integer` are newtypes whose magnitudes are private, and this crate re-exports nothing of `num-bigint` or `num-traits`: no crate above it can name a `BigUint` or import a `num-traits` trait to call a method on one.
 
-**Rationale.** A use of `num-traits` is a trait import — `Zero`, `One`, `ToPrimitive`, `FromPrimitive` — existing only to make a method callable on a bignum; sealing turns those into inherent methods, so "only this crate does arithmetic" is enforced by privacy rather than by inventory. Adding an operation here adds to the trusted base, since the kernel decides with these types.
+**Rationale.** A use of `num-traits` is a trait import — `Zero`, `One`, `ToPrimitive`, `FromPrimitive` — existing only to make a method callable on a bignum; sealing turns those into inherent methods, so "only this crate does arithmetic" is enforced by privacy rather than by inventory. Adding an operation here adds to the trusted base, since the certifier decides with these types.
 
 **Rejected.** Re-exporting the bignum types behind an alias, which leaves every caller able to reach the API the seal exists to close.
 
@@ -24,7 +24,7 @@ The values of the Curios intrinsic carriers: the unbounded `Natural` and `Intege
 
 **Decision.** `Floating` is IEEE 754-2019 binary64 computed over unbounded integers: every one of the 2⁶⁴ bit patterns a distinct value, each operation computed exactly and rounded once in the `Rounding` it is given — ties to even, ties to away, toward zero, toward positive, toward negative — and one NaN rule for every operation, the default NaN where no operand is one and otherwise the greatest quieted operand pattern, read unsigned. `to_dyadic` hands out a finite value's exact mantissa and exponent, and `of_dyadic` rounds an exact value in any direction ([`Flt` is specified by a model](../documentation/design/arithmetic/flt-is-specified-by-a-model-and-the-runtime-conforms.md)).
 
-**Rationale.** The kernel folds `Flt` through this type, so it must be a definition rather than an observation of the host: no floating-point unit is on the trusted path, and the host's `f64` is the oracle `floating::tests` checks the model against. `/std/Flt/exact` is the model's rounding in Curios, line for line, and the rounding tests hold the two together, so a change to `round` here is a change there.
+**Rationale.** The certifier folds `Flt` through this type, so it must be a definition rather than an observation of the host: no floating-point unit is on the trusted path, and the host's `f64` is the oracle `floating::tests` checks the model against. `/std/Flt/exact` is the model's rounding in Curios, line for line, and the rounding tests hold the two together, so a change to `round` here is a change there.
 
 **Rejected.** Deriving `Floating` from the host's `f64` with a gate around NaNs, which ties a term's meaning to the compiler's machine exactly where hardware disagrees.
 

@@ -24,14 +24,14 @@ fn erase_over(
     baseline: ErasedBaseline<'_>,
 ) -> Result<ErasedUnit, Error> {
     let globals = Globals::default();
-    let (rechecked, mut kernel) = certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut certifier) = certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX);
     assert!(
         rechecked.verdicts.is_empty(),
         "the fixture is certified: {:?}",
         rechecked.verdicts
     );
 
-    erase_unit_over(&mut kernel, Erasures::nothing(), unit, baseline)
+    erase_unit_over(&mut certifier, Erasures::nothing(), unit, baseline)
 }
 
 /// Where [`a_bound_call`] binds its call: a local `let` opening the entry, or a top-level item.
@@ -93,8 +93,8 @@ fn identity_arena() -> ErasedProgram {
 
     let program = zonked(&stating(&module(items, body), nat));
     let globals = Globals::default();
-    let (_, mut kernel) = certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
-    erase_program(&mut kernel, Erasures::nothing(), &program).expect("the program erases")
+    let (_, mut certifier) = certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
+    erase_program(&mut certifier, Erasures::nothing(), &program).expect("the program erases")
 }
 
 /// Every erased function's termination flag.

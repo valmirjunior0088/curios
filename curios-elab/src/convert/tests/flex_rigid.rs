@@ -131,7 +131,7 @@ fn scope_check_allows_in_context_variable() {
     assert_eq!(context.metavar_solution(MetavarId(0)), Some(&x));
 }
 
-// What is committed is the term the check rebuilt. A lambda annotated below the domain it is solved at checks, its annotation against that domain by subsumption, and is committed at the domain, which is the annotation the kernel requires of it; committed as it came, it is a solution the elaborator accepts and the kernel refuses. The same holds of a lambda beneath a tuple, which the check reaches through the tuple's field type.
+// What is committed is the term the check rebuilt. A lambda annotated below the domain it is solved at checks, its annotation against that domain by subsumption, and is committed at the domain, which is the annotation the certifier requires of it; committed as it came, it is a solution the elaborator accepts and the certifier refuses. The same holds of a lambda beneath a tuple, which the check reaches through the tuple's field type.
 #[test]
 fn a_candidate_is_committed_as_its_check_rebuilt_it() {
     let mut context = context();

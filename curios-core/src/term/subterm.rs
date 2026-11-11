@@ -477,7 +477,7 @@ impl Subterm {
             | Subterm::Var(_) => false,
             // Reduced away before a head is compared.
             Subterm::Let(_) => false,
-            // Elaboration's own: the kernel refuses them, and the elaborator solves or parks them before it compares heads.
+            // Elaboration's own: the certifier refuses them, and the elaborator solves or parks them before it compares heads.
             Subterm::Metavar(_) | Subterm::Transient(_) => false,
         }
     }

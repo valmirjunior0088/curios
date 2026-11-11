@@ -118,7 +118,7 @@ pub fn invert_indices<J: Judge>(
     invert_with(judge, actuals, targets, flex, false)
 }
 
-/// [`invert_indices`] for the outer direction: the flex variables are the *context's*, not an arm's, so a key-shaped actual at the top of a position is not something the flex side was refined to — there is nothing for a solution to cycle through — and a variable actual may therefore solve the flex target it meets. This is the kernel's spelling of the elaborator's `refine_head` orientation: the outer variable stands refined to the arm's term. The first direction keeps the guard, because there the flex side is the arm's own binders and index refinement has already refined keys to them.
+/// [`invert_indices`] for the outer direction: the flex variables are the *context's*, not an arm's, so a key-shaped actual at the top of a position is not something the flex side was refined to — there is nothing for a solution to cycle through — and a variable actual may therefore solve the flex target it meets. This is the certifier's spelling of the elaborator's `refine_head` orientation: the outer variable stands refined to the arm's term. The first direction keeps the guard, because there the flex side is the arm's own binders and index refinement has already refined keys to them.
 pub fn invert_indices_outer<J: Judge>(
     judge: &mut J,
     actuals: &[Term],
@@ -132,7 +132,7 @@ pub fn invert_indices_outer<J: Judge>(
 ///
 /// Direction one pins a payload binder to the rigid actual it must equal ([`invert_indices`]). Direction two refines an outer variable to the target it must equal, and is the same unifier with its sides swapped (`invert_indices_outer`): it solves flexible variables on what is now the target side, the occurs check refusing a solution that mentions any other refinable variable — which is exactly the parameter cycle (`b := b + 1` through a family parameter) that must not substitute. The directions run in sequence, the first solution applied to the targets before the second runs, which keeps one equation from being solved twice in opposite orientations; and a pinned binder's value may mention an outer variable the second direction refined, so the first solution is rewritten through the second — the reverse cannot happen, the second having run on targets the first was already applied to — which makes the union idempotent in one pass.
 ///
-/// The outer variables are the locals the kernel's spelling of the actual indices names (`locals_beneath`), never a top-level name, whose meaning no case can refine: a local carrying a definition contributes the locals its definition names instead, which is what the index mentions read by value.
+/// The outer variables are the locals the certifier's spelling of the actual indices names (`locals_beneath`), never a top-level name, whose meaning no case can refine: a local carrying a definition contributes the locals its definition names instead, which is what the index mentions read by value.
 ///
 /// `Impossible` when either direction finds a definite clash, which makes the case unreachable.
 pub fn solve_indices<J: Judge>(
@@ -173,7 +173,7 @@ pub fn solve_indices<J: Judge>(
     Ok(Invert::Solved(solutions))
 }
 
-/// Whether `value` may stand for the outer variable `name` everywhere `name` stands. An outer variable is checked at its index's type by subsumption, so its own type may sit below that type, while the target it would be refined to is typed at the index's: where the variable's type is a sort, the target is a type whose own sort the variable's may not hold, and the solution is kept only where the judge holds it below. A refinement both checkers apply alike, the elaborator through its store and the kernel by binding, is one whose value has the variable's own type; one left out keeps the variable as it stands, an answer both read alike. Any other variable's type is its index's by conversion, which the target inhabits.
+/// Whether `value` may stand for the outer variable `name` everywhere `name` stands. An outer variable is checked at its index's type by subsumption, so its own type may sit below that type, while the target it would be refined to is typed at the index's: where the variable's type is a sort, the target is a type whose own sort the variable's may not hold, and the solution is kept only where the judge holds it below. A refinement both checkers apply alike, the elaborator through its store and the certifier by binding, is one whose value has the variable's own type; one left out keeps the variable as it stands, an answer both read alike. Any other variable's type is its index's by conversion, which the target inhabits.
 fn fits_its_variable<J: Judge>(judge: &mut J, name: &Free, value: &Term) -> Result<bool, J::Error> {
     let Some(type_) = judge.assumption(name).cloned() else {
         return Ok(true);

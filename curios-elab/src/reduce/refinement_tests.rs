@@ -18,7 +18,7 @@ fn proj_refinement_lookup() {
     assert_eq!(reduce(&mut context, term.clone()), Ok(nat(1)));
 }
 
-/// Two occurrences of one scrutinee mint an instance each, and the key meets them while both are open. The hit holds the two to one instance, since the arm's value is the scrutinee's as the arm recorded it: left apart, they close wherever their own bounds put them, and the kernel's key, which keeps its levels, answers no term at another.
+/// Two occurrences of one scrutinee mint an instance each, and the key meets them while both are open. The hit holds the two to one instance, since the arm's value is the scrutinee's as the arm recorded it: left apart, they close wherever their own bounds put them, and the certifier's key, which keeps its levels, answers no term at another.
 #[test]
 fn scrutinee_refinement_holds_fresh_universe_instances_to_one() {
     let mut context = context();
@@ -69,7 +69,7 @@ fn instance(context: &Context, meta: UniverseMetaId) -> Level {
 
 /// The pair the key must keep apart, and the one it does not: two occurrences of one definition at *ground* instances.
 ///
-/// A fresh instance is undecided and is held to the recorded one — the test above is that rule, and it is what the prelude needs — but `Type u` embeds a level in a *term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two ground instances. Erasing the instance identifies them, and the arm's equation then refines a stuck term it was never shown to be about. The kernel refuses the coercion this forges (`curios-cert`'s `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`, over the whole module); this is the elaborator's own store, asked directly.
+/// A fresh instance is undecided and is held to the recorded one — the test above is that rule, and it is what the prelude needs — but `Type u` embeds a level in a *term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two ground instances. Erasing the instance identifies them, and the arm's equation then refines a stuck term it was never shown to be about. The certifier refuses the coercion this forges (`curios-cert`'s `recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`, over the whole module); this is the elaborator's own store, asked directly.
 ///
 /// The probe is checker-level rather than a source program on purpose: the surface has no spelling for an instance, so a program arranges two ground instances only through what bounds them, where this states them.
 ///
@@ -148,7 +148,7 @@ fn a_refinement_is_not_read_where_its_frame_is_set_aside() {
     });
 }
 
-/// An equation in force follows the solution an arm is checked under: under the guard `f(n) < 5`, an arm that refines `n` to `0` holds `f(0) < 5`, the recorded spelling stepping aside for that instance, and gives both back when it is left. The kernel's `whnf::equation_scope_tests` holds this proposition under this name, by substituting the solution through the arm; here the variable stays spelled, so a term of the arm that still names it — the guard as written, or `f(n + 0) < 5`, which is no key — is read as the arm spells it.
+/// An equation in force follows the solution an arm is checked under: under the guard `f(n) < 5`, an arm that refines `n` to `0` holds `f(0) < 5`, the recorded spelling stepping aside for that instance, and gives both back when it is left. The certifier's `whnf::equation_scope_tests` holds this proposition under this name, by substituting the solution through the arm; here the variable stays spelled, so a term of the arm that still names it — the guard as written, or `f(n + 0) < 5`, which is no key — is read as the arm spells it.
 ///
 /// Mutation-checked four ways. With `Context::refine` restating nothing the instance stays stuck inside the arm. With the recorded equation left answering beside its instance, the recorded key still answers there. With a key spelled as it is written, the guard and its instance are two keys in the arm. With a stuck form put to the reduced spellings as it is written, `f(n + 0) < 5` is put to no equation, the instance naming no `n`. `context::tests::retry` holds an instance that names no local withheld.
 #[test]
@@ -230,7 +230,7 @@ fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
     });
 }
 
-/// A solution may name a variable an arm inside solves in turn: under the guard `f(n) < 5`, the arm that solves `n` as `k + 1` holds the equation at `f(k + 1) < 5`, and the arm inside it that solves `k` as `0` holds it at that instance again. The kernel has substituted both solutions by then; here both variables stay spelled, so a term is spelled as refined until no refined variable is left in it.
+/// A solution may name a variable an arm inside solves in turn: under the guard `f(n) < 5`, the arm that solves `n` as `k + 1` holds the equation at `f(k + 1) < 5`, and the arm inside it that solves `k` as `0` holds it at that instance again. The certifier has substituted both solutions by then; here both variables stay spelled, so a term is spelled as refined until no refined variable is left in it.
 ///
 /// Mutation-checked: with a term spelled as refined for one round only, the guard as written still names `k` in the inner arm and meets no equation.
 #[test]

@@ -1,4 +1,4 @@
-//! What a later walk believes of a unit an earlier walk filed — a record withheld in part or whole, a unit compiled over its earlier step — each attack a history the kernel refuses where it holds.
+//! What a later walk believes of a unit an earlier walk filed — a record withheld in part or whole, a unit compiled over its earlier step — each attack a history the certifier refuses where it holds.
 
 use {
     super::*,
@@ -14,7 +14,7 @@ fn named(path: &str) -> Global {
     Global::Authored(Qualifier::from(path.split('/')))
 }
 
-/// What the kernel says of `proof`, Core text closing with a term, put at `/std/Bool/False` over the prelude and every unit `history` built, through the walk a compilation puts a program to.
+/// What the certifier says of `proof`, Core text closing with a term, put at `/std/Bool/False` over the prelude and every unit `history` built, through the walk a compilation puts a program to.
 fn put(history: &History, proof: &str) -> Vec<Verdict> {
     history
         .built(|predecessors| {
@@ -378,7 +378,7 @@ let /down : (
     );
 }
 
-/// `r` loops at a type holding a proof of `False`, written as Core text so the kernel alone judges the unit.
+/// `r` loops at a type holding a proof of `False`, written as Core text so the certifier alone judges the unit.
 const PARTIAL_BOX_TEXT: &str = r"
 induct /app/Box: pub Type
 | box(
@@ -441,7 +441,7 @@ fn a_definition_added_beside_one_whose_verdict_is_withheld_is_judged_against_it_
     assert!(
         matches!(
             &stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("app/t")) && matches!(verdict.error, Error::NotTotal { .. })
         ),
         "{stepped:?}"
@@ -474,7 +474,7 @@ let /lib/p :
     assert!(
         matches!(
             &stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("lib/p")) && matches!(verdict.error, Error::Mismatch { .. })
         ),
         "{stepped:?}"
@@ -516,7 +516,7 @@ let /app/p :
     assert!(
         matches!(
             &stepped,
-            Err(Stopped { mount, why: Unbuilt::Unmade(Unmade::Kernel(verdict)) })
+            Err(Stopped { mount, why: Unbuilt::Unmade(Unmade::Certifier(verdict)) })
                 if mount == "app"
                     && verdict.name == Some(named("app/p"))
                     && matches!(verdict.error, Error::Mismatch { .. })
@@ -614,7 +614,7 @@ fn a_proof_reaching_a_definition_whose_verdict_alone_moved_is_judged_again() {
     assert!(
         matches!(
             &stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::NotTotal { .. })
         ),
         "{stepped:?}"
@@ -671,7 +671,7 @@ fn a_match_over_a_family_an_edit_gave_a_case_is_judged_again() {
     assert!(
         matches!(
             &stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("lib/f")) && matches!(verdict.error, Error::MissingArm { .. })
         ),
         "{stepped:?}"
@@ -721,7 +721,7 @@ fn a_declaration_an_edit_moved_past_its_reader_is_unbound_where_the_reader_is_ju
     assert!(
         matches!(
             &stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Undeclared(_))
         ),
         "{stepped:?}"
@@ -773,7 +773,7 @@ let /lib/t : /lib/Q =
     assert!(
         matches!(
             &stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Mismatch { .. })
         ),
         "{stepped:?}"
@@ -812,7 +812,7 @@ fn a_name_declared_under_a_mount_its_unit_does_not_claim_is_asked_of_the_unit_th
     assert!(
         matches!(
             &stepped,
-            Err(Stopped { mount, why: Unbuilt::Unmade(Unmade::Kernel(verdict)) })
+            Err(Stopped { mount, why: Unbuilt::Unmade(Unmade::Certifier(verdict)) })
                 if mount == "b"
                     && verdict.name == Some(named("b/t"))
                     && matches!(verdict.error, Error::Mismatch { .. })
@@ -895,7 +895,7 @@ fn a_proof_over_its_unit_compiled_for_the_other_kind_is_judged_again_where_what_
     assert!(
         matches!(
             &refused,
-            Some(Unbuilt::Unmade(Unmade::Kernel(verdict)))
+            Some(Unbuilt::Unmade(Unmade::Certifier(verdict)))
                 if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Mismatch { .. })
         ),
         "{refused:?}"
@@ -948,7 +948,7 @@ fn a_proof_over_a_unit_compiled_over_a_baseline_is_judged_again_where_what_it_re
     assert!(
         matches!(
             &stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Mismatch { .. })
         ),
         "{stepped:?}"
@@ -1066,7 +1066,7 @@ fn a_proof_over_a_unit_a_session_kept_is_judged_again_where_what_it_read_moved()
     assert!(
         matches!(
             &refused,
-            Some(Unmade::Kernel(verdict))
+            Some(Unmade::Certifier(verdict))
                 if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Mismatch { .. })
         ),
         "{refused:?}"
@@ -1091,7 +1091,7 @@ let /lib/Q : Prop =
     let undeclared = |stepped: &Result<(), Stopped>| {
         matches!(
             stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("lib/t")) && matches!(verdict.error, Error::Undeclared(_))
         )
     };
@@ -1127,7 +1127,7 @@ end
     let indexed = |stepped: &Result<(), Stopped>| {
         matches!(
             stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("u/A")) && matches!(verdict.error, Error::IndexedByItsGroup { .. })
         )
     };
@@ -1160,7 +1160,7 @@ end
     let denied = |stepped: &Result<(), Stopped>| {
         matches!(
             stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("u/Box")) && matches!(verdict.error, Error::VarianceDenied { .. })
         )
     };
@@ -1194,7 +1194,7 @@ struct /u/R: #{level = u + 1} Type { field: #{level = u} Type }
     let denied = |stepped: &Result<(), Stopped>| {
         matches!(
             stepped,
-            Err(Stopped { why: Unbuilt::Unmade(Unmade::Kernel(verdict)), .. })
+            Err(Stopped { why: Unbuilt::Unmade(Unmade::Certifier(verdict)), .. })
                 if verdict.name == Some(named("u/R")) && matches!(verdict.error, Error::VarianceDenied { .. })
         )
     };

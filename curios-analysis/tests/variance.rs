@@ -1,10 +1,10 @@
-//! The variance analysis, driven through the kernel.
+//! The variance analysis, driven through the certifier.
 //!
-//! An integration test for the reason `driven.rs` gives: the analysis is written against `Env`, and the only implementations sit above this crate. A family here is built by hand at its universe parameters, declared to the kernel and put to `variance_vectors`; a vector is spelled with `*` for an irrelevant level and `=` for an invariant one.
+//! An integration test for the reason `driven.rs` gives: the analysis is written against `Env`, and the only implementations sit above this crate. A family here is built by hand at its universe parameters, declared to the certifier and put to `variance_vectors`; a vector is spelled with `*` for an irrelevant level and `=` for an invariant one.
 
 use {
     curios_analysis::{Declarations, held_levels, test_support::*, variance_vectors},
-    curios_cert::Kernel,
+    curios_cert::Certifier,
     curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, LevelHead, StructDecl,
@@ -13,8 +13,8 @@ use {
     std::collections::BTreeMap,
 };
 
-fn kernel() -> Kernel<'static> {
-    Kernel::new(100_000, SYNTAX)
+fn certifier() -> Certifier<'static> {
+    Certifier::new(100_000, SYNTAX)
 }
 
 fn named(path: &str) -> Global {
@@ -97,18 +97,18 @@ fn spelled(vector: &[Variance]) -> String {
         .collect()
 }
 
-/// Each declared family's vector, the families declared to `kernel` first.
+/// Each declared family's vector, the families declared to `certifier` first.
 fn vectors(
-    kernel: &mut Kernel,
+    certifier: &mut Certifier,
     inducts: &BTreeMap<Global, InductDecl>,
 ) -> BTreeMap<Global, String> {
     for (name, entry) in inducts {
-        kernel
+        certifier
             .declare_induct(name, entry)
             .expect("a name is declared once");
     }
 
-    variance_vectors(kernel, Declarations::of(inducts, &BTreeMap::new()))
+    variance_vectors(certifier, Declarations::of(inducts, &BTreeMap::new()))
         .vectors
         .iter()
         .map(|(name, vector)| (*name, spelled(vector)))
@@ -119,7 +119,7 @@ fn vectors(
 fn vector(name: &str, declaration: InductDecl) -> String {
     let inducts = BTreeMap::from([(named(name), declaration)]);
 
-    vectors(&mut kernel(), &inducts)[&named(name)].clone()
+    vectors(&mut certifier(), &inducts)[&named(name)].clone()
 }
 
 /// `Wrap.{u}(A: Type u) | c(x: A)`: a level only a parameter's type mentions.
@@ -222,7 +222,7 @@ fn a_level_only_an_index_target_mentions_is_invariant() {
         (named("Fam"), fam(at("Box", &[level(0)], Vec::new()))),
         (named("Control"), fam(nat())),
     ]);
-    let vectors = vectors(&mut kernel(), &inducts);
+    let vectors = vectors(&mut certifier(), &inducts);
 
     assert_eq!(vectors[&named("Fam")], "=");
     assert_eq!(vectors[&named("Control")], "*");
@@ -258,13 +258,14 @@ fn a_structs_field_is_read() {
             )),
         ),
     ]);
-    let mut kernel = kernel();
+    let mut certifier = certifier();
     for (name, entry) in &structs {
-        kernel
+        certifier
             .declare_struct(name, entry)
             .expect("a name is declared once");
     }
-    let found = variance_vectors(&mut kernel, Declarations::of(&BTreeMap::new(), &structs)).vectors;
+    let found =
+        variance_vectors(&mut certifier, Declarations::of(&BTreeMap::new(), &structs)).vectors;
 
     assert_eq!(spelled(&found[&named("Holds")]), "=");
     assert_eq!(spelled(&found[&named("Keeps")]), "*");
@@ -298,7 +299,7 @@ fn a_level_composes_through_the_families_it_reaches() {
         (named("Tree"), tree),
         (named("Held"), held),
     ]);
-    let vectors = vectors(&mut kernel(), &inducts);
+    let vectors = vectors(&mut certifier(), &inducts);
 
     assert_eq!(vectors[&named("Tree")], "*");
     assert_eq!(vectors[&named("Held")], "=");
@@ -316,7 +317,7 @@ fn a_mutual_pair_settles_on_a_later_round() {
     );
     let inducts = BTreeMap::from([(named("First"), first), (named("Second"), boxed())]);
 
-    assert_eq!(vectors(&mut kernel(), &inducts)[&named("First")], "=");
+    assert_eq!(vectors(&mut certifier(), &inducts)[&named("First")], "=");
 }
 
 // `Uses.{u}(A: Type u) | c(x: Alias.{u}(A))` over `Alias.{u} = (A: Type u) => A`: the reduct is `A`, which carries no level. With no budget to unfold the alias its instance is read as written, every level invariant, and the refusal is handed back.
@@ -326,8 +327,8 @@ fn an_instance_reduction_removes_leaves_no_level() {
     let carrier = Free::local(1, Some("A"));
 
     for (budget, expected, refused) in [(100_000, "*", false), (0, "=", true)] {
-        let mut kernel = Kernel::new(budget, SYNTAX);
-        kernel
+        let mut certifier = Certifier::new(budget, SYNTAX);
+        certifier
             .define(
                 &alias,
                 &Term::func_type(
@@ -342,10 +343,10 @@ fn an_instance_reduction_removes_leaves_no_level() {
             )
             .expect("a name is declared once");
         let inducts = BTreeMap::from([(named("Uses"), uses(named("Alias")))]);
-        kernel
+        certifier
             .declare_induct(&named("Uses"), &inducts[&named("Uses")])
             .expect("a name is declared once");
-        let found = variance_vectors(&mut kernel, Declarations::of(&inducts, &BTreeMap::new()));
+        let found = variance_vectors(&mut certifier, Declarations::of(&inducts, &BTreeMap::new()));
 
         assert_eq!(spelled(&found.vectors[&named("Uses")]), expected);
         assert_eq!(
@@ -362,8 +363,8 @@ fn an_instance_reduction_removes_leaves_no_level() {
 fn a_level_on_an_instance_that_does_not_unfold_is_invariant() {
     let opaque = named("Opaque");
     let carrier = Free::local(1, Some("A"));
-    let mut kernel = kernel();
-    kernel
+    let mut certifier = certifier();
+    certifier
         .declare(
             &opaque,
             &Term::func_type(
@@ -375,7 +376,7 @@ fn a_level_on_an_instance_that_does_not_unfold_is_invariant() {
         .expect("a name is declared once");
     let inducts = BTreeMap::from([(named("Uses"), uses(named("Opaque")))]);
 
-    assert_eq!(vectors(&mut kernel, &inducts)[&named("Uses")], "=");
+    assert_eq!(vectors(&mut certifier, &inducts)[&named("Uses")], "=");
 }
 
 // `Box` analyzed while carrying a vector that calls its `Type`-holding level irrelevant: a name inside the set answers from the fixpoint, never from what it carries.
@@ -389,7 +390,7 @@ fn a_carried_vector_is_recomputed_rather_than_believed() {
     assert_eq!(vector("Box", lying), "=");
 }
 
-// A family registered and not analyzed answers as its driver holds it (`Env::variance`). The kernel holds the vector its own walk filed for a family and none for one it was only handed, so a level composes through such a family as invariant whatever its entry carries, an irrelevance it claims among it. A family no registry holds is invariant.
+// A family registered and not analyzed answers as its driver holds it (`Env::variance`). The certifier holds the vector its own walk filed for a family and none for one it was only handed, so a level composes through such a family as invariant whatever its entry carries, an irrelevance it claims among it. A family no registry holds is invariant.
 #[test]
 fn a_family_outside_the_set_answers_as_its_driver_holds_it() {
     let holder = || {
@@ -407,25 +408,28 @@ fn a_family_outside_the_set_answers_as_its_driver_holds_it() {
         (Some(Variance::Invariant), "="),
         (None, "="),
     ] {
-        let mut kernel = kernel();
+        let mut certifier = certifier();
         if let Some(carried) = carried {
             let declaration = InductDecl {
                 variances: vec![carried],
                 ..boxed()
             };
-            kernel
+            certifier
                 .declare_induct(&named("Box"), &declaration)
                 .expect("a name is declared once");
         }
         let inducts = BTreeMap::from([(named("Holder"), holder())]);
 
-        assert_eq!(vectors(&mut kernel, &inducts)[&named("Holder")], expected);
+        assert_eq!(
+            vectors(&mut certifier, &inducts)[&named("Holder")],
+            expected
+        );
     }
 }
 
 /// The universe parameters `parts` hold, by index.
-fn held(kernel: &mut Kernel, parts: &[Term]) -> Vec<usize> {
-    let found = held_levels(kernel, parts);
+fn held(certifier: &mut Certifier, parts: &[Term]) -> Vec<usize> {
+    let found = held_levels(certifier, parts);
     assert!(!found.every, "no part holds a metavariable");
 
     found
@@ -438,10 +442,10 @@ fn held(kernel: &mut Kernel, parts: &[Term]) -> Vec<usize> {
         .collect()
 }
 
-/// A kernel handed `Wrap`, carried as irrelevant in its level, and `Box`, carried as invariant in its. It has filed a vector for neither, so it reads both as invariant.
-fn with_wrap_and_box() -> Kernel<'static> {
-    let mut kernel = kernel();
-    kernel
+/// A certifier handed `Wrap`, carried as irrelevant in its level, and `Box`, carried as invariant in its. It has filed a vector for neither, so it reads both as invariant.
+fn with_wrap_and_box() -> Certifier<'static> {
+    let mut certifier = certifier();
+    certifier
         .declare_induct(
             &named("Wrap"),
             &InductDecl {
@@ -450,7 +454,7 @@ fn with_wrap_and_box() -> Kernel<'static> {
             },
         )
         .expect("a name is declared once");
-    kernel
+    certifier
         .declare_induct(
             &named("Box"),
             &InductDecl {
@@ -460,7 +464,7 @@ fn with_wrap_and_box() -> Kernel<'static> {
         )
         .expect("a name is declared once");
 
-    kernel
+    certifier
 }
 
 // A definition's body applied at its binders, which is how its caller hands it over: `((A: Type u) => Type v)(x)` reduces to `Type v`, so the level the binder was annotated at is gone with the lambda and the one the value is stays.
@@ -474,37 +478,37 @@ fn a_body_applied_at_its_binders_holds_what_its_reduct_does() {
     );
     let applied = Term::apply(body, [Term::free_var(&argument)]);
 
-    assert_eq!(held(&mut kernel(), &[applied]), [1]);
+    assert_eq!(held(&mut certifier(), &[applied]), [1]);
 }
 
-// `(A: Type u) => Box.{v}` and `(A: Type u) => Wrap.{v}(A)`, each a family passed as an argument. Two of them met at no function type are compared binder by binder, so the annotation's level is held, and the body's own by what the driver holds of its family: the kernel was only handed these two, so it reads each as invariant, and `curios-cert`'s `a_lambdas_body_is_read_by_the_vector_filed_for_its_family` holds the body to a vector the kernel filed.
+// `(A: Type u) => Box.{v}` and `(A: Type u) => Wrap.{v}(A)`, each a family passed as an argument. Two of them met at no function type are compared binder by binder, so the annotation's level is held, and the body's own by what the driver holds of its family: the certifier was only handed these two, so it reads each as invariant, and `curios-cert`'s `a_lambdas_body_is_read_by_the_vector_filed_for_its_family` holds the body to a vector the certifier filed.
 #[test]
 fn a_lambda_is_read_with_its_binders() {
     let carrier = Free::local(1, Some("A"));
     let over = |body: Term| Term::func([(carrier, Term::type_at(level(0)))], body);
     let invariant = over(at("Box", &[level(1)], Vec::new()));
     let irrelevant = over(at("Wrap", &[level(1)], vec![Term::free_var(&carrier)]));
-    let mut kernel = with_wrap_and_box();
+    let mut certifier = with_wrap_and_box();
 
-    assert_eq!(held(&mut kernel, &[invariant]), [0, 1]);
-    assert_eq!(held(&mut kernel, &[irrelevant]), [0, 1]);
+    assert_eq!(held(&mut certifier, &[invariant]), [0, 1]);
+    assert_eq!(held(&mut certifier, &[irrelevant]), [0, 1]);
 }
 
 // A family's name with no argument: its instance is compared level by level, as two formers met at no function type are, whatever its vector says of the node it builds once applied.
 #[test]
 fn a_bare_former_is_read_whole() {
     let bare = |name: &str| Term::instance(named(name), vec![level(0)]);
-    let mut kernel = with_wrap_and_box();
+    let mut certifier = with_wrap_and_box();
 
-    assert_eq!(held(&mut kernel, &[bare("Wrap")]), [0]);
-    assert_eq!(held(&mut kernel, &[bare("Box")]), [0]);
+    assert_eq!(held(&mut certifier, &[bare("Wrap")]), [0]);
+    assert_eq!(held(&mut certifier, &[bare("Box")]), [0]);
 }
 
 // A level its declaration has not closed is reported by its head as a parameter is, so the walk answers while a declaration elaborates.
 #[test]
 fn a_level_still_open_is_reported_by_its_head() {
     let open = UniverseMetaId(3);
-    let found = held_levels(&mut kernel(), &[Term::type_at(Level::meta(open))]);
+    let found = held_levels(&mut certifier(), &[Term::type_at(Level::meta(open))]);
 
     assert!(found.holds(LevelHead::Meta(open)));
     assert!(!found.holds(LevelHead::Param(UniverseParam(0))));

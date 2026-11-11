@@ -1619,7 +1619,7 @@ fn process_items(
             TopItem::Broken(_) | TopItem::Mod(_) | TopItem::Use(_) => {
                 unreachable!("a head stands where its item does")
             }
-            // A `let` item is a group of one or more definitions. It lowers to a `rec` item when it is a declared group or when its one member names itself — read off the lowered terms, so a definition's own name is in scope of its type and body without anything said in the source — and to a plain `let` item otherwise. The kernel needs the distinction and the programmer does not: a `Rec` binds its members' names, a `Let` leaves a self-reference unbound.
+            // A `let` item is a group of one or more definitions. It lowers to a `rec` item when it is a declared group or when its one member names itself — read off the lowered terms, so a definition's own name is in scope of its type and body without anything said in the source — and to a plain `let` item otherwise. The certifier needs the distinction and the programmer does not: a `Rec` binds its members' names, a `Let` leaves a self-reference unbound.
             TopItem::Let(ls) => {
                 let mut items = ls
                     .iter()

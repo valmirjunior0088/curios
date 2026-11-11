@@ -4,7 +4,7 @@
 //!
 //! **A decorator attaches to the next whole operand.** A primary — a name, a literal, a call — takes it as it stands; a larger form is parenthesized under it, and so is a decorated call's head, so `(#{universes = {levels = [0]}} /f)(@Nat, 2)` sets the instance of the name and not of the call.
 //!
-//! **Every name is written as the spelling handed in spells it.** Core text proper — a dump, a kernel's refusal, the round-trip — is written under a spelling that says so ([`Spelling::core_text`](crate::Spelling::core_text)), every global by its absolute path or by the shortening that spelling sets.
+//! **Every name is written as the spelling handed in spells it.** Core text proper — a dump, a certifier's refusal, the round-trip — is written under a spelling that says so ([`Spelling::core_text`](crate::Spelling::core_text)), every global by its absolute path or by the shortening that spelling sets.
 //!
 //! **A reader's spelling writes the same forms as a reader writes them.** Under any other spelling — a diagnostic's, and every term a reader is shown — no decorator is written, an intrinsic is its surface name or operator (`Nat`, `2 + 3`), a sort's level and a name's instance follow the name as `.{…}`, a level metavariable is `?u1`, a type former's η-form is the former, a constructor's value and a record literal leave their family's parameters out, and a metavariable is `?7`. That spelling is for a reader, who cannot write most of what a decorator states, and reads back as no term.
 //!

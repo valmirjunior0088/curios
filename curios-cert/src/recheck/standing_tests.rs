@@ -82,7 +82,7 @@ fn qed() -> Term {
     )
 }
 
-/// `lemma : Vouched = <proof>`, `spare : Vouched = qed(())`, and `corollary : Vouched = lemma`, with `lemma` written by its declaration where `written` and generated as a witness is otherwise: the kernel states it a proof in the first case alone, and it is marked as the module a walk hands back marks it.
+/// `lemma : Vouched = <proof>`, `spare : Vouched = qed(())`, and `corollary : Vouched = lemma`, with `lemma` written by its declaration where `written` and generated as a witness is otherwise: the certifier states it a proof in the first case alone, and it is marked as the module a walk hands back marks it.
 fn proving_definitions(proof: Term, written: bool) -> Definitions {
     let (vouched_name, declaration) = vouched_declaration();
     let lemma = match authored_proof(&global("lemma"), vouched(), proof) {
@@ -162,7 +162,7 @@ fn a_read_of_a_generated_definitions_body_falls_with_an_edit_to_it() {
     );
 }
 
-/// What a name unfolds to moves with what the kernel states of it though no term does: a `lemma` written by its declaration is stated a proof and one generated none, so one that moves from either to the other is no longer the baseline's, and `corollary`, which asked for its body, is judged again.
+/// What a name unfolds to moves with what the certifier states of it though no term does: a `lemma` written by its declaration is stated a proof and one generated none, so one that moves from either to the other is no longer the baseline's, and `corollary`, which asked for its body, is judged again.
 #[test]
 fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
     for written in [true, false] {

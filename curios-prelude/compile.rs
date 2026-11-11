@@ -1,4 +1,4 @@
-//! The fixed prelude's build: `/sys` and `/std` lowered, elaborated, certified and erased through the kernel that certified them, each imaged as the certified unit the compiler restores.
+//! The fixed prelude's build: `/sys` and `/std` lowered, elaborated, certified and erased through the certifier that certified them, each imaged as the certified unit the compiler restores.
 //!
 //! A module of two programs that stand beside it. `build.rs` is the one Cargo runs, into the crate's `OUT_DIR`; `profile.rs` runs the same work under a recorder for whoever asks, into a directory of its own.
 
@@ -119,7 +119,7 @@ fn reported(
 
 /// Elaborate, validate, hash-cons, certify and erase one lowered root into the unit its image is, against what the roots before it established.
 ///
-/// `predecessors` are the roots before it, made: the kernel judges it against their modules, with the records their walks left, and an item of this root reads in their erased forms how a name of an earlier one is bound, its own erased form holding nothing of theirs.
+/// `predecessors` are the roots before it, made: the certifier judges it against their modules, with the records their walks left, and an item of this root reads in their erased forms how a name of an earlier one is bound, its own erased form holding nothing of theirs.
 fn unit(
     root: &str,
     mut prepared: PreparedText,
@@ -200,13 +200,13 @@ fn unit(
     );
 
     let (core, certification, anf) = certified(root, &core, predecessors, prepared.anchors());
-    // What the kernel stated rebuilt the nodes whose marks it changed, which are consed with the rest: the table holds every node the module shared, so a node the kernel handed back as it was costs nothing.
+    // What the certifier stated rebuilt the nodes whose marks it changed, which are consed with the rest: the table holds every node the module shared, so a node the certifier handed back as it was costs nothing.
     let core = core.shared(&sharing);
 
     Unit::new(prepared, core, anf, traces, certification)
 }
 
-/// The kernel's walk over one root's module as it is imaged, against the roots before it with the records their walks left, and the root erased through the kernel that walked it: the module as the kernel stated it, the record of its definitions and its items' erased forms, or a panic at the first refusal, since a prelude the kernel does not accept or erasure cannot erase is no prelude.
+/// The certifier's walk over one root's module as it is imaged, against the roots before it with the records their walks left, and the root erased through the certifier that walked it: the module as the certifier stated it, the record of its definitions and its items' erased forms, or a panic at the first refusal, since a prelude the certifier does not accept or erasure cannot erase is no prelude.
 ///
 /// The module judged is the hash-consed one the image holds, and certified before it is imaged as a store's unit is: what a compilation restores is these bytes, which the image's own determinism check holds to one serialization.
 fn certified(
@@ -215,9 +215,9 @@ fn certified(
     predecessors: &[&Unit],
     anchors: &Anchors,
 ) -> (Definitions, Certification, ErasedUnit) {
-    // Meta-free before the kernel walks it; projecting here is also what validates that claim at the boundary that certifies the root.
+    // Meta-free before the certifier walks it; projecting here is also what validates that claim at the boundary that certifies the root.
     let zonked = Zonked::project(core)
-        .unwrap_or_else(|refusal| panic!("/{root} is not zonked for the kernel: {refusal}"));
+        .unwrap_or_else(|refusal| panic!("/{root} is not zonked for the certifier: {refusal}"));
     // The roots before this one rather than `Globals::default()`: `/std` names `/sys`, so judging it against an empty environment would refuse every intrinsic carrier it wraps. Each with the record its walk made, so `/std`'s walk reads the certifier's classification of `/sys` rather than classifying it again. The assembler `curios-pipeline` offers is unreachable from here — a build script that reached the compiler boundary would pull the whole pipeline into the prelude's own build — so the environment is mounted by hand.
     let mut globals = Globals::default();
     for earlier in predecessors {
@@ -235,7 +235,7 @@ fn certified(
             definitions,
             entrypoint: _,
         },
-        mut kernel,
+        mut certifier,
     ) = certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
 
     if let Some(verdict) = refusals.first() {
@@ -247,7 +247,7 @@ fn certified(
 
         panic!(
             // A refusal count over a corpus size, not a subset of it: the walk pushes a verdict per *failing pass*, and its passes run over declarations and over each definition of a `rec` group, so the count can exceed the item count outright.
-            "/{root} failed the kernel: {} refusals over {} items, first: {name} — {}",
+            "/{root} failed the certifier: {} refusals over {} items, first: {name} — {}",
             refusals.len(),
             core.items.len(),
             verdict.error.rendered(&Spelling::default()),
@@ -255,10 +255,10 @@ fn certified(
     }
     // Plain stdout rather than `cargo:warning=`, as for the hash-consing metric — and because the verdict is not this line. The panic above is: a refusal fails the build, so a build that finished has certified. What this adds is the count, which changes only when the prelude does.
     println!(
-        "/{root} certified: {} items accepted by the kernel",
+        "/{root} certified: {} items accepted by the certifier",
         core.items.len()
     );
-    // The root is the module the kernel stated, so every mark it carries is the walk's own.
+    // The root is the module the certifier stated, so every mark it carries is the walk's own.
     let stated = zonked.map(|_| definitions);
 
     // No entrypoint, so nothing to link: each item's erased form is its own, which is what a successor reads and a program links.
@@ -279,7 +279,7 @@ fn certified(
         .map(|unit| unit.erased())
         .collect::<Vec<_>>();
     let anf = erase_unit(
-        &mut kernel,
+        &mut certifier,
         Erasures::of(&cores, &places, &certifications, &erased)
             .fixed(&vec![true; predecessors.len()]),
         &stated,

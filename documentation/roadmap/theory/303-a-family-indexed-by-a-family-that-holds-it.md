@@ -4,7 +4,7 @@
 
 ## What is missing
 
-**Both checkers refuse it.** A family's parameters and indices, and a record's or a concept's parameters, name no declaration that holds it ([Strict positivity, modulo polarity](../../design/theory/strict-positivity-modulo-polarity.md)), so `induct Ctx: Type | empty() | ext(g: Ctx, a: Ty(g)) and Ty(g: Ctx): Type | unit() end` is refused at `Ty`. The elaborator refuses a declaration of its group (`indexed_by_its_group`, `curios-elab/src/elaborate/module.rs`) and the kernel one of its own item or of an item that reaches it back (`indexed_by_its_cycle`, `curios-cert/src/recheck.rs`), each by `IndexedByItsGroup`, since Core text can declare the two families apart.
+**Both checkers refuse it.** A family's parameters and indices, and a record's or a concept's parameters, name no declaration that holds it ([Strict positivity, modulo polarity](../../design/theory/strict-positivity-modulo-polarity.md)), so `induct Ctx: Type | empty() | ext(g: Ctx, a: Ty(g)) and Ty(g: Ctx): Type | unit() end` is refused at `Ty`. The elaborator refuses a declaration of its group (`indexed_by_its_group`, `curios-elab/src/elaborate/module.rs`) and the certifier one of its own item or of an item that reaches it back (`indexed_by_its_cycle`, `curios-cert/src/recheck.rs`), each by `IndexedByItsGroup`, since Core text can declare the two families apart.
 
 ## What is known
 

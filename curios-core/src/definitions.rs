@@ -363,7 +363,7 @@ pub struct Certified {
 
 /// The items one judgment read, and how: its type, or its body.
 ///
-/// Recorded where the kernel consults its environment — a name's type or universe scheme, a declaration's registry entry, a definition's body — so a read counts however the judgment reached it. A remembered reduct included: every memo lives one declaration, so the bodies a remembered reduct unfolds were asked for within the judgment that hits it. A body counts as read whenever it is asked for, unfolded or not, because asking is what makes the answer depend on it.
+/// Recorded where the certifier consults its environment — a name's type or universe scheme, a declaration's registry entry, a definition's body — so a read counts however the judgment reached it. A remembered reduct included: every memo lives one declaration, so the bodies a remembered reduct unfolds were asked for within the judgment that hits it. A body counts as read whenever it is asked for, unfolded or not, because asking is what makes the answer depend on it.
 ///
 /// A definition's classification also reads the verdict of every name it mentions, which the totality closure runs over, and that read is a signature read of the name: typing a mention reads its type, but a mention in an arm no reduction takes is typed by no rule, so the certifier records the read where it classifies the definition, and a verdict closed over such a name is judged again once the name's verdict moves.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1180,7 +1180,7 @@ impl Definition {
 
     /// Every top-level name this definition's elaboration consumed: what it [`mentions`](Self::mentions), plus the nominal heads its constructions and type-former normal forms name. Those live in the registry rather than in a reference, so `mentions` cannot see them — and an item that builds a `Struct` or matches a `Variant` depends on that declaration exactly as one that names it does.
     ///
-    /// This is the edge set an invalidation is closed over, a refusal is poisoned along and, with what an item's registry entries reach ([`Definitions::reaches`]), the kernel's order follows. [`mentions`](Self::mentions) is what the totality closure needs, which the reference edges alone serve.
+    /// This is the edge set an invalidation is closed over, a refusal is poisoned along and, with what an item's registry entries reach ([`Definitions::reaches`]), the certifier's order follows. [`mentions`](Self::mentions) is what the totality closure needs, which the reference edges alone serve.
     pub fn reaches(&self) -> BTreeSet<Global> {
         let mut names = self.mentions();
         names.extend(construction_heads(&self.type_));
@@ -1879,7 +1879,7 @@ impl<B: Bound + Terms> Carried for B {
 
 /// Every position of `item` that can hold a bound value, offered to `visit` with the top-level name owning it, skipping whatever `in_scope` already answers for: each definition's type, body and the sort it states its value at, a recursive group's opened against its members' names, then what the entry of each former it declares carries.
 ///
-/// One list, read by every walk that asks what a module or one item of it carries — the kernel's free-local refusal below it, the storage refusal beside that, and the read of an item's terms as they were written ([`Item::each_term`]). A second copy is how a position quietly stops being covered, which is the failure the enumeration exists to prevent, so a new question about an item's contents is a new `visit` and never a new walk.
+/// One list, read by every walk that asks what a module or one item of it carries — the certifier's free-local refusal below it, the storage refusal beside that, and the read of an item's terms as they were written ([`Item::each_term`]). A second copy is how a position quietly stops being covered, which is the failure the enumeration exists to prevent, so a new question about an item's contents is a new `visit` and never a new walk.
 fn item_positions(
     item: &Item,
     in_scope: &impl Fn(&Global) -> bool,
@@ -1989,7 +1989,7 @@ impl fmt::Display for Positional {
 ///
 /// The terms are those of the items the module holds as other than an object a store holds, made by the compilation filing it: an item read out of the object it was stored as was refused or admitted by the filing that wrote it, the prelude's by its build, so a filing walks what its edit made and not the unit (`made_positions`).
 ///
-/// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the kernel refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
+/// It refuses what [`free_locals_of`] and [`open_positions_of`] report, over the same positions, at the other seam: the certifier refuses one where it walks a module, and this refuses one where a module is stored. Neither has a safe direction to degrade in — a local reaching either aliases silently with a binder some later walk mints, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
 pub fn validate_stored_identities(
     definitions: &Definitions,
     mounts: &[Mount],
@@ -2058,9 +2058,9 @@ pub fn validate_stored_identities(
 
 /// Every free local the terms of `items` mention, each with the top-level name owning the position it was found in.
 ///
-/// **What a checker refuses before it mints a binder of its own.** Both checkers mint from a counter no predecessor raised — the kernel's from zero, the elaborator's from its own unit's lowering count — because no term a walk is handed from elsewhere carries a local ([`validate_stored_identities`]). A free local reaching a walk is therefore one its counter could hand out again, and the binder it mints while comparing under a telescope or eta-contracting would silently identify two terms that differ. The judgment could not see it: by the time it looks the local up, the local is bound. So the refusal is taken at the boundary, over every position a term can sit in, rather than where a judgment meets it.
+/// **What a checker refuses before it mints a binder of its own.** Both checkers mint from a counter no predecessor raised — the certifier's from zero, the elaborator's from its own unit's lowering count — because no term a walk is handed from elsewhere carries a local ([`validate_stored_identities`]). A free local reaching a walk is therefore one its counter could hand out again, and the binder it mints while comparing under a telescope or eta-contracting would silently identify two terms that differ. The judgment could not see it: by the time it looks the local up, the local is bound. So the refusal is taken at the boundary, over every position a term can sit in, rather than where a judgment meets it.
 ///
-/// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Whether a variable is local asks nothing of a kernel — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
+/// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Whether a variable is local asks nothing of a certifier — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
 ///
 /// A walk hands in the items it judges the terms of: over a baseline, the ones whose terms are not the baseline's, the walk that filed the baseline having refused a local of its own in each of the others.
 pub fn free_locals_of<'a>(
@@ -2104,9 +2104,9 @@ pub fn open_positions_of<'a>(
     found
 }
 
-/// Evidence that a module is a finished Core term: the kernel's whole `NotCore` class — no `Metavar` and no `Transient` node survives in any term-bearing position, and no level in one holds a universe metavariable — every position closed, no bound variable reaching past the scopes that bind it, and, for a program, an entry stating the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a unit's `Definitions` re-establishes them at a stage boundary, cheaply, because `has_metavar`, `has_transient` and `has_universe_meta` are per-node cached derivations.
+/// Evidence that a module is a finished Core term: the certifier's whole `NotCore` class — no `Metavar` and no `Transient` node survives in any term-bearing position, and no level in one holds a universe metavariable — every position closed, no bound variable reaching past the scopes that bind it, and, for a program, an entry stating the type it was judged at. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a unit's `Definitions` re-establishes them at a stage boundary, cheaply, because `has_metavar`, `has_transient` and `has_universe_meta` are per-node cached derivations.
 ///
-/// The wrapper is interface-level evidence, never a license to trust: the kernel keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
+/// The wrapper is interface-level evidence, never a license to trust: the certifier keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
 #[derive(Debug, Clone)]
 pub struct Zonked<T>(T);
 

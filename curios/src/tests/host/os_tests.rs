@@ -1,4 +1,4 @@
-//! The few programs that run against the real host rather than a scripted one: what they assert is that the scheduler's park-poll-resume path works over a descriptor the kernel decides on. The real host's standard output cannot be captured, so a program reports through a file the test reads back.
+//! The few programs that run against the real host rather than a scripted one: what they assert is that the scheduler's park-poll-resume path works over a descriptor the certifier decides on. The real host's standard output cannot be captured, so a program reports through a file the test reads back.
 
 use {
     crate::tests::test_support::*,

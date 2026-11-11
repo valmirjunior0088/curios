@@ -8,17 +8,17 @@ description = "The soundness board: every flaw found in the Curios checkers as a
 [lints]
 workspace = true
 
-# Over the pipeline and the kernel, and under nothing: no crate depends on this one, so nothing here enters the trusted base.
+# Over the pipeline and the certifier, and under nothing: no crate depends on this one, so nothing here enters the trusted base.
 [dependencies]
 # The module a witness built by hand is read to, and the term it closes with.
 curios-core = { workspace = true }
 # The qualified name an expected refusal stands in, the report a reader's refusal is located by, and the trait each checker's errors are named through.
 curios-common = { workspace = true, features = ["test-support"] }
-# The error a witness expects of the kernel, and every one's name.
+# The error a witness expects of the certifier, and every one's name.
 curios-cert = { workspace = true, features = ["test-support"] }
 # The error a witness expects of the elaborator, and every one's name.
 curios-elab = { workspace = true, features = ["test-support"] }
-# A program put to both checkers as a compilation puts it, and a module built by hand to the kernel, over the units in scope.
+# A program put to both checkers as a compilation puts it, and a module built by hand to the certifier, over the units in scope.
 curios-pipeline = { workspace = true, features = ["test-support"] }
 # A witness's history: its steps walked over a store of their own, and the units in scope its proof is put over.
 curios-verdict = { workspace = true, features = ["test-support"] }
@@ -26,7 +26,7 @@ curios-verdict = { workspace = true, features = ["test-support"] }
 curios-unit = { workspace = true }
 # The registry's name for `False`, which a module built by hand is put at.
 curios-module = { workspace = true }
-# The program a witness's text is parsed as, the reader that makes a module of one written as Core text and the name of each of its refusals, and the spelling a kernel's refusal is printed in.
+# The program a witness's text is parsed as, the reader that makes a module of one written as Core text and the name of each of its refusals, and the spelling a certifier's refusal is printed in.
 curios-surface = { workspace = true, features = ["test-support"] }
 # The binary's subcommands, `report` and `probe`.
 clap = { workspace = true }

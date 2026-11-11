@@ -16,33 +16,33 @@ fn a_program_whose_tail_proves_something_else_is_refused_and_says_by_whom() {
 }
 
 #[test]
-fn a_program_that_does_not_read_is_refused_with_the_kernel_not_asked() {
+fn a_program_that_does_not_read_is_refused_with_the_certifier_not_asked() {
     let probe = Probe::put(&Proof::Program("let".to_string()));
     let said = probe.to_string();
 
     assert!(!probe.admitted());
-    assert_eq!(probe.said(Checker::Kernel), "not asked");
+    assert_eq!(probe.said(Checker::Certifier), "not asked");
     assert!(said.starts_with("REFUSED    by text\n"), "{said}");
 }
 
 #[test]
-fn a_module_is_put_to_the_reader_and_the_kernel_and_says_by_whom() {
+fn a_module_is_put_to_the_reader_and_the_certifier_and_says_by_whom() {
     let probe = Probe::put(&Proof::Module("0".to_string()));
     let said = probe.to_string();
 
     assert!(!probe.admitted());
     assert_eq!(probe.said(Checker::Reader), "admitted");
     assert!(
-        said.starts_with("REFUSED    by kernel `Mismatch` at the closing term\n           reader      admitted\n           kernel      refused\n"),
+        said.starts_with("REFUSED    by certifier `Mismatch` at the closing term\n           reader      admitted\n           certifier   refused\n"),
         "{said}"
     );
 }
 
 #[test]
-fn a_module_that_does_not_read_is_refused_by_the_reader_with_the_kernel_not_asked() {
+fn a_module_that_does_not_read_is_refused_by_the_reader_with_the_certifier_not_asked() {
     let probe = Probe::put(&Proof::Module("let".to_string()));
 
     assert_eq!(probe.said(Checker::Reader), "refused");
-    assert_eq!(probe.said(Checker::Kernel), "not asked");
+    assert_eq!(probe.said(Checker::Certifier), "not asked");
     assert!(probe.to_string().starts_with("REFUSED    by reader\n"));
 }

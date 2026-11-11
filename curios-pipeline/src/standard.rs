@@ -99,7 +99,7 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// [`Fold::compile`] with the entry compiled as a test program: the authored tail, or a library's absence of one, replaced by the synthesized `Test/main([...])` over the tests in scope at or under any of `under` ([`EntryTail::Test`]) — which are tests of the one unit marked tested, the entry's own where `loader` is ([`RootSource::tested`]). Everything else is the ordinary pipeline, kernel judgment included, and a selection meeting no test builds no program ([`TestProgram`]).
+    /// [`Fold::compile`] with the entry compiled as a test program: the authored tail, or a library's absence of one, replaced by the synthesized `Test/main([...])` over the tests in scope at or under any of `under` ([`EntryTail::Test`]) — which are tests of the one unit marked tested, the entry's own where `loader` is ([`RootSource::tested`]). Everything else is the ordinary pipeline, certifier judgment included, and a selection meeting no test builds no program ([`TestProgram`]).
     pub fn tests<O, P>(
         self,
         entrypoint: &curios_surface::Entrypoint,
@@ -251,7 +251,7 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// The interface of the last unit — a package's library, compiled against everything before it — for its consumers. The same fold [`Fold::check_units`] runs, the kernel included, so a library that does not check is not documented and reports what stopped it as `run` would. The record is then made from the unit's stored tables and its sources ([`document_unit`]), whether the unit was compiled now or reused from the store: no unit carries one.
+    /// The interface of the last unit — a package's library, compiled against everything before it — for its consumers. The same fold [`Fold::check_units`] runs, the certifier included, so a library that does not check is not documented and reports what stopped it as `run` would. The record is then made from the unit's stored tables and its sources ([`document_unit`]), whether the unit was compiled now or reused from the store: no unit carries one.
     ///
     /// **The prelude's records are the ones handed over.** A unit adopts a root no consumer can name, and the prelude holds the only one: `/sys`, which a package named `std` adopts as the archived `/std` does.
     pub fn documentation<P>(self, progress: P) -> Result<Documentation, CompileError>

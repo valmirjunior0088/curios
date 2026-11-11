@@ -45,7 +45,7 @@ impl Eraser<'_> {
             .collect::<Vec<_>>();
         let tail = tail.open(&name_refs);
 
-        // Each member bound at its type to its selection, as the kernel's own group tail binds it.
+        // Each member bound at its type to its selection, as the certifier's own group tail binds it.
         context.scoped(|context| {
             for (index, (name, (type_, _))) in names.iter().zip(&members).enumerate() {
                 context.bind(
@@ -63,7 +63,7 @@ impl Eraser<'_> {
         })
     }
 
-    /// Erase a top-level recursive item as the fragment's item. Its members are defined in the kernel's environment already, as every item's names are, each at the group's universes: a member names another at the group's own levels and at the sorts this form is read at, which is the occurrence the kernel reads, and the form's own name for it.
+    /// Erase a top-level recursive item as the fragment's item. Its members are defined in the certifier's environment already, as every item's names are, each at the group's universes: a member names another at the group's own levels and at the sorts this form is read at, which is the occurrence the certifier reads, and the form's own name for it.
     pub fn erase_rec_item(
         &mut self,
         context: &mut Reader,

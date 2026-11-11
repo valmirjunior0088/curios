@@ -1297,12 +1297,12 @@ fn every_row_is_on_the_side_the_compiler_puts_it() {
 }
 
 #[test]
-fn every_row_is_on_the_side_the_kernel_puts_it_asked_alone() {
-    // The same rows put to the kernel with the elaborator's verdict left out: a held row it refuses is the reader's fault, and a refused row it holds is an equation the trusted checker believes and the elaborator has been keeping from every program. Mutation-checked: a held law planted among a carrier's refused rows is named.
+fn every_row_is_on_the_side_the_certifier_puts_it_asked_alone() {
+    // The same rows put to the certifier with the elaborator's verdict left out: a held row it refuses is the reader's fault, and a refused row it holds is an equation the trusted checker believes and the elaborator has been keeping from every program. Mutation-checked: a held law planted among a carrier's refused rows is named.
     let found = CARRIERS
         .iter()
         .flat_map(|carrier| {
-            misplaced_by_the_kernel(IMPORTS, carrier.name, &carrier.rows(), carrier.held.len())
+            misplaced_by_the_certifier(IMPORTS, carrier.name, &carrier.rows(), carrier.held.len())
         })
         .collect::<Vec<_>>();
     assert!(found.is_empty(), "{}", found.join("\n"));
@@ -1325,7 +1325,7 @@ fn every_atom_law_closes_at_every_order_of_its_binders() {
     }
 }
 
-/// The atom rows and their controls at the order the binders are declared in, each on the side stated: read back as a written goal, and put to the kernel asked alone. A control either checker holds is an equation a holding took that no reader of its operation states.
+/// The atom rows and their controls at the order the binders are declared in, each on the side stated: read back as a written goal, and put to the certifier asked alone. A control either checker holds is an equation a holding took that no reader of its operation states.
 #[test]
 fn every_atom_row_and_its_control_is_on_the_side_stated() {
     let binders = orders(ATOM_BINDERS, 1).remove(0);
@@ -1336,7 +1336,7 @@ fn every_atom_row_and_its_control_is_on_the_side_stated() {
         .collect::<Vec<_>>();
     let name = "Atoms up to conversion";
     let mut found = misplaced(IMPORTS, name, &rows, ATOMS_HELD.len());
-    found.extend(misplaced_by_the_kernel(
+    found.extend(misplaced_by_the_certifier(
         IMPORTS,
         name,
         &rows,
@@ -1356,7 +1356,7 @@ let span(@K: Type, t: Tree(K)) -> Nat = match t | tip(_) => 2 | join(l, r) => sp
 /// The binders every instance row is stated under.
 const INSTANCE_BINDERS: &str = "@K: Type, l: Tree(K), r: Tree(K), t: Tree(K)";
 
-/// Equations over calls apart in a universe instance, each closed by `Eq/refl()`. An atom of a carrier whose values hold no type is one up to universe instances, in every reader (`curios_core::same_atom`). A row is stated in a signature, where each call's level is its declaration's to close, so the kernel is handed the calls apart wherever the elaborator held them one by a reader and joined no level: it holds the row by the same reader, or the compilation is refused as the kernel's.
+/// Equations over calls apart in a universe instance, each closed by `Eq/refl()`. An atom of a carrier whose values hold no type is one up to universe instances, in every reader (`curios_core::same_atom`). A row is stated in a signature, where each call's level is its declaration's to close, so the certifier is handed the calls apart wherever the elaborator held them one by a reader and joined no level: it holds the row by the same reader, or the compilation is refused as the certifier's.
 const INSTANCES_HELD: &[&str] = &[
     // A call commuted, at each carrier and under each reader that pairs operands: a connective's leaves, the decision diagram, the symmetric peel, a lattice's leaves, the fused pairing.
     "Eq()(even(l) && even(r), even(r) && even(l))",
@@ -1514,7 +1514,7 @@ fn a_rounding_to_an_integral_value_is_fixed_by_every_direction() {
         panic!("{}", failures.join("\n"));
     }
     let mut found = misplaced(IMPORTS, name, &rows, rows.len());
-    found.extend(misplaced_by_the_kernel(IMPORTS, name, &rows, rows.len()));
+    found.extend(misplaced_by_the_certifier(IMPORTS, name, &rows, rows.len()));
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
 
@@ -1648,7 +1648,7 @@ fn two_calls_of_a_recursive_function_that_differ_are_refused() {
     ]
     .map(|claim| ("x: Nat, y: Nat".to_owned(), claim.to_owned()));
     let mut found = misplaced(RECURSIVE, name, &rows, 0);
-    found.extend(misplaced_by_the_kernel(RECURSIVE, name, &rows, 0));
+    found.extend(misplaced_by_the_certifier(RECURSIVE, name, &rows, 0));
     assert!(found.is_empty(), "{}", found.join("\n"));
 
     // The same comparison where the second call's argument is an implicit to solve.
@@ -1712,7 +1712,7 @@ const UNFOLDED_BINDERS: &[Binder] = &[
 
 /// The rows over calls met unfolded, each one value spelled two ways under calls the walk unfolds before it hands them out as atoms.
 const UNFOLDED_HELD: &[&str] = &[
-    // Compared through the congruence of `Nat/to_int`, which the kernel reaches again outside the classing that compared the two stuck `match`es under it.
+    // Compared through the congruence of `Nat/to_int`, which the certifier reaches again outside the classing that compared the two stuck `match`es under it.
     "Eq()(summed(a, c, mode), commuted(a, c, mode))",
     "Eq()(given(ps, mode), solved(ps, mode))",
     // Under a sum nothing pairs: the classing compares the two calls of `step`, and inside that comparison classes the calls standing in their arms, met unfolded in turn.
@@ -1724,7 +1724,7 @@ const UNFOLDED_HELD: &[&str] = &[
 
 #[test]
 fn a_call_met_unfolded_inside_a_classing_is_classed() {
-    // A classing asked for inside a classing is a comparison like any other, so what it asks is no matter of where an atom stands: each row closes by `Eq/refl()` through both checkers at every order of its binders swept, and is held as a written goal and by the kernel asked alone.
+    // A classing asked for inside a classing is a comparison like any other, so what it asks is no matter of where an atom stands: each row closes by `Eq/refl()` through both checkers at every order of its binders swept, and is held as a written goal and by the certifier asked alone.
     let stated = |binders: &String| {
         UNFOLDED_HELD
             .iter()
@@ -1742,7 +1742,12 @@ fn a_call_met_unfolded_inside_a_classing_is_classed() {
     let rows = stated(&orders(UNFOLDED_BINDERS, 1).remove(0));
     let name = "calls met unfolded";
     let mut found = misplaced(UNFOLDED, name, &rows, rows.len());
-    found.extend(misplaced_by_the_kernel(UNFOLDED, name, &rows, rows.len()));
+    found.extend(misplaced_by_the_certifier(
+        UNFOLDED,
+        name,
+        &rows,
+        rows.len(),
+    ));
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
 
@@ -1771,7 +1776,7 @@ fn a_goal_under_binders_of_another_type_is_compared() {
     ]
     .map(|claim| (String::new(), claim));
     let mut found = misplaced(IMPORTS, name, &rows, 0);
-    found.extend(misplaced_by_the_kernel(IMPORTS, name, &rows, 0));
+    found.extend(misplaced_by_the_certifier(IMPORTS, name, &rows, 0));
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
 
@@ -1799,13 +1804,13 @@ fn two_recursive_functions_whose_bodies_convert_are_one() {
         panic!("{}", failures.join("\n"));
     }
     let mut found = misplaced(TWO_RECURSIONS, name, &rows, 2);
-    found.extend(misplaced_by_the_kernel(TWO_RECURSIONS, name, &rows, 2));
+    found.extend(misplaced_by_the_certifier(TWO_RECURSIONS, name, &rows, 2));
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
 
 #[test]
-fn a_step_taken_through_an_annotation_is_one_the_kernel_takes_in_one() {
-    // The elaborator compares a value's type with a `let`'s annotation and the annotation with the result type, each pair leaving one unpaired factor; the kernel compares the first type with the last, which leaves two. Both accept at every order only where conversion is transitive over them.
+fn a_step_taken_through_an_annotation_is_one_the_certifier_takes_in_one() {
+    // The elaborator compares a value's type with a `let`'s annotation and the annotation with the result type, each pair leaving one unpaired factor; the certifier compares the first type with the last, which leaves two. Both accept at every order only where conversion is transitive over them.
     let binders = [
         Binder {
             name: "a",

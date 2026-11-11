@@ -380,10 +380,10 @@ fn every_generated_law_is_a_fit_for_refl() {
 }
 
 #[test]
-fn every_generated_law_is_held_by_the_kernel_asked_alone() {
+fn every_generated_law_is_held_by_the_certifier_asked_alone() {
     let found = by_carrier(&rows(&declared()))
         .into_iter()
-        .flat_map(|(name, group)| misplaced_by_the_kernel(IMPORTS, &name, &group, group.len()))
+        .flat_map(|(name, group)| misplaced_by_the_certifier(IMPORTS, &name, &group, group.len()))
         .collect::<Vec<_>>();
     assert!(found.is_empty(), "{}", found.join("\n"));
 }

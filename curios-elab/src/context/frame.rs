@@ -36,7 +36,7 @@ pub struct DefEntry {
     by_value: Option<ByValue>,
 }
 
-/// A local definition's term by value, as it was read where the name was defined ([`Context::by_value`](crate::Context::by_value)): read in place of the term wherever the kernel's spelling of a term is asked, so a chain of definitions is read once, where each link is made, and not again at every spelling.
+/// A local definition's term by value, as it was read where the name was defined ([`Context::by_value`](crate::Context::by_value)): read in place of the term wherever the certifier's spelling of a term is asked, so a chain of definitions is read once, where each link is made, and not again at every spelling.
 #[derive(Debug, Clone)]
 pub struct ByValue {
     /// The term with its solved metavariables materialized and each local definition it names replaced by what that one is by value.
@@ -115,9 +115,9 @@ impl DefEntry {
 pub struct ScrutineeEntry {
     pub original: Term,
     pub value: Term,
-    /// Whether this spelling is an alias of an equation recorded under another: the kernel's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement skips it, which leaves a reduct over the definitions' values unanswered — `typing`'s registration states the case.
+    /// Whether this spelling is an alias of an equation recorded under another: the certifier's spelling of a guard written over local definitions, which an occurrence reached by unfolding a definition presents exactly. The exact lookup reads it; settlement skips it, which leaves a reduct over the definitions' values unanswered — `typing`'s registration states the case.
     pub alias: bool,
-    /// Whether this entry withholds the equation its key holds in a frame outside, rather than recording one: an arm that refines a variable leaves it under every equation whose scrutinee, as the kernel spells it under the arm's solution, names no local. `Context::withhold_closed_equations` states the rule. It keeps the equation's spelling and value, which a report on the arm names.
+    /// Whether this entry withholds the equation its key holds in a frame outside, rather than recording one: an arm that refines a variable leaves it under every equation whose scrutinee, as the certifier spells it under the arm's solution, names no local. `Context::withhold_closed_equations` states the rule. It keeps the equation's spelling and value, which a report on the arm names.
     pub withheld: bool,
     /// Whether this entry stands in for the equation its key holds in a frame outside: an arm restated that equation at its solution and the spelling came out as it was, so the recorded entry answers nothing, and is settled nothing, while this frame stands (`Context::restate_equations`). Its spelling is settled in this frame and goes with it.
     pub restates: bool,
@@ -352,13 +352,13 @@ pub struct Frame {
     refinement_projections: Recorded<Projected, ProjectionEntry>,
     /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by the scrutinee as written, its metavariables and universes normalized (`reduce`'s `shallow_scrutinee`); an occurrence that surfaces spelled differently is met at the entry's reduced spelling (`scrutinee_spellings`). The term-keyed analogue of the two stores above, suppressed by the same flag.
     refinement_scrutinees: Recorded<Term, ScrutineeEntry>,
-    /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the kernel's per-entry reduct.
+    /// Each scrutinee entry's *reduced* spelling once a probe has asked for it, under its key — `reduce::refined_reduct`'s memo, the elaborator's copy of the certifier's per-entry reduct.
     ///
     /// **It lives as long as its entry, and is forgotten by what can change what its key reduces to.** A spelling is settled with its entry's frame and every frame inside it withheld, and read only through the window, so it rests on the refinements of the frames outside its entry — which cannot change while the entry stands: a registration lands in the innermost frame, and a frame leaves after every frame inside it — and on what reduction reads of everything else: the definitions, the solutions and the universe levels. So a registration and the exit of an inner frame leave it alone, and it is forgotten with its frame and where its key is registered again; otherwise it stands while what it read of the rest does, which it is filed with ([`Footing`]): the solutions committed when it settled, all of them while it held an unsolved metavariable, the levels where it holds a universe metavariable, the answers it was given where it asked a question, and the definitions in view. A footing is read against the stores rather than walked by them, so a frame only a parked problem holds forgets as the live ones do. A fresh definition forgets the spellings naming it, as it does the reducts.
     ///
     /// **It is the frame's, behind a cell.** The live context and every judgment that stands on the frame read one memo and settle a key once between them: a spelling rests on the frames below its own, and a frame stands on the same ones wherever it is held.
     ///
-    /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the kernel settles an equation's reduct once for each.
+    /// **Settled once for each of the two reductions**, a table for each (`Context::plainly`): a probe is compared with the spelling reduced the way the probe was, as the certifier settles an equation's reduct once for each.
     scrutinee_spellings: RefCell<[HashMap<Term, Spelling>; 2]>,
     /// What the last settlement made under this frame's refinements remembered, of each of the two reductions: the settlement of an entry registered in a frame this is the nearest one beneath to register a refinement, or, kept by the base frame, of one no frame beneath refines. The next settlement made under them starts from it (`Caches::enter_window`).
     ///

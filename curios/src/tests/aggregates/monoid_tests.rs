@@ -161,7 +161,7 @@ fn a_regrouped_run_still_respects_its_order() {
 fn a_symbolic_run_is_the_same_value_however_it_is_grouped() {
     // **The law above past a head the peel cannot strip.** `a_literal_run_is_the_same_value_however_it_is_grouped` regroups behind chunks that are syntactically their own twin, which the prefix step peels before the nesting matters. Here the leading chunks are convertible but unlike — `g(a + b)` against `g(b + a)`, and two instances of one universe-polymorphic fold — so nothing peels, and a peel handing the nesting back intact would leave shape congruence to refuse on operand count. Regrouping in the peel (`core::spine`) hands back both flat spellings, and the operand comparison then decides the heads.
     //
-    // Stated as a program because the two checkers meet it in turn: an elaborated `refl` is certified by the kernel, so both peels are exercised, and the polymorphic fold is the shape a proof about a structural `reverse` reaches on its first inductive step.
+    // Stated as a program because the two checkers meet it in turn: an elaborated `refl` is certified by the certifier, so both peels are exercised, and the polymorphic fold is the shape a proof about a structural `reverse` reaches on its first inductive step.
     let source = r#"
         use /std/{Str, Eq, Nat, Bytes, List, Io};
         let list_law(t : List(Nat), h : Nat, g : (Nat) -> List(Nat), a : Nat, b : Nat)
@@ -455,7 +455,7 @@ entry()
     );
 }
 
-// A position past the first two operands of a concatenation is the third operand's start, however the second operand's width is spelled. The offset spells it through `Char/to_utf8(c)` and the operand through `Str/of_char(c).bytes`; the peel compares positions by spelling, so a reducer naming `to_utf8`'s `let` afresh on each unfolding would leave the two never meeting and the drop stuck. The elaborator's reducer substitutes a `let` as the kernel does.
+// A position past the first two operands of a concatenation is the third operand's start, however the second operand's width is spelled. The offset spells it through `Char/to_utf8(c)` and the operand through `Str/of_char(c).bytes`; the peel compares positions by spelling, so a reducer naming `to_utf8`'s `let` afresh on each unfolding would leave the two never meeting and the drop stuck. The elaborator's reducer substitutes a `let` as the certifier does.
 #[test]
 fn a_position_past_a_character_meets_the_operand_after_it() {
     assert_eq!(

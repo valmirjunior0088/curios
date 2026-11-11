@@ -1,6 +1,6 @@
 //! What one case's solution does to the context its arm is checked in, stated once for both checkers.
 //!
-//! [`solve_indices`](crate::solve_indices) finds what an arm learns about the scrutinee's indices, and a variable scrutinee adds the zero-index instance of the same equations, itself standing for the case's value ([`scrutinee_solution`]). The kernel binds each solved variable to its solution, as a `let` binds a local, and reads the arm by value; the elaborator, which is still producing the body, records it as refinements instead. Neither reaches the *types* of the locals already in scope, and those are read where no refinement is consulted — a metavariable born in the arm keeps the types of its birth context and checks its solution against them, retried outside the arm's frame. So both checkers re-assume every local whose type mentions a solved variable at its specialized type ([`retyped`]).
+//! [`solve_indices`](crate::solve_indices) finds what an arm learns about the scrutinee's indices, and a variable scrutinee adds the zero-index instance of the same equations, itself standing for the case's value ([`scrutinee_solution`]). The certifier binds each solved variable to its solution, as a `let` binds a local, and reads the arm by value; the elaborator, which is still producing the body, records it as refinements instead. Neither reaches the *types* of the locals already in scope, and those are read where no refinement is consulted — a metavariable born in the arm keeps the types of its birth context and checks its solution against them, retried outside the arm's frame. So both checkers re-assume every local whose type mentions a solved variable at its specialized type ([`retyped`]).
 //!
 //! # Shared, not duplicated
 //!
@@ -8,7 +8,7 @@
 //!
 //! # Through local definitions
 //!
-//! The kernel hands these rules its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition. Both rules read through local definitions by the one reading [`Unfolding`] and [`beneath`] state, so they are stated over what the kernel sees: a scrutinee that is a `let` of a variable solves that variable, and a local whose type mentions a `let` reaching a solved variable is re-typed with that definition substituted. The kernel answers no local definition, so for it the reading is the identity.
+//! The certifier hands these rules its terms by value, each `let`-bound name unfolded; the elaborator keeps a `let` as a local definition. Both rules read through local definitions by the one reading [`Unfolding`] and [`beneath`] state, so they are stated over what the certifier sees: a scrutinee that is a `let` of a variable solves that variable, and a local whose type mentions a `let` reaching a solved variable is re-typed with that definition substituted. The certifier answers no local definition, so for it the reading is the identity.
 
 #[cfg(test)]
 mod tests;
@@ -56,7 +56,7 @@ pub fn retyped<E: Env>(
 
 /// Whether reading `term` reads a variable `solutions` solves: `term` names one, or names a local whose reading — its type, and its definition where it has one, as `reads` answers them — reads one in turn, followed to the end.
 ///
-/// **What an equation's reduced spelling rests on.** A settlement reduces the equation's key with the equations inside it withheld, and reads, besides the definition store and the equations outside it, each local the key names: a local definition by its value, and every local at its type, where a question reduction puts to conversion is answered. A case moves exactly those readings: it re-types each local whose type names a variable it solves ([`retyped`]), and the kernel binds again each local definition whose value names one. So a spelling settled under the case's arm rests on its solution where this holds and nowhere else, and such an equation is restated in the arm rather than settled there (`curios-cert`'s `Scope::restate`, `curios-elab`'s `Context::restate_equations`).
+/// **What an equation's reduced spelling rests on.** A settlement reduces the equation's key with the equations inside it withheld, and reads, besides the definition store and the equations outside it, each local the key names: a local definition by its value, and every local at its type, where a question reduction puts to conversion is answered. A case moves exactly those readings: it re-types each local whose type names a variable it solves ([`retyped`]), and the certifier binds again each local definition whose value names one. So a spelling settled under the case's arm rests on its solution where this holds and nowhere else, and such an equation is restated in the arm rather than settled there (`curios-cert`'s `Scope::restate`, `curios-elab`'s `Context::restate_equations`).
 ///
 /// A declaration `term` references is not followed: a top-level name's meaning is no case's to move.
 pub fn reads_solved(

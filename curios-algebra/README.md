@@ -6,7 +6,7 @@ The carriers' algebra over abstract atoms: what conversion decides about the car
 
 ### The mathematics has one owner, and it names no term
 
-**Decision.** This crate depends directly on `curios-num` alone, and its source names no `Term`, `Intrinsic`, elaborator context or kernel type. It reasons over an `Atom`, a handle its caller hands out, and a summand carries an origin of the caller's choosing, handed back untouched so the caller rebuilds a result from the terms it came from.
+**Decision.** This crate depends directly on `curios-num` alone, and its source names no `Term`, `Intrinsic`, elaborator context or certifier type. It reasons over an `Atom`, a handle its caller hands out, and a summand carries an origin of the caller's choosing, handed back untouched so the caller rebuilds a result from the terms it came from.
 
 **Rationale.** Over bare atoms a rule is stated once, tested against concrete values without a checker, and reached by every carrier from one implementation — where a rule interleaved with term reading can drift between carriers — `x + 1 <= y` meeting `x < y` at `Int` and not at `Nat`. An atom's identity is settled before its handle is handed over, so nothing here asks for conversion or reduction and the crate cannot acquire the rest of the compiler through callbacks.
 

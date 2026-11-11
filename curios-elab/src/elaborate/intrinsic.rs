@@ -42,7 +42,7 @@ fn with_elaborated(intrinsic: &Intrinsic, done: Vec<Term>) -> Intrinsic {
 
 /// Elaborate every operand against the type this operation demands of it, and hand back the rebuilt node with its result type.
 ///
-/// The demands are `Intrinsic::signature`'s, which is also what the kernel checks against — so elaboration and re-checking cannot disagree about an operand's type, and neither restates the other. What stays here is the half a table cannot state: `Mode` is elaboration's, a type operand is established through `check_is_sort` so a metavariable in that position gets a classifier, and a parameterized former's sort is read off the rebuilt node.
+/// The demands are `Intrinsic::signature`'s, which is also what the certifier checks against — so elaboration and re-checking cannot disagree about an operand's type, and neither restates the other. What stays here is the half a table cannot state: `Mode` is elaboration's, a type operand is established through `check_is_sort` so a metavariable in that position gets a classifier, and a parameterized former's sort is read off the rebuilt node.
 fn synth_intrinsic(
     context: &mut Context,
     intrinsic: &Intrinsic,

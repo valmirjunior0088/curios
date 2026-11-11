@@ -299,9 +299,9 @@ fn rollback_restores_constraints_and_solutions() {
 
 /// The two checkers decide universe-context validity separately, and this is where that decision is held to account.
 ///
-/// `curios-cert/src/satisfy.rs` records the reason for the duplication: a transcription would inherit whatever the original gets wrong and agree for that reason, so the kernel's decision is written from the constraint semantics instead, and "a disagreement is a signal". A signal nothing can observe is not one. [`universe_context_validate`] runs during elaboration, so a context it rejects never becomes part of a module, and the kernel's `closed`/`satisfiable` are asked only about contexts this function has already passed — for every program in the corpus. Comparing them therefore has to be done directly, which is what this does, and it is the obligation that argument incurs rather than an extra precaution.
+/// `curios-cert/src/satisfy.rs` records the reason for the duplication: a transcription would inherit whatever the original gets wrong and agree for that reason, so the certifier's decision is written from the constraint semantics instead, and "a disagreement is a signal". A signal nothing can observe is not one. [`universe_context_validate`] runs during elaboration, so a context it rejects never becomes part of a module, and the certifier's `closed`/`satisfiable` are asked only about contexts this function has already passed — for every program in the corpus. Comparing them therefore has to be done directly, which is what this does, and it is the obligation that argument incurs rather than an extra precaution.
 ///
-/// The direction that matters is the *kernel* being the more permissive of the two: it assumes an item's constraints while checking it, so a set it wrongly calls satisfiable is a hypothesis set from which every level relation follows, and `check_instance` stops discharging anything. The elaborator being the more permissive one is ordinary incompleteness and surfaces as a refusal. Neither is observable from a program, which is why the assertion is equality rather than an implication.
+/// The direction that matters is the *certifier* being the more permissive of the two: it assumes an item's constraints while checking it, so a set it wrongly calls satisfiable is a hypothesis set from which every level relation follows, and `check_instance` stops discharging anything. The elaborator being the more permissive one is ordinary incompleteness and surfaces as a refusal. Neither is observable from a program, which is why the assertion is equality rather than an implication.
 ///
 /// The final two assertions are the control: a table whose contexts were all valid, or all invalid, would pass this while comparing nothing.
 #[test]
@@ -348,7 +348,7 @@ fn both_checkers_decide_universe_context_validity_alike() {
                 ],
             },
         ),
-        // A right-hand maximum is what makes the kernel's decision a search: nothing local says which alternative bounds the left side.
+        // A right-hand maximum is what makes the certifier's decision a search: nothing local says which alternative bounds the left side.
         (
             "right-hand maximum",
             UniverseContext {
@@ -417,17 +417,17 @@ fn both_checkers_decide_universe_context_validity_alike() {
     let mut verdicts = Vec::new();
     for (label, context) in &contexts {
         let elaborator = universe_context_validate(context).is_ok();
-        let kernel = context.is_closed() && satisfiable(&context.constraints);
+        let certifier = context.is_closed() && satisfiable(&context.constraints);
 
         assert_eq!(
             elaborator,
-            kernel,
-            "the two checkers disagree about `{label}`: the elaborator says {}, the kernel says {}",
+            certifier,
+            "the two checkers disagree about `{label}`: the elaborator says {}, the certifier says {}",
             match elaborator {
                 true => "valid",
                 false => "invalid",
             },
-            match kernel {
+            match certifier {
                 true => "valid",
                 false => "invalid",
             },
@@ -505,11 +505,11 @@ fn satisfied_somewhere(constraints: &[UniverseConstraint], params: usize, bound:
 
 /// Both checkers call a universe context satisfiable exactly where an assignment of naturals satisfies it.
 ///
-/// Two tests stand beside this and neither states it. [`both_checkers_decide_universe_context_validity_alike`] above compares the two decisions to *each other* over a table written by hand, which can only hold the shapes someone thought of, and nothing in it is held to the naturals. `curios-cert`'s `satisfy::tests::a_set_is_satisfiable_exactly_when_it_has_a_model_in_the_naturals` holds the kernel's half to the naturals over singles and pairs, and the elaborator's solver — the half that *runs a search*, with a node budget it can exhaust — is no part of it.
+/// Two tests stand beside this and neither states it. [`both_checkers_decide_universe_context_validity_alike`] above compares the two decisions to *each other* over a table written by hand, which can only hold the shapes someone thought of, and nothing in it is held to the naturals. `curios-cert`'s `satisfy::tests::a_set_is_satisfiable_exactly_when_it_has_a_model_in_the_naturals` holds the certifier's half to the naturals over singles and pairs, and the elaborator's solver — the half that *runs a search*, with a node budget it can exhaust — is no part of it.
 ///
 /// So this holds the elaborator's decision to the naturals, over every ordered pair of [`small_levels`] as one constraint and every set of two of those, and adds the case neither reaches: sets of **three** constraints, over the narrower alphabet a loop through a right-hand maximum needs, since a maximum read the other way is a disjunction and the set that separates a conjunctive derivation from the naturals' total order wants a clause to bound each part of one. The bound on the search is well above the least model any set in these alphabets can have, whose values a clause can raise by at most the largest offset once per head.
 ///
-/// The unsound direction is the *kernel* calling satisfiable a set no assignment satisfies: the walk assumes an item's constraints while judging it, so such a set is a hypothesis set from which `entails` derives every level relation and `check_instance` discharges nothing — the universe discipline that keeps the paradox out stops applying. That direction is asserted to be empty, and so is the kernel being the more permissive of the two. The other two disagreements are incompleteness, which surfaces as a refusal, and are asserted empty as well, so a change that trades one for the other shows here.
+/// The unsound direction is the *certifier* calling satisfiable a set no assignment satisfies: the walk assumes an item's constraints while judging it, so such a set is a hypothesis set from which `entails` derives every level relation and `check_instance` discharges nothing — the universe discipline that keeps the paradox out stops applying. That direction is asserted to be empty, and so is the certifier being the more permissive of the two. The other two disagreements are incompleteness, which surfaces as a refusal, and are asserted empty as well, so a change that trades one for the other shows here.
 #[test]
 fn both_checkers_agree_with_the_naturals_over_every_small_context() {
     const PARAMS: usize = 2;
@@ -528,11 +528,11 @@ fn both_checkers_agree_with_the_naturals_over_every_small_context() {
     let mut admitted_without_a_model: Vec<Vec<UniverseConstraint>> = Vec::new();
     let mut refused_with_a_model = 0usize;
     let mut elaborator_alone = 0usize;
-    let mut kernel_alone: Vec<Vec<UniverseConstraint>> = Vec::new();
+    let mut certifier_alone: Vec<Vec<UniverseConstraint>> = Vec::new();
     let mut sets = 0usize;
 
     let mut judge = |constraints: Vec<UniverseConstraint>| {
-        let kernel = satisfiable(&constraints);
+        let certifier = satisfiable(&constraints);
         let truth = satisfied_somewhere(&constraints, PARAMS, BOUND);
         let context = UniverseContext {
             parameter_count: PARAMS,
@@ -541,17 +541,17 @@ fn both_checkers_agree_with_the_naturals_over_every_small_context() {
         };
         let elaborator = universe_context_validate(&context).is_ok();
 
-        if kernel && !truth {
+        if certifier && !truth {
             admitted_without_a_model.push(constraints.clone());
         }
-        if !kernel && truth {
+        if !certifier && truth {
             refused_with_a_model += 1;
         }
-        if elaborator && !kernel {
+        if elaborator && !certifier {
             elaborator_alone += 1;
         }
-        if kernel && !elaborator {
-            kernel_alone.push(constraints);
+        if certifier && !elaborator {
+            certifier_alone.push(constraints);
         }
         sets += 1;
     };
@@ -595,15 +595,15 @@ fn both_checkers_agree_with_the_naturals_over_every_small_context() {
 
     assert!(
         admitted_without_a_model.is_empty(),
-        "the kernel called {} of {sets} sets satisfiable with no assignment satisfying them, the first being {:?}",
+        "the certifier called {} of {sets} sets satisfiable with no assignment satisfying them, the first being {:?}",
         admitted_without_a_model.len(),
         admitted_without_a_model.first(),
     );
     assert!(
-        kernel_alone.is_empty(),
-        "the kernel is the more permissive of the two over {} of {sets} sets, the first being {:?}",
-        kernel_alone.len(),
-        kernel_alone.first(),
+        certifier_alone.is_empty(),
+        "the certifier is the more permissive of the two over {} of {sets} sets, the first being {:?}",
+        certifier_alone.len(),
+        certifier_alone.first(),
     );
     assert_eq!(
         (refused_with_a_model, elaborator_alone),

@@ -68,11 +68,11 @@ fn a_refused_type_is_one_error_at_the_term_refused() {
     );
 }
 
-/// A refusal from *below* the kernel is still a diagnostic: this query answers what `run` would say, and erasure is the last stage that says anything.
+/// A refusal from *below* the certifier is still a diagnostic: this query answers what `run` would say, and erasure is the last stage that says anything.
 ///
-/// The stages under the kernel do more than build the program: erasure narrows a dispatch key into the branch table `curios-anf` carries, refusing one that does not fit, and it hands the module to the erased verifier, which rejects the recursion classes the language does not admit. A check path that stopped at the kernel would report both programs below clean where `run` refuses them.
+/// The stages under the certifier do more than build the program: erasure narrows a dispatch key into the branch table `curios-anf` carries, refusing one that does not fit, and it hands the module to the erased verifier, which rejects the recursion classes the language does not admit. A check path that stopped at the certifier would report both programs below clean where `run` refuses them.
 #[test]
-fn a_refusal_below_the_kernel_is_still_reported() {
+fn a_refusal_below_the_certifier_is_still_reported() {
     let overflowing = of(
         "let _f(n : /std/Nat) -> /std/Nat = match n | 0 => 1 | 4294967296 => 2 | _ => 0 end;\n/std/print(\"\")",
     );

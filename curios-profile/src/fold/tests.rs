@@ -205,7 +205,7 @@ fn a_span_re_entered_within_itself_measures_each_extent() {
 fn self_time_excludes_the_spans_entered_directly_inside() {
     let report = folded(
         "D\t0\tcurios_cert\tcertify_declaration\n\
-         D\t1\tcurios_cert\tkernel::convert\n\
+         D\t1\tcurios_cert\tcertifier::convert\n\
          S\t1\t0\t0\n\
          E\t1\t0\t0\t0\t0\t0\t0\n\
          S\t2\t1\t100\n\
@@ -228,7 +228,7 @@ fn self_time_excludes_the_spans_entered_directly_inside() {
             .expect("the span folds")
     };
     let declaration = row("certify_declaration");
-    let convert = row("kernel::convert");
+    let convert = row("certifier::convert");
 
     assert_eq!(declaration.total, Duration::from_nanos(1000));
     assert_eq!(declaration.self_total, Duration::from_nanos(500));
@@ -297,7 +297,7 @@ fn a_span_counts_once_within_each_name_entered_above_it() {
 #[test]
 fn a_span_re_entered_within_itself_counts_each_nanosecond_once_in_its_self_time() {
     let report = folded(
-        "D\t0\tcurios_cert\tkernel::convert\n\
+        "D\t0\tcurios_cert\tcertifier::convert\n\
          S\t1\t0\t0\n\
          E\t1\t0\t0\t0\t0\t0\t0\n\
          S\t2\t0\t200\n\
@@ -434,7 +434,7 @@ fn the_report_lists_the_slowest_instances_with_their_fields() {
 #[test]
 fn a_span_whose_parent_entered_before_the_stream_opened_keeps_its_own_time() {
     let report = folded(
-        "D\t0\tcurios_cert\tkernel::convert\n\
+        "D\t0\tcurios_cert\tcertifier::convert\n\
          E\t5\t0\t100\t0\t0\t0\t0\n\
          X\t5\t0\t300\t0\t0\t0\t0\n\
          C\t5\t0\t300\n\

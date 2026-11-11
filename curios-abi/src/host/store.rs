@@ -248,7 +248,7 @@ impl WireResults {
         }
     }
 
-    /// The shape the guest sees these results in — the one statement of the arity rule the prelude's declaration, the elaborator's and the kernel's types are all built from.
+    /// The shape the guest sees these results in — the one statement of the arity rule the prelude's declaration, the elaborator's and the certifier's types are all built from.
     pub fn shape(&self) -> ResultShape<'_> {
         match &self.slots {
             Slots::None => ResultShape::Unit,

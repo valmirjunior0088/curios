@@ -208,7 +208,7 @@ fn an_inferred_call_commits_to_the_product_as_a_bare_literal_does() {
     );
 }
 
-/// `body` over the declarations the programs below share, its last line the text printed. Each is written in both orders and run, so the kernel has judged what the elaborator admitted.
+/// `body` over the declarations the programs below share, its last line the text printed. Each is written in both orders and run, so the certifier has judged what the elaborator admitted.
 fn program(body: &str) -> String {
     fill!(
         r#"
@@ -365,7 +365,7 @@ fn a_tuple_of_functions_into_propositions_is_refused_where_a_type_is_declared() 
     );
 }
 
-// And at a sort left to inference, a list's element, the pair is a proposition as soon as it is read: the line after meets a list of propositions and takes its length, `List/len` standing over an element at any sort. Read as a type's there, the element would be held to a type by that call and the kernel would refuse it.
+// And at a sort left to inference, a list's element, the pair is a proposition as soon as it is read: the line after meets a list of propositions and takes its length, `List/len` standing over an element at any sort. Read as a type's there, the element would be held to a type by that call and the certifier would refuse it.
 #[test]
 fn a_pair_of_functions_into_propositions_is_a_proposition_on_the_next_line() {
     let source = program(

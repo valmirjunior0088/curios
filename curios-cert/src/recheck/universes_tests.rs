@@ -16,7 +16,7 @@ use {
 
 /// A declaration's universe context is *assumed* while checking it, so an unsatisfiable one is a hypothesis set that proves anything.
 ///
-/// `Kernel::assume_universes` takes the item's own constraints as given, and `entails` answers `≤` questions under them — so a context containing `u + 1 ≤ u` lets every level relation through, and `check_instance` stops discharging anything. Deciding satisfiability is `satisfiable`'s, a second implementation beside the elaborator's solver; this asks whether the walk refuses such a context before assuming it.
+/// `Certifier::assume_universes` takes the item's own constraints as given, and `entails` answers `≤` questions under them — so a context containing `u + 1 ≤ u` lets every level relation through, and `check_instance` stops discharging anything. Deciding satisfiability is `satisfiable`'s, a second implementation beside the elaborator's solver; this asks whether the walk refuses such a context before assuming it.
 #[test]
 fn an_unsatisfiable_universe_context_is_refused() {
     let contradiction = UniverseConstraint {
@@ -48,13 +48,13 @@ fn an_unsatisfiable_universe_context_is_refused() {
 
     assert!(
         !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
-        "the kernel assumed a contradiction as a hypothesis without noticing",
+        "the certifier assumed a contradiction as a hypothesis without noticing",
     );
 }
 
 /// A constraint may only mention parameters the context declares.
 ///
-/// A context is closed: universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a constraint could still reference. One that names `P3` while declaring a single parameter is not a stricter hypothesis but a meaningless one — instantiation substitutes an argument vector of the declared length, and a reference past its end has nothing to become. The elaborator refuses this as an escaping level; the kernel assumes the context, so it must refuse it too.
+/// A context is closed: universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a constraint could still reference. One that names `P3` while declaring a single parameter is not a stricter hypothesis but a meaningless one — instantiation substitutes an argument vector of the declared length, and a reference past its end has nothing to become. The elaborator refuses this as an escaping level; the certifier assumes the context, so it must refuse it too.
 #[test]
 fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     let escaping = UniverseConstraint {
@@ -84,7 +84,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
 
     assert!(
         !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
-        "the kernel assumed a constraint about a parameter the declaration does not have",
+        "the certifier assumed a constraint about a parameter the declaration does not have",
     );
 }
 
@@ -111,7 +111,7 @@ fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
             verdicts
                 .iter()
                 .any(|verdict| matches!(verdict.error, Error::NotCore(_))),
-            "{label}: the kernel certified a module carrying an unsolved universe metavariable: {verdicts:?}",
+            "{label}: the certifier accepted a module carrying an unsolved universe metavariable: {verdicts:?}",
         );
     }
 }
@@ -263,7 +263,7 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
 
 /// A sort whose quality is open, in the two positions the boundary pass walks: a metavariable elaboration left, and a parameter no context binds.
 ///
-/// Every rule that reads a sort reads which of `Prop` and `Type` it is: irrelevance, the large-elimination guard, the totality an erased position owes. One that states neither has no answer any of them may take, so the kernel judges a term only once each of its sorts states one. Neither module is reachable from a surface program, so only these fixtures put the refusal to the test; the control is [`a_ground_level_in_the_same_positions_is_accepted`].
+/// Every rule that reads a sort reads which of `Prop` and `Type` it is: irrelevance, the large-elimination guard, the totality an erased position owes. One that states neither has no answer any of them may take, so the certifier judges a term only once each of its sorts states one. Neither module is reachable from a surface program, so only these fixtures put the refusal to the test; the control is [`a_ground_level_in_the_same_positions_is_accepted`].
 #[test]
 fn a_sort_stating_neither_prop_nor_type_is_refused() {
     for (quality, open) in [
@@ -282,7 +282,7 @@ fn a_sort_stating_neither_prop_nor_type_is_refused() {
                 verdicts
                     .iter()
                     .any(|verdict| matches!(verdict.error, Error::OpenSort(_))),
-                "{label}: the kernel certified a module carrying {quality}: {verdicts:?}",
+                "{label}: the certifier accepted a module carrying {quality}: {verdicts:?}",
             );
         }
     }
@@ -334,7 +334,7 @@ fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
             verdicts
                 .iter()
                 .any(|verdict| matches!(verdict.error, Error::UnclosedUniverses)),
-            "{label}: the kernel certified a level naming a parameter the declaration does not have: {verdicts:?}",
+            "{label}: the certifier accepted a level naming a parameter the declaration does not have: {verdicts:?}",
         );
     }
 }
@@ -364,7 +364,7 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
 
 /// A universe instance supplying fewer levels than the scheme it instantiates has parameters.
 ///
-/// `Kernel::check_instance` discharges a scheme's *constraints* at the levels an occurrence supplies, and that is all it does. A scheme with an empty constraint set therefore accepts an instance of any width — the loop body never runs — so the width needs a check of its own, which `check_instance` makes first. `curios-elab`'s `validate_instance_arities` asks the same, of every `Instance`, `InductType`, `Variant`, `StructType` and `Struct` in the module.
+/// `Certifier::check_instance` discharges a scheme's *constraints* at the levels an occurrence supplies, and that is all it does. A scheme with an empty constraint set therefore accepts an instance of any width — the loop body never runs — so the width needs a check of its own, which `check_instance` makes first. `curios-elab`'s `validate_instance_arities` asks the same, of every `Instance`, `InductType`, `Variant`, `StructType` and `Struct` in the module.
 ///
 /// The consequence is the capture [`a_level_naming_an_undeclared_universe_parameter_is_refused`] records, reached from the other side. That fixture is about a declaration naming a parameter it does not have; this one is about a declaration naming a parameter it *does* have, at an occurrence that does not supply it. `instantiate_universes` leaves whatever the instance does not supply as it stands, so `Levelled`'s `Type.{param 1}` at the one-level instance `[param 0]` stays `Type.{param 1}` — and `param 1` at the use site is the *use site's* own second parameter, not the declaration's. A level the declaration meant is now one of the reader's, and cumulativity is decided about the wrong one.
 ///
@@ -384,7 +384,7 @@ fn a_universe_instance_narrower_than_its_scheme_is_refused() {
         verdicts
             .iter()
             .any(|verdict| matches!(verdict.error, Error::Arity { .. })),
-        "the kernel certified an occurrence that leaves a declared universe parameter unsupplied: {verdicts:?}",
+        "the certifier accepted an occurrence that leaves a declared universe parameter unsupplied: {verdicts:?}",
     );
 }
 
@@ -424,7 +424,7 @@ fn an_instance_at_the_top_of_the_offset_range_is_refused_as_an_overflow() {
                     error: Error::Reduce(ReduceError::Universe(UniverseError::OffsetOverflow)),
                 }] if *name == Global::Authored(Qualifier::from(["held"]))
             ),
-            "{label}: the kernel read a successor past the top of the offset range: {verdicts:?}",
+            "{label}: the certifier read a successor past the top of the offset range: {verdicts:?}",
         );
     }
 }
@@ -445,18 +445,18 @@ fn an_instance_below_the_top_of_the_offset_range_is_accepted() {
         assert_eq!(
             fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
             Vec::new(),
-            "{label}: the kernel refused an instance whose successors all fit",
+            "{label}: the certifier refused an instance whose successors all fit",
         );
     }
 }
 
 /// An occurrence of a universe-polymorphic definition that states no instance is refused rather than typed at the scheme's own type, which would discharge nothing.
 ///
-/// An occurrence stating no level of a universe scheme denotes none of its instances. `curios-elab` never builds one, writing every reference to a declaration at the instance it chooses, and the kernel neither unfolds one — `Kernel::value_at` withholds the body of an instance short of its scheme, as `curios-elab`'s `Frames::value_at` does, for the reason that one states: unfolding it "would leak the scheme's parameters" — nor types it, refusing its instance's arity: handing the stored type back whole would hand back the scheme's parameters with it.
+/// An occurrence stating no level of a universe scheme denotes none of its instances. `curios-elab` never builds one, writing every reference to a declaration at the instance it chooses, and the certifier neither unfolds one — `Certifier::value_at` withholds the body of an instance short of its scheme, as `curios-elab`'s `Frames::value_at` does, for the reason that one states: unfolding it "would leak the scheme's parameters" — nor types it, refusing its instance's arity: handing the stored type back whole would hand back the scheme's parameters with it.
 ///
 /// Two things would follow from that, and the second is what this asserts. The scheme's parameters are *captured* — `A`'s `Type v` is read as the ambient item's `v`, so a level belonging to one scheme becomes a level the using item quantifies over, which is the collapse at the neighbouring position. And `check_instance` would never run, so the scheme's own constraints would be discharged by nothing. `A` here is well formed only where `u + 1 <= v`, and the second case below is that same occurrence with its instance stated, refused for exactly that reason — so the two cases differ in nothing but whether dropping the instance also drops the rule.
 ///
-/// Reachable from no surface program, since the elaborator states every occurrence's instance before the kernel is asked, which is why this belongs here.
+/// Reachable from no surface program, since the elaborator states every occurrence's instance before the certifier is asked, which is why this belongs here.
 ///
 /// The control is [`an_occurrence_stating_its_universe_instance_is_still_accepted`], and it holds the two spellings the rule must keep: an instance that does discharge the constraint, and a bare occurrence of a *monomorphic* definition, which is how every definition with no universe parameters is written.
 #[test]
@@ -483,7 +483,7 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
                 .error
                 .rendered(&Spelling::default())
                 .contains(refusal)),
-            "{label}: the kernel read a universe scheme at the ambient item's parameters: {verdicts:?}",
+            "{label}: the certifier read a universe scheme at the ambient item's parameters: {verdicts:?}",
         );
     }
 }
@@ -541,11 +541,11 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
     );
 }
 
-/// An arm's case equation does not refine an occurrence that merely *projects* onto its scrutinee, which would certify a coercion between two types the kernel itself calls distinct.
+/// An arm's case equation does not refine an occurrence that merely *projects* onto its scrutinee, which would certify a coercion between two types the certifier itself calls distinct.
 ///
 /// A store keying both sides through `project_erased_universes` — which rebuilds every `Type` payload at one canonical ground level, a projection written for the Core-to-ANF hand-off where levels really are irrelevant — would read that projection as a quotient by definitional equality, and it is not one: `Type 0` and `Type 1` are distinct terms, and the whole universe hierarchy is the claim that they are not interchangeable. Scrutinizing `f<0>(x)` would record the equation under the key `f(x)`, and the *unrelated* stuck term `f<1>(x)` would probe to that same key and be refined to the arm's `wrap(T)` — a case value it was never shown to have.
 ///
-/// Level 1 is what makes the two indices genuinely different rather than merely differently spelled: `f`'s body carries its parameter into a constructor payload, so `f<0>(x)` and `f<1>(x)` reduce to `wrap(Type 0)` and `wrap(Type 1)`. [`Route::Direct`] below is that fact stated as an assertion — with no arm open, the kernel refuses the very same coercion — so the arm is the whole of what admitted it. The premise "a universe argument cannot affect computation" is false: Core has no eliminator *over* levels, but `Type u` embeds one in a term, and a payload position is where it becomes a value difference.
+/// Level 1 is what makes the two indices genuinely different rather than merely differently spelled: `f`'s body carries its parameter into a constructor payload, so `f<0>(x)` and `f<1>(x)` reduce to `wrap(Type 0)` and `wrap(Type 1)`. [`Route::Direct`] below is that fact stated as an assertion — with no arm open, the certifier refuses the very same coercion — so the arm is the whole of what admitted it. The premise "a universe argument cannot affect computation" is false: Core has no eliminator *over* levels, but `Type u` embeds one in a term, and a payload position is where it becomes a value difference.
 ///
 /// It is a constructed module and never a `.crs`: the elaborator mints its own levels, so no surface program spells the two instances this pair needs.
 ///
@@ -566,7 +566,7 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
                 verdict.name == Some(Global::Authored(Qualifier::from(["coerce"])))
                     && matches!(verdict.error, Error::Mismatch { .. })
             }),
-            "{label}: the kernel certified a coercion between two types it calls distinct: {verdicts:?}",
+            "{label}: the certifier accepted a coercion between two types it calls distinct: {verdicts:?}",
         );
     }
 }
@@ -675,7 +675,7 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
 ///
 /// `rec carrier@{p} : Type (p + 1) = Type p end` with an occurrence stating `carrier@{5}` is owed `Type 6`, so claiming it at `Type 1` is a mismatch.
 ///
-/// This is the kernel's half of site two of `xboard/tickets/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers/`, and unlike the three fixtures beside it this one discriminates nothing: `infer`'s `Rec` arm binds each member at `member_type` positionally, under the item's own constraints, which is the reading the fix keeps — the module below is refused the same way before the group stopped binding universes and after. What carried the cause at this site was the *elaborator's* export, `Places::member`, which paired `group.member_type(index)` with a term carrying the group and so handed an occurrence a type with the group's binder still over it; no surface syntax states a universe argument, so that spelling was reachable only from inside elaboration. It is closed by the group carrying no context to open. This fixture is here to hold the kernel's positional reading still, since the fix's correctness rests on it being the only one.
+/// This is the certifier's half of site two of `xboard/tickets/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers/`, and unlike the three fixtures beside it this one discriminates nothing: `infer`'s `Rec` arm binds each member at `member_type` positionally, under the item's own constraints, which is the reading the fix keeps — the module below is refused the same way before the group stopped binding universes and after. What carried the cause at this site was the *elaborator's* export, `Places::member`, which paired `group.member_type(index)` with a term carrying the group and so handed an occurrence a type with the group's binder still over it; no surface syntax states a universe argument, so that spelling was reachable only from inside elaboration. It is closed by the group carrying no context to open. This fixture is here to hold the certifier's positional reading still, since the fix's correctness rests on it being the only one.
 #[test]
 fn an_exported_member_type_is_read_at_the_occurrences_instance() {
     let p = Level::param(UniverseParam(0));
@@ -1046,7 +1046,7 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
 ///
 /// A group binds no universe, so a level `param k` inside a member's scopes is the enclosing item's `k`th wherever it stands, and an instance of the item substitutes it with every other level the item binds. That is the reading `xboard/tickets/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers/` was admitted through the absence of; the fixtures beside it hold the four sites a *reader* reaches, and this one holds the boundary, which is what makes those four the only readings there are.
 ///
-/// While a group bound parameters of its own, `param 1` inside a member of a one-parameter item was that item's own level, shifted past the group's binder — so the module below is the pre-collapse spelling of a legitimate group, and nothing about it is ill-formed on its face. The instance `held@{5}` states one level for a one-parameter scheme, so `Kernel::check_instance` passes on width and has no constraint to discharge; `instantiate_universes` then substitutes `param 0` and leaves `param 1` as it stands, and `param 1` at the reader is the *reader's* second parameter. Under the reader's own `param 1 ≤ 0` the member's body reads as `Type 1`, which the reader's `Type 0` inhabits. `universe_escape` is the whole of what refuses it, reaching a member through the opened view [`RecItem::definitions`](curios_core::RecItem::definitions) hands back, at the item's own count.
+/// While a group bound parameters of its own, `param 1` inside a member of a one-parameter item was that item's own level, shifted past the group's binder — so the module below is the pre-collapse spelling of a legitimate group, and nothing about it is ill-formed on its face. The instance `held@{5}` states one level for a one-parameter scheme, so `Certifier::check_instance` passes on width and has no constraint to discharge; `instantiate_universes` then substitutes `param 0` and leaves `param 1` as it stands, and `param 1` at the reader is the *reader's* second parameter. Under the reader's own `param 1 ≤ 0` the member's body reads as `Type 1`, which the reader's `Type 0` inhabits. `universe_escape` is the whole of what refuses it, reaching a member through the opened view [`RecItem::definitions`](curios_core::RecItem::definitions) hands back, at the item's own count.
 ///
 /// Reachable from no surface program — `validate_universes` holds every level of a module to its declaration's count before the module leaves the elaborator — so only this fixture puts the certifier's copy of the rule at this position.
 ///
@@ -1109,7 +1109,7 @@ fn a_group_members_level_names_only_its_items_universe_parameters() {
     assert!(
         verdicts.iter().any(|verdict| verdict.name == Some(held)
             && matches!(verdict.error, Error::UnclosedUniverses)),
-        "the kernel certified a group member naming a level its item does not bind: {verdicts:?}",
+        "the certifier accepted a group member naming a level its item does not bind: {verdicts:?}",
     );
 
     let stated = vec![Level::constant(5), Level::constant(6)];

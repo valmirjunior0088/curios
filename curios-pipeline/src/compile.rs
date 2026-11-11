@@ -191,7 +191,7 @@ pub fn with_broken<T>(
     })
 }
 
-/// Put `program` to the independent kernel with `predecessors` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
+/// Put `program` to the independent certifier with `predecessors` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
 ///
 /// The [`Globals`] environment is assembled here, beside the walk that reads it, rather than in `curios-unit`, which holds what the stages produced and judges nothing. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
 pub fn recheck(
@@ -316,7 +316,7 @@ fn read_for_report(
     report(&reading)
 }
 
-/// The kernel's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
+/// The certifier's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
 pub fn globals(predecessors: Predecessors<'_>) -> Globals<'_> {
     globals_after(predecessors, &vec![false; predecessors.units().len()])
 }
@@ -332,8 +332,8 @@ pub fn globals_after<'a>(predecessors: Predecessors<'a>, moved: &[bool]) -> Glob
     globals
 }
 
-/// The compile error a kernel verdict is reported as: the refusal, named for the item it is about where there is one.
-pub fn kernel_refusal(
+/// The compile error a certifier verdict is reported as: the refusal, named for the item it is about where there is one.
+pub fn certifier_refusal(
     verdict: &Verdict,
     definitions: &curios_core::Definitions,
     scope: &[&curios_core::Lexicon],
@@ -345,8 +345,8 @@ pub fn kernel_refusal(
     );
 
     CompileError::failure(match &verdict.name {
-        Some(name) => format!("the kernel refused {}: {refusal}", name.faithful()),
-        None => format!("the kernel refused a unit: {refusal}"),
+        Some(name) => format!("the certifier refused {}: {refusal}", name.faithful()),
+        None => format!("the certifier refused a unit: {refusal}"),
     })
 }
 
@@ -699,7 +699,7 @@ where
     (findings, verdict)
 }
 
-/// The elaboration of a program put whole, its declarations and the term that closes it as one module, in `context`, which the caller reads its credits and its consumption from however this ends. Beside the program come the erasure obligations elaboration decided over it, reported and never raised: what puts a program whole is an instrument that hands the same program to the kernel (`typecheck_entrypoint`, [`examine_entrypoint`]), where a compilation takes a program's declarations as the unit they are (`enter`). What the entry is judged at is stated once for both (`state`).
+/// The elaboration of a program put whole, its declarations and the term that closes it as one module, in `context`, which the caller reads its credits and its consumption from however this ends. Beside the program come the erasure obligations elaboration decided over it, reported and never raised: what puts a program whole is an instrument that hands the same program to the certifier (`typecheck_entrypoint`, [`examine_entrypoint`]), where a compilation takes a program's declarations as the unit they are (`enter`). What the entry is judged at is stated once for both (`state`).
 ///
 /// `predecessors` are the units in scope, read where a report is made: where each one's declarations lie, which a report placed in one of them is resolved against, after the entry's own, the paths each gives its names, and the lexicon each keeps, which a report spells a name by.
 pub fn elaborate_entry<'s, O>(
@@ -745,7 +745,7 @@ where
     };
     observe(Stage::Core(&lowered, dumped));
 
-    // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry. An entry put as a proof states the empty proposition instead, and those two are the whole choice: the surface entry carries no type, so no caller states another. A test program's tail replaces the written entry, and the elaborator that synthesizes it states its type.
+    // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the certifier rechecks it and erasure seals at it — each reading it off the entry. An entry put as a proof states the empty proposition instead, and those two are the whole choice: the surface entry carries no type, so no caller states another. A test program's tail replaces the written entry, and the elaborator that synthesizes it states its type.
     //
     // `Io({})` is closed, which is what lets it be stated before elaboration at all. `Io(?T)` would need a metavariable minted before the elaboration context exists, which would leave the contract a post-hoc head test on the inferred type. What closes a program is of any type `/std/Program` executes, and that costs the contract nothing: the dispatch is a call inside the entry, at each of its tails, and the call answers `Io({})`.
     state(&mut lowered.entrypoint, &tail, syntax);
@@ -806,9 +806,9 @@ where
     Ok((program, obligations))
 }
 
-/// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the kernel, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
+/// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, judged by the certifier, and **erased**, with a refusal from any of them reported as the compile path reports it. What a question about a program's correctness is answered by.
 ///
-/// **Erasure is a verdict, which is why the line is drawn under it rather than under the kernel.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the kernel would let `wonder` report a clean program that `run` then refuses, which is the one thing that query may not do. Below here nothing decides: `lower_from_anf` — private, so named here rather than linked — returns no `Result` at all.
+/// **Erasure is a verdict, which is why the line is drawn under it rather than under the certifier.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the certifier would let `wonder` report a clean program that `run` then refuses, which is the one thing that query may not do. Below here nothing decides: `lower_from_anf` — private, so named here rather than linked — returns no `Result` at all.
 ///
 /// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module. `read`, where there is one, is told the program's lowering as soon as it is made ([`ReadLowering`]).
 pub fn check_entrypoint(
@@ -861,15 +861,15 @@ pub struct Closing<'a> {
 /// What erasing an entered program came to: the module it links to, or what erasing it refused it for.
 type Erasure = Result<curios_anf::Module, CompileError>;
 
-/// A program entered: the unit its declarations are, and the term it closes with, elaborated, accepted by the kernel and erased through the kernel that accepted it ([`Entered::erased`]): what the lowering after it needs of the entry.
+/// A program entered: the unit its declarations are, and the term it closes with, elaborated, accepted by the certifier and erased through the certifier that accepted it ([`Entered::erased`]): what the lowering after it needs of the entry.
 ///
 /// **A program's declarations are a unit, and its final term is compiled over it.** The declarations are kept between compilations as any unit's are — handed back by a cache where nothing they were compiled from moved, compiled over a baseline where something did — and the term is elaborated, judged and erased on every compile: it is no declaration, and has no name to be kept under.
 struct Entered {
     /// The unit of the program's declarations: restored, compiled over a baseline, or compiled whole.
     unit: Unit,
-    /// The term the program closes with beside a module of nothing, zonked and accepted by the kernel, stating the type it was judged at.
+    /// The term the program closes with beside a module of nothing, zonked and accepted by the certifier, stating the type it was judged at.
     program: Zonked<Program>,
-    /// The program erased and linked through the kernel that judged it, or what erasing it refused it for: every program but a test program that schedules no test, which nothing is compiled of. The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
+    /// The program erased and linked through the certifier that judged it, or what erasing it refused it for: every program but a test program that schedules no test, which nothing is compiled of. The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
     erased: Option<Erasure>,
     /// Every test in scope, module by module, scheduled or skipped, when the entry is compiled as a test program ([`EntryTail::schedule`]).
     modules: Vec<TestModule>,
@@ -887,7 +887,7 @@ impl Entered {
     }
 }
 
-/// Enter the program `source` is: its declarations as the unit they are — the one `cache` hands back, compiled over the baseline it offers, or compiled whole and handed to it — and the term `tail` closes it with, elaborated, put to the kernel over that unit and erased through that kernel ([`judged`]). Beside it come the lowering's findings, credited by elaboration, whatever the verdict; the outer refusal is a program that did not lower.
+/// Enter the program `source` is: its declarations as the unit they are — the one `cache` hands back, compiled over the baseline it offers, or compiled whole and handed to it — and the term `tail` closes it with, elaborated, put to the certifier over that unit and erased through that certifier ([`judged`]). Beside it come the lowering's findings, credited by elaboration, whatever the verdict; the outer refusal is a program that did not lower.
 ///
 /// **Where the unit is compiled the term is elaborated in its walk**, so a program holding a refused declaration reports every refusal and what its final term said beside them, as one batch. Where the unit is restored nothing of it is elaborated, and the term is elaborated alone, over the units in scope and the one restored.
 fn enter<O>(
@@ -935,7 +935,7 @@ where
         false => test_modules(schedule, &anchors_of(&lowered, predecessors)),
     };
 
-    // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the kernel rechecks it and erasure seals at it — each reading it off the entry.
+    // The entrypoint contract, stated in the entry: a program *is* a description of doing something and yielding nothing, so an authored entry states `Io({})`, and elaboration checks the body against it, the certifier rechecks it and erasure seals at it — each reading it off the entry.
     state(&mut written, &tail, syntax);
     let dumped = DumpScope {
         syntax,
@@ -1121,9 +1121,9 @@ fn close_over(
     closed
 }
 
-/// The term `entry` closes the program with, over `scope`, the units before it and the unit of the program's declarations last, zonked and judged by the kernel; and, where `erasing` holds the program's lowering, erased and linked through the kernel that judged it, with what erasing it refused it for reported against that lowering and `predecessors`, the units before the program's own.
+/// The term `entry` closes the program with, over `scope`, the units before it and the unit of the program's declarations last, zonked and judged by the certifier; and, where `erasing` holds the program's lowering, erased and linked through the certifier that judged it, with what erasing it refused it for reported against that lowering and `predecessors`, the units before the program's own.
 ///
-/// **One walk.** The kernel that judged the term is the one erasure reads it through, as a unit's is (`compile_lowered`): its environment borrows the scope built here, so it cannot leave this call, and what it erased can. The linked program's termination flags are marked here, from the record of every unit it was erased from, and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_anf::Function::total`.
+/// **One walk.** The certifier that judged the term is the one erasure reads it through, as a unit's is (`compile_lowered`): its environment borrows the scope built here, so it cannot leave this call, and what it erased can. The linked program's termination flags are marked here, from the record of every unit it was erased from, and nowhere else: erasure marks nothing, and nothing reads a flag before the back half lowers what this returns. See `curios_anf::Function::total`.
 fn judged(
     budget: u64,
     (scope, predecessors): (Predecessors<'_>, Predecessors<'_>),
@@ -1131,16 +1131,16 @@ fn judged(
     entry: curios_core::Entrypoint,
     erasing: Option<&PreparedText>,
 ) -> Result<(Zonked<Program>, Option<Erasure>), CompileError> {
-    // The zonk evidence the kernel and erasure consume, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
+    // The zonk evidence the certifier and erasure consume, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
     let program = Zonked::project(&Program {
         definitions: nothing(),
         entrypoint: entry,
     })
     .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
 
-    // The independent kernel's second opinion: each unit was walked when it was built and arrives here as environment, so only the term that closes the program is judged.
+    // The independent certifier's second opinion: each unit was walked when it was built and arrives here as environment, so only the term that closes the program is judged.
     let globals = globals(scope);
-    let (rechecked, mut kernel) = {
+    let (rechecked, mut certifier) = {
         curios_profile::profile!("recheck");
         certify_program(&program, budget, &globals, *syntax)
     };
@@ -1151,11 +1151,11 @@ fn judged(
             &Spelling::for_refusal(definitions, &scope.lexicons(), syntax),
         );
         return Err(CompileError::failure(match &verdict.name {
-            Some(name) => format!("the kernel refused {}: {refusal}", name.faithful()),
-            None => format!("the kernel refused the entrypoint: {refusal}"),
+            Some(name) => format!("the certifier refused {}: {refusal}", name.faithful()),
+            None => format!("the certifier refused the entrypoint: {refusal}"),
         }));
     }
-    // The program as the kernel stated it, the one it is erased from.
+    // The program as the certifier stated it, the one it is erased from.
     let program = Zonked::project(&Program {
         definitions: rechecked.definitions,
         entrypoint: rechecked
@@ -1173,7 +1173,7 @@ fn judged(
             scope.erased(),
         );
         let mut linked = erase_program(
-            &mut kernel,
+            &mut certifier,
             Erasures::of(&cores, &places, &certifications, &forms),
             &program,
         )
@@ -1202,13 +1202,13 @@ fn judged(
 pub struct Examined {
     /// The (T) and (V) obligations the elaborator decided over the program, reported rather than raised.
     pub obligations: Vec<Obligation>,
-    /// Every refusal the kernel reached over the same program.
+    /// Every refusal the certifier reached over the same program.
     pub verdicts: Vec<Verdict>,
 }
 
-/// Put `entrypoint` to both checkers at what `tail` judges it at — the program contract, as a suite guarding a rule puts a program, or `False`, as the soundness board puts a witness — and hand back what each said rather than stopping at the first refusal: lowering, elaboration, the kernel.
+/// Put `entrypoint` to both checkers at what `tail` judges it at — the program contract, as a suite guarding a rule puts a program, or `False`, as the soundness board puts a witness — and hand back what each said rather than stopping at the first refusal: lowering, elaboration, the certifier.
 ///
-/// The program is put whole, its declarations and the term that closes it elaborated as one module and judged as one, with one difference from the compile path: the elaborator's erasure obligations are reported rather than raised, so a program only it refuses still reaches the kernel. That is what a consumer asking which checker refused a program needs, and what `check_entrypoint` cannot say, since it stops at the first refusal. It stops under the kernel: erasure decides whether a program can be built, which is no part of whether its entry has the type it states.
+/// The program is put whole, its declarations and the term that closes it elaborated as one module and judged as one, with one difference from the compile path: the elaborator's erasure obligations are reported rather than raised, so a program only it refuses still reaches the certifier. That is what a consumer asking which checker refused a program needs, and what `check_entrypoint` cannot say, since it stops at the first refusal. It stops under the certifier: erasure decides whether a program can be built, which is no part of whether its entry has the type it states.
 pub fn examine_entrypoint(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -1228,12 +1228,12 @@ pub fn examine_entrypoint(
         elaborate_lowered(budget, predecessors, syntax, lowered, tail, &mut |_| {});
     let (program, obligations) = elaborated?;
 
-    // The zonk evidence the kernel consumes, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
+    // The zonk evidence the certifier consumes, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
     let program = Zonked::project(&program).map_err(|refusal| Refused {
         error: None,
         reported: CompileError::failure(refusal.to_string()),
     })?;
-    // The independent kernel's second opinion: each predecessor was walked when it was built and arrives here as environment, so only what it does not already answer for is judged.
+    // The independent certifier's second opinion: each predecessor was walked when it was built and arrives here as environment, so only what it does not already answer for is judged.
     let rechecked = {
         curios_profile::profile!("recheck");
         certify_program(&program, budget, &globals(predecessors), *syntax).0
@@ -1280,7 +1280,7 @@ where
 
 /// Compile one unit against `predecessors`: lower, elaborate, judge, erase, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude.
 ///
-/// **The judgment sits between elaboration and erasure and that ordering is the point.** A module the kernel refuses never reaches erasure's budget, and a refusal reads as a refusal rather than as whatever erasure made of an ill-typed term. It is also why this is a fold step rather than one operation: the producer of a stored unit runs the same sequence *without* the judge, because the crate that writes an image deliberately cannot reach the kernel.
+/// **The judgment sits between elaboration and erasure and that ordering is the point.** A module the certifier refuses never reaches erasure's budget, and a refusal reads as a refusal rather than as whatever erasure made of an ill-typed term. It is also why this is a fold step rather than one operation: the producer of a stored unit runs the same sequence *without* the judge, because the crate that writes an image deliberately cannot reach the certifier.
 pub fn compile_unit(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -1366,11 +1366,11 @@ pub fn compile_lowered(
     let core = Zonked::project(&core)
         .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
 
-    // The unit is erased through the kernel that certified it.
+    // The unit is erased through the certifier that accepted it.
     let globals = globals(predecessors);
-    let (rechecked, mut kernel) = certify_definitions(&core, budget, &globals, *syntax);
+    let (rechecked, mut certifier) = certify_definitions(&core, budget, &globals, *syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = kernel_refusal(
+        let refusal = certifier_refusal(
             verdict,
             core.as_definitions(),
             &predecessors.lexicons(),
@@ -1378,14 +1378,14 @@ pub fn compile_lowered(
         );
         return Err(refuse(&lowered, refusal));
     }
-    // The unit is the module the kernel stated, so every mark it carries is the walk's own.
+    // The unit is the module the certifier stated, so every mark it carries is the walk's own.
     let core = core.map(|_| rechecked.definitions);
 
     let places = predecessors.places();
     let certifications = predecessors.certifications();
     let erased = predecessors.erased();
     let scope = Erasures::of(&cores, &places, &certifications, &erased).fixed(&fixed);
-    let anf = erase_unit(&mut kernel, scope, &core).map_err(|error| {
+    let anf = erase_unit(&mut certifier, scope, &core).map_err(|error| {
         let refusal = erasure_refusal(
             &error,
             core.as_definitions(),
@@ -1469,7 +1469,7 @@ impl After {
 ///
 /// Returns the units it produced, not the ones it was given: the caller owns `base` and this cannot take it. The predecessors are rebuilt per step from pointers to both, which is free.
 ///
-/// A `cache` short-circuits the step entirely: a recorded unit was judged when it was recorded, so neither elaboration nor the kernel re-runs for it. `None` compiles everything, which is what every caller without a project does.
+/// A `cache` short-circuits the step entirely: a recorded unit was judged when it was recorded, so neither elaboration nor the certifier re-runs for it. `None` compiles everything, which is what every caller without a project does.
 ///
 /// Each source arrives beside the baseline its assembler offers for it — `None` for every unit but one taking a prelude root's place, which is decided where the sources are built rather than recognized here. The offer goes to `cache` on a miss, which decides what becomes of it, and with no cache nothing is taken.
 ///
@@ -1716,7 +1716,7 @@ pub struct TestProgram {
     pub modules: Vec<TestModule>,
     /// Each prefix the tail selects tests at or under that selects none: what a run refuses where no subject's tail selects anything at it.
     pub unmatched: Vec<Qualifier>,
-    /// The program and the rows it imports — `None` for a test tail that schedules no test, since a program running nothing is built past nothing but the kernel's judgment of it.
+    /// The program and the rows it imports — `None` for a test tail that schedules no test, since a program running nothing is built past nothing but the certifier's judgment of it.
     pub compiled: Option<(curios_wasm::Module, ForeignStore)>,
 }
 

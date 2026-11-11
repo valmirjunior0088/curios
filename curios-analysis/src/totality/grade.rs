@@ -1,6 +1,6 @@
 //! Grading a call: what its arguments are, measured against the caller's parameters under what the arms enclosing it established.
 //!
-//! Shared by every walk that finds calls — the elaborator's discovery [`Walk`](super::Walk), and the kernel's own typing walk — so a call is graded by one function whichever walk met it. What a walk contributes is its [`SizeContext`], built as it enters and leaves arms, and the arguments it saw at the call.
+//! Shared by every walk that finds calls — the elaborator's discovery [`Walk`](super::Walk), and the certifier's own typing walk — so a call is graded by one function whichever walk met it. What a walk contributes is its [`SizeContext`], built as it enters and leaves arms, and the arguments it saw at the call.
 
 use {
     super::{Call, Carriers, Guard, Shape, Tag, spine},
@@ -34,7 +34,7 @@ pub const EXPAND_FUEL: usize = 16;
 ///
 /// **An index inversion's solutions are no part of it.** A solution is an equation conversion concluded — [`solve_indices`](crate::solve_indices) is the one analysis that borrows a driver's conversion — and at a `Prop`-sorted type conversion is proof irrelevance, which every proof of a proposition satisfies. A target holding a proposition's constructor is therefore one spelling of the scrutinee among all of them, and a payload read below the binder through it grades below a value no reduction took apart. The size order reads what reduction took apart and nothing conversion concluded, which is the line [`Env::force`] already draws by reducing plainly.
 ///
-/// Both drivers read it here, so the rule has one home. What each supplies for itself is the case's shape: the discovery walk builds one from the binders it minted, and the kernel reads the arm's own spelling of the case value.
+/// Both drivers read it here, so the rule has one home. What each supplies for itself is the case's shape: the discovery walk builds one from the binders it minted, and the certifier reads the arm's own spelling of the case value.
 pub fn refined_by_arm(scrutinee: &Term) -> Option<Free> {
     match &**scrutinee {
         Subterm::Var(var) => var.as_free().cloned(),
@@ -553,7 +553,7 @@ impl<'a, E: Env> Grader<'a, E> {
     ///
     /// Definitions stand between a term and its constructor shape, and no enumeration of *which* closes the set: witness projections (an operator resolves a witness, so `n - 1` arrives as `(w).0(n, 1)`), `/sys` intrinsic wrappers and ordinary definitions all do. Unfolding is uniform over all of them because δ and β preserve meaning: a decrease visible after unfolding is a decrease in the term's value.
     ///
-    /// There is no step count. Termination rests on what this pass is handed rather than on a budget: every walk that grades a call has typed the terms it reads before asking — the discovery walk runs after the bodies are checked, and the kernel grades a call once its arguments are — positivity refuses a negative occurrence, and the universe hierarchy refuses `Type : Type` — so a well-typed rec-free term normalizes. [`readable`] keeps `rec` out, and the checker's own reduction budget remains the backstop for anything that still fails to settle: the force is a [`Probe`], so a term with no reading is opaque and the budget's refusal propagates as the analysis's own.
+    /// There is no step count. Termination rests on what this pass is handed rather than on a budget: every walk that grades a call has typed the terms it reads before asking — the discovery walk runs after the bodies are checked, and the certifier grades a call once its arguments are — positivity refuses a negative occurrence, and the universe hierarchy refuses `Type : Type` — so a well-typed rec-free term normalizes. [`readable`] keeps `rec` out, and the checker's own reduction budget remains the backstop for anything that still fails to settle: the force is a [`Probe`], so a term with no reading is opaque and the budget's refusal propagates as the analysis's own.
     ///
     /// A count here would bound *re-entries* rather than unfoldings: [`Env::force`] is a full weak-head normalization, so it walks an entire forwarder chain in one call. The stated condition above is what bounds the read instead, and no verdict in the corpus depends on a number.
     fn unfolded_shape(&mut self, term: &Term) -> Result<Shape, E::Error> {

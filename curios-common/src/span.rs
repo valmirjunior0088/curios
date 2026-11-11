@@ -251,7 +251,7 @@ impl Report {
         }
     }
 
-    /// A report about nothing in particular: a manifest, a store, a kernel refusal that names an item rather than a position.
+    /// A report about nothing in particular: a manifest, a store, a certifier refusal that names an item rather than a position.
     pub fn unlocated(message: impl Into<String>) -> Self {
         Self {
             span: None,

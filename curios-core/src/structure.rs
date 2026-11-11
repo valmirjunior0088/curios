@@ -17,7 +17,7 @@ use {
 #[curios_archive::archived]
 pub struct StructDecl {
     pub universe_context: UniverseContext,
-    /// The declaration's parameters, terminating in its field telescope: `struct Pair(A : Type, B : Type) { fst : A, snd : B }` is `(A : Type, B : Type)` ending in `(fst : A, snd : B)` ending in `()`. Each parameter stands under the mark it binds as — the marks the type former's own function type carries, stated here for the elaborator, which opens the parameters over the fields and has no function type to read them from. A `use` parameter joins the witness scope the field types resolve in. The kernel reads no mark of either telescope.
+    /// The declaration's parameters, terminating in its field telescope: `struct Pair(A : Type, B : Type) { fst : A, snd : B }` is `(A : Type, B : Type)` ending in `(fst : A, snd : B)` ending in `()`. Each parameter stands under the mark it binds as — the marks the type former's own function type carries, stated here for the elaborator, which opens the parameters over the fields and has no function type to read them from. A `use` parameter joins the witness scope the field types resolve in. The certifier reads no mark of either telescope.
     ///
     /// Nested rather than two parallel telescopes, for the reason [`InductDecl::arity`](super::InductDecl) gives: the fields are scoped under the parameters *by construction*, so there is no agreement between two encodings to state and no malformed pairing for a judgment to refuse.
     pub arity: Telescope<Telescope<()>>,

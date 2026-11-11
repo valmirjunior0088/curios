@@ -21,7 +21,7 @@ use {
     std::{collections::HashMap, fmt, rc::Rc},
 };
 
-/// What a spent budget was refused, beneath the report it ends: the row of the charge it could not afford, with what that charge was and what was left, as the kernel names it.
+/// What a spent budget was refused, beneath the report it ends: the row of the charge it could not afford, with what that charge was and what was left, as the certifier names it.
 fn spent(f: &mut fmt::Formatter<'_>, refusal: &ReduceError) -> fmt::Result {
     match refusal {
         ReduceError::Exhausted {

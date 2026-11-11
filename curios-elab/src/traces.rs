@@ -152,7 +152,7 @@ pub struct Traces {
 
 /// What elaboration concluded of one definition as it published it, beside its terms: what a declaration reads of the definition that Core holds nothing of.
 ///
-/// **The elaborator's alone.** The kernel classifies each definition it judges for itself, and reads a unit in scope by its own record of it (`curios_core::Certification`), so nothing here is an input to a judgment of the kernel's: a conclusion wrong here costs a kernel refusal and admits nothing ([`curios-cert`'s README](../../curios-cert/README.md)).
+/// **The elaborator's alone.** The certifier classifies each definition it judges for itself, and reads a unit in scope by its own record of it (`curios_core::Certification`), so nothing here is an input to a judgment of the certifier's: a conclusion wrong here costs a certifier refusal and admits nothing ([`curios-cert`'s README](../../curios-cert/README.md)).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Classified {
@@ -166,7 +166,7 @@ pub struct Classified {
 
 /// Where a definition's universe parameters reach its value, as elaboration read it off the definition's final terms: what the elaborator's level alignment compares two instances of the definition by. A vector says something only where it holds an irrelevant level, so one that holds none is filed as none.
 ///
-/// The level alignment is its one reader. The kernel compares two instances of a definition by their spines and levels and unfolds where that decides nothing, so it reads none of this: a vector claiming an irrelevance the body denies costs a kernel refusal and admits nothing.
+/// The level alignment is its one reader. The certifier compares two instances of a definition by their spines and levels and unfolds where that decides nothing, so it reads none of this: a vector claiming an irrelevance the body denies costs a certifier refusal and admits nothing.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Vectors {

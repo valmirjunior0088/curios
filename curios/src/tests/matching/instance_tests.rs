@@ -1,4 +1,4 @@
-//! What the kernel types of a type the elaborator derived by substitution: one typed where a reader wrote it is typed at every value put in a variable's place, an arm no reduction takes there being typed by no rule.
+//! What the certifier types of a type the elaborator derived by substitution: one typed where a reader wrote it is typed at every value put in a variable's place, an arm no reduction takes there being typed by no rule.
 
 use {crate::tests::test_support::*, curios_common::fill};
 
@@ -161,7 +161,7 @@ fn a_result_is_typed_where_an_equation_around_an_arm_computes_to_another_case() 
     assert_eq!(run(&respelled), b"held");
 }
 
-// A row that a binder of its own puts under cases it does not state is elaborated once, at its own pattern, and each leaf that takes it holds that body with the leaf's binders in its variables' places, typed by the kernel where it stands. `(_, true)` is reached under `some` and under `none`, and its body holds a match of its own.
+// A row that a binder of its own puts under cases it does not state is elaborated once, at its own pattern, and each leaf that takes it holds that body with the leaf's binders in its variables' places, typed by the certifier where it stands. `(_, true)` is reached under `some` and under `none`, and its body holds a match of its own.
 #[test]
 fn a_row_reached_at_two_leaves_is_typed_at_each() {
     let source = r#"

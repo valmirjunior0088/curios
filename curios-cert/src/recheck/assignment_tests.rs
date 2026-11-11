@@ -1,4 +1,4 @@
-//! A declaration that leaves a sort to its caller, attacked where a use reads it at an assignment: each module written as Core text, put to the kernel with nothing in scope and declaring the propositions it uses, closing on `False` were the refusal it meets not made, or holding a sort no assignment states.
+//! A declaration that leaves a sort to its caller, attacked where a use reads it at an assignment: each module written as Core text, put to the certifier with nothing in scope and declaring the propositions it uses, closing on `False` were the refusal it meets not made, or holding a sort no assignment states.
 
 use {
     super::test_support::*,
@@ -438,7 +438,7 @@ fn an_entry_well_typed_at_prop_alone_is_refused_at_type() {
 
 /// A family's vector speaks of its levels and never of its sorts: two instances apart in a sort are two types where the levels they are also apart in are irrelevant. The route to `False` stands but for `/up` and `/down`.
 ///
-/// Mutation-check: drop the comparison of sorts from `Kernel::instances_eq`, and the module is admitted at `False`.
+/// Mutation-check: drop the comparison of sorts from `Certifier::instances_eq`, and the module is admitted at `False`.
 #[test]
 fn a_sort_is_compared_whatever_a_familys_vector_says_of_its_levels() {
     let verdicts = verdicts(TWO_INSTANCES_APART_IN_A_SORT);

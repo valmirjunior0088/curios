@@ -8,7 +8,7 @@
 //!
 //! Every refused row is a candidate law or a control, never a bug. A candidate needs a rule in `curios-core`'s `reduce::intrinsic`, which both checkers share, so taking one is an addition to the trusted base, held by the grid that probes it over values (`documentation/design/arithmetic/a-law-is-decided-where-it-neither-respells-nor-invents.md`). A control is a claim that is *not* a law, stated beside the held rows whose rule must stop short of it and marked as one where it stands: a rule widened past its soundness moves a control to the held side, and the goal test names it.
 //!
-//! **Each checker is asked by itself.** The candidate line is the elaborator's answer, and a compilation asks the kernel only once the elaborator accepts, so neither says what the kernel makes of a row the elaborator refuses: a kernel that held a control would pass both. [`kernel_alone`] puts every row to the kernel with the elaborator's verdict left out, and a refused row must be refused there too, as a mismatch — a budget that ran out compared nothing.
+//! **Each checker is asked by itself.** The candidate line is the elaborator's answer, and a compilation asks the certifier only once the elaborator accepts, so neither says what the certifier makes of a row the elaborator refuses: a certifier that held a control would pass both. [`certifier_alone`] puts every row to the certifier with the elaborator's verdict left out, and a refused row must be refused there too, as a mismatch — a budget that ran out compared nothing.
 //!
 //! **The rules no law table states have seeds.** Beta, delta, zeta, iota, eta and irrelevance are conversion's as the carriers' laws are, and `structural` states one equation for each and the near miss beside it, which `contexts` places under every child a term former holds. A seed states no side: [`asked_alone`] reads which side each checker puts it on — the elaborator by the proof it is handed, since a candidate search costs a seed's row more than elaborating it does — and `parted` lists every row a checker puts on the other side than its seed derives, held equal to what the audits find. Why a row's verdict is derived from its seed and asked of each checker alone is `documentation/design/soundness/conversion-is-one-relation-in-both-checkers.md`.
 
@@ -118,7 +118,7 @@ fn named(name: String) -> Global {
     Global::Authored(Qualifier::from([name]))
 }
 
-/// Whether the elaborator holds each row when it alone is asked, in the rows' order: every row as an `Eq/refl()` proof, elaborated by [`typecheck_with_prelude`], which stops short of the kernel and reports every item it refuses rather than the first. A refusal that is no mismatch — a spent budget, a goal left undecided — is no answer, and fails the audit that asked.
+/// Whether the elaborator holds each row when it alone is asked, in the rows' order: every row as an `Eq/refl()` proof, elaborated by [`typecheck_with_prelude`], which stops short of the certifier and reports every item it refuses rather than the first. A refusal that is no mismatch — a spent budget, a goal left undecided — is no answer, and fails the audit that asked.
 fn elaborator_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<bool> {
     let entrypoint = program(header, rows, "Eq/refl()")
         .parse::<Entrypoint>()
@@ -166,22 +166,22 @@ fn elaborator_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<
 
 /// What a row's statement answers at: the claim that two terms of one type are equal, beside the proof that the first equals itself, packed with that type and that first term.
 ///
-/// The type names neither side, which is what keeps the two at one universe instance. A level a signature holds where conversion compares it is its declaration's parameter, so a side the statement's type named would stand at the statement's own parameter where the other closes at its least level: two instances of one recursive call, which the kernel compares at every level and refuses for those alone.
+/// The type names neither side, which is what keeps the two at one universe instance. A level a signature holds where conversion compares it is its declaration's parameter, so a side the statement's type named would stand at the statement's own parameter where the other closes at its least level: two instances of one recursive call, which the certifier compares at every level and refuses for those alone.
 const PACKED: &str = "{T: Type, claim: Prop, left: T, proof: Eq(@T)(left, left)}";
 
 /// Where [`PACKED`] holds the claim's type and the claim's body, by position.
 const CLAIM: usize = 1;
 const PROOF: usize = 3;
 
-/// What a row's statement is a call of, answering at [`PACKED`]. One call hands both halves the same type and the same left side, so they differ in nothing but the right side — two statements written apart would each settle levels of their own, and the kernel would refuse the claim for those.
+/// What a row's statement is a call of, answering at [`PACKED`]. One call hands both halves the same type and the same left side, so they differ in nothing but the right side — two statements written apart would each settle levels of their own, and the certifier would refuse the claim for those.
 fn claimed() -> String {
     format!("let claimed(@A: Type, a: A, b: A) -> {PACKED} = (A, Eq(@A)(a, b), a, Eq/refl());")
 }
 
-/// What the kernel says of each row when it alone is asked, in the rows' order: `None` where it holds the row, and its refusal where it does not.
+/// What the certifier says of each row when it alone is asked, in the rows' order: `None` where it holds the row, and its refusal where it does not.
 ///
-/// Each row is stated as one call of [`claimed`], which elaborates whatever the row's side, since it asks only that the two sides have one type; [`typecheck_with_prelude`] stops short of the kernel. The claim the kernel then judges is that call's two halves under the statement's own binders: its [`CLAIM`] component is the claim's type and its [`PROOF`] component the claim's body. Every term in it is one the elaborator built, and the one comparison it leaves the kernel is the row's left side against its right, at their type.
-fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_cert::Error>> {
+/// Each row is stated as one call of [`claimed`], which elaborates whatever the row's side, since it asks only that the two sides have one type; [`typecheck_with_prelude`] stops short of the certifier. The claim the certifier then judges is that call's two halves under the statement's own binders: its [`CLAIM`] component is the claim's type and its [`PROOF`] component the claim's body. Every term in it is one the elaborator built, and the one comparison it leaves the certifier is the row's left side against its right, at their type.
+fn certifier_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_cert::Error>> {
     let items = rows
         .iter()
         .enumerate()
@@ -256,7 +256,7 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
     for verdict in &verdicts {
         assert!(
             verdict.name.is_some_and(|name| names.contains(&name)),
-            "the kernel refuses more than a row's claim: {verdict:?}"
+            "the certifier refuses more than a row's claim: {verdict:?}"
         );
     }
 
@@ -271,27 +271,27 @@ fn kernel_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios_ce
         .collect()
 }
 
-/// The rows the kernel, asked alone, puts on the other side than stated: the first `held` are stated as held and the rest as refused. A refused row counts as refused only where the kernel compares its sides and finds them apart, so one it refuses any other way — a spent budget among them — is reported too.
-fn misplaced_by_the_kernel(
+/// The rows the certifier, asked alone, puts on the other side than stated: the first `held` are stated as held and the rest as refused. A refused row counts as refused only where the certifier compares its sides and finds them apart, so one it refuses any other way — a spent budget among them — is reported too.
+fn misplaced_by_the_certifier(
     header: &str,
     name: &str,
     rows: &[(String, String)],
     held: usize,
 ) -> Vec<String> {
-    kernel_alone(header, rows)
+    certifier_alone(header, rows)
         .into_iter()
         .zip(rows)
         .enumerate()
         .filter_map(|(index, (refusal, (_, row)))| match (index < held, refusal) {
             (true, None) | (false, Some(curios_cert::Error::Mismatch { .. })) => None,
             (true, Some(error)) => Some(format!(
-                "{name}: `{row}` is held but the kernel, asked alone, refuses it: {error:?}"
+                "{name}: `{row}` is held but the certifier, asked alone, refuses it: {error:?}"
             )),
             (false, None) => Some(format!(
-                "{name}: `{row}` is refused but the kernel, asked alone, holds it"
+                "{name}: `{row}` is refused but the certifier, asked alone, holds it"
             )),
             (false, Some(error)) => Some(format!(
-                "{name}: `{row}` is refused, but the kernel, asked alone, does not refuse it as a mismatch: {error:?}"
+                "{name}: `{row}` is refused, but the certifier, asked alone, does not refuse it as a mismatch: {error:?}"
             )),
         })
         .collect()
@@ -301,7 +301,7 @@ fn misplaced_by_the_kernel(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Answers {
     elaborator: bool,
-    kernel: bool,
+    certifier: bool,
 }
 
 impl Answers {
@@ -309,7 +309,7 @@ impl Answers {
     fn both(holds: bool) -> Self {
         Self {
             elaborator: holds,
-            kernel: holds,
+            certifier: holds,
         }
     }
 }
@@ -322,28 +322,28 @@ impl fmt::Display for Answers {
         };
         write!(
             formatter,
-            "{} by the elaborator and {} by the kernel",
+            "{} by the elaborator and {} by the certifier",
             says(self.elaborator),
-            says(self.kernel)
+            says(self.certifier)
         )
     }
 }
 
-/// What each checker says of each row when it alone is asked: the elaborator through [`elaborator_alone`], the kernel through [`kernel_alone`]. A refusal that is no mismatch is no answer from either, and fails the audit that asked.
+/// What each checker says of each row when it alone is asked: the elaborator through [`elaborator_alone`], the certifier through [`certifier_alone`]. A refusal that is no mismatch is no answer from either, and fails the audit that asked.
 fn asked_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<Answers> {
     let holds = elaborator_alone(header, name, rows);
 
-    kernel_alone(header, rows)
+    certifier_alone(header, rows)
         .into_iter()
         .zip(holds)
         .zip(rows)
         .map(|((refusal, elaborator), (_, row))| Answers {
             elaborator,
-            kernel: match refusal {
+            certifier: match refusal {
                 None => true,
                 Some(curios_cert::Error::Mismatch { .. }) => false,
                 Some(error) => panic!(
-                    "{name}: the kernel, asked alone, refuses `{row}` otherwise than as a mismatch: {error:?}"
+                    "{name}: the certifier, asked alone, refuses `{row}` otherwise than as a mismatch: {error:?}"
                 ),
             },
         })

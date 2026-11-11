@@ -268,7 +268,7 @@ fn a_fold_that_reads_its_hypothesis_still_closes_a_family() {
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
 }
 
-/// An arm's goal is the ambient goal with the case in its scrutinee's place, an elimination of that scrutinee inside the goal among it: in the `false` arm the goal's own `match` is one on `false`, whose `true` arm holds a proof that rested on its guard. A `match` inside the arm stores that goal as its result, and the kernel types no arm a literal scrutinee never takes. The second program eliminates a call, whose occurrence the goal writes.
+/// An arm's goal is the ambient goal with the case in its scrutinee's place, an elimination of that scrutinee inside the goal among it: in the `false` arm the goal's own `match` is one on `false`, whose `true` arm holds a proof that rested on its guard. A `match` inside the arm stores that goal as its result, and the certifier types no arm a literal scrutinee never takes. The second program eliminates a call, whose occurrence the goal writes.
 #[test]
 fn an_arms_goal_that_eliminates_its_scrutinee_is_a_result_a_match_may_store() {
     let variable = r#"
