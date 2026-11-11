@@ -14,7 +14,7 @@ use {
 
 // -- fixtures ---------------------------------------------------------------
 //
-// Every fixture takes a runtime taint (`List/len(/std/Proc/args()!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
+// Every fixture takes a runtime taint (`List/len(/std/Proc/args()!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the loop live.
 //
 // The runtime taint is read inside the entry function; its local annotations share that function's sequencing region.
 
@@ -238,7 +238,7 @@ pub const LOOPED_PICK: &str = r#"
 ///
 /// [`SPLIT_RETURN`] exercises the filler too, but only through the return protocol, whose slots are boxed by construction, so it cannot catch a filler at a raw carrier. Here the variant reaches a continuation parameter instead, and the parameter's uses demand an unboxed `Flt`, so the edges carry `f64` and the `none` edge has no value to carry. The payload must be a `Flt` rather than a `Nat`: a `Nat` filler and its slot share the `i31` carrier, so the wrong-carrier constant is indistinguishable from a right one.
 ///
-/// A conjunction whose second operand is a call of a total function: `spin`'s kernel reduces by `65537`, the needle that finds it, and the comparison before the `&&` reads the taint against `4`. Four arguments, the program's name among them, make it `true`, and `spin(4, 1)` is `20608`.
+/// A conjunction whose second operand is a call of a total function: `spin`'s loop reduces by `65537`, the needle that finds it, and the comparison before the `&&` reads the taint against `4`. Four arguments, the program's name among them, make it `true`, and `spin(4, 1)` is `20608`.
 pub const CONJUNCTION_CALL: &str = r#"
     use /std/{Nat, Bool, List, Proc};
     let spin(n: Nat, acc: Nat) -> Nat =

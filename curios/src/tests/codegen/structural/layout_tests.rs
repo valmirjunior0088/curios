@@ -232,7 +232,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
 ///
 /// Cases `{0, 1}` with nothing else reachable — every `Bool` match, and every exhaustive two-constructor tag — decide in one compare. A `br_table` is a bounds check, a `csel`, a dependent load and an indirect branch on the ISA lowerings in this pipeline's chain, and nothing below the emitter narrows it: Cranelift's aarch64 rule builds a `JTSequence` whatever the table's size, and Binaryen leaves a two-entry table alone.
 ///
-/// Asserted on the fixture's own kernel rather than the module, since the prelude rides along and its wider families table legitimately. Both dispatches stay runtime-tainted so neither folds — a closed condition is decided at compile time and emits no dispatch at all.
+/// Asserted on the fixture's own hot function rather than the module, since the prelude rides along and its wider families table legitimately. Both dispatches stay runtime-tainted so neither folds — a closed condition is decided at compile time and emits no dispatch at all.
 #[test]
 fn a_two_way_dispatch_is_a_branch_not_a_table() {
     let source = r#"
@@ -260,12 +260,12 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
 
     let wat = wat(source);
     let functions = functions(&wat);
-    let kernel = function_with(&functions, "65521");
+    let hot = function_with(&functions, "65521");
 
     assert!(
-        !kernel.body.contains("br_table"),
+        !hot.body.contains("br_table"),
         "a two-way dispatch must branch rather than table: {}",
-        kernel.body
+        hot.body
     );
 }
 
@@ -312,17 +312,17 @@ fn a_tuple_is_read_at_its_own_final_type() {
 
     // `Chain` is one final `$row/N$/Chain` at the family's width, so the walk needs no cascade at all: the object's type is a fact of the family, and the read is one exact cast followed by the field.
     let functions = functions(&wat);
-    let kernel = function_with(&functions, "999983");
+    let hot = function_with(&functions, "999983");
     assert!(
-        kernel.body.contains("ref.cast (ref $row/") && kernel.body.contains("struct.get $row/"),
+        hot.body.contains("ref.cast (ref $row/") && hot.body.contains("struct.get $row/"),
         "the walk reads the family at its own exact type: {}",
-        kernel.body
+        hot.body
     );
     // A number's fast path tests for an i31, `ref.test (ref i31)`; a cascade is a test against a concrete type.
     assert!(
-        !kernel.body.contains("ref.test (ref $"),
+        !hot.body.contains("ref.test (ref $"),
         "and needs no roster cascade to find it: {}",
-        kernel.body
+        hot.body
     );
 
     // The family types are final and unrelated too — the same property, for the rows on this path.
@@ -513,14 +513,14 @@ fn a_monomorphic_slot_carries_its_own_type() {
     );
 
     let functions = functions(&wat);
-    let kernel = function_with(&functions, "999983");
+    let hot = function_with(&functions, "999983");
     assert!(
-        kernel.body.contains("struct.get_u $row/"),
+        hot.body.contains("struct.get_u $row/"),
         "the tag is read out of its packed byte, with nothing to unbox: {}",
-        kernel.body
+        hot.body
     );
     // Every read of a slot lands in a local of the slot's own carrier, so none of them is followed by an unbox. The casts that remain in this walk are the function's own `anyref` parameter and a hoisted literal, and neither is a field.
-    let lines: Vec<&str> = kernel.body.lines().collect();
+    let lines: Vec<&str> = hot.body.lines().collect();
     for (index, line) in lines.iter().enumerate() {
         if !line.contains("struct.get") || !line.contains("$row/") {
             continue;

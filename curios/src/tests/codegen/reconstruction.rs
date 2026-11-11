@@ -156,13 +156,13 @@ fn loop_cont(fixture: &Fixture) {
     assert!(nodes.iter().any(|&id| matches!(module.node(id), Some(curios_cps::Node::ApplyCont(edge)) if edge.target == target)), "the loop has a backedge: {module}");
     let wat = fixture.wasm.to_string();
     let functions = functions(&wat);
-    let kernels = functions
+    let hot_functions = functions
         .iter()
         .filter(|f| f.body.contains("16777213"))
         .collect::<Vec<_>>();
-    assert!(!kernels.is_empty());
+    assert!(!hot_functions.is_empty());
     assert!(
-        kernels.iter().any(|f| f.body.contains("loop ")),
+        hot_functions.iter().any(|f| f.body.contains("loop ")),
         "the raw Wasm contains the recovered loop"
     );
 }

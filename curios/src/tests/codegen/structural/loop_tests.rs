@@ -4,13 +4,13 @@ use {super::test_support::*, crate::tests::test_support::*};
 
 // -- LCG --------------------------------------------------------------------
 
-/// The LCG kernel reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive kernel survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cps`'s `contify_calls` tests; this pins the end-to-end result.
+/// The LCG loop reaches closure conversion as a single-entry recursive continuation. Proxy: the user `loop` is contified — the optimized high-CPS module keeps only `main`, prelude helpers, the `io/…` description thunks every effect boundary erases to, and the lambdas those lift, so the recursive hot_loop survives as a local continuation (a recursive `cont` with a single external entry and its own backedge), not a function. The contification mechanism is owned by `curios-cps`'s `contify_calls` tests; this pins the end-to-end result.
 #[test]
-fn lcg_kernel_is_single_entry_recursive_continuation() {
+fn lcg_loop_is_single_entry_recursive_continuation() {
     let module = cps_optm_module(LCG);
     assert!(
         emits(&module, |op| *op == curios_cps::Intrinsic::NatRem) && reads_nat(&module, 65537),
-        "the kernel arithmetic must survive into the optimized cont module:\n{module}",
+        "the loop's arithmetic must survive into the optimized cont module:\n{module}",
     );
 
     for function in module.functions().iter().flatten() {
@@ -27,18 +27,18 @@ fn lcg_kernel_is_single_entry_recursive_continuation() {
     }
 }
 
-/// The hot kernel is exactly one natural loop with a clean backedge — no nested loop, and no `$dispatch/` selector driving the iteration.
+/// The hot loop is exactly one natural loop with a clean backedge — no nested loop, and no `$dispatch/` selector driving the iteration.
 #[test]
-fn lcg_hot_kernel_is_one_natural_loop() {
+fn lcg_hot_loop_is_one_natural_loop() {
     let wat = wat(LCG);
-    for kernel in loops_containing(&wat, "65537") {
+    for hot_loop in loops_containing(&wat, "65537") {
         assert_eq!(
-            kernel.matches("loop ").count(),
+            hot_loop.matches("loop ").count(),
             1,
-            "the kernel must be a single natural loop, not nested loops",
+            "the hot loop must be a single natural loop, not nested loops",
         );
         assert!(
-            !kernel.contains("$dispatch/"),
+            !hot_loop.contains("$dispatch/"),
             "the backedge must be an ordinary loop branch, not a dispatcher selector",
         );
     }
@@ -48,40 +48,40 @@ fn lcg_hot_kernel_is_one_natural_loop() {
 #[test]
 fn lcg_loop_is_scalar_no_closure_no_indirect() {
     let wat = wat(LCG);
-    for kernel in loops_containing(&wat, "65537") {
+    for hot_loop in loops_containing(&wat, "65537") {
         assert!(
-            kernel.contains("i64.mul"),
+            hot_loop.contains("i64.mul"),
             "Nat multiply is direct scalar arithmetic"
         );
         assert!(
-            kernel.contains("i32.rem_u"),
+            hot_loop.contains("i32.rem_u"),
             "the modulo is direct scalar arithmetic"
         );
         assert!(
-            !kernel.contains("call_indirect"),
+            !hot_loop.contains("call_indirect"),
             "no indirect call in the hot loop"
         );
         assert!(
-            !kernel.contains("struct.new $clsr/"),
+            !hot_loop.contains("struct.new $clsr/"),
             "no closure allocation in the hot loop"
         );
         assert!(
-            !kernel.contains("struct.new $envr/"),
+            !hot_loop.contains("struct.new $envr/"),
             "no environment allocation in the hot loop"
         );
     }
 }
 
-/// The loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: a boxed edge argument is loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision `curios-cps`'s `represent` fixpoint exists to produce.
+/// The loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: a boxed edge argument is loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the hot_loop is the loop-carried decision `curios-cps`'s `represent` fixpoint exists to produce.
 ///
 /// The casts do *not* go to zero and asserting that they do would be wrong: 4 `ref.cast`/`i31.get_u` pairs survive on values the loop reads from outside itself, where the coercion is correct and is the cheaper side of the trade. Nor does the `i64` widening go away — see `i64.mul` in [`lcg_loop_is_scalar_no_closure_no_indirect`] — because a `Nat` product leaving the i31 has to be detected and grown into a boxed magnitude, and `i32.mul` wraps silently, which no storage decision changes.
 #[test]
 fn lcg_loop_carries_its_scalars_in_registers() {
     let wat = wat(LCG);
-    for kernel in loops_containing(&wat, "65537") {
+    for hot_loop in loops_containing(&wat, "65537") {
         assert!(
-            !kernel.contains("ref.as_non_null"),
-            "no edge argument in the hot loop is reboxed to cross it: {kernel}"
+            !hot_loop.contains("ref.as_non_null"),
+            "no edge argument in the hot loop is reboxed to cross it: {hot_loop}"
         );
     }
 }
@@ -91,17 +91,17 @@ fn lcg_loop_carries_its_scalars_in_registers() {
 fn a_float_literal_read_in_a_register_is_its_constant() {
     let wat = wat(FLOAT_LITERAL_LOOP);
     let globals = ["1.25", "0.375"].map(|literal| float_global(&wat, literal));
-    for kernel in loops_containing(&wat, "i32.const 7919") {
+    for hot_loop in loops_containing(&wat, "i32.const 7919") {
         assert!(
-            kernel.contains("f64.const 1.25") && kernel.contains("f64.const 0.375"),
-            "both literals are read where the loop reads them: {kernel}"
+            hot_loop.contains("f64.const 1.25") && hot_loop.contains("f64.const 0.375"),
+            "both literals are read where the loop reads them: {hot_loop}"
         );
         for global in &globals {
             assert!(
-                !kernel
+                !hot_loop
                     .lines()
                     .any(|line| line.trim() == format!("global.get {global}")),
-                "no literal is read back out of its global's box, `{global}`: {kernel}"
+                "no literal is read back out of its global's box, `{global}`: {hot_loop}"
             );
         }
     }
@@ -120,10 +120,10 @@ fn a_loop_a_known_parameter_seeds_allocates_no_float() {
         "the premise: the loop stays in `spin`, seeded by its parameter, rather than being copied into a caller: {}",
         spin.name
     );
-    for kernel in loops_containing(spin.body, "i32.const 7919") {
+    for hot_loop in loops_containing(spin.body, "i32.const 7919") {
         assert!(
-            !kernel.contains("struct.new $flt"),
-            "no round boxes the float its parameter seeded: {kernel}"
+            !hot_loop.contains("struct.new $flt"),
+            "no round boxes the float its parameter seeded: {hot_loop}"
         );
     }
 }
@@ -138,10 +138,10 @@ fn a_loop_a_call_result_seeds_allocates_no_float() {
             .any(|function| function.name.ends_with("$/base")),
         "the premise: `base` stays a function whose result seeds the loop"
     );
-    for kernel in loops_containing(&wat, "i32.const 7919") {
+    for hot_loop in loops_containing(&wat, "i32.const 7919") {
         assert!(
-            !kernel.contains("struct.new $flt"),
-            "no round boxes the float a call's result seeded: {kernel}"
+            !hot_loop.contains("struct.new $flt"),
+            "no round boxes the float a call's result seeded: {hot_loop}"
         );
     }
 }
@@ -160,14 +160,14 @@ fn a_step_over_floats_called_from_a_loop_allocates_no_float() {
         "the step hands its answer back without boxing it: {}",
         step.body
     );
-    for kernel in loops_containing(&wat, "i32.const 7919") {
+    for hot_loop in loops_containing(&wat, "i32.const 7919") {
         assert!(
-            kernel.contains(&format!("call {}", step.name)),
-            "the premise: the loop calls the step: {kernel}"
+            hot_loop.contains(&format!("call {}", step.name)),
+            "the premise: the loop calls the step: {hot_loop}"
         );
         assert!(
-            !kernel.contains("struct.new $flt"),
-            "no round boxes what crosses the step's boundary: {kernel}"
+            !hot_loop.contains("struct.new $flt"),
+            "no round boxes what crosses the step's boundary: {hot_loop}"
         );
     }
 }
@@ -183,10 +183,10 @@ fn a_captured_float_seeds_loops_on_both_sides_of_the_capture_unboxed() {
     );
     // Each loop's exit boxes its answer once, where it leaves: the closure hands it back at its arity's uniform signature, and the entry's loop into a join a reference reads. What must not happen is a box on the way round.
     for needle in ["i32.const 7919", "i32.const 6007"] {
-        for kernel in loops_containing(&wat, needle) {
+        for hot_loop in loops_containing(&wat, needle) {
             assert!(
-                !boxes_a_round(kernel),
-                "no round boxes the float the capture seeded: {kernel}"
+                !boxes_a_round(hot_loop),
+                "no round boxes the float the capture seeded: {hot_loop}"
             );
         }
     }
@@ -202,18 +202,18 @@ fn a_loop_a_stated_float_seeds_boxes_no_round() {
         "the premise: warp escapes, entered through its closure wrapper"
     );
     for needle in ["i32.const 7919", "i32.const 6007"] {
-        for kernel in loops_containing(&wat, needle) {
+        for hot_loop in loops_containing(&wat, needle) {
             assert!(
-                !boxes_a_round(kernel),
-                "no round boxes the float a stated reference seeded: {kernel}"
+                !boxes_a_round(hot_loop),
+                "no round boxes the float a stated reference seeded: {hot_loop}"
             );
         }
     }
 }
 
-/// Whether some float box in `kernel` is on the way round: its straight run of instructions ends at the loop's back edge rather than leaving it.
-fn boxes_a_round(kernel: &str) -> bool {
-    let lines = kernel.lines().map(str::trim).collect::<Vec<_>>();
+/// Whether some float box in `hot_loop` is on the way round: its straight run of instructions ends at the loop's back edge rather than leaving it.
+fn boxes_a_round(hot_loop: &str) -> bool {
+    let lines = hot_loop.lines().map(str::trim).collect::<Vec<_>>();
     lines.iter().enumerate().any(|(index, line)| {
         *line == "struct.new $flt"
             && lines[index + 1..]
@@ -471,11 +471,11 @@ fn is_nat(atom: &curios_cps::Atom, value: u32) -> bool {
     matches!(atom, curios_cps::Atom::Literal(curios_cps::Literal::Nat(literal)) if u32::try_from(literal).ok() == Some(value))
 }
 
-/// The second operand of `taint == 4 && spin(taint, 1) == 20608` is a call of a function that terminates and does nothing else, so it runs only on the arm the comparison leaves where it holds: `spin`'s kernel, found by the `65537` it reduces by, stands inside that arm and nowhere outside it.
+/// The second operand of `taint == 4 && spin(taint, 1) == 20608` is a call of a function that terminates and does nothing else, so it runs only on the arm the comparison leaves where it holds: `spin`'s loop, found by the `65537` it reduces by, stands inside that arm and nowhere outside it.
 #[test]
 fn a_conjunctions_second_call_runs_only_on_the_arm_its_first_operand_holds_on() {
     let module = cps_optm_module(CONJUNCTION_CALL);
-    let kernels = module
+    let spin_steps = module
         .live_nodes()
         .filter(|(_, node)| {
             matches!(node, curios_cps::Node::LetIntrinsic { op: curios_cps::Intrinsic::NatRem, args, .. } if args.iter().any(|arg| is_nat(arg, 65537)))
@@ -483,8 +483,8 @@ fn a_conjunctions_second_call_runs_only_on_the_arm_its_first_operand_holds_on() 
         .map(|(id, _)| id)
         .collect::<Vec<_>>();
     assert!(
-        !kernels.is_empty(),
-        "the premise: `spin`'s kernel survives:\n{module}"
+        !spin_steps.is_empty(),
+        "the premise: `spin`'s loop survives:\n{module}"
     );
     let arm = module
         .live_nodes()
@@ -504,8 +504,8 @@ fn a_conjunctions_second_call_runs_only_on_the_arm_its_first_operand_holds_on() 
         .unwrap_or_else(|| panic!("a branch on `taint == 4`:\n{module}"));
     let inside = region(&module, arm);
     assert!(
-        kernels.iter().all(|kernel| inside.contains(kernel)),
-        "the kernel runs only where the comparison holds:\n{module}",
+        spin_steps.iter().all(|step| inside.contains(step)),
+        "the loop runs only where the comparison holds:\n{module}",
     );
 }
 

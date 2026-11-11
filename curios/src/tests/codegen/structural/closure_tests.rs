@@ -63,14 +63,14 @@ fn a_capture_free_closure_in_a_loop_interns_as_a_const() {
     let wat = wat(LOOPED_PICK);
 
     // `spin` owns the 40009 modulus and is contified into the entry, so the claim is made of the loop itself; the two lambdas own 30011 and are lifted to their own functions.
-    for kernel in loops_containing(&wat, "40009") {
+    for hot_loop in loops_containing(&wat, "40009") {
         assert!(
-            !kernel.contains("struct.new $envr/"),
-            "the loop constructs no environment per iteration: {kernel}",
+            !hot_loop.contains("struct.new $envr/"),
+            "the loop constructs no environment per iteration: {hot_loop}",
         );
         assert!(
-            kernel.contains("global.get $const/"),
-            "the arms reference the interned consts instead: {kernel}",
+            hot_loop.contains("global.get $const/"),
+            "the arms reference the interned consts instead: {hot_loop}",
         );
     }
 
@@ -186,17 +186,17 @@ fn a_convoy_in_a_hot_loop_allocates_no_closure() {
         "#;
 
     let wat = wat(CONVOY);
-    for kernel in loops_containing(&wat, "65537") {
+    for hot_loop in loops_containing(&wat, "65537") {
         assert!(
-            !kernel.contains("struct.new $envr/"),
+            !hot_loop.contains("struct.new $envr/"),
             "no arm's environment is allocated in the loop"
         );
         assert!(
-            !kernel.contains("struct.new $clsr/"),
+            !hot_loop.contains("struct.new $clsr/"),
             "no closure is allocated in the loop"
         );
         assert!(
-            !kernel.contains("call_indirect"),
+            !hot_loop.contains("call_indirect"),
             "no arm is called indirectly in the loop"
         );
     }
@@ -218,13 +218,13 @@ fn a_closure_of_one_arity_reaches_its_call_with_nothing_to_cast() {
         "#;
 
     let wat = wat(REPEAT);
-    for kernel in loops_containing(&wat, "65537") {
+    for hot_loop in loops_containing(&wat, "65537") {
         assert!(
-            kernel.contains("call_indirect $clsr/1"),
+            hot_loop.contains("call_indirect $clsr/1"),
             "the loop calls the closure it was handed"
         );
         assert!(
-            !kernel.contains("ref.cast (ref $envr/"),
+            !hot_loop.contains("ref.cast (ref $envr/"),
             "and casts nothing to reach its code"
         );
     }
