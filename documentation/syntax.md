@@ -105,7 +105,7 @@ A numeral is unconstrained where the term it is written in has read all of its p
 
 `-42` is one literal. `- 42` is parsed as an operator occurrence and is not a signed literal. The space is load-bearing.
 
-A floating-point literal has a decimal point followed by at least one decimal digit. It may have a sign and an `e` or `E` exponent.
+A floating-point literal has a decimal point with at least one decimal digit on each side. It may have a sign and an `e` or `E` exponent.
 
 ```crs
 5.0
@@ -113,7 +113,7 @@ A floating-point literal has a decimal point followed by at least one decimal di
 1.0e9
 ```
 
-Floating-point literals have type `Flt`. `5.` is not one, and is refused rather than read as the numeral `5` with a stray dot after it.
+Floating-point literals have type `Flt`. Neither `5.` nor `.5` is one: each is refused, with the spelling that is, rather than read as a numeral beside a stray dot.
 
 The values no decimal spells have literals of their own, each with a required sign: `+inf.0` and `-inf.0` are the infinities, `+nan.0` is the default quiet NaN, and `-nan.0` is the same NaN with its sign set. Without its sign, `inf.0` is field `0` of a binder named `inf`. A decimal too large for `Flt` is refused rather than rounded to an infinity. Every other NaN has no literal, and is built from its bytes with `Flt/of_le_bytes`, which is how a report spells one ([A literal is realized by its expected type](design/surface/a-literal-is-realized-by-its-expected-type.md)).
 

@@ -36,6 +36,30 @@ fn a_numeral_with_a_dangling_dot_is_refused_by_the_rule() {
     assert!("5.0".parse::<Term>().is_ok());
 }
 
+/// `.5` is not a float literal either, signed or not, and the refusal names the spelling that is, its caret under the whole literal.
+#[test]
+fn a_decimal_with_nothing_before_its_dot_is_refused_by_the_rule() {
+    for written in [".5", "-.5", "+.5e3"] {
+        let report = written.parse::<Term>().unwrap_err().format();
+        assert!(
+            report
+                .contains("a floating-point literal has a digit before its decimal point — `0.5`"),
+            "reported {report}"
+        );
+        assert!(
+            report.ends_with(&format!(
+                "1 | {written}\n      | {}",
+                "^".repeat(written.len())
+            )),
+            "reported {report}"
+        );
+    }
+    assert!("0.5".parse::<Term>().is_ok());
+    assert!("-0.5".parse::<Term>().is_ok());
+    // A name the exponent's letters spell is no literal's start: `e.0` projects.
+    assert!("e.0".parse::<Term>().is_ok());
+}
+
 #[test]
 fn rejects_a_float_literal_that_overflows_to_infinity() {
     // The model rounds an overflowing magnitude to the infinity of its sign, which is refused rather than taken — an infinity has literals of its own — and refused outright rather than backtracked into a different parse of the same digits.

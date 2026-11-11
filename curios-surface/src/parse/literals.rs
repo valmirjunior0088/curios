@@ -36,6 +36,10 @@ pub fn parse_caller_sort<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, T
 /// What a sign with no magnitude behind it is told.
 const SIGN_LEADS_A_LITERAL: &str = "expected a numeral, `inf.0` or `nan.0` after the sign";
 
+/// What a decimal with nothing before its dot is told.
+const NO_WHOLE_PART: &str =
+    "a floating-point literal has a digit before its decimal point — `0.5` — and `.5` is not one";
+
 // A numeric literal: an optional sign glued to its magnitude. The sign must touch the magnitude; `- 42` (spaced) is the subtraction operator, not a negative literal.
 //
 // The sign is read once, here, so what stands behind one is this production's to say. Read by each magnitude for itself, a sign that touched none failed three alternatives at one offset, and the report was the first one's word: `Expected 'inf.0'`.
@@ -198,25 +202,22 @@ fn not_ahead_word<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     .parse(state)
 }
 
-/// A finite `Flt` literal past its sign: a decimal with a dot and at least one digit after it, optionally scaled by an exponent. `start` is where the literal began, its sign included.
+/// A finite `Flt` literal past its sign: a decimal with a digit on each side of its dot, optionally scaled by an exponent. `start` is where the literal began, its sign included.
 fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> impl Parser<'a, Floating> {
     move |state: ParserState<'a>| {
         take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
             .flat_map::<Floating, _>(move |digits| {
-                let has_dot = digits.contains('.');
-
-                let has_decimal = digits
-                    .split_once('.')
-                    .map(|(_, suffix)| {
-                        suffix
-                            .chars()
-                            .next()
-                            .is_some_and(|char| char.is_ascii_digit())
-                    })
-                    .unwrap_or(false);
-
-                if !has_dot || !has_decimal {
+                let Some((whole, fraction)) = digits.split_once('.') else {
                     return fail("Expected float literal with dot and decimal").boxed();
+                };
+
+                if !fraction.starts_with(|char: char| char.is_ascii_digit()) {
+                    return fail("Expected float literal with dot and decimal").boxed();
+                }
+
+                // Committed where the literal opens with its dot, since nothing else the grammar spells opens with a dot and a digit: uncommitted, the report would be the enclosing form's word on the dot. A name the character class admits, the `e` of `e.0`, is a projection's head and falls through.
+                if whole.is_empty() {
+                    return commit(fail_from(&start, NO_WHOLE_PART)).boxed();
                 }
 
                 // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f64>` is correctly rounded and gives the same bits on every input, so the two agree; what the model adds is that the answer does not depend on the machine the compiler runs on.
