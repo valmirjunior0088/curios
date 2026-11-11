@@ -1519,12 +1519,6 @@ impl fmt::Display for Displayed<'_> {
                 }
                 match need {
                     None => write!(f, "\n  {needed}"),
-                    Some(Need::Joining(joining)) => write!(
-                        f,
-                        "\n  {needed}\n  {} joins two texts, and {} builds one from a format",
-                        joining.concat.spelled(spelling),
-                        joining.render.spelled(spelling)
-                    ),
                     Some(Need::Closing(type_)) => write!(
                         f,
                         "\n  a program closes with a term whose type has one, and this one's type is {}",

@@ -86,8 +86,6 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     report: ReportSyntax {
         try_type: name(&["std", "Try", "Try"]),
         try_run: name(&["std", "Try", "run"]),
-        str_concat: name(&["std", "Str", "concat"]),
-        fmt_render: name(&["std", "Fmt", "render"]),
     },
     derivations: DerivationSyntax {
         spell: SpellDerivation {

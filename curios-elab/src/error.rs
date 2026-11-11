@@ -247,19 +247,6 @@ impl Runner {
     }
 }
 
-/// The functions a report names where `+` meets text, each a global the reader's own imports spell: the one that joins two, and the one that builds a text from a format.
-#[derive(Debug)]
-pub struct Joining {
-    concat: Term,
-    render: Term,
-}
-
-impl Joining {
-    pub fn new(concat: Term, render: Term) -> Self {
-        Self { concat, render }
-    }
-}
-
 /// What a missing witness was needed for, where its goal's concept is one the compiler resolves for a form of its own: the report then says what that form wanted, in place of the premise of a call the author never wrote.
 #[derive(Debug)]
 pub enum Need {
@@ -267,8 +254,6 @@ pub enum Need {
     Embedding(EmbeddingDiagnosis),
     /// To execute what closes a program: the goal is the registry's `Program`, at this type.
     Closing(Box<Term>),
-    /// To add two texts: the goal is the registry's `Add` at `/std/Str`, which is no operator's carrier.
-    Joining(Box<Joining>),
 }
 
 /// The shape-specific half of a missing-witness report, computed when the unresolved goal keys on a *labeled* tuple shape and the same key with every label dropped does have a witness. Labels are part of a tuple type's identity, which is the surprise an anonymous-shape key has; a reader who meets it deserves the rule rather than a bare miss.
@@ -475,7 +460,7 @@ macro_rules! shown_terms {
                         $visit(target);
                     }
                     Some(Need::Closing(type_)) => $visit(type_),
-                    Some(Need::Joining(_)) | None => {}
+                    None => {}
                 }
             }
             Self::Goal {

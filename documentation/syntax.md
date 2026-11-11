@@ -473,6 +473,8 @@ An operator's result type is whatever its concept's method declares: `+`, `-`, `
 
 Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
 
+`+` also joins two texts, as `Str/concat` does: `"Hello, " + name`. Both operands are texts; a text built from values of other types is written with `Fmt/render`.
+
 ## Sequencing and effects
 
 ### Postfix `!`
