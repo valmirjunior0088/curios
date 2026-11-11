@@ -8,12 +8,12 @@ repository = "https://github.com/valmirjunior0088/curios"
 
 [grammars.curios]
 repository = "https://github.com/valmirjunior0088/curios"
-rev = "3c0aa213046a8ef8b42eed3de5548326a20c485b"
+rev = "7dce81dd7ef32235bb4b1a0315fdceeb0744dd3d"
 path = "editors/grammar/base"
 
 [grammars.curios_core]
 repository = "https://github.com/valmirjunior0088/curios"
-rev = "3c0aa213046a8ef8b42eed3de5548326a20c485b"
+rev = "7dce81dd7ef32235bb4b1a0315fdceeb0744dd3d"
 path = "editors/grammar/core"
 
 [language_servers.curios]
