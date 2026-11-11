@@ -787,9 +787,9 @@ impl HostOps for OsHost {
             Mode::ReadWrite => options.read(true).write(true),
         };
 
-        // Opened without blocking, so the open waits on no peer: a FIFO's other end, a device's carrier. What the path turns out to name decides how it is filed.
+        // Opened without blocking, so the open waits on no peer: a FIFO's other end, a device's carrier. Never as the controlling terminal, which a terminal a process leading its session opens would otherwise become, its hangup then ending the process. What the path turns out to name decides how it is filed.
         let file = options
-            .custom_flags(OFlags::NONBLOCK.bits().cast_signed())
+            .custom_flags((OFlags::NONBLOCK | OFlags::NOCTTY).bits().cast_signed())
             .open(path)
             .map_err(failure_from_error)?;
         let kind = file.metadata().map_err(failure_from_error)?.file_type();

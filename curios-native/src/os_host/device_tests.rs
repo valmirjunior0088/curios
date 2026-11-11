@@ -183,6 +183,40 @@ fn a_dropped_host_gives_back_every_terminal_still_taken() {
     assert!(cooked(held.as_fd()));
 }
 
+/// The pseudo-terminal the child half of [`a_terminal_a_session_leader_opens_is_not_its_controlling_terminal`] opens, named by the variable its parent sets.
+const LEADING_TERMINAL: &str = "CURIOS_TEST_LEADING_TERMINAL";
+
+/// A terminal a program opens never becomes its controlling terminal, though the program leads its session and has none, so that terminal's hangup never ends the program. Only a process leading its session takes one by opening it, so the child is this test's own binary run again, starting a session of its own first.
+#[test]
+fn a_terminal_a_session_leader_opens_is_not_its_controlling_terminal() {
+    if let Some(name) = env::var_os(LEADING_TERMINAL) {
+        rustix::process::setsid().expect("a session of its own");
+        let host = OsHost::with_args(vec![]);
+        let far = host.file_open(name.into_vec(), Mode::ReadWrite).unwrap();
+        let session = host
+            .with_fd(&far, |fd| rustix::termios::tcgetsid(fd))
+            .expect("a filed descriptor");
+        assert_eq!(session, Err(Errno::NOTTY));
+
+        return;
+    }
+
+    let (_near, name) = pseudo_terminal();
+    let mut child = std::process::Command::new(env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "os_host::device_tests::a_terminal_a_session_leader_opens_is_not_its_controlling_terminal",
+        ])
+        .env(LEADING_TERMINAL, OsStr::from_bytes(&name))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("the test runs again as a child");
+
+    assert!(ended_within(&mut child, Duration::from_secs(10)).success());
+}
+
 /// A path is the bytes the host holds, never decoded on the way: the name `dir_list` hands back opens as the file it names, exactly as `file_stat` finds it. The file is made with the standard library on the raw bytes, so the row under test is the only one asked to read them back. The name is the hardest one the filesystem takes — bytes that are not UTF-8 at all where they are allowed, and a non-ASCII name where they are not, since APFS refuses an undecodable one with `EILSEQ`.
 #[test]
 fn open_takes_a_listed_name_back_as_the_bytes_it_was_given() {
