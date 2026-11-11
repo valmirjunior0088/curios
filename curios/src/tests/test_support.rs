@@ -269,6 +269,26 @@ pub fn emits(
     })
 }
 
+/// Every block of the Markdown `text` fenced as `language`, beside the line its fence opens on.
+pub fn fenced(text: &str, language: &str) -> Vec<(usize, String)> {
+    let mut found = Vec::new();
+    let mut open: Option<(usize, String)> = None;
+
+    for (index, line) in text.lines().enumerate() {
+        match (&mut open, line.strip_prefix("```")) {
+            (None, Some(opened)) if opened == language => open = Some((index + 1, String::new())),
+            (Some(_), Some(_)) => found.extend(open.take()),
+            (Some((_, body)), None) => {
+                body.push_str(line);
+                body.push('\n');
+            }
+            (None, _) => {}
+        }
+    }
+
+    found
+}
+
 /// A [`MockHost`] with one lie in it: one call to the lying row answers the scripted reply, and every other call the mock's.
 pub struct Lying {
     inner: MockHost,

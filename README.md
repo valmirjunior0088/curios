@@ -35,8 +35,11 @@ That length is not a comment, and nobody has to remember to check it. Try tellin
 ```crs
 use /std/{Nat, Vec};
 
-let empty: Vec(Nat, 0) = Vec/nil();
-let single: Vec(Nat, 1) = empty;
+let empty: Vec(Nat, 0) =
+    Vec/nil();
+
+let single: Vec(Nat, 1) =
+    empty;
 ```
 
 Then ask what it makes of that, with `curios wonder vector.crs`:
@@ -47,9 +50,9 @@ type mismatch
   inferred: Vec(Nat, 0)
   expected: Vec(Nat, 1)
 
-   --> vector.crs:4:27
-    4 | let single: Vec(Nat, 1) = empty;
-      |                           ^^^^^
+   --> vector.crs:7:5
+    7 |     empty;
+      |     ^^^^^
 ```
 
 `Vec(Nat, 0)` and `Vec(Nat, 1)` are simply different types, so the off-by-one never reaches the generated program — there is nothing to test for, because there is nothing to run. And the `counted` field that made that work does its thinking at compile time and then goes home: a proof weighs nothing, so a `Vec` in the WebAssembly is exactly the list.

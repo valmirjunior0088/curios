@@ -1,37 +1,18 @@
 //! The language reference's examples check clean: every `crs` block of `documentation/syntax.md` is a whole program or module, asked about as `curios wonder -` asks about standard input, and reports nothing — no error, goal or lint. A form shown on its own, outside a program, is a `text` block, which nothing compiles.
 
 use {
+    super::test_support::*,
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_wonder::{Origin, Subject, diagnostics},
     std::{fs, path::Path},
 };
 
-/// Every `crs` block of `text`, beside the line its fence opens on.
-fn examples(text: &str) -> Vec<(usize, String)> {
-    let mut found = Vec::new();
-    let mut open: Option<(usize, String)> = None;
-
-    for (index, line) in text.lines().enumerate() {
-        match (&mut open, line.starts_with("```")) {
-            (None, true) if line == "```crs" => open = Some((index + 1, String::new())),
-            (Some(_), true) => found.extend(open.take()),
-            (Some((_, body)), false) => {
-                body.push_str(line);
-                body.push('\n');
-            }
-            (None, _) => {}
-        }
-    }
-
-    found
-}
-
 #[test]
 fn every_crs_example_reports_nothing() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../documentation/syntax.md");
     let reference = fs::read_to_string(&path).expect("the reference is readable");
-    let examples = examples(&reference);
+    let examples = fenced(&reference, "crs");
     assert!(!examples.is_empty(), "the reference holds examples");
 
     let mut wrong = Vec::new();
