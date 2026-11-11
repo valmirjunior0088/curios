@@ -766,7 +766,7 @@ end
 
 Induction arms and literal-dispatch arms cannot be mixed in one match.
 
-A dispatch literal is a numeric literal or a character literal — the latter matching its scalar value, so `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, with the conversion visible at the head. `Nat` is unbounded; a dispatch key is not. A dispatch literal is written whole, but a key is compiled into 32 bits, and a key past them is refused at its arm rather than changing what the program means.
+A dispatch literal is a numeric literal or a character literal — the latter matching its scalar value, so `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, with the conversion visible at the head. A dispatch literal is any natural, written whole.
 
 ### List fold and case split
 
