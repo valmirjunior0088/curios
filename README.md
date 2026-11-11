@@ -147,7 +147,7 @@ The resulting CLI is `target/release/curios`. The build has two stages — a sli
 - [Design decisions](documentation/design) — one file per decision, in a directory per subject, when you want to know _why_ Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
 - [Soundness board](xboard) — a ticket for every proof of `False` found in the checkers, filed by part of the judgment and run by `cargo xboard report`; [the claim it stands for](documentation/design/soundness/the-soundness-board.md), with the argument for each rule in a directory beside it
 - [Development roadmap](documentation/roadmap/) — pending work, maintained by its specifications; [how it is filed](documentation/design/pending-work-is-owned-by-its-specification.md)
-- [Benchmark methodology and results](xbench/README.md)
+- [Benchmark bench](xbench/README.md) — Curios and Rust timed on the same workloads, for orientation rather than precision, each reading filed with what it was taken under
 
 ## Contributing
 
