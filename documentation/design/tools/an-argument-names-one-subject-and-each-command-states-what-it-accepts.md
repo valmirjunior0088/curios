@@ -19,4 +19,5 @@
 - **Every flag global, refused at run time where unread**, which brings back tracking which flags were read; **git's `-C DIR`**, a second spelling of `--manifest`.
 - **Writing a loose program's executable to `./<stem>` by default**: nothing is filed where the command was not pointed, and standard input has no stem.
 - **Dependencies or a cache for a loose file**, an in-file manifest as uv and cargo script have: a loose file has `/std` and nowhere to file what it built.
+- **Reading standard input where a bare command finds a pipe attached**, which decides between two programs by whether a terminal is present, so one command line means one thing in a shell and another in a pipeline, and `curios run < input.txt` compiles the input it was meant to be fed; `-` costs one character.
 - **Two optional positionals for `run`**, which lets `--` fill the subject and lets known compiler options after a subject stay compiler options; **a second flag scanner**, which would duplicate clap's rules for option values, attached values, help and feature-dependent flags.

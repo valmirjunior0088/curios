@@ -24,7 +24,7 @@ Above the package, only the umbrella is looked for, and only one that enumerates
 
 ## What a package is made of
 
-Two files are found by *presence* rather than declared, because they are the two things a package is rather than artifacts it opts into:
+Two files are found by presence rather than declared, since they are what a package is ([`curios-package`'s first law](../curios-package/README.md#the-four-laws)):
 
 | File | Is |
 | --- | --- |
@@ -38,9 +38,9 @@ name = "hello"
 compiler = "0.16.9"
 ```
 
-Neither stem enters a qualified name — `lib` and `exe` are spellings nothing can refer to, exactly so a package's own name never means two things at once. Each is its unit's root, so each loads its modules from the manifest's directory, as every root loads from the directory it sits in ([Modules](syntax.md#modules)): `pub mod parse;` in `lib.crs` reads `parse.crs`, and `mod util;` in `exe.crs` reads `util.crs`.
+Neither stem is part of a name ([Modules](syntax.md#modules)), so a package's own name means one thing: where its library is mounted. Each is its unit's root, so each loads its modules from the manifest's directory, as every root loads from the directory it sits in ([Modules](syntax.md#modules)): `pub mod parse;` in `lib.crs` reads `parse.crs`, and `mod util;` in `exe.crs` reads `util.crs`.
 
-One name is reserved: a package named `std` is the standard library. Compiled first, it takes the archived `/std`'s place — compiled over it, with everything the edit did not reach reused — and everything after it is compiled against it; anywhere else in a compilation it collides with the archived root as any other claim on `/std` does. It is how the standard library is worked on, not a way to swap one under a dependency, which means what it means against the `/std` it was compiled after.
+One name is reserved: a package named `std` is the standard library. Compiled first, it takes the archived `/std`'s place — compiled over it, with everything the edit did not reach reused — and everything after it is compiled against it; anywhere else in a compilation it collides with the archived root as any other claim on `/std` does. It is how the standard library is worked on, not a way to swap one under a dependency.
 
 Everything else is declared, in the rows [the manifest](#the-manifest) states. A declared row always wins over the found file, so `[[executables]] name = "hello"` with a `path` overrides the `exe.crs` convention for the package's own program; and with more than one executable and no `default`, a bare `curios run` refuses rather than guessing.
 
@@ -67,7 +67,7 @@ The dispatch is lexical and never probes the disk: an executable's name is a sin
 
 `run` and `compile` are the only commands that need a program's **own** file: a module of one is refused, naming the executable to run instead, and a library is refused as the non-program it is. Everywhere else a module reaches its unit as readily as the entry does, which is what lets a question or a lint be asked about the file in front of you.
 
-A loose file brings no project with it — no dependencies, not even the library of the package it sits in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one. For the same reason nothing answers a `foreign` a loose program declares for itself: a module is named by a `[[foreign]]` row, and a loose program has no manifest to write one in, which `run`, `test` and `compile` say where the program reaches such a declaration. A file a package's directory holds and no unit declares is where that surprises, so every command that takes one on its own says so before anything else, in a note naming what would declare it: the `mod` line for a file written as a module, and the `[[executables]]` row for one written as a program.
+A loose file brings no project with it — no dependencies, not even the library of the package it sits in ([An argument names one subject](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md)). When a scratch program does want the library, one `[[executables]]` line gives it one. For the same reason nothing answers a `foreign` a loose program declares for itself: a module is named by a `[[foreign]]` row, and a loose program has no manifest to write one in, which `run`, `test` and `compile` say where the program reaches such a declaration. A file a package's directory holds and no unit declares is where that surprises, so every command that takes one on its own says so before anything else, in a note naming what would declare it: the `mod` line for a file written as a module, and the `[[executables]]` row for one written as a program.
 
 ## The surface
 
@@ -114,7 +114,11 @@ A running program's own exit code passes through untouched. A program that close
 
 ### Serving a page
 
-`--target browser` builds the program's [page](#the-page) as `compile --target browser` does, reads every file of it once, and serves it from memory on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until the command is stopped. It prints where a browser opens it — `↳ Serving   http://127.0.0.1:8000/?arg=--help` — and opens no browser. The page stands at the root: `/` and `/index.html` are its document, every other file stands at its page path, and the program's arguments are the address's query, each an `arg=` percent-encoded, so the printed address runs it with the words after the subject. Nothing reloads: a changed program is served by running the command again, and every reply says `Cache-Control: no-store`, so the browser asks for the new page rather than keeping the old. Only `GET` is answered, and a request naming a host other than `127.0.0.1` or `localhost` at the port is refused, so a page another site loads cannot reach this one through a name that resolves to the machine. A port another process holds is refused, naming the flag that picks another, and `--port` beside the native target is refused.
+`--target browser` builds the program's [page](#the-page) as `compile --target browser` does, reads every file of it once, and serves it from memory on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until the command is stopped. It prints where a browser opens it — `↳ Serving   http://127.0.0.1:8000/?arg=--help` — and opens no browser.
+
+The page stands at the root: `/` and `/index.html` are its document, every other file stands at its page path, and the program's arguments are the address's query, each an `arg=` percent-encoded, so the printed address runs it with the words after the subject. Nothing reloads: a changed program is served by running the command again, and every reply says `Cache-Control: no-store`, so the browser asks for the new page rather than keeping the old.
+
+Only `GET` is answered, and a request naming a host other than `127.0.0.1` or `localhost` at the port is refused, so a page another site loads cannot reach this one through a name that resolves to the machine. A port another process holds is refused, naming the flag that picks another, and `--port` beside the native target is refused.
 
 ## `compile`
 
@@ -125,7 +129,7 @@ curios compile scratch.crs -o s  # a loose program, which has nowhere else to go
 curios compile --target browser  # a page, under the store
 ```
 
-Dispatched through the same code as `run`, so the two cannot drift apart. `--target` says what the program is built for: `native`, the default, writes an executable, and `browser` a directory holding a page. A declared executable's build is written under the store beside the governing manifest, under the target, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
+`--target` says what the program is built for: `native`, the default, writes an executable, and `browser` a directory holding a page. A declared executable's build is written under the store beside the governing manifest, under the target, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
 
 **The result is self-contained, including its `foreign` implementations.** Every [`[[foreign]]`](#the-manifest) module that answers a declaration the program reaches is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the store or the package at run time, and the executable is the only file that has to travel. It is linked before it is written, as `run` links before it runs: a declaration the program reaches that no module and no operation of the host answers, a declaration two rows claim and an export of another type than its declaration crosses as are each refused, so no executable is written that would refuse to start.
 
@@ -142,7 +146,11 @@ Dispatched through the same code as `run`, so the two cannot drift apart. `--tar
 
 The page's root is the program's package's root. A gateway the package carries stands at its `path` from `curios.toml`, a fetched one at `<row>.js`, a `[foreign.browser.static]` entry's files at its page path, and everything a dependency's rows put in the page under the dependency's name. Only a row the program reaches puts anything in the page.
 
-**A gateway names its package's files relative to its own address**, since its package's files keep their places beside each other in every page that holds them, and the page's root is its package's root only where its package is the program. An `import` the gateway writes resolves that way already; a URL it builds itself — for `fetch`, an image's `src`, a stylesheet — resolves against the document unless it is resolved against `import.meta.url`: from `web/dom.js`, `new URL("../art/pixel.png", import.meta.url)` reaches the entry `art`'s `pixel.png` in the package's own page and in every page that depends on it, where a bare `art/pixel.png` reaches it only in the first. The path is the page's: a `static` entry's files stand at its key, whatever directory of the package the entry reads them from, and `run --target browser` serves the same layout the written directory holds. A page path two files claim is refused naming both, and nothing written is root-absolute, so the page works under any path.
+**A gateway names its package's files relative to its own address**, since its package's files keep their places beside each other in every page that holds them, and the page's root is its package's root only where its package is the program.
+
+An `import` the gateway writes resolves that way already; a URL it builds itself — for `fetch`, an image's `src`, a stylesheet — resolves against the document unless it is resolved against `import.meta.url`: from `web/dom.js`, `new URL("../art/pixel.png", import.meta.url)` reaches the entry `art`'s `pixel.png` in the package's own page and in every page that depends on it, where a bare `art/pixel.png` reaches it only in the first.
+
+The path is the page's: a `static` entry's files stand at its key, whatever directory of the package the entry reads them from, and `run --target browser` serves the same layout the written directory holds. A page path two files claim is refused naming both, and nothing written is root-absolute, so the page works under any path.
 
 The program and every JavaScript file the page loads are held to the build: the loader fetches `index.wasm` against its integrity, `index.html` states the loader's, and the import map states every other `.js` and `.mjs` file's, each the `sha256-` form of its SHA-256, so one changed after the build fails to load. A browser that predates import-map integrity loads the gateways unchecked.
 
@@ -179,7 +187,11 @@ curios document --std site   # the standard library
 
 `--std <DIR>` documents the standard library the compiler was built with instead, writing its pages under `DIR`: the record is read off an image the compiler was built with, so nothing is compiled and no sources are read. It takes no subject, and since the standard library has no store to file pages under, the flag itself names where they go and `--output` does not apply.
 
-The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors and is marked opaque, a concept whose representation is private is marked sealed, a test never appears, and a `pub use` is a link to the declaration it re-exports — unless that declaration's own module is private and so has no page, in which case the declaration is documented on the re-exporting module's page, the facade being the only way it reaches a consumer. A reference into a dependency or the standard library renders as its qualified name in plain text: the pages document one library and link nothing outside it. The landing page is the root module's page: it opens with the manifest's `description`, lists the modules, then the root's own declarations; every other module's page opens with the `---` block above the `mod` that declares it, whose first paragraph is also the module's gloss on its parent's page. In prose, a pair of backticks encloses a code span.
+The pages are the library's consumers' view: a private declaration or module is absent rather than hidden, a type whose representation is private shows no constructors and is marked opaque, a concept whose representation is private is marked sealed, a test never appears, and a `pub use` is a link to the declaration it re-exports — unless that declaration's own module is private and so has no page, in which case the declaration is documented on the re-exporting module's page, the facade being the only way it reaches a consumer.
+
+A reference into a dependency or the standard library renders as its qualified name in plain text: the pages document one library and link nothing outside it.
+
+The landing page is the root module's page: it opens with the manifest's `description`, lists the modules, then the root's own declarations; every other module's page opens with the `---` block above the `mod` that declares it, whose first paragraph is also the module's gloss on its parent's page. In prose, a pair of backticks encloses a code span.
 
 What is written is `index.html`, one page per other module at its source path with the suffix `.crs.html` — `/json/parse/lexer` is `parse/lexer.crs.html`, so a module named `index` never lands on the landing page — and, under `static/`, the stylesheet, the three brand fonts with their licenses, the mark, the search index as one script, and the script that runs the rail and the field. Files are overwritten by name and nothing else in the directory is touched. How the pages themselves are built, and why the search index is a script rather than a file to fetch, is [`curios-document`'s](../curios-document/README.md).
 
@@ -199,17 +211,31 @@ curios test --target browser     # the same tests, run by whatever opens the pri
 
 Each unit is compiled as its own test program — the same compilation `run` performs, with the final term replaced by a synthesized scheduler over that unit's selected tests — and every selected test runs in an instantiation of its own, so one test's effects, traps and exits never reach another. The unit itself is compiled with every test it declares whatever the filter, and is the one `wonder` and `lint` read; the filter narrows the program, so only the tests it selects are built past the front end, and a unit it selects none from builds no program. A unit holds its tests only here and in what `wonder` and `lint` ask of it: `run`, `compile` and a unit compiled for the units after it leave them out, so a unit's tests cost its builds nothing.
 
-The report is one line per test on stdout, path then outcome — `passed`, `failed`, `trapped`, `exited N` — with a failure's report indented beneath it followed by the test's body as written. A test that exits on its own has reported nothing, so it is `exited N` whatever `N`, `0` included. On stderr each unit is taken on as `run` takes on a subject — `Processing`, then a `↳ Compiling` step for each unit it stands on and `↳ Linking` for its test program — and its tests run module by module, the modules in the order each declares its first test: each module that declares tests brackets their lines between a `↳ Testing` step and a `↳ Tested` step carrying its tally, `N passed, N failed` always, since that pair is what the exit code turns on, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened. A module the filter selects nothing from reports both steps with its tests skipped, and tests at the root report their module as `/`. The run ends with `Finished` and the tally of every module, unless a single module reported, whose `↳ Tested` step it would repeat.
+The report is one line per test on stdout, path then outcome — `passed`, `failed`, `trapped`, `exited N` — with a failure's report indented beneath it followed by the test's body as written. A test that exits on its own has reported nothing, so it is `exited N` whatever `N`, `0` included.
 
-A test takes no parameters, so every verdict is a fact about the one description the author wrote, and unchanged sources report identically. A claim about *every* instantiation is [a `let` rather than a test](syntax.md#test-declarations), checked by the kernel wherever its unit is checked — so a broken one fails the build rather than a run, and `curios test` never sees it.
+On stderr each unit is taken on as `run` takes on a subject — `Processing`, then a `↳ Compiling` step for each unit it stands on and `↳ Linking` for its test program — and its tests run module by module, the modules in the order each declares its first test: each module that declares tests brackets their lines between a `↳ Testing` step and a `↳ Tested` step carrying its tally, `N passed, N failed` always, since that pair is what the exit code turns on, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened.
+
+A module the filter selects nothing from reports both steps with its tests skipped, and tests at the root report their module as `/`. The run ends with `Finished` and the tally of every module, unless a single module reported, whose `↳ Tested` step it would repeat.
+
+A claim about every instance is [a `let`, not a test](syntax.md#test-declarations): a broken one fails the build, and `curios test` never sees it.
 
 The test *verdicts* are never cached — every invocation runs every selected test, however much of the compiling was reused.
 
 ### Serving the tests
 
-`--target browser` builds every subject's test program as its [page](#the-page) instead, as `compile --target browser` would build it, and serves on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until every selected test has a verdict. It prints the address, `↳ Serving   http://127.0.0.1:8000/`, and opens no browser: whatever opens the address runs the tests — a person, a headless browser a script starts against the printed port, a device reaching the machine. A script runs them with no window by holding a headless browser open until the command exits — `timeout 120 google-chrome --headless=new --user-data-dir=<a fresh directory> http://127.0.0.1:<port>/` — rather than by a mode that dumps the page at its load event, which ends the run before its first outcome. Everything is built before anything is served, so a `--filter` matching nothing and a test reaching a row with no `[foreign.browser]` table are refused as [`compile`](#compile) refuses them, before the address is printed.
+`--target browser` builds every subject's test program as its [page](#the-page) instead, as `compile --target browser` would build it, and serves on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until every selected test has a verdict. It prints the address, `↳ Serving   http://127.0.0.1:8000/`, and opens no browser: whatever opens the address runs the tests — a person, a headless browser a script starts against the printed port, a device reaching the machine.
 
-The root is the run: a runner that opens each test in an iframe of its own, one at a time in the order native runs them, each a fresh realm with fresh instances of every gateway module — the browser's form of native's one instantiation per test. `index.html` beside it is the subject in hand's page, the test's index as the program's argument, and the page switches to the next subject with the last outcome of the one before, which is why no subject's page has a name of its own. The runner drives the run over a WebSocket it opens at `/`, which the command takes from one page at a time: it is sent the test in hand, the page posts its outcome to the runner when its program ends ([The page](#the-page)), and the runner sends it back over the socket, answered with what the command wrote and the next test to open. A socket asked for while another drives the run is refused, so a second tab runs nothing and says so; one that closes, a reload's or a closed tab's, lets the run go, and the next page to open resumes it at the test in hand, which runs again. A socket is refused too where its `Origin` names another site, so only the runner a run serves drives it, and a page whose loader never starts — a gateway that fails to import — is reported trapped. The terminal shows what native shows, each module's `↳ Testing` and `↳ Tested` steps around one line per test as its outcome arrives and `Finished` at the end, and the runner page shows the same lines; a subject the filter selects nothing from is never served, and its modules report as it is built. Once the last verdict is in, the command stops serving and exits as `test` exits; a rerun is the command run again.
+A script runs them with no window by holding a headless browser open until the command exits — `timeout 120 google-chrome --headless=new --user-data-dir=<a fresh directory> http://127.0.0.1:<port>/` — rather than by a mode that dumps the page at its load event, which ends the run before its first outcome.
+
+Everything is built before anything is served, so a `--filter` matching nothing and a test reaching a row with no `[foreign.browser]` table are refused as [`compile`](#compile) refuses them, before the address is printed.
+
+The root is the run: a runner that opens each test in an iframe of its own, one at a time in the order native runs them, each a fresh realm with fresh instances of every gateway module — the browser's form of native's one instantiation per test. `index.html` beside it is the subject in hand's page, the test's index as the program's argument, and the page switches to the next subject with the last outcome of the one before, which is why no subject's page has a name of its own.
+
+The runner drives the run over a WebSocket it opens at `/`, which the command takes from one page at a time: it is sent the test in hand, the page posts its outcome to the runner when its program ends ([The page](#the-page)), and the runner sends it back over the socket, answered with what the command wrote and the next test to open.
+
+A socket asked for while another drives the run is refused, so a second tab runs nothing and says so; one that closes, a reload's or a closed tab's, lets the run go, and the next page to open resumes it at the test in hand, which runs again. A socket is refused too where its `Origin` names another site, so only the runner a run serves drives it, and a page whose loader never starts — a gateway that fails to import — is reported trapped.
+
+The terminal shows what native shows, each module's `↳ Testing` and `↳ Tested` steps around one line per test as its outcome arrives and `Finished` at the end, and the runner page shows the same lines; a subject the filter selects nothing from is never served, and its modules report as it is built. Once the last verdict is in, the command stops serving and exits as `test` exits; a rerun is the command run again.
 
 ## `curate`
 
@@ -219,7 +245,7 @@ curios curate
 
 `curate` materializes what the manifests reference. It and [`pin`](#pin), whose `--url` and `--refresh` fetch through the same delivery, are the only commands that fetch — the compiler itself never does, and [`run --target browser`](#serving-a-page) only listens, on loopback. A delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin, and a delivery that fails its hash is refused whoever fetched it.
 
-**It reaches the network through programs already on the machine**, for the reason acceptance is by hash: any transport may deliver the bytes, so the one already installed is the right one rather than a client vendored into the compiler. A package tree comes through `git`, and a `[[foreign]]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[[foreign]]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
+It reaches the network through programs already on the machine ([why](../curios-package/README.md#a-pin-is-derived-by-one-command-and-checked-everywhere-else)). A package tree comes through `git`, and a `[[foreign]]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[[foreign]]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
 
 ## `pin`
 
@@ -235,7 +261,7 @@ curios pin dependency json --refresh
 curios pin dependency json --rev def456 --check         # write nothing, exit nonzero if it would
 ```
 
-`pin` is the only command that writes a manifest, and **the only one that derives a pin rather than checking one**. Everywhere else in this toolchain a delivery is accepted against a hash that was already written down; here there is nothing to accept against, because computing that hash is the point. Adding a row and re-pinning one are the same act — a row that did not exist is simply one with nothing to keep — which is why there is no separate `add`.
+`pin` is the only command that writes a manifest, and the only one that derives a hash from a delivery rather than checking one against it. Adding a row and re-pinning one are the same command ([why](../curios-package/README.md#a-pin-is-derived-by-one-command-and-checked-everywhere-else)).
 
 The name is a positional and always required, on both forms, so `--rev` and `--refresh` have a row to name. What the name *is* differs, and so does what can be checked about it:
 
@@ -247,19 +273,19 @@ The name is a positional and always required, on both forms, so `--rev` and `--r
 
 Exactly one delivery form is required. `--path` and `--url` say where the row points; `--rev` alone keeps the repository and moves the revision; `--refresh` keeps everything and delivers again. `--url` on a dependency requires `--rev`, since a repository is pinned to a revision and nothing else.
 
-**`member` and `catalog` rows are not written here**, and the line is where a row *points*. Those two are markers rather than resolvers — one names a member of the governing umbrella, the other a row in its catalog — so there is no location to state, nothing to deliver and no hash to derive. Each is a single word in the manifest, which is less to type than the command that would write it.
+`member` and `catalog` rows are not written here: one names a member of the governing umbrella and the other a row of its catalog, so neither has a location to deliver from, and each is one word written in the manifest.
 
 | Flag | Is |
 | --- | --- |
-| `--path <PATH>` | a module the package carries, or a package belonging to a **separate project** on disk. A module's path is plain and relative, as an executable's is, because the module is inside this package; a `source = "path"` dependency reaches out of this project entirely, so `../json` is exactly what it is for. A package of your *own* project is a `member` of the umbrella that enumerates it, which is a different row and not this command's business |
+| `--path <PATH>` | a module the package carries, spelled plainly and relative as an executable's path is; or a dependency in a separate project on disk, such as `../json`. A package of the same project is a `member` of its umbrella, which this command does not write |
 | `--url <URL>` | a module fetched once and filed in the shared store, or — with `--rev` — a repository |
 | `--rev <REV>` | a dependency's revision to pin. Alone on an existing row, it re-pins that row's own URL to a new revision, which is how a dependency is moved forward without restating where it comes from |
 | `--refresh` | deliver again whatever the row already names and pin what arrives. The only spelling permitted to overwrite a hash that was not asked to move |
 | `--check` | write nothing and exit nonzero if the manifest would change. The delivery still happens — what a row *should* say cannot be known without it — and only the write is withheld |
 
-**What was fetched is filed, not discarded.** A delivery lands in the store under the digest it turns out to have, so the `curate` that follows finds it already there rather than downloading it a second time. That is sound because the digest is computed *from* the delivery: the entry holds bytes that hash to its own name by construction, and every reader re-hashes what it takes out.
+What was fetched is filed in the store under the digest it turns out to have, so the `curate` that follows finds it there.
 
-**A module is described before its pin is believed.** What arrived is reported first — its size, whether it is a WebAssembly module, and **what it exports**, which is what a `[foreign.answers]` entry may name as the export that answers a declaration:
+A module is described before its pin is written. What arrived is reported first — its size, whether it is a WebAssembly module, and **what it exports**, which is what a `[foreign.answers]` entry may name as the export that answers a declaration:
 
 ```
 Delivered      sha2: 12484 bytes, a WebAssembly module
@@ -267,9 +293,9 @@ Delivered      sha2: 12484 bytes, a WebAssembly module
                  nothing verified this download — the hash below is derived from it, not checked against it
 ```
 
-The export list is read by compiling the module, so it also answers whether this toolchain can link it at all; one that will not compile reports why instead of listing nothing. The last line appears only for a fetch — a module the package carries arrived inside the tree its consumer pinned — and it is not a formality: a re-pin is the one moment a hash stops being a check and becomes a claim. Which mismatches are ordinary and which are worth stopping for is [`curate`](#curate)'s refusal to say.
+The export list is read by compiling the module, so a module this toolchain cannot link reports why instead. The last line appears only for a fetch, since a carried module arrived inside the tree its consumer pinned.
 
-`--target` is required on `pin foreign`, and names the table of the row that is written, `[foreign.native]` or `[foreign.browser]`, inline where its author wrote it inline; the other table is left as it was. A browser delivery is described as the JavaScript gateway it is, whose exports are held to its rows where the page loads it, so nothing is read of them here. Writing is checked rather than trusted: the manifest is edited in place, keeping its comments and ordering, and the result is read back and compared key by key against what went in, so a row written here cannot have disturbed one it was not asked about. Pinning a row to what it already says writes nothing and reports that it did.
+`--target` is required on `pin foreign`, and names the table of the row that is written, `[foreign.native]` or `[foreign.browser]`, inline where its author wrote it inline; the other table is left as it was. A browser delivery is described as the JavaScript gateway it is, whose exports are held to its rows where the page loads it, so nothing is read of them here. The manifest is edited in place, keeping its comments and order, then read back and compared key by key with what went in, so no row the command was not asked about changes. Pinning a row to what it already says writes nothing and reports that it did.
 
 A pin reads only the row it writes, so it repairs a row the manifest refuses: `--refresh` gives a row the `hash` it lacks, and `--path` or `--url` gives a row written by hand the table it names no file in. What is held to the manifest's rules is the manifest as the pin would leave it, read before it is written: one that would still be refused, for this row or another, is refused naming why, and nothing is written.
 
@@ -281,7 +307,7 @@ curios new <DIR>
 
 The directory's name is the package's, and it is checked before anything is written — so a name the manifest could not hold fails with an empty disk rather than half a package.
 
-It writes every part a package has: the manifest, `lib.crs`, and `exe.crs`, plus a `.gitignore` for `.curios/`. There is deliberately no flag asking for only one of them. A package may be a library alone or a program alone — deleting either file says so, and the manifest decides — but *starting* one is not the moment to be asked, and a flag asking would only be answerable by somebody who already knows what the two are.
+It writes the manifest, `lib.crs`, `exe.crs` and a `.gitignore` for `.curios/`, and no flag asks for fewer ([why](../curios-package/README.md#new-starts-a-package-whole)). Deleting either file makes the package a library alone or a program alone.
 
 ## `lint`
 
@@ -337,13 +363,17 @@ Formatting is verified before anything is written — the output must reparse to
 
 No subject at all is the governing package entire for the check and `--tests`, and the sole or `default` executable for `--stage` and `--cost`, which both need a program and so refuse a file written as a module. For `--at` and `--declarations` it is that executable's entry file.
 
-`--at` and `--declarations` are asked about one file: the one the subject names, an executable's entry where it names one, and a library's header where it names none of its files. They are answered by the lowering, which is where a written name is resolved, and by no checker, so a file that does not elaborate answers as one that does, and only one that does not lower stops the question as it stops a build. A path is one name: a place anywhere in `Io/Reader/line` answers `line`. A name the lowering does not resolve answers nothing: a pattern's constructor, a field's label, a projection, a method reached through a witness, the bare head of a structure literal or of a structure pattern, a name on a `use` line, and a binder. A declaration of the library the compiler was built with is placed where its source file still holds the text it was built from, and its row ends at what it is declared as where no file does, which is every such row under an installed compiler; its head and prose are read off the text the compiler holds of it, and are answered either way.
+`--at` and `--declarations` are asked about one file: the one the subject names, an executable's entry where it names one, and a library's header where it names none of its files. They are answered by the lowering, which is where a written name is resolved, and by no checker, so a file that does not elaborate answers as one that does, and only one that does not lower stops the question as it stops a build.
 
-`stage` reprints a library too, selected through one of its files, at the three rungs a unit has: `text` is the parse of the file asked through, `core` the library's lowered declarations, lowered again in the asking process with no store, and `core-elab` its elaborated declarations, compiled over the store as a build compiles them. From `anf` on a program's entry roots what is printed, and a library is refused as it is by any command that takes a program.
+A path is one name: a place anywhere in `Io/Reader/line` answers `line`. A name the lowering does not resolve answers nothing: a pattern's constructor, a field's label, a projection, a method reached through a witness, the bare head of a structure literal or of a structure pattern, a name on a `use` line, and a binder.
+
+A declaration of the library the compiler was built with is placed where its source file still holds the text it was built from, and its row ends at what it is declared as where no file does, which is every such row under an installed compiler; its head and prose are read off the text the compiler holds of it, and are answered either way.
+
+`--stage` reprints a library too, selected through one of its files, at the three rungs a unit has: `text` is the parse of the file asked through, `core` the library's lowered declarations, and `core-elab` its elaborated ones. From `anf` on a program's entry roots what is printed, and a library is refused as it is by any command that takes a program.
 
 A file a package holds that no `mod` reaches is in no unit, so it is checked on its own — as a program when a final term follows its items, and as a module of its own otherwise — behind a note saying so and naming what would declare it, the `mod` line for a module and the `[[executables]]` row for a program, printed as its message alone after `note: `; a note is no finding, and no exit code counts it. A file no manifest above it claims is loose, with nothing to note. That holds for the standard library's own modules: `/std` is a package like any other, and [the package named `std`](#what-a-package-is-made-of) stands where the archived unit stood rather than beside it, so a question about `curios-prelude/std/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library.
 
-`cost` answers *which cliff am I on*: whether an optimization fired. A declaration is `absorbed` when nothing in the compiled program bears its name — it was inlined into its callers, or pruned once something else was — which is the row saying it costs nothing of its own; `specialized <n>` when a pass cloned it, so `n` functions stand where one was written. The two counts are read off the continuation graph before and after optimization, so no pass is instrumented and the program measured is the program that ships. Ordering is by name because the report is meant to be committed and diffed: a regression is then something to read rather than something to judge.
+`--cost` says whether an optimization fired. A declaration is `absorbed` when nothing in the compiled program bears its name — inlined into its callers, or pruned once something else was — so it costs nothing of its own, and `specialized <n>` when a pass cloned it into `n` functions. The rows are read off the program that ships, and ordered by name, so a committed report diffs.
 
 The stages, in the order the compiler passes them:
 
@@ -351,7 +381,7 @@ The stages, in the order the compiler passes them:
 | --- | --- |
 | `text` | the surface syntax tree, reprinted |
 | `core` | the lowered core term, which nothing has checked yet |
-| `core-elab` | the same after elaboration and zonking — the module every later stage consumes |
+| `core-elab` | the same after elaboration, every inferred term filled in — the module every later stage reads |
 | `anf` | the erased term, in A-normal form |
 | `anf-optm` | the erased term in A-normal form, after optimization |
 | `cps` | the program in continuation-passing style |
@@ -367,9 +397,7 @@ curios profile .curios/profile.tsv
 
 Reads back a stream [`--profile`](#flags) filed and writes its summary to stdout: the spans by total time, the magnitude sites beneath them, and — for a run that never returned — the stack it was inside when it stopped.
 
-Present only in a compiler built with the `profile` feature, the same one that carries the flag. The two halves of one format ship in one binary, so neither can drift from the other, and `PATH` is spelled as it was spelled to `--profile`.
-
-**Reading is a separate pass, not the profiled run's last step.** A stream is worth reading exactly when the run did not finish — a hang, a kill, a trap — and such a run never reaches its last step. Folding there would serve every case but the one profiling exists for.
+Present only in a compiler built with the `profile` feature, which carries the flag too; `PATH` is spelled as it was to `--profile`. Reading is a pass of its own rather than the profiled run's last step, since the runs worth reading are the ones that never finish ([`curios-profile`](../curios-profile/README.md#the-library-emits-records-and-aggregation-is-one-of-its-consumers)).
 
 ## The manifest
 
@@ -440,7 +468,11 @@ hash = "f1:…"
 "logo.png" = "art/logo.png"
 ```
 
-A row states either table or both, and either may be written inline, `native = { path = "…", hash = "…" }`; a row with neither is refused where the manifest is read, saying where a module goes. A target that reaches a declaration whose row lacks its table is refused where the program is linked, naming the row and the table, so a row with only `[foreign.browser]` is its author's word that the native target links nothing for it. Both sides of a `static` entry are plain relative paths, as an executable's `path` is, and none reads from `.curios/`. No file of any package may stand at `index.html`, `index.js` or `index.wasm`, the names a page holds for itself: a `static` key, a carried gateway's `path` and a fetched gateway in a row named `index` that would stand on one are refused where the manifest is read, the rule holding for a library as for a program. `path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both, and the carried case is the one it matters most for: a fetched module is obviously unvouched-for until it is checked, while a carried one *looks* covered by the tree hash its consumer pinned — and is, when the package came from git. But the entry package is hashed against nothing and `path` and `member` dependencies are deliberately unpinned, which is exactly where a locally built module lives.
+A row states either table or both, and either may be written inline, `native = { path = "…", hash = "…" }`; a row with neither is refused where the manifest is read, saying where a module goes. A target that reaches a declaration whose row lacks its table is refused where the program is linked, naming the row and the table, so a row with only `[foreign.browser]` is its author's word that the native target links nothing for it.
+
+Both sides of a `static` entry are plain relative paths, as an executable's `path` is, and none reads from `.curios/`. No file of any package may stand at `index.html`, `index.js` or `index.wasm`, the names a page holds for itself: a `static` key, a carried gateway's `path` and a fetched gateway in a row named `index` that would stand on one are refused where the manifest is read, the rule holding for a library as for a program.
+
+`path` names a module the package carries, spelled plainly as an executable's is; `url` names one fetched once and filed in the shared store. `hash` is stated for both ([why](../curios-package/README.md#a-pin-is-derived-by-one-command-and-checked-everywhere-else)).
 
 `f1:` is plain SHA-256 over the file's bytes, so `sha256sum` computes it and a release's checksum file already states it. A delivery that fails its hash is refused naming both digests, whichever way it arrived.
 
@@ -525,7 +557,7 @@ EOF
 
 It is loose in the same sense a file no unit declares is, and answers before anything looks for a manifest — so `-` means the same thing inside a package as outside one, never the package's default executable, and no `--manifest` can govern it. `compile -` builds it where `--output` says.
 
-Standard input is asked for rather than assumed. A bare `curios run` already means the governing package's default executable, so reading a pipe when one happens to be attached would decide between the two by whether a terminal is present — making one command line mean different things in a shell and in a pipeline, and leaving `curios run < input.txt` compiling the input it was meant to be fed. The spelling costs one character and removes the question.
+Standard input is asked for with `-`, and never read because a pipe is attached ([why](design/tools/an-argument-names-one-subject-and-each-command-states-what-it-accepts.md)).
 
 One thing follows from the program being anonymous, and it is a refusal rather than a guess: **it resolves no file-backed modules.** `mod util;` looks in the directory its root sits in, and text on standard input sits in none, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
 
@@ -557,9 +589,9 @@ Everything generated lands under one `.curios/`, beside the governing manifest �
 
 One transient entry passes through beside them: [`pin`](#pin) stages a delivery at `pinning.<pid>` while the digest that will name it is still being computed, then renames it into `sources/` or `foreign/`. It is removed however the command ends, so seeing one means a `pin` was interrupted, and nothing ever reads it.
 
-`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `native/`, `browser/` and `documentation/` are products of the package that declared them, nested under its name so two members of one umbrella never collide, and always stay in the project's `.curios/`. A source's scheme is a directory of its own so a successor scheme can sit beside `c1` rather than replace it.
+`.curios/` is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the shared half — everything above whose key says nothing about which project asked. `native/`, `browser/` and `documentation/` are products of the package that declared them, nested under its name so two members of one umbrella never collide, and always stay in the project's `.curios/`. A source's hash scheme is a directory of its own.
 
-Set `CURIOS_CACHE` to share that half across projects; unset, each project keeps its own. There is deliberately no divined default, because a toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for.
+Set `CURIOS_CACHE` to share that half across projects; unset, each project keeps its own, and nothing is written anywhere else ([why](../curios-package/README.md#the-store-goes-where-a-manifest-governs-and-nowhere-it-was-not-pointed)).
 
 ## Reusing what was already built
 
