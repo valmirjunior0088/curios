@@ -73,3 +73,29 @@ fn a_local_let_group_breaks_before_each_and() {
         "let a: Type = b\nand b: Type = a;\na"
     );
 }
+
+#[test]
+fn an_arms_alternatives_share_its_line_where_they_fit() {
+    let ladder = "match c | ' ' | '\\t' => true | _ => false end";
+
+    assert_eq!(render(ladder, 80), ladder);
+}
+
+/// Alternatives too long for one line continue at the arm's column, each after its bar: short atoms pack as many to a line as fit, as a list's simple entries do, and an alternative that takes something apart stands on a line of its own.
+#[test]
+fn alternatives_too_long_for_a_line_continue_at_the_arms_column() {
+    assert_eq!(
+        render(
+            "match m | january() | february() | march() | april() | may() => 1 | _ => 0 end",
+            32
+        ),
+        "match m\n| january() | february()\n| march() | april() | may() => 1\n| _ => 0\nend"
+    );
+    assert_eq!(
+        render(
+            "match p | (some(x), _) | (none(), some(x)) => x | _ => 0 end",
+            32
+        ),
+        "match p\n| (some(x), _)\n| (none(), some(x)) => x\n| _ => 0\nend"
+    );
+}

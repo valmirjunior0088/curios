@@ -103,8 +103,7 @@ pub let of_insert(
     | none() => Eq/refl()
     | some(n) =>
         match Node/insert(n, key, Hash/hash(key), v, @Eq/refl(), @grounded(m.rooted))
-        | added(_, @_, @answers) => answers(Hash/hash(key))
-        | replaced(_, @_, @answers) => answers(Hash/hash(key))
+        | added(_, @_, @answers) | replaced(_, @_, @answers) => answers(Hash/hash(key))
         | parted(n2, c, @back, @apart, @past) =>
             parted_answers(n, n2, key, v, c, back, grounded(m.rooted), apart, past)(Hash/hash(key))
         end
@@ -133,8 +132,8 @@ pub let of_insert_other(
             Eq/refl())
     | some(n) =>
         match Node/insert(n, key, Hash/hash(key), v, @Eq/refl(), @grounded(m.rooted))
-        | added(n2, @_, @answers) => elsewhere(n, n2, key, Option/some(v), other, codes, answers)
-        | replaced(n2, @_, @answers) => elsewhere(n, n2, key, Option/some(v), other, codes, answers)
+        | added(n2, @_, @answers) | replaced(n2, @_, @answers) =>
+            elsewhere(n, n2, key, Option/some(v), other, codes, answers)
         | parted(n2, c, @back, @apart, @past) =>
             elsewhere(
                 n,

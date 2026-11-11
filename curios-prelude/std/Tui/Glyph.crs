@@ -41,8 +41,7 @@ let selects_emoji(c: Char) -> Bool =
 -- Whether `c` takes two columns where it stands in a cluster.
 let wide_in_cluster(c: Char) -> Bool =
     match EastAsianWidth/of_char(c)
-    | wide() => true
-    | fullwidth() => true
+    | wide() | fullwidth() => true
     | _ => Char/is_emoji_presentation(c) || selects_emoji(c)
     end;
 

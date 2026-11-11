@@ -14,8 +14,8 @@ use {
         intrinsic_global,
     },
     crate::{
-        Apply, Argument, BytesPattern, BytesSegment, Dialect, Field, Func, FuncParam, FuncType,
-        FuncTypeParam, Infix, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry,
+        Alternative, Apply, Argument, BytesPattern, BytesSegment, Dialect, Field, Func, FuncParam,
+        FuncType, FuncTypeParam, Infix, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry,
         ListPattern, Literal, Match, MatchPattern, MatchPatternField, MatrixArm, Name, NatLiteral,
         NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, StrLit,
         StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam,
@@ -487,49 +487,71 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
     })
 }
 
-/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each row as its pattern over the names its body binds. A `choose` bind arm reads back as the match of two arms it stands for.
+/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each arm as its alternatives, each pattern over the names its own row's body binds, beside the body the first row's opening reads back as — the one the arm was written with. A `choose` bind arm reads back as the match of two arms it stands for.
 ///
 /// The motive's binders are opened ahead of the scrutinee's and the arms' after both, the order Core's printer ([`Spellable`](crate::Spellable)) opens them in.
 fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
-    let curios_core::Matrix { head, motive, rows } = matrix;
+    let curios_core::Matrix { head, motive, arms } = matrix;
 
     let motive = match motive {
         Some(motive) => Some(sub(motive, frame)?),
         None => None,
     };
     let head = unchecked(head, frame)?;
-    let arms = rows
+    let arms = arms
         .into_iter()
-        .map(|curios_core::Row { pattern, body }| {
-            let curios_core::Subterm::Func(function) = &*body else {
-                return None;
-            };
-            let mut params = Vec::with_capacity(function.telescope.len());
-            let body = lambda_parameters(
-                function.telescope.cursor(),
-                &function.telescope.marks(),
-                frame,
-                false,
-                &mut params,
-            )?;
-            let mut names = params.into_iter().map(|param| {
-                match param.expect("every slot is filled").pattern {
-                    Pattern::Binder(name) => name,
-                    Pattern::Tuple(_) | Pattern::Struct { .. } => {
-                        unreachable!("a lambda's parameter is read back as a name")
-                    }
-                }
-            });
+        .map(|curios_core::Arm { alternatives }| {
+            let mut body = None;
+            let alternatives = alternatives
+                .into_iter()
+                .map(|row| {
+                    let (pattern, opened) = written_row(row, frame)?;
+                    body.get_or_insert(opened);
+
+                    Some(Alternative {
+                        pattern,
+                        span: None,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?;
 
             Some(MatrixArm {
-                pattern: written_pattern(&pattern, &mut names),
-                body,
-                span: None,
+                alternatives,
+                body: body?,
             })
         })
         .collect::<Option<Vec<_>>>()?;
 
     Some(Subterm::Match(Match { head, motive, arms }).into())
+}
+
+/// A row as a program writes it: its pattern over the names its body binds, and the body under them.
+fn written_row(
+    curios_core::Row { pattern, body }: curios_core::Row,
+    frame: Frame,
+) -> Option<(MatchPattern, Term)> {
+    let curios_core::Subterm::Func(function) = &*body else {
+        return None;
+    };
+    let mut params = Vec::with_capacity(function.telescope.len());
+    let body = lambda_parameters(
+        function.telescope.cursor(),
+        &function.telescope.marks(),
+        frame,
+        false,
+        &mut params,
+    )?;
+    let mut names =
+        params
+            .into_iter()
+            .map(|param| match param.expect("every slot is filled").pattern {
+                Pattern::Binder(name) => name,
+                Pattern::Tuple(_) | Pattern::Struct { .. } => {
+                    unreachable!("a lambda's parameter is read back as a name")
+                }
+            });
+
+    Some((written_pattern(&pattern, &mut names), body))
 }
 
 /// A row's pattern as a program writes it, each binder under the next of `names`: what a report names an arm by.
@@ -1216,19 +1238,13 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
         MatchResult::Ambient(_) => None,
     };
     let head = unchecked(head, frame)?;
-    let arm = |pattern: MatchPattern, body: Term| MatrixArm {
-        pattern,
-        body,
-        span: None,
-    };
-
     let arms = match cases {
         Cases::Bool {
             false_case,
             true_case,
         } => vec![
-            arm(MatchPattern::Bool(true), sub(true_case, frame)?),
-            arm(MatchPattern::Bool(false), sub(false_case, frame)?),
+            MatrixArm::of(MatchPattern::Bool(true), sub(true_case, frame)?),
+            MatrixArm::of(MatchPattern::Bool(false), sub(false_case, frame)?),
         ],
         // A dispatch by value: a numeral an arm, and the fallthrough it is required to have.
         Cases::Switch { cases, default } => {
@@ -1238,9 +1254,9 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                     true => NatPattern::Zero,
                     false => NatPattern::Lit(NatLiteral(value, Radix::Dec(0))),
                 };
-                arms.push(arm(MatchPattern::Nat(pattern), sub(body, frame)?));
+                arms.push(MatrixArm::of(MatchPattern::Nat(pattern), sub(body, frame)?));
             }
-            arms.push(arm(
+            arms.push(MatrixArm::of(
                 MatchPattern::Binder(Label::from("_")),
                 sub(default, frame)?,
             ));
@@ -1265,7 +1281,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                         )
                     })
                     .collect();
-                arms.push(arm(
+                arms.push(MatrixArm::of(
                     MatchPattern::Variant {
                         tag: tag.as_string(),
                         args,
@@ -1275,7 +1291,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
             }
             // The fallthrough a match may end in, standing for every constructor it does not name.
             if let Some(default) = default {
-                arms.push(arm(
+                arms.push(MatrixArm::of(
                     MatchPattern::Binder(Label::from("_")),
                     sub(default, frame)?,
                 ));
@@ -1300,8 +1316,8 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                 };
 
                 vec![
-                    arm(MatchPattern::Nat(NatPattern::Zero), sub(empty_case, frame)?),
-                    arm(MatchPattern::Nat(succ), sub(body, frame)?),
+                    MatrixArm::of(MatchPattern::Nat(NatPattern::Zero), sub(empty_case, frame)?),
+                    MatrixArm::of(MatchPattern::Nat(succ), sub(body, frame)?),
                 ]
             }
             Carrier::Bytes {
@@ -1323,11 +1339,11 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                 };
 
                 vec![
-                    arm(
+                    MatrixArm::of(
                         MatchPattern::Bytes(BytesPattern::End),
                         sub(empty_case, frame)?,
                     ),
-                    arm(MatchPattern::Bytes(atom), sub(body, frame)?),
+                    MatrixArm::of(MatchPattern::Bytes(atom), sub(body, frame)?),
                 ]
             }
             Carrier::List {
@@ -1350,11 +1366,11 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                 };
 
                 vec![
-                    arm(
+                    MatrixArm::of(
                         MatchPattern::List(ListPattern::Nil),
                         sub(empty_case, frame)?,
                     ),
-                    arm(MatchPattern::List(cons), sub(body, frame)?),
+                    MatrixArm::of(MatchPattern::List(cons), sub(body, frame)?),
                 ]
             }
         },

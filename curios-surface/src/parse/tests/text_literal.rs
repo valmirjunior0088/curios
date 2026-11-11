@@ -36,14 +36,20 @@ fn a_character_literal_is_a_dispatch_pattern() {
         panic!("expected a match");
     };
     assert!(
-        matches!(match_.arms[0].pattern, MatchPattern::Char('a')),
+        matches!(
+            match_.arms[0].alternatives[0].pattern,
+            MatchPattern::Char('a')
+        ),
         "{:?}",
-        match_.arms[0].pattern
+        match_.arms[0].alternatives[0].pattern
     );
     assert!(
-        matches!(match_.arms[1].pattern, MatchPattern::Char('\n')),
+        matches!(
+            match_.arms[1].alternatives[0].pattern,
+            MatchPattern::Char('\n')
+        ),
         "{:?}",
-        match_.arms[1].pattern
+        match_.arms[1].alternatives[0].pattern
     );
     assert_eq!(term.to_string(), source);
 }

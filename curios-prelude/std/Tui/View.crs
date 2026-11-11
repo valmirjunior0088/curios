@@ -63,8 +63,7 @@ let either(@A: Type, first: Option(A), second: Option(A)) -> Option(A) =
 --- Where `v` asks for the terminal's cursor, or `none`. A request stands for the view it is made over; one over another's stands above it, `over`'s top above its base; and of two views side by side or one above the other, the later's is taken.
 pub let cursor(@w: Nat, @h: Nat, v: View(w, h)) -> Option(Point(w, h)) =
     match v
-    | filled(_, _, _, _) => Option/none()
-    | line(_, _) => Option/none()
+    | filled(_, _, _, _) | line(_, _) => Option/none()
     | beside(@w1, @w2, @bh, left, right) =>
         either(
             Option/bind(cursor(right), (p) => shifted(p, w1, 0, w1 + w2, bh)),

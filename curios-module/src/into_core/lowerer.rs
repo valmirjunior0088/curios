@@ -168,10 +168,11 @@ pub struct Lowerer<'a, 'b> {
     saw_goal: Cell<bool>,
 }
 
-/// One written binder the lint may report: its spelling, its identity and its span.
+/// One written binder the lint may report: its spelling, its identities and its span.
 struct Candidate {
     name: String,
-    id: curios_core::Free,
+    /// One for each time its text is lowered: an arm's body is lowered once for each of the arm's alternatives, and the binder is read where any lowering of it is.
+    ids: Vec<curios_core::Free>,
     span: Span,
 }
 
@@ -267,7 +268,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .borrow()
             .iter()
             .enumerate()
-            .filter(|(_, candidate)| !used.contains(&candidate.id))
+            .filter(|(_, candidate)| !candidate.ids.iter().any(|id| used.contains(id)))
             .map(|(ordinal, candidate)| {
                 let binder = LintedBinder {
                     declaration: self.declaration,
@@ -310,16 +311,25 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     let id = self.context.fresh_binder(hint);
                     return (name, id);
                 };
-                // A candidate is minted with its place among the declaration's candidates, which every local opened from it inherits: how a read no written name makes is traced back to the lint it answers.
+                // A candidate is minted with its place among the declaration's candidates, which every local opened from it inherits: how a read no written name makes is traced back to the lint it answers. A binder written where one already was is that one lowered again.
                 let mut candidates = self.candidates.borrow_mut();
-                let written =
-                    u32::try_from(candidates.len()).expect("a declaration's binders fit a u32");
+                let place = match candidates
+                    .iter()
+                    .rposition(|candidate| candidate.span == span)
+                {
+                    Some(place) => place,
+                    None => {
+                        candidates.push(Candidate {
+                            name: name.clone(),
+                            ids: Vec::new(),
+                            span,
+                        });
+                        candidates.len() - 1
+                    }
+                };
+                let written = u32::try_from(place).expect("a declaration's binders fit a u32");
                 let id = self.context.fresh_written_binder(hint, written);
-                candidates.push(Candidate {
-                    name: name.clone(),
-                    id,
-                    span,
-                });
+                candidates[place].ids.push(id);
                 (name, id)
             })
             .collect()
@@ -679,10 +689,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                             acc,
                             self.term(&arm.body)?,
                         ),
-                        ChooseTest::Bind { pattern, value } => {
+                        ChooseTest::Bind {
+                            alternatives,
+                            value,
+                        } => {
                             let value = self.term(value)?;
                             MatchCompiler::new(self).bind_arm(
-                                pattern,
+                                alternatives,
                                 value,
                                 &arm.body,
                                 acc,
@@ -1341,12 +1354,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     let held = curios_core::Term::matrix(curios_core::Matrix {
                         head: curios_core::Term::var(curios_core::Var::free(binder)),
                         motive: None,
-                        rows: vec![curios_core::Row {
-                            pattern,
-                            body: curios_core::Term::func(
-                                Vec::<(curios_core::Free, curios_core::Term)>::new(),
-                                body,
-                            ),
+                        arms: vec![curios_core::Arm {
+                            alternatives: vec![curios_core::Row {
+                                pattern,
+                                body: curios_core::Term::func(
+                                    Vec::<(curios_core::Free, curios_core::Term)>::new(),
+                                    body,
+                                ),
+                            }],
                         }],
                     });
                     match span {

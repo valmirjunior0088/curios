@@ -4,12 +4,14 @@
 
 use {
     super::{ReadError, Reader, Refusal, Tree, core_read, tree, word_value},
-    crate::{CoreText, Frame, LetBinding, LetGroup, LetSignature, Pattern, label_terms, sub},
+    crate::{
+        CoreText, Frame, LetBinding, LetGroup, LetSignature, Pattern, Shown, label_terms, sub,
+    },
     curios_core::{Bound, Free, Let, Many, Rec, Scope, Subterm, Term},
 };
 
 /// One binding of a block or a group: its word, its type and its value.
-fn binding(word: String, type_: Tree, body: Tree) -> LetBinding<crate::Shown> {
+fn binding(word: String, type_: Tree, body: Tree) -> LetBinding<Shown> {
     LetBinding {
         binder: Pattern::Binder(crate::Label::from(word)),
         signature: LetSignature::Name {

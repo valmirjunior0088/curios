@@ -8,14 +8,14 @@ use {
     curios_num::Natural,
 };
 
-/// A match before its patterns are compiled: the scrutinee, the motive where one is written, and the arms in the order they are written. A `choose` bind arm is the two rows `pattern => body | _ => rest`, the rest of its ladder being what a value the pattern does not match takes. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.
+/// A match before its patterns are compiled: the scrutinee, the motive where one is written, and the arms in the order they are written. A `choose` bind arm is the two arms `pattern => body | _ => rest`, the rest of its ladder being what a value the pattern does not match takes. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Matrix {
     pub head: Term,
     /// The motive as it is written, and `None` where no `:` is.
     pub motive: Option<Term>,
-    pub rows: Vec<Row>,
+    pub arms: Vec<Arm>,
 }
 
 impl Matrix {
@@ -23,7 +23,12 @@ impl Matrix {
     pub fn subterms(&self) -> impl Iterator<Item = &Term> {
         std::iter::once(&self.head)
             .chain(&self.motive)
-            .chain(self.rows.iter().map(|row| &row.body))
+            .chain(self.rows().map(|row| &row.body))
+    }
+
+    /// Every arm's rows, arm after arm.
+    pub fn rows(&self) -> impl Iterator<Item = &Row> {
+        self.arms.iter().flat_map(|arm| &arm.alternatives)
     }
 
     /// This matrix with every child term mapped, its patterns as they stand.
@@ -31,19 +36,32 @@ impl Matrix {
         Matrix {
             head: f(&self.head),
             motive: self.motive.as_ref().map(&mut *f),
-            rows: self
-                .rows
+            arms: self
+                .arms
                 .iter()
-                .map(|row| Row {
-                    pattern: row.pattern.clone(),
-                    body: f(&row.body),
+                .map(|arm| Arm {
+                    alternatives: arm
+                        .alternatives
+                        .iter()
+                        .map(|row| Row {
+                            pattern: row.pattern.clone(),
+                            body: f(&row.body),
+                        })
+                        .collect(),
                 })
                 .collect(),
         }
     }
 }
 
-/// One arm of a [`Matrix`]: its pattern, and its body as a function over the binders the pattern writes, in the order it writes them, placed where the pattern is written.
+/// One arm of a [`Matrix`]: a row for each alternative it writes, in the order it writes them. Each row's body is the arm's body lowered under that alternative's names, so each is typed apart, under its own cases, with the metavariables its own lowering minted.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct Arm {
+    pub alternatives: Vec<Row>,
+}
+
+/// One alternative of an [`Arm`]: its pattern, and the arm's body as a function over the binders the pattern writes, in the order it writes them, placed where the pattern is written.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Row {

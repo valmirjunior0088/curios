@@ -57,6 +57,13 @@ pub fn unreachable_arm_note(dead: &DeadArm, spelling: &Rc<Spelling>) -> String {
     }
 }
 
+/// What a report on an error one alternative of an arm raised adds: which alternative the arm's body was typed under.
+pub fn alternative_note(written: &str) -> String {
+    format!(
+        "  under the alternative `{written}`, which the arm's body is typed for apart from the others"
+    )
+}
+
 /// One goal's report without its snippet: the turnstile idiom under its own rename map (see [`GoalReport::rename_map`]) — the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction. The message half of a goal's [`Report`](curios_common::Report), and what the batch's `Display` writes before each snippet.
 pub fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String {
     // A report's terms render within the width a line is written within — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
@@ -1115,6 +1122,21 @@ impl fmt::Display for Displayed<'_> {
                     "the arms `{first}` and `{second}` both match `{value}`, and neither is a case of the other: arm order decides nothing, so write an arm for `{value}` before them"
                 )
             }
+            Error::MatrixAlternativesMeet {
+                value,
+                first,
+                second,
+                contained,
+            } => match contained {
+                true => write!(
+                    f,
+                    "the alternative `{first}` is a case of `{second}` in the same arm, which matches every value it does: write `{second}` alone"
+                ),
+                false => write!(
+                    f,
+                    "the alternatives `{first}` and `{second}` of one arm both match `{value}`: an arm's alternatives match no value in common, so write one of them to leave `{value}` out"
+                ),
+            },
             Error::MatrixStructHead { head, scrutinee } => {
                 let scrutinee = scrutinee.spelled(spelling);
                 write!(
@@ -1787,6 +1809,10 @@ impl fmt::Display for Displayed<'_> {
             Error::InUnreachableArm { dead, error } => {
                 Displayed(error, Rc::clone(spelling), anchors).fmt(f)?;
                 write!(f, "\n{}", unreachable_arm_note(dead, spelling))
+            }
+            Error::InAlternative { written, error } => {
+                Displayed(error, Rc::clone(spelling), anchors).fmt(f)?;
+                write!(f, "\n{}", alternative_note(written))
             }
             Error::Batch(errors) => {
                 // Every member's own rendering, separated by a blank line as a goal batch's entries are. Nothing is added around them: each member carries its own declaration and location.

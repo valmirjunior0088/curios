@@ -66,12 +66,7 @@ let sign() -> Parse(Str, {Bool, Bool}) =
     match s | some(c) => Parse/pure((c == '-', true)) | none() => Parse/pure((false, false)) end;
 
 let is_radix_marker(c: Char) -> Bool =
-    match Char/to_nat(c)
-    | 'x' => true
-    | 'o' => true
-    | 'b' => true
-    | _ => false
-    end;
+    match Char/to_nat(c) | 'x' | 'o' | 'b' => true | _ => false end;
 
 let prefixed() -> Parse(Str, Nat) =
     let _ = Parse/str/expect('0')!;

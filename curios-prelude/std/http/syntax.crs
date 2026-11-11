@@ -155,9 +155,7 @@ pub let fields(lines: List(Bytes), folding: Bool) -> Result(Refusal, List(Field)
                 | (true, [last, ..before]) =>
                     let joined = folded(last, line)!;
                     go(more, [joined, ..before])
-                | (true, []) =>
-                    Result/failure(Refusal/malformed("a field line begins with whitespace"))
-                | (false, _) =>
+                | (true, []) | (false, _) =>
                     Result/failure(Refusal/malformed("a field line begins with whitespace"))
                 end
             end

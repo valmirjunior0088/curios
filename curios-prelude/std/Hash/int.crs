@@ -72,11 +72,9 @@ let halves(
                 | lt() =>
                     let over_k: Bool/Holds(127 < kn) = Nat/ord/lt(127, kn, Eq/refl());
                     Bytes/ord/below/of_heads(Byte/not(h), k, flipped(t), r, proved())
-                | eq() => match upper_b end
-                | gt() => match upper_b end
+                | eq() | gt() => match upper_b end
                 end
-            | eq() => match upper_a end
-            | gt() => match upper_a end
+            | eq() | gt() => match upper_a end
             end
         end
     end;

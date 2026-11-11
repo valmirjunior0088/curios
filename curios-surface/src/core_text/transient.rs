@@ -1,19 +1,20 @@
 //! The forms only elaboration builds, each in the surface spelling it was read from under the node it is.
 //!
-//! An operator is `#{node = Infix} (a + b)`, a numeral elaboration has not settled `#{node = NumLit} 3`, a `!` site the rest of its region called over the action's result, `#{node = Bang} (k)((action)!)`, an ascription `#{node = Ascribed, type_ = T} e`, the body a derived witness asks for `#{node = Derive} ?`, a name resolution has not settled `#{node = Name} /path`, a concept's method named by its path `#{node = Method} /Show/show`, and a match before its patterns are compiled `#{node = Matrix} match head | pattern => body … end`, each row's pattern over places and its body the function over the pattern's binders it is. A program writes none of them in Core text, which no elaborator reads; a witness writes one to see it refused. A reader is shown each as it was written, an operator with its operands parenthesized as a reader reads them, an ascription as the term and its type bracketed, and the derived body as `derive`.
+//! An operator is `#{node = Infix} (a + b)`, a numeral elaboration has not settled `#{node = NumLit} 3`, a `!` site the rest of its region called over the action's result, `#{node = Bang} (k)((action)!)`, an ascription `#{node = Ascribed, type_ = T} e`, the body a derived witness asks for `#{node = Derive} ?`, a name resolution has not settled `#{node = Name} /path`, a concept's method named by its path `#{node = Method} /Show/show`, and a match before its patterns are compiled `#{node = Matrix} match head | pattern => body … end`, each row's pattern over places and its body the function over the pattern's binders it is, each row an arm of its own and `#{node = Matrix, arms = [2, 1]}` counting the rows of each arm where one holds more than one. A program writes none of them in Core text, which no elaborator reads; a witness writes one to see it refused. A reader is shown each as it was written, an operator with its operands parenthesized as a reader reads them, an ascription as the term and its type bracketed, and the derived body as `derive`.
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, Tree, call, core_read, numeral, shown,
-        term_global, tree, value, value_term, word, word_value,
+        Decoration, Fields, ReadError, Reader, Refusal, Tree, bracketed, call, core_read, numeral,
+        shown, term_global, tree, value, value_number, value_term, value_unmarked, word,
+        word_value,
     },
     crate::{
-        BytesPattern, CoreText, Frame, ListPattern, MatchPattern, MatrixArm, NatPattern,
-        ProofLiteral, ShownForm, lambda_parameters, sub, written_pattern,
+        Alternative, BytesPattern, CoreText, Frame, ListPattern, MatchPattern, MatrixArm,
+        NatPattern, ProofLiteral, ShownForm, lambda_parameters, sub, written_pattern,
     },
-    curios_common::Plicity,
+    curios_common::{Plicity, Sign},
     curios_core::{
-        Ascribed, Atom, Bang, Bind, Func, Global, Infix, Matrix, Method, NumLit, Pattern, Row,
+        Arm, Ascribed, Atom, Bang, Bind, Func, Global, Infix, Matrix, Method, NumLit, Pattern, Row,
         Subterm, Term, Transient,
     },
 };
@@ -97,44 +98,75 @@ fn transient_written_as_core(
             };
             frame.decorated(node("Method"), word(path))
         }
-        Transient::Matrix(matrix) => frame.decorated(node("Matrix"), matrix_written(matrix, frame)),
+        Transient::Matrix(matrix) => {
+            let mut fields = node("Matrix");
+            // An arm of one alternative is what the form builds, each arm Core text writes being one row.
+            if matrix.arms.iter().any(|arm| arm.alternatives.len() > 1) {
+                let counts = matrix
+                    .arms
+                    .iter()
+                    .map(|arm| value(numeral(arm.alternatives.len(), Sign::Unmarked)))
+                    .collect();
+                fields.push(("arms", bracketed(counts)));
+            }
+            frame.decorated(fields, matrix_written(matrix, frame))
+        }
     }
 }
 
-/// A match as it was written: its head and motive, then each row as its pattern over the names its body binds — in Core text, its pattern over places and its body as the function over its binders it is, each over the domain Core holds for it.
-fn matrix_written(Matrix { head, motive, rows }: Matrix, frame: Frame) -> Tree {
+/// A match as it was written: its head and motive, then each arm as its alternatives over the names their rows' bodies bind and the body the first row's opening is — in Core text, each row an arm of its own, its pattern over places and its body as the function over its binders it is, each over the domain Core holds for it, the field `arms` saying how many rows each arm holds where one holds more than one.
+fn matrix_written(Matrix { head, motive, arms }: Matrix, frame: Frame) -> Tree {
     let motive = motive.map(|motive| sub(motive, frame));
-    let arms = rows
-        .into_iter()
-        .map(|Row { pattern, body }| {
-            if frame.core_text() {
+    let arms = match frame.core_text() {
+        true => arms
+            .into_iter()
+            .flat_map(|arm| arm.alternatives)
+            .map(|Row { pattern, body }| {
                 let places = &mut std::iter::repeat_with(|| crate::Label::from("_".to_string()));
-                return MatrixArm {
-                    pattern: written_pattern(&pattern, places),
-                    body: sub(body, frame),
-                    span: None,
-                };
-            }
-            let Subterm::Func(Func { telescope }) = &*body else {
-                unreachable!("a row's body is a function over its binders");
-            };
-            let mut params = Vec::with_capacity(telescope.len());
-            let body =
-                lambda_parameters(telescope.cursor(), &telescope.marks(), frame, &mut params);
-            let mut names = params.into_iter().map(|param| match param.pattern {
-                crate::Pattern::Binder(name) => name,
-                crate::Pattern::Tuple(_) | crate::Pattern::Struct { .. } => {
-                    unreachable!("a lambda's parameter is written as a name")
-                }
-            });
 
-            MatrixArm {
-                pattern: written_pattern(&pattern, &mut names),
-                body,
-                span: None,
-            }
-        })
-        .collect::<Vec<_>>();
+                MatrixArm::of(written_pattern(&pattern, places), sub(body, frame))
+            })
+            .collect::<Vec<_>>(),
+        false => arms
+            .into_iter()
+            .map(|arm| {
+                let mut body = None;
+                let alternatives = arm
+                    .alternatives
+                    .into_iter()
+                    .map(|Row { pattern, body: row }| {
+                        let Subterm::Func(Func { telescope }) = &*row else {
+                            unreachable!("a row's body is a function over its binders");
+                        };
+                        let mut params = Vec::with_capacity(telescope.len());
+                        let opened = lambda_parameters(
+                            telescope.cursor(),
+                            &telescope.marks(),
+                            frame,
+                            &mut params,
+                        );
+                        let mut names = params.into_iter().map(|param| match param.pattern {
+                            crate::Pattern::Binder(name) => name,
+                            crate::Pattern::Tuple(_) | crate::Pattern::Struct { .. } => {
+                                unreachable!("a lambda's parameter is written as a name")
+                            }
+                        });
+                        body.get_or_insert(opened);
+
+                        Alternative {
+                            pattern: written_pattern(&pattern, &mut names),
+                            span: None,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                MatrixArm {
+                    alternatives,
+                    body: body.expect("an arm writes at least one alternative"),
+                }
+            })
+            .collect::<Vec<_>>(),
+    };
 
     tree(crate::Subterm::Match(crate::Match {
         head: sub(head, frame),
@@ -222,7 +254,12 @@ pub fn node_transient_read(
             let rows = arms
                 .iter()
                 .map(|arm| {
-                    let pattern = pattern_read(&arm.pattern, operand)?;
+                    let [alternative] = arm.alternatives.as_slice() else {
+                        return Err(refused(
+                            "an arm of one pattern, the rows an arm holds stated by `arms`",
+                        ));
+                    };
+                    let pattern = pattern_read(&alternative.pattern, operand)?;
                     let body = core_read(&arm.body, reader)?;
                     match &*body {
                         Subterm::Func(Func { telescope })
@@ -235,14 +272,36 @@ pub fn node_transient_read(
                         )),
                     }
                 })
-                .collect::<Result<_, ReadError>>()?;
+                .collect::<Result<Vec<_>, ReadError>>()?;
+            let counts = match fields.take("arms") {
+                Some(counts) => value_unmarked(counts)?
+                    .into_iter()
+                    .map(|count| match value_number(count)? {
+                        0 => Err(refused("an arm of at least one row")),
+                        count => usize::try_from(count)
+                            .map_err(|_| refused("an arm of at least one row")),
+                    })
+                    .collect::<Result<Vec<_>, ReadError>>()?,
+                None => vec![1; rows.len()],
+            };
+            if counts.iter().sum::<usize>() != rows.len() {
+                return Err(refused("as many rows as `arms` counts"));
+            }
+            let mut rows = rows.into_iter();
+            let arms = counts
+                .into_iter()
+                .map(|count| Arm {
+                    alternatives: rows.by_ref().take(count).collect(),
+                })
+                .collect();
+
             Transient::Matrix(Matrix {
                 head: core_read(head, reader)?,
                 motive: motive
                     .as_ref()
                     .map(|motive| core_read(motive, reader))
                     .transpose()?,
-                rows,
+                arms,
             })
         }
         ("Matrix", _) => return Err(refused("a match")),

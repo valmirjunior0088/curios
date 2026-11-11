@@ -2,14 +2,7 @@ use /std/{Str, Char, Nat, Bool, List, Option, Result, Parse, Html};
 use /std/Html/{Attr};
 
 let is_ws(c: Char) -> Bool =
-    match Char/to_nat(c)
-    | ' ' => true
-    | '\t' => true
-    | '\n' => true
-    | '\r' => true
-    | '\u{C}' => true
-    | _ => false
-    end;
+    match Char/to_nat(c) | ' ' | '\t' | '\n' | '\r' | '\u{C}' => true | _ => false end;
 
 let ws: Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws), (_) => ());

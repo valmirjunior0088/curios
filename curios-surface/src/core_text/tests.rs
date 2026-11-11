@@ -7,10 +7,11 @@ use {
     },
     curios_common::{Qualifier, Source},
     curios_core::{
-        Atom, CalleeId, Cases, Definition, Definitions, Field, Free, Global, HeadKey, InductDecl,
-        InductParam, Intrinsic, Item, Level, Match, MatchResult, MetavarId, MetavarOrigin, Nat,
-        Nominal, Proj, Quality, QualityParam, RecItem, Sort, StructDecl, Subterm, Telescope, Term,
-        UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
+        Arm, Atom, CalleeId, Cases, Definition, Definitions, Field, Free, Global, HeadKey,
+        InductDecl, InductParam, Intrinsic, Item, Level, Match, MatchResult, Matrix, MetavarId,
+        MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality, QualityParam, RecItem, Row, Sort,
+        StructDecl, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var,
+        WitnessId, WitnessKey, WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -430,6 +431,49 @@ fn every_node_written_reads_back_as_itself() {
         ),
         Term::instance(witness, Universes::default()),
         Term::method(show, "show"),
+        // A match as it is written, an arm of two alternatives beside one of one, which states the rows each arm holds; and one of arms of one row each, which states none.
+        Term::matrix(Matrix {
+            head: one(),
+            motive: None,
+            arms: vec![
+                Arm {
+                    alternatives: vec![
+                        Row {
+                            pattern: Pattern::Literal(3usize.into()),
+                            body: Term::func(Vec::<(Free, Term)>::new(), one()),
+                        },
+                        Row {
+                            pattern: Pattern::Zero,
+                            body: Term::func(Vec::<(Free, Term)>::new(), one()),
+                        },
+                    ],
+                },
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Binder,
+                        body: over(Free::local(1, Some("m")), one()),
+                    }],
+                },
+            ],
+        }),
+        Term::matrix(Matrix {
+            head: one(),
+            motive: None,
+            arms: vec![
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Zero,
+                        body: Term::func(Vec::<(Free, Term)>::new(), one()),
+                    }],
+                },
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Binder,
+                        body: over(Free::local(1, Some("m")), one()),
+                    }],
+                },
+            ],
+        }),
         Term::metavar_birthed(
             MetavarId(3),
             MetavarOrigin::Witness(WitnessOrigin {

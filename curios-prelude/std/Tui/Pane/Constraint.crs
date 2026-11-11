@@ -16,12 +16,7 @@ pub use Constraint/*;
 
 -- What `c` claims before anything is shared out.
 let claimed(avail: Nat, c: Constraint) -> Nat =
-    match c
-    | length(n) => n
-    | min(n) => n
-    | percent(p) => avail * p / 100
-    | fill(_) => 0
-    end;
+    match c | length(n) | min(n) => n | percent(p) => avail * p / 100 | fill(_) => 0 end;
 
 -- The weight `c` takes a share of what is left by.
 let weight(c: Constraint) -> Nat =

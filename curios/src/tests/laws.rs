@@ -143,6 +143,7 @@ fn elaborator_alone(header: &str, name: &str, rows: &[(String, String)]) -> Vec<
                 }
                 curios_elab::Error::Located { error, .. }
                 | curios_elab::Error::InUnreachableArm { error, .. }
+                | curios_elab::Error::InAlternative { error, .. }
                 | curios_elab::Error::InScope { error, .. } => error,
                 _ => break,
             };

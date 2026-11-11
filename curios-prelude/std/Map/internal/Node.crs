@@ -469,7 +469,7 @@ pub let leaf_answers(
                     | false => match e == j | true => Option/some(v0) | false => Option/none() end
                     end),
             Eq/sym(same),
-            match k == j | true => Eq/refl() | false => Eq/refl() end);
+            match k == j | true | false => Eq/refl() end);
 
 --- A leaf of `key`, whose encoding is `k`, wedged in above a sound node it parts from at `c`, the node forking past `c`, answers `key`'s value at `k` in the node's place: an encoding on the leaf's side of `c` is not on the node's, and one on the node's is not `k`.
 pub let wedge_answers(
@@ -559,7 +559,7 @@ let wedge_deeper(
     d: Nat,
     under: Bool/Holds(d < c),
 ) -> Bool/Holds(deeper(wedge(c, b, key, v, t), d)) =
-    match b | false => under | true => under end;
+    match b | false | true => under end;
 
 -- A leaf wedged in above a node it parts from at a bit leaves the node's first key as it was below that bit.
 let wedge_agree(
@@ -982,7 +982,7 @@ let leaf_gone(
                     end,
                     Option/none()),
             Eq/sym(same),
-            match k == j | true => Eq/refl() | false => Eq/refl() end);
+            match k == j | true | false => Eq/refl() end);
 
 -- A leaf whose key does not encode to `k` answers nothing at `k`.
 let leaf_absent(
@@ -1479,7 +1479,7 @@ pub let mapped_find(
         ) -> Eq()(
             match b | true => Option/some(f(v0)) | false => Option/none() end,
             Option/map(match b | true => Option/some(v0) | false => Option/none() end, f)) =
-            match b | true => Eq/refl() | false => Eq/refl() end;
+            match b | true | false => Eq/refl() end;
         cases(Hash/hash(k0) == k)
     | fork(c, z, o) =>
         match bit(k, c) | false => mapped_find(z, f, k) | true => mapped_find(o, f, k) end

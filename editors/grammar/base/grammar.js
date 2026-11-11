@@ -368,21 +368,24 @@ module.exports = grammar({
         "end",
       ),
 
+    // An arm's alternatives, each after its bar, share one body.
     match_arm: ($) =>
       seq(
         "|",
         field("pattern", $._match_pattern),
+        repeat(seq("|", field("pattern", $._match_pattern))),
         "=>",
         field("body", $._term),
       ),
 
     choose_term: ($) => seq("choose", repeat($.choose_arm), "end"),
 
-    // A bind arm's pattern is read as a term: every refutable pattern shape is also a term shape, and a highlighter has no need to tell them apart.
+    // A bind arm's alternatives are read as terms: every refutable pattern shape is also a term shape, and a highlighter has no need to tell them apart.
     choose_arm: ($) =>
       seq(
         "|",
         field("test", $._term),
+        repeat(seq("|", field("test", $._term))),
         optional(seq("=", field("value", $._term))),
         "=>",
         field("body", $._term),

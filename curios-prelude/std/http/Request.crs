@@ -58,12 +58,7 @@ pub let owned(name: Field/Name) -> Bool =
 
 --- Whether a request of method `m` states its length even where it has no content: the methods that define a meaning for content sent with them (RFC 9110 §8.6).
 let states_length(m: Method) -> Bool =
-    match m
-    | post() => true
-    | put() => true
-    | patch() => true
-    | _ => false
-    end;
+    match m | post() | put() | patch() => true | _ => false end;
 
 let length_line(r: Request) -> Bytes =
     match Bytes/len(r.body) != 0 || states_length(r.method)

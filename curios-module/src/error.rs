@@ -79,6 +79,10 @@ pub enum Error {
         /// The name the arm binds, which its author may have meant as a constructor.
         binder: String,
     },
+    /// An arm whose alternatives do not all bind the same names: `name` is bound by one of them and not by the alternative the refusal stands at. The arm's body reads each name it binds, in each alternative.
+    MatchAlternativeNames {
+        name: String,
+    },
     /// A recursive local binding — one that names itself, or a member of a `let … and …;` group — whose binder is a pattern. A pattern binds projections, none of which its own value could name.
     RecursivePatternBinding,
     /// A recursive local binding with no type annotation. A body that mentions the binding cannot be the source of its type.
@@ -281,6 +285,12 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "a named final arm cannot be a catch-all: write `| _ =>` for a default, or the constructor with its payload list, `| {binder}() =>`"
+                )
+            }
+            Error::MatchAlternativeNames { name } => {
+                write!(
+                    f,
+                    "every alternative of an arm binds the same names, and `{name}` is bound by one alternative of this arm and not by this one"
                 )
             }
             Error::RecursivePatternBinding => {

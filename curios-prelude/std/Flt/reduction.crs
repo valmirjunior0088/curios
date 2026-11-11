@@ -25,12 +25,8 @@ pub let of(x: Flt) -> Term =
 pub let product(a: Flt, b: Flt) -> Term =
     let negative = Flt/is_sign_minus(a) != Flt/is_sign_minus(b);
     match (of(a), of(b))
-    | (nan(_), _) => Term/nan(a + b)
-    | (infinite(_), nan(_)) => Term/nan(a + b)
-    | (number(_, _), nan(_)) => Term/nan(a + b)
-    | (invalid(), _) => Term/invalid()
-    | (infinite(_), invalid()) => Term/invalid()
-    | (number(_, _), invalid()) => Term/invalid()
+    | (nan(_), _) | (infinite(_), nan(_)) | (number(_, _), nan(_)) => Term/nan(a + b)
+    | (invalid(), _) | (infinite(_), invalid()) | (number(_, _), invalid()) => Term/invalid()
     | (infinite(_), infinite(_)) => Term/infinite(negative)
     | (infinite(_), number(y, _)) =>
         match y.mantissa == +0 | true => Term/invalid() | false => Term/infinite(negative) end
@@ -42,12 +38,8 @@ pub let product(a: Flt, b: Flt) -> Term =
 --- The exact sum `a + b` as a term, in the direction `r` a zero sum's sign reads (§6.3): a NaN operand's NaN, and invalid for the infinities of both signs.
 pub let sum(r: Rounding, a: Flt, b: Flt) -> Term =
     match (of(a), of(b))
-    | (nan(_), _) => Term/nan(a + b)
-    | (infinite(_), nan(_)) => Term/nan(a + b)
-    | (number(_, _), nan(_)) => Term/nan(a + b)
-    | (invalid(), _) => Term/invalid()
-    | (infinite(_), invalid()) => Term/invalid()
-    | (number(_, _), invalid()) => Term/invalid()
+    | (nan(_), _) | (infinite(_), nan(_)) | (number(_, _), nan(_)) => Term/nan(a + b)
+    | (invalid(), _) | (infinite(_), invalid()) | (number(_, _), invalid()) => Term/invalid()
     | (infinite(x), infinite(y)) =>
         match x == y | true => Term/infinite(x) | false => Term/invalid() end
     | (infinite(x), number(_, _)) => Term/infinite(x)

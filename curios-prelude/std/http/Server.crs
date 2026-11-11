@@ -147,8 +147,7 @@ let drain(c: Socket, quiet: Duration, left: Nat) -> Io({}) =
         | some(read) =>
             match read
             | success(bytes(b)) => drain(c, quiet, left - Nat/min(left, Bytes/len(b)))
-            | success(ended()) => Io/pure(())
-            | failure(_) => Io/pure(())
+            | success(ended()) | failure(_) => Io/pure(())
             end
         end
     end;

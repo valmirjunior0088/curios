@@ -306,8 +306,7 @@ let count_concat(
     | x[] =>
         match s
         | lead() => Eq/refl()
-        | cont(_, _, _) => match w end
-        | bad() => match w end
+        | cont(_, _, _) | bad() => match w end
         end
     | x[h, ..t] =>
         match s

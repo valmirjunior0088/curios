@@ -21,19 +21,11 @@ pub let of_neg(a: Int, p: Bool/Holds(a < +0)) -> Eq()(sign(a), -1) =
 
 --- `sign(a)` is at least `-1`, whatever `a` is.
 pub let at_least(a: Int) -> Bool/Holds(-1 <= sign(a)) =
-    match Int/view(a)
-    | nonneg(0) => Bool/True/qed()
-    | nonneg(_ + 1) => Bool/True/qed()
-    | neg(_) => Bool/True/qed()
-    end;
+    match Int/view(a) | nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed() end;
 
 --- `sign(a)` is at most `+1`, whatever `a` is.
 pub let at_most(a: Int) -> Bool/Holds(sign(a) <= +1) =
-    match Int/view(a)
-    | nonneg(0) => Bool/True/qed()
-    | nonneg(_ + 1) => Bool/True/qed()
-    | neg(_) => Bool/True/qed()
-    end;
+    match Int/view(a) | nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed() end;
 
 --- `sign(a)` is at most zero where `a` is.
 pub let of_not_pos(a: Int, p: Bool/Holds(a <= +0)) -> Bool/Holds(sign(a) <= +0) =
@@ -46,27 +38,26 @@ pub let of_not_pos(a: Int, p: Bool/Holds(a <= +0)) -> Bool/Holds(sign(a) <= +0) 
 --- `sign(a)` is at least zero where `a` is.
 pub let of_not_neg(a: Int, p: Bool/Holds(+0 <= a)) -> Bool/Holds(+0 <= sign(a)) =
     match Int/view(a)
-    | nonneg(0) => Bool/True/qed()
-    | nonneg(_ + 1) => Bool/True/qed()
+    | nonneg(0) | nonneg(_ + 1) => Bool/True/qed()
     | neg(_) => match p end
     end;
 
 --- The sign of a product is the product of the signs.
 pub let of_mul(a: Int, b: Int) -> Eq()(sign(a * b), sign(a) * sign(b)) =
     match (Int/view(a), Int/view(b))
-    | (nonneg(0), _) => Eq/refl()
-    | (nonneg(_ + 1), nonneg(0)) => Eq/refl()
-    | (nonneg(_ + 1), nonneg(_ + 1)) => Eq/refl()
-    | (nonneg(_ + 1), neg(_)) => Eq/refl()
-    | (neg(_), nonneg(0)) => Eq/refl()
-    | (neg(_), nonneg(_ + 1)) => Eq/refl()
+    | (nonneg(0), _)
+    | (nonneg(_ + 1), nonneg(0))
+    | (nonneg(_ + 1), nonneg(_ + 1))
+    | (nonneg(_ + 1), neg(_))
+    | (neg(_), nonneg(0))
+    | (neg(_), nonneg(_ + 1))
     | (neg(_), neg(_)) => Eq/refl()
     end;
 
 --- A sign is its own sign.
 pub let of_sign(a: Int) -> Eq()(sign(sign(a)), sign(a)) =
     match Int/view(a)
-    | nonneg(m) => match m | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+    | nonneg(m) => match m | 0 | _ + 1 => Eq/refl() end
     | neg(_) => Eq/refl()
     end;
 
@@ -75,6 +66,6 @@ pub let of_sign(a: Int) -> Eq()(sign(sign(a)), sign(a)) =
 --- A product of two operations conversion reads no arm of, so a proof takes this where it rebuilds an integer from the two.
 pub let times_abs(a: Int) -> Eq()(a, sign(a) * Nat/to_int(Int/abs(a))) =
     match Int/view(a)
-    | nonneg(m) => match m | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+    | nonneg(m) => match m | 0 | _ + 1 => Eq/refl() end
     | neg(_) => Eq/refl()
     end;

@@ -15,6 +15,7 @@ impl Error {
         while let Error::Located { error: inner, .. }
         | Error::InDeclaration { error: inner, .. }
         | Error::InUnreachableArm { error: inner, .. }
+        | Error::InAlternative { error: inner, .. }
         | Error::InScope { error: inner, .. } = error
         {
             error = inner;
@@ -29,6 +30,7 @@ impl Error {
             Error::InDeclaration { names, error } => error.declared_in().or(names.first()),
             Error::Located { error, .. }
             | Error::InUnreachableArm { error, .. }
+            | Error::InAlternative { error, .. }
             | Error::InScope { error, .. } => error.declared_in(),
             _ => None,
         }
@@ -90,6 +92,7 @@ variants!(Error {
     MatrixDuplicateRow,
     MatrixUncovered,
     MatrixArmsMeet,
+    MatrixAlternativesMeet,
     MatrixStructHead,
     MatrixMixedNatDispatch,
     NotAInductType,
@@ -158,6 +161,7 @@ variants!(Error {
     Located,
     InDeclaration,
     InUnreachableArm,
+    InAlternative,
     InScope,
     Batch,
 });

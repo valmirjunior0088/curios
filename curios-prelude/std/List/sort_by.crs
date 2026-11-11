@@ -98,8 +98,7 @@ let merge_permutes(
                         Permutation/trans(
                             Permutation/prefixed(acc, Permutation/fronted(y, [x, ..xs], ys)),
                             ihb([..acc, y]))
-                    | lt() => iha([y, ..ys], [..acc, x])
-                    | eq() => iha([y, ..ys], [..acc, x])
+                    | lt() | eq() => iha([y, ..ys], [..acc, x])
                     end
             end(acc)
     end(b, acc);
@@ -129,11 +128,7 @@ let merge_accumulates(
                         Eq/trans(
                             ihb([..acc, y]),
                             Eq/sym(Eq/cong((r: List(T)) => [..acc, ..r], ihb([y]))))
-                    | lt() =>
-                        Eq/trans(
-                            iha([y, ..ys], [..acc, x]),
-                            Eq/sym(Eq/cong((r: List(T)) => [..acc, ..r], iha([y, ..ys], [x]))))
-                    | eq() =>
+                    | lt() | eq() =>
                         Eq/trans(
                             iha([y, ..ys], [..acc, x]),
                             Eq/sym(Eq/cong((r: List(T)) => [..acc, ..r], iha([y, ..ys], [x]))))
@@ -164,12 +159,7 @@ let merge_leads(
                     (r: List(T)) => Bool/Holds(List/ordered/leads(le, z, r)),
                     Eq/sym(merge_accumulates(ord, [x, ..xs], ys, [y])),
                     zb)
-            | lt() =>
-                Eq/subst(
-                    (r: List(T)) => Bool/Holds(List/ordered/leads(le, z, r)),
-                    Eq/sym(merge_accumulates(ord, xs, [y, ..ys], [x])),
-                    za)
-            | eq() =>
+            | lt() | eq() =>
                 Eq/subst(
                     (r: List(T)) => Bool/Holds(List/ordered/leads(le, z, r)),
                     Eq/sym(merge_accumulates(ord, xs, [y, ..ys], [x])),

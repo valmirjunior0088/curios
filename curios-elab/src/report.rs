@@ -158,6 +158,10 @@ impl Error {
                 dead,
                 error: Box::new(error.shown(context)),
             },
+            Self::InAlternative { written, error } => Self::InAlternative {
+                written,
+                error: Box::new(error.shown(context)),
+            },
             Self::InScope { scope, error } => Self::InScope {
                 scope,
                 error: Box::new(error.shown(context)),

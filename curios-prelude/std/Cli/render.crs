@@ -112,8 +112,7 @@ let field_rows(f: Field) -> List({Str, Str}) =
     let short = match f.short | none() => "    " | some(c) => Fmt/render("-%, ")(c) end;
     let described = words([f.help, ..notes(f)]);
     match f.kind
-    | option(v, _) => [(Fmt/render("%--% <%>")(short)(f.long)(v.metavar), described)]
-    | many(v) => [(Fmt/render("%--% <%>")(short)(f.long)(v.metavar), described)]
+    | option(v, _) | many(v) => [(Fmt/render("%--% <%>")(short)(f.long)(v.metavar), described)]
     | toggle(_) => [(Fmt/render("%--[no-]%")(short)(f.long), described)]
     | choice(_, alternatives, _) =>
         List/map(alternatives, (a) => (Str/concat("    --", a.long), a.help))
@@ -150,9 +149,9 @@ pub let help(c: Command, version: Option(Str), path: List(Str)) -> Str =
                     List/map(commands, (child) =>
                         (
                             Cli/name(child),
-                            match child | leaf(_, a, _, _) => a | group(_, a, _, _) => a end))))
+                            match child | leaf(_, a, _, _) | group(_, a, _, _) => a end))))
         end;
-    let about = match target | leaf(_, a, _, _) => a | group(_, a, _, _) => a end;
+    let about = match target | leaf(_, a, _, _) | group(_, a, _, _) => a end;
     Fmt/render("%\n\n%\n\n%")(about)(usage(c, path))(sections);
 
 let tip(near: Option(Str), what: Str) -> Str =

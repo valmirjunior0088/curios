@@ -83,7 +83,7 @@ let is_raw_text(name: Str) -> Bool =
     Str/eql_ignoring_ascii_case(name, "script") || Str/eql_ignoring_ascii_case(name, "style");
 
 let attr_name(a: Attr) -> Str =
-    match a | attr(name, _) => name | flag(name) => name end;
+    match a | attr(name, _) | flag(name) => name end;
 
 let attr_value(a: Attr) -> Str =
     match a | attr(_, value) => value | flag(_) => "" end;
@@ -98,17 +98,14 @@ let render_attr(a: Attr) -> Str =
 pub let text_of(h: Html) -> Str =
     match h
     | text(s) => s
-    | void(_, _) => ""
-    | comment(_) => ""
-    | fragment(children) => Str/flatten(List/map(children, text_of))
-    | element(_, _, children) => Str/flatten(List/map(children, text_of))
+    | void(_, _) | comment(_) => ""
+    | fragment(children) | element(_, _, children) => Str/flatten(List/map(children, text_of))
     end;
 
 --- Whether `h` is an element called `name`, compared without case.
 pub let is_named(h: Html, name: Str) -> Bool =
     match h
-    | element(tag, _, _) => Str/eql_ignoring_ascii_case(tag, name)
-    | void(tag, _) => Str/eql_ignoring_ascii_case(tag, name)
+    | element(tag, _, _) | void(tag, _) => Str/eql_ignoring_ascii_case(tag, name)
     | _ => false
     end;
 
@@ -152,8 +149,7 @@ let attribute_in(attrs: List(Attr), name: Str) -> Option(Str) =
 --- The value of the attribute `name` on an element, `""` for a flag, compared without case; `none` on any other tree or when the element lacks it.
 pub let attribute(h: Html, name: Str) -> Option(Str) =
     match h
-    | element(_, attrs, _) => attribute_in(attrs, name)
-    | void(_, attrs) => attribute_in(attrs, name)
+    | element(_, attrs, _) | void(_, attrs) => attribute_in(attrs, name)
     | _ => Option/none()
     end;
 

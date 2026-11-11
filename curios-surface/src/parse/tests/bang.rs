@@ -66,7 +66,7 @@ fn bang_in_match_scrutinee_and_arm() {
         Subterm::Match(m) => {
             assert_eq!(m.head, Subterm::Bang(name("x")).into());
             let foo = m.arms.iter().find_map(|arm| {
-                matches!(&arm.pattern, MatchPattern::Variant { tag, .. } if tag == "foo")
+                matches!(&arm.alternatives[0].pattern, MatchPattern::Variant { tag, .. } if tag == "foo")
                     .then_some(&arm.body)
             });
             assert_eq!(foo, Some(&Subterm::Bang(name("y")).into()));

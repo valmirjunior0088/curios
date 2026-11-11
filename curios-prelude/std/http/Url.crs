@@ -51,13 +51,7 @@ let scheme() -> Parse(Str, Scheme) =
 -- Whether the authority ends here: at the path, the query, the fragment, or the end of the text.
 let ends_authority(next: Option(Char)) -> Bool =
     match next
-    | some(c) =>
-        match Char/to_nat(c)
-        | '/' => true
-        | '?' => true
-        | '#' => true
-        | _ => false
-        end
+    | some(c) => match Char/to_nat(c) | '/' | '?' | '#' => true | _ => false end
     | none() => true
     end;
 
@@ -270,8 +264,7 @@ let decode_at(rest: Bytes, acc: Bytes) -> Option(Bytes) =
                     match (hex_value(high), hex_value(low))
                     | (some(hi), some(lo)) =>
                         decode_at(onward, x[..acc, Nat/to_byte(hi.v * 16 + lo.v)])
-                    | (some(_), none()) => Option/none()
-                    | (none(), _) => Option/none()
+                    | (some(_), none()) | (none(), _) => Option/none()
                     end
                 end
             end

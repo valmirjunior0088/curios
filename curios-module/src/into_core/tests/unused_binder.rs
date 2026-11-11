@@ -234,3 +234,43 @@ fn a_use_lambda_member_is_never_reported() {
         Vec::<String>::new()
     );
 }
+
+/// An arm's body is lowered once for each alternative, and a binder written in it is one binder however often it is lowered: reported once, and only where no lowering of it is read.
+#[test]
+fn a_binder_in_the_body_an_arm_of_alternatives_shares_is_reported_once() {
+    assert_eq!(
+        lints(
+            r#"
+        let f(o : Bool) -> Bool =
+            match o
+            | true | false =>
+                let unused = o;
+                o
+            end;
+        f
+    "#
+        ),
+        ["unused-binder: unused binder `unused`; write `_` in its name's place"]
+    );
+}
+
+/// Each alternative writes its own binder, which its own lowering of the body reads or leaves.
+#[test]
+fn each_alternative_reports_the_binder_it_writes() {
+    assert_eq!(
+        lints(
+            r#"
+        let f(o : Type) -> Bool =
+            match o
+            | a(x) | b(_, x) => true
+            | _ => false
+            end;
+        f
+    "#
+        ),
+        [
+            "unused-binder: unused binder `x`; write `_` in its name's place",
+            "unused-binder: unused binder `x`; write `_` in its name's place"
+        ]
+    );
+}

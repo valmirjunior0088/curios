@@ -233,7 +233,7 @@ pub use Command/*;
 
 --- The word a command is chosen by.
 pub let name(c: Command) -> Str =
-    match c | leaf(n, _, _, _) => n | group(n, _, _, _) => n end;
+    match c | leaf(n, _, _, _) | group(n, _, _, _) => n end;
 
 --- A name as a line spells it: `--long`, `--no-long` for a switch's negation, or `-c`.
 pub induct Spelled: pub Type

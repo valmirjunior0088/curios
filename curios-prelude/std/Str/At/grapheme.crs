@@ -40,12 +40,7 @@ pub let after(run: Run, next: Char, class: GraphemeBreak) -> Run =
 
 -- Whether a character of class `class` stands alone, as a control or a line break does.
 let alone(class: GraphemeBreak) -> Bool =
-    match class
-    | cr() => true
-    | lf() => true
-    | control() => true
-    | _ => false
-    end;
+    match class | cr() | lf() | control() => true | _ => false end;
 
 --- Whether a cluster ends between a character of class `before` and `next`, of class `class`, the run up to `before` being `run`: the rules of UAX #29 in their order, the first that decides deciding.
 pub let breaks(before: GraphemeBreak, next: Char, class: GraphemeBreak, run: Run) -> Bool =

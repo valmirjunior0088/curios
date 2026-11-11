@@ -102,13 +102,12 @@ fn a_match_lowers_to_the_matrix_it_is_written_as() {
     assert!(matrix.motive.is_none());
     assert_eq!(
         matrix
-            .rows
-            .iter()
+            .rows()
             .map(|row| row.pattern.binders())
             .collect::<Vec<_>>(),
         [1, 1, 0],
     );
-    for row in &matrix.rows {
+    for row in matrix.rows() {
         let curios_core::Subterm::Func(body) = &*row.body else {
             panic!("expected a row's body to be a function, got {:?}", row.body);
         };
@@ -117,15 +116,18 @@ fn a_match_lowers_to_the_matrix_it_is_written_as() {
 }
 
 #[test]
-fn a_bind_arm_lowers_to_the_two_rows_it_stands_for() {
-    // `| pattern = value => body` is the matrix of two rows over `value`: its own, and a `_` that takes the rest of the ladder.
+fn a_bind_arm_lowers_to_the_two_arms_it_stands_for() {
+    // `| pattern = value => body` is the matrix of two arms over `value`: its own, and a `_` that takes the rest of the ladder.
     let term = run("choose | some(x) = m => x | _ => 0 end");
 
     let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
         panic!("expected a matrix at the top, got {term:?}");
     };
-    assert_eq!(matrix.rows.len(), 2);
-    assert_eq!(matrix.rows[1].pattern, curios_core::Pattern::Binder);
+    assert_eq!(matrix.arms.len(), 2);
+    assert_eq!(
+        matrix.arms[1].alternatives[0].pattern,
+        curios_core::Pattern::Binder
+    );
 }
 
 #[test]
@@ -183,4 +185,44 @@ fn a_match_refusal_stands_at_the_binder_or_the_motive_it_is_about() {
             "{source}\n{report}"
         );
     }
+}
+
+#[test]
+fn an_arm_lowers_to_a_row_for_each_alternative() {
+    // Each alternative is a row of its own arm, the body lowered again under the names it binds, so each is typed apart.
+    let term = run("match m | left(x, _) | right(_, x) => x | none() => 0 end");
+
+    let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
+        panic!("expected a matrix at the top, got {term:?}");
+    };
+    assert_eq!(
+        matrix
+            .arms
+            .iter()
+            .map(|arm| arm.alternatives.len())
+            .collect::<Vec<_>>(),
+        [2, 1]
+    );
+    let binders = matrix.arms[0]
+        .alternatives
+        .iter()
+        .map(|row| {
+            let curios_core::Subterm::Func(body) = &*row.body else {
+                panic!("expected a row's body to be a function, got {:?}", row.body);
+            };
+            assert_eq!(body.telescope.len(), row.pattern.binders());
+            body.telescope.len()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(binders, [2, 2]);
+}
+
+#[test]
+fn alternatives_that_bind_different_names_are_refused() {
+    // The body reads each name the arm binds in every alternative, and one an alternative lacks would read whatever else it names there.
+    let error = run_err("match m | some(x) | none() => x | _ => 0 end");
+    assert!(
+        error.contains("every alternative of an arm binds the same names, and `x`"),
+        "unexpected error: {error}"
+    );
 }

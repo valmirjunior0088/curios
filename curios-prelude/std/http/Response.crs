@@ -128,8 +128,7 @@ pub let of_html(
 pub let of_refusal(why: Refusal) -> Response =
     let said = Refusal/to_str(why);
     match why
-    | malformed(_) => of_text(400, said)
-    | incomplete() => of_text(400, said)
+    | malformed(_) | incomplete() => of_text(400, said)
     | line_too_long() => of_text(414, said)
     | head_too_large() => of_text(431, said)
     | content_too_large() => of_text(413, said)

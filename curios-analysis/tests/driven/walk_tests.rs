@@ -10,8 +10,8 @@ use {
     curios_cert::Kernel,
     curios_common::{InfixOp, Plicity, Qualifier},
     curios_core::{
-        Apply, Argument, Bang, Carrier, Cases, Field, Free, Global, InductArm, InductType, Infix,
-        Instance, Intrinsic, Level, Many, Match, MatchResult, Matrix, Metavar, MetavarId,
+        Apply, Argument, Arm, Bang, Carrier, Cases, Field, Free, Global, InductArm, InductType,
+        Infix, Instance, Intrinsic, Level, Many, Match, MatchResult, Matrix, Metavar, MetavarId,
         MetavarOrigin, MetavarSpine, Nat, Pattern, Proj, Rec, Row, Scope, Struct, StructEntry,
         StructType, Subterm, Term, Three, Totality, Transient, Tuple, Two, UniverseContext,
         Universes, Variant,
@@ -259,9 +259,17 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             Term::matrix(Matrix {
                 head: markers.visited(),
                 motive: Some(markers.visited()),
-                rows: vec![Row {
-                    pattern: Pattern::Binder,
-                    body: markers.visited(),
+                arms: vec![Arm {
+                    alternatives: vec![
+                        Row {
+                            pattern: Pattern::Binder,
+                            body: markers.visited(),
+                        },
+                        Row {
+                            pattern: Pattern::Binder,
+                            body: markers.visited(),
+                        },
+                    ],
                 }],
             })
         }),

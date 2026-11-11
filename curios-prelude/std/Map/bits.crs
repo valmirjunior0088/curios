@@ -147,10 +147,7 @@ let rungs(x: Nat, y: Nat) -> Eq()(place(x, y), 7 - seek(x, y, 8) + 1) =
                             match Nat/shr(x, 1) != Nat/shr(y, 1)
                             | true => Eq/refl()
                             | false =>
-                                match Nat/shr(x, 0) != Nat/shr(y, 0)
-                                | true => Eq/refl()
-                                | false => Eq/refl()
-                                end
+                                match Nat/shr(x, 0) != Nat/shr(y, 0) | true | false => Eq/refl() end
                             end
                         end
                     end

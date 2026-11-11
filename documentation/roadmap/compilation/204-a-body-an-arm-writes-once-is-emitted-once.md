@@ -1,10 +1,10 @@
 # A body an arm writes once is emitted once
 
-**Not refined yet.** This specification reserves the place where two leaves of one match that run the same body come to run one copy of it. It is not an implementation plan, and no design is chosen. The copies are the compiler's own ([Patterns are compiled where their types are known](../../design/surface/patterns-are-compiled-where-their-types-are-known.md)), and it waits for a consumer: no row of `/std` reaches more than one leaf (*What is known*).
+**Not refined yet.** This specification reserves the place where two leaves of one match that run the same body come to run one copy of it. It is not an implementation plan, and no design is chosen. The copies are the compiler's own ([Patterns are compiled where their types are known](../../design/surface/patterns-are-compiled-where-their-types-are-known.md)). Its consumer is an arm's [alternatives](../../syntax.md#alternatives), each of which runs a copy of the one body the arm writes; no row of `/std` reaches more than one leaf (*What is known*).
 
 ## What is missing
 
-**Nothing finds a body written twice.** A body a reader writes in two arms is emitted in both, through every rung to the optimized module, and the continuation optimizer (`curios-cps/src/optimize/`) holds no pass that takes two identical bodies for one. Today the reader chooses: a body bound once as a local function and called from both arms stays one where it is large, and is copied back into both where the inliner takes it. Once patterns are typed the choice is the compiler's: a row reached at several leaves is written at each as an instance of one elaborated body, since Core has nothing that shares a body among arms.
+**Nothing finds a body written twice.** A body a reader writes in two arms is emitted in both, through every rung to the optimized module, and the continuation optimizer (`curios-cps/src/optimize/`) holds no pass that takes two identical bodies for one. Today the reader chooses: a body bound once as a local function and called from both arms stays one where it is large, and is copied back into both where the inliner takes it. Once patterns are typed the choice is the compiler's: a row reached at several leaves is written at each as an instance of one elaborated body, since Core has nothing that shares a body among arms, and an arm of several alternatives is lowered, typed and emitted once for each of them.
 
 ## What is known
 

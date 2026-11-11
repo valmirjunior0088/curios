@@ -10,9 +10,9 @@ mod list_layout_tests;
 
 use {
     super::{
-        Apply, Argument, BytesPattern, BytesSegment, CasePayloadParam, Choose, ChooseArm,
-        ChooseTest, ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic, CoreItem,
-        CoreMember, CoreText, CoreValue, Decorated, DecoratorField, Dialect, Doc, Field,
+        Alternative, Apply, Argument, BytesPattern, BytesSegment, CasePayloadParam, Choose,
+        ChooseArm, ChooseTest, ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic,
+        CoreItem, CoreMember, CoreText, CoreValue, Decorated, DecoratorField, Dialect, Doc, Field,
         FieldSugarParam, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
         Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, ListPattern, Literal,
         Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
@@ -332,6 +332,49 @@ fn print_match_pattern_field(field: MatchPatternField) -> Printer {
     match field.label {
         Some(label) => flat([pure(label), pure(" = "), print_match_pattern(field.value)]),
         None => print_match_pattern(field.value),
+    }
+}
+
+/// An arm's alternatives: on one line where they fit, and otherwise from the arm's line with each continuation at the arm's column, after its bar. Short atoms pack as many to a line as fit, as a list's simple entries do, and an alternative that takes something apart stands on a line of its own. Each marks where its pattern ends, for the reason a term is marked — see `term_followed`: a literal leaf may be spelled another way than it was written.
+fn print_alternatives(alternatives: Vec<Alternative>) -> Printer {
+    let items = alternatives
+        .into_iter()
+        .enumerate()
+        .map(|(index, alternative)| {
+            let written = match alternative.span {
+                Some(span) => reached(span.end),
+                None => flat([]),
+            };
+            let bar = match index {
+                0 => flat([]),
+                _ => pure("| "),
+            };
+
+            FillItem {
+                compact: packs(&alternative.pattern),
+                printer: flat([bar, print_match_pattern(alternative.pattern), written]),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    group(flow(items))
+}
+
+/// Whether an alternative is a short atom a run of them packs: a binder, a literal, or a constructor over no payload.
+fn packs(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Binder(_)
+        | MatchPattern::Bool(_)
+        | MatchPattern::Char(_)
+        | MatchPattern::Nat(NatPattern::Zero | NatPattern::Lit(_))
+        | MatchPattern::List(ListPattern::Nil)
+        | MatchPattern::Bytes(BytesPattern::End) => true,
+        MatchPattern::Variant { args, .. } => args.is_empty(),
+        MatchPattern::Tuple(_)
+        | MatchPattern::Struct { .. }
+        | MatchPattern::Nat(NatPattern::Succ { .. })
+        | MatchPattern::List(ListPattern::Cons { .. })
+        | MatchPattern::Bytes(BytesPattern::Atom { .. }) => false,
     }
 }
 
@@ -1101,9 +1144,12 @@ impl<D: Layout> TreePrinter<D> {
                                     ChooseTest::Cond(condition) => {
                                         flat([pure("| "), self.term(condition)])
                                     }
-                                    ChooseTest::Bind { pattern, value } => flat([
+                                    ChooseTest::Bind {
+                                        alternatives,
+                                        value,
+                                    } => flat([
                                         pure("| "),
-                                        print_match_pattern(pattern),
+                                        print_alternatives(alternatives),
                                         pure(" = "),
                                         self.term(value),
                                     ]),
@@ -1134,16 +1180,10 @@ impl<D: Layout> TreePrinter<D> {
                     flat(
                         arms.into_iter()
                             .map(|arm| {
-                                // Where the pattern ends, for the reason a term is marked — see `term_followed`: a literal leaf may be spelled another way than it was written.
-                                let written = match arm.span {
-                                    Some(span) => reached(span.end),
-                                    None => flat([]),
-                                };
                                 flat([
                                     separator(),
                                     pure("| "),
-                                    print_match_pattern(arm.pattern),
-                                    written,
+                                    print_alternatives(arm.alternatives),
                                     self.attached_body(" =>", arm.body),
                                 ])
                             })

@@ -1,12 +1,12 @@
 use {
-    super::{Binder, Lowerer, RegionFrame},
+    super::{Binder, Lowerer, RegionFrame, bindable},
     crate::Error,
     curios_common::Span,
     curios_surface::{
-        BytesPattern, Choose, ChooseArm, ChooseTest, ListPattern, Match, MatchPattern,
+        Alternative, BytesPattern, Choose, ChooseArm, ChooseTest, ListPattern, Match, MatchPattern,
         MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
     },
-    std::mem,
+    std::{collections::BTreeSet, mem},
 };
 
 /// One unit of match lowering: borrows the [`Lowerer`] doing the surrounding term lowering — for name resolution, scoping, and recursing back into [`Lowerer::term`] or [`Lowerer::region`] at each arm's body — and writes a match as the matrix it is written as ([`curios_core::Matrix`]). The patterns are compiled where the scrutinee's type is known, by elaboration; what is decided here is what the syntax alone says.
@@ -74,10 +74,13 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     true_case,
                 ))
             }
-            ChooseTest::Bind { pattern, value } => {
+            ChooseTest::Bind {
+                alternatives,
+                value,
+            } => {
                 let value = self.collect(value, binds)?;
                 self.bind_arm(
-                    pattern,
+                    alternatives,
                     value,
                     &arm.body,
                     rest_wrapped,
@@ -87,17 +90,22 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }
     }
 
-    /// Lowers a `choose` bind arm `| pattern = value => body` — with `value` and `rest`, the rest of its ladder, already lowered — as the matrix of two rows over `value`: its own, and a `_` whose body is `rest`, which a value the pattern does not match takes. A refutable pattern only: a bare-binder pattern cannot fail (a plain `let`) and is rejected.
+    /// Lowers a `choose` bind arm `| pattern | … = value => body` — with `value` and `rest`, the rest of its ladder, already lowered — as the matrix of two arms over `value`: its own, and a `_` whose body is `rest`, which a value no alternative matches takes. Refutable alternatives only: a bare binder cannot fail (a plain `let`) and is rejected.
     pub fn bind_arm(
         &self,
-        pattern: &MatchPattern,
+        alternatives: &[Alternative],
         value: curios_core::Term,
         body: &Term,
         rest: curios_core::Term,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        if let MatchPattern::Binder(name) = pattern {
-            return Err(placed(Error::BindArmIrrefutable, name.span()));
+        for alternative in alternatives {
+            if let MatchPattern::Binder(name) = &alternative.pattern {
+                return Err(placed(
+                    Error::BindArmIrrefutable,
+                    name.span().or(alternative.span.as_ref()),
+                ));
+            }
         }
 
         // The `_` binds nothing its body can name.
@@ -116,13 +124,18 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         Ok(curios_core::Term::matrix(curios_core::Matrix {
             head: value,
             motive: None,
-            rows: vec![self.row(pattern, body, None, leaf)?, rest],
+            arms: vec![
+                self.arm(alternatives, body, leaf)?,
+                curios_core::Arm {
+                    alternatives: vec![rest],
+                },
+            ],
         }))
     }
 
     /// Lowers a headed match — its scrutinee already lowered — as the matrix of its arms, each as it is written. `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this, mirroring every other `Match` arm's `term`/`region` split.
     ///
-    /// Two refusals are read off the arms as they are written. A final arm that binds a name after arms that dispatch is a mistake where a default was meant ([`Error::MatchNamedCatchAll`]). And a written motive is only meaningful when the head itself dispatches on one carrier directly — every arm's *top-level* pattern being the same dispatchable shape, a final `_` apart — since that is the only case where a core `Match` node exists for the *original* scrutinee to attach the motive to: a tuple/struct-headed or plain-binder match never builds one, and the motive would be silently discarded ([`Error::MatrixMotiveRequiresCtorHead`]).
+    /// Two refusals are read off the arms as they are written. A final arm that binds a name after arms that dispatch is a mistake where a default was meant ([`Error::MatchNamedCatchAll`]). And a written motive is only meaningful when the head itself dispatches on one carrier directly — every alternative's *top-level* pattern being the same dispatchable shape, a final `_` apart — since that is the only case where a core `Match` node exists for the *original* scrutinee to attach the motive to: a tuple/struct-headed or plain-binder match never builds one, and the motive would be silently discarded ([`Error::MatrixMotiveRequiresCtorHead`]).
     pub fn headed(
         &self,
         head: curios_core::Term,
@@ -130,20 +143,21 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         arms: &[MatrixArm],
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        let dispatching = dispatching(arms)?;
-        let homogeneous = dispatching.first().is_none_or(|first| {
-            first.pattern.is_dispatchable()
-                && dispatching
-                    .iter()
-                    .all(|arm| mem::discriminant(&arm.pattern) == mem::discriminant(&first.pattern))
+        let mut patterns = dispatching(arms)?
+            .iter()
+            .flat_map(|arm| &arm.alternatives)
+            .map(|alternative| &alternative.pattern);
+        let homogeneous = patterns.next().is_none_or(|first| {
+            first.is_dispatchable()
+                && patterns.all(|pattern| mem::discriminant(pattern) == mem::discriminant(first))
         });
         if !homogeneous && let Some(motive) = motive {
             return Err(placed(Error::MatrixMotiveRequiresCtorHead, motive.span()));
         }
 
-        let rows = arms
+        let arms = arms
             .iter()
-            .map(|arm| self.row(&arm.pattern, &arm.body, arm.span.as_ref(), leaf))
+            .map(|arm| self.arm(&arm.alternatives, &arm.body, leaf))
             .collect::<Result<Vec<_>, Error>>()?;
         let motive = motive
             .as_ref()
@@ -153,20 +167,52 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         Ok(curios_core::Term::matrix(curios_core::Matrix {
             head,
             motive,
-            rows,
+            arms,
         }))
     }
 
-    /// One arm as a row: its pattern, and its body lowered under the names the pattern binds, as the function over those binders — placed where the pattern is written, which is where a row no value reaches is reported.
+    /// One arm: a row for each alternative, each its pattern and the body lowered again under that pattern's names, so that each is typed apart with metavariables of its own. Every alternative binds the names the first does, since the body reads each name of the arm in each of them, and a name an alternative lacks would read whatever else it names there ([`Error::MatchAlternativeNames`]).
+    fn arm(
+        &self,
+        alternatives: &[Alternative],
+        body: &Term,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Arm, Error> {
+        let mut names = None;
+        let alternatives = alternatives
+            .iter()
+            .map(|alternative| {
+                let mut binders = Vec::new();
+                let pattern = self.pattern(&alternative.pattern, &mut binders)?;
+                let written = binders
+                    .iter()
+                    .map(|(name, _)| name.clone())
+                    .filter(|name| bindable(name))
+                    .collect::<BTreeSet<_>>();
+                let first = names.get_or_insert_with(|| written.clone());
+                if let Some(name) = first.symmetric_difference(&written).next() {
+                    return Err(placed(
+                        Error::MatchAlternativeNames { name: name.clone() },
+                        alternative.span.as_ref(),
+                    ));
+                }
+
+                self.row(pattern, binders, body, alternative.span.as_ref(), leaf)
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        Ok(curios_core::Arm { alternatives })
+    }
+
+    /// One alternative as a row: its pattern, and the body lowered under the names the pattern binds, as the function over those binders — placed where the pattern is written, which is where a row no value reaches is reported.
     fn row(
         &self,
-        pattern: &MatchPattern,
+        pattern: curios_core::Pattern,
+        binders: Vec<Binder>,
         body: &Term,
         span: Option<&Span>,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Row, Error> {
-        let mut binders = Vec::new();
-        let pattern = self.pattern(pattern, &mut binders)?;
         let body = self.bound(&binders, || leaf(self, body))?;
         // A pattern's binder has no type written: the scrutinee's gives it one where the pattern is compiled.
         let function = curios_core::Term::func(
@@ -316,19 +362,33 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 }
 
-/// The arms of a headed match that are not its default: every arm, less a final top-level bare `_` after arms that each dispatch — a constructor tag or any of the hardcoded-carrier leaves ([`MatchPattern::is_dispatchable`]). A *named* final binder in that position is a mistake ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a default — it stays a binding — and neither is a `_` after tuple/struct arms, which project exhaustively and need none.
+/// The arms of a headed match that are not its default: every arm, less a final top-level bare `_` after arms that each dispatch — a constructor tag or any of the hardcoded-carrier leaves ([`MatchPattern::is_dispatchable`]), in each of their alternatives. A *named* final binder in that position is a mistake ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a default — it stays a binding — and neither is a `_` after tuple/struct arms, which project exhaustively and need none, nor a `_` beside other alternatives, which meets them.
 fn dispatching(arms: &[MatrixArm]) -> Result<&[MatrixArm], Error> {
+    let dispatches = |arm: &MatrixArm| {
+        arm.alternatives
+            .iter()
+            .all(|alternative| alternative.pattern.is_dispatchable())
+    };
+
     match arms.split_last() {
-        Some((last, init))
-            if !init.is_empty() && init.iter().all(|arm| arm.pattern.is_dispatchable()) =>
-        {
-            match &last.pattern {
-                MatchPattern::Binder(name) if name == "_" => Ok(init),
-                MatchPattern::Binder(name) => Err(placed(
+        Some((last, init)) if !init.is_empty() && init.iter().all(dispatches) => {
+            match last.alternatives.as_slice() {
+                [
+                    Alternative {
+                        pattern: MatchPattern::Binder(name),
+                        ..
+                    },
+                ] if name == "_" => Ok(init),
+                [
+                    Alternative {
+                        pattern: MatchPattern::Binder(name),
+                        span,
+                    },
+                ] => Err(placed(
                     Error::MatchNamedCatchAll {
                         binder: name.to_string(),
                     },
-                    name.span().or(last.span.as_ref()),
+                    name.span().or(span.as_ref()),
                 )),
                 _ => Ok(arms),
             }

@@ -40,14 +40,14 @@ let claims_of(f: Field, i: Nat) -> List({Str, Claim}) =
     let as(spelled: List(Str), claim: Claim) -> List({Str, Claim}) =
         List/map(spelled, (s) => (s, claim));
     match f.kind
-    | flag() => as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/switch(i))
-    | count() => as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/switch(i))
+    | flag() | count() =>
+        as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/switch(i))
     | toggle(_) =>
         [
             ..as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/switch(i)),
             ..as(List/map(names, (n) => Str/concat("--no-", n)), Claim/negation(i))]
-    | option(_, _) => as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/valued(i))
-    | many(_) => as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/valued(i))
+    | option(_, _) | many(_) =>
+        as([..List/map(names, (n) => Str/concat("--", n)), ..short], Claim/valued(i))
     | choice(_, alternatives, _) =>
         List/map(
             List/zip(List/range(0, List/len(alternatives)), alternatives),

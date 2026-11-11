@@ -17,22 +17,20 @@ fn inductive_match_nullary_and_unary() {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
             motive: Some(Subterm::Name(Name::from(["Bin".to_string()])).into()),
             arms: vec![
-                MatrixArm {
-                    pattern: MatchPattern::Variant {
+                MatrixArm::of(
+                    MatchPattern::Variant {
                         tag: "null".to_string(),
                         args: vec![],
                     },
-                    body: Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line("null"))).into(),
-                    span: None,
-                },
-                MatrixArm {
-                    pattern: MatchPattern::Variant {
+                    Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line("null"))).into()
+                ),
+                MatrixArm::of(
+                    MatchPattern::Variant {
                         tag: "bool_".to_string(),
                         args: vec![(Plicity::Explicit, MatchPattern::Binder("b".into()))],
                     },
-                    body: Subterm::Name(Name::from(["b".to_string()])).into(),
-                    span: None,
-                },
+                    Subterm::Name(Name::from(["b".to_string()])).into()
+                ),
             ],
         })
         .into()
@@ -48,17 +46,16 @@ fn inductive_match_multi_binder() {
         Subterm::Match(Match {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
             motive: Some(Subterm::Name(Name::from(["T".to_string()])).into()),
-            arms: vec![MatrixArm {
-                pattern: MatchPattern::Variant {
+            arms: vec![MatrixArm::of(
+                MatchPattern::Variant {
                     tag: "lit".to_string(),
                     args: vec![
                         (Plicity::Explicit, MatchPattern::Binder("a".into())),
                         (Plicity::Explicit, MatchPattern::Binder("b".into())),
                     ],
                 },
-                body: Subterm::Name(Name::from(["a".to_string()])).into(),
-                span: None,
-            }],
+                Subterm::Name(Name::from(["a".to_string()])).into()
+            )],
         })
         .into()
     );
@@ -72,14 +69,13 @@ fn match_omitted_motive() {
         Subterm::Match(Match {
             head: Subterm::Name(Name::from(["x".to_string()])).into(),
             motive: None,
-            arms: vec![MatrixArm {
-                pattern: MatchPattern::Variant {
+            arms: vec![MatrixArm::of(
+                MatchPattern::Variant {
                     tag: "foo".to_string(),
                     args: vec![(Plicity::Explicit, MatchPattern::Binder("y".into()))],
                 },
-                body: Subterm::Name(Name::from(["y".to_string()])).into(),
-                span: None,
-            }],
+                Subterm::Name(Name::from(["y".to_string()])).into()
+            )],
         })
         .into()
     );
@@ -307,10 +303,13 @@ fn choose_bind_arm() {
             arms: vec![
                 ChooseArm {
                     test: ChooseTest::Bind {
-                        pattern: MatchPattern::Variant {
-                            tag: "some".to_string(),
-                            args: vec![(Plicity::Explicit, MatchPattern::Binder("x".into()))],
-                        },
+                        alternatives: vec![Alternative {
+                            pattern: MatchPattern::Variant {
+                                tag: "some".to_string(),
+                                args: vec![(Plicity::Explicit, MatchPattern::Binder("x".into()))],
+                            },
+                            span: None,
+                        }],
                         value: name("o"),
                     },
                     body: name("x"),
@@ -470,7 +469,7 @@ fn a_dispatch_case_keeps_a_numeral_wider_than_the_erased_carrier() {
         panic!("expected arms");
     };
     assert_eq!(
-        first.pattern,
+        first.alternatives[0].pattern,
         MatchPattern::Nat(NatPattern::Lit(NatLiteral(
             Natural::parse_bytes(b"4294967296", 10).expect("a decimal numeral"),
             Radix::Dec(10)
@@ -487,7 +486,7 @@ fn a_match_binder_spans_its_word_alone() {
     let Subterm::Match(matched) = &*term else {
         panic!("a match");
     };
-    let MatchPattern::Variant { args, .. } = &matched.arms[0].pattern else {
+    let MatchPattern::Variant { args, .. } = &matched.arms[0].alternatives[0].pattern else {
         panic!("a constructor pattern");
     };
     let MatchPattern::Binder(x) = &args[0].1 else {
@@ -522,4 +521,90 @@ fn a_match_or_choose_takes_operators_and_suffixes_bare() {
         panic!("expected a bang, got {performed}");
     };
     assert!(matches!(action.as_subterm(), Subterm::Choose(_)));
+}
+
+/// An arm writes its alternatives each after a bar, up to the one arrow they share; a term has no bare `|`, so past a pattern a bar is the next alternative.
+#[test]
+fn an_arm_writes_each_alternative_after_a_bar() {
+    let term = "match c | 'a' | some(x) | (y, true) => 1 | _ => 0 end"
+        .parse::<Term>()
+        .unwrap();
+    let Subterm::Match(matched) = term.as_subterm() else {
+        panic!("expected a match, got {term}");
+    };
+    let patterns = matched.arms[0]
+        .alternatives
+        .iter()
+        .map(|alternative| alternative.pattern.clone())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        patterns,
+        [
+            MatchPattern::Char('a'),
+            MatchPattern::Variant {
+                tag: "some".to_string(),
+                args: vec![(Plicity::Explicit, MatchPattern::Binder("x".into()))],
+            },
+            MatchPattern::Tuple(vec![
+                MatchPatternField {
+                    label: None,
+                    value: MatchPattern::Binder("y".into()),
+                },
+                MatchPatternField {
+                    label: None,
+                    value: MatchPattern::Bool(true),
+                },
+            ]),
+        ]
+    );
+    assert_eq!(matched.arms[1].alternatives.len(), 1);
+}
+
+#[test]
+fn a_bind_arm_writes_its_alternatives_before_its_value() {
+    let term = "choose | left(x) | right(x) = e => x | _ => 0 end"
+        .parse::<Term>()
+        .unwrap();
+    let Subterm::Choose(choose) = term.as_subterm() else {
+        panic!("expected a choose, got {term}");
+    };
+    let ChooseTest::Bind {
+        alternatives,
+        value,
+    } = &choose.arms[0].test
+    else {
+        panic!("expected a bind arm");
+    };
+
+    assert_eq!(alternatives.len(), 2);
+    assert_eq!(*value, name("e"));
+}
+
+/// A pattern holds no alternatives: a bar inside one is refused by name where it stands, in each place a pattern nests, rather than reported as the token the enclosing form did not expect.
+#[test]
+fn an_alternative_inside_a_pattern_is_refused_by_name() {
+    for source in [
+        "match o | some(0 | 1) => 1 | _ => 0 end",
+        "match p | (0 | 1, x) => x | _ => 0 end",
+        "match p | Point { x = 0 | 1, y } => y | _ => 0 end",
+        "match o | (some(0) | none()) => 1 | _ => 0 end",
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            report.contains("alternatives stand at the top of an arm"),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
+#[test]
+fn an_arm_of_alternatives_round_trips() {
+    for source in [
+        "match c | ' ' | '\\t' => true | _ => false end",
+        "choose | left(x) | right(x) = e => x | _ => 0 end",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(term.to_string(), source);
+    }
 }

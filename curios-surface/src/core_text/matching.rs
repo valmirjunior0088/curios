@@ -9,7 +9,7 @@ use {
     },
     crate::{
         BytesPattern, CoreText, Frame, FuncParam, ListPattern, MatchPattern, MatrixArm, NatLiteral,
-        NatPattern, Pattern, Radix, label_terms, sub,
+        NatPattern, Pattern, Radix, Shown, label_terms, sub,
     },
     curios_common::Plicity,
     curios_core::{
@@ -173,16 +173,12 @@ fn motive_written(motive: Scope<curios_core::Many>, frame: Frame) -> Tree {
 }
 
 /// One arm: its pattern, then its body.
-fn arm(pattern: MatchPattern, body: Term, frame: Frame) -> MatrixArm<crate::Shown> {
-    MatrixArm {
-        pattern,
-        body: sub(body, frame),
-        span: None,
-    }
+fn arm(pattern: MatchPattern, body: Term, frame: Frame) -> MatrixArm<Shown> {
+    MatrixArm::of(pattern, sub(body, frame))
 }
 
 /// A family's arm: its constructor's tag over its payload's binders, each under its mark.
-fn constructor_arm(tag: &str, induct_arm: InductArm, frame: Frame) -> MatrixArm<crate::Shown> {
+fn constructor_arm(tag: &str, induct_arm: InductArm, frame: Frame) -> MatrixArm<Shown> {
     let labels = frame.labels(induct_arm.label_iter());
     let terms = label_terms(&labels);
     let args = labels
@@ -245,7 +241,13 @@ pub fn match_read(
         }
         held.finish()?;
     }
-    let patterns = arms.iter().map(|arm| &arm.pattern).collect::<Vec<_>>();
+    let patterns = arms
+        .iter()
+        .map(|arm| match arm.alternatives.as_slice() {
+            [alternative] => Ok(&alternative.pattern),
+            _ => Err(refused("an arm of one pattern")),
+        })
+        .collect::<Result<Vec<_>, ReadError>>()?;
     let cases = match patterns.as_slice() {
         [MatchPattern::Bool(false), MatchPattern::Bool(true)] => Cases::Bool {
             false_case: core_read(&arms[0].body, reader)?,
@@ -329,8 +331,9 @@ pub fn match_read(
             Cases::Switch {
                 cases: keyed
                     .iter()
-                    .map(|arm| {
-                        let key = match &arm.pattern {
+                    .zip(&patterns)
+                    .map(|(arm, pattern)| {
+                        let key = match pattern {
                             MatchPattern::Nat(NatPattern::Lit(literal)) => literal.0.clone(),
                             _ => curios_num::Natural::zero(),
                         };
@@ -343,8 +346,8 @@ pub fn match_read(
         _ => {
             let mut cases = Vec::new();
             let mut default = None;
-            for (index, arm) in arms.iter().enumerate() {
-                match &arm.pattern {
+            for (index, (arm, pattern)) in arms.iter().zip(&patterns).enumerate() {
+                match pattern {
                     MatchPattern::Variant { tag, args } if default.is_none() => {
                         let mut words = Vec::with_capacity(args.len());
                         let mut marks = Vec::with_capacity(args.len());

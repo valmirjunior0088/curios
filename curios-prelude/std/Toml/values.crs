@@ -89,10 +89,8 @@ pub and value() -> Parse(Str, Toml) =
         | 'f' => false_value
         | '[' => array_value()
         | '{' => inline_table_value()
-        | '+' => signed_number_value
-        | '-' => signed_number_value
-        | 'i' => special_value
-        | 'n' => special_value
+        | '+' | '-' => signed_number_value
+        | 'i' | 'n' => special_value
         | _ => digit_led_value
         end
     end;

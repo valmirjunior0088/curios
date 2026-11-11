@@ -557,7 +557,7 @@ Embeddings never chain. Declaring `Monad/Lift(Io, Job)` and `Monad/Lift(Job, Sch
 
 ### Match shell and motives
 
-A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case, and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the match is refused with the value no arm matches, written as a pattern. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled. Where the facts in scope refute each other and no written term says so, `proved(@False)` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
+A headed match has a scrutinee, an optional motive, one `| pattern => body` arm per case — or per several, written as [alternatives](#alternatives) — and a closing `end`. An arm may be left out where that constructor's index target is *provably* impossible at the scrutinee's indices — a match over a `Sized(T)(n + 1)` needs no `empty()` arm — and where it is not provable the match is refused with the value no arm matches, written as a pattern. A scrutinee whose type reduces to an inductive with no constructors takes no arms at all: `match contradiction end` is how a proof of an empty type is discharged, with a motive where the result has to be spelled. Where the facts in scope refute each other and no written term says so, `proved(@False)` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
 The motive states the result type as a family. It is an ordinary term, checked against the eliminator's motive type — a function of the scrutinee's indices, in declaration order, and then the scrutinee:
 
@@ -582,7 +582,7 @@ Parameters are never binders. They are uniform across constructors and fixed by 
 
 Each arm is checked against the motive at that constructor's target indices, and the match as a whole at the scrutinee's actual indices. A `| _ =>` default binds nothing and refines no index, so it is checked at the actual indices too.
 
-An arm's body is typed once, under the cases its own pattern states and nothing else. What a body may rest on — the case of its scrutinee, a bound a case decides, the indices a constructor fixes — is what its arm writes, whichever other arms the match holds: an arm that writes a binder where another names a constructor learns nothing of that constructor.
+An arm's body is typed once, under the cases its own pattern states and nothing else — once for each of its [alternatives](#alternatives), under that alternative's. What a body may rest on — the case of its scrutinee, a bound a case decides, the indices a constructor fixes — is what its arm writes, whichever other arms the match holds: an arm that writes a binder where another names a constructor learns nothing of that constructor.
 
 A binder may be written bare, as `_`, or annotated. An annotation is an ordinary type in an ordinary position: checked by conversion against the binder's expected type, obeying the usual plicity rules, and free to name the binders before it. Annotating the scrutinee binder is how a reader recovers the eliminated family on the motive line.
 
@@ -594,7 +594,7 @@ Omitting the motive asks the elaborator to infer it. In a position with an expec
 
 A fold's motive (`Nat`, `List`, `Bytes`, with an arm reading its hypothesis) states its result per tail through the binder it declares: the `; ih` hypothesis is typed at the motive opened at the tail. `match n: (m) => P(m)` asks its arms for `P(0)` and `P(k + 1)`, the hypothesis standing at `P(k)`. A motive that names the scrutinee instead, `match n: (_) => P(n)`, states `P(n)` at every tail, and its arms inhabit that as it is written.
 
-A motive may only be written where the head dispatches directly: every arm's top-level pattern must be the same dispatchable shape. A tuple-scrutinee matrix, a struct-headed match, or a plain-binder match builds no core eliminator for the motive to attach to, and rejects one.
+A motive may only be written where the head dispatches directly: every arm's top-level pattern, in each of its alternatives, must be the same dispatchable shape. A tuple-scrutinee matrix, a struct-headed match, or a plain-binder match builds no core eliminator for the motive to attach to, and rejects one.
 
 ### Inductive patterns
 
@@ -647,6 +647,38 @@ Arms have no priority: the order they are written in never changes what a match 
 - Two arms that match one value, neither a case of the other, are refused with the value they share written as a pattern, which is the arm that parts them. `(true, _)` and `(_, true)` meet at `(true, true)`.
 - An arm no value reaches is refused: one written after an arm it is a case of, and a final `_` after arms that already cover every case.
 - A value no arm matches is refused, written as the pattern that matches it — `(some(_), none())` — with `_` wherever no case was read.
+
+### Alternatives
+
+An arm may write several patterns before its `=>`, each after a bar of its own: the arm is taken by a value any of them matches.
+
+```crs
+match Char/to_nat(c)
+| ' ' | '\t' | '\n' | '\r' => true
+| _ => false
+end
+```
+
+Every alternative binds the same names, and the body reads each as the alternative that matched binds it. A name may stand at a different place in each, and its type may differ; a name one alternative binds and another does not is refused, since the body would read it where that alternative leaves it unbound.
+
+```crs
+match h
+| element(tag, _, _) | void(tag, _) => Str/eql_ignoring_ascii_case(tag, name)
+| _ => false
+end
+```
+
+The body is typed once for each alternative, under that alternative's cases and nothing else, as an arm of its own would be: an arm with alternatives means the arms it abbreviates, its body written once. A proof that holds case by case is written once for all of them.
+
+```crs
+match Int/view(a)
+| nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed()
+end
+```
+
+The alternatives of one arm match no value in common, so no order among them decides which one a value takes. An alternative that is a case of another is refused, the other matching every value it does, and two that meet are refused with the value they share written as a pattern: `(true, _) | (_, true)` meet at `(true, true)`, and are written `(true, _) | (false, true)`. Against the arms beside it, each alternative is held to the rules an arm is, under [Binders beside patterns](#binders-beside-patterns).
+
+Alternatives stand at the top of an arm: a pattern holds none, so `some('a' | 'b')` is written `some('a') | some('b')`.
 
 ### The arm that cannot fail
 
@@ -773,7 +805,7 @@ choose
 end
 ```
 
-A condition arm fires when its expression evaluates to `true`. A bind arm evaluates the expression on the right of `=` and fires when it matches the refutable pattern on the left. A bare binder is not allowed as a bind-arm pattern, because it cannot fail: an arm that always fires is a `let`, and a tuple or struct pattern that takes nothing apart is refused the same way, as an arm that leaves the rest of the ladder unreached.
+A condition arm fires when its expression evaluates to `true`. A bind arm evaluates the expression on the right of `=` and fires when it matches the refutable pattern on the left, or one of the [alternatives](#alternatives) written there: `| left(x) | right(x) = either => x`. A bare binder is not allowed as a bind-arm pattern, because it cannot fail: an arm that always fires is a `let`, and a tuple or struct pattern that takes nothing apart is refused the same way, as an arm that leaves the rest of the ladder unreached.
 
 Each selected arm receives the same definitional refinement that an equivalent nested headed match would provide.
 

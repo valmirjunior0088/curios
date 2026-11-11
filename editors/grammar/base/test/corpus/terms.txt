@@ -285,6 +285,80 @@ end
       (number))))
 
 ================================================================================
+Arms of alternatives
+================================================================================
+
+match c
+| ' ' | '\t' => true
+| some(x) | other(_, x) => x
+| _ => false
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (match_term
+    (path
+      (identifier))
+    (match_arm
+      (character)
+      (character)
+      (boolean))
+    (match_arm
+      (constructor_pattern
+        (identifier)
+        (constructor_argument
+          (identifier)))
+      (constructor_pattern
+        (identifier)
+        (constructor_argument
+          (identifier))
+        (constructor_argument
+          (identifier)))
+      (path
+        (identifier)))
+    (match_arm
+      (identifier)
+      (boolean))))
+
+================================================================================
+A bind arm of alternatives
+================================================================================
+
+choose
+| left(x) | right(x) = e => x
+| _ => 0
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (choose_term
+    (choose_arm
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier)))))
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier)))))
+      (path
+        (identifier))
+      (path
+        (identifier)))
+    (choose_arm
+      (path
+        (identifier))
+      (number))))
+
+================================================================================
 Local let with destructuring binders and a recursive binding
 ================================================================================
 

@@ -382,6 +382,7 @@ macro_rules! shown_terms {
         match $error {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
+            | Self::InAlternative { error, .. }
             | Self::InScope { error, .. } => error.$recurse($visit),
             Self::InUnreachableArm { dead, error } => {
                 for term in dead.$terms() {
@@ -725,6 +726,13 @@ pub enum Error {
         value: String,
         first: String,
         second: String,
+    },
+    /// Two alternatives of one arm that match one value. Each is typed under its own cases, so nothing would say which of the two the value takes. `value` is the value as a pattern, and `first` and `second` are the two as written; where `contained`, every value `first` matches `second` matches too, and `first` adds nothing to the arm.
+    MatrixAlternativesMeet {
+        value: String,
+        first: String,
+        second: String,
+        contained: bool,
     },
     /// A struct pattern written under `head` over a scrutinee whose type is not that structure.
     MatrixStructHead {
@@ -1072,6 +1080,11 @@ pub enum Error {
     /// An arm that is never taken raised `error`: the arm is dead, which the report says beside what failed, with `dead` as the reason. What the arm rests on fails there: a proof resting on its guard, no checker recording an equation under a spelling that mentions no local, and a fact read off an index its scrutinee does not have, a case whose indices clash being checked with none solved.
     InUnreachableArm {
         dead: Box<DeadArm>,
+        error: Box<Error>,
+    },
+    /// One alternative of an arm of several raised `error`, under its own cases: the arm's body is typed once for each, and the report names the alternative, `written` as it is written, which a reader of the body alone could not tell.
+    InAlternative {
+        written: String,
         error: Box<Error>,
     },
     /// Where `error` arose, as its reader stands there (`ReaderScope`): the position its terms are settled for and spelled for. A sibling of [`Error::Located`], attached by the same drivers.
@@ -1689,6 +1702,7 @@ impl Error {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
+            | Self::InAlternative { error, .. }
             | Self::InScope { error, .. } => error.is_incomplete(),
             Self::Batch(errors) => errors.iter().all(Error::is_incomplete),
             _ => false,
@@ -1823,12 +1837,24 @@ impl Error {
         }
     }
 
+    /// Say that the alternative `written` of an arm of several raised this error, typed under its own cases. A batch is left as it is, each member carrying its own place.
+    pub fn in_alternative(self, written: String) -> Self {
+        match self {
+            Self::Batch(_) | Self::Goals(_) => self,
+            error => Self::InAlternative {
+                written,
+                error: Box::new(error),
+            },
+        }
+    }
+
     /// The definition the innermost declaration wrapper names — where the reader of this error stands.
     fn owner(&self) -> Option<Global> {
         match self {
             Self::InDeclaration { names, error } => error.owner().or(names.first().copied()),
             Self::Located { error, .. }
             | Self::InUnreachableArm { error, .. }
+            | Self::InAlternative { error, .. }
             | Self::InScope { error, .. } => error.owner(),
             _ => None,
         }
@@ -1875,7 +1901,8 @@ impl Error {
             Self::InScope { scope, error } => error.reader_scope().or(Some(scope)),
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
-            | Self::InUnreachableArm { error, .. } => error.reader_scope(),
+            | Self::InUnreachableArm { error, .. }
+            | Self::InAlternative { error, .. } => error.reader_scope(),
             _ => None,
         }
     }
@@ -1897,6 +1924,7 @@ impl Error {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
+            | Self::InAlternative { error, .. }
             | Self::RejectedCandidate { error, .. } => error.let_go_of_frames(),
             Self::Batch(errors) => errors.iter_mut().for_each(Self::let_go_of_frames),
             _ => {}
@@ -1932,6 +1960,7 @@ impl Error {
         match self {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
+            | Self::InAlternative { error, .. }
             | Self::InScope { error, .. } => error.write_terms(context),
             Self::InUnreachableArm { dead, error } => {
                 for term in dead.terms_mut() {
@@ -2163,6 +2192,7 @@ impl Error {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
+            | Self::InAlternative { error, .. }
             | Self::InScope { error, .. } => error.unwrapped(),
             error => error,
         }
@@ -2173,6 +2203,7 @@ impl Error {
         match self {
             Self::Located { error, .. }
             | Self::InUnreachableArm { error, .. }
+            | Self::InAlternative { error, .. }
             | Self::InScope { error, .. } => error.declaration_prefix(spelling),
             Self::InDeclaration { names, error } => {
                 format!(
@@ -2203,6 +2234,11 @@ impl Error {
                 error.render_body(spelling, anchors),
                 unreachable_arm_note(dead, spelling)
             ),
+            Self::InAlternative { written, error } => format!(
+                "{}\n{}",
+                error.render_body(spelling, anchors),
+                alternative_note(written)
+            ),
             error => Displayed(error, Rc::clone(spelling), anchors).to_string(),
         }
     }
@@ -2215,6 +2251,7 @@ impl Error {
             Self::Located { extent, error } => error.innermost_extent().or(Some(extent)),
             Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
+            | Self::InAlternative { error, .. }
             | Self::InScope { error, .. } => error.innermost_extent(),
             Self::UniverseInconsistency { path, .. } => {
                 path.iter().find_map(|origin| origin.extent.as_ref())
@@ -2304,6 +2341,7 @@ impl Exhaustion for Error {
             Self::Located { error, .. }
             | Self::InDeclaration { error, .. }
             | Self::InUnreachableArm { error, .. }
+            | Self::InAlternative { error, .. }
             | Self::InScope { error, .. } => error.refusal(),
             _ => None,
         }

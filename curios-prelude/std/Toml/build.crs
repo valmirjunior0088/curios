@@ -54,7 +54,7 @@ let seg_key(pre: Bytes, seg: Seg) -> Bytes =
     end;
 
 let seg_name(seg: Seg) -> Str =
-    match seg | plain(name) => name | at(name, _) => name end;
+    match seg | plain(name) | at(name, _) => name end;
 
 let replace_at(
     items: List(Toml),
@@ -76,8 +76,7 @@ let may_extend(side: Map(Bytes, Origin), kp: Bytes, act: Act) -> Result(Rule, {}
             end
         | _ =>
             match st
-            | header() => Result/success(())
-            | implicit() => Result/success(())
+            | header() | implicit() => Result/success(())
             | dotted() => Result/failure(Rule/extends_dotted_table())
             | _ => Result/failure(Rule/extends_inline_table())
             end

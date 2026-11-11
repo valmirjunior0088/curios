@@ -10,8 +10,8 @@ use {
     curios_cert::{Globals, Verdict, certify_definitions, certify_program},
     curios_common::{Candidates, Qualifier, Report, SyntaxRegistry, recurse},
     curios_core::{
-        Anchors, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec, Row, Subterm,
-        Term, Transient, Zonked,
+        Anchors, Arm, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec, Row,
+        Subterm, Term, Transient, Zonked,
     },
     curios_elab::{
         Context, Established, FinalizedProgram, Reading, Tail, elaborate_and_zonk_entry,
@@ -412,12 +412,18 @@ fn executed(term: &Term, syntax: &SyntaxRegistry) -> Term {
             Term::from(Subterm::Transient(Transient::Matrix(Matrix {
                 head: matrix.head.clone(),
                 motive: None,
-                rows: matrix
-                    .rows
+                arms: matrix
+                    .arms
                     .iter()
-                    .map(|row| Row {
-                        pattern: row.pattern.clone(),
-                        body: closing(&row.body, syntax),
+                    .map(|arm| Arm {
+                        alternatives: arm
+                            .alternatives
+                            .iter()
+                            .map(|row| Row {
+                                pattern: row.pattern.clone(),
+                                body: closing(&row.body, syntax),
+                            })
+                            .collect(),
                     })
                     .collect(),
             })))

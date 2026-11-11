@@ -9,6 +9,8 @@
 //! **The row that cannot fail**, a final row that takes nothing apart, states no case, so it is read where the match stands and at the match's own type, once, after the rows before it: written in place where one leaf reaches it, and bound once as a function of no argument, called from each, where more do.
 //!
 //! **Arm order decides nothing.** The rows that reach a leaf are its candidates, and the first written is taken. Each of the others either has it as a case, a general arm standing after its exception, or is a case of it, which no value reaches there; two that are neither would mean one thing in one order and another in the other, and the match is refused. A case no row reaches is a value no arm matches, reported as its pattern, and a row no leaf takes is an arm no value reaches.
+//!
+//! **An arm of several alternatives is a row for each**, typed apart as arms of their own are, so two of them that reach one leaf are refused, whichever is a case of the other: an arm's alternatives match no value in common, and no order among them says which typing a value takes.
 
 use {
     super::{
@@ -20,7 +22,7 @@ use {
     },
     curios_common::{Plicity, recurse},
     curios_core::{
-        Atom, Bind, Free, InductArm, Many, Matrix, Mention, Pattern, Row, Scope, StructType,
+        Arm, Atom, Bind, Free, InductArm, Many, Matrix, Mention, Pattern, Row, Scope, StructType,
         Subterm, Telescope, Term, Tuple,
     },
     curios_num::Natural,
@@ -38,11 +40,19 @@ pub fn elaborate_matrix(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let rows = matrix.rows.len();
+    let written = matrix.rows().collect::<Vec<_>>();
+    let rows = written.len();
     let compiler = Compiler {
         matrix,
         term,
-        labels: matrix.rows.iter().map(labels).collect(),
+        labels: written.iter().copied().map(labels).collect(),
+        arm_of: matrix
+            .arms
+            .iter()
+            .enumerate()
+            .flat_map(|(arm, written)| std::iter::repeat_n(arm, written.alternatives.len()))
+            .collect(),
+        rows: written,
         mode: mode.clone(),
         held: context.hold_frames(),
         fallthrough: None,
@@ -122,6 +132,10 @@ struct Walked {
 
 struct Compiler<'m> {
     matrix: &'m Matrix,
+    /// Every arm's rows, arm after arm, each an alternative of its arm in the order the arm writes them: a row is one of these by its place here.
+    rows: Vec<&'m Row>,
+    /// Which arm each row is an alternative of.
+    arm_of: Vec<usize>,
     /// The match as it is written, which a report of one of its dispatches is placed at.
     term: &'m Term,
     /// Each row's binders, as its body labels them.
@@ -162,10 +176,10 @@ impl<'m> Compiler<'m> {
     /// The whole matrix: its rows over its scrutinee, every one of them reached.
     fn whole(mut self, context: &mut Context, mode: Mode) -> Result<(Term, Term), Error> {
         let matrix = self.matrix;
-        let rows = matrix.rows.len();
+        let rows = self.rows.len();
 
         // A final row that takes nothing apart states no case. A lone one is a binding, read where its one leaf stands.
-        if rows > 1 && refutations(&matrix.rows[rows - 1].pattern) == 0 {
+        if rows > 1 && refutations(&self.row(rows - 1).pattern) == 0 {
             self.fallthrough = Some(Fallthrough {
                 row: rows - 1,
                 stand_in: context.fresh(None),
@@ -192,8 +206,21 @@ impl<'m> Compiler<'m> {
             Some(row) => Err(Error::MatrixDuplicateRow {
                 covered: self.covers[row].map(|by| self.written(by)),
             }
-            .at_opt(matrix.rows[row].body.extent())),
+            .at_opt(self.row(row).body.extent())),
             None => Ok(compiled),
+        }
+    }
+
+    /// The row at `row`, among every arm's rows.
+    fn row(&self, row: usize) -> &'m Row {
+        self.rows[row]
+    }
+
+    /// `error`, raised where the row at `row` was typed, naming the alternative it is where its arm writes more than one.
+    fn in_alternative(&self, row: usize, error: Error) -> Error {
+        match self.matrix.arms[self.arm_of[row]].alternatives.len() {
+            1 => error,
+            _ => error.in_alternative(self.written(row)),
         }
     }
 
@@ -201,7 +228,7 @@ impl<'m> Compiler<'m> {
     fn line(&self, row: usize) -> Line<'m> {
         Line {
             row,
-            cells: vec![Some((&self.matrix.rows[row].pattern, 0))],
+            cells: vec![Some((&self.row(row).pattern, 0))],
             taken: vec![None; self.labels[row].len()],
             lets: Vec::new(),
             held: Vec::new(),
@@ -392,10 +419,10 @@ impl<'m> Compiler<'m> {
             curios_surface::Label::from(hint.clone().unwrap_or_else(|| "_".to_string()))
         });
 
-        written_pattern(&self.matrix.rows[row].pattern, &mut names).to_string()
+        written_pattern(&self.row(row).pattern, &mut names).to_string()
     }
 
-    /// The rows that reach a place where every column is read: the first written is the arm a value there takes, and it is a case of every other, since nothing else orders two arms that match one value.
+    /// The rows that reach a place where every column is read: the first written is the arm a value there takes, and it is a case of every other, since nothing else orders two arms that match one value. No two of them are alternatives of one arm, which match no value in common.
     fn leaf(
         &mut self,
         context: &mut Context,
@@ -403,18 +430,32 @@ impl<'m> Compiler<'m> {
         mode: Mode,
     ) -> Result<(Term, Term), Error> {
         let line = lines.remove(0);
-        let matrix = self.matrix;
-        let patterns = |row: usize| &matrix.rows[row].pattern;
         for other in &lines {
+            let (first, later) = (&self.row(line.row).pattern, &self.row(other.row).pattern);
+            // Each alternative of an arm is typed under its own cases, so the one a value both match takes would be decided by the order they are written in.
+            if self.arm_of[line.row] == self.arm_of[other.row] {
+                let (case, general) = match (instance(first, later), instance(later, first)) {
+                    (true, _) => (Some(line.row), other.row),
+                    (_, true) => (Some(other.row), line.row),
+                    _ => (None, other.row),
+                };
+
+                return Err(Error::MatrixAlternativesMeet {
+                    value: self.value(0),
+                    first: self.written(case.unwrap_or(line.row)),
+                    second: self.written(general),
+                    contained: case.is_some(),
+                }
+                .at_opt(self.row(case.unwrap_or(other.row)).body.extent()));
+            }
             // An arm written after one it is a case of is no second claim on the value: the first takes it, and the later one is reached by nothing here.
-            let (first, later) = (patterns(line.row), patterns(other.row));
             if !instance(first, later) && !instance(later, first) {
                 return Err(Error::MatrixArmsMeet {
                     value: self.value(0),
                     first: self.written(line.row),
                     second: self.written(other.row),
                 }
-                .at_opt(self.matrix.rows[other.row].body.extent()));
+                .at_opt(self.row(other.row).body.extent()));
             }
             self.covers[other.row].get_or_insert(line.row);
         }
@@ -428,9 +469,11 @@ impl<'m> Compiler<'m> {
             return self.fallen(context, mode);
         }
         if !self.strays[line.row] {
+            let row = line.row;
             let leaf = self.body_of(context, line);
 
-            return elaborate(context, &leaf, mode);
+            return elaborate(context, &leaf, mode)
+                .map_err(|error| self.in_alternative(row, error));
         }
 
         let Mode::Check(expected) = mode else {
@@ -439,7 +482,10 @@ impl<'m> Compiler<'m> {
         let walked = match &self.walks[line.row] {
             Some(walked) => Rc::clone(walked),
             None => {
-                let walked = Rc::new(self.walk(context, line.row)?);
+                let walked = Rc::new(
+                    self.walk(context, line.row)
+                        .map_err(|error| self.in_alternative(line.row, error))?,
+                );
                 self.walks[line.row] = Some(Rc::clone(&walked));
 
                 walked
@@ -521,7 +567,7 @@ impl<'m> Compiler<'m> {
     /// The row that cannot fail as a term over the scrutinee: its body under each name its pattern writes, bound to the part of the scrutinee it stands at. A lone `_` binds nothing its body can name, so its one binder stands for anything.
     fn unfailing(&mut self, context: &mut Context, row: usize) -> Term {
         let head = &self.matrix.head;
-        let pattern = &self.matrix.rows[row].pattern;
+        let pattern = &self.row(row).pattern;
         if matches!(pattern, Pattern::Binder) && self.labels[row][0].0.is_none() {
             return self.body(row).open(&[head]);
         }
@@ -902,7 +948,7 @@ impl<'m> Compiler<'m> {
             let successor = first(|pattern| matches!(pattern, Pattern::Succ(_)));
             let literal =
                 first(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
-            let place = |row: usize| self.matrix.rows[row].body.extent();
+            let place = |row: usize| self.row(row).body.extent();
 
             return Err(Error::MatrixMixedNatDispatch {
                 successor: self.written(successor),
@@ -1241,7 +1287,7 @@ impl<'m> Compiler<'m> {
         written
             || writing
                 .iter()
-                .any(|(_, line)| holds_goal(&self.matrix.rows[line.row].body))
+                .any(|(_, line)| holds_goal(&self.row(line.row).body))
     }
 
     /// Whether the body of the row at `row` names its binder at `place`.
@@ -1439,13 +1485,15 @@ impl<'m> Compiler<'m> {
                 Term::matrix(Matrix {
                     head: value,
                     motive: None,
-                    rows: vec![Row {
-                        pattern: Pattern::Struct {
-                            head,
-                            structure,
-                            fields: Vec::new(),
-                        },
-                        body: Term::func(Vec::<(Free, Term)>::new(), tail),
+                    arms: vec![Arm {
+                        alternatives: vec![Row {
+                            pattern: Pattern::Struct {
+                                head,
+                                structure,
+                                fields: Vec::new(),
+                            },
+                            body: Term::func(Vec::<(Free, Term)>::new(), tail),
+                        }],
                     }],
                 })
             })
@@ -1758,11 +1806,9 @@ impl<'m> Compiler<'m> {
     ///
     /// A row's own walk enters such a case as a fold's arm where this holds, and as a case split's where it does not. The tree makes a column a fold where a row of the group it splits reads its hypothesis ([`Compiler::reads_hypothesis`]), and every such group is of rows that write that place, so a row walked as a case split is under no fold, and one walked as a fold's arm is typed under less than a case split gives it: its body stands wherever the tree puts it.
     fn folds(&self) -> Vec<Vec<bool>> {
-        let rows = &self.matrix.rows;
-
-        let mut places = Vec::with_capacity(rows.len());
+        let mut places = Vec::with_capacity(self.rows.len());
         let mut readers = BTreeSet::new();
-        for row in rows {
+        for row in &self.rows {
             let goal = holds_goal(&row.body);
             let mut written = Vec::new();
             fold_places(&row.pattern, &mut Vec::new(), &mut |path, peeled| {
@@ -1785,7 +1831,7 @@ impl<'m> Compiler<'m> {
 
     /// The body of the row at `row`, as the function over its binders it is.
     fn body(&self, row: usize) -> &'m Telescope<Term> {
-        match &*self.matrix.rows[row].body {
+        match &*self.row(row).body {
             Subterm::Func(func) => &func.telescope,
             _ => unreachable!("a row's body is a function over its binders"),
         }

@@ -105,7 +105,7 @@ end
 pub use Parsed/*;
 
 let values(@c: Command, p: Parsed(c)) -> Values(Slots(c)) =
-    match p | leaf(v) => v | group(v, _) => v end;
+    match p | leaf(v) | group(v, _) => v end;
 
 --- The type `get` answers for `name` among `spec`.
 pub let Lookup(spec: List(Slot), name: Str) -> Type =

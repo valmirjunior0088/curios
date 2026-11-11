@@ -259,9 +259,9 @@ pub struct ChooseArm<D: Dialect = Program> {
 pub enum ChooseTest<D: Dialect = Program> {
     /// `| cond =>` — a `Bool` condition; the arm fires when `cond` is `true`.
     Cond(Term<D>),
-    /// `| pattern = value =>` — a refutable bind (Rust `if let`): the arm fires when `value` matches the (refutable, possibly nested) `pattern`, binding its sub-patterns in the body. A bare-[`MatchPattern::Binder`] `pattern` is irrefutable and rejected by lowering — it would be a plain `let`.
+    /// `| pattern | … = value =>` — a refutable bind (Rust `if let`): the arm fires when `value` matches one of the (refutable, possibly nested) alternatives, binding its sub-patterns in the body. A bare-[`MatchPattern::Binder`] alternative is irrefutable and rejected by lowering — it would be a plain `let`.
     Bind {
-        pattern: MatchPattern,
+        alternatives: Vec<Alternative>,
         value: Term<D>,
     },
 }
@@ -307,18 +307,38 @@ pub struct Match<D: Dialect = Program> {
     pub arms: Vec<MatrixArm<D>>,
 }
 
-/// One arm of a [`Match`]: `| pattern => body`. Compiled by `curios-elab`'s matrix compiler into the single-level core match/projection forms — exactly what a person would get from hand-nesting matches (see its doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every argument a plain [`MatchPattern::Binder`]) comes to one core arm binding the written names.
-#[derive(Debug, Clone)]
+/// One arm of a [`Match`]: `| pattern | … => body`, its alternatives in the order they are written and the one body they share. Compiled by `curios-elab`'s matrix compiler into the single-level core match/projection forms — exactly what a person would get from hand-nesting matches (see its doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every argument a plain [`MatchPattern::Binder`]) comes to one core arm binding the written names.
+#[derive(Debug, Clone, PartialEq)]
 pub struct MatrixArm<D: Dialect = Program> {
-    pub pattern: MatchPattern,
+    /// At least one.
+    pub alternatives: Vec<Alternative>,
     pub body: Term<D>,
-    /// Where the pattern is written, or `None` for an arm the compiler built. A location, as a [`Term`]'s span is, and no part of what the arm is.
+}
+
+impl<D: Dialect> MatrixArm<D> {
+    /// The arm of one pattern, written nowhere: an arm the compiler built.
+    pub fn of(pattern: MatchPattern, body: Term<D>) -> Self {
+        Self {
+            alternatives: vec![Alternative {
+                pattern,
+                span: None,
+            }],
+            body,
+        }
+    }
+}
+
+/// One of the patterns an arm writes before its `=>`: the arm is taken by a value any of them matches, its names bound as that one binds them.
+#[derive(Debug, Clone)]
+pub struct Alternative {
+    pub pattern: MatchPattern,
+    /// Where the pattern is written, or `None` for one the compiler built. A location, as a [`Term`]'s span is, and no part of what the alternative is.
     pub span: Option<Span>,
 }
 
-impl<D: Dialect> PartialEq for MatrixArm<D> {
+impl PartialEq for Alternative {
     fn eq(&self, other: &Self) -> bool {
-        self.pattern == other.pattern && self.body == other.body
+        self.pattern == other.pattern
     }
 }
 

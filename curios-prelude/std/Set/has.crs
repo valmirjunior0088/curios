@@ -55,7 +55,7 @@ let either(
     x: Option(A),
     y: Option(A),
 ) -> Eq()(Option/is_some(Option/or(y, x)), Option/is_some(x) || Option/is_some(y)) =
-    match y | some(_) => Eq/refl() | none() => Eq/refl() end;
+    match y | some(_) | none() => Eq/refl() end;
 
 --- An element of `union` is an element of either.
 pub let of_union(

@@ -39,7 +39,7 @@ pub let past(p: Bytes, a: Bytes, b: Bytes) -> Eq()(ord(x[..p, ..a], x[..p, ..b])
 pub let flips: Ord/Flips(ord) =
     (a, b) =>
         match a: (m) => (b: Bytes) -> Eq()(ord(b, m), Ordering/flip(ord(m, b)))
-        | x[] => (b) => match b | x[] => Eq/refl() | x[_, .._] => Eq/refl() end
+        | x[] => (b) => match b | x[] | x[_, .._] => Eq/refl() end
         | x[h, ..t]; ih =>
             (b) =>
                 match b
@@ -102,7 +102,7 @@ pub let transitive: Ord/Transitive(Ord/le(ord)) =
                 c: Bytes,
                 p: Bool/Holds(Ordering/is_le(ord(m, b))),
                 q: Bool/Holds(Ordering/is_le(ord(b, c)))) -> Bool/Holds(Ordering/is_le(ord(m, c)))
-        | x[] => (_, c, _, _) => match c | x[] => Bool/True/qed() | x[_, .._] => Bool/True/qed() end
+        | x[] => (_, c, _, _) => match c | x[] | x[_, .._] => Bool/True/qed() end
         | x[h, ..t]; ih =>
             (b, c, p, q) =>
                 match b

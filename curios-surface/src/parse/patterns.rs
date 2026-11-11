@@ -199,15 +199,36 @@ fn parse_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, Pattern> {
         .parse(state)
 }
 
+/// What refuses an alternative written inside a pattern.
+const ALTERNATIVES_STAND_AT_THE_TOP: &str = "alternatives stand at the top of an arm, each a whole pattern: `some('a') | some('b')`, not `some('a' | 'b')`";
+
+// A pattern written inside another — a constructor's payload, a tuple's or a struct's field, a parenthesized group. An alternative stands at the top of an arm alone, so a bar after one is refused by name, where it stands, rather than left for the enclosing form to report as the token it did not expect; `||` is no bar and is left to it.
+fn parse_inner_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {
+    parse_match_pattern
+        .and_drop(
+            look_ahead(parse_literal("|").and_drop(not_ahead("|")))
+                .map(|_| true)
+                .or(pure(false))
+                .flat_map(|alternative| match alternative {
+                    true => parse_whitespace
+                        .and_keep(mark)
+                        .flat_map(|start| commit(fail_from(&start, ALTERNATIVES_STAND_AT_THE_TOP)))
+                        .boxed(),
+                    false => pure(()).boxed(),
+                }),
+        )
+        .parse(state)
+}
+
 // A match-arm field: `label = pattern` or a bare positional pattern — the `MatchPattern` counterpart of `parse_pattern_field`.
 pub fn parse_match_pattern_field<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPatternField> {
     parse_pattern_field_prefix
-        .and(parse_match_pattern)
+        .and(parse_inner_match_pattern)
         .map(|(label, value)| MatchPatternField {
             label: Some(label),
             value,
         })
-        .or(parse_match_pattern.map(|value| MatchPatternField { label: None, value }))
+        .or(parse_inner_match_pattern.map(|value| MatchPatternField { label: None, value }))
         .parse(state)
 }
 
@@ -222,7 +243,7 @@ pub fn parse_tuple_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, Match
         .map(|(first, rest)| iter::once(first).chain(rest).collect::<Vec<_>>())
         .or(parse_literal("(")
             .and_keep(parse_pattern_field_prefix)
-            .and(parse_match_pattern)
+            .and(parse_inner_match_pattern)
             .map(|(label, value)| {
                 vec![MatchPatternField {
                     label: Some(label),
@@ -262,7 +283,7 @@ pub fn parse_ctor_arg<'a>(state: ParserState<'a>) -> Parsed<'a, (Plicity, MatchP
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Witness => commit(fail_from(&start, PATTERN_TAKES_NO_USE)).boxed(),
-            Plicity::Explicit | Plicity::Implicit => parse_match_pattern
+            Plicity::Explicit | Plicity::Implicit => parse_inner_match_pattern
                 .map(move |pattern| (plicity, pattern))
                 .boxed(),
         })
@@ -476,7 +497,7 @@ fn parse_match_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPatt
         .or(parse_list_cons_match_pattern)
         .or(parse_tuple_match_pattern)
         .or(parse_literal("(")
-            .and_keep(parse_match_pattern)
+            .and_keep(parse_inner_match_pattern)
             .and_drop(parse_literal(")")))
         .or(refuse_misread_successor)
         .or(parse_binder.map(MatchPattern::Binder))

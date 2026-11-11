@@ -766,7 +766,7 @@
         ]
       },
       "test": {
-        "multiple": false,
+        "multiple": true,
         "required": true,
         "types": [
           {
@@ -4184,7 +4184,7 @@
         ]
       },
       "pattern": {
-        "multiple": false,
+        "multiple": true,
         "required": true,
         "types": [
           {

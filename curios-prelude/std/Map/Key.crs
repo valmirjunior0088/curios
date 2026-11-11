@@ -41,7 +41,7 @@ satisfy Key(Byte) {
     monotone(a, b) =
         match a < b
         | true => Eq/refl()
-        | false => match a == b | true => Eq/refl() | false => Eq/refl() end
+        | false => match a == b | true | false => Eq/refl() end
         end,
 }
 
@@ -51,7 +51,7 @@ let bool_of(z: Bytes) -> Bool =
 
 -- The encoding round-trips through it at both values, which is the whole of the injectivity below: two values encoding alike decode alike, and decoding is the identity.
 let bool_round(b: Bool) -> Eq()(bool_of(Hash/hash(b)), b) =
-    match b | true => Eq/refl() | false => Eq/refl() end;
+    match b | true | false => Eq/refl() end;
 
 --- One byte per value, `false`'s below `true`'s.
 satisfy Key(Bool) {
@@ -59,8 +59,7 @@ satisfy Key(Bool) {
         Eq/trans(Eq/sym(bool_round(a)), Eq/trans(Eq/cong(bool_of, same), bool_round(b))),
     monotone(a, b) =
         match a
-        | false => match b | false => Eq/refl() | true => Eq/refl() end
-        | true => match b | false => Eq/refl() | true => Eq/refl() end
+        | false | true => match b | false | true => Eq/refl() end
         end,
 }
 

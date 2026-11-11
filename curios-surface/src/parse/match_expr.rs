@@ -4,8 +4,8 @@ use {
         parse_match_pattern, parse_name, parse_pattern, parse_term_before_arrow, trimmed,
     },
     crate::{
-        Choose, ChooseArm, ChooseTest, Func, Match, MatrixArm, Pattern, Subterm, Term, parse_term,
-        parse_whitespace,
+        Alternative, Choose, ChooseArm, ChooseTest, Func, Match, MatrixArm, Pattern, Subterm, Term,
+        parse_term, parse_whitespace,
     },
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail_from, look_ahead, many0, mark, not_ahead, pure,
@@ -69,21 +69,45 @@ pub fn parse_match_prefix<'a, D: Grammar>(
         .parse(state)
 }
 
-// A match-arm: `| pattern => body`, where `pattern` may nest across constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`). A bare binder arm is legal alone (equivalent to a `let`), a binder may stand beside a concrete pattern in any column, and a final bare `_` is the row that cannot fail. Arms have no priority order, so two may match one value only where the first is a case of the other (`curios-elab`'s matrix compiler).
+// One of an arm's alternatives: a pattern, beside where it is written.
+fn parse_alternative<'a>(state: ParserState<'a>) -> Parsed<'a, Alternative> {
+    spanned(parse_match_pattern)
+        .map(|(span, pattern)| Alternative {
+            pattern,
+            span: Some(trimmed(span)),
+        })
+        .parse(state)
+}
+
+// An alternative after the first: a term has no bare `|`, so past a pattern a bar can be nothing but another alternative, and what follows it must be one.
+fn parse_later_alternative<'a>(state: ParserState<'a>) -> Parsed<'a, Alternative> {
+    parse_literal("|")
+        .and_keep(commit(parse_alternative))
+        .parse(state)
+}
+
+// The alternatives of an arm: one pattern, then another after each `|`, up to what follows them.
+fn parse_alternatives<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<Alternative>> {
+    parse_alternative
+        .and(many0(parse_later_alternative))
+        .map(|(first, mut rest)| {
+            rest.insert(0, first);
+            rest
+        })
+        .parse(state)
+}
+
+// A match-arm: `| pattern | … => body`, where each `pattern` may nest across constructors, tuples, and structs (see `MatchPattern`, `parse_match_pattern`). A bare binder arm is legal alone (equivalent to a `let`), a binder may stand beside a concrete pattern in any column, and a final bare `_` is the row that cannot fail. Arms have no priority order, so two may match one value only where the first is a case of the other, and the alternatives of one arm match no value in common (`curios-elab`'s matrix compiler).
 pub fn parse_induct_match_branch<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatrixArm<D>> {
     parse_literal("|")
         .and_keep(commit(
-            spanned(parse_match_pattern)
+            parse_alternatives
                 .and_drop(parse_literal("=>"))
                 .and(parse_term::<D>),
         ))
-        .map(|((span, pattern), body)| MatrixArm {
-            pattern,
-            body,
-            span: Some(trimmed(span)),
-        })
+        .map(|(alternatives, body)| MatrixArm { alternatives, body })
         .parse(state)
 }
 
@@ -96,10 +120,10 @@ pub fn parse_cons_ih<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Pattern>> 
         .parse(state)
 }
 
-// A bind arm `| pattern = value => body` (Rust `if let`): the arm fires when `value` matches the refutable `pattern`. The `=` separator is guarded against `==` (equality) and `=>` (an empty value) via `not_ahead`, mirroring the `!` vs `!=` idiom. Tried *after* the condition arm, since a bind pattern like `some(x)` also parses as a condition term and the condition arm cannot take a bind arm from it: `=` is no infix operator, so a condition term stops there and the arm fails wanting its `=>`. Reading it second is what lets it keep its commitments — a pattern the grammar refuses by name, a qualified constructor above all, is then the diagnosis instead of being re-read as an ordinary call and reported at the `=` that follows it.
+// A bind arm `| pattern | … = value => body` (Rust `if let`): the arm fires when `value` matches one of the refutable alternatives. The `=` separator is guarded against `==` (equality) and `=>` (an empty value) via `not_ahead`, mirroring the `!` vs `!=` idiom. Tried *after* the condition arm, since a bind pattern like `some(x)` also parses as a condition term and the condition arm cannot take a bind arm from it: `=` is no infix operator, so a condition term stops there and the arm fails wanting its `=>`. Reading it second is what lets it keep its commitments — a pattern the grammar refuses by name, a qualified constructor above all, is then the diagnosis instead of being re-read as an ordinary call and reported at the `=` that follows it.
 pub fn parse_bind_arm<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ChooseArm<D>> {
     parse_literal("|")
-        .and_keep(parse_match_pattern)
+        .and_keep(parse_alternatives)
         .and_drop(
             take_exact("=")
                 .and_drop(not_ahead("="))
@@ -109,8 +133,11 @@ pub fn parse_bind_arm<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Choo
         .and(parse_term_before_arrow)
         .and_drop(parse_literal("=>"))
         .and(parse_term::<D>)
-        .map(|((pattern, value), body)| ChooseArm {
-            test: ChooseTest::Bind { pattern, value },
+        .map(|((alternatives, value), body)| ChooseArm {
+            test: ChooseTest::Bind {
+                alternatives,
+                value,
+            },
             body,
         })
         .parse(state)

@@ -126,29 +126,14 @@ let month_name(m: Month) -> Str =
 -- A weekday's and a month's three letters may each stand in a value: by cases, a literal's reason at each.
 let weekday_admitted(d: Weekday) -> Bool/Holds(Bytes/all(Str/to_bytes(weekday_name(d)), admits)) =
     match d
-    | sunday() => Bool/True/qed()
-    | monday() => Bool/True/qed()
-    | tuesday() => Bool/True/qed()
-    | wednesday() => Bool/True/qed()
-    | thursday() => Bool/True/qed()
-    | friday() => Bool/True/qed()
-    | saturday() => Bool/True/qed()
+    | sunday() | monday() | tuesday() | wednesday() | thursday() | friday() | saturday() =>
+        Bool/True/qed()
     end;
 
 let month_admitted(m: Month) -> Bool/Holds(Bytes/all(Str/to_bytes(month_name(m)), admits)) =
     match m
-    | january() => Bool/True/qed()
-    | february() => Bool/True/qed()
-    | march() => Bool/True/qed()
-    | april() => Bool/True/qed()
-    | may() => Bool/True/qed()
-    | june() => Bool/True/qed()
-    | july() => Bool/True/qed()
-    | august() => Bool/True/qed()
-    | september() => Bool/True/qed()
-    | october() => Bool/True/qed()
-    | november() => Bool/True/qed()
-    | december() => Bool/True/qed()
+    | january() | february() | march() | april() | may() | june() | july() | august() | september()
+    | october() | november() | december() => Bool/True/qed()
     end;
 
 --- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7), `Sun, 06 Nov 1994 08:49:37 GMT`: its date and time in UTC, or `none` where its year has more than the four digits the form has room for. Each octet is built as one a value may hold, so a message is dated with no check that could refuse.

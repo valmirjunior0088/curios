@@ -19,17 +19,13 @@ let classify_continues(c: Byte) -> Bool/Holds(class_continues(classify(c))) =
             match Nat/in_range(n, 0xE0, 0xEF)
             | true =>
                 match n == 0xE0
-                | true => match n == 0xED | true => Bool/True/qed() | false => Bool/True/qed() end
-                | false => match n == 0xED | true => Bool/True/qed() | false => Bool/True/qed() end
+                | true | false => match n == 0xED | true | false => Bool/True/qed() end
                 end
             | false =>
                 match Nat/in_range(n, 0xF0, 0xF4)
                 | true =>
                     match n == 0xF0
-                    | true =>
-                        match n == 0xF4 | true => Bool/True/qed() | false => Bool/True/qed() end
-                    | false =>
-                        match n == 0xF4 | true => Bool/True/qed() | false => Bool/True/qed() end
+                    | true | false => match n == 0xF4 | true | false => Bool/True/qed() end
                     end
                 | false => Bool/True/qed()
                 end
@@ -80,8 +76,7 @@ pub let Valid(b: Bytes) -> Prop =
 let lead_of(s: Scan, h: Bool/Holds(at_lead(s))) -> Eq()(s, Scan/lead()) =
     match s
     | lead() => Eq/refl()
-    | cont(_, _, _) => match h end
-    | bad() => match h end
+    | cont(_, _, _) | bad() => match h end
     end;
 
 --- Reading a concatenation is reading its halves in turn.
@@ -132,7 +127,7 @@ let step_continues(c: Byte, s: Scan) -> Bool/Holds(scan_continues(step(c, s))) =
     | cont(rem, lo, hi) =>
         match Bool/not(Nat/in_range(n, lo, hi))
         | true => Bool/True/qed()
-        | false => match rem == 1 | true => Bool/True/qed() | false => Bool/True/qed() end
+        | false => match rem == 1 | true | false => Bool/True/qed() end
         end
     end;
 

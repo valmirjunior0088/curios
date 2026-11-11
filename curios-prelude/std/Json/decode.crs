@@ -156,13 +156,7 @@ let str_value: Parse(Str, Json) =
     Parse/map(raw_str(), (s) => Json/str(s));
 
 let is_ws(c: Char) -> Bool =
-    match Char/to_nat(c)
-    | ' ' => true
-    | '\t' => true
-    | '\n' => true
-    | '\r' => true
-    | _ => false
-    end;
+    match Char/to_nat(c) | ' ' | '\t' | '\n' | '\r' => true | _ => false end;
 
 let ws: Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws), (_) => ());
