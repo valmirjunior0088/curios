@@ -38,7 +38,7 @@ name = "hello"
 compiler = "0.16.9"
 ```
 
-Neither stem is part of a name ([Modules](syntax.md#modules)), so a package's own name means one thing: where its library is mounted. Each is its unit's root, so each loads its modules from the manifest's directory, as every root loads from the directory it sits in ([Modules](syntax.md#modules)): `pub mod parse;` in `lib.crs` reads `parse.crs`, and `mod util;` in `exe.crs` reads `util.crs`.
+Neither stem is part of a name ([Modules](language.md#modules)), so a package's own name means one thing: where its library is mounted. Each is its unit's root, so each loads its modules from the manifest's directory, as every root loads from the directory it sits in ([Modules](language.md#modules)): `pub mod parse;` in `lib.crs` reads `parse.crs`, and `mod util;` in `exe.crs` reads `util.crs`.
 
 One name is reserved: a package named `std` is the standard library. Compiled first, it takes the archived `/std`'s place — compiled over it, with everything the edit did not reach reused — and everything after it is compiled against it; anywhere else in a compilation it collides with the archived root as any other claim on `/std` does. It is how the standard library is worked on, not a way to swap one under a dependency.
 
@@ -63,7 +63,7 @@ Every command that takes a subject takes it one of four ways, so what a bare inv
 
 The dispatch is lexical and never probes the disk: an executable's name is a single identifier, so it can hold neither `.crs` nor a path separator nor be `-`, and the spaces cannot overlap. `curios run scratch.crs` therefore means the file even when the package declares an executable called `scratch`.
 
-**A file is placed the same way by every command:** it is an executable's when it is that executable's entry or a module the entry's `mod` lines reach, a library's when the `mod` lines of `lib.crs` reach it, and loose otherwise — compiled against the standard library alone. A file written as [a module](syntax.md#declarations-and-modules), items with no final term, has no program in it. The project is decided from the file's own location, not the working directory.
+**A file is placed the same way by every command:** it is an executable's when it is that executable's entry or a module the entry's `mod` lines reach, a library's when the `mod` lines of `lib.crs` reach it, and loose otherwise — compiled against the standard library alone. A file written as [a module](language.md#declarations-and-modules), items with no final term, has no program in it. The project is decided from the file's own location, not the working directory.
 
 `run` and `compile` are the only commands that need a program's **own** file: a module of one is refused, naming the executable to run instead, and a library is refused as the non-program it is. Everywhere else a module reaches its unit as readily as the entry does, which is what lets a question or a lint be asked about the file in front of you.
 
@@ -110,7 +110,7 @@ Everything after the subject belongs to the program and reaches it through `/std
 
 A program the runtime stops rather than one that exits prints why on stderr and exits 1: `panicked:` and one sentence naming the rule that refused it — a `Nat` or `Int` argument to a `foreign` function past what the wire carries, a value past what the runtime can hold, a read past the end of a packed value or list, a `Flt` decoded from the wrong number of bytes, a recursive value read while its own initializer was running — followed by the wasm frames where the build kept their names. A call the runtime refuses where it crosses to what answers it is no panic: `execution failed:` and a sentence naming the declaration and what was wrong, as when a module answers `256` to a `foreign` declared `-> Byte`, or a host cannot answer a call that has no failure to report.
 
-A running program's own exit code passes through untouched. A program that closes with a description that may fail, and fails, writes the failure on stderr and exits 1, and one that closes with a test that did not hold reports it and exits 1 ([`documentation/syntax.md`](syntax.md#declarations-and-modules)). A `print` or `print_err` that cannot write ends the program with 141 where its reader has gone and 1 otherwise ([`curios-prelude`](../curios-prelude/README.md#a-loose-printer-that-cannot-write-ends-the-program)).
+A running program's own exit code passes through untouched. A program that closes with a description that may fail, and fails, writes the failure on stderr and exits 1, and one that closes with a test that did not hold reports it and exits 1 ([`documentation/language.md`](language.md#declarations-and-modules)). A `print` or `print_err` that cannot write ends the program with 141 where its reader has gone and 1 otherwise ([`curios-prelude`](../curios-prelude/README.md#a-loose-printer-that-cannot-write-ends-the-program)).
 
 ### Serving a page
 
@@ -207,7 +207,7 @@ curios test --filter /app/Map --filter /app/Set    # the tests under either
 curios test --target browser     # the same tests, run by whatever opens the printed address
 ```
 
-`curios test` runs declared tests — the [`test name = body;`](syntax.md#test-declarations) declarations. With no subject it runs the governing package's: its library's, then each executable's. A subject narrows the run to what it selects: an executable runs that executable's tests, a library module runs the library's, a file no unit declares runs its own against the standard library alone. `--filter` narrows whatever was selected to the tests at or under a path, compared a whole segment at a time, so `/app/Map` never selects a test under `/app/MapBuilder`; repeated, a test any of its paths selects runs, and each one that matches no test is an error naming it.
+`curios test` runs declared tests — the [`test name = body;`](language.md#test-declarations) declarations. With no subject it runs the governing package's: its library's, then each executable's. A subject narrows the run to what it selects: an executable runs that executable's tests, a library module runs the library's, a file no unit declares runs its own against the standard library alone. `--filter` narrows whatever was selected to the tests at or under a path, compared a whole segment at a time, so `/app/Map` never selects a test under `/app/MapBuilder`; repeated, a test any of its paths selects runs, and each one that matches no test is an error naming it.
 
 Each unit is compiled as its own test program — the same compilation `run` performs, with the final term replaced by a synthesized scheduler over that unit's selected tests — and every selected test runs in an instantiation of its own, so one test's effects, traps and exits never reach another. The unit itself is compiled with every test it declares whatever the filter, and is the one `wonder` and `lint` read; the filter narrows the program, so only the tests it selects are built past the front end, and a unit it selects none from builds no program. A unit holds its tests only here and in what `wonder` and `lint` ask of it: `run`, `compile` and a unit compiled for the units after it leave them out, so a unit's tests cost its builds nothing.
 
@@ -217,7 +217,7 @@ On stderr each unit is taken on as `run` takes on a subject — `Processing`, th
 
 A module the filter selects nothing from reports both steps with its tests skipped, and tests at the root report their module as `/`. The run ends with `Finished` and the tally of every module, unless a single module reported, whose `↳ Tested` step it would repeat.
 
-A claim about every instance is [a `let`, not a test](syntax.md#test-declarations): a broken one fails the build, and `curios test` never sees it.
+A claim about every instance is [a `let`, not a test](language.md#test-declarations): a broken one fails the build, and `curios test` never sees it.
 
 The test *verdicts* are never cached — every invocation runs every selected test, however much of the compiling was reused.
 
@@ -414,7 +414,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 | `[format]` | how [`format`](#format) writes the package's files: `width`, the columns a line is written within, 50 through 100; an umbrella member inherits this from its umbrella instead |
 | `[dependencies]` | one row per package this one reaches, keyed by that package's name |
 | `[[executables]]` | one row per program beyond `exe.crs`: `name`, and `path` when the file is not `<name>.crs` |
-| `[[foreign]]` | one row per provider of this package's [`foreign` declarations](syntax.md#foreign-declarations): what each target links, in `[foreign.native]` and `[foreign.browser]`, and what its exports answer |
+| `[[foreign]]` | one row per provider of this package's [`foreign` declarations](language.md#foreign-declarations): what each target links, in `[foreign.native]` and `[foreign.browser]`, and what its exports answer |
 
 ```toml
 name = "hello"
@@ -523,7 +523,7 @@ Exit status is a tri-state, so tooling can tell "here is your goal batch" from "
 | --- | --- |
 | `0` | compiled, and for `run`, the program itself exited 0 |
 | `1` | a hard error, alone or beside written goals; a command line that does not parse; for `lint`, a lint; for `test`, any test that failed, trapped, exited or could not be built, and a `--filter` that matched nothing |
-| `2` | the program contains [written goals](syntax.md#written-goals) (`?`) and nothing else stopped it, and their report went to stderr — for `wonder --stage`, `--cost` and `--tests` too, when goals alone kept them from answering |
+| `2` | the program contains [written goals](language.md#written-goals) (`?`) and nothing else stopped it, and their report went to stderr — for `wonder --stage`, `--cost` and `--tests` too, when goals alone kept them from answering |
 
 A running program's own exit code passes through untouched, so `0` never hides a failure — and once the program has started, the code is the program's, which the tri-state cannot tell from the compiler's: a program may exit 1 or 2 itself. Tooling that needs to know whether a program was ever started checks it first, with [`lint`](#lint) or [`wonder`](#wonder), or runs the executable [`compile`](#compile) wrote.
 

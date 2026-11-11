@@ -889,7 +889,7 @@ pub enum Error {
     },
     /// A postfix `!` whose region's monad can never be determined: an inference-position region, or one whose expected type stayed an unsolved metavariable through every retry. Strict postponement reads the monad from the region's type and never infers it from the action, so a region that never names one cannot sequence.
     BangRegionUndetermined,
-    /// A postfix `!` in a region whose type is *known* and is no monad — the rigid twin of [`Error::BangRegionUndetermined`], and the case `documentation/syntax.md` states as "a `(Str, Bool) -> Bool` has nowhere to sequence one".
+    /// A postfix `!` in a region whose type is *known* and is no monad — the rigid twin of [`Error::BangRegionUndetermined`], and the case `documentation/language.md` states as "a `(Str, Bool) -> Bool` has nowhere to sequence one".
     ///
     /// Raised by `elaborate_bang` alone, which reads the region's monad and resolves its `Monad` witness itself: a region whose head applies to nothing has no monad to read, and one whose monad has no witness has nothing to sequence through. Left to `/std/Monad/bind`, either would be reported against a premise of a call the author never wrote. `region` is the type the reader must look at, and `owner` what the region belongs to, which says why it is that type.
     BangRegionNotAMonad {

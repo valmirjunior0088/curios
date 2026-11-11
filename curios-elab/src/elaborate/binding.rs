@@ -719,7 +719,7 @@ fn region_monad(
 ///
 /// **Which is not the same as a region with no monad, and reporting it as one would refuse a program the language accepts.** A lambda handed to `File/with` checks against `(File) -> Try(Io, Io/Error, A)` with `A` the caller's implicit, so its region is `Try(Io, Io/Error, ?)`: head rigid, both context arguments rigid, only the slot the `!` itself will solve still open. Asking [`convert`](convert()) for it leaves both the abstracted slot and the argument flexible and it declines, so `Try(Io, Io/Error, ?), which is no monad` would be reported at the `!` — while annotating the enclosing type, which changes nothing about the monad, makes the same program compile.
 ///
-/// The rule is the one `documentation/syntax.md` already states for witness resolution — "an under-applied shape such as `M(A) = State(S, Nat)` infers `M` right-biasedly, as `(A) => State(S, A)`: the final argument is the abstracted one". This applies it where conversion could not guess it.
+/// The rule is the one `documentation/language.md` already states for witness resolution — "an under-applied shape such as `M(A) = State(S, Nat)` infers `M` right-biasedly, as `(A) => State(S, A)`: the final argument is the abstracted one". This applies it where conversion could not guess it.
 ///
 /// Reached only after conversion has failed, so it turns refusals into readings and never changes a region that already elaborates. The head must be keyable — [`monad_shape`]'s own condition — so a flexible or computed head still declines here rather than abstracting something that names no monad; whether what is abstracted *is* a monad stays witness resolution's answer, reported as the missing `Monad` witness it is.
 fn abstracted_monad(

@@ -1463,7 +1463,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// A constant element folded back into the literal's byte run. Escaped as `\48` it is already a run; written as a term (`0x48`) the parser cannot tell it from a computed one, and left as an atom it would build an append chain where the escaped spelling builds a single packed value. `core::spine` decodes a concrete appended atom as a length-1 literal run, so conversion equates the two spellings either way — this is compaction, not meaning.
     ///
-    /// A written sign excludes `Byte` (see `syntax.md`), and a magnitude past `255` is a type error elaboration should report against the expected element type rather than one this fold silently truncates; both stay atoms.
+    /// A written sign excludes `Byte` (see `language.md`), and a magnitude past `255` is a type error elaboration should report against the expected element type rather than one this fold silently truncates; both stay atoms.
     fn bytes_constant_atom(term: &Term) -> Option<u8> {
         match term.as_subterm() {
             Subterm::Intrinsic(Intrinsic::Byte(byte)) => Some(*byte),

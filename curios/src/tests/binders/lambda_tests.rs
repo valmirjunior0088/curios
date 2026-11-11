@@ -78,7 +78,7 @@ fn a_lambda_binder_that_claims_no_parameter_is_named_as_surplus() {
         rendered
     };
 
-    // syntax.md's own refused spelling: `A` binds the sole explicit slot and the rest are surplus.
+    // language.md's own refused spelling: `A` binds the sole explicit slot and the rest are surplus.
     surplus(
         r#"
         use /std/{Str, Show};

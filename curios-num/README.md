@@ -1,6 +1,6 @@
 # curios-num
 
-The values of the Curios intrinsic carriers: the unbounded `Natural` and `Integer`, the bitwise-identity `Floating`, and the packed `Binary` a `Bytes` value is, with the operations every stage's constant folder shares. It is the workspace's only `num-bigint` and `num-traits` dependency ([One crate is the authority for one external concern](../documentation/design/one-crate-is-the-authority-for-one-external-concern.md)). What a numeric carrier means to the language belongs to [syntax.md](../documentation/syntax.md), and how the carriers stay unbounded at run time is [Nat and Int are an i31 until they outgrow it](../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md); local architecture belongs to the crate rustdoc.
+The values of the Curios intrinsic carriers: the unbounded `Natural` and `Integer`, the bitwise-identity `Floating`, and the packed `Binary` a `Bytes` value is, with the operations every stage's constant folder shares. It is the workspace's only `num-bigint` and `num-traits` dependency ([One crate is the authority for one external concern](../documentation/design/one-crate-is-the-authority-for-one-external-concern.md)). What a numeric carrier means to the language belongs to [language.md](../documentation/language.md), and how the carriers stay unbounded at run time is [Nat and Int are an i31 until they outgrow it](../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md); local architecture belongs to the crate rustdoc.
 
 ## Design
 

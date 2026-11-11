@@ -108,7 +108,7 @@ fn top_foreign_takes_a_tuple_of_results() {
     );
 }
 
-/// One result is forwarded through as itself, so a one-field brace would name a tuple no row can carry — and would drop the label, which by `documentation/syntax.md` makes it a different type again. Refused rather than quietly unwrapped.
+/// One result is forwarded through as itself, so a one-field brace would name a tuple no row can carry — and would drop the label, which by `documentation/language.md` makes it a different type again. Refused rather than quietly unwrapped.
 #[test]
 fn top_foreign_refuses_a_single_result_in_braces() {
     let refusal = "foreign f(Nat) -> {value: Nat};"

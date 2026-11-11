@@ -1,6 +1,6 @@
 # A body an arm writes once is emitted once
 
-**Not refined yet.** This specification reserves the place where two leaves of one match that run the same body come to run one copy of it. It is not an implementation plan, and no design is chosen. The copies are the compiler's own ([Patterns are compiled where their types are known](../../design/surface/patterns-are-compiled-where-their-types-are-known.md)). Its consumer is an arm's [alternatives](../../syntax.md#alternatives), each of which runs a copy of the one body the arm writes; no row of `/std` reaches more than one leaf (*What is known*).
+**Not refined yet.** This specification reserves the place where two leaves of one match that run the same body come to run one copy of it. It is not an implementation plan, and no design is chosen. The copies are the compiler's own ([Patterns are compiled where their types are known](../../design/surface/patterns-are-compiled-where-their-types-are-known.md)). Its consumer is an arm's [alternatives](../../language.md#alternatives), each of which runs a copy of the one body the arm writes; no row of `/std` reaches more than one leaf (*What is known*).
 
 ## What is missing
 

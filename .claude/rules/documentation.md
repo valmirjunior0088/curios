@@ -12,7 +12,7 @@ Each fact lives at the narrowest authoritative place and is linked from everywhe
 | --- | --- |
 | `README.md` | What Curios is, the happy path to running one, and where to go next |
 | `documentation/usage.md` | The command line and packages: every subcommand, flag, manifest key, exit code and file |
-| `documentation/syntax.md` | The surface language, complete |
+| `documentation/language.md` | The surface language, complete |
 | `documentation/roadmap/**` | Pending work: an area's findings and specifications, each owning its status |
 | `documentation/design/**` | One cross-cutting decision per file, in a directory per subject, or at the root for the workspace as a whole; a decision scoped to one crate is its `README.md`'s |
 | `xboard/tickets/<part>/` | The soundness board: one part of the judgment per directory, its question in its `metadata.toml`, with a directory for every proof of `False` found in it; the claim and its boundaries are `documentation/design/soundness/the-soundness-board.md`'s |

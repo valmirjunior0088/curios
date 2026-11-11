@@ -1,4 +1,4 @@
-//! The language reference's examples check clean: every `crs` block of `documentation/syntax.md` is a whole program or module, asked about as `curios wonder -` asks about standard input, and reports nothing — no error, goal or lint. A form shown on its own, outside a program, is a `text` block, which nothing compiles.
+//! The language reference's examples check clean: every `crs` block of `documentation/language.md` is a whole program or module, asked about as `curios wonder -` asks about standard input, and reports nothing — no error, goal or lint. A form shown on its own, outside a program, is a `text` block, which nothing compiles.
 
 use {
     super::test_support::*,
@@ -10,7 +10,7 @@ use {
 
 #[test]
 fn every_crs_example_reports_nothing() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../documentation/syntax.md");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../documentation/language.md");
     let reference = fs::read_to_string(&path).expect("the reference is readable");
     let examples = fenced(&reference, "crs");
     assert!(!examples.is_empty(), "the reference holds examples");
@@ -20,7 +20,7 @@ fn every_crs_example_reports_nothing() {
         let subject = Subject::Entry {
             units: Vec::new(),
             origin: Origin::Text {
-                label: format!("the example at syntax.md:{line}"),
+                label: format!("the example at language.md:{line}"),
                 text: example,
             },
             declares: None,

@@ -63,7 +63,7 @@ fn higher_kinded_superclass_projects() {
     assert_eq!(run(source), b"11");
 }
 
-// A function telescope puts a `use` premise into the witness scope of every *later domain*, so a later parameter's type may name the premise's methods (`binding`'s `assume_slot`). A concept's field telescope does the same: the edge declared one field above is in scope while `injective`'s type elaborates, so `Encoded/encode`'s own `use` premise resolves to it rather than going unfound. The two are one construct in `documentation/syntax.md`, and this is where they agree — the witness below then writes no encoding at all, since there is only the edge's.
+// A function telescope puts a `use` premise into the witness scope of every *later domain*, so a later parameter's type may name the premise's methods (`binding`'s `assume_slot`). A concept's field telescope does the same: the edge declared one field above is in scope while `injective`'s type elaborates, so `Encoded/encode`'s own `use` premise resolves to it rather than going unfound. The two are one construct in `documentation/language.md`, and this is where they agree — the witness below then writes no encoding at all, since there is only the edge's.
 #[test]
 fn a_superclass_edge_is_in_scope_for_a_later_field_type() {
     let source = r#"
