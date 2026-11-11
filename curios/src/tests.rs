@@ -40,6 +40,7 @@ mod programs;
 mod recovery;
 mod recursion;
 mod reduction;
+mod reference;
 mod reports;
 mod respelling;
 mod rules;
