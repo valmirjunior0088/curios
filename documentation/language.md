@@ -1,4 +1,4 @@
-# Syntax
+# Language
 
 This is the surface language a `.crs` file is written in: each form, what it means, and what is refused. Where the compiler and this document disagree, one of them is wrong, and the disagreement is a bug.
 
