@@ -3,7 +3,7 @@
 use {
     super::{test_support::*, *},
     curios_common::Source,
-    std::path::Path,
+    std::path::PathBuf,
 };
 
 /// The comment a position is tried with.
@@ -123,8 +123,13 @@ fn positions(lines: &[&str]) -> Vec<(usize, bool)> {
     found
 }
 
-/// What goes wrong with the marker written at one position of `lines` — riding the line's end, or above it at its indentation — or `None` where it keeps its place and a second run agrees. `file` is the path the text is read as held at, which says whether it is a program or Core text.
-fn misplaced(file: &str, lines: &[&str], (index, rides): (usize, bool)) -> Option<String> {
+/// What goes wrong with the marker written at one position of `lines` — riding the line's end, or above it at its indentation — or `None` where it keeps its place and a second run within `width` agrees. `file` is the path the text is read as held at, which says whether it is a program or Core text.
+fn misplaced(
+    file: &str,
+    lines: &[&str],
+    (index, rides): (usize, bool),
+    width: Width,
+) -> Option<String> {
     let line = lines[index];
     let marked = match rides {
         true => format!("{line} {MARKER}"),
@@ -137,7 +142,7 @@ fn misplaced(file: &str, lines: &[&str], (index, rides): (usize, bool)) -> Optio
     written[index] = &marked;
     let perturbed = &format!("{}\n", written.join("\n"));
 
-    let once = match Formatted::from_source(&Source::held(file, perturbed.as_str())) {
+    let once = match Formatted::from_source(&Source::held(file, perturbed.as_str()), width) {
         Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
         Err(refusal) => return Some(format!("refused: {refusal}\n--- written ---\n{perturbed}")),
     };
@@ -157,7 +162,7 @@ fn misplaced(file: &str, lines: &[&str], (index, rides): (usize, bool)) -> Optio
         ));
     }
 
-    match Formatted::from_source(&Source::held(file, once.as_str())) {
+    match Formatted::from_source(&Source::held(file, once.as_str()), width) {
         Ok(Formatted::Unchanged(_)) => None,
         Ok(Formatted::Changed(twice)) => Some(format!(
             "moved again\n--- once ---\n{once}--- twice ---\n{twice}"
@@ -181,7 +186,7 @@ fn a_comment_keeps_its_place_from_every_position() {
         let lines = lines(source);
 
         for position in positions(&lines) {
-            if let Some(fault) = misplaced("a.crs", &lines, position) {
+            if let Some(fault) = misplaced("a.crs", &lines, position, Width::default()) {
                 wandering.push(format!("fixture {fixture}: {fault}"));
             }
         }
@@ -201,7 +206,7 @@ fn a_comment_keeps_its_place_in_core_text_from_every_position() {
     let lines = lines(EVERY_FORM);
     let wandering = positions(&lines)
         .into_iter()
-        .filter_map(|position| misplaced("a.crsc", &lines, position))
+        .filter_map(|position| misplaced("a.crsc", &lines, position, Width::default()))
         .collect::<Vec<_>>();
 
     assert!(
@@ -255,21 +260,12 @@ fn item_at<'a>(lines: &[&'a str], index: usize) -> (Vec<&'a str>, usize) {
     (lines[start..end].to_vec(), index - start)
 }
 
-/// The same law over the sources of the tree, which hold the shapes no fixture thought of: every [`STRIDE`]-th position of every source, tried within the item that holds it.
-#[test]
-fn a_comment_keeps_its_place_in_the_sources_of_the_tree() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let mut paths = Vec::new();
-    collect_sources(&root, &mut paths);
-    let sources = paths
-        .iter()
-        .map(|path| std::fs::read_to_string(path).expect("a readable source"))
-        .collect::<Vec<_>>();
-
+/// The law over `sources`, each canonical within `width`: every [`STRIDE`]-th position of every source, tried within the item that holds it.
+fn assert_every_comment_keeps_its_place(sources: &[(PathBuf, String)], width: Width) {
     let tried = sources
         .iter()
         .enumerate()
-        .flat_map(|(file, source)| {
+        .flat_map(|(file, (_, source))| {
             positions(&lines(source))
                 .into_iter()
                 .map(move |position| (file, position))
@@ -281,18 +277,19 @@ fn a_comment_keeps_its_place_in_the_sources_of_the_tree() {
     let wandering = tried
         .into_iter()
         .filter_map(|(file, (index, rides))| {
-            let whole = lines(&sources[file]);
+            let (path, source) = &sources[file];
+            let whole = lines(source);
             let (item, within) = item_at(&whole, index);
             // An item cut where the source does not divide is tried in its whole file instead.
             let alone = format!("{}\n", item.join("\n").trim_end());
-            let divides = Formatted::from_source(&Source::inline(&alone))
+            let divides = Formatted::from_source(&Source::inline(&alone), width)
                 == Ok(Formatted::Unchanged(alone.clone()));
             let fault = match divides {
-                true => misplaced("a.crs", &item, (within, rides)),
-                false => misplaced("a.crs", &whole, (index, rides)),
+                true => misplaced("a.crs", &item, (within, rides), width),
+                false => misplaced("a.crs", &whole, (index, rides), width),
             };
 
-            fault.map(|fault| format!("{}: {fault}", paths[file].display()))
+            fault.map(|fault| format!("{}: {fault}", path.display()))
         })
         .collect::<Vec<_>>();
 
@@ -302,6 +299,30 @@ fn a_comment_keeps_its_place_in_the_sources_of_the_tree() {
         wandering.len(),
         wandering.join("\n\n")
     );
+}
+
+/// The same law over the sources of the tree, which hold the shapes no fixture thought of.
+#[test]
+fn a_comment_keeps_its_place_in_the_sources_of_the_tree() {
+    assert_every_comment_keeps_its_place(&sources_of_the_tree(), Width::default());
+}
+
+/// The same law at the narrowest width a file may be formatted within, over the sources of the tree as the formatter writes them there, where far more of their lines break.
+#[test]
+fn a_comment_keeps_its_place_in_the_sources_of_the_tree_at_the_narrowest_width() {
+    let narrowest = Width::new(NARROWEST).expect("the narrowest width is admitted");
+    let written = sources_of_the_tree()
+        .into_iter()
+        .map(|(path, source)| {
+            let held = Source::held(path.clone(), source.as_str());
+            match Formatted::from_source(&held, narrowest) {
+                Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => (path, text),
+                Err(refusal) => panic!("{}: {refusal}", path.display()),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    assert_every_comment_keeps_its_place(&written, narrowest);
 }
 
 /// A comment written under an arm's arrow, on a line of its own, stays there: between `=>` and the body it leads.

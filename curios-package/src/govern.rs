@@ -10,7 +10,10 @@
 mod tests;
 
 use {
-    crate::{MANIFEST, Manifest, Package, Store, Umbrella, compiler_requirement, require_compiler},
+    crate::{
+        FormatSettings, MANIFEST, Manifest, Package, Store, Umbrella, compiler_requirement,
+        format_owner, require_compiler,
+    },
     curios_module::identity,
     std::{
         collections::BTreeMap,
@@ -40,6 +43,17 @@ impl Governing {
     /// Check the selected package's effective minimum before compiling or reusing a cached executable.
     pub(crate) fn check_compiler(&self) -> Result<(), String> {
         require_compiler(
+            &self.package,
+            &self.directory,
+            self.umbrella
+                .as_ref()
+                .map(|umbrella| (umbrella, self.root.as_path())),
+        )
+    }
+
+    /// The governing package's format, with the manifest that owns it: the enumerating umbrella's, or the package's own.
+    pub(crate) fn format(&self) -> Result<(Option<&FormatSettings>, PathBuf), String> {
+        format_owner(
             &self.package,
             &self.directory,
             self.umbrella
@@ -104,16 +118,40 @@ impl Governing {
         Self::rooted(package, manifest, directory)
     }
 
+    /// What governs `file`: the package `manifest` names, which must hold it, or the package whose manifest is nearest above it. `None` where no manifest is above it, or where the first one found is an umbrella's, which declares no package — the file is then no package's.
+    pub fn of_file(file: &Path, manifest: Option<&Path>) -> Result<Option<Self>, String> {
+        let spelled = identity(file);
+
+        match manifest {
+            Some(named) => {
+                let governing = Self::at(named)?;
+                if !spelled.starts_with(identity(&governing.directory)) {
+                    return Err(format!(
+                        "{} is outside the package {} declares, so `--manifest` cannot place it",
+                        file.display(),
+                        named.display()
+                    ));
+                }
+                Ok(Some(governing))
+            }
+            None => match spelled.parent().and_then(nearest_manifest) {
+                Some(at) => match Manifest::from_path(&at.join(MANIFEST))? {
+                    Manifest::Package(_) => Self::of(&at).map(Some),
+                    Manifest::Umbrella(_) => Ok(None),
+                },
+                None => Ok(None),
+            },
+        }
+    }
+
     /// `package`, read from `manifest` at `at`, under whichever umbrella enumerates it.
     fn rooted(package: Package, manifest: PathBuf, at: PathBuf) -> Result<Self, String> {
         let umbrella = umbrella_over(&at)?;
-        compiler_requirement(
-            &package,
-            &at,
-            umbrella
-                .as_ref()
-                .map(|(umbrella, root)| (umbrella, root.as_path())),
-        )?;
+        let umbrella_at = umbrella
+            .as_ref()
+            .map(|(umbrella, root)| (umbrella, root.as_path()));
+        compiler_requirement(&package, &at, umbrella_at)?;
+        format_owner(&package, &at, umbrella_at)?;
 
         Ok(match umbrella {
             Some((umbrella, root)) => Self {

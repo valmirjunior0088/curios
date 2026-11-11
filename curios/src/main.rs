@@ -502,7 +502,10 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         Mode::Format {
-            subjects, check, ..
+            subjects,
+            check,
+            settings,
+            ..
         } => {
             let directory = here()?;
             // No subject is every file the governing package declares, as no subject is the package entire for every command that takes one.
@@ -513,17 +516,23 @@ fn dispatch() -> Result<(), Failure> {
                     .map(|subject| Some(subject.as_str()))
                     .collect(),
             };
+            // Every subject is admitted, and the width of each decided, before anything is written, so a refusal leaves every file as it was.
+            let admitted = subjects
+                .into_iter()
+                .map(|subject| contract.admit_files(subject, manifest, &directory, &settings))
+                .collect::<Result<Vec<_>, _>>()?;
 
             // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
             let mut dirty = Vec::new();
             let mut rewritten = BTreeSet::new();
-            for subject in subjects {
-                match contract.admit_files(subject, manifest, &directory)? {
+            for admitted in admitted {
+                match admitted {
                     // Standard input is answered on standard output, whole, so a pipe gets the canonical text whether or not anything moved.
-                    Rewritten::Stdin => {
+                    Rewritten::Stdin(width) => {
                         let text = io::read_to_string(io::stdin())
                             .map_err(|error| format!("failed to read standard input: {error}"))?;
-                        match Formatted::from_source(&Source::labelled(STDIN_LABEL, &text))? {
+                        match Formatted::from_source(&Source::labelled(STDIN_LABEL, &text), width)?
+                        {
                             Formatted::Changed(_) if check => {
                                 dirty.push(Spelling::STDIN.to_string())
                             }
@@ -533,13 +542,13 @@ fn dispatch() -> Result<(), Failure> {
                             }
                         }
                     }
-                    Rewritten::Files(paths) => {
+                    Rewritten::Files(paths, width) => {
                         // Two subjects naming one file rewrite it once.
                         for path in paths
                             .into_iter()
                             .filter(|path| rewritten.insert(path.clone()))
                         {
-                            match Formatted::from_path(&path)? {
+                            match Formatted::from_path(&path, width)? {
                                 Formatted::Unchanged(_) => {}
                                 Formatted::Changed(text) => match check {
                                     true => dirty.push(path.display().to_string()),

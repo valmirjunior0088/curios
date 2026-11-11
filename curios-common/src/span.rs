@@ -12,7 +12,7 @@ use {
     },
 };
 
-/// The width a line of Curios is written within, in scalar values: the formatter breaks no line past it, and a report quotes a longer one as a window this wide around its marks, so a line the formatter wrote is quoted whole.
+/// The widest a line of Curios is written within, in scalar values, and the width the formatter writes a file within where nothing states a narrower one: the formatter breaks no line past the width it is given, and a report quotes a longer one as a window this wide around its marks, so a line the formatter wrote is quoted whole.
 pub const LINE_WIDTH: usize = 100;
 
 /// The columns `cluster` takes on a terminal, which is what a caret under it is padded and drawn by: two where it holds a scalar East Asian Width calls wide or fullwidth, one that presents as an emoji, or the selector that asks for emoji presentation; none where it opens with a mark, a joiner or a control, which a terminal draws over its neighbour or not at all; one otherwise. A tab is the caller's, since it pads as a tab.

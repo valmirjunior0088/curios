@@ -15,7 +15,7 @@ use {
     curios_module::{SYNTAX, prepare_prelude},
     curios_surface::{
         CoreFile, FormScope, Formatted, GroupItem, Module, ReadError, Spellable, TopItem, UseGroup,
-        intrinsic_former, to_core,
+        Width, intrinsic_former, to_core,
     },
     std::{
         collections::BTreeSet,
@@ -464,7 +464,10 @@ fn every_unit_of_the_prelude_is_written_as_curios_format_writes_it() {
         for (index, unit) in prelude.iter().enumerate() {
             let (_, spelling) = written_whole(prelude, index);
             let text = unit.core().spelled(&spelling).to_string();
-            match Formatted::from_source(&Source::held("unit.crsc", text.as_str())) {
+            match Formatted::from_source(
+                &Source::held("unit.crsc", text.as_str()),
+                Width::default(),
+            ) {
                 Ok(Formatted::Unchanged(_)) => {}
                 Ok(Formatted::Changed(formatted)) => {
                     let line = text

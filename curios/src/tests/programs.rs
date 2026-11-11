@@ -3,7 +3,7 @@
 use {
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
-    curios_surface::Formatted,
+    curios_surface::{Formatted, Width},
     curios_wonder::{Origin, Severity, Subject, diagnostics},
     std::{
         fs,
@@ -68,7 +68,7 @@ fn every_program_source_is_canonically_formatted() {
     let mut wrong = Vec::new();
 
     for path in programs(&workspace().join("programs")) {
-        match Formatted::from_path(&path) {
+        match Formatted::from_path(&path, Width::default()) {
             Ok(Formatted::Unchanged(_)) => {}
             Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),
             Err(refusal) => wrong.push(format!("{}: {refusal}", path.display())),

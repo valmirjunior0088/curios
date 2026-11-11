@@ -12,7 +12,7 @@
 //!
 //! **And it is dropped the moment a document is waiting.** The compiler is on one thread, so a document that arrived while the warming check was queued would wait the whole of it: the warming *and* the document rather than either. Its own check warms this thread for everything after it, so the work is not lost, only unqueued. What this leaves standing is the case warming was for: an editor that opens a folder and no file, where the first document opened later finds the thread warm.
 //!
-//! **Formatting is `curios format` over the overlay, on the protocol thread.** The same `Formatted` the CLI runs, on the text the editor holds, answered as one whole-document edit — the formatter is pure and cheap, parse and print with no prelude, and its output is verified by reparse before it is handed back, so nothing here can hand an editor text the compiler would read differently.
+//! **Formatting is `curios format` over the overlay, on the protocol thread.** The same `Formatted` the CLI runs, on the text the editor holds, within the width the document's package states, answered as one whole-document edit — the formatter is pure and cheap, parse and print with no prelude, and its output is verified by reparse before it is handed back, so nothing here can hand an editor text the compiler would read differently.
 //!
 //! **A name's head and prose are parsed where they are asked for.** A hover reads the one declaration the name stands for, off the text a check left it written in (`Declaration::heading`): a parse of one declaration, on the protocol thread as formatting's parse of a document is, and of nothing where no hover is asked.
 //!
@@ -25,7 +25,7 @@ use {
     curios_common::{Report, Source, Span},
     curios_core::Declared,
     curios_module::Overlay,
-    curios_package::{Selection, Spelling},
+    curios_package::{FormatSettings, Selection, Spelling},
     curios_surface::Formatted,
     curios_verdict::Session,
     lsp_server::{Connection, Message, RequestId, Response},
@@ -107,6 +107,7 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
         documents: BTreeMap::new(),
         answers,
         jobs,
+        manifest: manifest.map(Path::to_path_buf),
     };
 
     // Before the loop, so the warming check is under way while the editor is still sending what it opened. A workspace the editor did not name is one nothing can be warmed for, and the first document is checked cold.
@@ -175,6 +176,8 @@ struct Server {
     documents: BTreeMap<PathBuf, String>,
     answers: Answers,
     jobs: mpsc::Sender<Job>,
+    /// The manifest `--manifest` named, which governs what a document is formatted within as it governs what is checked.
+    manifest: Option<PathBuf>,
 }
 
 impl Server {
@@ -300,8 +303,10 @@ impl Server {
             Some(text) => text.clone(),
             None => std::fs::read_to_string(&path).map_err(|error| error.to_string())?,
         };
+        // An editor states no width the protocol carries, so the document's is its package's, as `curios format` reads it.
+        let width = FormatSettings::default().width_of_file(&path, self.manifest.as_deref())?;
 
-        match Formatted::from_source(&Source::held(&path, text.as_str()))? {
+        match Formatted::from_source(&Source::held(&path, text.as_str()), width)? {
             Formatted::Unchanged(_) => Ok(Vec::new()),
             Formatted::Changed(formatted) => Ok(vec![TextEdit {
                 range: Range {

@@ -16,7 +16,7 @@ use {
         value_parser,
     },
     curios_elab::DEFAULT_BUDGET,
-    curios_package::Target,
+    curios_package::{FormatSettings, Target},
     curios_pipeline::Stage,
     curios_wonder::Place,
     std::{env, ffi::OsString, mem, path::PathBuf, sync::LazyLock},
@@ -241,6 +241,9 @@ pub enum Mode {
             help = "Write nothing; exit nonzero when any file would change (for CI)"
         )]
         check: bool,
+
+        #[command(flatten)]
+        settings: FormatSettings,
 
         #[command(flatten)]
         manifest: ManifestFlag,

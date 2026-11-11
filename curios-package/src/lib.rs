@@ -17,6 +17,10 @@ mod curate;
 use curate::*;
 pub use curate::{Acquisition, Curated, ModuleAcquisition, curate, declared_modules};
 
+mod format;
+pub use format::FormatSettings;
+use format::*;
+
 mod govern;
 pub use govern::Governing;
 use govern::*;

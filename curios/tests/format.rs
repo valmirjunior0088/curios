@@ -1,7 +1,8 @@
-//! What `curios format` does at the command line: which files a target names — every file a package declares for none, a file itself, standard input for `-` — and that `--check` writes nothing.
+//! What `curios format` does at the command line: which files a target names — every file a package declares for none, a file itself, standard input for `-` — the width each is formatted within, and that `--check` writes nothing.
 
 use {
     curios_common::test_support::*,
+    curios_surface::NARROWEST,
     std::{
         fs,
         io::Write,
@@ -107,4 +108,122 @@ fn a_dash_formats_standard_input_onto_standard_output() {
         String::from_utf8_lossy(&piped.stdout),
         fs::read_to_string(root.join("scratch.crs")).unwrap()
     );
+}
+
+/// A declaration the default width keeps on one line and the narrowest breaks.
+const WIDE: &str =
+    "let total: Nat =\n    combine(first_argument, second_argument, third_argument);\n";
+
+/// The narrowest width a file may be formatted within, as the flag spells it.
+fn narrowest() -> String {
+    NARROWEST.to_string()
+}
+
+/// Whether every line of `text` is within the narrowest width.
+fn narrow(text: &str) -> bool {
+    text.lines().all(|line| line.chars().count() <= NARROWEST)
+}
+
+/// `--width` formats standard input and a file no package governs within it, the two alike, where the default leaves the text as it is.
+#[test]
+fn a_width_formats_standard_input_and_a_file_no_package_governs_within_it() {
+    let root = temporary("width-loose");
+    write(&root, "loose.crs", WIDE);
+
+    let piped = curios(&root, &["format", "--width", &narrowest(), "-"], WIDE);
+    let piped_text = String::from_utf8_lossy(&piped.stdout).into_owned();
+    assert!(
+        piped.status.success(),
+        "{}",
+        String::from_utf8_lossy(&piped.stderr)
+    );
+    assert_ne!(piped_text, WIDE);
+    assert!(narrow(&piped_text), "{piped_text}");
+
+    assert!(
+        curios(&root, &["format", "--check", "loose.crs"], "")
+            .status
+            .success()
+    );
+    let rewritten = curios(&root, &["format", "--width", &narrowest(), "loose.crs"], "");
+    assert!(
+        rewritten.status.success(),
+        "{}",
+        String::from_utf8_lossy(&rewritten.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("loose.crs")).unwrap(),
+        piped_text
+    );
+}
+
+/// A package's files are formatted within the width its `[format]` states, whether the package is formatted whole or a file of it is named.
+#[test]
+fn a_package_formats_within_the_width_its_manifest_states() {
+    let root = temporary("width-package");
+    write(
+        &root,
+        "curios.toml",
+        &format!("compiler = \"0.0.0\"\nname = \"app\"\n\n[format]\nwidth = {NARROWEST}\n"),
+    );
+    write(&root, "lib.crs", WIDE);
+
+    let checked = curios(&root, &["format", "--check", "lib.crs"], "");
+    assert!(
+        !checked.status.success(),
+        "the file is wider than its package states"
+    );
+
+    let formatted = curios(&root, &["format"], "");
+    assert!(
+        formatted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&formatted.stderr)
+    );
+    let written = fs::read_to_string(root.join("lib.crs")).unwrap();
+    assert_ne!(written, WIDE);
+    assert!(narrow(&written), "{written}");
+    assert!(
+        curios(&root, &["format", "--check", "lib.crs"], "")
+            .status
+            .success()
+    );
+}
+
+/// `--width` reaches no file a package governs, since the package states its own: the command is refused before any subject is written, the one no package governs included.
+#[test]
+fn a_width_is_refused_for_a_file_a_package_governs_before_anything_is_written() {
+    let root = temporary("width-governed");
+    write(
+        &root,
+        "app/curios.toml",
+        "compiler = \"0.0.0\"\nname = \"app\"\n",
+    );
+    write(&root, "app/lib.crs", UNFORMATTED);
+    write(&root, "loose.crs", UNFORMATTED);
+
+    let refused = curios(
+        &root,
+        &[
+            "format",
+            "--width",
+            &narrowest(),
+            "loose.crs",
+            "app/lib.crs",
+        ],
+        "",
+    );
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(!refused.status.success(), "{stderr}");
+    assert!(
+        stderr.contains("the package `app` takes its format from"),
+        "{stderr}"
+    );
+    for file in ["loose.crs", "app/lib.crs"] {
+        assert_eq!(
+            fs::read_to_string(root.join(file)).unwrap(),
+            UNFORMATTED,
+            "{file}"
+        );
+    }
 }

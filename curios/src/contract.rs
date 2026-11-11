@@ -10,8 +10,11 @@ mod tests;
 use {
     crate::{Elaboration, ManifestFlag, Mode, Pinned, Query},
     curios_module::Overlay,
-    curios_package::{Entire, Entry, Library, Program, Selection, Spelling},
+    curios_package::{
+        Entire, Entry, FormatSettings, Governing, Library, Program, Selection, Spelling,
+    },
     curios_pipeline::Stage,
+    curios_surface::Width,
     curios_verdict::Verdicts,
     curios_wonder::{Staged, file_subject},
     std::{
@@ -353,12 +356,12 @@ impl Mode {
     }
 }
 
-/// What `format` rewrites for one subject.
+/// What `format` rewrites for one subject, and the width it is formatted within.
 pub enum Rewritten {
-    /// Files on disk, rewritten in place.
-    Files(Vec<PathBuf>),
-    /// Standard input, written back to standard output.
-    Stdin,
+    /// Files on disk, rewritten in place: the files of one subject, which one package governs or none does, so one width serves them all.
+    Files(Vec<PathBuf>, Width),
+    /// Standard input, written back to standard output, at the width the command line states, since no manifest governs it.
+    Stdin(Width),
 }
 
 impl Contract {
@@ -526,22 +529,41 @@ impl Contract {
         }
     }
 
-    /// What `subject` rewrites: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input.
+    /// What `subject` rewrites, and within which width: every file a package or program it names declares, a file itself whatever declares it — formatting reads no unit, so placement is not its question — or standard input. A file takes the width of the package that governs it, and `settings`, the command line's, reach only a file no package governs and standard input ([`FormatSettings::width_under`]).
     pub fn admit_files(
         &self,
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
+        settings: &FormatSettings,
     ) -> Result<Rewritten, String> {
         debug_assert_eq!(self.accepts, Accepts::Files, "{}", self.command);
 
         Ok(match Spelling::of(subject) {
-            Spelling::File(path) => Rewritten::Files(vec![file_subject(path)?]),
+            Spelling::File(path) => {
+                let path = file_subject(path)?;
+                let width = settings.width_of_file(&path, manifest)?;
+                Rewritten::Files(vec![path], width)
+            }
             spelling => match Self::selection(subject, manifest, directory)? {
-                Selection::Entire(entire) => Rewritten::Files(entire.declared_files()?),
-                Selection::Library(library) => Rewritten::Files(library.declared_files()?),
-                Selection::Program(_) if spelling == Spelling::Stdin => Rewritten::Stdin,
-                Selection::Program(program) => Rewritten::Files(program.declared_files()?),
+                Selection::Program(_) if spelling == Spelling::Stdin => {
+                    Rewritten::Stdin(settings.width_under(None)?)
+                }
+                Selection::Entire(entire) => {
+                    let width = settings.width_under(Some(&entire.governing))?;
+                    Rewritten::Files(entire.declared_files()?, width)
+                }
+                // Selected through the package `selection` found, which a program and a library do not keep.
+                Selection::Library(library) => {
+                    let governing = Governing::found(manifest, directory)?;
+                    let width = settings.width_under(Some(&governing))?;
+                    Rewritten::Files(library.declared_files()?, width)
+                }
+                Selection::Program(program) => {
+                    let governing = Governing::found(manifest, directory)?;
+                    let width = settings.width_under(Some(&governing))?;
+                    Rewritten::Files(program.declared_files()?, width)
+                }
             },
         })
     }

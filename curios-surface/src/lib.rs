@@ -48,7 +48,7 @@ use core_text::*;
 pub use core_text::{ReadError, Refusal, to_core};
 
 mod format;
-pub use format::Formatted;
+pub use format::{Formatted, NARROWEST, Width};
 
 mod print;
 use print::*;

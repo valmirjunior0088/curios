@@ -236,15 +236,16 @@ impl Standing<'_> {
 
     fn rewritten(&self, rewritten: &Rewritten) -> String {
         match rewritten {
-            Rewritten::Files(paths) => format!(
-                "files {}",
+            Rewritten::Files(paths, width) => format!(
+                "files {} within {}",
                 paths
                     .iter()
                     .map(|path| self.path(path))
                     .collect::<Vec<_>>()
-                    .join(" ")
+                    .join(" "),
+                width.columns()
             ),
-            Rewritten::Stdin => "standard input".to_string(),
+            Rewritten::Stdin(width) => format!("standard input within {}", width.columns()),
         }
     }
 
@@ -280,7 +281,7 @@ impl Standing<'_> {
                 .admit_entire(subject, None, directory)
                 .map(|entire| package_entire(&entire)),
             Accepts::Files => contract
-                .admit_files(subject, None, directory)
+                .admit_files(subject, None, directory, &FormatSettings::default())
                 .map(|rewritten| self.rewritten(&rewritten)),
             Accepts::Nothing => Ok("takes no subject".to_string()),
         };
@@ -510,25 +511,25 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app/helper: bench → program bench
   work/app/nested: (none) → entire nested
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
-format SUBJECT — Files, store None, leaves Rewritten, options --check --manifest
-  work/app: (none) → files lib.crs util.crs serve.crs helper.crs helper/deep.crs bench.crs
-  work/app: serve → files serve.crs helper.crs helper/deep.crs
+format SUBJECT — Files, store None, leaves Rewritten, options --check --width --manifest
+  work/app: (none) → files lib.crs util.crs serve.crs helper.crs helper/deep.crs bench.crs within 100
+  work/app: serve → files serve.crs helper.crs helper/deep.crs within 100
   work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
-  work/app: - → standard input
-  work/app: serve.crs → files serve.crs
-  work/app: helper.crs → files helper.crs
-  work/app: bench.crs → files bench.crs
-  work/app: lib.crs → files lib.crs
-  work/app: util.crs → files util.crs
-  work/app: stray.crs → files stray.crs
-  work/app: nested/lib.crs → files nested/lib.crs
-  work/app: <root>/scratch.crs → files <root>/scratch.crs
+  work/app: - → standard input within 100
+  work/app: serve.crs → files serve.crs within 100
+  work/app: helper.crs → files helper.crs within 100
+  work/app: bench.crs → files bench.crs within 100
+  work/app: lib.crs → files lib.crs within 100
+  work/app: util.crs → files util.crs within 100
+  work/app: stray.crs → files stray.crs within 100
+  work/app: nested/lib.crs → files nested/lib.crs within 100
+  work/app: <root>/scratch.crs → files <root>/scratch.crs within 100
   work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
-  work/app/helper: (none) → files <root>/work/app/lib.crs <root>/work/app/util.crs <root>/work/app/serve.crs <root>/work/app/helper.crs deep.crs <root>/work/app/bench.crs
-  work/app/helper: bench → files <root>/work/app/bench.crs
-  work/app/nested: (none) → files lib.crs
+  work/app/helper: (none) → files <root>/work/app/lib.crs <root>/work/app/util.crs <root>/work/app/serve.crs <root>/work/app/helper.crs deep.crs <root>/work/app/bench.crs within 100
+  work/app/helper: bench → files <root>/work/app/bench.crs within 100
+  work/app/nested: (none) → files lib.crs within 100
   .: (none) → refused: no `curios.toml` in <root> or any directory above it; run a `.crs` file by name, or work inside a package
 wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --server --budget --manifest
   work/app: (none) → entire app

@@ -4,6 +4,7 @@ use {
     super::test_support::*,
     curios_common::fill,
     curios_prelude::test_support::*,
+    curios_surface::NARROWEST,
     curios_wonder::SETTLE,
     std::{
         fs,
@@ -537,6 +538,45 @@ fn formatting_answers_with_the_canonical_text() {
     );
     assert!(
         formatted.contains(r#""end":{"character":0,"line":2}"#),
+        "{formatted}"
+    );
+
+    let output = editor.finish();
+    assert!(output.status.success());
+}
+
+/// Formatting answers within the width the document's package states, as `curios format` reads it: the protocol carries no width, so the manifest is the one place an editor's format and the command line's agree on.
+#[test]
+fn formatting_answers_within_the_width_the_documents_package_states() {
+    let root = temporary("format-width");
+    write(
+        &root,
+        "curios.toml",
+        &format!("compiler = \"0.0.0\"\nname = \"app\"\n\n[format]\nwidth = {NARROWEST}\n"),
+    );
+    let text =
+        "pub let total: Nat =\n    combine(first_argument, second_argument, third_argument);\n";
+    write(&root, "lib.crs", text);
+    let uri = format!("file://{}", root.join("lib.crs").display());
+
+    // What `curios format` writes within the same width, read off standard input, which no manifest governs.
+    let width = NARROWEST.to_string();
+    let expected = stdout(&curios(&root, &["format", "--width", &width, "-"], text));
+    assert_ne!(expected, text);
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":2,"method":"textDocument/formatting","params":{"textDocument":{"uri":"${uri}"},"options":{"tabSize":4,"insertSpaces":true}}}"#, uri));
+    let formatted = loop {
+        let message = editor.receive();
+        if message.contains(r#""id":2"#) {
+            break message;
+        }
+    };
+    assert!(
+        formatted.contains(&format!(r#""newText":"{}""#, expected.replace('\n', "\\n"))),
         "{formatted}"
     );
 

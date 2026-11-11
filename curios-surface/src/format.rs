@@ -7,6 +7,8 @@
 //! Comments are classified once, from the source text: one with source content earlier on its own line *rides* that line, and every other takes a line of its own. Nothing is classified twice and nothing is decided twice.
 //!
 //! **One document for the whole file**, built and rendered once by [`emit`], which says why.
+//!
+//! **The width is the one setting**, and every law holds at each width it admits: [`NARROWEST`] through [`LINE_WIDTH`], which `format/width_tests.rs` and `format/place_tests.rs` hold over the sources of the tree at the narrowest. Where a file's width comes from is `curios-package`'s `FormatSettings`.
 
 use {
     super::{
@@ -16,8 +18,51 @@ use {
     curios_common::{LINE_WIDTH, Source, Span},
     curios_parse::is_blank,
     curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
-    std::{cell::RefCell, fmt, path::Path, sync::Arc},
+    std::{cell::RefCell, fmt, path::Path, str::FromStr, sync::Arc},
 };
+
+/// The narrowest width a file may be formatted within. The formatter's laws are held over the sources of the tree at it, and below it a line nothing can break — a long name, a deep nesting's indentation — is most of what a narrower width would change.
+pub const NARROWEST: usize = 50;
+
+/// The columns a formatted line is written within, counted in scalar values: one of [`NARROWEST`] through [`LINE_WIDTH`], which is the default. No wider, since a report quotes a line as a window [`LINE_WIDTH`] wide, and a line the formatter wrote is quoted whole.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Width(usize);
+
+impl Width {
+    /// `columns` as a width, refused outside the widths the formatter admits.
+    pub fn new(columns: usize) -> Result<Self, String> {
+        match (NARROWEST..=LINE_WIDTH).contains(&columns) {
+            true => Ok(Self(columns)),
+            false => Err(format!(
+                "a width is {NARROWEST} through {LINE_WIDTH} columns, and {columns} is not"
+            )),
+        }
+    }
+
+    /// The columns this width holds.
+    pub fn columns(self) -> usize {
+        self.0
+    }
+}
+
+impl Default for Width {
+    fn default() -> Self {
+        Self(LINE_WIDTH)
+    }
+}
+
+impl FromStr for Width {
+    type Err = String;
+
+    fn from_str(spelling: &str) -> Result<Self, String> {
+        let columns = spelling.parse().map_err(|_| {
+            format!(
+                "a width is a number of columns, {NARROWEST} through {LINE_WIDTH}, not {spelling:?}"
+            )
+        })?;
+        Self::new(columns)
+    }
+}
 
 /// The formatter's verdict on one source: the canonical text, tagged by whether it differs from what was read. The formatter itself is pure — whether a `Changed` result fails a check or rewrites a file is the caller's policy.
 #[derive(Debug, PartialEq, Eq)]
@@ -27,11 +72,11 @@ pub enum Formatted {
 }
 
 impl Formatted {
-    /// Format `source` canonically: as Core text where it was read from a `.crsc`, and as a program or a module otherwise. `Err` is a human-readable refusal: a parse failure, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
-    pub fn from_source(source: &Arc<Source>) -> Result<Self, String> {
+    /// Format `source` canonically within `width`: as Core text where it was read from a `.crsc`, and as a program or a module otherwise. `Err` is a human-readable refusal: a parse failure, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
+    pub fn from_source(source: &Arc<Source>, width: Width) -> Result<Self, String> {
         let output = match written_as_core_text(source) {
-            true => core_text_formatted(source)?,
-            false => program_formatted(source)?,
+            true => core_text_formatted(source, width)?,
+            false => program_formatted(source, width)?,
         };
 
         Ok(match output == source.text() {
@@ -41,10 +86,10 @@ impl Formatted {
     }
 
     /// [`Formatted::from_source`] for the file at `path`, errors located by it. Writing a `Changed` result back is the caller's policy.
-    pub fn from_path(path: &Path) -> Result<Self, String> {
+    pub fn from_path(path: &Path, width: Width) -> Result<Self, String> {
         let located = |error: String| format!("{}: {error}", path.display());
         let source = Source::read(path).map_err(|error| located(error.to_string()))?;
-        Self::from_source(&source).map_err(located)
+        Self::from_source(&source, width).map_err(located)
     }
 }
 
@@ -70,24 +115,24 @@ fn original<'a>(source: &'a Source, comments: &[Span]) -> Original<'a> {
     }
 }
 
-/// A program or a module, formatted and verified.
-fn program_formatted(source: &Arc<Source>) -> Result<String, String> {
+/// A program or a module, formatted within `width` and verified.
+fn program_formatted(source: &Arc<Source>, width: Width) -> Result<String, String> {
     let input = parse_for_format(source).map_err(|error| error.format())?;
     // Every comment goes to the renderer with the text it was written in, which is all that decides its place — see `Original`.
     let original = original(source, &input.comments);
     let expected_comments = original.comments.len();
-    let output = emit(&input, &original);
+    let output = emit(&input, &original, width);
 
     verify(&input, expected_comments, &output)?;
     Ok(output)
 }
 
-/// A file of Core text, formatted and verified as a program is. It is read and not checked: a file its reader would refuse — a field its node does not hold, a form Core text refuses — is formatted all the same.
-fn core_text_formatted(source: &Arc<Source>) -> Result<String, String> {
+/// A file of Core text, formatted within `width` and verified as a program is. It is read and not checked: a file its reader would refuse — a field its node does not hold, a form Core text refuses — is formatted all the same.
+fn core_text_formatted(source: &Arc<Source>, width: Width) -> Result<String, String> {
     let input = parse_core_for_format(source).map_err(|error| error.format())?;
     let original = original(source, &input.comments);
     let expected_comments = original.comments.len();
-    let output = emit_core_text(&input, &original);
+    let output = emit_core_text(&input, &original, width);
 
     verify_core_text(&input, expected_comments, &output)?;
     Ok(output)
@@ -127,23 +172,23 @@ fn classify(source: &str, spans: &[Span]) -> Vec<Owed> {
         .collect()
 }
 
-/// Render one document at the canonical width and indent, following `original`.
-fn render(printer: Printer, original: &Original<'_>) -> String {
-    struct Within<'a, 'b>(RefCell<Option<Printer>>, &'a Original<'b>);
+/// Render one document within `width` at the canonical indent, following `original`.
+fn render(printer: Printer, original: &Original<'_>, width: Width) -> String {
+    struct Within<'a, 'b>(RefCell<Option<Printer>>, &'a Original<'b>, Width);
     impl fmt::Display for Within<'_, '_> {
         fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             let printer = self.0.borrow_mut().take().expect("rendered once");
 
-            run_printer_placing(printer, formatter, INDENT, LINE_WIDTH, self.1)
+            run_printer_placing(printer, formatter, INDENT, self.2.columns(), self.1)
         }
     }
-    Within(RefCell::new(Some(printer)), original).to_string()
+    Within(RefCell::new(Some(printer)), original, width).to_string()
 }
 
 /// The parsed file as one document: items separated by exactly one blank line — except a `use` following a `use` or a `mod X;`, which keeps the separation it was written with, stacked as the corpus writes its import heads and its `mod X; use X/{…}` pairs, or one blank line apart however many were written — and the tail last.
 ///
 /// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately would give each its own renderer, and a comment belonging to neither would have to be spliced in as text by this function. Nothing here handles comments.
-pub fn emit(input: &FormatInput, original: &Original<'_>) -> String {
+pub fn emit(input: &FormatInput, original: &Original<'_>, width: Width) -> String {
     let mut parts: Vec<Printer> = Vec::new();
     let mut previous: Option<&TopItem> = None;
 
@@ -165,11 +210,11 @@ pub fn emit(input: &FormatInput, original: &Original<'_>) -> String {
         parts.push(print_term(tail.clone()));
     }
 
-    format!("{}\n", render(flat(parts), original))
+    format!("{}\n", render(flat(parts), original, width))
 }
 
 /// A file of Core text as one document, as a program's is ([`emit`]): its items a blank line apart, each marked at both ends, and the entry last.
-fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>) -> String {
+fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>, width: Width) -> String {
     let mut parts: Vec<Printer> = Vec::new();
 
     for (item, span) in input.file.items.iter().zip(&input.item_spans) {
@@ -188,7 +233,7 @@ fn emit_core_text(input: &CoreFormatInput, original: &Original<'_>) -> String {
         parts.push(print_core_entry(entry.clone()));
     }
 
-    format!("{}\n", render(flat(parts), original))
+    format!("{}\n", render(flat(parts), original, width))
 }
 
 /// Whether a blank line stands between the item that starts at `start` and the code before it, read back over the comment lines between them: a comment is no blank line, and an item sharing its line with the one before is not apart from it. Read from the item's start, since an item's span runs on over the blank lines and comments the parse consumed after it.
@@ -269,3 +314,5 @@ mod place_tests;
 mod program_tests;
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod width_tests;

@@ -9,7 +9,9 @@ use {
 
 /// The canonical text of `text` read as a `.crsc`.
 fn core_formatted(text: &str) -> String {
-    match Formatted::from_source(&Source::held("a.crsc", text)).expect("the file formats") {
+    match Formatted::from_source(&Source::held("a.crsc", text), Width::default())
+        .expect("the file formats")
+    {
         Formatted::Unchanged(text) | Formatted::Changed(text) => text,
     }
 }
@@ -34,7 +36,7 @@ let /m/witness~/std/ops/Add(Nat)#1 : (use w: /C()) -> #BoolType = /m/witness~3;
 
     assert_eq!(core_formatted(written), EVERY_FORM);
     assert_eq!(
-        Formatted::from_source(&Source::held("a.crsc", EVERY_FORM)),
+        Formatted::from_source(&Source::held("a.crsc", EVERY_FORM), Width::default()),
         Ok(Formatted::Unchanged(EVERY_FORM.to_string()))
     );
 }
@@ -102,7 +104,7 @@ fn a_file_its_reader_refuses_is_formatted_all_the_same() {
 /// Core text is told from a program by the path it was read from: the same text read from a `.crs` is a program, which writes no decorator.
 #[test]
 fn core_text_is_read_where_the_path_says_so() {
-    let refusal = Formatted::from_source(&Source::held("a.crs", "#{a = 1} x\n"))
+    let refusal = Formatted::from_source(&Source::held("a.crs", "#{a = 1} x\n"), Width::default())
         .expect_err("a program writes no decorator");
 
     assert!(refusal.contains("obtained '#'"), "{refusal}");
@@ -142,7 +144,7 @@ fn every_file_of_core_text_the_tree_holds_is_canonically_formatted() {
     );
     let wrong = files
         .iter()
-        .filter_map(|path| match Formatted::from_path(path) {
+        .filter_map(|path| match Formatted::from_path(path, Width::default()) {
             Ok(Formatted::Unchanged(_)) => None,
             Ok(Formatted::Changed(_)) => Some(format!("{}: not canonical", path.display())),
             Err(refusal) => Some(format!("{}: {refusal}", path.display())),

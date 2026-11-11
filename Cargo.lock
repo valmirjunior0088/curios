@@ -854,6 +854,7 @@ dependencies = [
 name = "curios-package"
 version = "0.16.21"
 dependencies = [
+ "clap",
  "curios-common",
  "curios-module",
  "curios-surface",

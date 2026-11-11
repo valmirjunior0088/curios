@@ -36,7 +36,8 @@ fn a_leading_byte_order_mark_is_not_written_back() {
 /// A program whose tail is garbled is refused where the tail's own parse stopped, naming what it expected there — as the compiler refuses it — and not at the top of the file expecting its end, which is what the optional tail reported while the term's failure was discarded.
 #[test]
 fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {
-    let refusal = Formatted::from_source(&Source::inline("let x = (\n")).expect_err("garbled tail");
+    let refusal = Formatted::from_source(&Source::inline("let x = (\n"), Width::default())
+        .expect_err("garbled tail");
     assert!(
         refusal.starts_with("Expected ')', obtained 'end-of-file'"),
         "{refusal}"
@@ -176,20 +177,10 @@ fn an_inline_module_keeps_the_blank_lines_between_its_items() {
 /// Every Curios source in the tree formats without refusal — the parse and the round trip hold over the whole corpus, the standard library included — which is what proves a grammar change left every existing file meaning what it meant.
 #[test]
 fn every_source_in_the_tree_formats_without_refusal() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let mut sources = Vec::new();
-    collect_sources(&root, &mut sources);
-    assert!(
-        sources.len() > 100,
-        "found only {} sources under {}",
-        sources.len(),
-        root.display()
-    );
-
-    let refused = sources
-        .iter()
-        .filter_map(|path| {
-            Formatted::from_path(path)
+    let refused = sources_of_the_tree()
+        .into_iter()
+        .filter_map(|(path, text)| {
+            Formatted::from_source(&Source::held(path.clone(), text), Width::default())
                 .err()
                 .map(|refusal| format!("{}: {refusal}", path.display()))
         })
@@ -200,14 +191,18 @@ fn every_source_in_the_tree_formats_without_refusal() {
 /// Every Curios source in the tree is already in its canonical shape, which `place_tests`' sweep over the tree reads a comment's place against: in a source the formatter would change, any change ahead of the marker reads as the comment moved.
 #[test]
 fn every_source_in_the_tree_is_already_canonical() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let mut sources = Vec::new();
-    collect_sources(&root, &mut sources);
-
-    let reshaped = sources
-        .iter()
-        .filter(|path| matches!(Formatted::from_path(path), Ok(Formatted::Changed(_))))
-        .map(|path| path.display().to_string())
+    let reshaped = sources_of_the_tree()
+        .into_iter()
+        .filter(|(path, text)| {
+            matches!(
+                Formatted::from_source(
+                    &Source::held(path.clone(), text.as_str()),
+                    Width::default()
+                ),
+                Ok(Formatted::Changed(_))
+            )
+        })
+        .map(|(path, _)| path.display().to_string())
         .collect::<Vec<_>>();
     assert!(reshaped.is_empty(), "{}", reshaped.join("\n"));
 }

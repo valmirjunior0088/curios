@@ -11,7 +11,7 @@ use {
     curios_package::{Selection, Spelling, Target},
     curios_pipeline::compile_with_prelude,
     curios_prelude::test_support::*,
-    curios_surface::{Entrypoint, Formatted},
+    curios_surface::{Entrypoint, Formatted, Width},
     curios_unicode::{
         east_asian_width, grapheme_break, indic_conjunct_break, is_emoji_presentation,
         is_extended_pictographic, test_support::*,
@@ -230,7 +230,7 @@ fn every_source_is_canonically_formatted() {
     let mut wrong = Vec::new();
 
     for path in sources_under(std_directory()) {
-        match Formatted::from_path(&path) {
+        match Formatted::from_path(&path, Width::default()) {
             Ok(Formatted::Unchanged(_)) => {}
             Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),
             Err(refusal) => wrong.push(format!("{}: {refusal}", path.display())),

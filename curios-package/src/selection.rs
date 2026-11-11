@@ -13,8 +13,8 @@ mod tests;
 
 use {
     crate::{
-        EXECUTABLE, EXTENSION, Executable, Governing, LIBRARY, MANIFEST, Manifest, Package, Store,
-        Target, module_below, module_of, nearest_manifest, order, reachable,
+        EXECUTABLE, EXTENSION, Executable, Governing, LIBRARY, Package, Store, Target,
+        module_below, module_of, order, reachable,
     },
     curios_common::{Qualifier, RootKind},
     curios_module::{Overlay, RootSource, identity, open_entrypoint, overlay_entrypoint},
@@ -360,26 +360,9 @@ const UNSPELLED: &str = "its spelling names no module a `mod` could declare";
 fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<Selection, String> {
     let spelled = identity(&file);
 
-    let governing = match manifest {
-        Some(named) => {
-            let governing = Governing::at(named)?;
-            if !spelled.starts_with(identity(&governing.directory)) {
-                return Err(format!(
-                    "{} is outside the package {} declares, so `--manifest` cannot place it",
-                    file.display(),
-                    named.display()
-                ));
-            }
-            governing
-        }
-        // An umbrella found first declares no unit, so nothing declares the file — exactly as when no manifest is above it at all.
-        None => match spelled.parent().and_then(nearest_manifest) {
-            Some(at) => match Manifest::from_path(&at.join(MANIFEST))? {
-                Manifest::Package(_) => Governing::of(&at)?,
-                Manifest::Umbrella(_) => return Ok(loose(file)),
-            },
-            None => return Ok(loose(file)),
-        },
+    // An umbrella found first declares no unit, so nothing declares the file — exactly as when no manifest is above it at all.
+    let Some(governing) = Governing::of_file(&file, manifest)? else {
+        return Ok(loose(file));
     };
     let directory = identity(&governing.directory);
 

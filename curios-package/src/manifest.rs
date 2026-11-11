@@ -15,7 +15,7 @@ mod foreign_tests;
 mod package_tests;
 
 use {
-    crate::{CompilerVersion, FileHash, STORE, Store, Subject, TreeHash},
+    crate::{CompilerVersion, FileHash, FormatSettings, STORE, Store, Subject, TreeHash},
     curios_common::{is_identifier, is_keyword},
     serde::Deserialize,
     std::{
@@ -85,6 +85,8 @@ pub struct Package {
     pub name: String,
     /// The standalone package's minimum compiler. An umbrella member leaves this absent and inherits its umbrella's requirement.
     pub compiler: Option<CompilerVersion>,
+    /// How the standalone package's files are formatted, `None` where it states no `[format]`. An umbrella member leaves this absent and inherits its umbrella's, as it does `compiler`.
+    pub format: Option<FormatSettings>,
     /// What the package is, in a sentence or a few, for the landing page of its documentation. A fact about the package as a whole, which is what the manifest declares and no source file does — the library root is declared by no `mod`, so it has nowhere else to carry prose.
     pub description: Option<String>,
     /// Which executable a bare `curios run` means. `None` when there is at most one for it to mean.
@@ -136,6 +138,8 @@ impl Package {
 pub struct Umbrella {
     /// The minimum compiler every enumerated member inherits.
     pub compiler: CompilerVersion,
+    /// How every enumerated member's files are formatted, `None` where it states no `[format]`.
+    pub format: Option<FormatSettings>,
     /// Where each member's own manifest sits, relative to this one. A member may lie arbitrarily deep on disk; umbrellas themselves do not nest.
     pub members: Vec<PathBuf>,
     /// The rows a member reaches by declaring `source = "catalog"`. A row here fetches nothing by itself — activation lives in the package that names it.
@@ -199,6 +203,7 @@ pub struct Snapshot {
 struct Document {
     name: Option<String>,
     compiler: Option<String>,
+    format: Option<FormatSettings>,
     description: Option<String>,
     default: Option<String>,
     dependencies: Option<BTreeMap<String, DependencyRow>>,
@@ -270,6 +275,7 @@ impl Document {
         Ok(Package {
             name,
             compiler: self.compiler.map(|version| version.parse()).transpose()?,
+            format: self.format,
             description: self.description,
             default: self.default,
             dependencies: table(self.dependencies.unwrap_or_default(), "dependency row")?,
@@ -300,6 +306,7 @@ impl Document {
                         .to_string()
                 })?
                 .parse()?,
+            format: self.format,
             members: self
                 .members
                 .unwrap_or_default()

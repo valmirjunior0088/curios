@@ -83,7 +83,7 @@ Ten commands, and `wonder`'s seven queries — eleven commands where the compile
 | [`pin`](#pin) | the governing package's manifest | `foreign`/`dependency <NAME>`, `--path`, `--url`, `--rev`, `--refresh`, `--check` | one manifest row | files what it delivered |
 | [`new`](#new) | — | `<DIR>` | a package | none |
 | [`lint`](#lint) | anything | — | nothing | reads, files the units it compiled from disk |
-| [`format`](#format) | files, any number | `--check` | the files, rewritten | none |
+| [`format`](#format) | files, any number | `--check`, `--width <COLUMNS>` | the files, rewritten | none |
 | [`wonder`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
 | [`wonder --tests`](#wonder) | anything | — | nothing | reads, files the units it compiled from disk |
 | [`wonder --cost`](#wonder) | a program | — | nothing | reads, files the units it compiled from disk |
@@ -310,11 +310,14 @@ curios format serve util.crs    # an executable's files, and one file
 curios format proof.crsc        # a file of Core text
 curios format --check           # write nothing, exit nonzero if anything would change
 curios format - < draft.crs     # standard input, written canonically to standard output
+curios format --width 64 -      # standard input, within 64 columns
 ```
 
 Each subject names files, and what several subjects name is rewritten once: no subject is every file the governing package declares — its library's header and the modules its `mod` lines reach, then each executable's entry and the modules the entry reaches — an executable's name is its own, a file is itself whatever declares it, and `-` is standard input, written back to standard output. A file nothing declares is formatted only when it is named, and a `.crsc` is formatted as the Core text it holds, read and not checked, so a file its reader refuses is formatted all the same.
 
-There is one canonical style and no options to configure it. Formatting is verified before anything is written — the output must reparse to exactly the same program or Core text, with every comment preserved — so a formatter defect refuses rather than corrupts.
+There is one canonical style, and its one setting is the width a line is written within: 50 through 100 columns, counted in characters, and 100 where nothing states another. A file takes its width from one place. Where a package governs it — the package whose manifest is nearest above the file, or the one `--manifest` names — that is the package's [`[format]`](#the-manifest) table, or its umbrella's, and a `--width` given for such a file is refused before anything is written. Standard input and a file no package governs take `--width`. So the command line, `--check` and an editor's server format a file one way, and `curios format --width 80 - < file.crs` shows a package's file at another width without rewriting it. The rule and what it rejected are [A file is formatted at the width one place states](design/tools/a-file-is-formatted-at-the-width-one-place-states.md)'s.
+
+Formatting is verified before anything is written — the output must reparse to exactly the same program or Core text, with every comment preserved — so a formatter defect refuses rather than corrupts.
 
 ## `wonder`
 
@@ -378,6 +381,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 | `compiler` | required for a standalone package: its minimum Curios version, a bare SemVer version; an umbrella member inherits this from its umbrella instead |
 | `description` | one line, which opens the landing page [`document`](#document) writes |
 | `default` | which executable a bare `run`, `compile` or `test` means; it may name a declared row or the package's own `exe.crs` program |
+| `[format]` | how [`format`](#format) writes the package's files: `width`, the columns a line is written within, 50 through 100; an umbrella member inherits this from its umbrella instead |
 | `[dependencies]` | one row per package this one reaches, keyed by that package's name |
 | `[[executables]]` | one row per program beyond `exe.crs`: `name`, and `path` when the file is not `<name>.crs` |
 | `[[foreign]]` | one row per provider of this package's [`foreign` declarations](syntax.md#foreign-declarations): what each target links, in `[foreign.native]` and `[foreign.browser]`, and what its exports answer |
@@ -400,6 +404,13 @@ An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..
 `compiler` states a minimum, not a range or an exact toolchain pin: `compiler = "0.16.9"` accepts that version and newer, using SemVer precedence and ignoring build metadata. An older compiler is refused before compilation or cached execution, naming the manifest, the required minimum and the running version. Every dependency is checked against its own effective requirement too. A standalone package must state one: there is no implicit minimum, so a manifest without `compiler` is refused, naming the line that would satisfy the running compiler, and `curios new` writes that line when it starts a package. Loose programs and standard input have no manifest requirement.
 
 An umbrella must declare `compiler`, and every package its `members` enumerates inherits that minimum. A member cannot declare a local override; the refusal points to its umbrella. A package merely beneath an umbrella directory is still standalone unless enumerated. Inheritance follows each dependency's own membership, never its consumer's umbrella. A dependency delivered without the umbrella it needs cannot inherit and must declare a standalone minimum in its own manifest.
+
+`[format]` is inherited as `compiler` is: an umbrella's table is every member's, a member that writes one of its own is refused naming its umbrella, and a package no umbrella enumerates states its own or takes every setting's default. A width outside 50 through 100 and a key the table does not take are refused where the manifest is read.
+
+```toml
+[format]
+width = 72
+```
 
 A `[[foreign]]` row names a module in the table of the target that links it, and says which of its exports answers each of the package's `foreign` declarations it is named for:
 
@@ -438,6 +449,7 @@ A `foreign` no entry names is the host's to answer. A program asks only for what
 | Umbrella key | Is |
 | --- | --- |
 | `compiler` | required: the minimum Curios version all enumerated members inherit |
+| `[format]` | how [`format`](#format) writes every enumerated member's files, which they inherit |
 | `members` | the packages this umbrella governs, as paths; an umbrella governs a package **only if it enumerates it**, so a directory nothing enumerates is governed by nothing above it, however deep it sits |
 | `catalog` | pins the members may draw on, keyed as a dependency table is |
 

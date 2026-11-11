@@ -8,11 +8,37 @@ use {
     std::path::{Path, PathBuf},
 };
 
-/// The canonical text, either way: production callers match the variants directly, since changed-ness decides the exit path, and only these round-trip tests want the text alone.
+/// The canonical text at the default width, either way: production callers match the variants directly, since changed-ness decides the exit path, and only these round-trip tests want the text alone.
 pub fn formatted(source: &str) -> String {
-    match Formatted::from_source(&Source::inline(source)).expect("fixture formats") {
+    formatted_within(source, Width::default())
+}
+
+/// [`formatted`] within `width`.
+pub fn formatted_within(source: &str, width: Width) -> String {
+    match Formatted::from_source(&Source::inline(source), width).expect("fixture formats") {
         Formatted::Unchanged(text) | Formatted::Changed(text) => text,
     }
+}
+
+/// Every `.crs` of the tree, by its path, with the text it holds.
+pub fn sources_of_the_tree() -> Vec<(PathBuf, String)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let mut paths = Vec::new();
+    collect_sources(&root, &mut paths);
+    assert!(
+        paths.len() > 100,
+        "found only {} sources under {}",
+        paths.len(),
+        root.display()
+    );
+
+    paths
+        .into_iter()
+        .map(|path| {
+            let text = std::fs::read_to_string(&path).expect("a readable source");
+            (path, text)
+        })
+        .collect()
 }
 
 /// Every `.crs` under `directory`, skipping the directories that hold generated or foreign trees.

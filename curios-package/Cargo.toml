@@ -19,6 +19,8 @@ workspace = true
 test-support = []
 
 [dependencies]
+# `FormatSettings` derives its flags beside its keys, so one field is both and the two cannot drift.
+clap = { workspace = true }
 curios-common = { workspace = true }
 curios-module = { workspace = true }
 curios-surface = { workspace = true }
