@@ -105,7 +105,25 @@ fn far_end(name: &[u8]) -> fs::File {
         .expect("the far end opens")
 }
 
+/// How `child` ended within `wait`; a child still running then is killed, and fails the test rather than holding it.
+fn ended_within(child: &mut std::process::Child, wait: Duration) -> std::process::ExitStatus {
+    let deadline = Instant::now() + wait;
+
+    while Instant::now() < deadline {
+        if let Some(status) = child.try_wait().expect("the child is waited on") {
+            return status;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+
+    panic!("the child outlived its signal");
+}
+
 /// A process ended by a terminating signal gives back every terminal it took first, then ends by that signal. A test cannot outlive the signal it sends itself, so its child is this test's own binary run again: given a pseudo-terminal by the variable above, it takes the terminal and waits, and the parent sends it SIGTERM and finds the terminal as the child found it, its leave bytes written.
+///
+/// The parent pauses before it signals, so the signal arrives as a program's does, long after the take, with the thread that answers it already waiting. A child its parent never signals ends on its own, after the parent has given up on it.
 #[test]
 fn a_terminating_signal_gives_back_every_terminal_taken() {
     if let Some(name) = env::var_os(SIGNALLED_TERMINAL) {
@@ -113,9 +131,9 @@ fn a_terminating_signal_gives_back_every_terminal_taken() {
         let far = host.file_open(name.into_vec(), Mode::ReadWrite).unwrap();
         host.tty_take(far.clone(), b"\x1b[?1049l".to_vec()).unwrap();
         host.handle_write(far, b"taken".to_vec()).unwrap();
-        loop {
-            thread::sleep(Duration::from_secs(60));
-        }
+        thread::sleep(Duration::from_secs(30));
+
+        return;
     }
 
     let (near, name) = pseudo_terminal();
@@ -134,12 +152,13 @@ fn a_terminating_signal_gives_back_every_terminal_taken() {
         .expect("the test runs again as a child");
 
     read_until(&near, b"taken");
+    thread::sleep(Duration::from_millis(100));
     rustix::process::kill_process(
         rustix::process::Pid::from_child(&child),
         rustix::process::Signal::TERM,
     )
     .expect("the child is signalled");
-    let status = child.wait().expect("the child ends");
+    let status = ended_within(&mut child, Duration::from_secs(10));
 
     assert_eq!(
         std::os::unix::process::ExitStatusExt::signal(&status),

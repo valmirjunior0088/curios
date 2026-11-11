@@ -26,8 +26,7 @@ use {
     },
     signal_hook::{
         consts::{SIGHUP, SIGINT, SIGQUIT, SIGTERM},
-        iterator::Signals,
-        low_level::emulate_default_handler,
+        low_level::{emulate_default_handler, pipe},
     },
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
@@ -592,17 +591,41 @@ impl OsHost {
     }
 
     /// Start the thread that gives back every terminal still taken when a terminating signal arrives and then lets the signal end the process, so its parent sees it end by that signal; once, at the first take. A host whose handlers the system refuses still takes its terminal, and only a signal then leaves it as the program set it.
+    ///
+    /// Each signal wakes the thread through a pipe of its own, which its handler writes with `write(2)`. A socket pair would be woken with `send(2)`, which a sandbox that forbids sending on sockets refuses, and the signal would be caught and never acted on. The thread is waiting before any handler is registered, and a signal whose registration fails keeps its default action, so no signal is caught that nothing reads.
     fn give_back_on_signals(&self) {
         self.signals.get_or_init(|| {
+            let Ok(pipes) = ENDING
+                .iter()
+                .map(|_| io::pipe())
+                .collect::<Result<Vec<_>, _>>()
+            else {
+                return;
+            };
+            let (reads, writes): (Vec<_>, Vec<_>) = pipes.into_iter().unzip();
             let taken = Arc::clone(&self.taken);
 
-            if let Ok(mut signals) = Signals::new(ENDING) {
-                thread::spawn(move || {
-                    if let Some(signal) = signals.forever().next() {
-                        give_back_all(&taken);
-                        let _ = emulate_default_handler(signal);
-                    }
-                });
+            let waiting = thread::Builder::new().spawn(move || {
+                let watched = reads
+                    .iter()
+                    .map(|read| Watched {
+                        fd: read.as_fd(),
+                        asked: PollFlags::IN,
+                    })
+                    .collect::<Vec<_>>();
+
+                if let Ok(arrived) = ready(&watched, None)
+                    && let Some(place) = arrived.first()
+                {
+                    give_back_all(&taken);
+                    let _ = emulate_default_handler(ENDING[*place]);
+                }
+            });
+
+            if waiting.is_ok() {
+                for (signal, write) in ENDING.into_iter().zip(writes) {
+                    let _ = pipe::register(signal, write);
+                }
             }
         });
     }
