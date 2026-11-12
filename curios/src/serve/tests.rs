@@ -217,12 +217,20 @@ fn page(document: &str, program: &[u8]) -> Served {
     }
 }
 
-/// A run's report as a test keeps it: a line written before anything is served, then for each outcome taken the guest's stdout, a line naming its step and the posted trap, where there is one.
+/// A run's report as a test keeps it: a line written before anything is served, then for each step a line as it begins, what its guest wrote as it is told, and, once its outcome is taken, a line naming it and the posted trap, where there is one.
 struct Kept(Vec<u8>);
 
 impl Reporting for Kept {
-    fn took(&mut self, step: Step, guest: Streams, outcome: &Posted, _taken: Duration) {
-        self.0.extend(guest.stdout);
+    fn began(&mut self, step: Step) {
+        self.0
+            .extend(format!("began {}/{}\n", step.subject, step.test).into_bytes());
+    }
+
+    fn wrote(&mut self, _stream: Stream, bytes: &[u8]) {
+        self.0.extend(bytes);
+    }
+
+    fn took(&mut self, step: Step, outcome: &Posted, _taken: Duration) {
         self.0
             .extend(format!("step {}/{}\n", step.subject, step.test).into_bytes());
         self.0
@@ -261,12 +269,19 @@ fn socket(port: u16) -> Result<Socket, Error> {
     tungstenite::connect(format!("ws://127.0.0.1:{port}/")).map(|(socket, _)| socket)
 }
 
-/// An outcome as a runner sends one: `stdout` in base64, and `trap` where there is one.
-fn outcome(stdout: &str, trap: Option<&str>) -> Message {
+/// An outcome as a runner sends one, with `trap` where there is one.
+fn outcome(trap: Option<&str>) -> Message {
     let trap = trap.map_or("null".to_string(), |trap| format!("{trap:?}"));
 
     Message::text(format!(
-        "{{\"stdout\":\"{stdout}\",\"stderr\":\"\",\"exitCode\":0,\"trap\":{trap},\"held\":true}}"
+        "{{\"outcome\":{{\"exitCode\":0,\"trap\":{trap},\"held\":true}}}}"
+    ))
+}
+
+/// A write on standard output as a runner sends one, `bytes` in base64.
+fn wrote(bytes: &str) -> Message {
+    Message::text(format!(
+        "{{\"wrote\":{{\"stream\":\"stdout\",\"bytes\":\"{bytes}\"}}}}"
     ))
 }
 
@@ -369,23 +384,24 @@ fn the_socket_is_sent_the_report_so_far_and_the_step_in_hand_and_drives_the_run_
     let (port, served) = running();
     let mut socket = socket(port).expect("the run's socket opens");
 
-    // Opened, it is sent what was written before anything was served, and the step in hand.
+    // Opened, it is sent what was written before anything was served, and the step in hand, begun as it is handed over.
     assert_eq!(
         reply(&mut socket),
         (
-            "begun\n".to_string(),
+            "begun\nbegan 0/0\n".to_string(),
             Some(Step {
                 subject: 0,
                 test: 0
             })
         )
     );
-    // The first step, its guest having written `hi`: what was written, and the next step.
-    socket.send(outcome("aGk=", None)).unwrap();
+    // The first step, its guest writing `hi`, which is told and answered with nothing, and then ending: what was written, and the next step.
+    socket.send(wrote("aGk=")).unwrap();
+    socket.send(outcome(None)).unwrap();
     assert_eq!(
         reply(&mut socket),
         (
-            "histep 0/0\n".to_string(),
+            "histep 0/0\nbegan 0/1\n".to_string(),
             Some(Step {
                 subject: 0,
                 test: 1
@@ -393,7 +409,7 @@ fn the_socket_is_sent_the_report_so_far_and_the_step_in_hand_and_drives_the_run_
         )
     );
     // The first page's last step switches the page in hand.
-    socket.send(outcome("", None)).unwrap();
+    socket.send(outcome(None)).unwrap();
     assert_eq!(
         reply(&mut socket).1,
         Some(Step {
@@ -404,7 +420,7 @@ fn the_socket_is_sent_the_report_so_far_and_the_step_in_hand_and_drives_the_run_
     assert_eq!(get(port, "/index.html").2, b"<!doctype html>second");
     assert_eq!(get(port, "/index.wasm").2, b"\0asm2");
     // The last step, trapped: its trap written, no next step, and the serve ends, its port closed.
-    socket.send(outcome("", Some("boom"))).unwrap();
+    socket.send(outcome(Some("boom"))).unwrap();
     assert_eq!(reply(&mut socket), ("step 1/0\nboom".to_string(), None));
     served.join().unwrap().unwrap();
     assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).is_err());
@@ -416,7 +432,7 @@ fn a_second_socket_is_refused_while_one_drives_and_the_next_resumes_at_the_step_
     let (port, _served) = running();
     let mut driving = socket(port).expect("the run's socket opens");
     reply(&mut driving);
-    driving.send(outcome("", None)).unwrap();
+    driving.send(outcome(None)).unwrap();
     reply(&mut driving);
 
     match socket(port) {
@@ -424,14 +440,14 @@ fn a_second_socket_is_refused_while_one_drives_and_the_next_resumes_at_the_step_
         other => panic!("a second socket is refused, not {:?}", other.map(|_| ())),
     }
 
-    // Once the driving socket has closed, the run is let go, and the next to open resumes it where it stands, sent everything written so far.
+    // Once the driving socket has closed, the run is let go, and the next to open resumes it where it stands, sent everything written so far: the step in hand is handed over again, and is the one test still, begun once.
     driving.close(None).unwrap();
     while driving.read().is_ok() {}
     let mut resumed = socket(port).expect("a socket opens once none drives the run");
     assert_eq!(
         reply(&mut resumed),
         (
-            "begun\nstep 0/0\n".to_string(),
+            "begun\nbegan 0/0\nstep 0/0\nbegan 0/1\n".to_string(),
             Some(Step {
                 subject: 0,
                 test: 1

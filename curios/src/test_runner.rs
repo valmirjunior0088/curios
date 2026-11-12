@@ -17,7 +17,7 @@ use {
         troubled, url,
     },
     curios::{TestSubject, Tested, test_subjects},
-    curios_browser::{Posted, Step},
+    curios_browser::{Posted, Step, Stream},
     curios_common::{Qualifier, Style},
     curios_native::{OsHost, TestEnd},
     curios_package::{Selection, Target},
@@ -27,7 +27,7 @@ use {
         cell::RefCell,
         cmp::Reverse,
         collections::VecDeque,
-        io::{self, Write},
+        io, mem,
         sync::Arc,
         time::{Duration, Instant},
     },
@@ -94,12 +94,6 @@ impl From<Result<TestEnd, String>> for Outcome {
             Err(trap) => Outcome::Trapped(trap),
         }
     }
-}
-
-/// What a guest wrote on the two standard streams, where a source hands its output over rather than the guest writing to the process's streams itself.
-pub struct Streams {
-    pub stdout: Vec<u8>,
-    pub stderr: Vec<u8>,
 }
 
 /// Run the tests `selection` declares natively, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
@@ -471,6 +465,8 @@ pub fn serve_tests(
         Printing {
             printer: &mut printer,
             planned,
+            wrote: false,
+            column: Column::Start,
         },
     );
     serve_run(&listener, run)?;
@@ -478,18 +474,53 @@ pub fn serve_tests(
     Ok(printer.green())
 }
 
-/// A browser run's printer, with each served subject yet to be taken on, its tree and its modules, in the order the runner opens its pages: what the run hands each outcome to, and whose transcript it sends.
+/// A browser run's printer, with each served subject yet to be taken on, its tree and its modules, in the order the runner opens its pages: what the run tells of each step, and whose transcript it sends.
 struct Printing<'p, 'a> {
     printer: &'p mut Printer<'a>,
     planned: VecDeque<(Tree, Vec<TestModule>)>,
+    /// Whether the test in hand has written anything, and where its writes stand in their line: what a native test's host holds of it.
+    wrote: bool,
+    column: Column,
 }
 
 impl Reporting for Printing<'_, '_> {
-    fn took(&mut self, _step: Step, guest: Streams, outcome: &Posted, taken: Duration) {
-        // A page's test is written once it has ended, whole: its node, what it wrote, and how it ended.
+    fn began(&mut self, _step: Step) {
         self.printer.began();
-        self.printer
-            .ended(outcome_of(outcome), relay(&guest), taken);
+        self.wrote = false;
+        self.column = Column::Start;
+    }
+
+    /// Relay what a page's test wrote as a native test's own writes fall: the line its node opened on ended ahead of the first byte, then the bytes, each line behind its frame, on this process's stream of the same name.
+    fn wrote(&mut self, stream: Stream, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+        if !mem::replace(&mut self.wrote, true) {
+            cut();
+        }
+
+        // What is kept is what was shown, unpainted, from the same column.
+        let kept = framed(&mut self.column.clone(), bytes, &Style::plain());
+        match stream {
+            Stream::Stdout => relayed(
+                io::stdout(),
+                &framed(&mut self.column, bytes, answered()),
+                &kept,
+            ),
+            Stream::Stderr => relayed(
+                io::stderr(),
+                &framed(&mut self.column, bytes, reader()),
+                &kept,
+            ),
+        }
+    }
+
+    fn took(&mut self, _step: Step, outcome: &Posted, taken: Duration) {
+        self.printer.ended(
+            outcome_of(outcome),
+            Wrote::of(self.wrote, self.column),
+            taken,
+        );
 
         // The subject's last test closes it, and opens the next subject or ends the run.
         if !self.printer.in_hand() {
@@ -502,33 +533,6 @@ impl Reporting for Printing<'_, '_> {
 
     fn written(&self) -> Vec<u8> {
         kept()
-    }
-}
-
-/// Relay what a page's test wrote as a native test's own writes fall: the line its node opened on ended ahead of the first byte, then each stream's bytes, each line behind its frame, on this process's stream of the same name, standard output first.
-fn relay(guest: &Streams) -> Wrote {
-    if guest.stdout.is_empty() && guest.stderr.is_empty() {
-        return Wrote::Nothing;
-    }
-
-    cut();
-    let mut column = Column::Start;
-    for (bytes, style, stream) in [
-        (
-            &guest.stdout,
-            answered(),
-            &mut io::stdout() as &mut dyn Write,
-        ),
-        (&guest.stderr, reader(), &mut io::stderr()),
-    ] {
-        // What is kept is what was shown, unpainted, from the same column.
-        let shown = framed(&mut column.clone(), bytes, style);
-        relayed(stream, &shown, &framed(&mut column, bytes, &Style::plain()));
-    }
-
-    match column {
-        Column::Start => Wrote::Lines,
-        Column::Within | Column::Returned => Wrote::Open,
     }
 }
 

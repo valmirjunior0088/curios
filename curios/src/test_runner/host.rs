@@ -37,11 +37,7 @@ impl Frame {
 
     /// What the test wrote, as its node is closed by.
     pub fn wrote(&self) -> Wrote {
-        match (self.wrote.load(Ordering::SeqCst), *self.column()) {
-            (false, _) => Wrote::Nothing,
-            (true, Column::Start) => Wrote::Lines,
-            (true, Column::Within | Column::Returned) => Wrote::Open,
-        }
+        Wrote::of(self.wrote.load(Ordering::SeqCst), *self.column())
     }
 }
 

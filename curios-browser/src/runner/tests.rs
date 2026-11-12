@@ -1,32 +1,42 @@
 use super::*;
 
 #[test]
-fn an_outcome_is_read_as_the_runner_sends_it_and_its_streams_decoded() {
-    let outcome =
-        Posted::parse(br#"{"stdout":"aGk=","stderr":"","exitCode":0,"trap":null,"held":true}"#)
-            .unwrap();
+fn a_write_and_an_outcome_are_each_read_as_the_runner_sends_them() {
+    let Sent::Wrote(wrote) =
+        Sent::parse(br#"{"wrote":{"stream":"stderr","bytes":"aGk="}}"#).unwrap()
+    else {
+        panic!("a write");
+    };
+    assert_eq!(wrote.stream, Stream::Stderr);
+    assert_eq!(wrote.decoded().unwrap(), b"hi");
 
-    assert_eq!(outcome.exit_code, Some(0));
-    assert_eq!(outcome.held, Some(true));
-    assert_eq!(outcome.streams().unwrap(), (b"hi".to_vec(), Vec::new()));
+    assert_eq!(
+        Sent::parse(br#"{"outcome":{"exitCode":0,"trap":null,"held":true}}"#).unwrap(),
+        Sent::Outcome(Posted {
+            exit_code: Some(0),
+            trap: None,
+            held: Some(true),
+        })
+    );
 }
 
 #[test]
-fn an_outcome_that_is_none_is_refused_saying_so() {
+fn a_message_that_is_none_is_refused_saying_so() {
     assert!(
-        Posted::parse(b"{")
+        Sent::parse(b"{")
             .unwrap_err()
-            .starts_with("the outcome is not one:")
+            .starts_with("the message is not one:")
     );
-    let outcome =
-        Posted::parse(br#"{"stdout":"!","stderr":"","exitCode":null,"trap":"t","held":null}"#)
-            .unwrap();
+    let Sent::Wrote(wrote) = Sent::parse(br#"{"wrote":{"stream":"stdout","bytes":"!"}}"#).unwrap()
+    else {
+        panic!("a write");
+    };
 
     assert!(
-        outcome
-            .streams()
+        wrote
+            .decoded()
             .unwrap_err()
-            .starts_with("the outcome's stdout is not base64:")
+            .starts_with("what the page wrote is not base64:")
     );
 }
 

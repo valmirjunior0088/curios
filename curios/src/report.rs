@@ -344,6 +344,17 @@ pub enum Wrote {
     Open,
 }
 
+impl Wrote {
+    /// What a node's work wrote, from whether it `wrote` anything and the `column` its writes left the streams in.
+    pub fn of(wrote: bool, column: Column) -> Self {
+        match (wrote, column) {
+            (false, _) => Wrote::Nothing,
+            (true, Column::Start) => Wrote::Lines,
+            (true, Column::Within | Column::Returned) => Wrote::Open,
+        }
+    }
+}
+
 /// One subject's tree: the subject alone on a line, and beneath it a node for each thing done for it, written `label; outcome`.
 ///
 /// ```text

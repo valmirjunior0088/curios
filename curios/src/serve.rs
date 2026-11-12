@@ -10,13 +10,15 @@
 mod tests;
 
 use {
-    crate::Streams,
-    curios_browser::{ARGUMENT, INDEX_HTML, Posted, Reply, Step, content_type, runner},
+    curios_browser::{
+        ARGUMENT, INDEX_HTML, Posted, Reply, Sent, Step, Stream, content_type, runner,
+    },
     httparse::{EMPTY_HEADER, Error, Status},
     std::{
         collections::BTreeMap,
         ffi::OsString,
         io::{self, Read, Write},
+        mem,
         net::{Ipv4Addr, TcpListener, TcpStream},
         sync::{Mutex, PoisonError},
         thread,
@@ -70,10 +72,16 @@ pub struct Run<'a> {
     state: Mutex<State<'a>>,
 }
 
-/// What a run hands each step's outcome to — the command, which prints and tallies — and the report it keeps of the run.
+/// What a run tells of each step as its page runs it — the command, which prints and tallies — and the report it keeps of the run.
 pub trait Reporting {
-    /// Take `outcome` as `step`'s, `guest` being the streams its page kept and `taken` the time from the step's being sent to its outcome's arriving.
-    fn took(&mut self, step: Step, guest: Streams, outcome: &Posted, taken: Duration);
+    /// `step` is handed to a page: its test is in hand from here, until its outcome is taken.
+    fn began(&mut self, step: Step);
+
+    /// The test of the step in hand wrote `bytes` on `stream`.
+    fn wrote(&mut self, stream: Stream, bytes: &[u8]);
+
+    /// Take `outcome` as `step`'s, `taken` being the time from the step's being sent to its outcome's arriving.
+    fn took(&mut self, step: Step, outcome: &Posted, taken: Duration);
 
     /// Everything written of the run so far, in the order it was written: what every socket is sent, from its first byte as it opens.
     fn written(&self) -> Vec<u8>;
@@ -87,6 +95,8 @@ struct State<'a> {
     driven: bool,
     /// When the step in hand was last handed to a socket, which is when its page began to load.
     handed: Option<Instant>,
+    /// Whether the report was told the step in hand began: a step handed over again is the one test still, begun once.
+    begun: bool,
     report: Box<dyn Reporting + Send + 'a>,
 }
 
@@ -104,6 +114,7 @@ impl<'a> Run<'a> {
                 test: 0,
                 driven: false,
                 handed: None,
+                begun: false,
                 report: Box::new(report),
             }),
         }
@@ -138,8 +149,13 @@ impl<'a> Run<'a> {
         Some(Held(self))
     }
 
-    /// The step in hand's outcome taken, `guest` being the streams its page kept.
-    fn reported(&self, outcome: &Posted, guest: Streams) {
+    /// What the test of the step in hand wrote on `stream`, told as it arrives.
+    fn wrote(&self, stream: Stream, bytes: &[u8]) {
+        self.state().report.wrote(stream, bytes);
+    }
+
+    /// The step in hand's outcome taken.
+    fn reported(&self, outcome: &Posted) {
         let mut state = self.state();
         let step = step_of(&state, self.pages.len()).expect(DRIVEN_WHILE_IN_HAND);
         let taken = state
@@ -147,7 +163,8 @@ impl<'a> Run<'a> {
             .take()
             .map_or(Duration::ZERO, |handed| handed.elapsed());
 
-        state.report.took(step, guest, outcome, taken);
+        state.report.took(step, outcome, taken);
+        state.begun = false;
         state.test += 1;
         if state.test == self.pages[state.page].1 {
             state.page += 1;
@@ -155,11 +172,17 @@ impl<'a> Run<'a> {
         }
     }
 
-    /// The reply due a socket that has been sent `sent` bytes of the report: the rest of it, and the step in hand — `sent` moved past what the reply carries.
+    /// The reply due a socket that has been sent `sent` bytes of the report: the rest of it, and the step in hand, which the report is told began where it has not been — `sent` moved past what the reply carries.
     fn reply(&self, sent: &mut usize) -> Reply {
         let mut state = self.state();
+        let next = step_of(&state, self.pages.len());
+        if let Some(step) = next
+            && !mem::replace(&mut state.begun, true)
+        {
+            state.report.began(step);
+        }
         let written = state.report.written();
-        let reply = Reply::new(&written[*sent..], step_of(&state, self.pages.len()));
+        let reply = Reply::new(&written[*sent..], next);
         *sent = written.len();
         // A step handed over again, to a page reloaded or opened in another's place, is run again from its start.
         state.handed = reply.next.map(|_| Instant::now());
@@ -330,7 +353,7 @@ fn answer(stream: TcpStream, site: &Site<'_>, port: u16) -> io::Result<()> {
     }
 }
 
-/// Drive the run `held` holds over `socket`: the report so far and the step in hand sent at once, then each outcome the runner sends taken as that step's and answered with what the command wrote since and the next step, until the last, after which the socket is closed and the accept, listening on `port`, woken. A message that is no outcome closes the socket saying so.
+/// Drive the run `held` holds over `socket`: the report so far and the step in hand sent at once, then what the runner sends of that step — each write told as it arrives, and its outcome taken and answered with what the command wrote since and the next step, until the last, after which the socket is closed and the accept, listening on `port`, woken. A message that is no outcome closes the socket saying so.
 fn drive(
     mut socket: WebSocket<&TcpStream>,
     held: Held<'_, '_>,
@@ -344,23 +367,31 @@ fn drive(
 
     while reply.next.is_some() {
         let read = match socket.read()? {
-            Message::Text(text) => {
-                Posted::parse(text.as_bytes()).and_then(|outcome| Ok((outcome.streams()?, outcome)))
-            }
-            Message::Binary(_) => Err("an outcome is a text message".to_string()),
+            Message::Text(text) => Sent::parse(text.as_bytes()),
+            Message::Binary(_) => Err("a message of the run is text".to_string()),
             Message::Close(_) => return Ok(()),
             Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => continue,
         };
-        let Ok(((stdout, stderr), outcome)) = read else {
+        // A write is told and the step stays in hand; the outcome ends it and is answered.
+        let taken = match read {
+            Ok(Sent::Wrote(wrote)) => wrote.decoded().map(|bytes| {
+                run.wrote(wrote.stream, &bytes);
+            }),
+            Ok(Sent::Outcome(outcome)) => {
+                run.reported(&outcome);
+                reply = run.reply(&mut sent);
+                socket.send(said(&reply))?;
+
+                Ok(())
+            }
+            Err(refusal) => Err(refusal),
+        };
+        if taken.is_err() {
             return socket.close(Some(CloseFrame {
                 code: CloseCode::Invalid,
-                reason: "the message is no outcome".into(),
+                reason: "the message is none of the run's".into(),
             }));
-        };
-
-        run.reported(&outcome, Streams { stdout, stderr });
-        reply = run.reply(&mut sent);
-        socket.send(said(&reply))?;
+        }
     }
 
     socket.close(None)?;

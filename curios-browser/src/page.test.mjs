@@ -141,28 +141,29 @@ test("a gateway's export answers its row through the loader", async (t) => {
   assert.deepEqual(outcome.posted, []);
 });
 
-test("a framed page posts started, then its outcome with the streams it kept, at its own origin", async (t) => {
+test("a framed page posts started, each write as it is made, then its outcome, at its own origin", async (t) => {
   const root = doubling(t);
 
   const { posted } = await started(t, join(root, "app"), join(root, "page"), {
     framed: true,
   });
 
-  assert.equal(posted.length, 2);
   assert.deepEqual(posted[0], [{ type: "started" }, "/"]);
-  const [message, origin] = posted[1];
-  assert.equal(origin, "/");
-  assert.equal(message.type, "outcome");
-  assert.deepEqual(
-    [
-      message.outcome.held,
-      message.outcome.exitCode,
-      message.outcome.trap,
-      new TextDecoder().decode(message.outcome.stdout),
-      message.outcome.stderr.length,
-    ],
-    [null, 0, null, "42", 0],
+  const writes = posted.slice(1, -1);
+  assert.ok(writes.length > 0);
+  for (const [message, origin] of writes) {
+    assert.equal(origin, "/");
+    assert.equal(message.type, "wrote");
+    assert.equal(message.stream, "stdout");
+  }
+  assert.equal(
+    Buffer.concat(writes.map(([message]) => message.bytes)).toString(),
+    "42",
   );
+  assert.deepEqual(posted.at(-1), [
+    { type: "outcome", outcome: { exitCode: 0, trap: null, held: null } },
+    "/",
+  ]);
 });
 
 test("an export that is no function is refused before the program runs, naming the row", async (t) => {
@@ -385,12 +386,12 @@ test("a test page served by the command answers its word through its gateway, an
     replies.length > 0
       ? Promise.resolve(replies.shift())
       : new Promise((resolve) => waiting.push(resolve));
-  // The run so far ends on the address served: a subject's tree is written with its first test's outcome.
+  // The run so far ends on the node of the step it hands over, opened as the step is: the test in hand is the one whose line stands open.
   const opening = await replied();
   assert.ok(
     Buffer.from(opening.written, "base64")
       .toString()
-      .endsWith(`serve; ${base}/\n`),
+      .endsWith(`serve; ${base}/\n/app\n├─ /app/doubling`),
   );
   assert.deepEqual(opening.next, { subject: 0, test: 0 });
 
@@ -411,22 +412,14 @@ test("a test page served by the command answers its word through its gateway, an
   assert.equal(outcome.trap, null);
   assert.equal(outcome.held, true);
   assert.equal(posted[0][0].type, "started");
-  assert.equal(posted[1][0].outcome.held, true);
+  assert.equal(posted.at(-1)[0].outcome.held, true);
 
-  socket.send(
-    JSON.stringify({
-      stdout: Buffer.from(posted[1][0].outcome.stdout).toString("base64"),
-      stderr: Buffer.from(posted[1][0].outcome.stderr).toString("base64"),
-      exitCode: outcome.exitCode,
-      trap: outcome.trap,
-      held: outcome.held,
-    }),
-  );
+  socket.send(JSON.stringify({ outcome: posted.at(-1)[0].outcome }));
   const reply = await replied();
   assert.equal(reply.next, null);
   assert.match(
     Buffer.from(reply.written, "base64").toString(),
-    /^\/app\n├─ \/app\/doubling; passed in \d+\.\ds\n╰─ 1 passed, 0 failed; \d+\.\ds\n1 passed, 0 failed; \d+\.\ds\n$/,
+    /^; passed in \d+\.\ds\n╰─ 1 passed, 0 failed; \d+\.\ds\n1 passed, 0 failed; \d+\.\ds\n$/,
   );
 
   // A test that held wrote nothing, and the report is standard error's.

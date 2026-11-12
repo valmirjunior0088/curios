@@ -1,4 +1,4 @@
-//! The run a test serve answers at its root: the runner document, which opens one page per test and reports each to the command, and the wire between the two over the socket the runner opens at `/` — each test's outcome as its page posted it, and the reply that carries what the command has written that the socket has not been sent and the step to open next. Each is one type rendered and read here, so the runner's script, the command and the suites meet on one spelling.
+//! The run a test serve answers at its root: the runner document, which opens one page per test and reports each to the command, and the wire between the two over the socket the runner opens at `/` — what each test wrote as it wrote it, its outcome as its page posted it, and the reply that carries what the command has written that the socket has not been sent and the step to open next. Each is one type rendered and read here, so the runner's script, the command and the suites meet on one spelling.
 
 #[cfg(test)]
 mod tests;
@@ -23,35 +23,51 @@ pub struct Step {
     pub test: usize,
 }
 
-/// What a page posted to the runner when its program ended, as the runner sends it over the run's socket, the outcome of the step in hand: the streams the loader kept, in base64, and the harness's `exitCode`, `trap` and `held` as the page posted them.
+/// One of a test's two standard streams.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Stream {
+    Stdout,
+    Stderr,
+}
+
+/// Bytes the test of the step in hand wrote on one of its standard streams, in base64, as its page posted them: sent as they are written, so the command shows them as a native test's are shown.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Wrote {
+    pub stream: Stream,
+    pub bytes: String,
+}
+
+impl Wrote {
+    /// The bytes written, decoded.
+    pub fn decoded(&self) -> Result<Vec<u8>, String> {
+        STANDARD
+            .decode(&self.bytes)
+            .map_err(|error| format!("what the page wrote is not base64: {error}"))
+    }
+}
+
+/// What a page posted to the runner when its program ended, as the runner sends it over the run's socket, the outcome of the step in hand: the harness's `exitCode`, `trap` and `held` as the page posted them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Posted {
-    pub stdout: String,
-    pub stderr: String,
     pub exit_code: Option<u8>,
     pub trap: Option<String>,
     pub held: Option<bool>,
 }
 
-impl Posted {
-    /// The outcome `message` spells, or why it spells none.
+/// What the runner sends over the run's socket of the step in hand: what its test wrote, each write as it is made, and then how it ended.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Sent {
+    Wrote(Wrote),
+    Outcome(Posted),
+}
+
+impl Sent {
+    /// The message `message` spells, or why it spells none.
     pub fn parse(message: &[u8]) -> Result<Self, String> {
-        serde_json::from_slice(message).map_err(|error| format!("the outcome is not one: {error}"))
-    }
-
-    /// The guest's two streams, decoded.
-    pub fn streams(&self) -> Result<(Vec<u8>, Vec<u8>), String> {
-        let decoded = |stream: &str, name: &str| {
-            STANDARD
-                .decode(stream)
-                .map_err(|error| format!("the outcome's {name} is not base64: {error}"))
-        };
-
-        Ok((
-            decoded(&self.stdout, "stdout")?,
-            decoded(&self.stderr, "stderr")?,
-        ))
+        serde_json::from_slice(message).map_err(|error| format!("the message is not one: {error}"))
     }
 }
 

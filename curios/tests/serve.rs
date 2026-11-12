@@ -238,9 +238,16 @@ fn tested(root: &Path) {
 }
 
 /// An outcome as a runner sends one over the run's socket: the streams in base64, given encoded, and the rest as the harness resolves it.
-fn posted(stdout: &str, stderr: &str, exit_code: &str, trap: &str, held: &str) -> Message {
+fn posted(exit_code: &str, trap: &str, held: &str) -> Message {
     Message::text(format!(
-        "{{\"stdout\":\"{stdout}\",\"stderr\":\"{stderr}\",\"exitCode\":{exit_code},\"trap\":{trap},\"held\":{held}}}"
+        "{{\"outcome\":{{\"exitCode\":{exit_code},\"trap\":{trap},\"held\":{held}}}}}"
+    ))
+}
+
+/// The message a runner sends for a write its page's test made on `stream`, `bytes` in base64.
+fn wrote(stream: &str, bytes: &str) -> Message {
+    Message::text(format!(
+        "{{\"wrote\":{{\"stream\":\"{stream}\",\"bytes\":\"{bytes}\"}}}}"
     ))
 }
 
@@ -316,11 +323,14 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let (status, _, library) = serving.get("/index.wasm");
     assert_eq!(status, "HTTP/1.1 200 OK");
 
-    // What each page kept of its test's streams: a failing test's own word of what went wrong, on its standard error — the base64 of `expected 2 but got 1\n` — and, for the executable's, the base64 of a `drawn\n` it wrote on its standard output.
-    let held = posted("", "", "0", "null", "true");
-    let failed = posted("", "ZXhwZWN0ZWQgMiBidXQgZ290IDEK", "0", "null", "false");
-    let exited = posted("", "", "7", "null", "null");
-    let own = posted("ZHJhd24K", "", "0", "null", "true");
+    // What each page's runner sends of its test: a failing test's own word of what went wrong as it wrote it, on its standard error — the base64 of `expected 2 but got 1\n` — and, for the executable's, the base64 of a `drawn\n` it wrote on its standard output, each ahead of the outcome.
+    let held = vec![posted("0", "null", "true")];
+    let failed = vec![
+        wrote("stderr", "ZXhwZWN0ZWQgMiBidXQgZ290IDEK"),
+        posted("0", "null", "false"),
+    ];
+    let exited = vec![posted("7", "null", "null")];
+    let own = vec![wrote("stdout", "ZHJhd24K"), posted("0", "null", "true")];
 
     let mut socket = serving.socket();
     let (mut shown, first) = reply(&mut socket);
@@ -338,16 +348,22 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
             "╰─ 0 passed, 0 failed\n",
         ],
     );
+    // The step handed over is the test in hand, its node open: the one whose line stands open while its page runs.
     assert!(
-        shown.ends_with(&format!("serve; http://127.0.0.1:{port}/\n")),
+        shown.ends_with(&format!(
+            "serve; http://127.0.0.1:{port}/\n/app\n├─ /app/holds"
+        )),
         "{shown}"
     );
-    for (outcome, next) in [
+    for (sent, next) in [
         (held, step(0, 1)),
         (failed, step(0, 2)),
         (exited, step(1, 0)),
     ] {
-        socket.send(outcome).unwrap();
+        // A write is told and answered with nothing; the outcome that follows it is answered with what the command wrote since.
+        for message in sent {
+            socket.send(message).unwrap();
+        }
         let (written, after) = reply(&mut socket);
         shown.push_str(&written);
         assert_eq!(after, next);
@@ -356,7 +372,9 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let (status, _, executable) = serving.get("/index.wasm");
     assert_eq!(status, "HTTP/1.1 200 OK");
     assert_ne!(executable, library);
-    socket.send(own).unwrap();
+    for message in own {
+        socket.send(message).unwrap();
+    }
     let (written, after) = reply(&mut socket);
     shown.push_str(&written);
     assert_eq!(after, None);
@@ -422,17 +440,16 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
         ],
     );
     assert!(
-        opening.ends_with(&format!("serve; http://127.0.0.1:{port}/\n")),
+        opening.ends_with(&format!("serve; http://127.0.0.1:{port}/\napp\n├─ /own")),
         "{opening}"
     );
-    socket.send(posted("", "", "0", "null", "true")).unwrap();
+    socket.send(posted("0", "null", "true")).unwrap();
     let (closing, after) = reply(&mut socket);
     assert_eq!(after, None);
     assert_eq!(
         untimed(&closing),
         concat!(
-            "app\n",
-            "├─ /own; passed in _\n",
+            "; passed in _\n",
             "╰─ 1 passed, 0 failed; _\n",
             "1 passed, 0 failed, 3 skipped; _\n",
         )

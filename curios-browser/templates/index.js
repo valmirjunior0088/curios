@@ -55,10 +55,9 @@ const argumentsOf = (query) =>
       return Uint8Array.from(bytes);
     });
 
-/** A stream of the program's output: each write decoded and written into `element` while it stands in the document, each line handed to `log`, the console's, and every write kept, so a framed page can post the stream whole. */
-const stream = (element, log) => {
+/** A stream of the program's output: each write handed to `posted` as it is made, then decoded and written into `element` while it stands in the document, each line handed to `log`, the console's. */
+const stream = (element, log, posted) => {
   const decoder = new TextDecoder();
-  const kept = [];
   let line = "";
 
   const shown = (text) => {
@@ -76,7 +75,7 @@ const stream = (element, log) => {
 
   return {
     write: (bytes) => {
-      kept.push(bytes);
+      posted(bytes);
       shown(decoder.decode(bytes, { stream: true }));
     },
     end: () => {
@@ -85,19 +84,6 @@ const stream = (element, log) => {
       if (line !== "") {
         log(line);
       }
-    },
-    taken: () => {
-      const whole = new Uint8Array(
-        kept.reduce((length, bytes) => length + bytes.length, 0),
-      );
-      let at = 0;
-
-      for (const bytes of kept) {
-        whole.set(bytes, at);
-        at += bytes.length;
-      }
-
-      return whole;
     },
   };
 };
@@ -137,16 +123,21 @@ const answers = () => {
 /**
  * Run the page's program: `program`, its bytes, or what `index.wasm` holds, fetched beside this loader against its integrity; its arguments from `query`, the location's own where there is one. Its output is written into the page's element while that stands in the document and to the console, and a trap is reported in both.
  *
- * Framed — `globalThis.parent` a window other than this one — the page posts `{ type: "started" }` to its parent before the program runs and `{ type: "outcome", outcome }` after, `outcome` what this resolves to with each stream whole, each to the page's own origin, `"/"`, so no other origin reads a program's output.
+ * Framed — `globalThis.parent` a window other than this one — the page posts `{ type: "started" }` to its parent before the program runs, `{ type: "wrote", stream, bytes }` for each write the program makes on a standard stream, as it makes it, and `{ type: "outcome", outcome }` after, `outcome` how the program ended, each to the page's own origin, `"/"`, so no other origin reads a program's output.
  *
  * Resolves to what the harness's `run` resolves to.
  */
 export async function start({ program, query = globalThis.location?.search ?? "" } = {}) {
   const element = globalThis.document?.getElementById(page.output) ?? null;
-  const stdout = stream(element, (line) => console.log(line));
-  const stderr = stream(element, (line) => console.error(line));
   const parent = globalThis.parent;
   const framed = parent !== undefined && parent !== globalThis;
+  const wrote = (name) => (bytes) => {
+    if (framed) {
+      parent.postMessage({ type: "wrote", stream: name, bytes }, "/");
+    }
+  };
+  const stdout = stream(element, (line) => console.log(line), wrote("stdout"));
+  const stderr = stream(element, (line) => console.error(line), wrote("stderr"));
 
   if (framed) {
     parent.postMessage({ type: "started" }, "/");
@@ -187,7 +178,10 @@ export async function start({ program, query = globalThis.location?.search ?? ""
 
   if (framed) {
     parent.postMessage(
-      { type: "outcome", outcome: { ...outcome, stdout: stdout.taken(), stderr: stderr.taken() } },
+      {
+        type: "outcome",
+        outcome: { exitCode: outcome.exitCode, trap: outcome.trap, held: outcome.held },
+      },
       "/",
     );
   }

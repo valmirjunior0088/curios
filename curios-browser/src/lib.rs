@@ -17,7 +17,7 @@ mod run;
 pub use run::run;
 
 mod runner;
-pub use runner::{Posted, Reply, Step, runner};
+pub use runner::{Posted, Reply, Sent, Step, Stream, Wrote, runner};
 
 #[cfg(test)]
 mod tests;
