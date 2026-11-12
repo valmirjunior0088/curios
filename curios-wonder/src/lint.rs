@@ -3,7 +3,7 @@
 //! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, read off the union of the prefixes every unit spelled — and it adds it only when the subject is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
 
 use {
-    crate::{Asked, Diagnosed, Severity, Telling},
+    crate::{Asked, Diagnosed, Severity, Telling, answer},
     curios_common::{Qualifier, Report},
     curios_module::Overlay,
     curios_package::Selection,
@@ -78,7 +78,7 @@ pub fn lint(
 
     if !seen.rendered.is_empty() {
         telling.answering();
-        println!("{}", seen.rendered.join("\n\n"));
+        answer(format_args!("{}\n", seen.rendered.join("\n\n")));
     }
     if let Some(unstored) = unstored {
         telling.unfiled(unstored);

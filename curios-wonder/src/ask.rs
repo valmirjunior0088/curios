@@ -1,6 +1,6 @@
 //! The one-shot transport: ask about what the command line admitted, and render the answer for a reader.
 //!
-//! **The answer goes to stdout, and nothing else does.** A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder --stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, told to whoever narrates the question ([`Telling`]): that the store took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
+//! **The answer goes to stdout, and nothing else does** ([`answer`]). A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder --stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, told to whoever narrates the question ([`Telling`]): that the store took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
 //!
 //! **Exit 0 means the question was answered, including when the answer is a list of errors.** Non-zero means it could not be asked: no such subject, no such stage, a scope that cannot be assembled. `stage`, `cost` and `tests` are where the two meet — a program that stops before the answer has not answered the question, so what stopped it goes to stderr, stdout stays empty rather than holding text nothing downstream expected, and the exit is a build's: 2 when written goals alone stopped it, and 1 when anything was refused.
 
@@ -20,11 +20,32 @@ use {
     std::{
         collections::BTreeSet,
         fmt::Display,
-        fs, io,
+        fs,
+        io::{self, Write},
         path::{Path, PathBuf},
+        process,
         str::FromStr,
     },
 };
+
+/// The code a command ends with where the reader of its answer has gone, which is the one a program whose reader has gone ends with (`/std`'s `print`): what a shell reports of a process a broken pipe ended.
+const READER_GONE: i32 = 141;
+
+/// Write `text`, part of an answer, on standard output.
+///
+/// **A reader that has gone ends the command, with nothing said.** An answer is written for whoever reads it, and `curios wonder --stage wasm | head` is a reader that leaves early: once it has, no line more has anyone to read it, a sentence about the pipe least of all, so the command ends there as a filter does. Any other failure to write is said, and fails the command.
+pub fn answer(text: impl Display) {
+    let written = write!(io::stdout(), "{text}");
+
+    match written {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::BrokenPipe => process::exit(READER_GONE),
+        Err(error) => {
+            eprintln!("failed to write to standard output: {error}");
+            process::exit(1);
+        }
+    }
+}
 
 /// Whoever a question tells of its work as it goes, beside the answer it writes on standard output: each subject as it is taken on, each step of the subject's compile, how that compile ended, that an answer is about to be written, and why the store took nothing where it could not. The command line narrates with it; the language server asks in silence (`Silent`).
 pub trait Telling {
@@ -314,7 +335,7 @@ pub fn wonder_diagnostics(
     let (reports, refusal) = rendered(answers, budget, &overlay, telling);
     if !reports.is_empty() {
         telling.answering();
-        println!("{}", reports.join("\n\n"));
+        answer(format_args!("{}\n", reports.join("\n\n")));
     }
     if let Some(refusal) = refusal {
         telling.unfiled(refusal);
@@ -347,7 +368,7 @@ pub fn wonder_tests(
                 }
                 records
                     .iter()
-                    .for_each(|record| println!("{}", record.path));
+                    .for_each(|record| answer(format_args!("{}\n", record.path)));
             }
             Err(error) => {
                 listed = Err(error);
@@ -434,7 +455,7 @@ pub fn wonder_stage(
     }
 
     // The rung is the answer and goes to stdout, where the driver emits it: once every unit the program stands on is compiled, and before anything downstream of the rung is.
-    let shown = |text: &str| println!("{text}");
+    let shown = |text: &str| answer(format_args!("{text}\n"));
     let (reached, unstored) = asked.staged(budget, &overlay, name, shown, telling);
     let answered = match reached {
         Ok(Reached::Rendered(rendering)) => {
@@ -486,7 +507,7 @@ fn library_stage(
     });
     if let Ok(rendered) = &reached {
         telling.answering();
-        println!("{rendered}");
+        answer(format_args!("{rendered}\n"));
     }
     let answered = match reached {
         Ok(_) => Ok(()),
@@ -556,12 +577,12 @@ pub fn wonder_at(
             .and_then(|text| text.text.source.offset_of(place.line, place.column));
 
         if let Some(named) = offset.and_then(|offset| Named::at(names, offset)) {
-            println!("{}", row(named));
+            answer(format_args!("{}\n", row(named)));
             // Beneath the row, a blank line before each: the head as its author wrote it, then the prose above it.
             if let Some(heading) = named.declaration.as_ref().and_then(Declaration::heading) {
-                println!("\n{}", heading.head);
+                answer(format_args!("\n{}\n", heading.head));
                 if !heading.prose.is_empty() {
-                    println!("\n{}", heading.prose.join("\n"));
+                    answer(format_args!("\n{}\n", heading.prose.join("\n")));
                 }
             }
         }
@@ -580,7 +601,7 @@ pub fn wonder_declarations(
             .flat_map(|text| &text.names)
             .filter(|named| named.declares)
         {
-            println!("{}", row(named));
+            answer(format_args!("{}\n", row(named)));
         }
     })
 }
@@ -700,7 +721,7 @@ pub fn wonder_cost(
                     Outcome::Absorbed => "absorbed".to_string(),
                 };
 
-                println!("{}\t{outcome}", fate.name);
+                answer(format_args!("{}\t{outcome}\n", fate.name));
             }
             Ok(())
         }

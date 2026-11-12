@@ -40,8 +40,8 @@ use {
     curios_pipeline::CompileError,
     curios_surface::Formatted,
     curios_wonder::{
-        Linted, STDIN_LABEL, Staged, lint, serve, std_documentation, wonder_at, wonder_cost,
-        wonder_declarations, wonder_diagnostics, wonder_stage, wonder_tests,
+        Linted, STDIN_LABEL, Staged, answer, lint, serve, std_documentation, wonder_at,
+        wonder_cost, wonder_declarations, wonder_diagnostics, wonder_stage, wonder_tests,
     },
     std::{
         collections::BTreeSet,
@@ -676,7 +676,7 @@ fn dispatch() -> Result<(), Failure> {
                                 counted = true;
                             }
                             (false, Formatted::Changed(text) | Formatted::Unchanged(text)) => {
-                                print!("{text}");
+                                answer(text);
                             }
                         }
                     }
@@ -759,7 +759,7 @@ fn dispatch() -> Result<(), Failure> {
                     )?),
                 },
                 |module| {
-                    optimize(&module, true, |stage| println!("{stage}"));
+                    optimize(&module, true, |stage| answer(format_args!("{stage}\n")));
                 },
                 &mut Asking::reading(),
             )?,
@@ -782,7 +782,7 @@ fn dispatch() -> Result<(), Failure> {
             let report =
                 fold_at(&stream).map_err(|error| format!("{}: {error}", stream.display()))?;
 
-            print!("{}", report.render());
+            answer(report.render());
         }
     }
 

@@ -2,8 +2,40 @@
 
 use {
     super::test_support::*,
-    std::{fs, process::Output},
+    std::{
+        fs,
+        io::Write,
+        process::{Command, Output, Stdio},
+    },
 };
+
+/// An answer is written for whoever reads it, so a reader that leaves early — `curios wonder --stage wasm | head` — ends the command as a filter ends, with the code a broken pipe gives and nothing said: a panic over the pipe says what no answer does.
+#[test]
+fn a_reader_that_leaves_early_ends_the_question_with_nothing_said() {
+    let root = temporary("reader-gone");
+    fs::create_dir_all(&root).unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_curios"))
+        .current_dir(&root)
+        .args(["wonder", "--stage", "wasm", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("run the compiler");
+    // Gone before the program is so much as read, so the rung's first line already has no reader.
+    drop(child.stdout.take());
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"/std/print(\"\")\n")
+        .unwrap();
+
+    let ended = child.wait_with_output().expect("the compiler exits");
+    let said = String::from_utf8_lossy(&ended.stderr);
+    assert_eq!(ended.status.code(), Some(141), "{said}");
+    assert!(!said.contains("panicked"), "{said}");
+}
 
 /// A goal on standard input is an answer: located, rendered as `run` reports it, on stdout, exit 0.
 #[test]

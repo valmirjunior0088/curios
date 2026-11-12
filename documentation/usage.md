@@ -624,6 +624,8 @@ A running program's own exit code passes through untouched, so `0` never hides a
 
 `run --target browser` serves until it is stopped, so it ends by the signal that stops it, or with `1` before it serves: a page that cannot be built, a port that is taken. `test --target browser` serves until every selected test has a verdict, then exits as `test` exits, and ends with `1` before it serves for the same reasons.
 
+A command whose answer goes to standard output — a `wonder` query, `lint`, `format -`, `profile` — ends with `141`, and says nothing, once whatever reads the answer has gone, as `curios wonder --stage wasm | head` leaves early: the code a shell reports of any filter a broken pipe ended, and the one a Curios program's own `print` ends with.
+
 The tri-state describes a command line that parsed. One that did not — an unknown command, an unknown flag, no command at all — exits 1, with the usage message on stderr rather than a compiler report; `--help` and `--version` exit 0.
 
 ## Flags
