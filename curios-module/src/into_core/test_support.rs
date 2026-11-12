@@ -365,7 +365,7 @@ pub fn run_err(src: &str) -> String {
     }
 }
 
-// A refusal the lowering raised, rendered as the reader sees it: the message and, where the error was placed, its snippet.
+// A refusal the lowering raised, rendered as the reader sees it: the block, with its pane where the error was placed.
 pub fn run_err_report(src: &str) -> String {
     into_core(
         &src.parse::<Entrypoint>().unwrap(),

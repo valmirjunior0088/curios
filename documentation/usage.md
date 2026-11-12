@@ -16,7 +16,7 @@ The complete command-line and package reference. The [README](../README.md) cove
 
 ## Which manifest governs
 
-The governing package is the one whose `curios.toml` is nearest to the subject — a file's own directory, the working directory for a name or no argument — found there or in the first directory above it that holds one. A command run anywhere inside a package — in the directory of one of its modules, say — means that package, and a build names the manifest on its `Processing` line whenever it is not in the working directory: `Processing serve (../curios.toml)`. The walk stops at the first manifest it finds, so a package nested in another's directory is its own, and an umbrella found first is refused, since it declares no package to compile.
+The governing package is the one whose `curios.toml` is nearest to the subject — a file's own directory, the working directory for a name or no argument — found there or in the first directory above it that holds one. A command run anywhere inside a package — in the directory of one of its modules, say — means that package, and a command names the manifest beside its subject whenever it is not in the working directory: `serve (../curios.toml)`. The walk stops at the first manifest it finds, so a package nested in another's directory is its own, and an umbrella found first is refused, since it declares no package to compile.
 
 Above the package, only the umbrella is looked for, and only one that enumerates you governs you. When it does, the umbrella's directory is the governing root: that is where the store goes, and it is shared with your sibling members.
 

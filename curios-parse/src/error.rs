@@ -221,7 +221,7 @@ impl ParserError {
         )
     }
 
-    /// Renders the error for humans: the message, then a caret snippet pointing into the offending line — the form the CLI and pipeline surface to the user. [`report`](Self::report) rendered, so the two cannot disagree about where.
+    /// Renders the error for humans: its report as a block, the facts and then the offending line with marks under it — the form the CLI and pipeline surface to the user. [`report`](Self::report) rendered, so the two cannot disagree about where.
     pub fn format(&self) -> String {
         self.report().render()
     }

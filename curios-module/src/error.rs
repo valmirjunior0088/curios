@@ -148,7 +148,7 @@ impl Error {
         }
     }
 
-    /// The error as data: the `Display` message, at the span `Located` wraps it in when one does — except a module that failed to parse, whose location is the parser's own rather than the `mod` line that asked for it, and whose message therefore carries the parser's message and no snippet of its own.
+    /// The error as data: what it says, at the span `Located` wraps it in when one does — except a module that failed to parse, whose report is the parser's own, in the module's file rather than at the `mod` line that asked for it, with the fact of which module the file was read as.
     pub fn report(&self) -> Report {
         let report = match self {
             Self::Located { span, error } => error
@@ -196,7 +196,7 @@ impl Error {
         Some(report)
     }
 
-    /// Renders the error for the user: the `Display` message plus, when the error is `Located`, the source snippet its span points at. Callers should prefer this over `to_string()`, which prints the message alone. [`report`](Self::report) rendered, so the two cannot disagree about where.
+    /// Renders the error for the user: its report as a block, with the pane its span points at when the error is `Located`. Callers should prefer this over `to_string()`, which prints the tag and the facts alone. [`report`](Self::report) rendered, so the two cannot disagree about where.
     pub fn format(&self) -> String {
         self.report().render()
     }

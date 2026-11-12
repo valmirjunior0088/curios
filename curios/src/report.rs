@@ -12,7 +12,7 @@
 //! ╰─ emit; 0.4s
 //! ```
 //!
-//! **Everything here goes to stderr.** `curios run` hands stdout to the program it executes, so a status line written there would corrupt `curios run report.crs > report.json`.
+//! **Everything here goes to stderr.** `curios run` hands stdout to the program it executes, so a line of the transcript written there would corrupt `curios run report.crs > report.json`.
 //!
 //! **Nothing written is taken back.** There is no cursor control and no repainting: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal, colour apart. Rust's stderr is unbuffered, so a label reaches the reader before the work it names with no flushing of its own.
 //!
@@ -20,7 +20,7 @@
 //!
 //! **A run that sends pages its report keeps the transcript** ([`keep`]): every byte written here, from then on, is what a page is sent, so the page shows what the terminal showed.
 //!
-//! **What is said of no one subject stands under none**: a `note:` of how the command took what it was asked ([`note`]), a step taken for every subject ([`alone`]), and what the whole invocation came to, as its last line ([`total`]).
+//! **What is said of no one subject stands under none**: a step taken for every subject ([`alone`]), and what the whole invocation came to, as its last line ([`total`]).
 
 #[cfg(test)]
 mod tests;
@@ -144,7 +144,7 @@ pub fn relayed(mut stream: impl Write, shown: &[u8], kept: &[u8]) {
     }
 }
 
-/// What a status line is about.
+/// What a tree is about, named on its first line.
 ///
 /// Four namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's and a foreign module's are identifiers their manifest rows chose, and a file's is whatever was typed or wherever it landed. Rendering all of them through one type is what keeps a print site from spelling a slash it did not derive.
 #[derive(Clone, PartialEq, Eq)]
