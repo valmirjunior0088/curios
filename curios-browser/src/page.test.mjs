@@ -297,7 +297,7 @@ test("a row that states no browser table is refused for a browser, naming the ro
   assert.ok(!existsSync(join(root, "page")));
 });
 
-/** `curios test --target browser` started in `directory` on a port of loopback's own: the port read off its `Serving` line, its streams kept, and the command's end awaited. */
+/** `curios test --target browser` started in `directory` on a port of loopback's own: the port read off the line that says its address, its streams kept, and the command's end awaited. */
 const serving = (t, directory) => {
   const child = spawn(
     compiler,
@@ -385,10 +385,12 @@ test("a test page served by the command answers its word through its gateway, an
     replies.length > 0
       ? Promise.resolve(replies.shift())
       : new Promise((resolve) => waiting.push(resolve));
+  // The run so far ends on the address served: a subject's tree is written with its first test's outcome.
   const opening = await replied();
-  assert.equal(
-    Buffer.from(opening.written, "base64").toString(),
-    "↳ Testing      /app\n",
+  assert.ok(
+    Buffer.from(opening.written, "base64")
+      .toString()
+      .endsWith(`serve; ${base}/\n`),
   );
   assert.deepEqual(opening.next, { subject: 0, test: 0 });
 
@@ -422,12 +424,13 @@ test("a test page served by the command answers its word through its gateway, an
   );
   const reply = await replied();
   assert.equal(reply.next, null);
-  assert.equal(
+  assert.match(
     Buffer.from(reply.written, "base64").toString(),
-    "/app/doubling: passed\n↳ Tested       /app; 1 passed, 0 failed\n",
+    /^\/app\n├─ \/app\/doubling; passed in \d+\.\ds\n╰─ 1 passed, 0 failed; \d+\.\ds\n1 passed, 0 failed; \d+\.\ds\n$/,
   );
 
+  // A test that held wrote nothing, and the report is standard error's.
   const { code, stdout } = await ended;
   assert.equal(code, 0);
-  assert.equal(stdout, "/app/doubling: passed\n");
+  assert.equal(stdout, "");
 });

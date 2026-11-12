@@ -20,6 +20,7 @@ use {
         net::{Ipv4Addr, TcpListener, TcpStream},
         sync::{Mutex, PoisonError},
         thread,
+        time::{Duration, Instant},
     },
     tungstenite::{
         Message, WebSocket,
@@ -71,11 +72,11 @@ pub struct Run<'a> {
 
 /// What a run hands each step's outcome to — the command, which prints and tallies — and the report it keeps of the run.
 pub trait Reporting {
-    /// Take `outcome` as `step`'s, `guest` being the streams its page kept.
-    fn took(&mut self, step: Step, guest: Streams, outcome: &Posted);
+    /// Take `outcome` as `step`'s, `guest` being the streams its page kept and `taken` the time from the step's being sent to its outcome's arriving.
+    fn took(&mut self, step: Step, guest: Streams, outcome: &Posted, taken: Duration);
 
     /// Everything written of the run so far, in the order it was written: what every socket is sent, from its first byte as it opens.
-    fn written(&self) -> &[u8];
+    fn written(&self) -> Vec<u8>;
 }
 
 /// Where a run is, whether a socket drives it, and what takes its outcomes.
@@ -84,6 +85,8 @@ struct State<'a> {
     page: usize,
     test: usize,
     driven: bool,
+    /// When the step in hand was last handed to a socket, which is when its page began to load.
+    handed: Option<Instant>,
     report: Box<dyn Reporting + Send + 'a>,
 }
 
@@ -100,6 +103,7 @@ impl<'a> Run<'a> {
                 page: 0,
                 test: 0,
                 driven: false,
+                handed: None,
                 report: Box::new(report),
             }),
         }
@@ -138,8 +142,12 @@ impl<'a> Run<'a> {
     fn reported(&self, outcome: &Posted, guest: Streams) {
         let mut state = self.state();
         let step = step_of(&state, self.pages.len()).expect(DRIVEN_WHILE_IN_HAND);
+        let taken = state
+            .handed
+            .take()
+            .map_or(Duration::ZERO, |handed| handed.elapsed());
 
-        state.report.took(step, guest, outcome);
+        state.report.took(step, guest, outcome, taken);
         state.test += 1;
         if state.test == self.pages[state.page].1 {
             state.page += 1;
@@ -149,10 +157,12 @@ impl<'a> Run<'a> {
 
     /// The reply due a socket that has been sent `sent` bytes of the report: the rest of it, and the step in hand — `sent` moved past what the reply carries.
     fn reply(&self, sent: &mut usize) -> Reply {
-        let state = self.state();
+        let mut state = self.state();
         let written = state.report.written();
         let reply = Reply::new(&written[*sent..], step_of(&state, self.pages.len()));
         *sent = written.len();
+        // A step handed over again, to a page reloaded or opened in another's place, is run again from its start.
+        state.handed = reply.next.map(|_| Instant::now());
 
         reply
     }

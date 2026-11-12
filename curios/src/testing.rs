@@ -452,7 +452,7 @@ pub struct TestRun {
 }
 
 impl TestRun {
-    /// Run the test at `index` in the schedule under the host `host` makes of the program's arguments, `[argv0, index]`, which is how `Test/main` is told which to run. The guest prints the outcome line of a test it survives; a trap is the error.
+    /// Run the test at `index` in the schedule under the host `host` makes of the program's arguments, `[argv0, index]`, which is how `Test/main` is told which to run. A test that fails says what went wrong on its standard error and answers that it did not hold; a trap is the error.
     pub fn run<H: HostOps + Send + Sync + 'static>(
         &self,
         index: usize,

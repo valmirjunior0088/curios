@@ -4,7 +4,7 @@
 //!
 //! **Every row shares three clauses beside its own.** A handle that names nothing, or a resource of a kind that cannot do the operation at all, fails `NotFound` and leaves every resource as it was; a stream used in a direction it is not open for — reading `stdout` or `stderr`, writing `stdin`, or a file against its open mode — fails with `EBADF` through the errno lane, on every host. Every operand is copied in and every reply copied out, so no host keeps a reference to guest memory across a call. An operand that is no value of its type is refused by the host's adapter. A reply is lowered from its own type, which is what makes it a value of the row's wire types, and nothing checks it further: what a row's rustdoc promises beyond its types is its host's to keep, and the hosts' own tests hold them to it.
 //!
-//! The table is an exported X-macro: invoked with the name of a callback macro, it applies that callback to every row. `curios-abi` applies one, generating the [`HostOp`] enum, the roster its accessors read and the [`HostOps`] trait; `curios-native` applies its own to bind every import to its method, so the bindings are read off the table too. A callback matches the row grammar and passes each type through untouched — none maps a type to anything — which keeps the table's vocabulary the type system's rather than a macro's.
+//! The table is an exported X-macro: invoked with the name of a callback macro, it applies that callback to every row. `curios-abi` applies one, generating the [`HostOp`] enum, the roster its accessors read, the [`HostOps`] trait and [`HostFront`], a host that stands in front of another and answers the rows it writes; `curios-native` applies its own to bind every import to its method, so the bindings are read off the table too. A callback matches the row grammar and passes each type through untouched — none maps a type to anything — which keeps the table's vocabulary the type system's rather than a macro's.
 //!
 //! A row whose reply is a [`Termination`] diverges: its call never returns, which is distinct from a row returning nothing, and it crosses no result. `proc_exit` is the one such row. No host implementation can return into the guest, since nothing but the adapter's guest-exit trap is made of a termination, and the guest holds no code for a return from it.
 //!
@@ -165,7 +165,7 @@ macro_rules! yields_label {
     };
 }
 
-/// Project the table to the [`HostOp`] enum, the roster its accessors read, and the typed host interface.
+/// Project the table to the [`HostOp`] enum, the roster its accessors read, the typed host interface, and the host that stands in front of another.
 macro_rules! declare_host_rows {
     ($(
         $(#[doc = $doc:literal])*
@@ -218,6 +218,57 @@ macro_rules! declare_host_rows {
 
             /// What the answer filed under `h` settled with, which leaves it filed no longer, or `None` while it has not settled. A handle that names no answer refuses the call.
             fn settled(&self, h: Handle) -> Result<Option<Settled>, Refusal>;
+        }
+
+        /// A host standing in front of another: every row is the one behind's unless the front writes its own, and so are the three methods no row names. A front is a [`HostOps`] by what it writes and what it leaves, so a host that reads a few rows of the conversation a program has with another states those rows and nothing else.
+        pub trait HostFront {
+            /// The host behind, which answers every row the front leaves.
+            type Behind: HostOps;
+
+            /// The host behind.
+            fn behind(&self) -> &Self::Behind;
+
+            $(
+                $(#[doc = $doc])*
+                fn $name(&self, $($p: $t),*) -> $r {
+                    self.behind().$name($($p),*)
+                }
+            )*
+
+            /// [`HostOps::wait`], as the host behind waits.
+            fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal> {
+                self.behind().wait(on)
+            }
+
+            /// [`HostOps::later`], filed with the host behind.
+            fn later(&self, answer: Answer) -> Result<Settled, Handle> {
+                self.behind().later(answer)
+            }
+
+            /// [`HostOps::settled`], read from the host behind.
+            fn settled(&self, h: Handle) -> Result<Option<Settled>, Refusal> {
+                self.behind().settled(h)
+            }
+        }
+
+        impl<F: HostFront> HostOps for F {
+            $(
+                fn $name(&self, $($p: $t),*) -> $r {
+                    HostFront::$name(self, $($p),*)
+                }
+            )*
+
+            fn wait(&self, on: Vec<Handle>) -> Result<(), Refusal> {
+                HostFront::wait(self, on)
+            }
+
+            fn later(&self, answer: Answer) -> Result<Settled, Handle> {
+                HostFront::later(self, answer)
+            }
+
+            fn settled(&self, h: Handle) -> Result<Option<Settled>, Refusal> {
+                HostFront::settled(self, h)
+            }
         }
     };
 }

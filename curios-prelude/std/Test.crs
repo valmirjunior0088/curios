@@ -1,5 +1,5 @@
 use /std/{Nat, Bool, Str, Bytes, List, Option, Result, Try, Io, Monad, Spell, Show, Fmt, Program,
-    print, Proc};
+    print, print_err, Proc};
 use /std/ops/{Eql};
 use /std/time/{Duration};
 
@@ -140,6 +140,16 @@ let report(name: Str, test: Test({})) -> Io(Bool) =
         Io/pure(false)
     end;
 
+-- The one test a runner selected is named by the runner, which says how it ended: the test says only what went wrong.
+let answer(test: Test({})) -> Io(Bool) =
+    let result = finish(test)!;
+    match result
+    | success(_) => Io/pure(true)
+    | failure(failure) =>
+        let _ = print_err(Str/concat(message(failure), "\n"))!;
+        Io/pure(false)
+    end;
+
 satisfy Program(Test({})) {
     execute(test) =
         let held = report("program", test)!;
@@ -158,7 +168,7 @@ let run_all(tests: List({Str, () -> Test({})})) -> Io(Bool) =
             let here = report(name, body())!;
             Io/pure(earlier && here));
 
---- Run the selected test, or every named test in order, and answer whether each one held.
+--- Run the selected test, or every named test in order, and answer whether each one held. A selected test that fails says what went wrong on standard error and nothing else, since whoever selected it names it; run in order, each is reported under its name on standard output.
 pub let main(tests: List({Str, () -> Test({})})) -> Io(Bool) =
     let arguments = Proc/args()!;
     match List/try_get(arguments, 1)
@@ -166,7 +176,7 @@ pub let main(tests: List({Str, () -> Test({})})) -> Io(Bool) =
         match parse_index(raw)
         | some(index) =>
             match List/try_get(tests, index)
-            | some((name, body)) => report(name, body())
+            | some((_, body)) => answer(body())
             | none() => Io/pure(false)
             end
         | none() => Io/pure(false)

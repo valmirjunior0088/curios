@@ -137,8 +137,13 @@ pub struct Built {
 /// Say why `store` took nothing of what a build compiled, where it took nothing. After the fold rather than during it: one unwritable store refuses everything for the same reason, so the reason is one line however many units went past it, each of whose `store` node says only that it was refused. Said even when the compilation failed, because a store nobody can write is true either way and the next run pays for it either way.
 pub fn unstored(store: Option<&Verdicts>) {
     if let Some(refusal) = store.and_then(Verdicts::refused) {
-        note(format!("what this built is not stored; {refusal}"));
+        note_unstored(&refusal);
     }
+}
+
+/// Say that a store took nothing of what a build compiled, for the reason it gave.
+pub fn note_unstored(refusal: &str) {
+    note(format!("what this built is not stored; {refusal}"));
 }
 
 /// The interface of the last of `units` — a package's library, compiled against everything before it — made from the compilation that builds it, whose units are filed into `store` when there is one.

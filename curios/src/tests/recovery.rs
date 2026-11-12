@@ -187,14 +187,10 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
         .collect::<Vec<_>>();
     assert_eq!(records.len(), 1);
 
-    let (system, io) = MockHost::builder().args(["test", "0"]).build();
+    let (system, _) = MockHost::builder().args(["test", "0"]).build();
     let outcome = compiled.run_test(system, ForeignBindings::empty());
 
     assert_eq!(outcome, Ok(TestEnd::Answered(true)));
-    assert_eq!(
-        String::from_utf8_lossy(&io.output()).trim_end(),
-        format!("{}: passed", records[0].path.join())
-    );
 }
 
 /// The two obligations are decided independently and reported together, so a reader fixing one is told about the other in the same run.

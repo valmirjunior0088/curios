@@ -16,6 +16,8 @@
 //!
 //! **Nothing written is taken back.** There is no cursor control, no repainting and no terminal detection: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal. Rust's stderr is unbuffered, so a label reaches the reader before the work it names with no flushing of its own.
 //!
+//! **A run that sends pages its report keeps the transcript** ([`keep`]): every byte written here, from then on, is what a page is sent, so the page shows what the terminal showed.
+//!
 //! **A heading column is what a command not drawn as a tree prints**: one word of [`Heading`], padded to a fixed width, then what it is about ([`fact`]).
 
 #[cfg(test)]
@@ -26,10 +28,48 @@ use {
     curios_wonder::STDIN_LABEL,
     std::{
         env, fmt,
+        io::Write,
         path::{Path, PathBuf},
-        time::Instant,
+        sync::{Mutex, MutexGuard, PoisonError},
+        time::{Duration, Instant},
     },
 };
+
+/// What the transcript wrote since a run asked for it to be kept, where one did.
+static KEPT: Mutex<Option<Vec<u8>>> = Mutex::new(None);
+
+/// What is kept of the transcript, held. A writer that panicked left every byte it wrote, so its poison is passed over.
+fn held() -> MutexGuard<'static, Option<Vec<u8>>> {
+    KEPT.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// The one path every byte of the transcript takes: to stderr, and onto what is kept of it where a run keeps it.
+fn say(text: impl fmt::Display) {
+    let text = text.to_string();
+
+    eprint!("{text}");
+    if let Some(kept) = held().as_mut() {
+        kept.extend_from_slice(text.as_bytes());
+    }
+}
+
+/// Keep what the transcript writes from here on. A run that sends pages its report asks before its first line, so what a page is sent is what the terminal showed and the two cannot drift.
+pub fn keep() {
+    held().get_or_insert_default();
+}
+
+/// What the transcript wrote since it was asked kept, in the order written, and nothing where it was not.
+pub fn kept() -> Vec<u8> {
+    held().clone().unwrap_or_default()
+}
+
+/// Relay `bytes`, which a program run elsewhere wrote on one of its standard streams, to `stream`, this process's of the same name, and onto what is kept of the transcript, where they fell.
+pub fn relayed(mut stream: impl Write, bytes: &[u8]) {
+    stream.write_all(bytes).expect("failed relaying");
+    if let Some(kept) = held().as_mut() {
+        kept.extend_from_slice(bytes);
+    }
+}
 
 /// What a status line is about.
 ///
@@ -121,12 +161,6 @@ headings! {
     Try => "Try",
 }
 
-/// The marker a nested line wears, in the columns a top-level line leaves empty in front of its heading.
-const NESTED: &str = "↳ ";
-
-/// How many columns [`NESTED`] occupies. Written out rather than measured: `str::len` counts the arrow's three UTF-8 bytes, and it prints in one.
-const NESTED_WIDTH: usize = 2;
-
 /// The widest heading in `headings`.
 const fn widest(headings: &[Heading]) -> usize {
     let (mut max, mut index) = (0, 0);
@@ -144,29 +178,40 @@ const fn widest(headings: &[Heading]) -> usize {
     max
 }
 
-/// The heading column: the widest heading, the columns a nested line's marker takes in front of it, and the three spaces every line keeps to its right.
-pub const HEADING_WIDTH: usize = widest(HEADINGS) + NESTED_WIDTH + 3;
+/// The heading column: the widest heading, and the five columns every line keeps to its right.
+pub const HEADING_WIDTH: usize = widest(HEADINGS) + 5;
 
-/// A line's heading column, padded out to where its subject begins. `marker` is [`NESTED`] for a step of the header above and empty for a line of its own.
-///
-/// Padded once here rather than at each write site, and after the marker is joined on: `{:<}` measures characters, so the arrow counts for the one column it prints in whatever its byte length.
-fn head(marker: &str, heading: Heading) -> String {
-    format!("{:<HEADING_WIDTH$}", format!("{marker}{}", heading.text()))
+/// A line's heading column, padded out to where its subject begins, once here rather than at each write site.
+fn head(heading: Heading) -> String {
+    format!("{:<HEADING_WIDTH$}", heading.text())
 }
 
 /// One complete fact, on a line of its own.
 pub fn fact(heading: Heading, detail: impl fmt::Display) {
-    eprintln!("{}", unnested(heading, detail));
-}
-
-/// One complete fact, as text — `Finished 3 passed, 1 failed` — for a fact written to the terminal and carried elsewhere as the same bytes.
-pub fn unnested(heading: Heading, detail: impl fmt::Display) -> String {
-    format!("{}{detail}", head("", heading))
+    say(format_args!("{}{detail}\n", head(heading)));
 }
 
 /// How a build is taken rather than anything it did: a line of its own ahead of the header, spelled as a question spells its note.
 pub fn note(text: impl fmt::Display) {
-    eprintln!("note: {text}");
+    say(format_args!("note: {text}\n"));
+}
+
+/// A step taken for no one subject, on a line of its own under none: `serve; http://127.0.0.1:8000/`, where what is served is every subject's.
+pub fn alone(label: &str, outcome: impl fmt::Display) {
+    say(format_args!("{label}; {outcome}\n"));
+}
+
+/// What a whole invocation came to, as its last line, with the time `taken` by all it sums where that was measured: `3 passed, 1 failed; 0.2s`.
+pub fn total(text: impl fmt::Display, taken: Option<Duration>) {
+    match taken {
+        Some(taken) => say(format_args!("{text}; {}\n", seconds(taken))),
+        None => say(format_args!("{text}\n")),
+    }
+}
+
+/// End the line of the node standing open, where what it names is about to write of its own: its outcome then closes it beneath ([`Tree::ended`]). Free of any tree because whoever sees the write holds none: a test's host, which runs where the test does.
+pub fn cut() {
+    say("\n");
 }
 
 /// What a question says where the store took nothing of what it compiled: the fact a build states for the same reason, in a question's words. A store nobody can write otherwise reads as a compiler that is slow.
@@ -181,20 +226,7 @@ pub fn unfiled(refusal: String) {
 ///
 /// Headingless because it is not a thing that happened, which is what every heading names; it is part of what the line above already reported.
 pub fn detail(text: impl fmt::Display) {
-    eprintln!("{:<HEADING_WIDTH$}  {text}", "");
-}
-
-/// One complete step of the header above, as text — `↳ Running hello`, or `↳ Tested /app; 3 passed, 1 failed` with `outcome` — for a step written to the terminal and carried elsewhere as the same bytes.
-pub fn nested(heading: Heading, subject: &Subject, outcome: Option<&str>) -> String {
-    match outcome {
-        Some(outcome) => format!("{}{subject}; {outcome}", head(NESTED, heading)),
-        None => format!("{}{subject}", head(NESTED, heading)),
-    }
-}
-
-/// The step a page is served with, naming where a browser opens it — the one fact a reader needs from what follows, which is nothing until the server is stopped.
-pub fn serving(url: &str) {
-    eprintln!("{}{url}", head(NESTED, Heading::Serving));
+    say(format_args!("{:<HEADING_WIDTH$}  {text}\n", ""));
 }
 
 /// `manifest` as a reader standing in `here` would spell it: nothing when it sits right there, a climb of `../` when it sits above, and the path itself anywhere else — `--manifest` can name a file off to the side.
@@ -257,6 +289,20 @@ const BRANCH: &str = "├─ ";
 /// The connector of the last node a tree plans.
 const CORNER: &str = "╰─ ";
 
+/// The trunk, beside what stands beneath a node more are planned after.
+const TRUNK: &str = "│";
+
+/// What a node's work wrote of its own on the standard streams while the node's line stood open, as whoever watched them saw it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wrote {
+    /// Nothing: the node's line is open still, and its outcome closes it.
+    Nothing,
+    /// Something, the last of it a line's end.
+    Lines,
+    /// Something that left a line open.
+    Open,
+}
+
 /// One subject's tree: the subject alone on a line, and beneath it a node for each thing done for it, written `label; outcome`.
 ///
 /// ```text
@@ -270,6 +316,14 @@ const CORNER: &str = "╰─ ";
 /// **A node's line is built by unterminated writes.** The label reaches the reader before the work it names, and what closes the line is what the work came to. A compiler that dies mid-step leaves the line open, so the last thing written is how far it got.
 ///
 /// **The connector is the plan's.** `├─` is written where more nodes are planned and `╰─` at the last, before either's work is done, so a tree a refusal cuts short ends on `├─`: the steps it planned and never reached are the ones missing.
+///
+/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), it flows as written, and the outcome closes the node beneath it, on a curve off the trunk:
+///
+/// ```text
+/// ├─ /geometry/draws_a_square
+/// ■■■■
+/// │  ╰─ passed in 0.1s
+/// ```
 pub struct Tree {
     /// The subject's line, until the first node writes it.
     line: Option<String>,
@@ -298,24 +352,29 @@ impl Tree {
     }
 
     /// Leave the tree as it stands. A subject no node was written for says nothing, unless its line names the manifest that governs it: that is said whatever was done, since nothing else tells which package the invocation reached.
-    pub fn close(self) {
-        if let Some(line) = self.line.filter(|_| self.governed) {
-            eprintln!("{line}");
+    pub fn close(mut self) {
+        if self.governed {
+            self.headed();
+        }
+    }
+
+    /// The subject's line, written ahead of its first node.
+    fn headed(&mut self) {
+        if let Some(line) = self.line.take() {
+            say(format_args!("{line}\n"));
         }
     }
 
     /// Open a node for `label`, the last its tree plans or not, leaving its line unterminated.
     pub fn open(&mut self, label: &str, last: bool) {
-        if let Some(line) = self.line.take() {
-            eprintln!("{line}");
-        }
-        eprint!(
+        self.headed();
+        say(format_args!(
             "{}{label}",
             match last {
                 true => CORNER,
                 false => BRANCH,
             }
-        );
+        ));
         self.opened = Some(Instant::now());
     }
 
@@ -326,18 +385,18 @@ impl Tree {
 
     /// Close the open node with what its work took: `; 1.4s`.
     pub fn done(&mut self) {
-        eprintln!("; {}", self.taken());
+        say(format_args!("; {}\n", self.taken()));
     }
 
     /// Close the open node with how its work ended where it did not simply finish, and what it took: `; refused in 0.3s`.
     pub fn verdict(&mut self, verdict: &str) {
-        eprintln!("; {verdict} in {}", self.taken());
+        say(format_args!("; {verdict} in {}\n", self.taken()));
     }
 
     /// Close the open node with what its work came to stand as, where that is the one fact it is read for: `; .curios/native/hello/hello`.
     pub fn outcome(&mut self, outcome: impl fmt::Display) {
         self.opened = None;
-        eprintln!("; {outcome}");
+        say(format_args!("; {outcome}\n"));
     }
 
     /// Close the open node with where its work came to stand, or as `failed` where it could not be done: why is `done`'s to say, handed back for whoever reports it beneath.
@@ -346,20 +405,54 @@ impl Tree {
             Ok(()) => self.outcome(place),
             Err(_) => {
                 self.verdict("failed");
-                eprintln!();
+                say("\n");
             }
         }
 
         done
     }
 
+    /// Close the open node with how its work ended and the time `taken` whoever ran it measured, then what only they know of it, a line of `beneath` each: `; passed in 0.1s` on the node's own line, or, where the work `wrote` of its own and so ended that line, on a curve beneath what it wrote, `│  ╰─ passed in 0.1s`, after the end of a line it left open.
+    pub fn ended(&mut self, verdict: &str, taken: Duration, wrote: Wrote, beneath: &[String]) {
+        let taken = seconds(taken);
+
+        self.opened = None;
+        let inset = match wrote {
+            Wrote::Nothing => {
+                say(format_args!("; {verdict} in {taken}\n"));
+
+                "    "
+            }
+            Wrote::Lines | Wrote::Open => {
+                if wrote == Wrote::Open {
+                    say("\n");
+                }
+                say(format_args!("{TRUNK}  {CORNER}{verdict} in {taken}\n"));
+
+                "       "
+            }
+        };
+        for line in beneath {
+            say(format_args!("{TRUNK}{inset}{line}\n"));
+        }
+    }
+
+    /// Close the tree with the node that sums it up, and the time `taken` by all it sums where any of it ran: `╰─ 2 passed, 1 failed; 0.1s`.
+    pub fn summed(mut self, sum: &str, taken: Option<Duration>) {
+        self.headed();
+        match taken {
+            Some(taken) => say(format_args!("{CORNER}{sum}; {}\n", seconds(taken))),
+            None => say(format_args!("{CORNER}{sum}\n")),
+        }
+    }
+
     /// What the open node's work took, which closes it.
     fn taken(&mut self) -> String {
-        let elapsed = self
-            .opened
-            .take()
-            .map_or(0.0, |at| at.elapsed().as_secs_f64());
-
-        format!("{elapsed:.1}s")
+        seconds(self.opened.take().map_or(Duration::ZERO, |at| at.elapsed()))
     }
+}
+
+/// A time as the transcript spells one: seconds, to a tenth.
+fn seconds(taken: Duration) -> String {
+    format!("{:.1}s", taken.as_secs_f64())
 }

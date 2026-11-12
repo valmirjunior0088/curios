@@ -149,25 +149,24 @@ fn run_module(module: &Qualifier) {
         });
 
         match outcome {
-            // The guest printed `path: passed` and answered that the test held.
+            // The test answered that it held.
             Ok(TestEnd::Answered(true)) => passed += 1,
-            // The guest printed its own outcome line and its report; the body as written is what only the records know, appended beneath it.
+            // The test said what went wrong and answered that it did not hold; its path and its body as written are what only the records know.
             Ok(TestEnd::Answered(false)) => {
-                failures.push_str(&reported);
+                failures.push_str(&format!("{}: failed\n{reported}", record.path.join()));
                 if !record.body.is_empty() {
                     failures.push_str(&format!("{}\n", record.body));
                 }
             }
-            // An exit never reaches the guest's printing, so the line is written here, and it is a failure whatever its code: a verdict is answered, never exited with.
+            // An exit is a failure whatever its code: a verdict is answered, never exited with.
             Ok(TestEnd::Exited(code)) => {
                 failures.push_str(&format!(
-                    "{reported}{}: exited {code}\n",
+                    "{}: exited {code}\n{reported}",
                     record.path.join()
                 ));
             }
-            // Nor does a trap reach it.
             Err(error) => {
-                failures.push_str(&format!("{reported}{}: {error}\n", record.path.join()));
+                failures.push_str(&format!("{}: {error}\n{reported}", record.path.join()));
             }
         }
     }

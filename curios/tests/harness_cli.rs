@@ -1,4 +1,4 @@
-//! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, the guest's outcome lines joined by what only the runner knows — the failing body, each module's tally, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
+//! What `curios test` does at the command line: the governing package compiled as test programs, one instantiation per test, each test a node of its subject's tree closed by how it ended, what the test wrote of its own joined by what only the runner knows — the failing body, each subject's tally, the exit code — plus the filter, the store round trip, and `run`'s indifference to it all.
 
 use {
     curios_common::test_support::*,
@@ -116,19 +116,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     let root = project("outcomes");
     let output = curios(&root, &["test"]);
 
-    in_order(
-        &stdout(&output),
-        &[
-            "/app/doubling_passes: passed\n",
-            "/app/addition_passes: passed\n",
-            "/app/equality_fails: failed\n  expected 5 but got 4\n    Test/equal(double(2), 5)\n",
-            "/app/overflow_traps: trapped\n",
-            "    Test/perform(() => let v = /std/Proc/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)))\n",
-            "/app/exits_seven: exited 7\n    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
-            "/app/effect_passes: passed\n",
-        ],
-    );
-    // The library is taken on, its unit compiled and its test program linked, its one module tested and tallied; the executable, which declares no tests, is taken on, compiled and linked and nothing more. Each program's own step follows the units it links: it is timed through to the machine code a run executes.
+    // The library's unit is checked and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: a failing test says what went wrong itself, so its verdict stands beneath that with the body as written, and a trap's text and an exit's body are the runner's to add. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
     in_order(
         &stderr(&output),
         &[
@@ -139,25 +127,36 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "├─ check; ",
             "├─ build; ",
             "├─ emit; ",
-            "↳ Testing      /app\n",
-            "↳ Tested       /app; 3 passed, 1 failed, 1 trapped, 1 exited\n",
+            "├─ /app/doubling_passes; passed in ",
+            "├─ /app/addition_passes; passed in ",
+            "├─ /app/equality_fails\nexpected 5 but got 4\n│  ╰─ failed in ",
+            "│       Test/equal(double(2), 5)\n",
+            "├─ /app/overflow_traps; trapped in ",
+            "│      Test/perform(() => let v = /std/Proc/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)))\n",
+            "├─ /app/exits_seven; exited 7 in ",
+            "│    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
+            "├─ /app/effect_passes; passed in ",
+            "╰─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
             "/app\n",
             "├─ check; ",
             "╰─ store; ",
             "app\n",
             "├─ check; ",
+            "╰─ 0 passed, 0 failed\n",
         ],
     );
-    assert_eq!(
-        stderr(&output).matches("↳ Testing").count(),
-        1,
-        "a unit that declares no tests reports no module, stderr: {}",
+    assert!(
+        stderr(&output)
+            .lines()
+            .last()
+            .is_some_and(|last| last.starts_with("3 passed, 1 failed, 1 trapped, 1 exited; ")),
+        "the run ends on its tally and what its tests took, stderr: {}",
         stderr(&output)
     );
-    assert!(
-        !stderr(&output).contains("Finished"),
-        "a run of one module ends on its tally, stderr: {}",
-        stderr(&output)
+    assert_eq!(
+        stdout(&output),
+        "",
+        "the report is standard error's, and no test here writes"
     );
     assert_eq!(output.status.code(), Some(1));
 }
@@ -187,13 +186,78 @@ test fails_quietly =
 
     let output = curios(&root, &["test"]);
 
-    assert_eq!(
-        stdout(&output),
-        "/app/quits_early: exited 0\n    Test/perform(() => Proc/exit(@Test({}), 0))\n/app/fails_quietly: exited 1\n    Test/perform(() => Proc/exit(@Test({}), 1))\n",
-        "stderr: {}",
-        stderr(&output)
+    in_order(
+        &stderr(&output),
+        &[
+            "├─ /app/quits_early; exited 0 in ",
+            "│    Test/perform(() => Proc/exit(@Test({}), 0))\n",
+            "├─ /app/fails_quietly; exited 1 in ",
+            "│    Test/perform(() => Proc/exit(@Test({}), 1))\n",
+            "╰─ 0 passed, 0 failed, 2 exited; ",
+        ],
     );
     assert_eq!(output.status.code(), Some(1));
+}
+
+/// What a test writes is never held: it reaches the stream the test wrote it on as it is written, its first byte ends the line the test's node opened on, and the node closes beneath it — after the end of a line the test left open. The frame is standard error's whichever stream the test wrote on, so the two streams read apart show each its own and read as one pipe show the test's bytes inside its node.
+#[test]
+fn a_test_that_writes_is_closed_beneath_what_it_wrote() {
+    let root = temporary("writes");
+    write(
+        &root,
+        "curios.toml",
+        "compiler = \"0.0.0\"\nname = \"app\"\n",
+    );
+    write(
+        &root,
+        "lib.crs",
+        r#"use /std/{Io, Test, print, print_err};
+
+test quiet =
+    Test/assert(true);
+
+test draws =
+    Test/perform(() => let _ = print("drawn\n")!; Io/pure(Test/assert(true)));
+
+test mutters =
+    Test/perform(() => let _ = print_err("half")!; Io/pure(Test/assert(true)));
+"#,
+    );
+
+    let apart = curios(&root, &["test"]);
+    assert_eq!(stdout(&apart), "drawn\n", "stderr: {}", stderr(&apart));
+    in_order(
+        &stderr(&apart),
+        &[
+            "├─ /app/quiet; passed in ",
+            "├─ /app/draws\n│  ╰─ passed in ",
+            "├─ /app/mutters\nhalf\n│  ╰─ passed in ",
+            "╰─ 3 passed, 0 failed; ",
+        ],
+    );
+
+    let (mut merged, writer) = pipe().unwrap();
+    // The command holds the parent's copies of the write end until it is dropped, and the read below ends only once every copy is closed.
+    let mut child = {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_curios"));
+        command
+            .current_dir(&root)
+            .arg("test")
+            .stdout(writer.try_clone().unwrap())
+            .stderr(writer);
+        command.spawn().expect("run the compiler")
+    };
+    let mut together = String::new();
+    merged.read_to_string(&mut together).unwrap();
+    assert!(child.wait().unwrap().success());
+    in_order(
+        &together,
+        &[
+            "├─ /app/quiet; passed in ",
+            "├─ /app/draws\ndrawn\n│  ╰─ passed in ",
+            "├─ /app/mutters\nhalf\n│  ╰─ passed in ",
+        ],
+    );
 }
 
 #[test]
@@ -201,22 +265,25 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     let root = project("filter");
 
     let cold = curios(&root, &["test", "--filter", "/app/addition_passes"]);
-    assert_eq!(
-        stdout(&cold),
-        "/app/addition_passes: passed\n",
-        "stderr: {}",
-        stderr(&cold)
+    in_order(
+        &stderr(&cold),
+        &[
+            "├─ emit; ",
+            "├─ /app/addition_passes; passed in ",
+            "╰─ 1 passed, 0 failed, 5 skipped; ",
+        ],
     );
     assert_eq!(cold.status.code(), Some(0));
 
+    // Each payload comes back whole, so nothing of either subject's build is narrated: a subject's tree is its tests and its tally.
     let warm = curios(&root, &["test", "--filter", "/app/addition_passes"]);
-    assert_eq!(stdout(&warm), stdout(&cold));
-    // Each payload comes back whole, so nothing of either target's build is narrated.
     in_order(
         &stderr(&warm),
         &[
-            "↳ Testing      /app\n",
-            "↳ Tested       /app; 1 passed, 0 failed, 5 skipped\n",
+            "/app\n├─ /app/addition_passes; passed in ",
+            "╰─ 1 passed, 0 failed, 5 skipped; ",
+            "app\n╰─ 0 passed, 0 failed\n",
+            "1 passed, 0 failed, 5 skipped; ",
         ],
     );
     assert!(
@@ -226,9 +293,9 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     );
 }
 
-/// A module's tests run together however its declarations interleave with another's, each module tallied with the tests the filter skipped, one it selects nothing from included, and `Finished` sums them all.
+/// A module's tests run together however its declarations interleave with another's, and a subject's tally counts the tests the filter left out, those of a module it selects nothing from included.
 #[test]
-fn each_module_is_tallied_apart_with_the_tests_the_filter_skipped() {
+fn a_modules_tests_run_together_and_the_tally_counts_what_the_filter_skipped() {
     let root = temporary("modules");
     write(
         &root,
@@ -278,22 +345,14 @@ end
         ],
     );
 
-    assert_eq!(
-        stdout(&output),
-        "/app/first: passed\n/app/second: passed\n/app/Inner/kept: passed\n",
-        "stderr: {}",
-        stderr(&output)
-    );
     in_order(
         &stderr(&output),
         &[
-            "↳ Testing      /app\n",
-            "↳ Tested       /app; 2 passed, 0 failed\n",
-            "↳ Testing      /app/Inner\n",
-            "↳ Tested       /app/Inner; 1 passed, 0 failed, 1 skipped\n",
-            "↳ Testing      /app/Left\n",
-            "↳ Tested       /app/Left; 0 passed, 0 failed, 1 skipped\n",
-            "Finished       3 passed, 0 failed, 2 skipped\n",
+            "├─ /app/first; passed in ",
+            "├─ /app/second; passed in ",
+            "├─ /app/Inner/kept; passed in ",
+            "╰─ 3 passed, 0 failed, 2 skipped; ",
+            "\n3 passed, 0 failed, 2 skipped; ",
         ],
     );
 }
@@ -347,19 +406,24 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     );
 
     let executable = curios(&root, &["test", "app"]);
-    assert_eq!(
-        stdout(&executable),
-        "/in_app: passed\n",
+    in_order(
+        &stderr(&executable),
+        &["app\n", "├─ /in_app; passed in ", "╰─ 1 passed, 0 failed; "],
+    );
+    assert!(
+        !stderr(&executable).contains("in_library"),
         "stderr: {}",
         stderr(&executable)
     );
 
     let loose = curios(&root, &["test", "scratch/loose.crs"]);
-    assert_eq!(
-        stdout(&loose),
-        "/loose/in_loose: passed\n",
-        "stderr: {}",
-        stderr(&loose)
+    in_order(
+        &stderr(&loose),
+        &[
+            "scratch/loose.crs\n",
+            "├─ /loose/in_loose; passed in ",
+            "╰─ 1 passed, 0 failed; ",
+        ],
     );
 }
 
@@ -371,11 +435,13 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     let module = "use /std/{Test};\n\ntest in_piped =\n    Test/assert(true);\n";
 
     let tested = fed(&root, &["test", "-"], module);
-    assert_eq!(
-        stdout(&tested),
-        "/stdin/in_piped: passed\n",
-        "stderr: {}",
-        stderr(&tested)
+    in_order(
+        &stderr(&tested),
+        &[
+            "<stdin>\n",
+            "├─ /stdin/in_piped; passed in ",
+            "╰─ 1 passed, 0 failed; ",
+        ],
     );
     assert_eq!(tested.status.code(), Some(0));
 
@@ -557,7 +623,14 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
 
     // Each target is filed against its own chain, so the second invocation compiles nothing: every target's one step is its program's. A store handle shared across targets would carry the library's placement into every later fold, withholding each executable's payload on the invocation that first compiled it.
     let warm = curios(&root, &["test"]);
-    assert_eq!(stdout(&warm), stdout(&cold));
+    in_order(
+        &stderr(&warm),
+        &[
+            "├─ /app/lib_holds; passed in ",
+            "├─ /other_holds; passed in ",
+            "\n2 passed, 0 failed; ",
+        ],
+    );
     assert!(
         !stderr(&warm).contains("check;"),
         "stderr: {}",

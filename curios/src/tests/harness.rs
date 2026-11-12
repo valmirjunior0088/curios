@@ -64,23 +64,31 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
 
 #[test]
 fn an_index_argument_selects_one_test() {
-    // The runner's protocol: argv[1] names the test to run, and only its line is printed.
-    let (system, io) = MockHost::builder().args(["prog", "1"]).build();
-    run_text(
-        r#"
-        use /std/{Nat, Io, Test};
-        let entry() -> /std/Io({}) =
-            let _ = Test/main([
-                ("/tests/first", () => Test/assert(true)),
-                ("/tests/second", () => Test/assert(2 == 2)),
-            ])!;
-            Io/pure(());
-        entry()
-        "#,
-        system,
-    )
-    .expect("expected result");
-    assert_eq!(io.output(), b"/tests/second: passed\n");
+    // The runner's protocol: argv[1] names the test to run, and whoever selected it names it and says how it ended, so the test says only what went wrong, on its standard error, and nothing where it held.
+    let selected = |index: &str| {
+        let (system, io) = MockHost::builder().args(["prog", index]).build();
+        run_text(
+            r#"
+            use /std/{Nat, Io, Test};
+            let entry() -> /std/Io({}) =
+                let _ = Test/main([
+                    ("/tests/first", () => Test/assert(true)),
+                    ("/tests/second", () => Test/equal(1 + 1, 3)),
+                ])!;
+                Io/pure(());
+            entry()
+            "#,
+            system,
+        )
+        .expect("expected result");
+
+        (io.output(), io.errors())
+    };
+
+    assert_eq!(selected("0"), (Vec::new(), Vec::new()));
+    let (output, errors) = selected("1");
+    assert_eq!(errors, b"expected 3 but got 2\n");
+    assert_eq!(output, errors, "nothing on standard output");
 }
 
 #[test]

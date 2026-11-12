@@ -231,11 +231,33 @@ curios test --target browser     # the same tests, run by whatever opens the pri
 
 Each unit is compiled as its own test program — the same compilation `run` performs, with the final term replaced by a synthesized scheduler over that unit's selected tests — and every selected test runs in an instantiation of its own, so one test's effects, traps and exits never reach another. The unit itself is compiled with every test it declares whatever the filter, and is the one `wonder` and `lint` read; the filter narrows the program, so only the tests it selects are built past the front end, and a unit it selects none from builds no program. A unit holds its tests only here and in what `wonder` and `lint` ask of it: `run`, `compile` and a unit compiled for the units after it leave them out, so a unit's tests cost its builds nothing.
 
-The report is one line per test on stdout, path then outcome — `passed`, `failed`, `trapped`, `exited N` — with a failure's report indented beneath it followed by the test's body as written. A test that exits on its own has reported nothing, so it is `exited N` whatever `N`, `0` included.
+The report is on standard error, on each subject's own tree, after the nodes that built its test program ([What a command reports](#what-a-command-reports)). A unit and its test program are each a subject, so a library is named twice: checked and filed, then built into the program that runs its tests.
 
-On stderr each unit is taken on as `run` takes on a subject — `Processing`, then a `↳ Compiling` step for each unit it stands on and `↳ Linking` for its test program — and its tests run module by module, the modules in the order each declares its first test: each module that declares tests brackets their lines between a `↳ Testing` step and a `↳ Tested` step carrying its tally, `N passed, N failed` always, since that pair is what the exit code turns on, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened.
+```text
+/demo
+├─ check; 0.3s
+╰─ store; 0.0s
+/demo
+├─ check; 0.0s
+├─ build; 0.2s
+├─ emit; 0.4s
+├─ /demo/shapes/a_square_has_four_sides; passed in 0.0s
+├─ /demo/two_is_three
+the condition was false
+│  ╰─ failed in 0.0s
+│       Test/assert(2 == 3)
+├─ /demo/render/draws_a_square
+■■■■
+│  ╰─ passed in 0.1s
+╰─ 2 passed, 1 failed; 0.1s
+2 passed, 1 failed; 0.1s
+```
 
-A module the filter selects nothing from reports both steps with its tests skipped, and tests at the root report their module as `/`. The run ends with `Finished` and the tally of every module, unless a single module reported, whose `↳ Tested` step it would repeat.
+Each selected test is a node, opened by its path before the test runs, so a test that never ends is the one whose line stands open, and closed by how it ended and what it took: `passed`, `failed`, `trapped`, `exited N`. A test that exits on its own has answered nothing, so it is `exited N` whatever `N`, `0` included. The tests run module by module, the modules in the order each declares its first test.
+
+What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written. Its first byte ends the line its node opened on, and the node closes beneath what was written, on a curve off the trunk, whichever stream that was and wherever either stream goes. A failing test says what went wrong itself, on its standard error, so its verdict always stands beneath; beneath the verdict the runner adds what only it knows, the test's body as written and, for a trap, the trap's text.
+
+A subject's tally closes its tree and the run's is the last line, each with what its tests took together where any ran: `N passed, N failed` always, since that pair is what the exit code turns on, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened. A subject that declares no test, or that the filter selects nothing from, closes with its tally at once.
 
 A claim about every instance is [a `let`, not a test](language.md#test-declarations): a broken one fails the build, and `curios test` never sees it.
 
@@ -243,7 +265,7 @@ The test *verdicts* are never cached — every invocation runs every selected te
 
 ### Serving the tests
 
-`--target browser` builds every subject's test program as its [page](#the-page) instead, as `compile --target browser` would build it, and serves on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until every selected test has a verdict. It prints the address, `↳ Serving   http://127.0.0.1:8000/`, and opens no browser: whatever opens the address runs the tests — a person, a headless browser a script starts against the printed port, a device reaching the machine.
+`--target browser` builds every subject's test program as its [page](#the-page) instead, as `compile --target browser` would build it, and serves on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until every selected test has a verdict. It prints the address on a line under no subject, `serve; http://127.0.0.1:8000/`, since what is served is every subject's, and opens no browser: whatever opens the address runs the tests — a person, a headless browser a script starts against the printed port, a device reaching the machine.
 
 A script runs them with no window by holding a headless browser open until the command exits — `timeout 120 google-chrome --headless=new --user-data-dir=<a fresh directory> http://127.0.0.1:<port>/` — rather than by a mode that dumps the page at its load event, which ends the run before its first outcome.
 
@@ -255,7 +277,7 @@ The runner drives the run over a WebSocket it opens at `/`, which the command ta
 
 A socket asked for while another drives the run is refused, so a second tab runs nothing and says so; one that closes, a reload's or a closed tab's, lets the run go, and the next page to open resumes it at the test in hand, which runs again. A socket is refused too where its `Origin` names another site, so only the runner a run serves drives it, and a page whose loader never starts — a gateway that fails to import — is reported trapped.
 
-The terminal shows what native shows, each module's `↳ Testing` and `↳ Tested` steps around one line per test as its outcome arrives and `Finished` at the end, and the runner page shows the same lines, a reloaded runner every one of them again; a subject the filter selects nothing from is never served, and its modules report as it is built, on both. Once the last verdict is in, the command stops serving and exits as `test` exits; a rerun is the command run again.
+Past the address each served subject is named again and its tests stand on a tree of their own, written as native writes them, each whole as its outcome arrives: its node, what its page kept of the two streams — relayed on the command's own, standard output first — and how it ended, timed from the test's being handed to a page. The runner page shows every line the command wrote from its first, a reloaded runner all of them again; a subject the filter selects nothing from is never served, and closes with its tally as it is built, on both. Once the last verdict is in, the command stops serving and exits as `test` exits; a rerun is the command run again.
 
 ## `curate`
 

@@ -221,7 +221,7 @@ fn page(document: &str, program: &[u8]) -> Served {
 struct Kept(Vec<u8>);
 
 impl Reporting for Kept {
-    fn took(&mut self, step: Step, guest: Streams, outcome: &Posted) {
+    fn took(&mut self, step: Step, guest: Streams, outcome: &Posted, _taken: Duration) {
         self.0.extend(guest.stdout);
         self.0
             .extend(format!("step {}/{}\n", step.subject, step.test).into_bytes());
@@ -229,8 +229,8 @@ impl Reporting for Kept {
             .extend(outcome.trap.clone().unwrap_or_default().into_bytes());
     }
 
-    fn written(&self) -> &[u8] {
-        &self.0
+    fn written(&self) -> Vec<u8> {
+        self.0.clone()
     }
 }
 

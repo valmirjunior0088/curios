@@ -28,7 +28,7 @@ test("a message is admitted from the opened iframe's window at the runner's own 
 });
 
 test("an outcome is sent with its streams in base64 and the rest as the page posted it", () => {
-  const stdout = new TextEncoder().encode("/app/t: passed\n");
+  const stdout = new TextEncoder().encode("├─ /app/t; passed in 0.0s\n");
   const message = JSON.parse(
     posted({
       stdout,
@@ -40,7 +40,7 @@ test("an outcome is sent with its streams in base64 and the rest as the page pos
   );
 
   assert.deepEqual(message, {
-    stdout: "L2FwcC90OiBwYXNzZWQK",
+    stdout: "4pSc4pSAIC9hcHAvdDsgcGFzc2VkIGluIDAuMHMK",
     stderr: "",
     exitCode: 0,
     trap: null,
