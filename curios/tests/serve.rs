@@ -226,7 +226,7 @@ fn tested(root: &Path) {
     .unwrap();
     fs::write(
         root.join("lib.crs"),
-        "use /std/{Io, Test};\n\ntest holds =\n    Test/assert(true);\n\ntest fails =\n    Test/equal(1, 2);\n\ntest exits =\n    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)));\n",
+        "use /std/{Test};\n\ntest holds =\n    Test/assert(true);\n\ntest fails =\n    Test/equal(1, 2);\n\ntest exits =\n    let _ = /std/Proc/exit(@{}, 7)!; Test/assert(true);\n",
     )
     .unwrap();
     fs::write(
@@ -372,7 +372,7 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
                 "│  ╰─ failed in _\n",
                 "│       Test/equal(1, 2)\n",
                 "├─ /app/exits; exited 7 in _\n",
-                "│    Test/perform(() => let _ = /std/Proc/exit(@{{}}, 7)!; Io/pure(Test/assert(true)))\n",
+                "│    let _ = /std/Proc/exit(@{{}}, 7)!; Test/assert(true)\n",
                 "╰─ 1 passed, 1 failed, 1 exited; _\n",
                 "app\n",
                 "├─ /own\n",

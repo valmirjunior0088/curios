@@ -50,13 +50,13 @@ test equality_fails =
     Test/equal(double(2), 5);
 
 test overflow_traps =
-    Test/perform(() => let v = /std/Proc/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)));
+    let v = /std/Proc/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Test/assert(true);
 
 test exits_seven =
-    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)));
+    let _ = /std/Proc/exit(@{}, 7)!; Test/assert(true);
 
 test effect_passes =
-    Test/perform(() => let s = Io/pure("x")!; Io/pure(Test/equal(s, "x")));
+    let s = Io/pure("x")!; Test/equal(s, "x");
 "#,
     );
     write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
@@ -132,9 +132,9 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "├─ /app/equality_fails\nexpected 5 but got 4\n│  ╰─ failed in ",
             "│       Test/equal(double(2), 5)\n",
             "├─ /app/overflow_traps; trapped in ",
-            "│      Test/perform(() => let v = /std/Proc/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Io/pure(Test/assert(true)))\n",
+            "│      let v = /std/Proc/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Test/assert(true)\n",
             "├─ /app/exits_seven; exited 7 in ",
-            "│    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
+            "│    let _ = /std/Proc/exit(@{}, 7)!; Test/assert(true)\n",
             "├─ /app/effect_passes; passed in ",
             "╰─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
             "/app\n",
@@ -176,10 +176,10 @@ fn a_test_that_exits_before_it_reports_is_exited_whatever_its_code() {
         r#"use /std/{Test, Proc};
 
 test quits_early =
-    Test/perform(() => Proc/exit(@Test({}), 0));
+    let _ = Proc/exit(@{}, 0)!; Test/assert(true);
 
 test fails_quietly =
-    Test/perform(() => Proc/exit(@Test({}), 1));
+    let _ = Proc/exit(@{}, 1)!; Test/assert(true);
 "#,
     );
     write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
@@ -190,9 +190,9 @@ test fails_quietly =
         &stderr(&output),
         &[
             "├─ /app/quits_early; exited 0 in ",
-            "│    Test/perform(() => Proc/exit(@Test({}), 0))\n",
+            "│    let _ = Proc/exit(@{}, 0)!; Test/assert(true)\n",
             "├─ /app/fails_quietly; exited 1 in ",
-            "│    Test/perform(() => Proc/exit(@Test({}), 1))\n",
+            "│    let _ = Proc/exit(@{}, 1)!; Test/assert(true)\n",
             "╰─ 0 passed, 0 failed, 2 exited; ",
         ],
     );
@@ -211,16 +211,16 @@ fn a_test_that_writes_is_closed_beneath_what_it_wrote() {
     write(
         &root,
         "lib.crs",
-        r#"use /std/{Io, Test, print, print_err};
+        r#"use /std/{Test, print, print_err};
 
 test quiet =
     Test/assert(true);
 
 test draws =
-    Test/perform(() => let _ = print("drawn\n")!; Io/pure(Test/assert(true)));
+    let _ = print("drawn\n")!; Test/assert(true);
 
 test mutters =
-    Test/perform(() => let _ = print_err("half")!; Io/pure(Test/assert(true)));
+    let _ = print_err("half")!; Test/assert(true);
 "#,
     );
 

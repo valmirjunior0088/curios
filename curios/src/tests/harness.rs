@@ -20,16 +20,19 @@ fn the_description_schedules_every_rung() {
         run(r#"
         use /std/{Nat, Str, Io, Eq, Test};
         let double(n: Nat) -> Nat = n * 2;
-        let an_action() -> Io(Test({})) =
+        let an_action() -> Test({}) =
             let s = Io/pure("x")!;
-            Io/pure(Test/equal(s, "x"));
+            Test/equal(s, "x");
+        let a_failing_action() -> Test({}) =
+            let _ = Io/pure(())!;
+            Test/assert(false);
         let entry() -> /std/Io({}) =
             let _ = Test/main([
                 ("/tests/a_bool", () => Test/assert(1 + 1 == 2)),
                 ("/tests/doubling", () => Test/equal(double(21), 42)),
                 ("/tests/a_failing_equal", () => Test/equal(double(2), 5)),
-                ("/tests/an_action", () => Test/perform(an_action)),
-                ("/tests/a_failing_action", () => Test/perform(() => Io/pure(Test/assert(false)))),
+                ("/tests/an_action", () => an_action()),
+                ("/tests/a_failing_action", () => a_failing_action()),
             ])!;
             Io/pure(());
         entry()
@@ -112,16 +115,16 @@ fn a_conjunction_takes_the_weakest_rung_and_names_the_first_failure() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Eq, Test};
-        let counter() -> Io(Test({})) =
+        let counter() -> Test({}) =
             let _ = /std/print("performed\n")!;
-            Io/pure(Test/assert(true));
+            Test/assert(true);
         let entry() -> /std/Io({}) =
             let _ = Test/main([
                 ("/tests/passing", () => Test/all([Test/equal(1, 1), Test/equal(2, 2)])),
                 ("/tests/empty", () => Test/all([])),
                 ("/tests/first_failure", () => Test/all([Test/assert(true), Test/equal(2, 3), Test/equal(4, 5)])),
-                ("/tests/action_then_verdict", () => Test/all([Test/perform(counter), Test/assert(true)])),
-                ("/tests/failure_before_action", () => Test/all([Test/assert(false), Test/perform(counter)])),
+                ("/tests/action_then_verdict", () => Test/all([counter(), Test/assert(true)])),
+                ("/tests/failure_before_action", () => Test/all([Test/assert(false), counter()])),
             ])!;
             Io/pure(());
         entry()

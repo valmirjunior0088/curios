@@ -78,10 +78,6 @@ pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Tes
     | false => fail(Fmt/render("expected # but got #")(expected)(actual))
     end;
 
---- Flatten an effectful thunk returning a test. A function returning `Test(A)` can instead sequence its `Io` actions directly.
-pub let perform(@A: Type, thunk: () -> Io(Test(A))) -> Test(A) =
-    Test/action(thunk());
-
 --- Flatten a fallible thunk returning a test, reporting its error when it fails.
 pub let try(@E: Type, @A: Type, use Show(E), thunk: () -> Try(Io, E, Test(A))) -> Test(A) =
     bind(Monad/lift(thunk()), (inner) => inner);

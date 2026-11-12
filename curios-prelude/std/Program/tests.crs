@@ -16,15 +16,13 @@ let left(receiver: Channel/Receiver(Nat), n: Nat) -> Io(Bool) =
     Io/pure(match taken | item(m) => m == n | _ => false end);
 
 test a_description_that_yields_nothing_is_executed_as_itself =
-    Test/perform(() =>
-        let ends = Channel/new(@Nat, 1)!;
-        let _ = Program/execute(leave(ends.0, 7))!;
-        let held = left(ends.1, 7)!;
-        Io/pure(Test/assert(held)));
+    let ends = Channel/new(@Nat, 1)!;
+    let _ = Program/execute(leave(ends.0, 7))!;
+    let held = left(ends.1, 7)!;
+    Test/assert(held);
 
 test a_description_that_may_fail_and_does_not_runs_to_its_end =
-    Test/perform(() =>
-        let ends = Channel/new(@Nat, 1)!;
-        let _ = Program/execute(leave_or_fail(ends.0, 7))!;
-        let held = left(ends.1, 7)!;
-        Io/pure(Test/assert(held)));
+    let ends = Channel/new(@Nat, 1)!;
+    let _ = Program/execute(leave_or_fail(ends.0, 7))!;
+    let held = left(ends.1, 7)!;
+    Test/assert(held);
