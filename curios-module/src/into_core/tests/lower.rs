@@ -135,7 +135,7 @@ fn a_motive_on_a_head_that_does_not_dispatch_is_rejected() {
     // A motive attaches to the scrutinee's own dispatch, which a tuple pattern never builds: it projects.
     let error = run_err("match p : (q) => T | (x, y) => x end");
     assert!(
-        error.contains("written motive"),
+        error.contains("misplaced motive"),
         "unexpected error: {error}"
     );
 }
@@ -179,9 +179,9 @@ fn a_match_refusal_stands_at_the_binder_or_the_motive_it_is_about() {
         let report = run_err_report(source);
         // The caret line under the source's one line: blanks to where the part begins, then a caret for each of its characters.
         let at = source.find(underlined).expect("the part is written");
-        let carets = format!("| {}{}", " ".repeat(at), "^".repeat(underlined.len()));
+        let carets = format!("│ {}{}", " ".repeat(at), "^".repeat(underlined.len()));
         assert!(
-            report.lines().any(|line| line.trim_start() == carets),
+            report.lines().any(|line| line.ends_with(&carets)),
             "{source}\n{report}"
         );
     }
@@ -222,7 +222,7 @@ fn alternatives_that_bind_different_names_are_refused() {
     // The body reads each name the arm binds in every alternative, and one an alternative lacks would read whatever else it names there.
     let error = run_err("match m | some(x) | none() => x | _ => 0 end");
     assert!(
-        error.contains("every alternative of an arm binds the same names, and `x`"),
+        error.contains("`x` is bound by another alternative of this arm and not by this one"),
         "unexpected error: {error}"
     );
 }

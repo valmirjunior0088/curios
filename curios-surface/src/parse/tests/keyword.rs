@@ -9,7 +9,7 @@ use crate::*;
 fn a_reserved_keyword_cannot_name_a_declaration() {
     let error = "let match : Nat = 1;".parse::<Module>().unwrap_err();
     assert!(
-        error.format().contains("'match' is a reserved keyword"),
+        error.format().contains("`match` is a reserved keyword"),
         "{}",
         error.format()
     );
@@ -19,7 +19,7 @@ fn a_reserved_keyword_cannot_name_a_declaration() {
 fn a_reserved_keyword_cannot_name_a_use_selector() {
     let error = "use /std/{end};".parse::<Module>().unwrap_err();
     assert!(
-        error.format().contains("'end' is a reserved keyword"),
+        error.format().contains("`end` is a reserved keyword"),
         "{}",
         error.format()
     );

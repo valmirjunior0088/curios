@@ -30,7 +30,7 @@ fn hidden_arguments_are_written_from_the_first_of_their_run() {
 fn a_hidden_argument_out_of_its_run_is_refused() {
     let skipped = error(&format!("{TWO}        print(two(use first, 1, true))\n"));
     assert!(
-        skipped.contains("a `use` member is written where the `@` member 'A' stands")
+        skipped.contains("a `use` member is written where the `@` member `A` stands")
             && skipped.contains("write `@_` first"),
         "got: {skipped}"
     );
@@ -55,7 +55,7 @@ fn a_hidden_argument_out_of_its_run_is_refused() {
 fn a_plain_argument_is_never_a_placeholder() {
     let message = error(&format!("{TWO}        print(two(_, true))\n"));
     assert!(
-        message.contains("obtained '_'") && !message.contains("not in scope"),
+        message.contains("obtained: `_`") && !message.contains("not in scope"),
         "got: {message}"
     );
 }
@@ -69,7 +69,7 @@ fn a_held_place_is_read_where_a_mark_opens_one_alone() {
     ] {
         let message = error(source);
         assert!(
-            message.contains("Expected '") && !message.contains("not in scope"),
+            message.contains("expected: `") && !message.contains("not in scope"),
             "{source:?} reported {message}"
         );
     }
@@ -95,7 +95,7 @@ fn a_lambdas_hidden_binders_are_written_from_the_first_of_their_run() {
         "#,
     );
     assert!(
-        refused.contains("a `use` member is written where the `@` member 'A' stands"),
+        refused.contains("a `use` member is written where the `@` member `A` stands"),
         "got: {refused}"
     );
 }
@@ -166,7 +166,7 @@ fn a_plain_argument_does_not_spill_past_a_hidden_only_list() {
     let spilled =
         error("use /std/{Nat, Eq, print};\nlet p: Eq(0, 1) = Eq/refl();\nprint(\"no\")\n");
     assert!(
-        spilled.contains("expected 0, got 2")
+        spilled.contains("written: 2\n│  expected: 0")
             && spilled.contains("a call fills one parameter list"),
         "got: {spilled}"
     );

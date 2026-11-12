@@ -136,7 +136,7 @@ fn open_parameter_does_not_infer_from_the_witness() {
     let message = error(source).to_lowercase();
     assert!(
         message.contains("never solved")
-            && message.contains("implicit argument 'b' of 'into/into'"),
+            && message.contains("implicit argument `b` of `into/into`"),
         "unexpected report:\n{message}"
     );
 }
@@ -249,12 +249,12 @@ fn a_witness_whose_head_is_computed_is_refused_at_its_declaration() {
     let report = error(source);
     assert!(
         report.contains(
-            "this witness of 'Show' is for head 'Nat', which its signature does not spell"
+            "this witness of `Show` is for the head `Nat`, which its signature does not spell"
         ),
         "expected the refusal to name the key the signature computes:\n{report}"
     );
     assert!(
-        report.contains("write 'Nat' where the signature computes it"),
+        report.contains("write `Nat` where the signature computes it"),
         "expected the way out:\n{report}"
     );
 }
@@ -280,7 +280,7 @@ fn a_witness_keyed_through_a_definition_under_its_binder_cannot_be_keyed() {
 
         let report = error(&source);
         assert!(
-            report.contains("this witness cannot be keyed"),
+            report.contains("unkeyed witness"),
             "expected the unkeyable report:\n{report}"
         );
         assert!(
@@ -359,9 +359,9 @@ fn a_use_parameter_at_a_proposition_is_refused_where_it_is_declared() {
         "#,
     );
     assert!(
-        report.contains("a 'use' parameter's type must be a concept application")
+        report.contains("the type of a `use` parameter is a concept application")
             && report.contains("found: Holds(n < 10)")
-            && report.contains("write '@' in place of 'use'")
+            && report.contains("write `@` in place of `use`")
             && !report.contains("no witness"),
         "unexpected report:\n{report}"
     );
@@ -382,7 +382,7 @@ fn a_witness_premise_at_a_proposition_is_refused() {
         "#,
     );
     assert!(
-        report.contains("a 'use' parameter's type must be a concept application")
+        report.contains("the type of a `use` parameter is a concept application")
             && report.contains("found: Holds(0 < 1)"),
         "unexpected report:\n{report}"
     );
@@ -430,9 +430,9 @@ fn an_implicit_parameter_at_a_concept_nothing_mentions_is_refused_where_it_is_de
     );
     assert!(
         report.contains(
-            "an '@' parameter at a concept's type that no later type mentions can never be filled"
+            "an `@` parameter at a concept's type that no later type mentions is never filled"
         ) && report.contains("found: Show(A)")
-            && report.contains("write 'use' in place of '@'"),
+            && report.contains("write `use` in place of `@`"),
         "unexpected report:\n{report}"
     );
 
@@ -470,7 +470,7 @@ fn an_operator_under_a_local_premise_decides_nothing_the_carriers_witness_would(
         "#;
     let report = error(reduced);
     assert!(
-        report.contains("type mismatch\n  inferred: True\n  expected: Holds(x == x)"),
+        report.contains("type mismatch\n│  inferred: True\n│  expected: Holds(x == x)"),
         "{report}"
     );
 

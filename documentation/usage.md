@@ -115,6 +115,45 @@ A node that finished closes with what it took, `; 0.3s`. One that did not closes
 
 Nothing is rewritten or erased, and the bytes are the same in a pipe, a log file and a CI transcript as on a terminal, colour apart.
 
+What the compiler says of a program is a report, and every report has one form, a block:
+
+```text
+type mismatch
+│  inferred: Nat
+│  expected: Str
+│
+│  3 │ let label: Str = double(21);
+│    │                  ^^^^^^^^^^
+│
+╰─ error; demo.crs:3:18
+```
+
+The first line is a tag: a few words that name the kind of thing reported, the same wherever it is met and whichever stage reports it, with nothing of the program in them. What is reported of this program follows on a trunk, a fact a line and in one order: what stands here, the terms at issue each behind a label, the rule it is held to, and the way out, said as what to write. Then comes the program's own text, an empty line of the trunk above and below it, with marks under what the report is about. The last line says what the report is and where it stands: `error` for what a rule refuses, `goal` for a [written goal](language.md#written-goals), `lint` for a [lint](#lint), `note` for how the command took what it was asked, then the file, the line and the column, the file spelled from where the invocation stands, as one word a terminal opens. A report about a second place shows that place first, closed by what stands there, so the report's own place is always its last line; and every pane of one report shares a gutter, so the code of each begins in one column:
+
+```text
+declaration cycle
+│  `a` and `b` need one another
+│  a declaration elaborates after what it reads
+│  each of these reads another before it can finish
+│  by a name it writes, or by the witness a goal of its resolves to
+│  a definition may call itself, and a witness may resolve through its own entry
+│  a cycle through two has no order to elaborate them in
+│  declare definitions that call one another as one group, `let ... and ...`
+│  and witnesses that resolve through one another as `satisfy C(A) { ... } and D(B) { ... }`
+│
+│  10 │ let b: Nat = a;
+│     │     ^
+│
+├─ `b` is declared here; demo.crs:10:5
+│
+│   9 │ let a: Nat = b;
+│     │     ^
+│
+╰─ error; demo.crs:9:5
+```
+
+A goal's first line is its answer in place of a tag: what the compiler knows is wanted where it stands, `` `Nat` expected ``, or what it worked out stands there, `` `Nat` inferred ``; beneath it are the names in scope, each with its type, and each term the compiler found that fits, `? ≈ seed`. A text that is no form of the grammar is a `syntax error`, whose facts are what was `expected:` there and what was `obtained:` in its place, or the rule the text breaks and what to write. A build writes its reports on standard error after the tree, a blank line between; `wonder` and `lint` write them on standard output, as their answer.
+
 Colour is a layer over those bytes and changes none of them: a subject bold, the tree and the times dim, and what went wrong — `refused`, `failed`, `trapped`, `exited N`, a count of failures that is not zero — red. `--color <WHEN>` decides it once: `always`, `never`, or `auto`, the default, which paints where standard error is a terminal and the environment's `NO_COLOR` is unset or empty.
 
 ## `run`
@@ -466,7 +505,7 @@ A declaration of the library the compiler was built with is placed where its sou
 
 `--stage` reprints a library too, selected through one of its files, at the three rungs a unit has: `text` is the parse of the file asked through, `core` the library's lowered declarations, and `core-elab` its elaborated ones. From `anf` on a program's entry roots what is printed, and a library is refused as it is by any command that takes a program.
 
-A file a package holds that no `mod` reaches is in no unit, so it is checked on its own — as a program when a final term follows its items, and as a module of its own otherwise — behind a note saying so and naming what would declare it, the `mod` line for a module and the `[[executables]]` row for a program, printed as its message alone after `note: `; a note is no finding, and no exit code counts it. A file no manifest above it claims is loose, with nothing to note. That holds for the standard library's own modules: `/std` is a package like any other, and [the package named `std`](#what-a-package-is-made-of) stands where the archived unit stood rather than beside it, so a question about `curios-prelude/std/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library.
+A file a package holds that no `mod` reaches is in no unit, so it is checked on its own — as a program when a final term follows its items, and as a module of its own otherwise — behind a note saying so and naming what would declare it, the `mod` line for a module and the `[[executables]]` row for a program, a block of its sentence alone closed `note`; a note is no finding, and no exit code counts it. A file no manifest above it claims is loose, with nothing to note. That holds for the standard library's own modules: `/std` is a package like any other, and [the package named `std`](#what-a-package-is-made-of) stands where the archived unit stood rather than beside it, so a question about `curios-prelude/std/List.crs` is answered against the prelude it is part of and costs the closure of the edit rather than the library.
 
 `--cost` says whether an optimization fired. A declaration is `absorbed` when nothing in the compiled program bears its name — inlined into its callers, or pruned once something else was — so it costs nothing of its own, and `specialized <n>` when a pass cloned it into `n` functions. The rows are read off the program that ships, and ordered by name, so a committed report diffs.
 
@@ -663,8 +702,8 @@ Text written as a module — items with no final term — is checked as one, as 
 
 Diagnostics name it `<stdin>` where they would name a file, keeping line and column:
 
-```
-   --> <stdin>:1:19
+```text
+╰─ error; <stdin>:1:19
 ```
 
 The program's own standard input is spent on reading the source, so a read of it reports the end of the input. A program that reads its input wants a file, or a path the shell mints for it — `curios run <(your_generator)` is an ordinary file argument, and leaves standard input alone.

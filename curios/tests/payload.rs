@@ -224,7 +224,7 @@ fn a_build_and_a_test_run_name_what_the_files_form_is_declared_by() {
     let built = stderr(&["run", "items.crs"]);
     assert!(
         built.starts_with(&format!(
-            "note: items.crs is in no unit of `/app`, so it is compiled on its own against `/std`: {module}\n"
+            "items.crs is in no unit of `/app`, so it is compiled on its own against `/std`: {module}\n╰─ note\n"
         )),
         "{built}"
     );
@@ -233,7 +233,7 @@ fn a_build_and_a_test_run_name_what_the_files_form_is_declared_by() {
         let tested = stderr(&["test", file]);
         assert!(
             tested.starts_with(&format!(
-                "note: {file} is in no unit of `/app`, so it is tested on its own against `/std`: {remedy}\n"
+                "{file} is in no unit of `/app`, so it is tested on its own against `/std`: {remedy}\n╰─ note\n"
             )),
             "{tested}"
         );
@@ -251,7 +251,7 @@ fn a_file_no_unit_declares_says_so_when_built() {
     let stderr = String::from_utf8_lossy(&ran.stderr);
     assert!(
         stderr.starts_with(
-            "note: scratch.crs is in no unit of `/app`, so it is compiled on its own against `/std`: an `[[executables]]` row in its manifest declares it\n"
+            "scratch.crs is in no unit of `/app`, so it is compiled on its own against `/std`: an `[[executables]]` row in its manifest declares it\n╰─ note\n"
         ),
         "{stderr}"
     );
@@ -263,8 +263,7 @@ fn a_file_no_unit_declares_says_so_when_built() {
         String::from_utf8_lossy(&built.stderr)
     );
     assert!(
-        String::from_utf8_lossy(&built.stderr)
-            .starts_with("note: scratch.crs is in no unit of `/app`"),
+        String::from_utf8_lossy(&built.stderr).starts_with("scratch.crs is in no unit of `/app`"),
         "{}",
         String::from_utf8_lossy(&built.stderr)
     );
@@ -357,7 +356,7 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
         assert_eq!(refused.status.success(), *answers, "{command:?}: {said}");
         // `dep` is reused once the first command after the edit has filed it; `app`'s library and its payload never are, which is what refuses each command again.
         assert!(
-            said.contains("no witness of /std/ops/Add(/std/Bool) found"),
+            said.contains("wanted: /std/ops/Add(/std/Bool)"),
             "{command:?}: {said}"
         );
     }

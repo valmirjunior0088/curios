@@ -227,7 +227,7 @@ fn rejects_direct_and_re_export_of_same_label() {
         Type
     "#
         )
-        .contains("export conflict")
+        .contains("is exported twice")
     );
 }
 
@@ -250,7 +250,7 @@ fn rejects_two_globs_exposing_same_label() {
         Type
     "#
         )
-        .contains("export conflict")
+        .contains("is exported twice")
     );
 }
 
@@ -411,7 +411,7 @@ fn rejects_named_re_export_from_own_opaque_constructor_namespace() {
     );
 
     assert!(
-        error.contains("constructors of opaque inductive '/Foo/U' cannot be re-exported")
+        error.contains("the constructors of `/Foo/U` cannot be re-exported")
             && error.contains("mark its representation public"),
         "unexpected error: {error}"
     );
@@ -432,7 +432,7 @@ fn rejects_glob_re_export_from_own_opaque_constructor_namespace() {
     );
 
     assert!(
-        error.contains("constructors of opaque inductive '/Foo/U' cannot be re-exported")
+        error.contains("the constructors of `/Foo/U` cannot be re-exported")
             && error.contains("mark its representation public"),
         "unexpected error: {error}"
     );

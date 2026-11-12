@@ -198,7 +198,7 @@ fn refused(budget: u64, shape: Runaway) -> String {
 fn a_recursion_no_budget_reaches_is_ended_by_its_budget() {
     let report = refused(25_000, Runaway::Spin);
 
-    assert!(report.contains("ran out of steps"), "{report}");
+    assert!(report.contains("budget spent"), "{report}");
 }
 
 /// A pair of calls whose unfolding meets the pair again is told apart and not left to its budget, whatever the calls build on the way: a sum one summand longer under a binder, a sum built apart from what they differ in, a sum of calls under no binder, and nothing at all.
@@ -278,7 +278,7 @@ fn a_comparison_over_many_atoms_is_decided_inside_its_budget() {
 fn an_order_that_costs_more_is_decided_by_a_larger_budget() {
     let report = refused(1_000_000, Runaway::Pairs(16));
     assert!(
-        report.contains("ran out of steps") && report.contains("deciding two Bool terms"),
+        report.contains("budget spent") && report.contains("deciding two Bool terms"),
         "{report}"
     );
     assert_eq!(
@@ -331,7 +331,7 @@ fn a_clash_the_budget_cannot_finish_is_not_concluded() {
             .expect_err("the budget concluded a clash over two terms it holds equal");
 
         assert!(
-            report.contains("ran out of steps") || report.contains("no arm matches"),
+            report.contains("budget spent") || report.contains("no arm matches"),
             "at {budget}: {report}",
         );
     }

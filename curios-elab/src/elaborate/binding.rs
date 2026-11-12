@@ -570,7 +570,7 @@ fn infix_method(
     let goal = Term::struct_type_at(*concept_name, universes.clone(), vec![operand_type.clone()]);
     let provenance = WitnessOrigin {
         func: CalleeId::Operator(op),
-        role: Some(format!("its '{field_name}' implementation")),
+        role: Some(format!("its `{field_name}` implementation")),
     };
     let (slot, witness) =
         context.fresh_witness_metavar(goal.clone(), term.extent(), provenance.clone());

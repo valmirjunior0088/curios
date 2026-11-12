@@ -245,14 +245,15 @@ fn a_sort_two_terms_decide_apart_is_refused_as_decided_twice() {
         /std/print("")
         "#,
     );
-    let (refused, noted) = report
-        .split_once("\n\n  this term decides it as `Type`\n\n")
+    // The further place stands first, closed by what stands there, and the report's own after it.
+    let (noted, refused) = report
+        .split_once("├─ this term decides it as `Type`")
         .unwrap_or_else(|| panic!("the first term is not noted: {report}"));
     let column = |rendered: &str| {
         rendered
             .lines()
-            .last()
-            .and_then(|caret| caret.find('^'))
+            .filter_map(|line| line.find('^'))
+            .next_back()
             .unwrap_or_else(|| panic!("no caret: {rendered}"))
     };
     assert!(column(noted) < column(refused), "{report}");
@@ -306,8 +307,8 @@ fn a_sort_is_written_where_a_caller_states_it() {
     ] {
         let report = error(source);
         assert!(
-            report.contains("`Sort` is left to a caller")
-                && report.contains(&format!("this one stands in {site}")),
+            report.contains("it is left to a caller")
+                && report.contains(&format!("`Sort` stands in {site}")),
             "{site}: {report}"
         );
     }
@@ -320,7 +321,10 @@ fn a_sort_is_written_where_a_caller_states_it() {
         /std/print("")
         "#,
     );
-    assert!(own_sort.contains("Expected keyword 'Prop'"), "{own_sort}");
+    assert!(
+        own_sort.contains("expected: the keyword `Prop`"),
+        "{own_sort}"
+    );
 }
 
 // A tuple type over two sorts each left to a caller is a proposition where both are stated `Prop` and a type otherwise: no one sort is its own, and it is refused where it is written.

@@ -15,49 +15,88 @@ use {
 };
 
 /// What refuses a binder after `use` where the site declares.
-pub const USE_HAS_NO_BINDER: &str = "a `use` member has no binder: a witness is reached by resolution, never by name, so the premise is written alone — `use Show(A)`";
+pub const USE_HAS_NO_BINDER: &[&str] = &[
+    "a `use` member has no binder",
+    "a witness is reached by resolution, never by name",
+    "write the premise alone, `use Show(A)`",
+];
 
 /// What refuses a binder after `use` where the site binds.
-pub const USE_BINDS_NOTHING: &str = "a `use` member has no binder: a witness is reached by resolution, never by name, so the member is written `use _`";
+pub const USE_BINDS_NOTHING: &[&str] = &[
+    "a `use` member has no binder",
+    "a witness is reached by resolution, never by name",
+    "write the member as `use _`",
+];
 
 /// What refuses `use _` where the site declares.
-pub const USE_PLACE_STATES_NO_TYPE: &str =
-    "`use _` holds a place and states no type: a signature writes the premise — `use Show(A)`";
+pub const USE_PLACE_STATES_NO_TYPE: &[&str] = &[
+    "`use _` holds a place and states no type",
+    "a signature writes the premise, `use Show(A)`",
+];
 
 /// What refuses a plain or `@` member written as its type alone in a definition's telescope.
-pub const DEFINITION_NAMES_ITS_MEMBERS: &str = "a definition names its plain and `@` parameters: write `x: T` or `@x: T`, with `_` in the name's place where the body never names it";
+pub const DEFINITION_NAMES_ITS_MEMBERS: &[&str] = &[
+    "a definition names its plain and `@` parameters",
+    "write `x: T` or `@x: T`",
+    "write `_` in the name's place where the body never names it",
+];
 
 /// What refuses a type after `use` where the site binds.
-pub const BINDER_STATES_NO_USE_TYPE: &str = "a `use` member is written `use _` here: its type is the expected function type's to state, and a function that must state one is a `let` with a telescope";
+pub const BINDER_STATES_NO_USE_TYPE: &[&str] = &[
+    "a `use` member is written `use _` here",
+    "its type is the expected function type's to state",
+    "a function that must state one is a `let` with a telescope",
+];
 
 /// What refuses a type after `@` where the site binds.
-pub const BINDER_FOLLOWS_IMPLICIT: &str =
-    "after `@` a binder is read here, not a type: write `@_`, or `@_: T` to state the type";
+pub const BINDER_FOLLOWS_IMPLICIT: &[&str] = &[
+    "after `@` a binder is read here, not a type",
+    "write `@_`, or `@_: T` to state the type",
+];
 
 /// What refuses a `use` member among a constructor's payload.
-pub const PAYLOAD_TAKES_NO_USE: &str =
-    "a constructor's payload takes no `use` member: a payload is plain or `@`";
+pub const PAYLOAD_TAKES_NO_USE: &[&str] = &[
+    "a constructor's payload takes no `use` member",
+    "a payload is plain or `@`",
+];
 
 /// What refuses a mark on an index.
-pub const INDEX_TAKES_NO_MARK: &str =
-    "an index takes no mark: a family's indices are always written";
+pub const INDEX_TAKES_NO_MARK: &[&str] = &[
+    "an index takes no mark",
+    "a family's indices are always written",
+];
 
 /// What refuses a `use` member among a structure's fields.
-pub const STRUCT_FIELD_TAKES_NO_USE: &str = "a structure's field takes no `use` member: its premise is a `use` parameter — `struct S(K: Type, use C(K))` — and a field is plain or `@`";
+pub const STRUCT_FIELD_TAKES_NO_USE: &[&str] = &[
+    "a structure's field takes no `use` member",
+    "its premise is a `use` parameter, `struct S(K: Type, use C(K))`",
+    "a field is plain or `@`",
+];
 
 /// What refuses an `@` member among a concept's fields.
-pub const CONCEPT_FIELD_TAKES_NO_IMPLICIT: &str =
-    "a concept's field takes no `@`: it is a method, or a superclass written `use Concept(args)`";
+pub const CONCEPT_FIELD_TAKES_NO_IMPLICIT: &[&str] = &[
+    "a concept's field takes no `@`",
+    "it is a method, or a superclass written `use Concept(args)`",
+];
 
 /// What refuses a mark on a field of a tuple type.
-pub const TUPLE_FIELD_TAKES_NO_MARK: &str = "a tuple type's field takes no mark: a hidden field is a structure's — `struct S: Type { n: Nat, @Holds(0 < n) }`";
+pub const TUPLE_FIELD_TAKES_NO_MARK: &[&str] = &[
+    "a tuple type's field takes no mark",
+    "a hidden field is a structure's, `struct S: Type { n: Nat, @Holds(0 < n) }`",
+];
 
 /// What refuses a mark on a field of a struct pattern.
-pub const STRUCT_PATTERN_TAKES_NO_MARK: &str = "a struct pattern takes no mark: a hidden field takes no position, and one that has a label is read by it — `label = binder`";
+pub const STRUCT_PATTERN_TAKES_NO_MARK: &[&str] = &[
+    "a struct pattern takes no mark",
+    "a hidden field takes no position",
+    "one that has a label is read by it, `label = binder`",
+];
 
 /// What refuses a `use` member in a constructor pattern.
-pub const PATTERN_TAKES_NO_USE: &str =
-    "a pattern takes no `use` member: a constructor's payload is plain or `@`";
+pub const PATTERN_TAKES_NO_USE: &[&str] = &[
+    "a pattern takes no `use` member",
+    "a constructor's payload is plain or `@`",
+];
 
 /// A member a site read, or the report of the form it read in that member's place.
 pub type Read<T> = Result<T, ParserError>;
@@ -74,7 +113,7 @@ pub fn parse_mark<'a>(state: ParserState<'a>) -> Parsed<'a, Plicity> {
 /// The report that the text from `start` to here breaks `rule`, as the read a site holds in a member's place.
 pub fn refused<'a, T: 'a>(
     start: &Mark,
-    rule: &'static str,
+    rule: &'static [&'static str],
 ) -> impl Parser<'a, Read<T>> + use<'a, T> {
     refusal(start, rule).map(Err)
 }

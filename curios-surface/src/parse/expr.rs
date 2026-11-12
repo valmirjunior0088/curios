@@ -22,18 +22,28 @@ use {
 };
 
 /// What refuses a definition with parameters and no result.
-const DEFINITION_STATES_ITS_RESULT: &str = "a definition with parameters states its result before its body: `let double(n: Nat) -> Nat = …`";
+const DEFINITION_STATES_ITS_RESULT: &[&str] = &[
+    "a definition with parameters states its result before its body",
+    "write `let double(n: Nat) -> Nat = …`",
+];
 
 /// What refuses `:=` where a definition's `=` belongs.
-const DEFINITION_TAKES_EQUALS: &str =
-    "a definition is written with `=`, as in `let x: Nat = 3;`: `:=` is no token of Curios";
+const DEFINITION_TAKES_EQUALS: &[&str] = &[
+    "`:=` is no token of Curios",
+    "a definition is written with `=`, as in `let x: Nat = 3;`",
+];
 
 /// What refuses a lambda written with a bare parameter.
-pub const LAMBDA_TAKES_PARENTHESES: &str =
-    "a lambda's parameters are written in parentheses: `(x) => x + 1`";
+pub const LAMBDA_TAKES_PARENTHESES: &[&str] = &[
+    "a lambda's parameters are written in parentheses",
+    "write `(x) => x + 1`",
+];
 
 /// `refusal` where `literal` stands, and nothing where it does not: the literal is consumed, so the refusal is past the choice point and outranks the token the form around it wanted there, with its caret on the literal.
-pub fn refusing<'a>(literal: &'static str, refusal: &'static str) -> impl Parser<'a, ()> {
+pub fn refusing<'a>(
+    literal: &'static str,
+    refusal: &'static [&'static str],
+) -> impl Parser<'a, ()> {
     move |state: ParserState<'a>| {
         look_ahead(take_exact(literal))
             .map(|()| true)
@@ -191,7 +201,7 @@ pub fn parse_let_signature<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
         .or(mark().and_drop(take_exact("=")).flat_map(|start| {
             fail_from(
                 &start,
-                "this definition states no type; a top-level `let` and every member after `and` state theirs — `: T = …`, or `(params) -> T = …` — and only a local `let` may leave its type out",
+                &["this definition states no type", "a top-level `let` and every member after `and` state theirs, `: T = …` or `(params) -> T = …`", "only a local `let` may leave its type out"],
             )
         })).parse(state)
 }
@@ -229,7 +239,7 @@ pub fn parse_proj_suffix_raw<'a>(state: ParserState<'a>) -> Parsed<'a, Field> {
             parse_usize_raw
                 .map(Field::Index)
                 .or(parse_identifier_raw.map(|label| Field::Label(label.to_string())))
-                .map_err("Expected field index or label after '.'"),
+                .map_err("expected: a field index or label after `.`"),
         )
         .parse(state)
 }
@@ -428,7 +438,7 @@ pub fn op_precedence(op: InfixOp) -> u8 {
 pub fn require_space<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     take_while(is_blank)
         .flat_map(|spaces| match spaces.is_empty() {
-            true => fail("expected whitespace after operator").boxed(),
+            true => fail("expected: whitespace after the operator").boxed(),
             false => pure(()).boxed(),
         })
         .and_drop(parse_whitespace)
@@ -507,7 +517,7 @@ fn refuse_asymmetric_operator<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
         // A character its reader cannot see where the blank belongs: the operator reads as spaced and is not, so the refusal stands at the character and names it.
         if after.chars().next().is_some_and(unseen) {
             return take_exact(op.symbol())
-                .and_keep(fail("expected whitespace after operator"))
+                .and_keep(fail("expected: whitespace after the operator"))
                 .boxed();
         }
         let glued_to_operand = after.chars().next().is_some_and(starts_operand);
@@ -520,19 +530,28 @@ fn refuse_asymmetric_operator<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
             (false, true) => take_exact(op.symbol())
                 .and_keep(fail_from(
                     &start,
-                    format!(
-                        "an infix operator takes whitespace on both sides — `a {op} b` — and `{op}` glued to an operand is not one: `a/b` is a path and `-1` a signed literal",
-                        op = op.symbol()
-                    ),
+                    vec![
+                        format!(
+                            "an infix operator takes whitespace on both sides, `a {} b`",
+                            op.symbol()
+                        ),
+                        format!("`{}` glued to an operand is not one", op.symbol()),
+                        "`a/b` is a path and `-1` a signed literal".to_string(),
+                    ],
                 ))
                 .boxed(),
             _ => pure(()).boxed(),
         }
-    }).parse(state)
+    })
+    .parse(state)
 }
 
 /// What refuses a term that begins on the line another has just ended on.
-const TERMS_SIDE_BY_SIDE: &str = "two terms stand side by side with nothing that joins them: a call is written `f(a, b)`, its arguments in one parenthesized list, and an operator takes whitespace on both sides";
+const TERMS_SIDE_BY_SIDE: &[&str] = &[
+    "two terms stand side by side with nothing that joins them",
+    "a call is written `f(a, b)`, its arguments in one parenthesized list",
+    "an operator takes whitespace on both sides",
+];
 
 // Two terms on one line with nothing between them are no form: a call fills a parenthesized list, a path is whitespace-free and an operator is spaced on both sides. What another language writes by juxtaposition — `add 1 2`, `return x`, `if c then a` — therefore has no reading, and the enclosing form would report the token it wanted where the second term stands, `Expected ';', obtained '1'`. Probed once a whole term has been read: where what follows on the same line begins a term — a name, a literal, a list — the refusal is this one, with its caret on that term's first character.
 //
@@ -577,12 +596,13 @@ fn refuse_juxtaposed_term<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
             let foreign = [&first[first.len() - ending..], &rest[..word_length]]
                 .into_iter()
                 .find_map(|word| written_instead_of(word).map(|form| (word, form)));
-            let refusal = match foreign {
-                Some((word, form)) => {
-                    format!("{TERMS_SIDE_BY_SIDE}\n  `{word}` is no keyword of Curios: {form}")
-                }
-                None => TERMS_SIDE_BY_SIDE.to_string(),
-            };
+            let refusal = TERMS_SIDE_BY_SIDE
+                .iter()
+                .map(|fact| fact.to_string())
+                .chain(
+                    foreign.map(|(word, form)| format!("`{word}` is no keyword of Curios: {form}")),
+                )
+                .collect::<Vec<_>>();
             mark()
                 .and_drop(take_n(1))
                 .flat_map(move |start| commit(fail_from(&start, refusal.clone())))
@@ -638,7 +658,7 @@ fn term<'a, D: Grammar>(probed: bool) -> impl Parser<'a, Term<D>> {
             refuse_declaration_head.and_keep(
                 // At end of input there is no character for [`refuse_non_term`] to consume, so every alternative below declines at the same offset and the tie-break reports the first of them. This stands ahead of them so that tie names the input instead.
                 look_ahead(take_eof)
-                    .and_keep(fail("expected a term, obtained 'end-of-file'"))
+                    .and_keep(fail(&["expected: a term", "obtained: the end of the file"]))
                     .or(parse_let)
                     .or(parse_func_type)
                     .or(parse_func)
@@ -658,7 +678,10 @@ fn refuse_non_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>
             // The span reaches back over the consumed character so the caret underlines it; the failure itself stays past it, which is what outranks the alternatives.
             fail_from(
                 &start,
-                format!("expected a term, obtained '{}'", shown(text)),
+                vec![
+                    "expected: a term".to_string(),
+                    format!("obtained: `{}`", shown(text)),
+                ],
             )
         })
         .parse(state)
@@ -666,11 +689,18 @@ fn refuse_non_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>
 
 // The reserved words that begin a declaration and can never begin a term, refused ahead of the alternatives above. Left to them, the local `let` would read the word as its keyword and fail one token in, which wins [`Parser::or`]'s furthest-failure tie-break: a declaration written after the program's tail — after the unannotated top-level `let` that opened it, above all — would report `Expected keyword 'let'`, naming neither the word read nor why an item is refused there. The word is consumed before the failure so it is past the choice point and stays the diagnosis, with the caret after the word as `parse_keyword` places it. `end`, `concept`, `satisfy` and `test` stay out: the first may follow a term and the other three may begin one.
 fn refuse_declaration_head<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
-    look_ahead(take_while(is_identifier_char)).flat_map(|head| match head {
-        "mod" | "use" | "pub" | "induct" | "struct" | "foreign" => take_while(is_identifier_char)
-            .and_keep(fail(format!(
-                "'{head}' begins a declaration, not a term; every declaration precedes the program's final term, and an unannotated top-level 'let' opens that term"
-            ))).boxed(),
-        _ => pure(()).boxed(),
-    }).parse(state)
+    look_ahead(take_while(is_identifier_char))
+        .flat_map(|head| match head {
+            "mod" | "use" | "pub" | "induct" | "struct" | "foreign" => {
+                take_while(is_identifier_char)
+                    .and_keep(fail(vec![
+                        format!("`{head}` begins a declaration, not a term"),
+                        "every declaration precedes the program's final term".to_string(),
+                        "an unannotated top-level `let` opens that term".to_string(),
+                    ]))
+                    .boxed()
+            }
+            _ => pure(()).boxed(),
+        })
+        .parse(state)
 }

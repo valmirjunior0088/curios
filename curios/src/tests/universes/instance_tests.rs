@@ -127,8 +127,8 @@ fn a_family_whose_payload_resolves_through_a_later_witness_reads_its_final_teles
         let report = error(&program(family, "Later"));
         assert!(
             report.contains("need one another")
-                && report.contains("'Holder'")
-                && report.contains("'Later'")
+                && report.contains("`Holder`")
+                && report.contains("`Later`")
                 && report.contains("the witness of Sized(Nat)"),
             "expected the family, its payload's type and the witness refused as one cycle:\n{report}"
         );
@@ -253,8 +253,8 @@ fn a_definition_whose_levels_outrun_the_budget_is_refused_where_it_is_declared()
 
     let report = typecheck_within(400_000, source).expect_err("the budget cuts `D`'s reading");
 
-    assert!(report.contains("while elaborating D"), "{report}");
-    assert!(report.contains("ran out of steps"), "{report}");
+    assert!(report.contains("pub let D(A: Type)"), "{report}");
+    assert!(report.contains("budget spent"), "{report}");
 }
 
 // **A case equation read at another instance holds the two to one.** `even_at(U, n)` is stuck on `n`, and each `U` written mints an instance of its own: the scrutinee's closes at zero and the arm's, which holds a `Type`, at one. The arm's proof rests on the equation the scrutinee recorded, so the two are one instance or the arm proves nothing. The elaborator commits them equal where it reads the equation, and the certifier's key, which keeps its levels, answers the term it is handed. With `Nat` for the inhabitant the two close together unasked, which is the control.

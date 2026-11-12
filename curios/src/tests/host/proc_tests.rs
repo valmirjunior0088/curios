@@ -96,7 +96,7 @@ fn exit_halts_with_code() {
 fn an_exit_code_past_a_byte_is_refused_before_it_runs() {
     let refusal = typecheck("/std/Proc/exit(256)").expect_err("256 is not a byte");
     assert!(
-        refusal.contains("Byte literal 256 is out of range"),
+        refusal.contains("`256` is no `Byte`"),
         "refused, but not as a byte:\n{refusal}"
     );
 }

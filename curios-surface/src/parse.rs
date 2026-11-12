@@ -158,20 +158,35 @@ const DOC_SPACING: &str =
     "a documentation comment opens with `--- `, with the space, or ends its line";
 
 /// What refuses a `---` after code on its line.
-const DOC_TRAILING: &str =
-    "a documentation comment takes a line of its own; `---` cannot follow code";
+const DOC_TRAILING: &[&str] = &[
+    "a documentation comment takes a line of its own",
+    "`---` cannot follow code",
+];
 
 /// What refuses two `---` blocks with a blank line or a plain comment between them and nothing declared in between.
-const DOC_TWICE: &str = "two documentation comments precede one declaration; join them, since an empty `---` line is a paragraph break";
+const DOC_TWICE: &[&str] = &[
+    "two documentation comments precede one declaration",
+    "an empty `---` line is a paragraph break",
+    "join them",
+];
 
 /// What refuses a `---` block followed by anything but what it may document.
-pub const DOC_BEFORE_NOTHING: &str = "a documentation comment `---` must immediately precede what it documents: a declaration, a constructor, a field or a concept method";
+pub const DOC_BEFORE_NOTHING: &[&str] = &[
+    "a documentation comment `---` immediately precedes what it documents",
+    "that is a declaration, a constructor, a field or a concept method",
+];
 
 /// What refuses a term standing past a program's final one. It states the rule and not the reader's intent: that the term before it is an action is nothing the grammar knows, so the sequencing form is given as what is written where it is one.
-const PROGRAM_CLOSES_WITH_ONE_TERM: &str = "a program closes with one term, the description it performs, and this is a second: an action that runs before the last is sequenced, as `let _ = …!;`";
+const PROGRAM_CLOSES_WITH_ONE_TERM: &[&str] = &[
+    "a program closes with one term, the description it performs, and this is a second",
+    "sequence an action that runs before the last, as `let _ = …!;`",
+];
 
 /// What refuses a `;` standing past a program's final term.
-const PROGRAM_TAKES_NO_SEMICOLON: &str = "a program closes with one term, the description it performs, and no `;` follows it: an action that runs before the last is sequenced, as `let _ = …!;`";
+const PROGRAM_TAKES_NO_SEMICOLON: &[&str] = &[
+    "a program closes with one term, the description it performs, and no `;` follows it",
+    "sequence an action that runs before the last, as `let _ = …!;`",
+];
 
 /// The end of a program: its input exhausted past the final term. What stands there in its place is refused as what it is, rather than left for `take_eof` to report as a token the grammar did not expect: a documentation block, which documents nothing; a `;`, which closes a declaration and no term; and a second term, where a program has one.
 ///
@@ -311,7 +326,7 @@ fn parse_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
 pub fn parse_identifier_raw<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
     take_while(is_identifier_char)
         .flat_map(|identifier| match identifier.is_empty() {
-            true => fail("Expected identifier").boxed(),
+            true => fail("expected: an identifier").boxed(),
             false => pure(identifier).boxed(),
         })
         .parse(state)
@@ -366,14 +381,14 @@ fn parse_label_owning<'a>(owns_the_fault: bool) -> impl Parser<'a, Label> {
 }
 
 pub fn reserved_keyword(word: &str) -> String {
-    format!("'{word}' is a reserved keyword, so it cannot be a name")
+    format!("`{word}` is a reserved keyword, so it cannot be a name")
 }
 
 fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> impl Parser<'a, Name> {
     move |state: ParserState<'a>| {
         (match segments.iter().any(|segment| is_keyword(segment)) {
             true => fail(format!(
-                "path '{}' contains a reserved keyword",
+                "the path `{}` contains a reserved keyword",
                 segments.join("/")
             ))
             .boxed(),
@@ -407,7 +422,7 @@ fn parse_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
 fn parse_qualified_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
     parse_name
         .flat_map(|name| match name.is_single() {
-            true => fail("expected a qualified path").boxed(),
+            true => fail("expected: a qualified path").boxed(),
             false => pure(name).boxed(),
         })
         .parse(state)
@@ -426,15 +441,18 @@ fn parse_keyword<'a>(expected: &'static str) -> impl Parser<'a, ()> {
             .flat_map(
                 move |((start, word), rest)| match (word, expected == word) {
                     (_, true) => pure(()).boxed(),
-                    ("", false) => fail(format!(
-                        "Expected keyword '{expected}', obtained {}",
-                        obtained(rest, 1)
-                    ))
+                    ("", false) => fail(vec![
+                        format!("expected: the keyword `{expected}`"),
+                        format!("obtained: {}", obtained(rest, 1)),
+                    ])
                     .boxed(),
                     // The report spans the word, so the caret underlines it rather than standing after it.
                     (word, false) => fail_from(
                         &start,
-                        format!("Expected keyword '{expected}', obtained '{word}'"),
+                        vec![
+                            format!("expected: the keyword `{expected}`"),
+                            format!("obtained: `{word}`"),
+                        ],
                     )
                     .boxed(),
                 },

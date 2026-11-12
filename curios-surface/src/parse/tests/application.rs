@@ -128,7 +128,7 @@ fn infix_requires_spaces_and_disambiguates_signs() {
     // The caret underlines the symbol alone. A symbol followed by punctuation rather than an operand — `->`, `--` — keeps the enclosing form's report, and so does a `/` opening an absolute path after a space, which is what a missing `end` looks like.
     let report = "a- 2".parse::<Term>().unwrap_err().format();
     assert!(
-        report.ends_with("1 | a- 2\n      |  ^"),
+        report.contains("│  1 │ a- 2\n│    │  ^\n"),
         "reported {report}"
     );
     for source in ["a ->2", "a /std/x"] {
@@ -162,19 +162,19 @@ fn a_position_that_begins_no_term_names_the_input_rather_than_an_alternative() {
     ] {
         let report = source.parse::<Term>().unwrap_err().format();
         assert!(
-            report.contains(&format!("expected a term, obtained '{obtained}'")),
+            report.contains(&format!("expected: a term\n│  obtained: `{obtained}`")),
             "{source:?} reported {report}"
         );
     }
     // Nothing is left to consume at the end of input, so that case is named ahead of the alternatives instead of after them.
     let report = "".parse::<Term>().unwrap_err().format();
     assert!(
-        report.contains("expected a term, obtained 'end-of-file'"),
+        report.contains("expected: a term\n│  obtained: the end of the file"),
         "reported {report}"
     );
     // The caret underlines the offending character rather than standing after it.
     let report = ")".parse::<Term>().unwrap_err().format();
-    assert!(report.ends_with("1 | )\n      | ^"), "reported {report}");
+    assert!(report.contains("│  1 │ )\n│    │ ^\n"), "reported {report}");
     // The refusal stays recoverable, so a speculative caller still backtracks past it: a trailing separator is read as trailing only because `parse_term` fails softly at the closing delimiter.
     for source in ["(1, true,)", "[1, 2,]", "(1,)", "()"] {
         assert!(source.parse::<Term>().is_ok(), "{source} should parse");

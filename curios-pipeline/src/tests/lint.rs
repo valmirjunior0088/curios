@@ -32,7 +32,7 @@ pub and second(n: Nat, ok: Holds(0 < n)) -> {Nat, Eq()(10 / n, 10 / n)} = (first
 
     assert_eq!(
         unused_binders(&unit),
-        ["unused binder `idle`; write `_` in its name's place"]
+        ["unused binder\n  `idle` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -53,6 +53,6 @@ pub let holder(m: Nat, idle: Nat) -> Nat =
 
     assert_eq!(
         unused_binders(&unit),
-        ["unused binder `idle`; write `_` in its name's place"]
+        ["unused binder\n  `idle` is never used\n  write `_` in its name's place"]
     );
 }

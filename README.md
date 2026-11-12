@@ -45,14 +45,14 @@ let single: Vec(Nat, 1) =
 Then ask what it makes of that, with `curios wonder vector.crs`:
 
 ```text
-while elaborating single:
 type mismatch
-  inferred: Vec(Nat, 0)
-  expected: Vec(Nat, 1)
-
-   --> vector.crs:7:5
-    7 |     empty;
-      |     ^^^^^
+│  inferred: Vec(Nat, 0)
+│  expected: Vec(Nat, 1)
+│
+│  7 │     empty;
+│    │     ^^^^^
+│
+╰─ error; vector.crs:7:5
 ```
 
 `Vec(Nat, 0)` and `Vec(Nat, 1)` are simply different types, so the off-by-one never reaches the generated program — there is nothing to test for, because there is nothing to run. And the `counted` field that made that work does its thinking at compile time and then goes home: a proof weighs nothing, so a `Vec` in the WebAssembly is exactly the list.

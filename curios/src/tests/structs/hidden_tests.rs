@@ -96,17 +96,14 @@ fn a_hidden_fields_entry_is_held_to_its_mark_its_run_and_its_name() {
     let refused = |literal: &str| error(&format!("{prelude}\nprint(Nat/to_str({literal}.len))"));
 
     let plain = refused("Sized { 2, two }");
-    assert!(
-        plain.contains("has 1 field(s) but the literal supplies 2"),
-        "{plain}"
-    );
+    assert!(plain.contains("has 1 field\n│  written: 2"), "{plain}");
 
     let late = refused("Sized { two, @2 }");
     assert!(late.contains("this `@` member has no slot"), "{late}");
 
     let misnamed = refused("Sized { @size = 2, items = two }");
     assert!(
-        misnamed.contains("has no field '@size' at that position (fields in order: @len, items)"),
+        misnamed.contains("has no field `@size` at that position\n│  fields in order: @len, items"),
         "{misnamed}"
     );
 }
@@ -141,7 +138,7 @@ fn a_spread_does_not_carry_a_bound_its_override_breaks() {
 
     let report = error(source);
     assert!(
-        report.contains("hidden field 'ok' of") && report.contains("was not filled"),
+        report.contains("hidden field `ok` of") && report.contains("was not filled"),
         "{report}"
     );
 }

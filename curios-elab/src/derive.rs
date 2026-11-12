@@ -228,7 +228,7 @@ struct Payload {
     callee: CalleeId,
     /// The written label, empty where there was none.
     label: String,
-    /// `payload 'x'`, `field #2`: how a report names it.
+    /// ``payload `x` ``, `field #2`: how a report names it.
     described: String,
 }
 
@@ -240,7 +240,7 @@ impl Payload {
         };
         let described = match label.is_empty() {
             true => format!("{noun} #{ordinal}"),
-            false => format!("{noun} '{label}'"),
+            false => format!("{noun} `{label}`"),
         };
         // A constructor's own path is its type's with the tag appended; a struct is named by its declaration directly.
         let callee = match tag {

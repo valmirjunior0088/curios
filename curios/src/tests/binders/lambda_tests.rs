@@ -108,7 +108,7 @@ fn a_lambda_short_of_a_parameter_counts_the_explicit_ones() {
         /std/print(Nat/to_str(bad(5, 6)))
         "#;
     assert!(
-        error(source).contains("expected 2, got 1"),
+        error(source).contains("written: 1\n│  expected: 2"),
         "{}",
         error(source)
     );
@@ -205,7 +205,7 @@ fn bare_reference_at_an_expectation_never_decided_names_what_was_never_solved() 
         "#;
     let error = error(source);
     assert!(
-        error.contains("never solved: the implicit argument 'b' of 'take'"),
+        error.contains("never solved: the implicit argument `b` of `take`"),
         "{error}"
     );
 }

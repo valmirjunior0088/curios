@@ -10,7 +10,7 @@ use {
         STDIN_LABEL, Severity, Subject, Uncosted, Written, checked, cost, declared_tests,
         diagnostics, stage, unit_stage, written,
     },
-    curios_common::Span,
+    curios_common::{Kind, Report, Span, Style},
     curios_core::Declared,
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
@@ -63,6 +63,12 @@ pub trait Telling {
 
     /// The store took nothing of what the question compiled, for the reason given.
     fn unfiled(&mut self, refusal: String);
+
+    /// Whoever reads the answer on standard output: where they stand and whether they see colour, which is what a diagnostic of the answer is written for.
+    fn reader(&self) -> Style;
+
+    /// Whoever reads what is said beside the answer, on standard error.
+    fn bystander(&self) -> Style;
 }
 
 /// A question asked in silence.
@@ -78,6 +84,14 @@ impl Telling for Silent {
     fn answering(&mut self) {}
 
     fn unfiled(&mut self, _: String) {}
+
+    fn reader(&self) -> Style {
+        Style::plain()
+    }
+
+    fn bystander(&self) -> Style {
+        Style::plain()
+    }
 }
 
 /// How the compile of a question's subject ended, read off what it reported: a lint stops nothing, so a subject that reported only lints ended as one that reported nothing did.
@@ -357,7 +371,10 @@ pub fn wonder_tests(
     for asked in Asked::every(selection).map_err(CompileError::failure)? {
         // The answer is the list on standard output, so what is said of how the file was taken goes beside it.
         if let Some(said) = asked.subject.said_unlinked(&overlay, "was checked") {
-            eprintln!("note: {said}");
+            eprintln!(
+                "{}",
+                Report::unlocated(said).rendered(Kind::Note, &telling.bystander())
+            );
         }
         let (records, unstored) = asked.tests(budget, &overlay, telling);
         refusal = refusal.or(unstored);
@@ -403,6 +420,7 @@ pub fn rendered(
 ) -> (Vec<String>, Option<String>) {
     let mut seen = BTreeSet::new();
     let mut unfiled = None;
+    let reader = telling.reader();
 
     let reports = answers
         .into_iter()
@@ -416,7 +434,7 @@ pub fn rendered(
 
             diagnostics
         })
-        .map(|diagnostic| diagnostic.render())
+        .map(|diagnostic| diagnostic.rendered(&reader))
         .filter(|rendered| seen.insert(rendered.clone()))
         .collect();
 
@@ -451,7 +469,10 @@ pub fn wonder_stage(
     let refusal = written_as_a_module(label_of(program.entry()));
     let asked = Asked::about_program(program).map_err(CompileError::failure)?;
     if let Some(said) = asked.subject.said_unlinked(&overlay, "is compiled") {
-        eprintln!("note: {said}");
+        eprintln!(
+            "{}",
+            Report::unlocated(said).rendered(Kind::Note, &telling.bystander())
+        );
     }
 
     // The rung is the answer and goes to stdout, where the driver emits it: once every unit the program stands on is compiled, and before anything downstream of the rung is.
@@ -460,8 +481,9 @@ pub fn wonder_stage(
     let answered = match reached {
         Ok(Reached::Rendered(rendering)) => {
             // What stopped the compilation after the rung is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
+            let bystander = telling.bystander();
             for diagnostic in &rendering.diagnostics {
-                eprintln!("{}", diagnostic.render());
+                eprintln!("{}", diagnostic.rendered(&bystander));
             }
             Ok(())
         }
@@ -635,7 +657,10 @@ fn for_names(
         }
     };
     if let Some(said) = asked.subject.said_unlinked(&overlay, "is read") {
-        eprintln!("note: {said}");
+        eprintln!(
+            "{}",
+            Report::unlocated(said).rendered(Kind::Note, &telling.bystander())
+        );
     }
 
     let (texts, unstored) = asked.written(budget, &overlay, &file, telling);
@@ -706,7 +731,10 @@ pub fn wonder_cost(
     let refusal = written_as_a_module(label_of(program.entry()));
     let asked = Asked::about_program(program).map_err(CompileError::failure)?;
     if let Some(said) = asked.subject.said_unlinked(&overlay, "is compiled") {
-        eprintln!("note: {said}");
+        eprintln!(
+            "{}",
+            Report::unlocated(said).rendered(Kind::Note, &telling.bystander())
+        );
     }
 
     let (fates, unstored) = asked.costed(budget, &overlay, telling);

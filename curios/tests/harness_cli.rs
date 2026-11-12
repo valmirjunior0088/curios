@@ -658,6 +658,6 @@ fn a_goal_beside_a_refusal_exits_one_with_both_reported() {
 
     assert_eq!(output.status.code(), Some(1));
     let report = stderr(&output);
-    assert!(report.contains("broken:"), "{report}");
-    assert!(report.contains("goal `?`"), "{report}");
+    assert!(report.contains("pub let broken : Nat = true;"), "{report}");
+    assert!(report.contains("╰─ goal"), "{report}");
 }

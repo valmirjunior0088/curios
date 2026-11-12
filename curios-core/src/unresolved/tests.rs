@@ -20,7 +20,10 @@ fn failed(
 fn a_name_the_scope_does_not_hold_is_not_in_scope() {
     let unresolved = failed("coutn", Sought::Binding, None, Missing::Absent);
 
-    assert_eq!(unresolved.to_string(), "`coutn` is not in scope");
+    assert_eq!(
+        unresolved.to_string(),
+        "unknown name\n  `coutn` is not in scope"
+    );
 }
 
 #[test]
@@ -38,8 +41,14 @@ fn a_step_a_module_does_not_hold_names_the_module_it_stopped_in() {
         Missing::Absent,
     );
 
-    assert_eq!(binding.to_string(), "`/std/Nat` has no `to_srt`");
-    assert_eq!(module.to_string(), "`/std/Nat` has no module `el`");
+    assert_eq!(
+        binding.to_string(),
+        "unknown name\n  `/std/Nat` has no `to_srt`"
+    );
+    assert_eq!(
+        module.to_string(),
+        "unknown module\n  `/std/Nat` has no module `el`"
+    );
 }
 
 #[test]
@@ -51,7 +60,10 @@ fn a_step_from_the_root_names_the_path_it_would_have_been() {
         Missing::Absent,
     );
 
-    assert_eq!(unresolved.to_string(), "`/Nope` names no module");
+    assert_eq!(
+        unresolved.to_string(),
+        "unknown module\n  `/Nope` names no module"
+    );
 }
 
 #[test]
@@ -63,7 +75,10 @@ fn a_private_step_names_the_module_it_is_private_to() {
         Missing::Private,
     );
 
-    assert_eq!(unresolved.to_string(), "`Sealed` is private to `/A`");
+    assert_eq!(
+        unresolved.to_string(),
+        "private name\n  `Sealed` is private to `/A`"
+    );
 }
 
 // A root the unit may not name is the step that failed, and what it is offered are the paths that carry the name it reached for under that root: each is shown by its own last segment, not by the root's.
@@ -81,7 +96,7 @@ fn a_root_out_of_reach_is_refused_with_what_carries_the_name_reached_for() {
 
     assert_eq!(
         unresolved.to_string(),
-        "`sys` is internal to the standard library\n  `Nat` is `/std/Nat`: write it absolute, or `use /std/{Nat};`"
+        "internal name\n  `sys` is internal to the standard library\n  `Nat` is `/std/Nat`\n  write it absolute, or `use /std/{Nat};`"
     );
 }
 
@@ -96,7 +111,7 @@ fn a_root_the_unit_did_not_declare_is_told_to_declare_it() {
 
     assert_eq!(
         unresolved.to_string(),
-        "`geometry` is mounted by this compilation but is not a declared dependency of this unit; declare it to reach its names"
+        "undeclared dependency\n  `geometry` is mounted by this compilation\n  it is no declared dependency of this unit\n  declare it to reach its names"
     );
 }
 
@@ -104,7 +119,10 @@ fn a_root_the_unit_did_not_declare_is_told_to_declare_it() {
 fn a_literals_head_is_said_to_name_no_structure() {
     let unresolved = failed("Piar", Sought::Structure, None, Missing::Absent);
 
-    assert_eq!(unresolved.to_string(), "`Piar` names no structure in scope");
+    assert_eq!(
+        unresolved.to_string(),
+        "unknown name\n  `Piar` names no structure in scope"
+    );
 }
 
 #[test]
@@ -117,6 +135,6 @@ fn the_nearest_name_and_each_way_to_reach_one_elsewhere_follow_the_refusal() {
 
     assert_eq!(
         unresolved.to_string(),
-        "`Bool` is not in scope\n  did you mean `Bol`?\n  `Bool` is `/std/Bool`: write it absolute, or `use /std/{Bool};`"
+        "unknown name\n  `Bool` is not in scope\n  did you mean `Bol`?\n  `Bool` is `/std/Bool`\n  write it absolute, or `use /std/{Bool};`"
     );
 }

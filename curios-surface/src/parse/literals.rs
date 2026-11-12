@@ -37,8 +37,10 @@ pub fn parse_caller_sort<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, T
 const SIGN_LEADS_A_LITERAL: &str = "expected a numeral, `inf.0` or `nan.0` after the sign";
 
 /// What a decimal with nothing before its dot is told.
-const NO_WHOLE_PART: &str =
-    "a floating-point literal has a digit before its decimal point — `0.5` — and `.5` is not one";
+const NO_WHOLE_PART: &[&str] = &[
+    "a floating-point literal has a digit before its decimal point, as `0.5` does",
+    "`.5` is not one",
+];
 
 // A numeric literal: an optional sign glued to its magnitude. The sign must touch the magnitude; `- 42` (spaced) is the subtraction operator, not a negative literal.
 //
@@ -93,7 +95,7 @@ fn parse_num_lit<'a, D: Grammar>(sign: Sign) -> impl Parser<'a, Term<D>> {
 pub fn refuse_dangling_dot<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     take_while(|char: char| char.is_ascii_digit())
             .flat_map(|digits| match digits.is_empty() {
-                true => fail("expected a numeral").boxed(),
+                true => fail("expected: a numeral").boxed(),
                 false => pure(()).boxed(),
             })
             .and_keep(mark)
@@ -102,7 +104,7 @@ pub fn refuse_dangling_dot<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
     .flat_map(|start| {
         commit(fail_from(
             &start,
-            "a floating-point literal has a decimal point followed by at least one digit — `5.0` — and `5.` is not one",
+            &["a floating-point literal has a decimal point followed by at least one digit, as `5.0` does", "`5.` is not one"],
         ))
     }).parse(state)
 }
@@ -132,7 +134,7 @@ pub fn parse_usize_raw<'a>(state: ParserState<'a>) -> Parsed<'a, usize> {
     take_while(|char: char| char.is_ascii_digit())
         .flat_map(|digits| match digits.parse::<usize>() {
             Ok(value) => pure(value).boxed(),
-            Err(_) => fail("expected usize").boxed(),
+            Err(_) => fail("expected: a count").boxed(),
         })
         .parse(state)
 }
@@ -150,7 +152,7 @@ pub fn parse_radix<'a>(
                     match Natural::parse_bytes(digits.as_bytes(), radix) {
                         Some(value) => pure(NatLiteral(value, tag(digits.len()))).boxed(),
                         None => {
-                            fail(format!("expected base-{radix} digits after '{prefix}'")).boxed()
+                            fail(format!("expected: base-{radix} digits after `{prefix}`")).boxed()
                         }
                     }
                 }),
@@ -166,7 +168,7 @@ pub fn parse_nat_digits<'a>(state: ParserState<'a>) -> Parsed<'a, NatLiteral> {
             take_while(|char: char| char.is_ascii_digit()).flat_map(|digits| {
                 match Natural::parse_bytes(digits.as_bytes(), 10) {
                     Some(value) => pure(NatLiteral(value, Radix::Dec(digits.len()))).boxed(),
-                    None => fail("expected nat").boxed(),
+                    None => fail("expected: a natural number").boxed(),
                 }
             }),
         )
@@ -208,11 +210,13 @@ fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> impl Parser<'a, Floating> {
         take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
             .flat_map::<Floating, _>(move |digits| {
                 let Some((whole, fraction)) = digits.split_once('.') else {
-                    return fail("Expected float literal with dot and decimal").boxed();
+                    return fail("expected: a floating-point literal with a dot and a decimal")
+                        .boxed();
                 };
 
                 if !fraction.starts_with(|char: char| char.is_ascii_digit()) {
-                    return fail("Expected float literal with dot and decimal").boxed();
+                    return fail("expected: a floating-point literal with a dot and a decimal")
+                        .boxed();
                 }
 
                 // Committed where the literal opens with its dot, since nothing else the grammar spells opens with a dot and a digit: uncommitted, the report would be the enclosing form's word on the dot. A name the character class admits, the `e` of `e.0`, is a projection's head and falls through.
@@ -225,7 +229,7 @@ fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> impl Parser<'a, Floating> {
                     Some((value, scale)) => {
                         Floating::of_decimal(sign == Sign::Negative, &value, scale)
                     }
-                    None => return fail("Expected float literal").boxed(),
+                    None => return fail("expected: a floating-point literal").boxed(),
                 };
 
                 // An overflowing magnitude rounds to the infinity of its sign, which is refused rather than taken: a decimal that overflows is almost certainly a mistake, and the infinity has literals of its own. Committed, since a dot between digits is the prefix that discriminates the literal: uncommitted, the refusal loses to the numeral, which reads the integer part and takes the `.0` after it for a projection.
@@ -233,7 +237,10 @@ fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> impl Parser<'a, Floating> {
                     true => pure(value).boxed(),
                     false => commit(fail_from(
                         &start,
-                        "Float literal overflows Flt; an infinity is written `+inf.0` or `-inf.0`",
+                        &[
+                            "this literal overflows `Flt`",
+                            "an infinity is written `+inf.0` or `-inf.0`",
+                        ],
                     ))
                     .boxed(),
                 }
@@ -293,7 +300,7 @@ fn refuse_line_break_in_string<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     mark().and_drop(take_exact("\n")).flat_map(|start| {
         commit(fail_from(
             &start,
-            "a string literal ends before its line does: close it with `\"`, or spell text that spans lines as a block string literal — `\"\"\"`, a newline, the lines, a newline and `\"\"\"`",
+            &["a string literal ends before its line does", "close it with `\"`", "or spell text that spans lines as a block string literal: `\"\"\"`, a newline, the lines, a newline and `\"\"\"`"],
         ))
     }).parse(state)
 }
@@ -331,16 +338,18 @@ pub fn parse_char_value<'a>(state: ParserState<'a>) -> Parsed<'a, char> {
                 .or(take_exact("'").map(|_| '\''))
                 .or(parse_unicode_escape)
                 // The backslash discriminates the escape, so the fault is this one rather than the first alternative's tie at the same offset, and rather than the fallback below reading the backslash as an ordinary character.
-                .or(commit(fail(
-                    "a character escape is one of `\\n`, `\\t`, `\\r`, `\\\\`, `\\'` or `\\u{...}`; a lone backslash is written `'\\\\'`",
-                ))),
+                .or(commit(fail(&[
+                    "a character escape is one of `\\n`, `\\t`, `\\r`, `\\\\`, `\\'` or `\\u{...}`",
+                    "a lone backslash is written `'\\\\'`",
+                ]))),
         )
         .or(
             take_n(1).flat_map(|string| match string.chars().next().unwrap() {
-                '\'' => fail("use \\' to include a single quote in a char literal").boxed(),
+                '\'' => fail("write `\\'` for a single quote in a character literal").boxed(),
                 char => pure(char).boxed(),
             }),
-        ).parse(state)
+        )
+        .parse(state)
 }
 
 pub fn parse_string_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
@@ -396,24 +405,29 @@ pub fn parse_block_string_literal<'a, D: Grammar>(state: ParserState<'a>) -> Par
                 .and_drop(take_exact("\n").or(take_n(1).flat_map(move |_| {
                     commit(fail_from(
                         &open,
-                        "a block string literal opens with `\"\"\"` and a newline; its text begins on the next line",
+                        &[
+                            "a block string literal opens with `\"\"\"` and a newline",
+                            "its text begins on the next line",
+                        ],
                     ))
                 })))
                 // Past the opener and its newline this is a block literal and nothing else, so an unterminated one says so. Recoverable, it would backtrack to the one-line form, fail there too, and leave the enclosing term to complain at the opening quotes.
-                .and_keep(commit(
-                    many0(parse_block_piece)
-                        .and(mark)
-                        .and_drop(take_exact("\"\"\"").map_err(
-                            "a block string literal closes with `\"\"\"` on a line of its own",
-                        )),
-                ))
+                .and_keep(commit(many0(parse_block_piece).and(mark).and_drop(
+                    take_exact("\"\"\"").map_err(
+                        "a block string literal closes with `\"\"\"` on a line of its own",
+                    ),
+                )))
                 .flat_map(|(pieces, close)| match assemble_block(pieces) {
-                    Ok(value) => pure(Subterm::ProofLiteral(ProofLiteral::Str(StrLit::block(value)))).boxed(),
+                    Ok(value) => pure(Subterm::ProofLiteral(ProofLiteral::Str(StrLit::block(
+                        value,
+                    ))))
+                    .boxed(),
                     Err(message) => commit(fail_from(&close, message)).boxed(),
                 })
         })
         .and_drop(parse_whitespace)
-        .map(Into::into).parse(state)
+        .map(Into::into)
+        .parse(state)
 }
 
 /// The value a block's pieces spell, under the rules `parse_block_string_literal` states, or the refusal for a closer that shares its line with content.

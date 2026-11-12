@@ -18,7 +18,7 @@ fn a_misspelled_binder_is_offered_the_one_it_is_a_swap_from() {
     "#,
     );
     assert!(
-        error.contains("`coutn` is not in scope\n  did you mean `count`?"),
+        error.contains("`coutn` is not in scope\n│  did you mean `count`?"),
         "{error}"
     );
 }
@@ -37,7 +37,7 @@ fn a_misspelled_declaration_is_offered_its_sibling() {
     "#,
     );
     assert!(
-        error.contains("`totl` is not in scope\n  did you mean `total`?"),
+        error.contains("`totl` is not in scope\n│  did you mean `total`?"),
         "{error}"
     );
 }
@@ -56,7 +56,7 @@ fn a_name_that_differs_in_case_alone_is_offered() {
     "#,
     );
     assert!(
-        error.contains("`total` is not in scope\n  did you mean `Total`?"),
+        error.contains("`total` is not in scope\n│  did you mean `Total`?"),
         "{error}"
     );
 }
@@ -74,7 +74,7 @@ fn a_misspelled_member_names_the_module_it_stopped_in() {
     "#,
     );
     assert!(
-        error.contains("`/std/Option` has no `sme`\n  did you mean `some`?"),
+        error.contains("`/std/Option` has no `sme`\n│  did you mean `some`?"),
         "{error}"
     );
 }
@@ -84,15 +84,15 @@ fn a_misspelled_module_is_offered_the_one_it_is_near_wherever_it_is_looked_up() 
     for (path, said) in [
         (
             "Nat/el/add(a, a)",
-            "`/std/Nat` has no module `el`\n  did you mean `le`?",
+            "`/std/Nat` has no module `el`\n│  did you mean `le`?",
         ),
         (
             "/std/Nta/add(a, a)",
-            "`/std` has no module `Nta`\n  did you mean `Nat`?",
+            "`/std` has no module `Nta`\n│  did you mean `Nat`?",
         ),
         (
             "Nta/add(a, a)",
-            "`Nta` is not in scope\n  did you mean `Nat`?",
+            "`Nta` is not in scope\n│  did you mean `Nat`?",
         ),
     ] {
         let error = refused(&fill!(
@@ -120,7 +120,7 @@ fn a_misspelled_selector_is_offered_the_member_it_is_near() {
     "#,
     );
     assert!(
-        error.contains("`/std/Nat` has no `to_srt`\n  did you mean `to_str`?"),
+        error.contains("`/std/Nat` has no `to_srt`\n│  did you mean `to_str`?"),
         "{error}"
     );
 }
@@ -138,7 +138,7 @@ fn a_module_out_of_scope_is_told_how_to_reach_it() {
     );
     assert!(
         error.contains(
-            "`List` is not in scope\n  `List` is `/std/List`: write it absolute, or `use /std/{List};`"
+            "`List` is not in scope\n│  `List` is `/std/List`\n│  write it absolute, or `use /std/{List};`"
         ),
         "{error}"
     );
@@ -161,7 +161,7 @@ fn a_literals_head_that_names_nothing_is_offered_the_structure_it_is_near() {
     "#,
     );
     assert!(
-        error.contains("`Piar` is not in scope\n  did you mean `Pair`?"),
+        error.contains("`Piar` is not in scope\n│  did you mean `Pair`?"),
         "{error}"
     );
 }
@@ -204,15 +204,14 @@ fn each_declaration_is_refused_for_the_name_it_wrote() {
     "#,
     );
     assert!(
-        error
-            .contains("while elaborating f:\n`/std/Nat` has no `to_srt`\n  did you mean `to_str`?"),
+        error.contains("unknown name\n│  `/std/Nat` has no `to_srt`\n│  did you mean `to_str`?"),
         "{error}"
     );
     assert!(
-        error.contains("while elaborating g:\n`/std/Option` has no `sme`\n  did you mean `some`?"),
+        error.contains("unknown name\n│  `/std/Option` has no `sme`\n│  did you mean `some`?"),
         "{error}"
     );
-    assert!(!error.contains("while elaborating h:"), "{error}");
+    assert!(!error.contains("let h(n: Nat)"), "{error}");
 }
 
 // A root the program may not write is a step that fails for a reason of its own, and the name reached for under it is offered as any unresolved name is: by the paths that carry it. The declaration that wrote it is refused alone.
@@ -231,12 +230,12 @@ fn a_name_under_a_root_out_of_reach_refuses_its_declaration_alone() {
     );
     assert!(
         error.contains(
-            "while elaborating x:\n`sys` is internal to the standard library\n  `Nat` is `/std/Nat`: write it absolute, or `use /std/{Nat};`"
+            "internal name\n│  `sys` is internal to the standard library\n│  `Nat` is `/std/Nat`\n│  write it absolute, or `use /std/{Nat};`"
         ),
         "{error}"
     );
     assert!(
-        error.contains("while elaborating y:\n`cuont` is not in scope"),
+        error.contains("unknown name\n│  `cuont` is not in scope"),
         "{error}"
     );
 }
@@ -272,7 +271,7 @@ fn a_family_of_a_group_is_told_how_to_reach_a_name_its_parameter_reads() {
     );
     assert!(
         error.contains(
-            "`Nat` is not in scope\n  `Nat` is `/std/Nat`: write it absolute, or `use /std/{Nat};`"
+            "`Nat` is not in scope\n│  `Nat` is `/std/Nat`\n│  write it absolute, or `use /std/{Nat};`"
         ),
         "{error}"
     );

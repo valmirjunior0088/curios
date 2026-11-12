@@ -83,7 +83,7 @@ fn misplaced(header: &str, name: &str, rows: &[(String, String)], held: usize) -
     rows.push((String::new(), SENTINEL.to_owned()));
     let error = typecheck(&program(header, &rows, "?"))
         .expect_err("a program of written goals never compiles");
-    let reports = error.split("goal `?`").skip(1).collect::<Vec<_>>();
+    let reports = error.split("\n\n").collect::<Vec<_>>();
     assert_eq!(
         reports.len(),
         rows.len(),

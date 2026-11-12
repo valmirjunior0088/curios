@@ -60,7 +60,7 @@ fn a_clean_file_no_mod_declares_lints_clean_behind_its_note() {
     let text = stdout(&linted);
     assert_eq!(linted.status.code(), Some(0), "{text}");
     assert!(
-        text.starts_with("note: stray.crs is in no unit of `/app`"),
+        text.starts_with("stray.crs is in no unit of `/app`"),
         "{text}"
     );
 }
@@ -79,10 +79,10 @@ fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
     assert_eq!(linted.status.code(), Some(1));
     let text = stdout(&linted);
     assert!(
-        text.starts_with("unused import `Bool`; delete it"),
+        text.starts_with("unused import\n│  `Bool` is never used\n│  delete it"),
         "{text}"
     );
-    assert!(text.contains("--> <stdin>:1:11"), "{text}");
+    assert!(text.contains("╰─ lint; <stdin>:1:11"), "{text}");
     // The program is checked under its own name, a blank line parts the tree from the report, and the count closes.
     let narrated = String::from_utf8_lossy(&linted.stderr);
     assert!(narrated.starts_with("<stdin>\n╰─ check; "), "{narrated}");
@@ -116,8 +116,11 @@ fn goals_alone_exit_two_and_a_lint_beside_one_exits_one() {
     );
     assert_eq!(both.status.code(), Some(1));
     let text = stdout(&both);
-    assert!(text.starts_with("goal `?`"), "{text}");
-    assert!(text.contains("unused declaration `m`"), "{text}");
+    assert!(text.starts_with("`/std/Nat` expected"), "{text}");
+    assert!(
+        text.contains("unused declaration\n│  `m` is never used"),
+        "{text}"
+    );
 }
 
 /// A dependency nothing in the package reached is reported by the package-entire form alone, against the manifest, and one the library reaches is not.
@@ -153,7 +156,7 @@ fn an_unused_dependency_is_reported_for_the_package_entire() {
     assert_eq!(entire.status.code(), Some(1), "{}", stdout(&entire));
     let text = stdout(&entire);
     assert!(
-        text.contains("unused dependency `json`; delete its row"),
+        text.contains("unused dependency\n│  `json` is never used\n│  delete its row"),
         "{text}"
     );
     assert!(!text.contains("`shape`"), "{text}");
@@ -198,7 +201,7 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
     assert_eq!(stdout(&unstored), stdout(&stored), "the report is the same");
     assert_eq!(
         narrated
-            .matches("note: what this compiled is not stored; ")
+            .matches("what this compiled is not stored; ")
             .count(),
         1,
         "once, for a library and a program asked of one store: {narrated}"

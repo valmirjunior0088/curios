@@ -36,7 +36,7 @@ fn an_operator_pins_a_character_operand_from_context() {
     );
 }
 
-// Two characters under an operator are decided at `Char`, as a character nothing pins realizes: a comparison goes through `Char`'s own witness, and an operation `Char` has no witness of is refused, where reading both as code points would add them.
+// Two characters under an operator are decided at `Char`, as a character nothing pins realizes: a comparison goes through `Char`'s own witness, and an operation `Char` has no witness is refused, where reading both as code points would add them.
 #[test]
 fn an_operator_between_characters_is_decided_at_char() {
     assert_eq!(
@@ -55,7 +55,7 @@ fn an_operator_between_characters_is_decided_at_char() {
         "#,
     );
     assert!(
-        report.contains("no witness of /std/ops/Add(Char)"),
+        report.contains("wanted: /std/ops/Add(Char)"),
         "unexpected report:\n{report}"
     );
 }

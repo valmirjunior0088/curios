@@ -129,7 +129,7 @@ fn an_unnamed_member_is_reached_by_no_name() {
         "#,
     );
     assert!(
-        field.contains("'_0'") && field.contains("no field"),
+        field.contains("`_0`") && field.contains("no field"),
         "got: {field}"
     );
 }

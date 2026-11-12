@@ -57,7 +57,7 @@ fn what_rightly_follows_a_term_is_not_a_second_term() {
     }
 
     let later = refusal("let a : Nat = 1\nlet b : Nat = 2;\nb");
-    assert!(later.contains("Expected ';'"), "{later}");
+    assert!(later.contains("expected: `;`"), "{later}");
 }
 
 /// A head or a form missing a part its grammar requires is refused in a sentence that names the part: a structure's and a concept's sort, a definition's result, the `=` a definition is written with, a lambda's parentheses, a constructor's payload list, and the bars of a `match`.

@@ -12,7 +12,7 @@ use {
 #[test]
 fn display_unbound_variable() {
     let err = Error::unbound_variable(Subterm::Intrinsic(Intrinsic::NatType), None);
-    assert_eq!(err.to_string(), "`Nat` is not in scope");
+    assert_eq!(err.to_string(), "unknown name\n  `Nat` is not in scope");
 }
 
 #[test]
@@ -23,7 +23,7 @@ fn display_not_a_function() {
     );
     assert_eq!(
         err.to_string(),
-        "applied a non-function\n  head has type: Nat"
+        "not a function\n  applied: a term of type Nat"
     );
 }
 
@@ -44,7 +44,7 @@ fn display_parameterless_witness_concept_states_the_rule() {
     let err = Error::parameterless_witness_concept(Global::Authored(Qualifier::from(["Nothing"])));
     assert_eq!(
         err.to_string(),
-        "this witness cannot be registered: concept '/Nothing' has no parameters to key on\n  a global witness keys on its concept's parameter heads; supply a parameterless concept through a local 'use' binder instead"
+        "unkeyed witness\n  the concept `/Nothing` has no parameters to key on\n  a global witness keys on its concept's parameter heads\n  supply a parameterless concept through a local `use` binder"
     );
 }
 

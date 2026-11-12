@@ -176,7 +176,7 @@ pub fn check_dependent_fields(
         FieldSource::Resolve { func, edge } => {
             let provenance = WitnessOrigin {
                 func: func.clone(),
-                role: Some(format!("its '{edge}' superclass")),
+                role: Some(format!("its `{edge}` superclass")),
             };
             let (id, metavar) =
                 context.fresh_witness_metavar(ty.clone(), origin.extent(), provenance.clone());

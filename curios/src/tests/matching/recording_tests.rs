@@ -7,9 +7,9 @@ fn assert_refused_in_a_dead_arm(source: &str) {
     let error = error(source);
     assert!(
         error.contains("type mismatch")
-            && error.contains("this arm is never taken: its guard")
+            && error.contains("this arm is never taken\n│  its guard")
             && error.contains("is always false")
-            && !error.contains("the certifier refused"),
+            && !error.contains("certifier refusal"),
         "expected the elaborator to refuse the dead arm, got: {error}"
     );
 }
@@ -30,8 +30,8 @@ fn a_bound_given_up_in_a_dead_arm_says_the_arm_is_never_taken() {
         "#,
     );
     assert!(
-        error.contains("an implicit argument of 'needs' was not inferred")
-            && error.contains("this arm is never taken: its guard flag is always false"),
+        error.contains("an implicit argument of `needs` was not inferred")
+            && error.contains("this arm is never taken\n│  its guard flag is always false"),
         "expected the bound's report to say the arm is dead, got: {error}"
     );
 }
@@ -157,8 +157,8 @@ fn assert_refused_under_a_contradicted_guard(source: &str) {
     let error = error(source);
     assert!(
         error.contains("type mismatch")
-            && error.contains("this arm is never taken: in it the guard")
-            && !error.contains("the certifier refused"),
+            && error.contains("this arm is never taken\n│  in it the guard")
+            && !error.contains("certifier refusal"),
         "expected the elaborator to refuse the dead arm, got: {error}"
     );
 }
@@ -289,8 +289,8 @@ fn a_second_match_on_a_variable_an_arm_fixed_refines_nothing() {
     );
     assert!(
         error.contains("type mismatch")
-            && error.contains("this arm is never taken: its guard n is always 5")
-            && !error.contains("the certifier refused"),
+            && error.contains("this arm is never taken\n│  its guard n is always 5")
+            && !error.contains("certifier refusal"),
         "expected the elaborator to refuse the dead arm, got: {error}"
     );
 }
@@ -317,8 +317,7 @@ fn a_contradiction_claimed_in_a_dead_arm_is_refused_as_one_that_does_not_follow(
         "#,
     );
     assert!(
-        !error.contains("which is the compiler's fault")
-            && !error.contains("the certifier refused"),
+        !error.contains("which is the compiler's fault") && !error.contains("certifier refusal"),
         "expected the bound to be refused as not following, got: {error}"
     );
 }

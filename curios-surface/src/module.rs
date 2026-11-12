@@ -539,7 +539,7 @@ impl Entrypoint {
                 .flat_map(|items| {
                     let swallowed = match first_broken(&items) {
                         Some(error) => commit(raise(error)).boxed(),
-                        None => fail("Expected a program's final term").boxed(),
+                        None => fail("expected: a program's final term").boxed(),
                     };
                     parse_term
                         .and_drop(parse_program_end::<Program>)

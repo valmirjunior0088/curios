@@ -122,11 +122,11 @@ fn a_bound_over_a_diverging_subject_is_refused_by_name() {
     .expect_err("a diverging subject cannot discharge a bound");
 
     assert!(
-        error.contains("is a proof position but reaches 'spin'"),
+        error.contains("is a proof position\n│  it reaches `spin`"),
         "expected the totality refusal by name, got: {error}"
     );
     assert!(
-        !error.contains("ran out of steps"),
+        !error.contains("budget spent"),
         "exhaustion should have been re-reported by name, got: {error}"
     );
 }
@@ -165,7 +165,7 @@ fn a_bound_on_a_computed_subject_evaluates_it() {
     .expect_err("the bound's subject is evaluated, and cannot finish inside this budget");
 
     assert!(
-        error.contains("ran out of steps"),
+        error.contains("budget spent"),
         "expected a spent-budget refusal, got: {error}"
     );
 }

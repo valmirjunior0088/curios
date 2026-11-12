@@ -12,7 +12,7 @@ fn a_parameter_the_result_mentions_is_used_when_an_earlier_parameter_has_a_funct
         cong
     "#
         ),
-        ["unused-binder: unused binder `y`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `y` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -58,7 +58,7 @@ fn a_local_parameter_nothing_mentions_is_reported_when_a_later_type_binds_its_na
         g
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -72,7 +72,7 @@ fn a_parameter_a_later_one_of_its_name_shadows_is_reported_though_the_result_nam
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -87,7 +87,7 @@ fn a_local_parameter_a_later_one_of_its_name_shadows_is_reported_though_the_resu
         g
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -101,8 +101,8 @@ fn every_parameter_but_the_last_of_a_name_the_result_mentions_is_reported() {
     "#
         ),
         [
-            "unused-binder: unused binder `x`; write `_` in its name's place",
-            "unused-binder: unused binder `x`; write `_` in its name's place"
+            "unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place",
+            "unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"
         ]
     );
 }
@@ -117,7 +117,7 @@ fn a_pattern_leaf_is_reported_though_the_result_names_a_later_parameter_of_its_n
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -131,7 +131,7 @@ fn a_pattern_leaf_shadowing_a_parameter_the_result_mentions_is_reported_when_the
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -158,6 +158,6 @@ fn a_witness_parameter_a_later_one_of_its_name_shadows_is_reported() {
         Type
     "#
         ),
-        ["unused-binder: unused binder `A`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `A` is never used\n  write `_` in its name's place"]
     );
 }

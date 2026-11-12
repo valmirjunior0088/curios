@@ -11,7 +11,7 @@ fn a_parameter_the_body_never_reads_is_reported_at_its_word() {
         f
     "#
         ),
-        ["unused-binder: unused binder `n`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `n` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -38,7 +38,7 @@ fn a_parameter_only_a_later_parameters_type_mentions_is_used() {
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -52,7 +52,7 @@ fn only_the_sugars_own_parameters_are_exempted_by_the_result_type() {
         f
     "#
         ),
-        ["unused-binder: unused binder `n`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `n` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -65,7 +65,7 @@ fn a_local_binding_nothing_reads_is_reported() {
         Type
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -78,7 +78,7 @@ fn a_pattern_leaf_nothing_reads_is_reported_alone() {
         a
     "#
         ),
-        ["unused-binder: unused binder `b`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `b` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -92,7 +92,7 @@ fn a_binder_shadowed_before_any_use_is_reported() {
         x
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -104,7 +104,7 @@ fn an_implicit_parameter_is_a_binder_like_any_other() {
         (@A : Type) => Type
     "#
         ),
-        ["unused-binder: unused binder `A`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `A` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -125,7 +125,7 @@ fn a_match_arm_binder_nothing_reads_is_reported() {
         f
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -148,8 +148,8 @@ fn a_fold_hypothesis_and_a_cons_tail_nothing_reads_are_reported() {
     "#
         ),
         [
-            "unused-binder: unused binder `ih`; write `_` in its name's place",
-            "unused-binder: unused binder `t`; write `_` in its name's place",
+            "unused-binder: unused binder\n  `ih` is never used\n  write `_` in its name's place",
+            "unused-binder: unused binder\n  `t` is never used\n  write `_` in its name's place",
         ]
     );
 }
@@ -178,7 +178,7 @@ fn an_underscore_prefixed_binder_is_reported_where_nothing_reads_it() {
         f
     "#
         ),
-        ["unused-binder: unused binder `_n`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `_n` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -218,7 +218,7 @@ fn a_sugar_field_parameter_nothing_reads_is_reported() {
         (f(x) = Type,)
     "#
         ),
-        ["unused-binder: unused binder `x`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -250,7 +250,7 @@ fn a_binder_in_the_body_an_arm_of_alternatives_shares_is_reported_once() {
         f
     "#
         ),
-        ["unused-binder: unused binder `unused`; write `_` in its name's place"]
+        ["unused-binder: unused binder\n  `unused` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -269,8 +269,8 @@ fn each_alternative_reports_the_binder_it_writes() {
     "#
         ),
         [
-            "unused-binder: unused binder `x`; write `_` in its name's place",
-            "unused-binder: unused binder `x`; write `_` in its name's place"
+            "unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place",
+            "unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"
         ]
     );
 }

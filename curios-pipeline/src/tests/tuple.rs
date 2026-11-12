@@ -44,7 +44,7 @@ fn proj_unknown_label_names_the_available_fields() {
 
     let error = typecheck(source).unwrap_err();
     assert!(
-        error.contains("no field named 'body'") && error.contains("status"),
+        error.contains("no field is named `body`") && error.contains("status"),
         "unexpected error: {error}"
     );
 }
@@ -60,7 +60,7 @@ fn duplicate_tuple_label_is_rejected() {
 
     let error = typecheck(source).unwrap_err();
     assert!(
-        error.contains("duplicate field label 'x'"),
+        error.contains("`x` labels two fields"),
         "unexpected error: {error}"
     );
 }
@@ -108,7 +108,7 @@ fn named_construction_checks_against_the_labels() {
     "#;
     let error = typecheck(wrong_name).unwrap_err();
     assert!(
-        error.contains("'code'") && error.contains("'status'"),
+        error.contains("`code`") && error.contains("`status`"),
         "unexpected error: {error}"
     );
 

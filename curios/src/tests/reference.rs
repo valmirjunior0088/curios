@@ -2,6 +2,7 @@
 
 use {
     super::test_support::*,
+    curios_common::Style,
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_wonder::{Origin, Subject, diagnostics},
@@ -33,7 +34,12 @@ fn every_crs_example_reports_nothing() {
             None,
             &mut |_| {},
         );
-        wrong.extend(reports.diagnostics.iter().map(|report| report.render()));
+        wrong.extend(
+            reports
+                .diagnostics
+                .iter()
+                .map(|report| report.rendered(&Style::plain())),
+        );
     }
 
     assert!(

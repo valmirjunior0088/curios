@@ -191,7 +191,7 @@ fn a_refused_form_names_its_rule() {
             "a definition names its plain and `@` parameters",
         ),
         // Where the site binds.
-        ("(@A, use d, x) => x", "the member is written `use _`"),
+        ("(@A, use d, x) => x", "write the member as `use _`"),
         (
             "(@A, use Show(A), x) => x",
             "a `use` member is written `use _` here",
@@ -206,7 +206,7 @@ fn a_refused_form_names_its_rule() {
         ),
         (
             "Fm { fm(@B, use d, a, b) = b }",
-            "the member is written `use _`",
+            "write the member as `use _`",
         ),
         (
             "Fm { fm(@B, use Show(B), a, b) = b }",
@@ -251,13 +251,13 @@ fn a_refused_form_names_its_rule() {
             .format();
         assert!(report.contains(rule), "{source:?} reported {report}");
         assert!(
-            !report.contains("Expected '"),
+            !report.contains("expected: `"),
             "{source:?} reported {report}"
         );
     }
 }
 
-/// A declaration's parameter list is its own past the `(`, so a plain or `@` member written without its type is reported where its `:` is missing. Left recoverable, the list was dropped and the head read on as one with no parameters, which reported the `:` it wanted at the parenthesis.
+/// A declaration`s parameter list is its own past the `(`, so a plain or `@` member written without its type is reported where its `:` is missing. Left recoverable, the list was dropped and the head read on as one with no parameters, which reported the `:` it wanted at the parenthesis.
 #[test]
 fn a_declarations_member_written_alone_is_reported_where_it_stands() {
     for source in [
@@ -270,7 +270,7 @@ fn a_declarations_member_written_alone_is_reported_where_it_stands() {
             .expect_err("the member is no parameter");
         let report = error.format();
         assert!(
-            report.contains("Expected ':', obtained ')'"),
+            report.contains("expected: `:`\n│  obtained: `)`"),
             "{source:?} reported {report}"
         );
         assert_eq!(

@@ -36,9 +36,7 @@ fn a_labeled_goal_does_not_reach_the_positional_witness() {
         "#;
 
     assert!(error(source).contains(
-        "no witness of Tag({x: Nat, y: Bool}) found\n  \
-         labels are part of the type: the witness for {_, _} does not cover {x: _, y: _}\n  \
-         name a struct for the labeled product, or declare the witness for this shape"
+        "wanted: Tag({x: Nat, y: Bool})\n│  labels are part of the type\n│  the witness for {_, _} does not cover {x: _, y: _}\n│  name a struct for the labeled product, or declare the witness for this shape"
     ));
 }
 
@@ -110,7 +108,7 @@ fn a_variable_head_is_still_not_a_key() {
         "#;
 
     assert!(error(source).contains(
-        "every parameter's head must be an inductive, a struct, an intrinsic type, or a tuple type"
+        "a parameter's head is an inductive, a struct, an intrinsic type or a tuple type"
     ));
 }
 
@@ -130,7 +128,7 @@ fn a_witness_keyed_on_a_function_type_cannot_be_keyed() {
         "#,
     );
     assert!(
-        error.contains("this witness cannot be keyed") && !error.contains("or a function type"),
+        error.contains("unkeyed witness") && !error.contains("or a function type"),
         "unexpected error: {error}"
     );
 }

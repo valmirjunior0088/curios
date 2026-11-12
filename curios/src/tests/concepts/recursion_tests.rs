@@ -180,7 +180,7 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
     );
 }
 
-// A definition and the witness it resolves to, each needing the other, are a cycle like two witnesses': `describe`'s goal resolves to `Show(Box)`, whose `show` calls `describe`. Refused by name in either order they are written in — where the elaborator once accepted both and the certifier refused `/describe` for ``unbound name `/witness~0` ``.
+// A definition and the witness it resolves to, each needing the other, are a cycle like two witnesses': `describe`'s goal resolves to `Show(Box)`, whose `show` calls `describe`. Refused by name in either order they are written in — where the elaborator once accepted both and certifier refusal `/describe` for ``unbound name `/witness~0` ``.
 #[test]
 fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_order() {
     let describe = "let describe(b: Box) -> Str = Show/show(b);";
@@ -206,7 +206,7 @@ fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_
             "expected a cycle, by name:\n{report}"
         );
         assert!(
-            report.contains("'describe'") && report.contains("the witness of Show(Box)"),
+            report.contains("`describe`") && report.contains("the witness of Show(Box)"),
             "expected both members named:\n{report}"
         );
         assert!(
@@ -215,7 +215,7 @@ fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_
         );
         assert!(
             report.contains("no group holds a definition beside a witness")
-                && !report.contains("'let ... and ...'"),
+                && !report.contains("`let ... and ...`"),
             "expected the way out a definition and a witness have, not a group neither fits:\n{report}"
         );
     }

@@ -167,7 +167,7 @@ fn a_description_is_matched_only_by_its_own_module() {
         "#,
     );
     assert!(
-        report.contains("representation of type 'Test' is private"),
+        report.contains("representation of `Test` is private"),
         "{report}"
     );
 }
@@ -332,7 +332,7 @@ fn a_test_program_is_judged_and_a_build_holds_none_of_its_tests() {
 
     let report = tests_error(source);
     assert!(
-        report.contains("while elaborating /judged")
+        report.contains("List/get([1, 2, 3], r(0))")
             && report
                 .contains("nothing discharged /std/Bool/Holds(r(0) < List/len(@Nat, [1, 2, 3]))"),
         "{report}"

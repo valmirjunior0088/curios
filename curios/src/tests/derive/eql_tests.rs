@@ -107,7 +107,7 @@ fn the_eql_derivation_shares_the_provenance() {
         "#;
     let report = error(premise);
     assert!(
-        report.contains("no witness of Eql(A) found\n  needed by 'Box/boxed' for payload #1 — add `use Eql(A)` to the telescope"),
+        report.contains("wanted: Eql(A)\n│  needed by `Box/boxed` for payload #1 — add `use Eql(A)` to the telescope"),
         "{report}"
     );
 }

@@ -230,20 +230,20 @@ fn an_arm_no_value_reaches_is_refused() {
     for (source, arm) in [
         (
             "use /std/{Nat, Option};\n\nlet f(m: Option(Option(Nat))) -> Nat =\n    match m\n    | some(_) => 0\n    | some(some(x)) => x\n    | none() => 1\n    end;\n\n/std/print(Nat/to_str(f(Option/none())))\n",
-            "    6 |     | some(some(x)) => x\n      |       ^^^^^^^^^^^^^",
+            "│  6 │     | some(some(x)) => x\n│    │       ^^^^^^^^^^^^^",
         ),
         (
             "use /std/{Bool, Nat};\n\nlet f(b: Bool) -> Nat =\n    match b\n    | true => 1\n    | false => 0\n    | _ => 2\n    end;\n\n/std/print(Nat/to_str(f(true)))\n",
-            "    7 |     | _ => 2\n      |       ^",
+            "│  7 │     | _ => 2\n│    │       ^",
         ),
         (
             "use /std/{Nat, Option};\n\nlet f(o: Option(Nat)) -> Nat =\n    match o\n    | x => 0\n    | some(y) => y\n    end;\n\n/std/print(Nat/to_str(f(Option/some(3))))\n",
-            "    6 |     | some(y) => y\n      |       ^^^^^^^",
+            "│  6 │     | some(y) => y\n│    │       ^^^^^^^",
         ),
     ] {
         let error = error(source);
         assert!(
-            error.contains("duplicate or overlapping") && error.contains(arm),
+            error.contains("unreachable arm") && error.contains(arm),
             "{source:?} reported {error}"
         );
     }
@@ -342,9 +342,7 @@ fn a_struct_pattern_names_its_structure_at_every_binder() {
 
         let other = error(&under("B"));
         assert!(
-            other.contains(
-                "a `B` pattern matches a value of that structure, and this one is of type A"
-            ),
+            other.contains("a `B` pattern matches a value of that structure\n│  scrutinee: A"),
             "{other}"
         );
         let unknown = error(&under("Nope"));

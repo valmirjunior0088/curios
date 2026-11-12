@@ -82,9 +82,8 @@ fn an_order_derivation_needs_the_equality_its_concept_requires() {
 
     let report = error(source);
     assert!(
-        report.contains(
-            "no witness of /std/ops/Eql(Colour) found\n  needed by 'Ord' for its 'Eql' superclass"
-        ),
+        report
+            .contains("wanted: /std/ops/Eql(Colour)\n│  needed by `Ord` for its `Eql` superclass"),
         "{report}"
     );
     assert!(report.contains("satisfy Ord(Colour) { .. }"), "{report}");

@@ -148,8 +148,8 @@ fn an_undetermined_value_implicit_is_reported_as_undetermined_not_undischarged()
 
     let report = error(source);
     assert!(
-        report.contains("implicit argument 'n' of 'pad' was not inferred")
-            && report.contains("no argument or expected type determined it (its type is Nat)")
+        report.contains("implicit argument `n` of `pad` was not inferred")
+            && report.contains("no argument or expected type determined it\n│  its type: Nat")
             && !report.contains("nothing discharged"),
         "the report should say nothing determined the value, got: {report}"
     );
@@ -454,7 +454,7 @@ fn a_candidate_rejected_where_its_implicit_was_born_is_reported_as_one() {
 
     assert!(
         refusal.contains(
-            "the implicit argument 'z' of 'Eq/refl' cannot be Le { y, @ok = /std/Bool/True/qed() }\n  it does not check where the argument was left out:\n    type mismatch\n      inferred: /std/Bool/True\n      expected: Holds(y <= z)"
+            "the implicit argument `z` of `Eq/refl` cannot be Le { y, @ok = /std/Bool/True/qed() }\n│  it does not check where the argument was left out\n│  type mismatch\n│    inferred: /std/Bool/True\n│    expected: Holds(y <= z)"
         ),
         "{refusal}"
     );

@@ -20,9 +20,12 @@ pub use entropy::{Entropy, Mint};
 
 mod span;
 pub use span::{
-    ArchivedNote, ArchivedReport, ArchivedSource, ArchivedSpan, LINE_WIDTH, Note, Report, Source,
-    Span,
+    ArchivedNote, ArchivedReport, ArchivedSource, ArchivedSpan, LINE_WIDTH, Note, Pane, Report,
+    Said, Source, Span,
 };
+
+mod style;
+pub use style::{Kind, Style};
 
 mod interner;
 pub use interner::{Table, intern};

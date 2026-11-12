@@ -90,7 +90,7 @@ fn labeled_fill_of_a_former_superclass_is_unknown() {
         "#;
 
     let message = error(source);
-    assert!(message.contains("'eq4'"), "got: {message}");
+    assert!(message.contains("`eq4`"), "got: {message}");
     assert!(message.contains("no field"), "got: {message}");
 }
 
@@ -274,10 +274,7 @@ fn a_position_past_a_concept_values_methods_is_out_of_bounds() {
         "#;
 
     let report = error(source);
-    assert!(
-        report.contains("tuple index 1 out of bounds (arity 1)"),
-        "{report}"
-    );
+    assert!(report.contains("index: 1\n│  fields: 1"), "{report}");
 }
 
 // A concept value in normal form holds its edges and reads as the literal written in full, so one standing in a type is a metavariable's solution as any value is. Read as a literal of plain entries, its edge was a field too many and the solution was refused.
@@ -344,7 +341,7 @@ fn a_use_field_that_is_no_concept_application_is_refused() {
 
     let report = error(source);
     assert!(
-        report.contains("names 'Nat' as a superclass, but 'Nat' is not a concept application"),
+        report.contains("names `Nat` as a superclass\n│  `Nat` is no concept application"),
         "got: {report}"
     );
 }

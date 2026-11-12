@@ -141,7 +141,7 @@ fn a_ladders_rest_learns_a_conditions_failure_and_nothing_of_a_missed_pattern() 
         "#;
     let report = error(bind);
     assert!(
-        report.contains("type mismatch\n  inferred: True\n  expected: Holds(Bool/xor(b, true))"),
+        report.contains("type mismatch\n│  inferred: True\n│  expected: Holds(Bool/xor(b, true))"),
         "{report}"
     );
 }

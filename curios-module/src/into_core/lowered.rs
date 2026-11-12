@@ -13,7 +13,7 @@ use {
         Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step, Table,
     },
     crate::{Lint, LintKind, LintedBinder, PreparedText},
-    curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Sorted},
+    curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Said, Sorted},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet, HashSet},
@@ -247,7 +247,7 @@ pub enum Consulted {
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 struct Unused {
-    message: String,
+    said: Said,
     at: curios_core::Extent,
     definition: u32,
     ordinal: u32,
@@ -304,7 +304,7 @@ impl LoweredDeclaration {
                 let binder = lint.binder?;
 
                 Some(Unused {
-                    message: lint.message.clone(),
+                    said: lint.said.clone(),
                     at: lint.at?,
                     definition: place(&binder.declaration?)?,
                     ordinal: binder.ordinal,
@@ -769,7 +769,7 @@ impl<'a> Baseline<'a> {
         }
         context.report(declaration.lints.iter().map(|unused| Lint {
             kind: LintKind::UnusedBinder,
-            message: unused.message.clone(),
+            said: unused.said.clone(),
             at: Some(unused.at),
             binder: Some(LintedBinder {
                 declaration: Some(names[unused.definition as usize]),

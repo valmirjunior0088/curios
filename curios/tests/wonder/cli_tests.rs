@@ -55,8 +55,7 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
         String::from_utf8_lossy(&answered.stderr)
     );
     let text = stdout(&answered);
-    assert!(text.starts_with("goal `?`"), "{text}");
-    assert!(text.contains("--> <stdin>:1:20"), "{text}");
+    assert!(text.contains("╰─ goal; <stdin>:1:20"), "{text}");
     // The check is narrated beside the answer, closed by what stopped it.
     let narrated = String::from_utf8_lossy(&answered.stderr);
     assert!(
@@ -114,7 +113,7 @@ fn every_question_about_a_file_no_unit_declares_names_what_its_form_is_declared_
     ] {
         let said = |taken: &str| {
             format!(
-                "note: {file} is in no unit of `/app`, so it {taken} on its own against `/std`: {remedy}"
+                "{file} is in no unit of `/app`, so it {taken} on its own against `/std`: {remedy}"
             )
         };
 
@@ -152,7 +151,7 @@ fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
     assert!(cold.status.success());
     let text = stdout(&cold);
     assert!(
-        text.starts_with("note: stray.crs is in no unit of `/app`"),
+        text.starts_with("stray.crs is in no unit of `/app`"),
         "{text}"
     );
     assert!(
@@ -199,8 +198,7 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     let answered = curios(&root, &["wonder", "-"], module);
     assert!(answered.status.success());
     let text = stdout(&answered);
-    assert!(text.contains("while elaborating w"), "{text}");
-    assert!(text.contains("--> <stdin>:1:24"), "{text}");
+    assert!(text.contains("╰─ error; <stdin>:1:24"), "{text}");
 
     let staged = curios(&root, &["wonder", "--stage", "core", "-"], module);
     let refusal = String::from_utf8_lossy(&staged.stderr);
@@ -226,7 +224,7 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     let refused = stdout(&curios(&root, &["wonder", "my-file.crs"], ""));
     assert!(
         refused.contains(
-            "my-file.crs is written as a module, with no final term, and its stem `my-file` is no name a module can take"
+            "my-file.crs is written as a module, with no final term\n│  its stem `my-file` is no name a module can take"
         ),
         "{refused}"
     );

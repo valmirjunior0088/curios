@@ -57,7 +57,7 @@ fn a_public_name_in_a_private_module_is_told_of_the_module() {
 
     assert!(
         error.contains(
-            "public item 'g' exposes 'T' in its signature, and 'T' is in the private module '/M/Inner'\n  mark '/M/Inner' pub, re-export 'T' beside 'g', or make 'g' private"
+            "the public `g` names `T` in its signature\n  `T` is in the private module `/M/Inner`\n  mark `/M/Inner` `pub`, re-export `T` beside `g`, or make `g` private"
         ),
         "unexpected error: {error}"
     );
@@ -84,8 +84,8 @@ fn a_name_exported_into_a_private_module_is_told_of_that_one() {
     );
 
     assert!(
-        error.contains("'T' is in the private module '/M/Outer'")
-            && error.contains("mark '/M/Outer' pub"),
+        error.contains("`T` is in the private module `/M/Outer`")
+            && error.contains("mark `/M/Outer` `pub`"),
         "unexpected error: {error}"
     );
 }
@@ -108,7 +108,7 @@ fn a_private_name_in_a_private_module_is_told_to_mark_the_name() {
 
     assert!(
         error.contains(
-            "public item 'make' exposes private item 'T' in its signature\n  mark 'T' pub, or make 'make' private"
+            "the public `make` names the private `T` in its signature\n  mark `T` `pub`, or make `make` private"
         ),
         "unexpected error: {error}"
     );

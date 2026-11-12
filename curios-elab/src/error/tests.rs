@@ -81,7 +81,6 @@ fn a_batch_renders_one_report_per_member() {
     let reports = batch.located(&Rc::new(Spelling::default()), &[&anchors]);
 
     assert_eq!(reports.len(), 2);
-    assert!(reports[0].message.starts_with("while elaborating /first:"));
     assert_eq!(
         reports
             .iter()

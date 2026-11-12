@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    curios_common::Source,
+    curios_common::{Source, Style},
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_surface::{Formatted, Width},
@@ -68,7 +68,7 @@ fn the_error_shown_is_what_wonder_prints() {
     let printed: Vec<String> = reports
         .diagnostics
         .iter()
-        .map(|report| report.render())
+        .map(|report| report.rendered(&Style::plain()))
         .collect();
 
     // `wonder` prints its reports a blank line apart, the last ending its line.

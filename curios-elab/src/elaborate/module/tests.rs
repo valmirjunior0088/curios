@@ -88,11 +88,24 @@ fn definitions(items: Vec<Item>) -> Definitions {
     }
 }
 
-/// Every refusal one elaboration reports, rendered.
+/// Every refusal one elaboration reports: the declarations each was raised in, then what it says.
 fn refusals(context: &mut Context, definitions: &Definitions) -> Vec<String> {
     match elaborate_and_zonk_definitions(context, definitions, &[], &Rc::default()) {
         Ok(_) => Vec::new(),
-        Err(error) => error.each().map(Error::to_string).collect(),
+        Err(error) => error
+            .each()
+            .map(|error| match error {
+                Error::InDeclaration { names, .. } => {
+                    let names = names
+                        .iter()
+                        .map(|name| name.faithful().to_string())
+                        .collect::<Vec<_>>();
+
+                    format!("{}: {error}", names.join(", "))
+                }
+                error => error.to_string(),
+            })
+            .collect(),
     }
 }
 
@@ -107,14 +120,8 @@ fn two_independent_refusals_are_both_reported_in_item_order() {
     let reports = refusals(&mut context(), &definitions);
 
     assert_eq!(reports.len(), 2, "{reports:?}");
-    assert!(
-        reports[0].starts_with("while elaborating /a:"),
-        "{reports:?}"
-    );
-    assert!(
-        reports[1].starts_with("while elaborating /c:"),
-        "{reports:?}"
-    );
+    assert!(reports[0].starts_with("/a: "), "{reports:?}");
+    assert!(reports[1].starts_with("/c: "), "{reports:?}");
 }
 
 #[test]
@@ -129,10 +136,7 @@ fn a_dependent_of_a_refused_item_is_withheld_and_reports_nothing() {
     let reports = refusals(&mut context(), &definitions);
 
     assert_eq!(reports.len(), 1, "{reports:?}");
-    assert!(
-        reports[0].starts_with("while elaborating /a:"),
-        "{reports:?}"
-    );
+    assert!(reports[0].starts_with("/a: "), "{reports:?}");
 }
 
 /// A name the lowering reports broken is poisoned before the first item: its own declaration and every dependent are withheld, and the survivors elaborate as if neither had been written.
@@ -227,7 +231,7 @@ fn two_items_that_read_each_other_are_refused_as_one_cycle() {
 
     assert_eq!(reports.len(), 1, "{reports:?}");
     assert!(
-        reports[0].starts_with("while elaborating /a:\n'/a' and '/b' need one another"),
+        reports[0].starts_with("/a: declaration cycle\n  `/a` and `/b` need one another"),
         "{reports:?}"
     );
 }

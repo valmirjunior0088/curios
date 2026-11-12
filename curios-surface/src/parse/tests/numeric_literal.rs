@@ -32,7 +32,10 @@ fn a_numeral_with_a_dangling_dot_is_refused_by_the_rule() {
         ),
         "reported {report}"
     );
-    assert!(report.ends_with("1 | 5.\n      |  ^"), "reported {report}");
+    assert!(
+        report.contains("│  1 │ 5.\n│    │  ^\n"),
+        "reported {report}"
+    );
     assert!("5.0".parse::<Term>().is_ok());
 }
 
@@ -42,13 +45,14 @@ fn a_decimal_with_nothing_before_its_dot_is_refused_by_the_rule() {
     for written in [".5", "-.5", "+.5e3"] {
         let report = written.parse::<Term>().unwrap_err().format();
         assert!(
-            report
-                .contains("a floating-point literal has a digit before its decimal point — `0.5`"),
+            report.contains(
+                "a floating-point literal has a digit before its decimal point, as `0.5` does"
+            ),
             "reported {report}"
         );
         assert!(
-            report.ends_with(&format!(
-                "1 | {written}\n      | {}",
+            report.contains(&format!(
+                "│  1 │ {written}\n│    │ {}\n",
                 "^".repeat(written.len())
             )),
             "reported {report}"
@@ -68,17 +72,17 @@ fn rejects_a_float_literal_that_overflows_to_infinity() {
     // The refusal is the literal's own, spanning it, whether the exponent or the digit count carries it past the range: neither is left for the numeral to reread as an integer and a `.0` projection.
     let exponent = "1.0e309".parse::<Term>().unwrap_err().format();
     assert!(
-        exponent.contains("Float literal overflows Flt"),
+        exponent.contains("this literal overflows `Flt`"),
         "reported {exponent}"
     );
     assert!(
-        exponent.ends_with("1 | 1.0e309\n      | ^^^^^^^"),
+        exponent.contains("│  1 │ 1.0e309\n│    │ ^^^^^^^\n"),
         "reported {exponent}"
     );
     let digits = format!("1{}.0", "0".repeat(309));
     let report = digits.parse::<Term>().unwrap_err().format();
     assert!(
-        report.contains("Float literal overflows Flt"),
+        report.contains("this literal overflows `Flt`"),
         "reported {report}"
     );
     assert!(format!("{digits}e-10").parse::<Term>().is_ok());
@@ -133,7 +137,7 @@ fn the_non_finite_values_are_signed_literals() {
     assert!("+nan.0x".parse::<Term>().is_err());
 }
 
-/// A sign is read once, by the number it leads, so one that touches no magnitude is told what a sign leads. Read by each magnitude for itself, it failed three alternatives at one offset and the report was the first one's word, `Expected 'inf.0'`.
+/// A sign is read once, by the number it leads, so one that touches no magnitude is told what a sign leads. Read by each magnitude for itself, it failed three alternatives at one offset and the report was the first one's word, `expected: `inf.0``.
 #[test]
 fn a_sign_that_touches_no_magnitude_is_told_what_a_sign_leads() {
     for source in [
@@ -155,9 +159,9 @@ fn a_sign_that_touches_no_magnitude_is_told_what_a_sign_leads() {
     }
     // A magnitude that begins and goes wrong is its own to report.
     let overflow = "1.0e999".parse::<Term>().unwrap_err().format();
-    assert!(overflow.contains("overflows Flt"), "{overflow}");
+    assert!(overflow.contains("overflows `Flt`"), "{overflow}");
     let signed = "-1.0e999".parse::<Term>().unwrap_err().format();
-    assert!(signed.contains("overflows Flt"), "{signed}");
+    assert!(signed.contains("overflows `Flt`"), "{signed}");
 }
 
 /// Where a literal is expected and a blank stands, the report says a blank: the end of the file is named at it alone, since a caret before a blank has text after it.
@@ -167,11 +171,14 @@ fn a_literal_expected_at_a_blank_obtains_a_blank() {
         .parse::<Entrypoint>()
         .unwrap_err()
         .format();
-    assert!(blank.contains("Expected ''', obtained a blank"), "{blank}");
+    assert!(
+        blank.contains("expected: `'`\n│  obtained: a blank"),
+        "{blank}"
+    );
 
     let end = "let c = 'a".parse::<Entrypoint>().unwrap_err().format();
     assert!(
-        end.contains("Expected ''', obtained 'end-of-file'"),
+        end.contains("expected: `'`\n│  obtained: the end of the file"),
         "{end}"
     );
 }

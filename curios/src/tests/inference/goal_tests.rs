@@ -17,8 +17,8 @@ fn a_goal_in_a_local_let_annotation_is_reported() {
         /std/print("unreachable\n")
         "#;
     let error = typecheck(source).expect_err("a program with a written goal never compiles");
-    assert!(error.contains("goal `?`"), "{error}");
-    assert!(error.contains("? = Nat"), "{error}");
+    assert!(error.contains("╰─ goal"), "{error}");
+    assert!(error.contains("`Nat` inferred"), "{error}");
 }
 
 #[test]
@@ -33,13 +33,13 @@ fn a_goal_as_a_lambda_domain_is_reported() {
         /std/print("unreachable\n")
         "#;
     let error = typecheck(source).expect_err("a program with a written goal never compiles");
-    assert!(error.contains("goal `?`"), "{error}");
-    assert!(error.contains("? = Nat"), "{error}");
+    assert!(error.contains("╰─ goal"), "{error}");
+    assert!(error.contains("`Nat` inferred"), "{error}");
 }
 
 #[test]
 fn a_goal_as_a_match_motive_is_reported() {
-    // An elided motive is synthesized from the arms, but a written `?` motive does not count as elided, which would synthesize over it and leave it unreported. It is a user-written motive the author is asking about: checked against the eliminator's motive type and reported.
+    // An elided motive is synthesized from the arms, but a written `?` motive does not count as elided, which would synthesize over it and leave it unreported. It is a user-misplaced motive the author is asking about: checked against the eliminator's motive type and reported.
     let source = r#"
         use /std/{Nat, Bool};
 
@@ -49,5 +49,5 @@ fn a_goal_as_a_match_motive_is_reported() {
         /std/print("unreachable\n")
         "#;
     let error = typecheck(source).expect_err("a program with a written goal never compiles");
-    assert!(error.contains("goal `?`"), "{error}");
+    assert!(error.contains("╰─ goal"), "{error}");
 }

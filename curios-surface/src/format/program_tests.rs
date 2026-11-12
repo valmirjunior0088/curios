@@ -39,10 +39,10 @@ fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {
     let refusal = Formatted::from_source(&Source::inline("let x = (\n"), Width::default())
         .expect_err("garbled tail");
     assert!(
-        refusal.starts_with("Expected ')', obtained 'end-of-file'"),
+        refusal.starts_with("syntax error\n│  expected: `)`\n│  obtained: the end of the file"),
         "{refusal}"
     );
-    assert!(refusal.contains("\n    2 | "), "{refusal}");
+    assert!(refusal.contains("\n│  2 │ "), "{refusal}");
 }
 
 #[test]

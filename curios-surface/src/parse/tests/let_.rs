@@ -36,7 +36,7 @@ fn top_let_with_pub() {
     );
 }
 
-/// The optional-type form is local-only: a module-level `let` without a type is refused by the rule, with the caret on the `=`, rather than by the sugar's `Expected '('`, which named one of the two tokens that would have served.
+/// The optional-type form is local-only: a module-level `let` without a type is refused by the rule, with the caret on the `=`, rather than by the sugar's `expected: `(``, which named one of the two tokens that would have served.
 #[test]
 fn let_requires_a_type() {
     let report = "let x = Type;".parse::<Module>().unwrap_err().format();
@@ -46,10 +46,10 @@ fn let_requires_a_type() {
         "reported {report}"
     );
     assert!(
-        report.ends_with("    1 | let x = Type;\n      |       ^"),
+        report.contains("│  1 │ let x = Type;\n│    │       ^\n"),
         "reported {report}"
     );
-    assert!(!report.contains("Expected '('"), "reported {report}");
+    assert!(!report.contains("expected: `(`"), "reported {report}");
 }
 
 /// A member after `and` cannot have its type inferred from a body that may mention its siblings, so a typeless one is refused by the same rule — at the top level and locally.
@@ -68,7 +68,7 @@ fn a_group_member_states_its_type() {
             report.contains("every member after `and` state theirs"),
             "reported {report}"
         );
-        assert!(!report.contains("Expected '('"), "reported {report}");
+        assert!(!report.contains("expected: `(`"), "reported {report}");
     }
 }
 
@@ -143,9 +143,9 @@ fn a_test_takes_no_parameters() {
 fn a_malformed_test_in_a_program_reports_its_own_fault() {
     // The fall-through a contextual word needs ends at the label, so each of these commits and names what it wanted. Falling through instead, the report would land on `ok`, where the tail the item became ran out.
     for (source, expected) in [
-        ("test ok(n: Nat) = Test/assert(true);", "Expected '='"),
-        ("test ok Test/assert(true);", "Expected '='"),
-        ("test ok = Test/assert(true)", "Expected ';'"),
+        ("test ok(n: Nat) = Test/assert(true);", "expected: `=`"),
+        ("test ok Test/assert(true);", "expected: `=`"),
+        ("test ok = Test/assert(true)", "expected: `;`"),
     ] {
         let error = source.parse::<Entrypoint>().unwrap_err().format();
         assert!(error.contains(expected), "{source}\n{error}");

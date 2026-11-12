@@ -1,6 +1,9 @@
 //! Which records one program yields: every refusal, goal and lint it holds, each located at its own term, a lint after the verdict it stands beside, and nothing for a declaration whose only fault is reaching a refused one.
 
-use {super::test_support::*, crate::*, curios_elab::DEFAULT_BUDGET, curios_module::Overlay};
+use {
+    super::test_support::*, crate::*, curios_common::Style, curios_elab::DEFAULT_BUDGET,
+    curios_module::Overlay,
+};
 
 fn of(text: &str) -> Vec<crate::Diagnosis> {
     diagnostics(
@@ -41,9 +44,9 @@ fn a_parse_failure_is_one_error_at_the_offset_the_parser_stopped() {
         .expect("a parse failure is located");
     assert_eq!(span.line_column(), (2, 1));
     assert!(
-        report.render().contains("<stdin>:2:1"),
+        report.rendered(&Style::plain()).contains("<stdin>:2:1"),
         "{}",
-        report.render()
+        report.rendered(&Style::plain())
     );
 }
 
@@ -63,9 +66,9 @@ fn a_refused_type_is_one_error_at_the_term_refused() {
     assert_eq!(span.line_column(), (1, 23));
     // The record renders as the compile path prints: message, then the snippet the span draws.
     assert!(
-        report.render().contains("<stdin>:1:23"),
+        report.rendered(&Style::plain()).contains("<stdin>:1:23"),
         "{}",
-        report.render()
+        report.rendered(&Style::plain())
     );
 }
 
@@ -82,9 +85,11 @@ fn a_refusal_below_the_certifier_is_still_reported() {
     };
     assert_eq!(report.severity, Severity::Error);
     assert!(
-        report.render().contains("does not fit a branch table"),
+        report
+            .rendered(&Style::plain())
+            .contains("does not fit a branch table"),
         "{}",
-        report.render()
+        report.rendered(&Style::plain())
     );
 
     // A mutual value group with no lambda between its members: no forcing order satisfies it, and the erased verifier is what says so.
@@ -94,9 +99,11 @@ fn a_refusal_below_the_certifier_is_still_reported() {
     };
     assert_eq!(report.severity, Severity::Error);
     assert!(
-        report.render().contains("evaluate each other"),
+        report
+            .rendered(&Style::plain())
+            .contains("evaluate each other"),
         "{}",
-        report.render()
+        report.rendered(&Style::plain())
     );
 }
 
@@ -111,13 +118,8 @@ fn every_goal_is_its_own_record_at_its_own_occurrence() {
     assert_eq!(second.severity, Severity::Goal);
     assert_eq!(first.report.span.as_ref().unwrap().line_column(), (1, 21));
     assert_eq!(second.report.span.as_ref().unwrap().line_column(), (2, 21));
-    assert!(
-        first.report.message.starts_with("goal `?`"),
-        "{}",
-        first.report.message
-    );
-    // The message carries no snippet — the span is the record's, and the transport draws or does not draw it.
-    assert!(!first.report.message.contains("-->"));
+    // What the report says carries no pane — the span is the record's, and the transport draws or does not draw it.
+    assert_eq!(first.report.message(), "`/std/Nat` expected");
 }
 
 /// A lint is a record of its own severity, located at the word it is about, rendered as any report is.
@@ -129,12 +131,15 @@ fn a_lint_is_its_own_record_at_the_word() {
     };
 
     assert_eq!(report.severity, Severity::Lint);
-    assert_eq!(report.report.message, "unused import `Bool`; delete it");
+    assert_eq!(
+        report.report.message(),
+        "unused import\n  `Bool` is never used\n  delete it"
+    );
     assert_eq!(report.report.span.as_ref().unwrap().line_column(), (1, 11));
     assert!(
-        report.render().contains("<stdin>:1:11"),
+        report.rendered(&Style::plain()).contains("<stdin>:1:11"),
         "{}",
-        report.render()
+        report.rendered(&Style::plain())
     );
 }
 
@@ -158,10 +163,10 @@ fn a_binder_only_a_proof_the_elaborator_wrote_reads_is_not_reported() {
         of(source)
             .into_iter()
             .filter(|report| report.severity == Severity::Lint)
-            .map(|report| report.report.message)
+            .map(|report| report.report.message())
             .collect::<Vec<_>>()
     };
-    let only_q = ["unused binder `q`; write `_` in its name's place"];
+    let only_q = ["unused binder\n  `q` is never used\n  write `_` in its name's place"];
 
     assert_eq!(lints(&format!("{credited}/std/print(\"\")")), only_q);
     assert_eq!(
@@ -202,9 +207,9 @@ fn a_library_reports_its_own_lints() {
     };
     assert_eq!(report.severity, Severity::Lint);
     assert!(
-        report.render().contains("lib.crs:1:16"),
+        report.rendered(&Style::plain()).contains("lib.crs:1:16"),
         "{}",
-        report.render()
+        report.rendered(&Style::plain())
     );
 }
 
@@ -235,9 +240,9 @@ fn a_library_reports_an_ill_typed_test_without_compiling_a_tail() {
     };
     assert_eq!(report.severity, Severity::Error);
     assert!(
-        report.render().contains("lib.crs:4:17"),
+        report.rendered(&Style::plain()).contains("lib.crs:4:17"),
         "{}",
-        report.render()
+        report.rendered(&Style::plain())
     );
 }
 
@@ -289,7 +294,7 @@ fn a_withheld_witness_leaves_its_consumers_silent() {
     };
     assert_eq!(record.severity, Severity::Error);
     assert!(
-        record.report.message.contains("expected a term"),
+        record.report.message().contains("expected: a term"),
         "{}",
         record.report.render()
     );

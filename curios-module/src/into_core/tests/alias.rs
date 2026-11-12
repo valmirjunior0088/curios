@@ -16,7 +16,7 @@ fn transparent_alias_exposure_audits_the_complete_representation() {
     );
 
     assert!(
-        error.contains("exposes private item 'Hidden'"),
+        error.contains("names the private `Hidden`"),
         "unexpected error: {error}"
     );
 }
@@ -35,7 +35,7 @@ fn parameterized_transparent_alias_preserves_representation_provenance() {
     );
 
     assert!(
-        error.contains("exposes private item 'Hidden'"),
+        error.contains("names the private `Hidden`"),
         "unexpected error: {error}"
     );
 }
@@ -54,7 +54,7 @@ fn specialized_direct_type_alias_preserves_representation_provenance() {
     );
 
     assert!(
-        error.contains("exposes private item 'Hidden'"),
+        error.contains("names the private `Hidden`"),
         "unexpected error: {error}"
     );
 }
@@ -73,7 +73,7 @@ fn reordered_direct_type_alias_preserves_representation_provenance() {
     );
 
     assert!(
-        error.contains("exposes private item 'Hidden'"),
+        error.contains("names the private `Hidden`"),
         "unexpected error: {error}"
     );
 }
@@ -93,7 +93,7 @@ fn chained_direct_type_aliases_preserve_representation_provenance() {
     );
 
     assert!(
-        error.contains("exposes private item 'Hidden'"),
+        error.contains("names the private `Hidden`"),
         "unexpected error: {error}"
     );
 }
@@ -112,7 +112,7 @@ fn constant_direct_type_family_alias_preserves_representation_provenance() {
     );
 
     assert!(
-        error.contains("exposes private item 'Hidden'"),
+        error.contains("names the private `Hidden`"),
         "unexpected error: {error}"
     );
 }
@@ -131,7 +131,7 @@ fn direct_type_alias_audits_private_body_dependencies() {
     );
 
     assert!(
-        error.contains("exposes private item 'Hidden'"),
+        error.contains("names the private `Hidden`"),
         "unexpected error: {error}"
     );
 }
@@ -232,7 +232,7 @@ fn non_type_identity_alias_still_preserves_representation_provenance() {
     );
 
     assert!(
-        error.contains("exposes private item 'Hidden'"),
+        error.contains("names the private `Hidden`"),
         "unexpected error: {error}"
     );
 }

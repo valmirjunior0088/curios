@@ -291,20 +291,20 @@ impl Qualifier {
         Self::of(segments[..segments.len().saturating_sub(1)].to_vec())
     }
 
-    /// The line a report adds under an unresolved `written` that this qualifier could have meant: reached by its absolute path or its own import, and — nested below a root — through its parent's name too, `Eq/cong` once `Eq` is in scope; a root's direct child has no route shorter than the import or the absolute path. The `unbound variable` and `unresolved qualifier` reports both spell the way out with this one line, so the two cannot drift.
-    pub fn reach_hint(&self, written: &str) -> String {
+    /// The two facts a report adds under an unresolved `written` that this qualifier could have meant, what it is and how it is written: reached by its absolute path or its own import, and — nested below a root — through its parent's name too, `Eq/cong` once `Eq` is in scope; a root's direct child has no route shorter than the import or the absolute path. Every report of a name not found spells the way out with these, so no two of them drift.
+    pub fn reach_hint(&self, written: &str) -> [String; 2] {
         let module = self.without_last();
         let import = format!("`use {}/{{{written}}};`", module.join());
+        let is = format!("`{written}` is `{}`", self.join());
         match module.segments().len() {
-            0 | 1 => format!(
-                "  `{written}` is `{}`: write it absolute, or {import}",
-                self.join()
-            ),
-            _ => format!(
-                "  `{written}` is `{}`: write `{parent}/{written}` if `{parent}` is imported, or {import}",
-                self.join(),
-                parent = module.last()
-            ),
+            0 | 1 => [is, format!("write it absolute, or {import}")],
+            _ => [
+                is,
+                format!(
+                    "write `{parent}/{written}` if `{parent}` is imported, or {import}",
+                    parent = module.last()
+                ),
+            ],
         }
     }
 

@@ -1,7 +1,6 @@
 use {
-    super::{Mark, Parsed, Parser, ParserError, ParserState},
+    super::{Mark, Parsed, Parser, ParserError, ParserState, Stated},
     curios_unicode::is_default_ignorable,
-    std::borrow::Cow,
 };
 
 /// Succeeds with `a` without consuming input — the monadic return, for injecting an already-known value into a combinator chain.
@@ -10,7 +9,7 @@ pub fn pure<'a, A>(a: A) -> impl Parser<'a, A> {
 }
 
 /// Always fails with `message` at the current offset. Since it consumes nothing, the failure is recoverable by an enclosing [`Parser::or`] at the same position — the usual way to reject a value from inside [`Parser::flat_map`] after semantic inspection.
-pub fn fail<'a, A>(message: impl Into<Cow<'static, str>>) -> impl Parser<'a, A> {
+pub fn fail<'a, A>(message: impl Into<Stated>) -> impl Parser<'a, A> {
     move |state: ParserState<'a>| -> Parsed<'a, A> { Err(ParserError::new(state, message)) }
 }
 
@@ -27,7 +26,7 @@ pub fn settled<'a, A>(result: Result<A, ParserError>) -> impl Parser<'a, A> {
 /// [`fail`] about the text from `start` to the current offset: only the reported span reaches back, and the failure still sits at the current offset, so it commits and ranks in [`Parser::or`]'s tie-break exactly as `fail` would — for a word read and refused, so the caret underlines the word rather than standing after it.
 pub fn fail_from<'a, A, S>(start: &Mark, message: S) -> impl Parser<'a, A> + use<'a, A, S>
 where
-    S: Into<Cow<'static, str>>,
+    S: Into<Stated>,
 {
     let start = start.offset();
     move |state: ParserState<'a>| -> Parsed<'a, A> {
@@ -38,7 +37,7 @@ where
 /// The failure [`fail_from`] would report here, as a value and without failing: for a grammar that reads a form it will refuse before it has read the token that makes the refusal its own, and [`raise`]s it once it has. The report covers the text from `start` to the current offset, as `fail_from`'s does.
 pub fn refusal<'a, S>(start: &Mark, message: S) -> impl Parser<'a, ParserError> + use<'a, S>
 where
-    S: Into<Cow<'static, str>>,
+    S: Into<Stated>,
 {
     let start = start.offset();
     move |state: ParserState<'a>| Ok((ParserError::new(state, message).from(start), state))
@@ -58,7 +57,10 @@ pub fn take_n<'a>(expected: usize) -> impl Parser<'a, &'a str> {
         Some((obtained, state)) => Ok((obtained, state)),
         None => Err(ParserError::new(
             state,
-            format!("Expected {expected} character(s), obtained 'end-of-file'"),
+            vec![
+                format!("expected: {expected} more characters"),
+                "obtained: the end of the file".to_string(),
+            ],
         )),
     }
 }
@@ -77,7 +79,7 @@ pub fn ahead<'a>() -> impl Parser<'a, &'a str> {
 pub fn take_eof<'a>() -> impl Parser<'a, ()> {
     |state: ParserState<'a>| match state.is_finished() {
         true => Ok(((), state)),
-        false => Err(ParserError::new(state, "Expected 'end-of-file'")),
+        false => Err(ParserError::new(state, "expected: the end of the file")),
     }
 }
 
@@ -113,8 +115,8 @@ pub fn obtained(rest: &str, limit: usize) -> String {
         .collect();
 
     match (found.is_empty(), rest.is_empty()) {
-        (false, _) => format!("'{}'", shown(&found)),
-        (true, true) => "'end-of-file'".to_string(),
+        (false, _) => format!("`{}`", shown(&found)),
+        (true, true) => "the end of the file".to_string(),
         (true, false) => "a blank".to_string(),
     }
 }

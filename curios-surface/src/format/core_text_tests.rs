@@ -107,7 +107,7 @@ fn core_text_is_read_where_the_path_says_so() {
     let refusal = Formatted::from_source(&Source::held("a.crs", "#{a = 1} x\n"), Width::default())
         .expect_err("a program writes no decorator");
 
-    assert!(refusal.contains("obtained '#'"), "{refusal}");
+    assert!(refusal.contains("obtained: `#`"), "{refusal}");
 }
 
 /// Every `.crsc` under `directory`, skipping the directories that hold generated or foreign trees, and `editors/`, whose files are highlighting fixtures for the editor grammars, as [`collect_sources`] skips it.

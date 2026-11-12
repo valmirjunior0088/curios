@@ -217,7 +217,7 @@ fn entrypoint_parses_capture_tail_comments() {
 fn a_literal_mismatch_quotes_the_token_alone() {
     let report = "match n | 0 = 1 end".parse::<Term>().unwrap_err().format();
     assert!(
-        report.contains("Expected '=>', obtained '='"),
+        report.contains("expected: `=>`\n│  obtained: `=`"),
         "reported {report}"
     );
     assert!(!report.contains("'= '"), "reported {report}");
@@ -243,19 +243,19 @@ fn a_comment_opens_with_a_space_or_ends_its_line() {
 fn a_construct_with_a_discriminating_prefix_reports_inside_itself() {
     for (source, expected) in [
         // A struct literal, past its `Name {`.
-        ("P { x = 1 ", "Expected '}'"),
-        ("P { x = @ }", "expected a term, obtained '@'"),
+        ("P { x = 1 ", "expected: `}`"),
+        ("P { x = @ }", "expected: a term\n│  obtained: `@`"),
         // A lambda, past its `=>`.
-        ("(x) => @", "expected a term, obtained '@'"),
+        ("(x) => @", "expected: a term\n│  obtained: `@`"),
         // A motive, past its `:`.
         (
             "match b: @ | true => 1 end",
-            "expected a term, obtained '@'",
+            "expected: a term\n│  obtained: `@`",
         ),
         // A tuple-type field, past its `:`.
-        ("{ x: @ }", "expected a term, obtained '@'"),
+        ("{ x: @ }", "expected: a term\n│  obtained: `@`"),
         // A labeled tuple field, past its guarded `=`.
-        ("(x = @)", "expected a term, obtained '@'"),
+        ("(x = @)", "expected: a term\n│  obtained: `@`"),
         // A block string, past its opener and newline.
         (
             "\"\"\"\n text\n",

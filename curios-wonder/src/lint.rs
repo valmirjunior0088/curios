@@ -4,7 +4,7 @@
 
 use {
     crate::{Asked, Diagnosed, Severity, Telling, answer},
-    curios_common::{Qualifier, Report},
+    curios_common::{Kind, Qualifier, Report, Said},
     curios_module::Overlay,
     curios_package::Selection,
     std::collections::BTreeSet,
@@ -40,6 +40,7 @@ pub fn lint(
     };
 
     let mut seen = Renderings::default();
+    let reader = telling.reader();
     let mut reached = BTreeSet::new();
     let mut linted = Linted::default();
     let mut unstored = None;
@@ -54,7 +55,7 @@ pub fn lint(
         // The first, since every subject of a package asks one store.
         unstored = unstored.or(refusal);
         for diagnostic in diagnostics {
-            if seen.insert_rendered(diagnostic.render()) {
+            if seen.insert_rendered(diagnostic.rendered(&reader)) {
                 match diagnostic.severity {
                     Severity::Lint => linted.lints += 1,
                     Severity::Error => linted.errors += 1,
@@ -68,8 +69,10 @@ pub fn lint(
 
     if let Some(dependencies) = dependencies {
         for name in unused_dependencies(&dependencies, &reached) {
-            let rendered =
-                Report::unlocated(format!("unused dependency `{name}`; delete its row")).render();
+            let mut said = Said::line("unused dependency");
+            said.stating(format_args!("`{name}` is never used"));
+            said.stating("delete its row");
+            let rendered = Report::of(None, said).rendered(Kind::Lint, &reader);
             if seen.insert_rendered(rendered) {
                 linted.lints += 1;
             }

@@ -39,8 +39,8 @@ fn a_proof_handed_to_an_implicit_type_is_reported_as_a_proposition() {
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
         error.contains(
-            "a proposition was given where the implicit argument 'A' of 'keep' takes a type"
-        ) && error.contains("True is a proposition"),
+            "a proposition was given where the implicit argument `A` of `keep` takes a type"
+        ) && error.contains("given: True"),
         "unexpected report: {error}"
     );
     assert!(!error.contains("expected: ?"), "unexpected report: {error}");
@@ -71,8 +71,8 @@ fn a_value_handed_to_an_implicit_proposition_is_reported_as_a_type() {
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
         error.contains(
-            "a type was given where the implicit argument 'P' of 'proves' takes a proposition"
-        ) && error.contains("Nat is a type"),
+            "a type was given where the implicit argument `P` of `proves` takes a proposition"
+        ) && error.contains("given: Nat"),
         "unexpected report: {error}"
     );
     assert!(!error.contains("expected: ?"), "unexpected report: {error}");
@@ -112,7 +112,7 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     assert!(
         error.contains("`cong` is not in scope")
             && error.contains(
-                "`cong` is `/std/Eq/cong`: write `Eq/cong` if `Eq` is imported, or `use /std/Eq/{cong};`"
+                "`cong` is `/std/Eq/cong`\n│  write `Eq/cong` if `Eq` is imported, or `use /std/Eq/{cong};`"
             ),
         "unexpected report: {error}"
     );
@@ -127,7 +127,7 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
         error.contains("`Bool` is not in scope")
-            && error.contains("`Bool` is `/std/Bool`: write it absolute, or `use /std/{Bool};`"),
+            && error.contains("`Bool` is `/std/Bool`\n│  write it absolute, or `use /std/{Bool};`"),
         "unexpected report: {error}"
     );
     assert!(
@@ -178,7 +178,7 @@ fn goal_reports_spell_no_universe_instances() {
     let error = compile(source).unwrap_err();
 
     assert_eq!(
-        error.matches("goal `?`").count(),
+        error.matches("╰─ goal").count(),
         2,
         "unexpected error: {error}"
     );
@@ -358,7 +358,7 @@ fn an_abstract_witness_folds_back_to_its_operator() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
     assert!(error.contains("a + a"), "operator not folded: {error}");
     assert!(
         !error.contains(").0("),
@@ -397,7 +397,7 @@ fn goal_types_spell_negated_equality_as_neq() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
     assert!(error.contains("1 != 2"), "unexpected error: {error}");
     assert!(!error.contains("witness"), "unexpected error: {error}");
 }
@@ -414,7 +414,7 @@ fn a_wide_goal_type_breaks_across_lines_in_the_report() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
     assert!(
         error.contains("first_argument: Nat,\n"),
         "expected a broken binder list: {error}"
@@ -434,9 +434,9 @@ fn a_hard_error_beside_a_goal_is_reported_with_it() {
     let error = compile(source).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
     assert!(
-        error.find("type mismatch") < error.find("goal `?`"),
+        error.find("type mismatch") < error.find("╰─ goal"),
         "the refusal comes first: {error}"
     );
 }
@@ -499,7 +499,7 @@ fn a_typed_mistake_names_what_is_written_instead() {
     "#,
     );
     assert!(
-        pair.contains("introduced a tuple") && !pair.contains("unit type"),
+        pair.contains("unexpected tuple") && !pair.contains("unit type"),
         "unexpected report: {pair}"
     );
 
@@ -511,8 +511,7 @@ fn a_typed_mistake_names_what_is_written_instead() {
     "#,
     );
     assert!(
-        curried.contains("wrong number of arguments: expected 1, got 2")
-            && curried.contains("`f(a)(b)`"),
+        curried.contains("written: 2\n│  expected: 1") && curried.contains("`f(a)(b)`"),
         "unexpected report: {curried}"
     );
 
@@ -528,8 +527,7 @@ fn a_typed_mistake_names_what_is_written_instead() {
     "#,
     );
     assert!(
-        surplus.contains("wrong number of arguments: expected 1, got 2")
-            && !surplus.contains("`f(a)(b)`"),
+        surplus.contains("written: 2\n│  expected: 1") && !surplus.contains("`f(a)(b)`"),
         "unexpected report: {surplus}"
     );
 }

@@ -126,8 +126,7 @@ fn struct_wrong_field_count_rejected() {
         "#,
     );
     assert!(
-        short.contains("has 2 field(s) but the literal supplies 1")
-            && short.contains("missing: snd"),
+        short.contains("has 2 fields\n│  written: 1") && short.contains("missing: snd"),
         "unexpected error: {short}"
     );
 
@@ -140,8 +139,7 @@ fn struct_wrong_field_count_rejected() {
         "#,
     );
     assert!(
-        long.contains("has 2 field(s) but the literal supplies 3")
-            && long.contains("no such field: third"),
+        long.contains("has 2 fields\n│  written: 3") && long.contains("no such field: third"),
         "unexpected error: {long}"
     );
 }
@@ -170,7 +168,7 @@ fn struct_literal_non_struct_head_rejected() {
         "#;
 
     let error = error(source);
-    assert!(error.contains("struct type"), "unexpected error: {error}");
+    assert!(error.contains("not a struct"), "unexpected error: {error}");
 }
 
 // A `Prop`-sorted struct whose fields are all propositions is a sub-singleton: every projection lands in `Prop`, so proof irrelevance leaks nothing. It is accepted, and — its content being non-informative — erases away: the program compiles and runs, the projected proof contributing no runtime code while the ordinary `Nat` computation still produces its result.
@@ -345,10 +343,7 @@ fn a_literal_head_with_nothing_written_is_the_application() {
         /std/print("no")
         "#;
     let report = error(refused);
-    assert!(
-        report.contains("wrong number of arguments: expected 2, got 0"),
-        "{report}"
-    );
+    assert!(report.contains("written: 0\n│  expected: 2"), "{report}");
 
     let accepted = r#"
         use /std/{Nat};

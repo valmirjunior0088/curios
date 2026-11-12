@@ -78,7 +78,7 @@ fn a_solved_goal_gets_no_suggestions() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("? ="), "unexpected error: {error}");
+    assert!(error.contains("` inferred"), "unexpected error: {error}");
     assert!(!error.contains('\u{2248}'), "unexpected error: {error}");
 }
 
@@ -145,7 +145,7 @@ fn two_goals_are_each_offered_the_others_definition() {
     "#;
 
     let error = compile(source).unwrap_err();
-    let reports: Vec<&str> = error.split("goal `?`").collect();
+    let reports: Vec<&str> = error.split("\n\n").collect();
     let left = reports
         .iter()
         .find(|report| report.contains("let left("))
@@ -274,7 +274,7 @@ fn an_import_is_offered_only_below_its_use() {
     "#;
 
     let error = compile(source).unwrap_err();
-    let reports: Vec<&str> = error.split("goal `?`").collect();
+    let reports: Vec<&str> = error.split("\n\n").collect();
     let above = reports
         .iter()
         .find(|report| report.contains("let above("))
@@ -308,7 +308,7 @@ fn a_nested_modules_import_stays_in_its_body() {
     "#;
 
     let error = compile(source).unwrap_err();
-    let reports: Vec<&str> = error.split("goal `?`").collect();
+    let reports: Vec<&str> = error.split("\n\n").collect();
     let inner = reports
         .iter()
         .find(|report| report.contains("let inner("))

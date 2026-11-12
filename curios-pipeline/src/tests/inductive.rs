@@ -32,7 +32,7 @@ fn projection_through_a_stuck_inductive_payload_lowers() {
 
 #[test]
 fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
-    // `Result/success((a, a))` checked against a known `Result(...)`. The tuple is an introduction form whose parameter type is the inserted implicit `?A`, so it can't be checked until `?A` is known. Elaboration postpones it, unifies the result against the expected `Result` — solving `?A` (the success type, which the tuple's own result witnesses) and the *phantom* `?E` (the failure type, carried only by the expected type) — then re-checks the tuple. Guards the result-directed argument order in `elaborate_apply`; without it this fails "introduced a tuple where the expected type is not a tuple type".
+    // `Result/success((a, a))` checked against a known `Result(...)`. The tuple is an introduction form whose parameter type is the inserted implicit `?A`, so it can't be checked until `?A` is known. Elaboration postpones it, unifies the result against the expected `Result` — solving `?A` (the success type, which the tuple's own result witnesses) and the *phantom* `?E` (the failure type, carried only by the expected type) — then re-checks the tuple. Guards the result-directed argument order in `elaborate_apply`; without it this fails "unexpected tuple where the unexpected tuple".
     let source = r#"
         use /std/{Result};
         use /std/{Nat};
@@ -71,7 +71,7 @@ fn match_arm_arity_is_checked_statically() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("constructor 'success' takes 1 argument(s) but the match arm binds 2"),
+        error.contains("`success` takes 1 payload\n│  written: 2"),
         "unexpected error: {error}"
     );
 }
@@ -123,7 +123,7 @@ fn match_on_a_non_inductive_scrutinee_is_rejected_directly() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("matched inductive constructors on a non-inductive type"),
+        error.contains("constructor arms match a value of an inductive type"),
         "unexpected error: {error}"
     );
 }
@@ -234,7 +234,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
     );
     let error = compile(&under).unwrap_err();
     assert!(
-        error.contains("motive binds 1 name(s)") && error.contains("needs 2"),
+        error.contains("the motive binds 1 name") && error.contains("needs 2"),
         "unexpected error: {error}"
     );
 
@@ -250,7 +250,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
     );
     let error = compile(&over).unwrap_err();
     assert!(
-        error.contains("motive binds 3 name(s)") && error.contains("needs 2"),
+        error.contains("the motive binds 3 names") && error.contains("needs 2"),
         "unexpected error: {error}"
     );
 
@@ -577,7 +577,7 @@ fn an_indexed_familys_type_takes_its_parameters_and_then_its_indices() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("? = (T: Type) -> (n: Nat) -> Type"),
+        error.contains("`(T: Type) -> (n: Nat) -> Type` inferred"),
         "unexpected error: {error}"
     );
 }
@@ -615,7 +615,7 @@ fn an_indexed_family_applied_in_one_call_is_refused() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("wrong number of arguments: expected 1, got 2"),
+        error.contains("written: 2\n│  expected: 1"),
         "unexpected error: {error}"
     );
 }
@@ -638,7 +638,7 @@ fn a_familys_implicit_parameters_still_take_a_call_of_their_own() {
     "#;
     let error = compile(refused).unwrap_err();
     assert!(
-        error.contains("wrong number of arguments: expected 0, got 2"),
+        error.contains("written: 2\n│  expected: 0"),
         "unexpected error: {error}"
     );
 }

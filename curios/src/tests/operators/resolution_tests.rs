@@ -25,7 +25,7 @@ fn an_operator_with_no_literal_operand_takes_no_default() {
         "#,
     );
     assert!(
-        report.contains("the type of parameter 'x' was never determined"),
+        report.contains("the type of the parameter `x` was never determined"),
         "unexpected report:\n{report}"
     );
 }

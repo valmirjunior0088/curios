@@ -380,7 +380,10 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, l
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → refused: `run` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -400,7 +403,10 @@ compile SUBJECT — Program (its own file), store Write, leaves Executable, opti
   work/app: stray.crs → refused: `compile` files what it builds under the package that declares it, and <root>/work/app/stray.crs has none: say where, as in `curios compile <root>/work/app/stray.crs --output stray`
   work/app: nested/lib.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → refused: `compile` files what it builds under the package that declares it, and <root>/scratch.crs has none: say where, as in `curios compile <root>/scratch.crs --output scratch`
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -420,7 +426,10 @@ compile SUBJECT --output out — Program (its own file), store Write, leaves Exe
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -440,7 +449,10 @@ document SUBJECT — Library, store Write, leaves Pages, options --std --output 
   work/app: stray.crs → refused: `document` takes a library, and a program is not one
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → refused: `document` takes a library, and a program is not one
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → library app
@@ -462,7 +474,10 @@ test SUBJECT — Any, store Write, leaves Nothing, options --target --port --fil
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → entire app
@@ -504,7 +519,10 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → entire app
@@ -524,7 +542,10 @@ format SUBJECT — Files, store None, leaves Rewritten, options --check --width 
   work/app: stray.crs → files stray.crs within 100
   work/app: nested/lib.crs → files nested/lib.crs within 100
   work/app: <root>/scratch.crs → files <root>/scratch.crs within 100
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → files <root>/work/app/lib.crs <root>/work/app/util.crs <root>/work/app/serve.crs <root>/work/app/helper.crs deep.crs <root>/work/app/bench.crs within 100
@@ -544,7 +565,10 @@ wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --st
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → entire app
@@ -564,7 +588,10 @@ wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --c
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → entire app
@@ -584,7 +611,10 @@ wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests 
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → refused: `wonder --cost` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -604,7 +634,10 @@ wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, o
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -624,7 +657,10 @@ wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --t
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → refused: `wonder --stage` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -644,7 +680,10 @@ wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, optio
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -664,7 +703,10 @@ wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing,
   work/app: stray.crs → loose stray.crs unlinked
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
-  work/app: missing.crs → refused: failed to read <root>/work/app/missing.crs: No such file or directory (os error 2)
+  work/app: missing.crs → refused: unreadable file
+│  reading: <root>/work/app/missing.crs
+│  No such file or directory (os error 2)
+╰─ error
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve

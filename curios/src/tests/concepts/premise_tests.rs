@@ -182,7 +182,10 @@ fn a_type_at_the_registered_dictionary_prints_as_written() {
         "#;
 
     let message = error(source);
-    assert!(message.contains("? = Slot(Nat, Str)"), "got: {message}");
+    assert!(
+        message.contains("`Slot(Nat, Str)` inferred"),
+        "got: {message}"
+    );
 }
 
 // A concept's premise is a superclass field. A `use` parameter would index the concept by a dictionary, which no witness key reads, and the refusal names the rule.
@@ -202,7 +205,7 @@ fn a_concept_takes_no_use_parameter() {
     let message = error(source);
     assert!(
         message.contains(
-            "concept `Keyed` takes a `use` parameter: a concept states a premise as a superclass field"
+            "the concept `Keyed` takes a `use` parameter\n│  a concept states a premise as a superclass field"
         ),
         "got: {message}"
     );
@@ -244,7 +247,7 @@ fn a_literal_head_is_held_to_the_formers_marks() {
 
     let message = error(source);
     assert!(
-        message.contains("wrong number of arguments"),
+        message.contains("argument count mismatch"),
         "got: {message}"
     );
 }

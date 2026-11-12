@@ -90,7 +90,7 @@ fn two_spines_that_give_an_implicit_two_values_refuse_the_call() {
         )));
 
         assert!(
-            report.contains("two types each give the implicit argument 'xs' of 'pair' a value, and the values differ")
+            report.contains("two types each give the implicit argument `xs` of `pair` a value, and the values differ")
                 && report.contains(&format!("one: {one}"))
                 && report.contains(&format!("another: {another}")),
             "unexpected report for `pair({arguments})`:\n{report}"

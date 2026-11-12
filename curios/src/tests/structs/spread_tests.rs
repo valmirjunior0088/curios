@@ -224,10 +224,7 @@ fn struct_spread_non_struct_base_rejected() {
         "#;
 
     let error = error(source);
-    assert!(
-        error.contains("must itself be"),
-        "unexpected error: {error}"
-    );
+    assert!(error.contains("is itself"), "unexpected error: {error}");
 }
 
 // Nor does a same-shaped *other* record.
@@ -243,10 +240,7 @@ fn struct_spread_wrong_struct_base_rejected() {
         "#;
 
     let error = error(source);
-    assert!(
-        error.contains("must itself be"),
-        "unexpected error: {error}"
-    );
+    assert!(error.contains("is itself"), "unexpected error: {error}");
 }
 
 // A spread is construction, so a private-representation struct cannot be spread-copied outside its declaring module either.

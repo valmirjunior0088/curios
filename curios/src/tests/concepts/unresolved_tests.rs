@@ -51,7 +51,7 @@ fn a_missing_witness_names_a_curried_head_by_its_innermost_reference() {
 
     let report = error(source);
     assert!(
-        report.contains("needed by 'Fmt/print'"),
+        report.contains("needed by `Fmt/print`"),
         "expected the head named through the spine:\n{report}"
     );
 }
@@ -70,7 +70,7 @@ fn a_missing_witness_names_the_premise_by_position() {
 
     let report = error(source);
     assert!(
-        report.contains("needed by 'f' for its 1st 'use' premise"),
+        report.contains("needed by `f` for its 1st `use` premise"),
         "expected the premise named by position:\n{report}"
     );
 }
@@ -90,7 +90,7 @@ fn a_later_premise_is_named_by_its_own_position() {
 
     let report = error(source);
     assert!(
-        report.contains("needed by 'g' for its 2nd 'use' premise"),
+        report.contains("needed by `g` for its 2nd `use` premise"),
         "expected the second premise named as the second:\n{report}"
     );
 }
@@ -106,10 +106,7 @@ fn a_missing_witness_over_a_nominal_type_spells_its_name() {
         /std/print(spelled)
         "#,
     );
-    assert!(
-        report.contains("no witness of Spell(Opaque) found"),
-        "{report}"
-    );
+    assert!(report.contains("wanted: Spell(Opaque)"), "{report}");
 }
 
 // A premise a witness could not have discharged is named by the witness that needed it. A witness is anonymous, so its minted name is nothing a reader can find; its concept and the head it occupies are what coherence names it by.
@@ -125,7 +122,7 @@ fn a_missing_premise_names_the_witness_that_needed_it() {
     );
     assert!(
         report.contains(
-            "no witness of Show(Foo) found\n  needed by the witness of 'Show' for head 'List' for its 1st 'use' premise"
+            "wanted: Show(Foo)\n│  needed by the witness of `Show` for head `List` for its 1st `use` premise"
         ) && !report.contains("witness~"),
         "{report}"
     );

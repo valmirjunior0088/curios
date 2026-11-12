@@ -30,7 +30,7 @@ use test_runner::*;
 
 use {
     curios::{bindings_of, optimize},
-    curios_common::Source,
+    curios_common::{Source, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost},
@@ -76,7 +76,8 @@ fn install_profiling(path: PathBuf) {
 
 /// The process-level failure split: a written-goal batch is incomplete development state (exit 2), everything else a hard error (exit 1). A command that could not get to its end hands `main` the report of why; one that got there and found something failed has said so itself, and hands over only how the process ends ([`Concluded`]).
 enum Failure {
-    Incomplete(String),
+    /// A compile that stopped, with what it reported: rendered where it is printed, for whoever reads it there.
+    Stopped(CompileError),
     Error(String),
     Concluded(Concluded),
 }
@@ -99,12 +100,7 @@ impl From<String> for Failure {
 
 impl From<CompileError> for Failure {
     fn from(error: CompileError) -> Self {
-        match error {
-            CompileError::Incomplete(_) => Failure::Incomplete(error.to_string()),
-            CompileError::Failure(_) | CompileError::Mixed { .. } => {
-                Failure::Error(error.to_string())
-            }
-        }
+        Failure::Stopped(error)
     }
 }
 
@@ -174,14 +170,23 @@ fn dispatch() -> Result<(), Failure> {
     }
 
     // Decided once, before anything is written: asked for or refused outright, and otherwise on where standard error goes and whether the reader has said `NO_COLOR`, which a value that is not empty says.
-    paint(match cli.color {
+    let seen = |terminal: bool| match cli.color {
         Color::Always => true,
         Color::Never => false,
         Color::Auto => {
-            io::stderr().is_terminal()
-                && env::var_os("NO_COLOR").is_none_or(|unpainted| unpainted.is_empty())
+            terminal && env::var_os("NO_COLOR").is_none_or(|unpainted| unpainted.is_empty())
         }
+    };
+    let stood = env::current_dir().and_then(|here| here.canonicalize()).ok();
+    // Each stream has a reader of its own: an answer redirected to a file is written no colour while the narration beside it, on a terminal, is.
+    paint(Style {
+        here: stood.clone(),
+        painted: seen(io::stderr().is_terminal()),
     });
+    let answered = Style {
+        here: stood,
+        painted: seen(io::stdout().is_terminal()),
+    };
 
     let Cli { mode, .. } = cli;
 
@@ -316,7 +321,7 @@ fn dispatch() -> Result<(), Failure> {
             } = lint(
                 elaboration.budget,
                 contract.admit_any(subject, manifest, &here()?)?,
-                &mut Asking::checking(),
+                &mut Asking::checking(answered.clone()),
             )?;
             // The count of lints always, since it is what the command is asked for, and of what else was reported where anything was.
             let counted = |count: usize, one: &str| match count {
@@ -730,17 +735,17 @@ fn dispatch() -> Result<(), Failure> {
             Query::Check => wonder_diagnostics(
                 elaboration.budget,
                 contract.admit_any(subject, manifest, &here()?)?,
-                &mut Asking::checking(),
+                &mut Asking::checking(answered.clone()),
             )?,
             Query::Tests => wonder_tests(
                 elaboration.budget,
                 contract.admit_any(subject, manifest, &here()?)?,
-                &mut Asking::checking(),
+                &mut Asking::checking(answered.clone()),
             )?,
             Query::Cost => wonder_cost(
                 elaboration.budget,
                 contract.admit_program(subject, manifest, None, &here()?)?,
-                &mut Asking::reading(),
+                &mut Asking::reading(answered.clone()),
             )?,
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
             Query::Stage(name) => wonder_stage(
@@ -761,18 +766,18 @@ fn dispatch() -> Result<(), Failure> {
                 |module| {
                     optimize(&module, true, |stage| answer(format_args!("{stage}\n")));
                 },
-                &mut Asking::reading(),
+                &mut Asking::reading(answered.clone()),
             )?,
             Query::At(place) => wonder_at(
                 elaboration.budget,
                 contract.admit_staged(subject, manifest, &here()?)?,
                 place,
-                &mut Asking::reading(),
+                &mut Asking::reading(answered.clone()),
             )?,
             Query::Declarations => wonder_declarations(
                 elaboration.budget,
                 contract.admit_staged(subject, manifest, &here()?)?,
-                &mut Asking::reading(),
+                &mut Asking::reading(answered.clone()),
             )?,
             Query::Server => serve(elaboration.budget, manifest)?,
         },
@@ -793,10 +798,14 @@ fn dispatch() -> Result<(), Failure> {
 fn main() -> ExitCode {
     match dispatch() {
         Ok(()) => ExitCode::SUCCESS,
-        Err(Failure::Incomplete(report)) => {
-            eprintln!("{report}");
+        Err(Failure::Stopped(stopped)) => {
+            eprintln!("{}", stopped.rendered(reader()));
 
-            ExitCode::from(2)
+            // Written goals alone are the incomplete state; anything refused beside them is a failure.
+            match stopped {
+                CompileError::Incomplete(_) => ExitCode::from(2),
+                CompileError::Failure(_) | CompileError::Mixed { .. } => ExitCode::FAILURE,
+            }
         }
         Err(Failure::Error(report)) => {
             eprintln!("{report}");

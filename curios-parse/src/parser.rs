@@ -1,7 +1,4 @@
-use {
-    super::{ParserError, ParserState},
-    std::borrow::Cow,
-};
+use super::{ParserError, ParserState, Stated};
 
 /// What a parser answers at a position: its value and where the input stands past it, or a [`ParserError`].
 pub type Parsed<'a, A> = Result<(A, ParserState<'a>), ParserError>;
@@ -75,7 +72,7 @@ pub trait Parser<'a, A>: Sized {
     }
 
     /// Replaces the failure's message while keeping its offset and commitment, so a low-level token error ("Expected '('...") can be reworded as a domain-level one without changing where the caret points or how [`Parser::or`] commitment behaves.
-    fn map_err(self, message: impl Into<Cow<'static, str>>) -> impl Parser<'a, A> {
+    fn map_err(self, message: impl Into<Stated>) -> impl Parser<'a, A> {
         move |state: ParserState<'a>| {
             self.parse(state)
                 .map_err(|error| error.with_message(message))
@@ -105,7 +102,7 @@ pub trait Parser<'a, A>: Sized {
     /// Transforms the parsed value into another, or into a refusal said as the message `f` answers, standing where the value ended: what a grammar writes where it reads a run of characters and then decides whether it spells what was wanted.
     fn and_then<B, S>(self, f: impl FnOnce(A) -> Result<B, S>) -> impl Parser<'a, B>
     where
-        S: Into<Cow<'static, str>>,
+        S: Into<Stated>,
     {
         move |state: ParserState<'a>| {
             let (item, state) = self.parse(state)?;

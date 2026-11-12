@@ -163,7 +163,7 @@ fn an_unreadable_action_of_another_monad_is_reported_at_its_own_bang() {
 
     let error = typecheck(source).expect_err("an unlifted action must refuse");
     assert!(
-        error.contains("an action of one monad where another is expected")
+        error.contains("monad mismatch")
             && error.contains("action: Io({})")
             && error.contains("expected: Job(")
             && error.contains("acts.0!")
@@ -276,7 +276,7 @@ fn a_tail_with_no_edge_reports_the_lift_witness() {
 
     let error = typecheck(source).expect_err("a missing edge must refuse");
     assert!(
-        error.contains("no witness of Monad/Lift(Io, Job)"),
+        error.contains("wanted: Monad/Lift(Io, Job)"),
         "expected the embedding report, got: {error}"
     );
 }
@@ -336,7 +336,7 @@ fn a_missing_edge_reports_the_lift_witness() {
     let error = typecheck(source).expect_err("a missing edge must refuse");
     // The former-eta display fold renders the goal's monads as bare heads, and the embedding diagnosis speaks in terms of the sequencing rather than the synthesized wrapper.
     assert!(
-        error.contains("no witness of Monad/Lift(Io, Job)")
+        error.contains("wanted: Monad/Lift(Io, Job)")
             && error.contains("needed to sequence an Io action in this Job region"),
         "expected the embedding report with folded formers, got: {error}"
     );
@@ -355,7 +355,7 @@ fn a_missing_edge_between_aliased_monads_reports_them_as_written() {
 
     let error = typecheck(source).expect_err("a byte action in a text region must refuse");
     assert!(
-        error.contains("no witness of /std/Monad/Lift(Parse(/std/Bytes), Parse(Str)) found")
+        error.contains("wanted: /std/Monad/Lift(Parse(/std/Bytes), Parse(Str))")
             && error.contains(
                 "needed to sequence a Parse(/std/Bytes) action in this Parse(Str) region"
             ),
@@ -431,7 +431,7 @@ fn a_try_sequenced_in_a_region_with_no_edge_for_it_is_told_what_is_written_inste
     );
     assert!(
         error.contains(
-            "Try/run hands the action's Result back to this region, and a region whose own type is a Try sequences it"
+            "Try/run hands the action's Result back to this region\n│  a region whose own type is a Try sequences it"
         ),
         "expected what is written instead, got: {error}"
     );
@@ -463,7 +463,7 @@ fn a_missing_edge_between_monads_that_hold_no_failure_offers_no_runner() {
     .expect_err("no Io-into-Job edge exists");
 
     assert!(
-        error.contains("no witness of") && error.contains("Lift"),
+        error.contains("no witness") && error.contains("Lift"),
         "expected the missing edge, got: {error}"
     );
     assert!(!error.contains("hands the action's"), "{error}");

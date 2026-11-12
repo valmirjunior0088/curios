@@ -154,7 +154,7 @@ fn plain_arguments_do_not_pass_through_an_all_implicit_parameter_list() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("wrong number of arguments: expected 0, got 2"),
+        error.contains("written: 2\n│  expected: 0"),
         "unexpected error: {error}"
     );
 }
@@ -172,12 +172,12 @@ fn uninferred_implicit_names_the_binder_and_function() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("implicit argument 'T' of 'cast' was not inferred"),
+        error.contains("implicit argument `T` of `cast` was not inferred"),
         "unexpected error: {error}"
     );
     // A type argument was never an obligation: the report says nothing determined it, not that nothing discharged `Type`.
     assert!(
-        error.contains("no argument or expected type determined it (its type is Type)"),
+        error.contains("no argument or expected type determined it\n│  its type: Type"),
         "unexpected error: {error}"
     );
 }

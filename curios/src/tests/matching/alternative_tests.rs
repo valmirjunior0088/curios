@@ -125,7 +125,9 @@ fn an_alternative_an_arm_before_it_covers_is_refused() {
 
     let error = error(source);
     assert!(
-        error.contains("no value reaches this one past the arms before it, `some(_)` among them"),
+        error.contains(
+            "no value reaches this arm past the arms before it\n│  `some(_)` is among them"
+        ),
         "unexpected error: {error}"
     );
 }

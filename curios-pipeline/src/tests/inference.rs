@@ -27,7 +27,7 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
     "#;
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("cannot decide a postponed conversion"),
+        error.contains("undecided conversion"),
         "unexpected report: {error}"
     );
     assert!(error.contains("never solved"), "unexpected report: {error}");
@@ -48,7 +48,7 @@ fn a_candidate_over_a_lambdas_binder_commits_and_leaves_the_implicit_to_its_own_
     "#;
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("implicit argument 'A' of 'Option/none' was not inferred"),
+        error.contains("implicit argument `A` of `Option/none` was not inferred"),
         "unexpected report: {error}"
     );
     assert!(
@@ -80,7 +80,7 @@ fn a_conversion_parked_under_refinements_notes_the_dependence() {
     "#;
     let error = compile(source).map(|_| ()).unwrap_err();
     assert!(
-        error.contains("cannot decide a postponed conversion"),
+        error.contains("undecided conversion"),
         "unexpected report: {error}"
     );
     assert!(
@@ -198,7 +198,7 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("cannot decide a postponed conversion"),
+        error.contains("undecided conversion"),
         "unexpected error: {error}"
     );
     assert!(
@@ -208,7 +208,7 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
     // The goal is named in the sentence and shown as the report's second place.
     assert!(
         error.contains("never solved: a written goal `?`,")
-            && error.contains("\n\n  this goal `?` was never solved\n\n"),
+            && error.contains("\n├─ this goal `?` was never solved; "),
         "unexpected error: {error}"
     );
     assert!(!mentions_metavar_id(&error), "id leaked: {error}");
@@ -216,7 +216,7 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
 
 #[test]
 fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
-    // `with((pair) => pair.0, xs)`: the inserted implicit `?A` is the lambda's domain *and* `xs`'s element type, but `xs : List(?A)` is checked after the lambda. Elaboration must postpone the lambda (its domain is an unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`, then re-check it. Guards the lambda-domain arm of `blocked_on_metavar`; without it this fails "projected from a non-tuple". Checked at the type-check level — the inference is the point, not lowering. (`with` is local: the std maps take their collection first, which would pin `?A` before the lambda and vacate the scenario.)
+    // `with((pair) => pair.0, xs)`: the inserted implicit `?A` is the lambda's domain *and* `xs`'s element type, but `xs : List(?A)` is checked after the lambda. Elaboration must postpone the lambda (its domain is an unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`, then re-check it. Guards the lambda-domain arm of `blocked_on_metavar`; without it this fails "not a tuple". Checked at the type-check level — the inference is the point, not lowering. (`with` is local: the std maps take their collection first, which would pin `?A` before the lambda and vacate the scenario.)
     let source = r#"
         use /std/{List};
         use /std/{Nat};
@@ -259,7 +259,7 @@ fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
 
 #[test]
 fn continuation_postpones_until_the_result_type_pins_its_codomain() {
-    // A `!` region whose tail is `Parse/pure((x, x))` — a *bare tuplecheckable only against a known tuple type. The expected type reaches the tail solely through each bind's result metavar `?B`, which the turnaround solves *after* the continuation is checked. Elaboration must postpone the continuation lambda (its codomain `M(?B)` carries a result metavar) until `expect` grounds `?B` against the concrete `Parse(Bytes, { Byte, Byte })`, then re-check it. Guards the codomain arm of `blocked_on_metavar`; without it the tail fails "introduced a tuple where the expected type is not a tuple type".
+    // A `!` region whose tail is `Parse/pure((x, x))` — a *bare tuplecheckable only against a known tuple type. The expected type reaches the tail solely through each bind's result metavar `?B`, which the turnaround solves *after* the continuation is checked. Elaboration must postpone the continuation lambda (its codomain `M(?B)` carries a result metavar) until `expect` grounds `?B` against the concrete `Parse(Bytes, { Byte, Byte })`, then re-check it. Guards the codomain arm of `blocked_on_metavar`; without it the tail fails "unexpected tuple where the unexpected tuple".
     let source = r#"
         use /std/{Bytes, Parse};
         use /std/{Byte};
@@ -347,7 +347,7 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
     let error = compile(source).unwrap_err();
 
     assert!(
-        error.contains("the type of parameter 'x' was never determined"),
+        error.contains("the type of the parameter `x` was never determined"),
         "unexpected error: {error}"
     );
 }
@@ -364,7 +364,7 @@ fn a_wildcard_parameter_nothing_types_is_described_rather_than_quoted() {
 
     assert!(
         error.contains("the type of a parameter was never determined")
-            && error.contains("annotate the parameter: (_: T) => ...")
+            && error.contains("annotate the parameter, `(_: T) => ...`")
             && !error.contains("'_'"),
         "unexpected error: {error}"
     );

@@ -357,7 +357,7 @@ pub let chosen(c: Code(/std/Nat)) -> /std/Nat = Pick/pick(@/std/Nat, /std/Nat, c
         let refusal = compile(&source).expect_err("the declaration is refused");
 
         assert!(
-            refusal.contains("no witness of /std/ops/Add(/std/Bool) found"),
+            refusal.contains("wanted: /std/ops/Add(/std/Bool)"),
             "{refusal}"
         );
     }
@@ -397,7 +397,7 @@ test held = /std/Test/assert(true);
     for under in [Qualifier::empty(), Qualifier::from(["held"])] {
         let refusal = tested(under);
         assert!(
-            refusal.contains("no witness of /std/ops/Add(/std/Bool) found"),
+            refusal.contains("wanted: /std/ops/Add(/std/Bool)"),
             "{refusal}"
         );
     }

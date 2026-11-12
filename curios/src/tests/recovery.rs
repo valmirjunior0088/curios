@@ -33,8 +33,8 @@ fn two_independent_refusals_report_both() {
         "#,
     );
 
-    assert!(report.contains("while elaborating _a:"), "{report}");
-    assert!(report.contains("while elaborating _c:"), "{report}");
+    assert!(report.contains("let _a : Nat = true;"), "{report}");
+    assert!(report.contains("let _c : Nat = false;"), "{report}");
     assert!(!report.contains("_b"), "{report}");
 }
 
@@ -51,7 +51,7 @@ fn a_dependent_of_a_refused_declaration_reports_nothing_of_its_own() {
         "#,
     );
 
-    assert!(report.contains("while elaborating _a:"), "{report}");
+    assert!(report.contains("let _a : Nat = true;"), "{report}");
     assert!(!report.contains("_b"), "{report}");
 }
 
@@ -75,7 +75,7 @@ fn a_dependent_through_a_constructed_type_reports_nothing_of_its_own() {
         "#,
     );
 
-    assert!(report.contains("Box"), "{report}");
+    assert!(report.contains("| boxed(value : true)"), "{report}");
     assert!(!report.contains("_open"), "{report}");
 }
 
@@ -100,10 +100,7 @@ fn a_user_of_a_refused_witness_reports_nothing_of_its_own() {
         "#,
     );
 
-    assert!(
-        report.contains("the witness of 'Show' for head 'Color'"),
-        "{report}"
-    );
+    assert!(report.contains("show(c) = 1,"), "{report}");
     assert!(!report.contains("_shown"), "{report}");
     assert!(!report.contains("no witness"), "{report}");
 }
@@ -129,10 +126,7 @@ fn a_witness_refused_before_it_registered_leaves_its_user_reporting_no_witness()
         "#,
     );
 
-    assert!(
-        report.contains("the witness in the entry module"),
-        "{report}"
-    );
+    assert!(report.contains("satisfy Show(1) {"), "{report}");
     assert!(report.contains("no witness"), "{report}");
 }
 
@@ -152,7 +146,7 @@ fn a_test_of_a_refused_declaration_is_left_out_of_the_synthesized_tail() {
         "#,
     );
 
-    assert!(report.contains("while elaborating _a:"), "{report}");
+    assert!(report.contains("let _a : Nat = true;"), "{report}");
     assert!(!report.contains("uses_a"), "{report}");
 }
 
@@ -224,7 +218,7 @@ fn a_dependent_of_a_broken_declaration_reports_nothing_of_its_own() {
         "use /std/{Nat};\n\nlet _a : Nat = ;\nlet _b : Nat = _a;\n\n/std/print(\"\")\n",
     );
 
-    assert!(report.contains("expected a term"), "{report}");
+    assert!(report.contains("expected: a term"), "{report}");
     assert!(!report.contains("_b"), "{report}");
     assert!(!report.contains("unbound"), "{report}");
 }
@@ -235,10 +229,10 @@ fn a_broken_declaration_is_reported_beside_a_refusal_after_it() {
         "use /std/{Nat};\n\nlet _a : Nat = ;\nlet _c : Nat = true;\n\n/std/print(\"\")\n",
     );
 
-    assert!(report.contains("expected a term"), "{report}");
-    assert!(report.contains("while elaborating _c:"), "{report}");
+    assert!(report.contains("expected: a term"), "{report}");
+    assert!(report.contains("let _c : Nat = true;"), "{report}");
     assert!(
-        report.find("expected a term") < report.find("while elaborating"),
+        report.find("expected: a term") < report.find("let _c : Nat = true;"),
         "the parse failure first: {report}"
     );
 }

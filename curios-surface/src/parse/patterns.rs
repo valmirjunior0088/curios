@@ -134,8 +134,10 @@ pub fn parse_struct_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, Pattern> {
 }
 
 /// What refuses a `let`'s struct pattern that reaches something other than its closing brace.
-const UNCLOSED_STRUCT_PATTERN: &str =
-    "a struct pattern closes with `}`; a `let` reads `Name { … }` as its binder";
+const UNCLOSED_STRUCT_PATTERN: &[&str] = &[
+    "a struct pattern closes with `}`",
+    "a `let` reads `Name { … }` as its binder",
+];
 
 // A struct pattern's field: [`parse_pattern_field`], under no mark. A hidden field takes no position in a pattern, so a mark there has nothing to claim, and is refused by that rule where `committed` says the text is a struct pattern's alone.
 fn parse_struct_pattern_field<'a>(committed: bool) -> impl Parser<'a, PatternField> {
@@ -200,7 +202,10 @@ fn parse_pattern_inner<'a>(state: ParserState<'a>) -> Parsed<'a, Pattern> {
 }
 
 /// What refuses an alternative written inside a pattern.
-const ALTERNATIVES_STAND_AT_THE_TOP: &str = "alternatives stand at the top of an arm, each a whole pattern: `some('a') | some('b')`, not `some('a' | 'b')`";
+const ALTERNATIVES_STAND_AT_THE_TOP: &[&str] = &[
+    "alternatives stand at the top of an arm, each a whole pattern",
+    "write `some('a') | some('b')`, not `some('a' | 'b')`",
+];
 
 // A pattern written inside another — a constructor's payload, a tuple's or a struct's field, a parenthesized group. An alternative stands at the top of an arm alone, so a bar after one is refused by name, where it stands, rather than left for the enclosing form to report as the token it did not expect; `||` is no bar and is left to it.
 fn parse_inner_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPattern> {
@@ -334,7 +339,7 @@ pub fn parse_nat_zero_match_pattern<'a>(state: ParserState<'a>) -> Parsed<'a, Ma
     parse_nat_digits
         .flat_map(|lit| match lit {
             NatLiteral(n, _) if n.is_zero() => pure(MatchPattern::Nat(NatPattern::Zero)).boxed(),
-            _ => fail("expected 0 as a nested Nat zero pattern").boxed(),
+            _ => fail("expected: `0` as a nested `Nat` zero pattern").boxed(),
         })
         .parse(state)
 }
@@ -387,14 +392,14 @@ fn refuse_misread_successor<'a>(state: ParserState<'a>) -> Parsed<'a, MatchPatte
                     match (!spaced || after.is_empty(), written) {
                         (true, _) => commit(fail_from(
                             &start,
-                            "a successor pattern takes whitespace on both sides of its `+` — `p + 1` — and `p+1` is the binder `p` followed by the literal `+1`",
+                            &["a successor pattern takes whitespace on both sides of its `+`, as in `p + 1`", "`p+1` is the binder `p` followed by the literal `+1`"],
                         ))
                         .boxed(),
                         // A spaced step of one the successor form did not take failed past it, where that refusal stands.
                         (false, "1") => fail("a successor pattern takes a step of one").boxed(),
                         (false, _) => commit(fail_from(
                             &step,
-                            "a successor pattern takes a step of one, `p + 1`: a larger step is a match on the predecessor inside its arm",
+                            &["a successor pattern takes a step of one, `p + 1`", "a larger step is a match on the predecessor inside its arm"],
                         ))
                         .boxed(),
                     }

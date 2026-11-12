@@ -40,7 +40,7 @@ fn opaque_inductive_empty_elimination_is_private() {
 
     let error = error(source);
     assert!(
-        error.contains("representation of type 'Secret/T' is private"),
+        error.contains("representation of `Secret/T` is private"),
         "unexpected error: {error}"
     );
 }
@@ -150,8 +150,8 @@ fn an_arm_naming_no_constructor_is_told_which_there_are() {
         "#,
     );
     assert!(
-        nullary.contains("match arm 'less' is not a constructor of")
-            && nullary.contains("its constructors are lt(), eq(), gt()"),
+        nullary.contains("`less` is no constructor of")
+            && nullary.contains("its constructors: lt(), eq(), gt()"),
         "unexpected error: {nullary}"
     );
 
@@ -167,7 +167,7 @@ fn an_arm_naming_no_constructor_is_told_which_there_are() {
         "#,
     );
     assert!(
-        payloads.contains("its constructors are empty(), push(_, _)"),
+        payloads.contains("its constructors: empty(), push(_, _)"),
         "unexpected error: {payloads}"
     );
 }
@@ -184,7 +184,7 @@ fn a_match_with_no_arms_over_a_carrier_says_what_it_eliminates() {
     );
     assert!(
         error.contains("a match with no arms eliminates only a type with no constructors")
-            && error.contains("head has type: Nat"),
+            && error.contains("scrutinee: Nat"),
         "unexpected error: {error}"
     );
 }

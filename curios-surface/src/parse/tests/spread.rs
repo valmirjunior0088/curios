@@ -170,7 +170,7 @@ fn a_packed_literal_reports_its_own_entry_rather_than_the_form_around_it() {
     for source in ["x[0x48, )]", "x[0, ,]", "x[0x48, 0x69"] {
         let report = source.parse::<Term>().unwrap_err().format();
         assert!(
-            !report.contains("Expected ';'"),
+            !report.contains("expected: `;`"),
             "{source:?} reported {report}"
         );
     }

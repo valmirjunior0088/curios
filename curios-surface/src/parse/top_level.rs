@@ -31,11 +31,17 @@ pub fn parse_pub<'a>(state: ParserState<'a>) -> Parsed<'a, bool> {
 }
 
 /// What refuses a documentation comment above an import: nothing documents a `use`, since an import has no page and a re-export links to the declaration it re-exports.
-const DOC_BEFORE_USE: &str = "a documentation comment cannot precede `use`: an import is not a declaration, and a re-export is read at the declaration it re-exports";
+const DOC_BEFORE_USE: &[&str] = &[
+    "a documentation comment cannot precede `use`",
+    "an import is not a declaration",
+    "a re-export is read at the declaration it re-exports",
+];
 
 /// What refuses a documentation comment above a test, which is never part of an interface.
-const DOC_BEFORE_TEST: &str =
-    "a documentation comment cannot precede `test`: a test is not part of the interface";
+const DOC_BEFORE_TEST: &[&str] = &[
+    "a documentation comment cannot precede `test`",
+    "a test is not part of the interface",
+];
 
 /// The head of a later member of an `and` group: its documentation comment, its `pub`, and the `and` itself.
 ///
@@ -83,9 +89,11 @@ fn documented<'a, T: 'a>(doc: &Option<Doc>, parser: impl Parser<'a, T> + 'a) -> 
 pub fn parse_top_test<'a>(vis_pub: bool) -> impl Parser<'a, TopItem> {
     move |state: ParserState<'a>| {
         (match vis_pub {
-            true => {
-                fail("a test is never `pub`: its name is its report line, not an export").boxed()
-            }
+            true => fail(&[
+                "a test is never `pub`",
+                "its name is its report line, not an export",
+            ])
+            .boxed(),
             false => pure(()).boxed(),
         }
         .and_keep(parse_test_member(()))
@@ -152,12 +160,35 @@ pub fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, Top
 }
 
 /// The words a wire type is one of, which the refusal of anything else names.
-const WIRE_TYPE_EXPECTED: &str =
-    "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Handle, List(...), or Option(...))";
+const WIRE_TYPE_EXPECTED: &[&str] = &[
+    "expected: a wire type",
+    "one of Nat, Int, Bool, Byte, Flt, Bytes, Handle, List(...) or Option(...)",
+];
 
 /// The words a `List`'s or an `Option`'s element is one of.
-const WIRE_LEAF_EXPECTED: &str =
-    "expected a List or Option element type (Nat, Int, Bool, Bytes, or Handle — neither nests)";
+const WIRE_LEAF_EXPECTED: &[&str] = &[
+    "expected: a `List` or `Option` element type",
+    "one of Nat, Int, Bool, Bytes or Handle",
+    "neither nests",
+];
+
+/// The facts of what was `expected`, with the word obtained in its place said after the first of them, which says what was expected.
+fn obtained_instead(expected: &[&str], obtained: &str) -> Vec<String> {
+    let facts = |facts: &[&str]| {
+        facts
+            .iter()
+            .map(|fact| fact.to_string())
+            .collect::<Vec<_>>()
+    };
+    let (wanted, rest) = expected.split_at(expected.len().min(1));
+
+    [
+        facts(wanted),
+        vec![format!("obtained: `{obtained}`")],
+        facts(rest),
+    ]
+    .concat()
+}
 
 /// What refuses `List` written with no element.
 const LIST_STATES_ITS_ELEMENT: &str = "`List` is written with its element type, as in `List(Nat)`";
@@ -167,11 +198,16 @@ const OPTION_STATES_ITS_ELEMENT: &str =
     "`Option` is written with its element type, as in `Option(Nat)`";
 
 /// What refuses a result that no form of one begins.
-const WIRE_RESULT_EXPECTED: &str = "expected a wire result: a wire type, a braced list of labelled wire types, `{}` for none, or `Never`";
+const WIRE_RESULT_EXPECTED: &[&str] = &[
+    "expected: a wire result",
+    "a wire type, a braced list of labelled wire types, `{}` for none, or `Never`",
+];
 
 /// What refuses `()` where a result stands.
-const WIRE_RESULT_IS_A_TYPE: &str =
-    "`()` is the unit value, and a result is a type: a row that answers nothing is written `-> {}`";
+const WIRE_RESULT_IS_A_TYPE: &[&str] = &[
+    "`()` is the unit value, and a result is a type",
+    "a row that answers nothing is written `-> {}`",
+];
 
 // A `List` or `Option` element type — the wire grammar minus `List` and `Option` themselves. Splitting it out of `parse_wire_type` is what makes `List(List(T))` and `Option(List(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
 fn parse_wire_leaf<'a>(state: ParserState<'a>) -> Parsed<'a, WireLeaf> {
@@ -186,7 +222,7 @@ fn parse_wire_leaf<'a>(state: ParserState<'a>) -> Parsed<'a, WireLeaf> {
             // A word read here is an element type or nothing, so the refusal commits and is the diagnosis. Left to backtrack it reached no reader at all: the enclosing list took the failure for an empty one and the `)` after it complained instead, naming a paren for a mistake about a type.
             other => commit(fail_from(
                 &start,
-                format!("{WIRE_LEAF_EXPECTED}, found '{other}'"),
+                obtained_instead(WIRE_LEAF_EXPECTED, other),
             ))
             .boxed(),
         })
@@ -195,7 +231,11 @@ fn parse_wire_leaf<'a>(state: ParserState<'a>) -> Parsed<'a, WireLeaf> {
 
 // A wire type is one of a closed set of bare words, so a path spelled with `/` is refused by name rather than left to `parse_identifier`, which stops at the slash and lets the enclosing paren take the blame.
 fn refuse_qualified_wire_name<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
-    commit(not_ahead("/").map_err("a wire type is written bare: `Nat` rather than `/std/Nat`, since the wire grammar is its own closed vocabulary and resolves no names")).parse(state)
+    commit(not_ahead("/").map_err(&[
+        "a wire type is written bare, `Nat` rather than `/std/Nat`",
+        "the wire grammar is its own closed vocabulary and resolves no names",
+    ]))
+    .parse(state)
 }
 
 // One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Byte`/`Flt`/`Bytes`/`Handle` are literal keywords here, and `List(T)` and `Option(T)` take a leaf.
@@ -230,7 +270,7 @@ pub fn parse_wire_type<'a>(state: ParserState<'a>) -> Parsed<'a, WireType> {
             // As in [`parse_wire_leaf`]: a word here is a wire type or nothing. `parse_identifier` failing on a non-identifier is what keeps the empty parameter list `() -> T` working — the arm is never reached at the `)`.
             other => commit(fail_from(
                 &start,
-                format!("{WIRE_TYPE_EXPECTED}, found '{other}'"),
+                obtained_instead(WIRE_TYPE_EXPECTED, other),
             ))
             .boxed(),
         })
@@ -238,7 +278,10 @@ pub fn parse_wire_type<'a>(state: ParserState<'a>) -> Parsed<'a, WireType> {
 }
 
 /// What refuses `_` where a result's field is labelled: a tuple type reads `_` as no label, and a row's results are read by their labels alone.
-const WIRE_FIELD_IS_LABELLED: &str = "a result's field is read by its label, so `_` cannot stand for one: write a name, as in `status: Nat`";
+const WIRE_FIELD_IS_LABELLED: &[&str] = &[
+    "a result's field is read by its label, so `_` cannot stand for one",
+    "write a name, as in `status: Nat`",
+];
 
 /// A field of a braced result as it is read: its label and type, beside the report that refuses the label as one an earlier field has, made where the label stands for [`wire_fields`] to raise.
 type WireField = ((String, WireType), ParserError);
@@ -255,15 +298,24 @@ fn parse_wire_label<'a>(state: ParserState<'a>) -> Parsed<'a, (String, ParserErr
             word => look_ahead(parse_whitespace.and_keep(take_exact(":")))
                 .or(commit(fail_from(
                     &start,
-                    format!("a result's field is written `label: type`, as in `status: Nat`; '{word}' is read as a label and no `:` follows it"),
+                    vec![
+                        format!("`{word}` is read as a label and no `:` follows it"),
+                        "a result's field is written `label: type`, as in `status: Nat`"
+                            .to_string(),
+                    ],
                 )))
                 .and_keep(refusal(
                     &start,
-                    format!("a result names each of its fields once: '{word}' labels an earlier one"),
+                    vec![
+                        format!("`{word}` labels an earlier field"),
+                        "a result names each of its fields once".to_string(),
+                    ],
                 ))
-                .map(move |repeated| (word.to_string(), repeated)).boxed(),
+                .map(move |repeated| (word.to_string(), repeated))
+                .boxed(),
         })
-        .and_drop(parse_whitespace).parse(state)
+        .and_drop(parse_whitespace)
+        .parse(state)
 }
 
 // One labelled field of a braced result: `status: Nat`. The label is kept as written, so nothing may invent one or reorder the field it names.
@@ -451,7 +503,7 @@ pub fn parse_use_path<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
 
                 match segments.iter().any(|segment| is_keyword(segment)) {
                     true => fail(format!(
-                        "path '{}' contains a reserved keyword",
+                        "the path `{}` contains a reserved keyword",
                         name.qualifier().join()
                     ))
                     .boxed(),
@@ -491,9 +543,13 @@ pub fn parse_use_group<'a>(state: ParserState<'a>) -> Parsed<'a, UseGroup> {
             .and_keep(parse_literal("*"))
             .map(|()| UseGroup::Glob))
         // The path is read, so what stands here is a group or a mistake — `use` is reserved and begins no term, and the arm that dispatched it has already committed. Left to the alternatives above, a bare `use /std/Nat;` would ask for the `/` that introduces a group and never say a group was what it wanted.
-        .or(commit(fail(
-            "a `use` imports through a group: `use /std/{Nat};` for one name, `use /std/{Nat, Bool};` for several, or `use /std/*;` for the exported surface — there is no bare `use path;` form",
-        ))).parse(state)
+        .or(commit(fail(&[
+            "a `use` imports through a group, and there is no bare `use path;` form",
+            "write `use /std/{Nat};` for one name",
+            "`use /std/{Nat, Bool};` for several",
+            "or `use /std/*;` for the exported surface",
+        ])))
+        .parse(state)
 }
 
 // The span reaches back to the mark the dispatch took before `pub`, as a `mod`'s does, and closes on the `;` rather than on the whitespace after it: it is what a report about the whole declaration underlines.
@@ -540,8 +596,10 @@ pub fn parse_induct_payload_field<'a, D: Grammar>(
 }
 
 /// What refuses a constructor declared with no payload list.
-const CASE_STATES_ITS_PAYLOAD: &str =
-    "a constructor is declared with its payload list, empty where it carries nothing: `| red()`";
+const CASE_STATES_ITS_PAYLOAD: &[&str] = &[
+    "a constructor is declared with its payload list, empty where it carries nothing",
+    "write `| red()`",
+];
 
 pub fn parse_top_induct_case<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, TopCase<D>> {
     parse_doc
@@ -792,11 +850,16 @@ fn parse_struct_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Stru
 }
 
 /// What refuses a structure whose fields follow its head with no sort between them.
-const STRUCTURE_STATES_ITS_SORT: &str = "a structure states its sort before its fields: `struct Point: Type { … }`, or `: Prop` for a proposition";
+const STRUCTURE_STATES_ITS_SORT: &[&str] = &[
+    "a structure states its sort before its fields",
+    "write `struct Point: Type { … }`, or `: Prop` for a proposition",
+];
 
 /// What refuses a concept whose fields follow its head with no sort between them.
-const CONCEPT_STATES_ITS_SORT: &str =
-    "a concept states its sort before its fields: `concept Shape(A: Type): Type { … }`";
+const CONCEPT_STATES_ITS_SORT: &[&str] = &[
+    "a concept states its sort before its fields",
+    "write `concept Shape(A: Type): Type { … }`",
+];
 
 // One structure of a `struct` item, after its `pub` and keyword: the name, the parameters, the result sort with its own `pub`, and the fields.
 pub fn parse_struct_member<'a, D: Grammar>(
@@ -986,7 +1049,10 @@ pub fn parse_witness_field<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessFiel
 }
 
 /// What refuses a `use` entry in a witness body.
-const WITNESS_NEVER_FILLS_A_SUPERCLASS: &str = "a witness never writes a superclass slot: resolution fills it, so every path to the superclass finds the one registered witness";
+const WITNESS_NEVER_FILLS_A_SUPERCLASS: &[&str] = &[
+    "a witness never writes a superclass slot",
+    "resolution fills it, so every path to the superclass finds the one registered witness",
+];
 
 // A witness-body entry is an implementation field. A concept literal also admits a `use <term>` fill for one of the concept's `use`-marked fields; a witness does not, because a registered witness carrying a superclass other than the registered one answers `==` one way through the table and another way through its own projection. The word is read and refused by name rather than left to fail as a missing label, which would say nothing about why.
 fn parse_witness_entry<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessField> {
@@ -1051,8 +1117,10 @@ fn parse_witness_member<'a>(doc: Option<Doc>) -> impl Parser<'a, TopWitness> {
 }
 
 /// What refuses a `pub` on a witness, wherever in a group it is written.
-const WITNESS_NEVER_PUB: &str =
-    "a witness is never `pub`: it is reached by resolution, not by name";
+const WITNESS_NEVER_PUB: &[&str] = &[
+    "a witness is never `pub`",
+    "it is reached by resolution, not by name",
+];
 
 // A witness declaration is anonymous: `satisfy Concept(args) { … }`, or a group `satisfy C(A) { … } and D(B) { … }` of witnesses that resolve through one another. The keyword is *not* a commit point: `satisfy` is contextual, so a program's tail may call a function of that name, and the dispatch keeps this arm recoverable for it. A witness has no `pub`, so neither does an `and` member, and one written here is refused by name as a test's is.
 pub fn parse_top_witness<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, TopItem> {
@@ -1075,7 +1143,10 @@ pub fn parse_top_witness<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a,
 }
 
 /// What a head that names no item reports. Lists the heads rather than the offending word alone, because the reader's next question is what they were allowed to write.
-const NOT_A_TOP_LEVEL_ITEM: &str = "Expected a top-level item: one of 'mod', 'use', 'concept', 'satisfy', 'test', 'let', 'induct', 'struct' or 'foreign'";
+const NOT_A_TOP_LEVEL_ITEM: &[&str] = &[
+    "expected: a top-level item",
+    "one of `mod`, `use`, `concept`, `satisfy`, `test`, `let`, `induct`, `struct` or `foreign`",
+];
 
 /// One top-level item, dispatched on the head it begins with.
 ///

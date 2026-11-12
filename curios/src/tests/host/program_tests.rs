@@ -143,7 +143,7 @@ fn a_step_that_may_fail_is_refused_in_an_io_function() {
     .expect_err("a `Try` has no edge into `Io`");
 
     assert!(
-        error.contains("no witness of") && error.contains("Lift"),
+        error.contains("no witness") && error.contains("Lift"),
         "expected the missing edge, got: {error}"
     );
 }
@@ -157,7 +157,7 @@ fn a_term_nothing_executes_is_refused_as_what_closes_the_program() {
 
         assert!(
             error.contains(&format!(
-                "a program closes with a term whose type has one, and this one's type is {type_}"
+                "a program closes with a term whose type has one\n│  this one's type is {type_}"
             )),
             "{closing}: {error}"
         );
@@ -194,7 +194,7 @@ fn a_program_that_closes_with_a_pure_description_ends_with_what_its_actions_did(
 fn a_goal_that_closes_a_program_is_asked_at_io() {
     let error = typecheck("use /std/{Io};\n?\n").expect_err("a goal never compiles");
 
-    assert!(error.contains("? : Io({})"), "{error}");
+    assert!(error.contains("`Io({})` expected"), "{error}");
 }
 
 /// The first program past printing: a line read as text, a number made of it and its double printed, under one `match`, with a line that is not text ending the program by itself.

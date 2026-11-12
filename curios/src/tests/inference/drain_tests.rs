@@ -13,7 +13,7 @@ fn a_domain_nothing_pins_is_reported_as_its_parameter() {
         "#;
     let error = error(source);
     assert!(
-        error.contains("the type of parameter 'x' was never determined"),
+        error.contains("the type of the parameter `x` was never determined"),
         "{error}"
     );
 }
@@ -28,12 +28,12 @@ fn an_unannotated_parameter_of_a_let_bound_lambda_is_reported_by_name() {
         "#;
     let error = error(source);
     assert!(
-        error.contains("the type of parameter 'x' was never determined"),
+        error.contains("the type of the parameter `x` was never determined"),
         "{error}"
     );
 }
 
-// A postponement whose blocker is itself blocked. `List/slice` carries a `Holds(start + length <= len)` bound; undischarged inside `bad`, its proof metavariable rides into the candidate for `resize`'s implicit length when the reducer unfolds `bad`'s body, and `Convert::solve`'s embedded-metavariable guard postpones that candidate rather than committing a solution of a wider context. The drain follows the recorded blocking edges to the end of the chain and reports what nothing was ever going to solve, rather than the goal that merely waited — which would name an implicit the author never wrote (`the implicit argument 'n' of '/resize'`), at the `resize` call rather than at the bound, without mentioning `List/slice` at all.
+// A postponement whose blocker is itself blocked. `List/slice` carries a `Holds(start + length <= len)` bound; undischarged inside `bad`, its proof metavariable rides into the candidate for `resize`'s implicit length when the reducer unfolds `bad`'s body, and `Convert::solve`'s embedded-metavariable guard postpones that candidate rather than committing a solution of a wider context. The drain follows the recorded blocking edges to the end of the chain and reports what nothing was ever going to solve, rather than the goal that merely waited — which would name an implicit the author never wrote (`the implicit argument `n` of `/resize``), at the `resize` call rather than at the bound, without mentioning `List/slice` at all.
 #[test]
 fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
     let source = r#"
@@ -67,7 +67,7 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
 
     let report = error(source);
     assert!(
-        report.contains("'within' of 'List/slice'") && report.contains("nothing discharged"),
+        report.contains("`within` of `List/slice`") && report.contains("nothing discharged"),
         "the report should name the bound nothing discharged, got: {report}"
     );
     assert!(
@@ -88,7 +88,7 @@ fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
     );
     assert!(
         !report.contains("between: ?")
-            && report.contains("never solved: the implicit argument 'E'"),
+            && report.contains("never solved: the implicit argument `E`"),
         "unexpected report:\n{report}"
     );
 }
@@ -107,7 +107,7 @@ fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
         "#,
     );
     assert!(
-        report.contains("projected from a non-tuple") && report.contains("let (a, b) = p;"),
+        report.contains("not a tuple") && report.contains("let (a, b) = p;"),
         "the report should point at the destructuring:\n{report}"
     );
 }
@@ -125,7 +125,7 @@ fn a_match_nothing_types_is_refused_as_its_eliminator_refuses() {
         "#,
     );
     assert!(
-        report.contains("expected List but got"),
+        report.contains("expected: a List"),
         "the report should name the carrier the match expected:\n{report}"
     );
 }
@@ -146,7 +146,7 @@ fn reflexivity_at_two_lambdas_that_differ_is_a_mismatch() {
     );
 }
 
-// A parked problem that fails where its item is drained is the item's refusal as much as one raised while the item is elaborated: the report leads with the declaration. And what failed is a comparison of two terms the declared type states at one position, neither a type and neither inferred, so the report says that two terms differ and names the one the program wrote as written; with the position's type written out the same fault is one between two whole types, and keeps a mismatch's words.
+// A parked problem that fails where its item is drained is the item's refusal as much as one raised while the item is elaborated: the report leads with the declaration. And what failed is a comparison of two terms the declared type states at one position, neither a type and neither inferred, so the report says that two term mismatch and names the one the program wrote as written; with the position's type written out the same fault is one between two whole types, and keeps a mismatch's words.
 #[test]
 fn a_comparison_that_fails_at_the_drain_names_its_declaration_and_what_was_compared() {
     let boxed = error(
@@ -159,9 +159,9 @@ fn a_comparison_that_fails_at_the_drain_names_its_declaration_and_what_was_compa
         /std/print("unreachable")
         "#,
     );
-    assert!(boxed.starts_with("while elaborating boxed:"), "{boxed}");
+    assert!(boxed.contains("let boxed : Boxed()"), "{boxed}");
     assert!(
-        boxed.contains("terms differ") && boxed.contains("written: (n) => n + 1"),
+        boxed.contains("term mismatch") && boxed.contains("written: (n) => n + 1"),
         "{boxed}"
     );
 
@@ -195,7 +195,7 @@ fn a_refusal_at_the_entrys_drain_is_reported_once() {
     );
     assert!(
         report.contains("never solved: ")
-            && report.contains("the implicit argument 'A' of 'Proc/exit'"),
+            && report.contains("the implicit argument `A` of `Proc/exit`"),
         "{report}"
     );
     assert!(!report.contains("was not inferred"), "{report}");
@@ -214,7 +214,7 @@ fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(tagged.contains("terms differ"), "{tagged}");
+    assert!(tagged.contains("term mismatch"), "{tagged}");
 
     let reflexive = error(
         r#"
@@ -223,7 +223,7 @@ fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(reflexive.contains("terms differ"), "{reflexive}");
+    assert!(reflexive.contains("term mismatch"), "{reflexive}");
 }
 
 // A plain argument as well, where what would stand in its place is a value the program runs with. Mutation-checked, as above: the payload read back is the type's.
@@ -239,7 +239,7 @@ fn a_plain_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(list.contains("terms differ"), "{list}");
+    assert!(list.contains("term mismatch"), "{list}");
 
     let tuple = error(
         r#"
@@ -251,7 +251,7 @@ fn a_plain_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(tuple.contains("terms differ"), "{tuple}");
+    assert!(tuple.contains("term mismatch"), "{tuple}");
 }
 
 // A literal that parks inside an argument — a match arm's tuple, a `let` body's — is run by its retry or by the completion of the term that awaits its type, and is held to the call's type as the argument itself is. Mutation-checked, as above.
@@ -268,7 +268,7 @@ fn a_literal_inside_an_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(arm.contains("terms differ"), "{arm}");
+    assert!(arm.contains("term mismatch"), "{arm}");
 
     let body = error(
         r#"
@@ -280,5 +280,5 @@ fn a_literal_inside_an_argument_is_held_to_the_value_its_calls_type_states() {
         /std/print("unreachable")
         "#,
     );
-    assert!(body.contains("terms differ"), "{body}");
+    assert!(body.contains("term mismatch"), "{body}");
 }

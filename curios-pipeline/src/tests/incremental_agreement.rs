@@ -30,7 +30,7 @@ fn a_broken_item_withholds_its_dependents_and_reports_as_the_whole_compile_does(
     };
 
     assert!(
-        incremental.contains("expected a term"),
+        incremental.contains("expected: a term"),
         "the parse error is the answer: {incremental}"
     );
     assert_eq!(
@@ -55,7 +55,7 @@ fn a_binder_a_reused_items_proof_reads_stays_credited_as_in_a_whole_compile() {
     let baseline = unit_of(CREDITED);
     assert_eq!(
         unused_binders(&baseline),
-        ["unused binder `q`; write `_` in its name's place"],
+        ["unused binder\n  `q` is never used\n  write `_` in its name's place"],
         "`p` is read by the proof `proved` stands for, and `q` by nothing"
     );
 

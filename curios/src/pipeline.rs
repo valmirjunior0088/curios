@@ -3,10 +3,10 @@
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher or writes it beside a page. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Subject, Tree, apart, note},
+    crate::{Subject, Tree, apart, note, reader},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
-    curios_common::Source,
+    curios_common::{Source, Style},
     curios_document::Documentation,
     curios_module::{RootSource, UnitSource},
     curios_package::{Entry, Named, Program, Runs, Target},
@@ -435,24 +435,26 @@ pub struct Asking {
     steps: Option<Steps>,
     /// Whether anything was narrated that no blank line has yet parted from what follows.
     narrated: bool,
+    /// Whoever reads the answer, on standard output.
+    answered: Style,
 }
 
 impl Asking {
-    /// The narration of a question that checks what it is asked about.
-    pub fn checking() -> Self {
+    /// The narration of a question that checks what it is asked about, its answer written for `answered`.
+    pub fn checking(answered: Style) -> Self {
         Self {
             checks: true,
             steps: None,
             narrated: false,
+            answered,
         }
     }
 
     /// The narration of a question that reprints or reads the program it is asked about, and so narrates only the units the program stands on.
-    pub fn reading() -> Self {
+    pub fn reading(answered: Style) -> Self {
         Self {
             checks: false,
-            steps: None,
-            narrated: false,
+            ..Self::checking(answered)
         }
     }
 
@@ -510,5 +512,13 @@ impl Telling for Asking {
 
     fn unfiled(&mut self, refusal: String) {
         note(format!("what this compiled is not stored; {refusal}"));
+    }
+
+    fn reader(&self) -> Style {
+        self.answered.clone()
+    }
+
+    fn bystander(&self) -> Style {
+        reader().clone()
     }
 }

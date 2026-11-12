@@ -13,7 +13,7 @@ fn a_closed_roots_name_shown_only_privately_stays_out_of_a_public_signature() {
     let error = prepare_with("pub let leak(h: Hidden/Handle) -> Type = Type;").unwrap_err();
 
     assert!(
-        error.contains("exposes") && error.contains("Hidden"),
+        error.contains("private item exposed") && error.contains("Hidden"),
         "unexpected error: {error}"
     );
 }

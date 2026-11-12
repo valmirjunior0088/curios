@@ -48,7 +48,7 @@ Set one last refusal, a sibling of one you resolved together — the last elemen
 
 Steer around these, and where they hit one say the gap is the language's, not theirs. A line goes when what it stands on lands.
 
-- A name is bound once and never assigned: `x = x + 1` is refused as `Expected ';'` in a body and as `Expected 'end-of-file'` at a program's end, with no word of `let` (`documentation/language.md`, "Local `let`").
+- A name is bound once and never assigned: `x = x + 1` is refused as a `syntax error` that expected `;` in a body and the end of the file at a program's end, with no word of `let` (`documentation/language.md`, "Local `let`").
 - An effect before the last is sequenced as `let _ = …!;` (`documentation/language.md`, "Sequencing and effects").
 - A format takes one call a place, `Fmt/print("% of %\n")(a)(b)` (`curios-prelude/std/Fmt.crs`).
 - A program's arguments arrive as bytes (`curios-prelude/std/proc.crs`).

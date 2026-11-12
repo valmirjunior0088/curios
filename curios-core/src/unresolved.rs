@@ -5,7 +5,10 @@
 #[cfg(test)]
 mod tests;
 
-use {curios_common::Qualifier, std::fmt};
+use {
+    curios_common::{Qualifier, Said},
+    std::fmt,
+};
 
 /// What a step of a name was looked up as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,44 +56,66 @@ pub struct Unresolved {
 
 impl fmt::Display for Unresolved {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut said = Said::default();
+        self.say(&mut said);
+
+        said.fmt(formatter)
+    }
+}
+
+impl Unresolved {
+    /// Say why the name did not resolve onto `said`: the step that failed, in a line, then as a fact each the name most likely meant and every way to one that carries the name reached for.
+    pub fn say(&self, said: &mut Said) {
         let segment = &self.segment;
-        match (&self.within, self.missing, self.sought) {
-            (_, Missing::Internal, _) => {
-                write!(formatter, "`{segment}` is internal to the standard library")?;
-            }
-            (_, Missing::Undeclared, _) => write!(
-                formatter,
-                "`{segment}` is mounted by this compilation but is not a declared dependency of this unit; declare it to reach its names"
-            )?,
-            (None, _, Sought::Structure) => {
-                write!(formatter, "`{segment}` names no structure in scope")?;
-            }
-            (None, _, _) => write!(formatter, "`{segment}` is not in scope")?,
-            (Some(module), Missing::Private, _) => {
-                write!(formatter, "`{segment}` is private to `{}`", module.join())?;
-            }
+        // The tag names what kind of name was missed, and the first fact which one and where.
+        let (tag, missed) = match (&self.within, self.missing, self.sought) {
+            (_, Missing::Internal, _) => (
+                "internal name",
+                format!("`{segment}` is internal to the standard library"),
+            ),
+            (_, Missing::Undeclared, _) => (
+                "undeclared dependency",
+                format!("`{segment}` is mounted by this compilation"),
+            ),
+            (None, _, Sought::Structure) => (
+                "unknown name",
+                format!("`{segment}` names no structure in scope"),
+            ),
+            (None, _, _) => ("unknown name", format!("`{segment}` is not in scope")),
+            (Some(module), Missing::Private, _) => (
+                "private name",
+                format!("`{segment}` is private to `{}`", module.join()),
+            ),
             // The root has no name to say the step by, so the path it would have been is named.
             (Some(module), Missing::Absent, Sought::Module) if module.is_root() => {
-                write!(formatter, "`/{segment}` names no module")?;
+                ("unknown module", format!("`/{segment}` names no module"))
             }
             (Some(module), Missing::Absent, _) if module.is_root() => {
-                write!(formatter, "`/{segment}` names nothing")?;
+                ("unknown name", format!("`/{segment}` names nothing"))
             }
-            (Some(module), Missing::Absent, Sought::Module) => {
-                write!(formatter, "`{}` has no module `{segment}`", module.join())?;
-            }
-            (Some(module), Missing::Absent, _) => {
-                write!(formatter, "`{}` has no `{segment}`", module.join())?;
-            }
+            (Some(module), Missing::Absent, Sought::Module) => (
+                "unknown module",
+                format!("`{}` has no module `{segment}`", module.join()),
+            ),
+            (Some(module), Missing::Absent, _) => (
+                "unknown name",
+                format!("`{}` has no `{segment}`", module.join()),
+            ),
+        };
+        said.text(tag);
+        said.stating(missed);
+        if self.missing == Missing::Undeclared {
+            said.stating("it is no declared dependency of this unit");
+            said.stating("declare it to reach its names");
         }
         if let Some(nearest) = &self.nearest {
-            write!(formatter, "\n  did you mean `{nearest}`?")?;
+            said.stating(format_args!("did you mean `{nearest}`?"));
         }
         // Each by its own last segment: the name a reader reached for is the failed step itself, or, under a root they may not name, the step after it.
         for candidate in &self.elsewhere {
-            write!(formatter, "\n{}", candidate.reach_hint(candidate.last()))?;
+            for fact in candidate.reach_hint(candidate.last()) {
+                said.stating(fact);
+            }
         }
-
-        Ok(())
     }
 }

@@ -98,7 +98,7 @@ fn a_superclass_edge_is_reached_by_no_label() {
         "#;
 
     let message = error(projected);
-    assert!(message.contains("'_super0'"), "got: {message}");
+    assert!(message.contains("`_super0`"), "got: {message}");
     assert!(message.contains("no field"), "got: {message}");
 
     let declared = r#"

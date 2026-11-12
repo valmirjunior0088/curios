@@ -4,7 +4,11 @@
 //!
 //! **A lint stands in a text of its unit, as a lowered term's position does** ([`curios_core::Extent`]): in the declaration it is about, or in the `use` or `mod` line it is on ([`curios_core::Anchored::Namespace`]). So a stored lint holds no source, a unit storing its lints writes none of its files a second time, and a lint carried past a recompile is placed in the text its file is read as now. Its report is made where it is shown ([`Lint::report`]), from the anchors of the unit that holds it.
 
-use {curios_common::Report, curios_surface::Label, std::collections::BTreeSet};
+use {
+    curios_common::{Report, Said},
+    curios_surface::Label,
+    std::{collections::BTreeSet, fmt},
+};
 
 /// The kinds, each named as `curios lint` documents it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,12 +29,12 @@ impl LintKind {
     }
 }
 
-/// One finding: its kind, the message a reader sees, and where it stands among the unit's texts.
+/// One finding: its kind, what a reader is told of it, and where it stands among the unit's texts.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub struct Lint {
     pub kind: LintKind,
-    pub message: String,
+    pub said: Said,
     /// What it underlines, in a text of its unit: `None` for one written nowhere, as a name the compiler spelled is.
     pub at: Option<curios_core::Extent>,
     /// The binder an `unused-binder` lint names: what a credit is matched against. `None` for every other kind.
@@ -52,7 +56,7 @@ impl Lint {
         Self::at(
             LintKind::UnusedImport,
             at,
-            format!("unused import `{label}`; delete it"),
+            unused("import", label, "delete it"),
         )
     }
 
@@ -61,7 +65,7 @@ impl Lint {
         Self::at(
             LintKind::UnusedImport,
             at,
-            format!("unused import `{path}`; delete it"),
+            unused("import", path, "delete it"),
         )
     }
 
@@ -76,7 +80,7 @@ impl Lint {
             ..Self::at(
                 LintKind::UnusedBinder,
                 at,
-                format!("unused binder `{name}`; write `_` in its name's place"),
+                unused("binder", name, "write `_` in its name's place"),
             )
         }
     }
@@ -92,8 +96,10 @@ impl Lint {
         Self::at(
             LintKind::UnusedDeclaration,
             Some(at),
-            format!(
-                "unused declaration `{name}`; delete it, make it `pub`, or name it `_{name}` to keep it unused"
+            unused(
+                "declaration",
+                name,
+                format_args!("delete it, make it `pub`, or name it `_{name}` to keep it unused"),
             ),
         )
     }
@@ -103,14 +109,14 @@ impl Lint {
         Self::at(
             LintKind::UnusedDeclaration,
             at,
-            format!("unused module `{name}`; delete it or make it `pub`"),
+            unused("module", name, "delete it or make it `pub`"),
         )
     }
 
-    fn at(kind: LintKind, at: Option<curios_core::Extent>, message: String) -> Self {
+    fn at(kind: LintKind, at: Option<curios_core::Extent>, said: Said) -> Self {
         Self {
             kind,
-            message,
+            said,
             at,
             binder: None,
         }
@@ -118,11 +124,20 @@ impl Lint {
 
     /// The report a reader sees, placed by `anchors` — the unit's own, which hold every text a lint of it stands in — and unlocated where none holds its text.
     pub fn report(&self, anchors: &[&curios_core::Anchors]) -> Report {
-        match self.at.and_then(|at| at.resolved(anchors)) {
-            Some(span) => Report::at(span, self.message.clone()),
-            None => Report::unlocated(self.message.clone()),
-        }
+        Report::of(
+            self.at.and_then(|at| at.resolved(anchors)),
+            self.said.clone(),
+        )
     }
+}
+
+/// What a lint says of `name`, a `noun` nothing uses: that it is unused, and what to write in its place.
+fn unused(noun: &str, name: impl fmt::Display, way_out: impl fmt::Display) -> Said {
+    let mut said = Said::line(format!("unused {noun}"));
+    said.stating(format_args!("`{name}` is never used"));
+    said.stating(way_out);
+
+    said
 }
 
 /// Lints in reading order, as `anchors` place them: by the file they are about, then by position in it, unlocated ones last. Resolution walks a unit's items in dependency order and the modules in discovery order, neither of which is the order a reader opens files in.

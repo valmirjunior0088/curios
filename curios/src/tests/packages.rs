@@ -302,7 +302,7 @@ fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
         .expect_err("a package owning neither the concept nor the type declares no witness")
         .to_string();
     assert!(
-        refusal.contains("orphan witness of 'Tag' for head 'Thing'"),
+        refusal.contains("a witness of `Tag` for the head `Thing`"),
         "{refusal}"
     );
 

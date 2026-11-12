@@ -90,10 +90,7 @@ fn a_documentation_comment_before_nothing_is_refused() {
         "concept C(A: Type): Type {\n    --- lost\n}",
     ] {
         let error = source.parse::<Module>().unwrap_err().format();
-        assert!(
-            error.contains("must immediately precede"),
-            "{source}: {error}"
-        );
+        assert!(error.contains("immediately precedes"), "{source}: {error}");
     }
 
     // A program refuses the same three places: before its tail, after it, and where the block is all that follows its items — the last read as a program by a command that tries one first.
@@ -103,10 +100,7 @@ fn a_documentation_comment_before_nothing_is_refused() {
         "let x: Nat = 1;\n--- lost\n",
     ] {
         let error = source.parse::<Entrypoint>().unwrap_err().format();
-        assert!(
-            error.contains("must immediately precede"),
-            "{source}: {error}"
-        );
+        assert!(error.contains("immediately precedes"), "{source}: {error}");
     }
 }
 

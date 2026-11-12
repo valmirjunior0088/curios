@@ -17,7 +17,7 @@ fn rejects_cyclic_re_export_with_no_concrete_target() {
         Type
     "#
         )
-        .contains("cyclic re-export")
+        .contains("re-export cycle")
     );
 }
 
@@ -32,7 +32,7 @@ fn rejects_a_duplicate_declaration() {
     "#,
     );
     assert!(
-        report.contains("`x` is already declared in this module") && report.contains("3 |"),
+        report.contains("`x` is already declared in this module") && report.contains("3 │"),
         "reported {report}"
     );
 }
@@ -51,7 +51,7 @@ fn locates_a_duplicate_constructor_and_a_duplicate_concept_method() {
     "#,
     );
     assert!(
-        cases.contains("`red` is already declared in this module") && cases.contains("5 |"),
+        cases.contains("`red` is already declared in this module") && cases.contains("5 │"),
         "reported {cases}"
     );
 
@@ -66,7 +66,7 @@ fn locates_a_duplicate_constructor_and_a_duplicate_concept_method() {
     "#,
     );
     assert!(
-        fields.contains("`tag` is already declared in this module") && fields.contains("5 |"),
+        fields.contains("`tag` is already declared in this module") && fields.contains("5 │"),
         "reported {fields}"
     );
 }
@@ -99,7 +99,7 @@ fn rejects_a_duplicate_struct_field() {
     ] {
         let report = run_err_report(source);
         assert!(
-            report.contains("is already a field of this structure") && report.contains("2 |"),
+            report.contains("is already a field of this structure") && report.contains("2 │"),
             "reported {report}"
         );
     }

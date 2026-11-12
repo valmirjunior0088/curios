@@ -1,6 +1,7 @@
 //! The programs this tree ships lint clean and are written as `curios format` writes them: every instrument under `programs/`, loose as `curios lint` places a file no unit declares. A lint is exact and always on, so a finding here is fixed in the program rather than excused.
 
 use {
+    curios_common::Style,
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_surface::{Formatted, Width},
@@ -45,7 +46,7 @@ fn findings(subject: Subject) -> Vec<String> {
     .diagnostics
     .into_iter()
     .filter(|diagnostic| matches!(diagnostic.severity, Severity::Lint | Severity::Error))
-    .map(|diagnostic| diagnostic.render())
+    .map(|diagnostic| diagnostic.rendered(&Style::plain()))
     .collect()
 }
 

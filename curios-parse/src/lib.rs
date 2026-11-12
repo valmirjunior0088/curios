@@ -6,7 +6,7 @@ mod state;
 pub use state::ParserState;
 
 mod error;
-pub use error::ParserError;
+pub use error::{ParserError, Stated};
 
 mod parser;
 pub use parser::{

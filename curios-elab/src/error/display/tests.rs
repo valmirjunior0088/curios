@@ -95,7 +95,10 @@ fn a_mismatch_says_what_was_not_compared() {
     };
 
     assert!(!shown(None).contains("not compared"));
-    assert!(shown(Some(Declined::Unpaired)).contains("not compared: no operand of one side"));
+    assert!(
+        shown(Some(Declined::Unpaired))
+            .contains("not compared: the two sides of a commutative operation share no operand")
+    );
 }
 
 /// A spent budget is reported with the row of the charge it could not afford, what that charge was and what was left, as the certifier reports one.
@@ -113,7 +116,7 @@ fn a_spent_budget_names_what_it_was_spent_on() {
     );
     let shown = Displayed(&error, spelling, &[]).to_string();
 
-    assert!(shown.contains("conversion ran out of steps"), "{shown}");
+    assert!(shown.starts_with("budget spent\n  comparing: "), "{shown}");
     assert!(
         shown.contains("deciding two Bool terms needed 8 units with 5 left"),
         "{shown}"
@@ -136,7 +139,7 @@ fn a_rejected_candidate_is_reported_with_the_check_that_refused_it() {
 
     assert_eq!(
         Displayed(&error, spelling, &[]).to_string(),
-        "an inferred hole cannot be /Candidate\n  it does not check where it stands:\n    type mismatch\n      inferred: /Left\n      expected: /Right"
+        "rejected candidate\n  an inferred hole cannot be /Candidate\n  it does not check where it stands\n  type mismatch\n    inferred: /Left\n    expected: /Right"
     );
 }
 
@@ -168,16 +171,16 @@ fn a_watched_slot_with_no_name_is_described_rather_than_quoted() {
     });
     let witness = shown(Watched::Witness {
         callee: callee(),
-        role: Some("its 2nd 'use' premise".to_string()),
+        role: Some("its 2nd `use` premise".to_string()),
     });
 
     assert!(
-        implicit.starts_with("the implicit argument of '/f' cannot be /Candidate"),
+        implicit.contains("\n  the implicit argument of `/f` cannot be /Candidate\n"),
         "{implicit}"
     );
     assert!(
         witness.starts_with(
-            "the witness argument of '/f' for its 2nd 'use' premise cannot be /Candidate"
+            "rejected candidate\n  the witness argument of `/f` for its 2nd `use` premise cannot be /Candidate"
         ),
         "{witness}"
     );

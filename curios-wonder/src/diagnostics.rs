@@ -2,7 +2,7 @@
 
 use {
     crate::{Diagnosis, Reading, STDIN_MOUNT, Severity, Written},
-    curios_common::{Qualifier, Report, Source, Span, is_identifier},
+    curios_common::{Qualifier, Report, Said, Source, Span, is_identifier},
     curios_module::{
         Overlay, PreparedText, RootSource, UnitSource, open_entrypoint, overlay_entrypoint,
         supply_entrypoint,
@@ -116,14 +116,21 @@ impl Subject {
             return None;
         }
 
-        let message = format!(
-            "{} is written as a module, with no final term, and its stem `{stem}` is no name a module can take: rename the file to an identifier, or end it in a term to check it as a program",
+        let mut said = Said::line("unnameable module");
+        said.stating(format_args!(
+            "{} is written as a module, with no final term",
             path.display()
+        ));
+        said.stating(format_args!(
+            "its stem `{stem}` is no name a module can take"
+        ));
+        said.stating(
+            "rename the file to an identifier, or end it in a term to check it as a program",
         );
 
         Some(Diagnosis {
             severity: Severity::Error,
-            report: Report::at(Span::new(Source::held(path, &text), 0, 0), message),
+            report: Report::of(Some(Span::new(Source::held(path, &text), 0, 0)), said),
         })
     }
 

@@ -119,7 +119,7 @@ pub fn ordinal(index: usize) -> String {
 ///
 /// A position rather than a name, because a `use` parameter *has* no name — `let`, `rec` and `satisfy` sugar all declare one anonymously, so a name would read `_` for every premise of user-written code. Only the generated method wrappers write `use w`, and `w` is an implementation detail appearing in no program.
 pub fn premise_label(index: usize) -> String {
-    format!("its {} 'use' premise", ordinal(index))
+    format!("its {} `use` premise", ordinal(index))
 }
 
 /// Where each slot of a call sits among the slots of its own kind — the position a report names it by, whether it was written or filled: "its 2nd 'use' premise". Every slot a walk visits passes through [`SlotPositions::next`] in telescope order.

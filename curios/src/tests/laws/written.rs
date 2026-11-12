@@ -1910,7 +1910,7 @@ fn an_implicit_with_two_solutions_is_refused_and_never_picked() {
         for source in implicit_under(operation, "{}", "let _ = g(w); ()") {
             let error = typecheck(&source).expect_err("an implicit with two solutions is picked");
             assert!(
-                error.contains("cannot decide a postponed conversion"),
+                error.contains("undecided conversion"),
                 "refused, but not as a conversion left undecided:\n{error}"
             );
         }
@@ -1977,7 +1977,7 @@ fn a_metavariable_no_division_solves_is_left_undecided() {
         let source = linear_in(pattern, actual, "()");
         let error = typecheck(&source).expect_err("an equation this does not solve is accepted");
         assert!(
-            error.contains("cannot decide a postponed conversion"),
+            error.contains("undecided conversion"),
             "{source}\nrefused, but not as a conversion left undecided:\n{error}"
         );
     }
@@ -1999,7 +1999,9 @@ fn a_mismatch_nothing_compared_says_so() {
     );
     assert!(
         unpaired.contains("type mismatch")
-            && unpaired.contains("not compared: no operand of one side"),
+            && unpaired.contains(
+                "not compared: the two sides of a commutative operation share no operand"
+            ),
         "{unpaired}"
     );
 

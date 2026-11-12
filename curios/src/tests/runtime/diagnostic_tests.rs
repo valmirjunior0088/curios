@@ -173,15 +173,15 @@ fn names_a_family_in_a_report_raised_on_a_reduct() {
         ),
         (
             "pub let field: Nat = held.0;",
-            "head has type: Holder(Sized(Nat))",
+            "projected from: a term of type Holder(Sized(Nat))",
         ),
         (
             "pub let field: Nat = wrapped.0;",
-            "head has type: (Sized(Nat)(0)) -> Nat",
+            "projected from: a term of type (Sized(Nat)(0)) -> Nat",
         ),
         (
             "pub let arm: Nat = match wrapped | x() => 0 end;",
-            "head has type: (Sized(Nat)(0)) -> Nat",
+            "scrutinee: (Sized(Nat)(0)) -> Nat",
         ),
         (
             "pub let count: Nat = match held | 0 => 0 | _ + 1 => 1 end;",

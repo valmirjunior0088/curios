@@ -54,7 +54,7 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
     for source in [derived, written] {
         let report = error(source);
         assert!(
-            report.contains("a proof in '_apart' is a proof position but reaches '/witness~/std/ops/Eql(/Tree)', which is not known to terminate"),
+            report.contains("a proof in `_apart` is a proof position\n│  it reaches `/witness~/std/ops/Eql(/Tree)`, which is not known to terminate"),
             "{report}"
         );
     }
@@ -72,7 +72,7 @@ fn a_proposition_is_no_key_of_a_derived_witness() {
 
     let report = error(source);
     assert!(
-        report.contains("type mismatch\n  inferred: Prop\n  expected: Type"),
+        report.contains("type mismatch\n│  inferred: Prop\n│  expected: Type"),
         "{report}"
     );
 }
@@ -90,7 +90,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
     let report = error(concept);
     assert!(
         report.contains(
-            "cannot derive 'Spell' for Tag(Nat)\n  Tag(Nat) is a concept's record; write the body"
+            "`Spell` cannot be derived for Tag(Nat)\n│  Tag(Nat) is a concept's record\n│  write the body"
         ),
         "{report}"
     );
@@ -103,7 +103,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
         "#;
     let report = error(type_valued);
     assert!(
-        report.contains("cannot derive 'Spell' for Holder\n  payload #1 of 'Holder/holds' is a type, which no value spells; write the body"),
+        report.contains("`Spell` cannot be derived for Holder\n│  payload #1 of `Holder/holds` is a type, which no value spells\n│  write the body"),
         "{report}"
     );
 
@@ -116,7 +116,7 @@ fn an_ineligible_key_is_refused_by_its_shape() {
         "#;
     let report = error(recursive);
     assert!(
-        report.contains("cannot derive 'Spell' for R\n  payload #2 of 'R/node' is a type, which no value spells; write the body"),
+        report.contains("`Spell` cannot be derived for R\n│  payload #2 of `R/node` is a type, which no value spells\n│  write the body"),
         "{report}"
     );
     assert!(!report.contains("rec #0"), "{report}");
@@ -137,7 +137,7 @@ fn a_private_representation_refuses_the_derivation_outside_its_module() {
 
     let report = error(source);
     assert!(
-        report.contains("the representation of type 'Secret' is private"),
+        report.contains("the representation of `Secret` is private"),
         "{report}"
     );
 }
@@ -152,7 +152,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
         "#;
     let report = error(premise);
     assert!(
-        report.contains("no witness of Spell(A) found\n  needed by 'Box/boxed' for payload #1 — add `use Spell(A)` to the telescope"),
+        report.contains("wanted: Spell(A)\n│  needed by `Box/boxed` for payload #1 — add `use Spell(A)` to the telescope"),
         "{report}"
     );
 
@@ -166,9 +166,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
     // The goal's spelling is the deferred-goal report's, rendered as every report renders a type — the nominal name, not its recursive-group projection; the derivation's contribution is the provenance line, located at the declaration.
     let report = error(unwitnessed);
     assert!(
-        report.contains(
-            "no witness of Spell(Opaque) found\n  needed by 'Holder/holds' for payload 'inner'\n"
-        ),
+        report.contains("wanted: Spell(Opaque)\n│  needed by `Holder/holds` for payload `inner`\n"),
         "{report}"
     );
     assert!(report.contains("satisfy Spell(Holder) { .. }"), "{report}");
@@ -206,7 +204,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
         /std/print("")
         "#;
     assert!(
-        error(standard).contains("no derivation exists for 'Show'; write the body"),
+        error(standard).contains("`Show` is not registered as derivable"),
         "{}",
         error(standard)
     );
@@ -220,7 +218,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
         /std/print("")
         "#;
     assert!(
-        error(own).contains("no derivation exists for 'Tag'; write the body"),
+        error(own).contains("`Tag` is not registered as derivable"),
         "{}",
         error(own)
     );
@@ -232,7 +230,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
         /std/print("")
         "#;
     assert!(
-        error(premised).contains("no derivation exists for 'Show'; write the body"),
+        error(premised).contains("`Show` is not registered as derivable"),
         "{}",
         error(premised)
     );
@@ -249,8 +247,7 @@ fn the_signature_refusals_fire_on_a_derived_witness_as_on_a_written_one() {
     let rendered = error(orphan);
     assert!(
         rendered.contains(
-            "orphan witness of 'Ord' for head 'Bool', declared in the entry module\n  \
-             a witness may only be declared where the concept or a type in its head is already declared"
+            "a witness of `Ord` for the head `Bool` is declared in the entry module\n│  a witness is declared where its concept or a type in its head is declared"
         ),
         "{rendered}"
     );
@@ -271,9 +268,7 @@ fn the_signature_refusals_fire_on_a_derived_witness_as_on_a_written_one() {
     let rendered = error(duplicate);
     assert!(
         rendered.contains(
-            "duplicate witness of 'Show' for head 'Nat'\n  \
-             both are declared in the entry module\n  \
-             every concept-head pair has at most one witness, program-wide"
+            "duplicate witness\n│  `Show` has two witnesses for the head `Nat`\n│  both are declared in the entry module\n│  every concept-head pair has at most one witness, program-wide"
         ),
         "{rendered}"
     );
@@ -301,7 +296,7 @@ fn a_parameterized_head_is_refused_as_a_written_witness_is() {
     let report = error(derived);
     let written = error(written);
     assert!(
-        report.contains("type mismatch\n  inferred: (A: Type) -> Type\n  expected: Type"),
+        report.contains("type mismatch\n│  inferred: (A: Type) -> Type\n│  expected: Type"),
         "{report}"
     );
     // Identical but for the quoted source line: the same frame, message and caret column, because the body is not where the refusal comes from.

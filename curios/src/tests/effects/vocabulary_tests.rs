@@ -164,7 +164,7 @@ fn a_state_region_cannot_perform_io() {
 
     let error = typecheck(source).expect_err("a State region must refuse Io");
     assert!(
-        error.contains("no witness of /std/Monad/Lift(/std/Io, (x) => State(Nat, x))"),
+        error.contains("wanted: /std/Monad/Lift(/std/Io, (x) => State(Nat, x))"),
         "expected the missing Io edge, got: {error}"
     );
 }
@@ -251,7 +251,7 @@ fn a_result_computed_from_a_settled_argument_is_read() {
     assert_eq!(run(&source("Nat", "Monad/lift(say(0))")), b"said\n");
     let error = typecheck(&source("Nat", "say(0)")).expect_err("a numeral is not read");
     assert!(
-        error.contains("an action of one monad where another is expected"),
+        error.contains("monad mismatch"),
         "expected the lift report, got: {error}"
     );
 }

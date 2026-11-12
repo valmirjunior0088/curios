@@ -15,7 +15,7 @@ fn a_selector_nothing_resolved_through_is_reported_at_its_word() {
         x
     "#
         ),
-        ["unused-import: unused import `y`; delete it"]
+        ["unused-import: unused import\n  `y` is never used\n  delete it"]
     );
 }
 
@@ -31,7 +31,7 @@ fn a_glob_nothing_resolved_through_is_reported_as_its_path() {
         Type
     "#
         ),
-        ["unused-import: unused import `/Foo/*`; delete it"]
+        ["unused-import: unused import\n  `/Foo/*` is never used\n  delete it"]
     );
 }
 
@@ -66,7 +66,7 @@ fn an_import_a_local_shadows_before_any_use_is_unused() {
         x
     "#
         ),
-        ["unused-import: unused import `x`; delete it"]
+        ["unused-import: unused import\n  `x` is never used\n  delete it"]
     );
 }
 
@@ -156,8 +156,8 @@ fn lints_read_in_source_order() {
     "#
         ),
         [
-            "unused-import: unused import `b`; delete it",
-            "unused-import: unused import `a`; delete it",
+            "unused-import: unused import\n  `b` is never used\n  delete it",
+            "unused-import: unused import\n  `a` is never used\n  delete it",
         ]
     );
 }

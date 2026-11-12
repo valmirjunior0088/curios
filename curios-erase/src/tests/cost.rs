@@ -226,6 +226,6 @@ fn an_erasure_out_of_budget_is_refused_in_erasures_words() {
 
     assert_eq!(
         error.format(spelling, &[]),
-        "erasure ran out of steps reading: 2 + 3\n  recursion depth needed 1024 units with 0 left"
+        "budget spent\n│  erasing: 2 + 3\n│  recursion depth needed 1024 units with 0 left\n╰─ error"
     );
 }

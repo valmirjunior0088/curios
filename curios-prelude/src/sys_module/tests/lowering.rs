@@ -87,7 +87,7 @@ fn a_name_under_the_closed_root_is_offered_the_paths_that_carry_it() {
     let error = lower_with_prelude("let n: /sys/Nat = Type; Type").unwrap_err();
     assert!(
         error.contains(
-            "`sys` is internal to the standard library\n  `Nat` is `/std/Nat`: write it absolute, or `use /std/{Nat};`"
+            "`sys` is internal to the standard library\n  `Nat` is `/std/Nat`\n  write it absolute, or `use /std/{Nat};`"
         ),
         "unexpected error: {error}"
     );
@@ -96,7 +96,7 @@ fn a_name_under_the_closed_root_is_offered_the_paths_that_carry_it() {
     let error = lower_with_prelude("let n: Type = /sys/Nat/add; Type").unwrap_err();
     assert!(
         error.contains(
-            "`sys` is internal to the standard library\n  `Nat` is `/std/Nat`: write it absolute, or `use /std/{Nat};`"
+            "`sys` is internal to the standard library\n  `Nat` is `/std/Nat`\n  write it absolute, or `use /std/{Nat};`"
         ),
         "unexpected error: {error}"
     );
@@ -221,7 +221,7 @@ fn refuses_a_prefix_the_unit_did_not_declare() {
     let error = lower_declaring(&[], "use /std/Nat/{Nat}; Nat").unwrap_err();
     assert!(
         error.contains("`std` is mounted by this compilation")
-            && error.contains("not a declared dependency"),
+            && error.contains("it is no declared dependency of this unit"),
         "{error}"
     );
 }

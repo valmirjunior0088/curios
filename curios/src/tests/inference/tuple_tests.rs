@@ -31,7 +31,7 @@ fn a_tuple_literal_synthesizes_when_its_expected_type_never_gains_structure() {
 
     let report = error(source);
     assert!(
-        report.contains("? = {Nat, Bool}"),
+        report.contains("`{Nat, Bool}` inferred"),
         "expected the goal to report the synthesized product:\n{report}"
     );
 }
@@ -47,7 +47,7 @@ fn a_one_field_tuple_literal_synthesizes_against_a_written_goal() {
 
     let report = error(source);
     assert!(
-        report.contains("? = {Nat}"),
+        report.contains("`{Nat}` inferred"),
         "expected a one-field product:\n{report}"
     );
 }
@@ -65,7 +65,7 @@ fn a_settled_tuple_reports_the_obligation_it_unblocked() {
 
     let report = error(source);
     assert!(
-        report.contains("no witness of Show({x: Bool, y: Bool})"),
+        report.contains("wanted: Show({x: Bool, y: Bool})"),
         "expected the witness goal the tuple unblocked:\n{report}"
     );
 }
@@ -121,7 +121,7 @@ fn a_payload_stuck_on_a_rigid_index_is_refused_at_the_literal() {
 
     let report = error(source);
     assert!(
-        report.contains("expected type is not a tuple type") && report.contains("Count(L)"),
+        report.contains("unexpected tuple") && report.contains("Count(L)"),
         "expected the refusal to name the stuck expectation:\n{report}"
     );
 }
@@ -144,7 +144,7 @@ fn a_settled_index_measures_the_literal_against_the_type_it_computes() {
 
     let report = error(source);
     assert!(
-        report.contains("tuple has 2 field(s) but expected type has 0"),
+        report.contains("written: 2\n│  expected: 0"),
         "expected the arity report the reduced payload type makes possible:\n{report}"
     );
 }
@@ -172,7 +172,7 @@ fn a_synthesized_labeled_product_reports_its_labels() {
 
     let report = error(source);
     assert!(
-        report.contains("? = {a: Nat, b: Bool}"),
+        report.contains("`{a: Nat, b: Bool}` inferred"),
         "expected the synthesized product to carry its labels:\n{report}"
     );
 }
@@ -340,8 +340,8 @@ fn a_tuple_of_proofs_is_refused_where_a_type_is_declared() {
 
     assert!(
         report.contains(
-            "a proposition was given where the implicit argument 'A' of 'id' takes a type"
-        ) && report.contains("{True, True} is a proposition"),
+            "a proposition was given where the implicit argument `A` of `id` takes a type"
+        ) && report.contains("given: {True, True}"),
         "unexpected report:\n{report}"
     );
 }
@@ -358,9 +358,8 @@ fn a_tuple_of_functions_into_propositions_is_refused_where_a_type_is_declared() 
 
     assert!(
         report.contains(
-            "a proposition was given where the implicit argument 'A' of 'id' takes a type"
-        ) && report
-            .contains("is a proposition, and no proposition stands where a Type is declared"),
+            "a proposition was given where the implicit argument `A` of `id` takes a type"
+        ) && report.contains("no proposition stands where a `Type` is declared"),
         "unexpected report:\n{report}"
     );
 }
@@ -390,7 +389,7 @@ fn a_tuple_of_open_functions_into_propositions_is_refused_where_a_type_is_declar
 
     assert!(
         report.contains(
-            "a proposition was given where the implicit argument 'A' of 'g' takes a type"
+            "a proposition was given where the implicit argument `A` of `g` takes a type"
         ),
         "unexpected report:\n{report}"
     );

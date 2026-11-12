@@ -201,7 +201,7 @@ fn use_brace_group_empty() {
 fn an_unclosed_use_group_is_reported_as_a_missing_brace() {
     let error = "use /std/{Nat;".parse::<Module>().unwrap_err().format();
     assert!(
-        error.contains("Expected '}'") && !error.contains("bare `use path;`"),
+        error.contains("expected: `}`") && !error.contains("bare `use path;`"),
         "unexpected error: {error}"
     );
 }
@@ -244,8 +244,8 @@ fn use_entries_are_struct_literal_only() {
 #[test]
 fn a_malformed_item_is_reported_by_the_head_it_names() {
     for (source, expected) in [
-        ("pub let a : /std/Nat -> 1;", "Expected '='"),
-        ("satisfy => /std/Equal { }", "Expected identifier"),
+        ("pub let a : /std/Nat -> 1;", "expected: `=`"),
+        ("satisfy => /std/Equal { }", "expected: an identifier"),
         // The `use` arm names the rule rather than the token that introduces a group.
         (
             "use /std/Nat, /std/Bool;",
@@ -258,7 +258,7 @@ fn a_malformed_item_is_reported_by_the_head_it_names() {
             "{source:?} reported {report}, wanted {expected:?}"
         );
         assert!(
-            !report.contains("end-of-file"),
+            !report.contains("the end of the file"),
             "{source:?} fell through to the end-of-input expectation: {report}"
         );
     }
@@ -268,8 +268,8 @@ fn a_malformed_item_is_reported_by_the_head_it_names() {
 #[test]
 fn a_head_that_names_no_item_lists_the_heads_that_do() {
     let report = "pub mod util;\na\n".parse::<Module>().unwrap_err().format();
-    assert!(report.contains("Expected a top-level item"), "{report}");
-    assert!(report.contains("'satisfy'"), "{report}");
+    assert!(report.contains("expected: a top-level item"), "{report}");
+    assert!(report.contains("`satisfy`"), "{report}");
 }
 
 /// A trailing token that begins no item at all still reports as end of input: the item parser and the end-of-input expectation fail at one offset, and the tie keeps the latter.
@@ -279,7 +279,7 @@ fn a_trailing_token_still_reports_end_of_input() {
         .parse::<Module>()
         .unwrap_err()
         .format();
-    assert!(report.contains("end-of-file"), "{report}");
+    assert!(report.contains("the end of the file"), "{report}");
 }
 
 /// The contextual heads stay ordinary names, which is why their arms may not commit: a program's tail calling `test`, `satisfy` or `concept` is not a declaration that went wrong.
@@ -315,13 +315,13 @@ fn a_top_level_let_without_a_type_falls_through_to_the_tail() {
 #[test]
 fn a_malformed_pub_item_is_reported_in_a_program_too() {
     for (source, expected) in [
-        ("pub let a : /std/Nat = 1 +;\n()", "Expected ';'"),
+        ("pub let a : /std/Nat = 1 +;\n()", "expected: `;`"),
         (
             "pub satisfy /std/Equal(/std/Nat) { }\n()",
             "a witness is never `pub`",
         ),
         ("pub test t = 1;\n()", "a test is never `pub`"),
-        ("pub wibble x = 1;\n()", "Expected a top-level item"),
+        ("pub wibble x = 1;\n()", "expected: a top-level item"),
     ] {
         let report = source.parse::<Entrypoint>().unwrap_err().format();
         assert!(
@@ -329,7 +329,7 @@ fn a_malformed_pub_item_is_reported_in_a_program_too() {
             "{source:?} reported {report}, wanted {expected:?}"
         );
         assert!(
-            !report.contains("obtained 'pub'"),
+            !report.contains("obtained: `pub`"),
             "{source:?} fell through to the tail's local `let`: {report}"
         );
     }
@@ -352,11 +352,11 @@ fn a_declaration_below_the_tail_is_refused_as_one() {
         let report = source.parse::<Entrypoint>().unwrap_err().format();
         let word = head.split([' ', '\n']).next().unwrap();
         assert!(
-            report.contains(&format!("'{word}' begins a declaration, not a term")),
+            report.contains(&format!("`{word}` begins a declaration, not a term")),
             "{source:?} reported {report}"
         );
         assert!(!report.contains("obtained"), "{source:?} reported {report}");
-        assert!(report.contains("2 |"), "{source:?} reported {report}");
+        assert!(report.contains("2 │"), "{source:?} reported {report}");
     }
     // A `use`-headed form is read by its own parser before the term grammar sees the word, so the refusal reaches none of them.
     for source in ["f(use x)", "P { use w, a = 1 }", "(use _, v) => v"] {
@@ -370,15 +370,15 @@ fn a_keyword_expected_at_punctuation_names_both() {
     for (source, expected) in [
         (
             "let f : Type =\n    match n\n    | 0 => 1\n    | p + 1 => p;\n()",
-            "Expected keyword 'end', obtained ';'",
+            "expected: the keyword `end`\n│  obtained: `;`",
         ),
         (
             "let f : Type =\n    match n\n    | 0 => 1\n    | p + 1 => p\n\n/std/print(1)",
-            "Expected keyword 'end', obtained '/'",
+            "expected: the keyword `end`\n│  obtained: `/`",
         ),
         (
             "let f : Type =\n    match n\n    | 0 => 1\n    | p + 1 => p\n",
-            "Expected keyword 'end', obtained 'end-of-file'",
+            "expected: the keyword `end`\n│  obtained: the end of the file",
         ),
     ] {
         let report = source.parse::<Entrypoint>().unwrap_err().format();
@@ -394,10 +394,10 @@ fn a_misspelled_keyword_is_reported_against_the_word() {
     let source = "pub let f : /std/Nat =\n    match n\n    | 0 => 0\n    | p + 1; ih => ih\n    ends\n\npub let g : /std/Nat = 1;\n";
     let error = source.parse::<Module>().unwrap_err();
     let report = error.format();
-    assert!(report.contains("obtained 'ends'"), "{report}");
+    assert!(report.contains("obtained: `ends`"), "{report}");
     // The word sits on line 5; the declaration below it, where a caret reading past the whitespace would land, is line 7.
-    assert!(report.contains("5 |"), "{report}");
-    assert!(!report.contains("7 |"), "{report}");
+    assert!(report.contains("5 │"), "{report}");
+    assert!(!report.contains("7 │"), "{report}");
     // And the caret underlines the word itself, all four characters of it, rather than standing after it.
     assert!(report.contains("^^^^"), "{report}");
 }
@@ -461,7 +461,7 @@ fn what_stands_past_a_programs_final_term_is_refused_as_what_it_is() {
         .unwrap_err()
         .format();
     assert!(
-        documented.contains("must immediately precede what it documents"),
+        documented.contains("immediately precedes what it documents"),
         "{documented}"
     );
 
@@ -469,5 +469,5 @@ fn what_stands_past_a_programs_final_term_is_refused_as_what_it_is() {
         .parse::<Entrypoint>()
         .unwrap_err()
         .format();
-    assert!(stray.contains("Expected 'end-of-file'"), "{stray}");
+    assert!(stray.contains("expected: the end of the file"), "{stray}");
 }

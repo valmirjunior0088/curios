@@ -26,17 +26,14 @@
 mod tests;
 
 use {
-    curios_common::Qualifier,
+    curios_common::{Kind, Qualifier, Report, Style},
     curios_package::Named,
     curios_wonder::STDIN_LABEL,
     std::{
         env, fmt,
         io::Write,
         path::{Path, PathBuf},
-        sync::{
-            Mutex, MutexGuard, PoisonError,
-            atomic::{AtomicBool, Ordering},
-        },
+        sync::{Mutex, MutexGuard, OnceLock, PoisonError},
         time::{Duration, Instant},
     },
 };
@@ -49,35 +46,38 @@ fn held() -> MutexGuard<'static, Option<Vec<u8>>> {
     KEPT.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Whether the transcript is painted.
-static PAINTED: AtomicBool = AtomicBool::new(false);
+/// The reader no style was decided for: standing nowhere, seeing no colour.
+static PLAIN: Style = Style {
+    here: None,
+    painted: false,
+};
 
-/// Paint the transcript from here on, or leave it plain: decided once as the command starts, from what was asked and where standard error goes.
-pub fn paint(painted: bool) {
-    PAINTED.store(painted, Ordering::Relaxed);
+/// Whoever reads standard error, decided once as the command starts.
+static READER: OnceLock<Style> = OnceLock::new();
+
+/// Write for `reader` from here on: where they stand, which a path is spelled from, and whether they see colour. Decided once, as the command starts, from what was asked and where standard error goes.
+pub fn paint(reader: Style) {
+    let _ = READER.set(reader);
 }
 
-/// `text` under the attribute `code`, where the transcript is painted.
-fn painted(code: &str, text: impl fmt::Display) -> String {
-    match PAINTED.load(Ordering::Relaxed) {
-        true => format!("\x1b[{code}m{text}\x1b[0m"),
-        false => text.to_string(),
-    }
+/// Whoever reads standard error: what the transcript, and a report beside it, is written for.
+pub fn reader() -> &'static Style {
+    READER.get().unwrap_or(&PLAIN)
 }
 
 /// `text` as a subject is painted.
 fn bold(text: impl fmt::Display) -> String {
-    painted("1", text)
+    reader().bold(text)
 }
 
 /// `text` as the tree and a time are painted.
 fn dim(text: impl fmt::Display) -> String {
-    painted("2", text)
+    reader().dim(text)
 }
 
 /// `text` as what went wrong is painted: a refusal, a failure, a count of either that is not zero.
 pub fn troubled(text: impl fmt::Display) -> String {
-    painted("31", text)
+    reader().troubled(text)
 }
 
 /// Whether `verdict` says something went wrong: a rule refused, the machine failed, a test trapped or exited.
@@ -190,7 +190,10 @@ impl fmt::Display for Subject {
 
 /// How a command took what it was asked rather than anything it did for a subject: a line of its own under none, spelled as a question spells its note.
 pub fn note(text: impl fmt::Display) {
-    say(format_args!("note: {text}\n"));
+    say(format_args!(
+        "{}\n",
+        Report::unlocated(text.to_string()).rendered(Kind::Note, reader())
+    ));
 }
 
 /// A step taken for no one subject, on a line of its own under none: `serve; http://127.0.0.1:8000/`, where what is served is every subject's.
@@ -234,40 +237,9 @@ fn spelled_from(manifest: &Path, here: &Path) -> Option<String> {
     })
 }
 
-/// `path` as a reader standing where the invocation stands would spell it: as it is written where it is relative, by the climb from here and the descent to it where the two share more than the root, and whole anywhere else.
+/// `path` as whoever reads standard error would spell it from where they stand ([`Style::spelled`]).
 pub fn from_here(path: &Path) -> String {
-    let here = env::current_dir().and_then(|here| here.canonicalize()).ok();
-
-    match (path.is_absolute(), here) {
-        // What stands on disk is read by where it is, so a link in the way to it does not hide what the two share.
-        (true, Some(here)) => between(
-            &path.canonicalize().unwrap_or_else(|_| path.to_path_buf()),
-            &here,
-        ),
-        _ => path.display().to_string(),
-    }
-}
-
-/// The absolute `path` as spelled from the directory `here`.
-fn between(path: &Path, here: &Path) -> String {
-    let shared = path
-        .components()
-        .zip(here.components())
-        .take_while(|(there, stood)| there == stood)
-        .count();
-
-    // The root alone is shared: the two are in different places, and the path is told whole.
-    if shared <= 1 {
-        return path.display().to_string();
-    }
-
-    let climb = "../".repeat(here.components().count() - shared);
-    let descent = path.components().skip(shared).collect::<PathBuf>();
-
-    match descent.as_os_str().is_empty() {
-        true => format!("{climb}."),
-        false => format!("{climb}{}", descent.display()),
-    }
+    reader().spelled(path)
 }
 
 /// The connector of a node more are planned after.

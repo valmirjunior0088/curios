@@ -8,23 +8,23 @@ fn an_informative_field_is_reported_as_written_at_its_type() {
     for (source, words, place) in [
         (
             "use /std/{Show};\nconcept Carry(A: Type): Prop { use Show(A), }\n/std/print(\"no\")\n",
-            "concept 'Carry' is declared at sort 'Prop' but its field 'use Show(A)' is informative\n  a 'Prop' concept's fields must all be propositions\n",
-            "    2 | concept Carry(A: Type): Prop { use Show(A), }\n      |                                    ^^^^^^^",
+            "the concept `Carry` is declared at `Prop`\n│  its field `use Show(A)` is no proposition\n│  every field of a `Prop` concept is a proposition\n",
+            "│  2 │ concept Carry(A: Type): Prop { use Show(A), }\n│    │                                    ^^^^^^^",
         ),
         (
             "use /std/{Nat};\nuse /std/Bool/{True};\npub struct Bad: Prop { first: True, value: Nat, }\n/std/print(\"no\")\n",
-            "struct 'Bad' is declared at sort 'Prop' but its field 'value: Nat' is informative\n  a 'Prop' struct's fields must all be propositions\n",
-            "    3 | pub struct Bad: Prop { first: True, value: Nat, }\n      |                                            ^^^",
+            "the struct `Bad` is declared at `Prop`\n│  its field `value: Nat` is no proposition\n│  every field of a `Prop` struct is a proposition\n",
+            "│  3 │ pub struct Bad: Prop { first: True, value: Nat, }\n│    │                                            ^^^",
         ),
         (
             "use /std/{Nat};\nconcept Bad(A: Type): Prop { get(A) -> Nat, }\n/std/print(\"no\")\n",
-            "concept 'Bad' is declared at sort 'Prop' but its field 'get: (A) -> Nat' is informative\n  a 'Prop' concept's fields must all be propositions\n",
-            "    2 | concept Bad(A: Type): Prop { get(A) -> Nat, }\n      |                              ^^^^^^^^^^^^^",
+            "the concept `Bad` is declared at `Prop`\n│  its field `get: (A) -> Nat` is no proposition\n│  every field of a `Prop` concept is a proposition\n",
+            "│  2 │ concept Bad(A: Type): Prop { get(A) -> Nat, }\n│    │                              ^^^^^^^^^^^^^",
         ),
         (
             "use /std/{Nat};\npub struct Bad: Prop { get(Nat) -> Nat, }\n/std/print(\"no\")\n",
-            "struct 'Bad' is declared at sort 'Prop' but its field 'get: (Nat) -> Nat' is informative\n  a 'Prop' struct's fields must all be propositions\n",
-            "    2 | pub struct Bad: Prop { get(Nat) -> Nat, }\n      |                        ^^^^^^^^^^^^^^^",
+            "the struct `Bad` is declared at `Prop`\n│  its field `get: (Nat) -> Nat` is no proposition\n│  every field of a `Prop` struct is a proposition\n",
+            "│  2 │ pub struct Bad: Prop { get(Nat) -> Nat, }\n│    │                        ^^^^^^^^^^^^^^^",
         ),
     ] {
         let report = error(source);

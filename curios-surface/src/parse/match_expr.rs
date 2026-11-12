@@ -28,7 +28,10 @@ pub fn parse_func<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>>
 }
 
 /// What refuses a `match` whose arms are written in braces.
-const MATCH_TAKES_BARS: &str = "a `match` writes its arms after bars and closes with `end`, with no braces: `match n | 0 => … | _ => … end`";
+const MATCH_TAKES_BARS: &[&str] = &[
+    "a `match` writes its arms after bars and closes with `end`, with no braces",
+    "write `match n | 0 => … | _ => … end`",
+];
 
 // A `match` written as another language writes it, `match n { 0 => …, _ => … }`, reads as a scrutinee that is a structure literal, which commits at its brace and reports the `}` it wanted at the first arrow. Probed before the scrutinee: a name, a brace, a pattern that opens with no parenthesis and an arrow are no literal's beginning — an entry is a term, and a lambda's parameters are parenthesized — so the refusal is exact, and stands at the brace.
 fn refuse_braced_match<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {

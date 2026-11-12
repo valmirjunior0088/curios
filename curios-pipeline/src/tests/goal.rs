@@ -30,10 +30,10 @@ fn solved_goal_reports_its_solution() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
     assert!(error.contains("? : Type"), "unexpected error: {error}");
     assert!(
-        error.contains("? =") && error.contains("Nat"),
+        error.contains("`/std/Nat` inferred"),
         "unexpected error: {error}"
     );
 }
@@ -45,7 +45,7 @@ fn a_goal_solved_by_a_proposition_is_reported_at_prop() {
 
     assert!(error.contains("? : Prop"), "unexpected error: {error}");
     assert!(
-        error.contains("? =") && error.contains("True"),
+        error.contains("` inferred") && error.contains("True"),
         "unexpected error: {error}"
     );
 }
@@ -58,7 +58,7 @@ fn a_prelude_signature_is_reported_under_the_names_it_was_written_with() {
     let error = compile("let y : ? = /std/Nat/pow; /std/Io/pure(())").unwrap_err();
 
     assert!(
-        error.contains("? = (base: /std/Nat, exp: /std/Nat) -> /std/Nat"),
+        error.contains("`(base: /std/Nat, exp: /std/Nat) -> /std/Nat` inferred"),
         "unexpected report: {error}"
     );
 }
@@ -75,9 +75,9 @@ fn pinned_through_the_expected_type_reports_the_pin() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
     assert!(
-        error.contains("? =") && error.contains("Bool"),
+        error.contains("`Bool` inferred"),
         "unexpected error: {error}"
     );
 }
@@ -93,10 +93,13 @@ fn unconstrained_goal_reports_undetermined() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
-    assert!(error.contains("? : Nat"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(
+        error.contains("`Nat` expected"),
+        "unexpected error: {error}"
+    );
     // No `? =` clause: nothing determined the goal.
-    assert!(!error.contains("? ="), "unexpected error: {error}");
+    assert!(!error.contains("inferred"), "unexpected error: {error}");
 }
 
 #[test]
@@ -111,7 +114,7 @@ fn report_includes_the_local_scope() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
     assert!(error.contains("x : Nat"), "unexpected error: {error}");
 }
 
@@ -127,10 +130,10 @@ fn goal_in_synthesis_position_reports_a_meta_type() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
-    assert!(error.contains("? : ?"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("`?` expected"), "unexpected error: {error}");
     // No `? =` clause: nothing determined the goal.
-    assert!(!error.contains("? ="), "unexpected error: {error}");
+    assert!(!error.contains("inferred"), "unexpected error: {error}");
 }
 
 #[test]
@@ -146,12 +149,16 @@ fn several_goals_report_together_in_declaration_order() {
     let error = compile(source).unwrap_err();
 
     assert_eq!(
-        error.matches("goal `?`").count(),
+        error.matches("╰─ goal").count(),
         2,
         "unexpected error: {error}"
     );
-    let nat = error.find("? : Nat").expect("the Nat goal is reported");
-    let bool_ = error.find("? : Bool").expect("the Bool goal is reported");
+    let nat = error
+        .find("`Nat` expected")
+        .expect("the Nat goal is reported");
+    let bool_ = error
+        .find("`Bool` expected")
+        .expect("the Bool goal is reported");
     assert!(nat < bool_, "goals out of declaration order: {error}");
 }
 
@@ -168,7 +175,7 @@ fn item_and_entrypoint_tail_goals_share_one_batch() {
     let error = compile(source).unwrap_err();
 
     assert_eq!(
-        error.matches("goal `?`").count(),
+        error.matches("╰─ goal").count(),
         2,
         "unexpected error: {error}"
     );
@@ -188,13 +195,16 @@ fn solved_and_unsolved_goals_share_one_batch() {
     let error = compile(source).unwrap_err();
 
     assert_eq!(
-        error.matches("goal `?`").count(),
+        error.matches("╰─ goal").count(),
         2,
         "unexpected error: {error}"
     );
-    assert!(error.contains("? : Nat"), "unexpected error: {error}");
+    assert!(
+        error.contains("`Nat` expected"),
+        "unexpected error: {error}"
+    );
     assert!(error.contains("? : Type"), "unexpected error: {error}");
-    assert!(error.contains("? ="), "unexpected error: {error}");
+    assert!(error.contains("` inferred"), "unexpected error: {error}");
 }
 
 #[test]
@@ -228,7 +238,7 @@ fn types_spell_operators_as_infix_not_witness_projections() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
     assert!(error.contains("(1 + 2) * 3"), "unexpected error: {error}");
     assert!(!error.contains("witness"), "unexpected error: {error}");
 }
@@ -249,9 +259,9 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
     assert!(
-        error.contains("? : (Nat) -> Nat"),
+        error.contains("`(Nat) -> Nat` expected"),
         "unexpected error: {error}"
     );
     assert!(
@@ -263,7 +273,7 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
         "unexpected error: {error}"
     );
     assert!(
-        !error.contains("cannot decide"),
+        !error.contains("undecided conversion"),
         "unexpected error: {error}"
     );
     // `subst`'s result `P(y)` meets any goal once `ih` fills its proof slot; an undecided fit of a parameter-headed result is refused.
@@ -288,7 +298,7 @@ fn typecheck_rejects_a_goal() {
     )
     .unwrap_err();
 
-    assert!(error.contains("goal `?`"), "unexpected error: {error}");
+    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
 }
 
 /// A refusal beside a written goal is the refusal's exit and both reports: the refused item's first, then the goal at its occurrence.
@@ -305,14 +315,6 @@ fn a_goal_beside_a_refusal_classifies_as_mixed() {
     };
     assert_eq!(failures, 1);
     assert_eq!(reports.len(), 2, "{reports:?}");
-    assert!(
-        reports[0].message.contains("bad:"),
-        "{}",
-        reports[0].message
-    );
-    assert!(
-        reports[1].message.starts_with("goal `?`"),
-        "{}",
-        reports[1].message
-    );
+    assert_eq!(reports[0].headline, "type mismatch");
+    assert_eq!(reports[1].headline, "`/std/Nat` expected");
 }

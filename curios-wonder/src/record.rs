@@ -1,6 +1,6 @@
 //! The records a query answers with: plain data over the compiler's coordinates, deliberately distinct from any stage's own error type so a compiler refactor is never a protocol change by accident.
 
-use curios_common::Report;
+use curios_common::{Kind, Report, Style};
 
 /// How a diagnostic classifies. The first two are the compile path's own split — a goal batch exits 2 where a hard error exits 1 — carried per record because a transport renders them apart: a goal is something the author wrote and asked about, not something wrong. A lint is neither: an exact finding the lowering reports and nothing stops on, which `curios lint` alone turns into an exit code. A note is less than a lint: what a question says about how it was asked, which no exit code counts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,6 +13,18 @@ pub enum Severity {
     Lint,
     /// How the question was answered rather than anything wrong with the program: a file a package holds and none of its units declares, checked on its own.
     Note,
+}
+
+impl Severity {
+    /// What a report of this severity is, which is the word it closes on.
+    pub fn kind(self) -> Kind {
+        match self {
+            Severity::Error => Kind::Error,
+            Severity::Goal => Kind::Goal,
+            Severity::Lint => Kind::Lint,
+            Severity::Note => Kind::Note,
+        }
+    }
 }
 
 /// One thing the compiler said about a program, where it said it.
@@ -32,11 +44,18 @@ impl Diagnosis {
         }
     }
 
-    /// The diagnostic as `curios run` would have printed it: the report rendered, message then snippet. A note is the one record that is no report of the program — a build says the same on standard error — and renders as its message alone after `note: ` — its span is only the start of the file its message already names, which is where an editor places it, and a caret there would read as a refusal of the file's first line.
-    pub fn render(&self) -> String {
+    /// The diagnostic as a reader of `style` sees it: its report, a block closed by the word of what it is.
+    pub fn rendered(&self, style: &Style) -> String {
         match self.severity {
-            Severity::Note => format!("note: {}", self.report.message),
-            Severity::Error | Severity::Goal | Severity::Lint => self.report.render(),
+            // A note's span is only the start of the file it already names, which is where an editor places it: code shown there would read as a refusal of the file's first line.
+            Severity::Note => Report {
+                span: None,
+                ..self.report.clone()
+            }
+            .rendered(Kind::Note, style),
+            Severity::Error | Severity::Goal | Severity::Lint => {
+                self.report.rendered(self.severity.kind(), style)
+            }
         }
     }
 }

@@ -35,7 +35,7 @@ fn two_sorts_apart_in_a_level_are_not_set_apart_by_inversion() {
     let report = error(source);
     assert!(
         report.contains("no arm matches `refl()`")
-            && report.contains("is not provably impossible at the scrutinee's indices"),
+            && report.contains("its indices are not provably impossible at the scrutinee's"),
         "{report}"
     );
 }
@@ -94,10 +94,7 @@ fn the_self_application_girards_paradox_needs_is_refused_at_one_instance() {
 
     let message = error(&source);
     assert!(message.contains("strictly below itself"), "got: {message}");
-    assert!(
-        message.contains("while elaborating omega:"),
-        "got: {message}"
-    );
+    assert!(message.contains("let omega(x: U"), "got: {message}");
 }
 
 // The control, differing in the last declaration alone: the same `s` instantiated at a type its caller supplies. `A`'s level is held to the one `X` ranges over, which is satisfiable — what the refusal above rests on is the self-instantiation at one instance, not the quantifier.
@@ -136,7 +133,10 @@ fn the_set_of_the_sets_that_are_not_members_of_themselves_is_refused() {
     );
 
     assert!(message.contains("strictly below itself"), "got: {message}");
-    assert!(message.contains("while elaborating R:"), "got: {message}");
+    assert!(
+        message.contains("let R: V = V/set(Regular"),
+        "got: {message}"
+    );
 }
 
 // The control: the same `V` holds sets of types below it, the empty set and the set of it, so what the refusal above rests on is the self-membership and not the family.
@@ -175,7 +175,7 @@ fn a_pair_of_a_proposition_and_its_proof_is_no_proposition() {
     assert!(message.contains("inferred: Type"), "got: {message}");
     assert!(message.contains("expected: Prop"), "got: {message}");
     assert!(
-        message.contains("while elaborating Packed:"),
+        message.contains("let Packed: Prop = {P: Prop, p: P};"),
         "got: {message}"
     );
 }
@@ -216,11 +216,11 @@ fn a_local_polymorphic_definition_applied_to_itself_is_refused_with_its_remedy()
         "{message}"
     );
     assert!(
-        message.contains("required constraint: ?u1+1 ≤ ?u1"),
+        message.contains("required: ?u1+1 ≤ ?u1"),
         "the message numbers its levels within itself:\n{message}"
     );
     assert!(
-        message.contains("has to be hoisted"),
+        message.contains("hoist a local one that is used at two levels"),
         "the message says what to write instead:\n{message}"
     );
 }
@@ -301,8 +301,7 @@ fn caret_under(line: &str, written: &str, from: usize) -> String {
     let column = from + line[from..].find(written).expect("the line writes it");
 
     format!(
-        "{:>5} | {}{}",
-        "",
+        "│    │ {}{}\n",
         " ".repeat(column),
         "^".repeat(written.len())
     )
@@ -327,7 +326,7 @@ fn a_conflict_a_schemes_bound_closes_names_the_declaration_instantiated() {
         "{message}"
     );
     assert!(
-        message.contains("required by the bounds 'lt' sets on the levels it is used at"),
+        message.contains("required by the bounds `lt` sets on the levels it is used at"),
         "the message names whose bound the cycle runs through:\n{message}"
     );
     assert!(
@@ -353,13 +352,14 @@ fn a_conflict_two_uses_close_alone_stands_at_one_and_notes_the_other() {
 
     let message = error(&source);
     assert!(
-        message.contains("required by the bounds 'lt' sets on the levels it is used at"),
+        message.contains("required by the bounds `lt` sets on the levels it is used at"),
         "{message}"
     );
     let first = caret_under(BAD, "lt", 0);
     let second = caret_under(BAD, "lt", BAD.find("lt(q").expect("the second use"));
-    let (report, note) = message
-        .split_once("'lt' is used here")
+    // The other use stands first, closed by what stands there, and the report's own after it.
+    let (note, report) = message
+        .split_once("`lt` is used here")
         .unwrap_or_else(|| panic!("the other use is a place of its own:\n{message}"));
     assert!(
         report.contains(&first),

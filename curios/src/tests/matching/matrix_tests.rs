@@ -40,7 +40,7 @@ fn match_rejects_duplicate_row() {
 
     let error = error(source);
     assert!(
-        error.contains("duplicate or overlapping"),
+        error.contains("unreachable arm"),
         "unexpected error: {error}"
     );
 }
@@ -61,7 +61,7 @@ fn match_rejects_duplicate_flat_tag() {
 
     let error = error(source);
     assert!(
-        error.contains("duplicate or overlapping"),
+        error.contains("unreachable arm"),
         "unexpected error: {error}"
     );
 }
@@ -73,7 +73,7 @@ fn a_duplicate_arm_is_reported_at_the_later_arm() {
 
     let error = error(source);
     assert!(
-        error.contains("    7 |     | none() => 1\n      |       ^^^^^^"),
+        error.contains("│  7 │     | none() => 1\n│    │       ^^^^^^"),
         "unexpected error: {error}"
     );
 }
@@ -93,7 +93,7 @@ fn match_rejects_a_motive_on_tuple_head() {
 
     let error = error(source);
     assert!(
-        error.contains("written motive"),
+        error.contains("misplaced motive"),
         "unexpected error: {error}"
     );
 }
@@ -189,15 +189,15 @@ fn a_match_shape_refusal_is_located_at_the_match() {
     for (source, line) in [
         (
             "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    match b\n    | some(5) => 1\n    | some(n + 1; ih) => n\n    | _ => 0\n    end;\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
-            "    4 |     match b",
+            "│  4 │     match b",
         ),
         (
             "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    1 + (match b | some(5) => 1 | some(n + 1; ih) => n | _ => 0 end);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
-            "    4 |     1 + (match b",
+            "│  4 │     1 + (match b",
         ),
         (
             "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    let g = (k: Option(Nat)) =>\n        match k | some(5) => 1 | some(n + 1; ih) => n | _ => 0 end;\n    g(b);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
-            "    5 |         match k",
+            "│  5 │         match k",
         ),
     ] {
         let error = error(source);

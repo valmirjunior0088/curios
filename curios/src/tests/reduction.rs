@@ -747,7 +747,7 @@ fn an_oversized_construction_is_refused_before_it_is_allocated() {
     let refusal = typecheck_within(DEFAULT_BUDGET, &shift(1 << 40))
         .expect_err("a shift whose result no budget affords is refused");
     assert!(
-        refusal.contains("ran out"),
+        refusal.contains("budget spent"),
         "expected a spent-budget refusal, got: {refusal}"
     );
 
@@ -770,7 +770,7 @@ fn a_growing_accumulation_is_bounded_by_what_it_has_already_built() {
     let refusal = typecheck_within(BUDGET, &bytes_growing(200_000))
         .expect_err("a hundred times the iterations does not");
     assert!(
-        refusal.contains("ran out"),
+        refusal.contains("budget spent"),
         "expected a spent-budget refusal, got: {refusal}"
     );
 }

@@ -115,7 +115,7 @@ fn an_under_bound_motive_reports_its_binder_count() {
 
     let error = error(source);
     assert!(
-        error.contains("motive binds 1 name(s)") && error.contains("needs 2"),
+        error.contains("the motive binds 1 name") && error.contains("needs 2"),
         "unexpected error: {error}"
     );
 }
@@ -328,7 +328,7 @@ fn an_omitted_motive_over_a_proposition_is_refused_where_its_arms_are_data() {
 
     let report = error(source);
     assert!(
-        report.contains("cannot eliminate the proposition 'Two'"),
+        report.contains("the proposition `Two` is matched into a relevant result"),
         "{report}"
     );
 }
@@ -375,7 +375,7 @@ fn a_motive_whose_body_is_a_match_takes_the_sort_its_arms_decide() {
     assert_eq!(run(&inversion(": (_) => Prop")), b"held");
     let report = error(&data);
     assert!(
-        report.contains("cannot eliminate the proposition 'In'"),
+        report.contains("the proposition `In` is matched into a relevant result"),
         "{report}"
     );
 }

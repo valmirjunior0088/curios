@@ -206,7 +206,7 @@ fn public_signature_naming_an_unexported_subtree_item_is_rejected() {
     "#
         )
         .contains(
-            "exposes 'Helper' in its signature, and 'Helper' is in the private module '/Facade/Impl'\n  mark '/Facade/Impl' pub, re-export 'Helper' beside 'build', or make 'build' private"
+            "names `Helper` in its signature\n  `Helper` is in the private module `/Facade/Impl`\n  mark `/Facade/Impl` `pub`, re-export `Helper` beside `build`, or make `build` private"
         ),
     );
 }

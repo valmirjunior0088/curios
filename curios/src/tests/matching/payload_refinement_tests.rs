@@ -143,9 +143,9 @@ fn an_error_in_an_arm_the_indices_rule_out_says_the_arm_may_be_left_out() {
         "#,
     );
     assert!(
-        literal.contains("implicit argument 'ok' of 'needs_zero' was not inferred")
+        literal.contains("implicit argument `ok` of `needs_zero` was not inferred")
             && literal.contains(
-                "this arm is never taken: its case has type Tag(0) and its scrutinee has type Tag(1)"
+                "this arm is never taken\n│  its case has type Tag(0) and its scrutinee has type Tag(1)"
             )
             && literal.contains("the arm may be left out"),
         "{literal}"
@@ -163,7 +163,7 @@ fn an_error_in_an_arm_the_indices_rule_out_says_the_arm_may_be_left_out() {
     );
     assert!(
         variable.contains(
-            "this arm is never taken: its case has type Two(0, 1) and its scrutinee has type Two(n, n)"
+            "this arm is never taken\n│  its case has type Two(0, 1) and its scrutinee has type Two(n, n)"
         ) && variable.contains("the arm may be left out"),
         "{variable}"
     );

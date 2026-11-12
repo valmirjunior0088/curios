@@ -1,5 +1,5 @@
 use {
-    curios_common::{Report, Span},
+    curios_common::{Report, Said, Span},
     curios_parse::ParserError,
     std::{fmt, io, path::PathBuf},
 };
@@ -153,10 +153,10 @@ impl Error {
         let report = match self {
             Self::Located { span, error } => error
                 .parse_failure()
-                .unwrap_or_else(|| Report::at(span.clone(), error.to_string())),
+                .unwrap_or_else(|| Report::of(Some(span.clone()), error.said())),
             error => error
                 .parse_failure()
-                .unwrap_or_else(|| Report::unlocated(error.to_string())),
+                .unwrap_or_else(|| Report::of(None, error.said())),
         };
 
         // "Also" and not "first": a module's declarations are in scope before any of its `use` lines is read, so the claim that stood first may be written below the one refused.
@@ -182,7 +182,7 @@ impl Error {
         }
     }
 
-    /// The nested parser's report, prefixed with which module was being loaded, when this is a module that failed to parse.
+    /// The nested parser's report, in the module's own file, with the fact of which module the file was read as, when this is a module that failed to parse.
     fn parse_failure(&self) -> Option<Report> {
         let Self::ModuleLoadFailed { label, cause } = self else {
             return None;
@@ -190,13 +190,10 @@ impl Error {
         let LoadError::Parse(error) = &**cause else {
             return None;
         };
-        let report = error.report();
+        let mut report = error.report();
+        report.facts.push(read_as(label));
 
-        Some(Report {
-            span: report.span,
-            message: format!("failed to load module {label}:\n{}", report.message),
-            notes: report.notes,
-        })
+        Some(report)
     }
 
     /// Renders the error for the user: the `Display` message plus, when the error is `Located`, the source snippet its span points at. Callers should prefer this over `to_string()`, which prints the message alone. [`report`](Self::report) rendered, so the two cannot disagree about where.
@@ -206,117 +203,181 @@ impl Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.said().fmt(formatter)
+    }
+}
+
+impl Error {
+    /// What the error says: its sentence, and each fact beneath it.
+    pub fn said(&self) -> Said {
+        let mut said = Said::default();
+        self.say(&mut said);
+
+        said
+    }
+
+    /// Say the error onto `f`.
+    fn say(&self, f: &mut Said) {
         match self {
-            Error::Unresolved { failure, .. } => write!(f, "{failure}"),
-            Error::ModuleNotFound { path } => write!(f, "module not found: {path}"),
-            Error::OpaqueConstructorsCannotBeReExported { induct_decl } => write!(
-                f,
-                "constructors of opaque inductive '{induct_decl}' cannot be re-exported\n  mark its representation public (`: pub Type` or `: pub Prop`)"
-            ),
+            Error::Unresolved { failure, .. } => failure.say(f),
+            Error::ModuleNotFound { path } => {
+                f.text("unknown module");
+                f.stating(format_args!("not found: {path}"));
+            }
+            Error::OpaqueConstructorsCannotBeReExported { induct_decl } => {
+                f.text("private representation");
+                f.stating(format_args!(
+                    "the constructors of `{induct_decl}` cannot be re-exported"
+                ));
+                f.stating("mark its representation public, `: pub Type` or `: pub Prop`");
+            }
             Error::MountCollision {
                 claim,
                 claimed,
                 claimant,
-            } => write!(
-                f,
-                "{claim} collides with `{claimed}`, claimed by {claimant}; a prefix belongs to exactly one unit, and no claimed prefix may lie within another's subtree"
-            ),
+            } => {
+                f.text("prefix collision");
+                f.stating(format_args!(
+                    "{claim} collides with `{claimed}`, claimed by {claimant}"
+                ));
+                f.stating("a prefix belongs to exactly one unit");
+                f.stating("no claimed prefix lies within another's subtree");
+            }
             Error::PrivateItemInPublicInterface {
                 item,
                 referent,
                 behind: None,
-            } => write!(
-                f,
-                "public item '{item}' exposes private item '{referent}' in its signature\n  mark '{referent}' pub, or make '{item}' private"
-            ),
-            // Beside the item is where a re-export always answers: the item's module names the referent already, and its audience is the item's.
+            } => {
+                f.text("private item exposed");
+                f.stating(format_args!(
+                    "the public `{item}` names the private `{referent}` in its signature"
+                ));
+                f.stating(format_args!(
+                    "mark `{referent}` `pub`, or make `{item}` private"
+                ));
+            }
             Error::PrivateItemInPublicInterface {
                 item,
                 referent,
                 behind: Some(module),
-            } => write!(
-                f,
-                "public item '{item}' exposes '{referent}' in its signature, and '{referent}' is in the private module '{module}'\n  mark '{module}' pub, re-export '{referent}' beside '{item}', or make '{item}' private"
-            ),
+            } => {
+                f.text("private item exposed");
+                f.stating(format_args!(
+                    "the public `{item}` names `{referent}` in its signature"
+                ));
+                f.stating(format_args!(
+                    "`{referent}` is in the private module `{module}`"
+                ));
+                f.stating(format_args!("mark `{module}` `pub`, re-export `{referent}` beside `{item}`, or make `{item}` private"));
+            }
             Error::QualifierConflict { qualifier, .. } => {
-                write!(f, "`{qualifier}` already names a module in this scope")
+                f.text("name conflict");
+                f.stating(format_args!(
+                    "`{qualifier}` already names a module in this scope"
+                ));
             }
             Error::BindingConflict { label, .. } => {
-                write!(f, "`{label}` is already in scope here")
+                f.text("name conflict");
+                f.stating(format_args!("`{label}` is already in scope here"));
             }
             Error::DuplicateDeclaration { label } => {
-                write!(f, "`{label}` is already declared in this module")
+                f.text("duplicate declaration");
+                f.stating(format_args!("`{label}` is already declared in this module"));
             }
             Error::DuplicateField { label } => {
-                write!(f, "`{label}` is already a field of this structure")
+                f.text("duplicate field");
+                f.stating(format_args!(
+                    "`{label}` is already a field of this structure"
+                ));
             }
             Error::ExportConflict { label } => {
-                write!(f, "export conflict for label: {label}")
+                f.text("name conflict");
+                f.stating(format_args!("`{label}` is exported twice"));
             }
             Error::CyclicReExport { label } => {
-                write!(f, "cyclic re-export with no concrete target: {label}")
+                f.text("re-export cycle");
+                f.stating(format_args!(
+                    "`{label}` is re-exported in a cycle that reaches no declaration"
+                ));
             }
             Error::ConceptUseParameter { concept } => {
-                write!(
-                    f,
-                    "concept `{concept}` takes a `use` parameter: a concept states a premise as a superclass field, `use C(args)` among its fields"
-                )
+                f.text("misplaced premise");
+                f.stating(format_args!(
+                    "the concept `{concept}` takes a `use` parameter"
+                ));
+                f.stating("a concept states a premise as a superclass field, `use C(args)` among its fields");
             }
             Error::SortOutsideSignature { site } => {
-                write!(
-                    f,
-                    "`Sort` is left to a caller, so it is written in the signature of a top-level `let`, `induct` or `struct`: this one stands in {site}"
-                )
+                f.text("misplaced sort");
+                f.stating(format_args!("`Sort` stands in {site}"));
+                f.stating("it is left to a caller, so it is written in the signature of a top-level `let`, `induct` or `struct`");
             }
             Error::MatrixMotiveRequiresCtorHead => {
-                write!(
-                    f,
-                    "a written motive is only legal when every arm dispatches on the same kind of tag/literal directly"
-                )
+                f.text("misplaced motive");
+                f.stating("a motive is written where every arm dispatches directly on one kind of tag or literal");
             }
             Error::BindArmIrrefutable => {
-                write!(
-                    f,
-                    "a bind arm `| pattern = value =>` needs a refutable pattern; a bare binder is irrefutable — use a `let`"
-                )
+                f.text("irrefutable pattern");
+                f.stating("a bind arm, `| pattern = value =>`, takes a refutable pattern");
+                f.stating("a bare binder always matches");
+                f.stating("write a `let`");
             }
             Error::MatchNamedCatchAll { binder } => {
-                write!(
-                    f,
-                    "a named final arm cannot be a catch-all: write `| _ =>` for a default, or the constructor with its payload list, `| {binder}() =>`"
-                )
+                f.text("named catch-all");
+                f.stating("a named final arm is no catch-all");
+                f.stating("write `| _ =>` for a default");
+                f.stating(format_args!(
+                    "or the constructor with its payload list, `| {binder}() =>`"
+                ));
             }
             Error::MatchAlternativeNames { name } => {
-                write!(
-                    f,
-                    "every alternative of an arm binds the same names, and `{name}` is bound by one alternative of this arm and not by this one"
-                )
+                f.text("missing binder");
+                f.stating(format_args!(
+                    "`{name}` is bound by another alternative of this arm and not by this one"
+                ));
+                f.stating("every alternative of an arm binds the same names");
             }
             Error::RecursivePatternBinding => {
-                write!(
-                    f,
-                    "a recursive binding is a plain name: a pattern binds projections of a value, none of which the value itself can name; bind the value under a name and destructure it after"
-                )
+                f.text("recursive pattern");
+                f.stating("a recursive binding is a plain name");
+                f.stating(
+                    "a pattern binds projections of a value, and the value can name none of them",
+                );
+                f.stating("bind the value under a name and destructure it after");
             }
             Error::RecursiveBindingNeedsType { label } => {
-                write!(
-                    f,
-                    "`{label}` mentions itself and states no type; a recursive binding states its type, since a body that mentions the binding cannot be the source of it — and if an outer `{label}` was meant, the new binding shadows it: rename one of them"
-                )
+                f.text("missing type");
+                f.stating(format_args!("`{label}` mentions itself and states no type"));
+                f.stating("a body that mentions the binding cannot be the source of its type");
+                f.stating(format_args!(
+                    "if an outer `{label}` was meant, the new binding shadows it"
+                ));
+                f.stating("rename one of them");
             }
             Error::RecursiveBangBinding { label } => {
-                write!(
-                    f,
-                    "`{label}` is bound by an action that mentions it; the action runs before the binding exists, so it cannot name the result it produces"
-                )
+                f.text("recursive action");
+                f.stating(format_args!(
+                    "`{label}` is bound by an action that mentions it"
+                ));
+                f.stating("the action runs before the binding exists, so it cannot name the result it produces");
             }
             Error::ModuleLoadFailed { label, cause } => {
-                write!(f, "failed to load module {label}:\n{}", cause.format())
+                let Report {
+                    headline, facts, ..
+                } = cause.report();
+                f.text(headline);
+                facts.into_iter().for_each(|fact| f.stating(fact));
+                f.stating(read_as(label));
             }
-            Error::Located { error, .. } => write!(f, "{error}"),
+            Error::Located { error, .. } => error.say(f),
         }
     }
+}
+
+/// The fact that says which module a file was read as, beneath the report of a file that could not be read or parsed.
+fn read_as(label: &str) -> String {
+    format!("read as the module `{label}`")
 }
 
 /// Why a `.crs` file could not become a parsed module: unreadable, or read but failed to parse. Returned directly by [`open_entrypoint`](crate::open_entrypoint) and [`read_module`](crate::read_module); for a `mod`-declared file it is wrapped in [`Error::ModuleLoadFailed`], which adds which module was being loaded.
@@ -331,7 +392,11 @@ impl LoadError {
     pub fn report(&self) -> Report {
         match self {
             LoadError::Read { path, error } => {
-                Report::unlocated(format!("failed to read {}: {error}", path.display()))
+                let mut said = Said::line("unreadable file");
+                said.stating(format_args!("reading: {}", path.display()));
+                said.stating(error);
+
+                Report::of(None, said)
             }
             LoadError::Parse(error) => error.report(),
         }

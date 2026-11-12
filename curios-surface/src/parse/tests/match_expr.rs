@@ -324,15 +324,15 @@ fn choose_bind_arm() {
 
 #[test]
 fn a_malformed_choose_arm_reports_the_arm_rather_than_the_missing_default() {
-    // `many0` drops the failed arm's error, and the default arm stood in its place: every one of these reported `Expected '_'` at the arm's first token, a default the reader never meant to write.
+    // `many0` drops the failed arm's error, and the default arm stood in its place: every one of these reported `expected: `_`` at the arm's first token, a default the reader never meant to write.
     for (source, expected) in [
         (
             "choose\n| some(v) = key v\n| _ => 0\nend",
-            "Expected '=>', obtained 'v'",
+            "expected: `=>`\n│  obtained: `v`",
         ),
         (
             "choose\n| true 1\n| _ => 0\nend",
-            "Expected '=>', obtained '1'",
+            "expected: `=>`\n│  obtained: `1`",
         ),
         // The bind arm is read after the condition arm and so keeps its commitments: the pattern grammar's own refusal is the diagnosis, the same one a `match` arm gives for the same mistake.
         (
@@ -348,7 +348,7 @@ fn a_malformed_choose_arm_reports_the_arm_rather_than_the_missing_default() {
         .parse::<Term>()
         .unwrap_err()
         .format();
-    assert!(report.contains("Expected '|'"), "reported {report}");
+    assert!(report.contains("expected: `|`"), "reported {report}");
 }
 
 // `choose` survives print → re-parse, including the arm-free form.
@@ -390,7 +390,7 @@ fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
             "{source:?} reported {report}"
         );
         assert!(
-            !report.contains("Expected '=>'"),
+            !report.contains("expected: `=>`"),
             "{source:?} reported {report}"
         );
     }
@@ -417,7 +417,7 @@ fn a_successor_pattern_past_one_is_refused_at_its_step() {
 
 /// A constructor pattern names its constructor bare, and the refusal says so rather than blaming the token the fall-through reached.
 ///
-/// The tag is resolved against the scrutinee's type, so the namespace is never spelled. Written anyway, it is refused for that, rather than the head parsing as a `Binder` and the arm reporting `Expected '=>'` against the `/` — with a `=>` plainly written further along the same line.
+/// The tag is resolved against the scrutinee's type, so the namespace is never spelled. Written anyway, it is refused for that, rather than the head parsing as a `Binder` and the arm reporting `expected: `=>`` against the `/` — with a `=>` plainly written further along the same line.
 #[test]
 fn a_qualified_constructor_pattern_is_refused_by_name() {
     for source in [

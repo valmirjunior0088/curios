@@ -1,16 +1,69 @@
 use {
     super::{ParserState, obtained, shown, unseen},
-    curios_common::{Report, Source, Span},
+    curios_common::{Report, Said, Source, Span},
     std::{borrow::Cow, sync::Arc},
 };
+
+/// What a failure the grammar words says, a fact a line in the order a reader is told them: what stands here, then the rule it is held to, then what to write. One statement is a fact alone, so a message of one is written as its text.
+///
+/// **A constant's facts are borrowed.** Nearly every failure is backtracked and dropped, so one a grammar words from a constant, a text or a list of them, allocates nothing; only facts a failure spells as it is raised are owned.
+#[derive(Debug, Clone)]
+pub struct Stated(Facts);
+
+#[derive(Debug, Clone)]
+enum Facts {
+    One(Cow<'static, str>),
+    Constant(&'static [&'static str]),
+    Spelled(Vec<String>),
+}
+
+impl Stated {
+    fn facts(&self) -> Vec<&str> {
+        match &self.0 {
+            Facts::One(fact) => vec![fact],
+            Facts::Constant(facts) => facts.to_vec(),
+            Facts::Spelled(facts) => facts.iter().map(String::as_str).collect(),
+        }
+    }
+}
+
+impl From<&'static str> for Stated {
+    fn from(fact: &'static str) -> Self {
+        Self(Facts::One(Cow::Borrowed(fact)))
+    }
+}
+
+impl From<String> for Stated {
+    fn from(fact: String) -> Self {
+        Self(Facts::One(Cow::Owned(fact)))
+    }
+}
+
+impl From<&'static [&'static str]> for Stated {
+    fn from(facts: &'static [&'static str]) -> Self {
+        Self(Facts::Constant(facts))
+    }
+}
+
+impl<const N: usize> From<&'static [&'static str; N]> for Stated {
+    fn from(facts: &'static [&'static str; N]) -> Self {
+        Self(Facts::Constant(facts))
+    }
+}
+
+impl From<Vec<String>> for Stated {
+    fn from(facts: Vec<String>) -> Self {
+        Self(Facts::Spelled(facts))
+    }
+}
 
 /// What a failure says.
 ///
 /// **Rendered where the failure is reported, not where it is raised.** A grammar tries a literal at every position an alternative could begin, and nearly every such failure is backtracked and dropped: one that formatted its message as it was raised would allocate for each. So a missed literal holds the literal, and what stood in its place is read off the source when a report asks; a message the grammar wrote is borrowed where it is a constant.
 #[derive(Debug, Clone)]
 enum Message {
-    /// A message in hand.
-    Said(Cow<'static, str>),
+    /// Facts in hand.
+    Said(Stated),
     /// A literal that was not there.
     Expected(&'static str),
     /// A literal that was there and must not be.
@@ -33,7 +86,7 @@ pub struct ParserError {
 impl ParserError {
     pub(crate) fn new<M>(state: ParserState, message: M) -> Self
     where
-        M: Into<Cow<'static, str>>,
+        M: Into<Stated>,
     {
         Self::saying(state, Message::Said(message.into()))
     }
@@ -56,7 +109,7 @@ impl ParserError {
         }
     }
 
-    /// The failure of a literal that was not at `state`: `Expected '…', obtained …`, naming what stands there as [`obtained`] says it, up to the literal's length.
+    /// The failure of a literal that was not at `state`: the literal expected, and what was obtained in its place as [`obtained`] says it, up to the literal's length.
     pub(crate) fn expected(state: ParserState, expected: &'static str) -> Self {
         Self::saying(state, Message::Expected(expected))
     }
@@ -77,32 +130,41 @@ impl ParserError {
         }
     }
 
-    /// What the failure says, rendered — see [`Message`].
+    /// What the failure says: that the text is no form of the grammar, and beneath it the facts — see [`Message`].
     ///
     /// A failure whose caret stands at a character its reader cannot see names the character, where what it says does not already: the caret would point at nothing, or at what reads as a blank between two tokens.
-    fn message(&self) -> String {
-        let said = match &self.message {
-            Message::Said(message) => message.to_string(),
-            Message::Unexpected(unexpected) => format!("unexpected '{unexpected}'"),
-            Message::Expected(expected) => format!(
-                "Expected '{expected}', obtained {}",
-                obtained(&self.source.text()[self.offset..], expected.chars().count())
-            ),
-        };
+    fn said(&self) -> Said {
+        let mut said = Said::line("syntax error");
+        match &self.message {
+            Message::Said(stated) => stated
+                .facts()
+                .into_iter()
+                .for_each(|fact| said.stating(fact)),
+            Message::Unexpected(unexpected) => {
+                said.stating(format_args!("unexpected: `{unexpected}`"));
+            }
+            Message::Expected(expected) => {
+                said.stating(format_args!("expected: `{expected}`"));
+                said.stating(format_args!(
+                    "obtained: {}",
+                    obtained(&self.source.text()[self.offset..], expected.chars().count())
+                ));
+            }
+        }
 
         let at = self.from.unwrap_or(self.offset);
-        match self.source.text()[at..].chars().next() {
-            Some(char) if unseen(char) => {
-                let code = shown(char.encode_utf8(&mut [0; 4]));
-                match said.contains(&code) {
-                    true => said,
-                    false => {
-                        format!("{said}: {code} stands here, a character the grammar does not take")
-                    }
-                }
+        if let Some(char) = self.source.text()[at..].chars().next()
+            && unseen(char)
+        {
+            let code = shown(char.encode_utf8(&mut [0; 4]));
+            if !said.to_string().contains(&code) {
+                said.stating(format_args!(
+                    "{code} stands here, a character the grammar does not take"
+                ));
             }
-            _ => said,
         }
+
+        said
     }
 
     /// Whether an alternative [`commit`](crate::commit)ted to this failure — the diagnosis, rather than a guess a sibling may still improve on. What [`Parser::or`](crate::Parser::or) and the repetition combinators stop at.
@@ -140,22 +202,22 @@ impl ParserError {
         }
     }
 
-    pub(crate) fn with_message<M: Into<Cow<'static, str>>>(self, message: M) -> Self {
+    pub(crate) fn with_message<M: Into<Stated>>(self, message: M) -> Self {
         Self {
             message: Message::Said(message.into()),
             ..self
         }
     }
 
-    /// The error as data: its message at a span ending at the failure offset — empty, at the point the parser stopped, unless the failure named the run of text it is about — which is what the caret of [`format`](Self::format) points at, so a consumer reading the span sees exactly where the rendering does.
+    /// The error as data: what it says at a span ending at the failure offset — empty, at the point the parser stopped, unless the failure named the run of text it is about — which is what the caret of [`format`](Self::format) points at, so a consumer reading the span sees exactly where the rendering does.
     pub fn report(&self) -> Report {
-        Report::at(
-            Span::new(
+        Report::of(
+            Some(Span::new(
                 self.source.clone(),
                 self.from.unwrap_or(self.offset),
                 self.offset,
-            ),
-            self.message(),
+            )),
+            self.said(),
         )
     }
 

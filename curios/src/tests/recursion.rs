@@ -139,7 +139,7 @@ fn an_undeclared_cycle_is_refused_with_the_way_out() {
 
     let report = error(source);
     assert!(
-        report.contains("'f' and 'g' need one another") && report.contains("'let ... and ...'"),
+        report.contains("`f` and `g` need one another") && report.contains("`let ... and ...`"),
         "expected the cycle named with its way out:\n{report}"
     );
     // Placed at the first member's name: a cycle is about its declarations as wholes, and holds no position of its own.
@@ -171,8 +171,8 @@ fn a_cycle_through_a_registry_entry_is_refused_by_name() {
     for source in [through_a_family, through_a_record] {
         let report = error(source);
         assert!(
-            report.contains("'Tree' and 'Forest' need one another")
-                && report.contains("'let ... and ...'"),
+            report.contains("`Tree` and `Forest` need one another")
+                && report.contains("`let ... and ...`"),
             "expected the cycle named with its way out:\n{report}"
         );
         assert_eq!(
@@ -200,7 +200,7 @@ fn a_top_level_group_that_is_no_cycle_is_refused_naming_its_parts() {
             let generic(A: Type, n: Nat) -> Nat = alone(n);
             /std/print(Nat/to_str(generic(Nat, 1)))
             "#,
-            "'alone' alone, and 'generic' alone",
+            "`alone` alone, and `generic` alone",
         ),
         (
             r#"
@@ -222,7 +222,7 @@ fn a_top_level_group_that_is_no_cycle_is_refused_naming_its_parts() {
             end
             /std/print("1")
             "#,
-            "'Pause' alone, and 'Step' alone",
+            "`Pause` alone, and `Step` alone",
         ),
         (
             r#"
@@ -459,7 +459,7 @@ fn no_judgment_inside_a_group_reads_a_member_withheld_from_it() {
             error.contains(&fill!(
                 "nothing discharged /std/Bool/Holds(${member}(0) < List/len(@Nat, [1, 2, 3]))",
                 member,
-            )) && !error.contains("the certifier refused"),
+            )) && !error.contains("certifier refusal"),
             "{error}"
         );
     };
@@ -563,7 +563,7 @@ fn a_group_member_type_cannot_fold_to_a_proposition() {
     assert!(
         error.contains("inferred: Prop")
             && error.contains("expected: Type")
-            && !error.contains("the certifier refused"),
+            && !error.contains("certifier refusal"),
         "{error}"
     );
 }
@@ -586,7 +586,7 @@ fn a_slot_reached_from_its_own_solution_is_judged() {
     let refused = |groups: &str, tail: &str, diagnostic: &str| {
         let error = error(&program(groups, tail));
         assert!(
-            error.contains(diagnostic) && !error.contains("the certifier refused"),
+            error.contains(diagnostic) && !error.contains("certifier refusal"),
             "{error}"
         );
     };
@@ -613,7 +613,7 @@ fn a_slot_reached_from_its_own_solution_is_judged() {
         "let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => let _w = val; T(k) end
         and val: T(2) = id((x) => x + 1);",
         "val(3)",
-        "is a type position but does not terminate on every input",
+        "is a type position\n│  it does not terminate on every input",
     );
 }
 
@@ -634,8 +634,8 @@ fn a_type_reaching_two_partial_definitions_names_the_first_written() {
         ))
     };
 
-    assert!(refusal("zeta(0), alpha(0)").contains("reaches 'zeta'"));
-    assert!(refusal("alpha(0), zeta(0)").contains("reaches 'alpha'"));
+    assert!(refusal("zeta(0), alpha(0)").contains("reaches `zeta`"));
+    assert!(refusal("alpha(0), zeta(0)").contains("reaches `alpha`"));
 }
 
 // Two definitions that write one recursion two ways are one function to both checkers, called and bare: their groups are compared as the binders they are, and neither is unfolded against the other.

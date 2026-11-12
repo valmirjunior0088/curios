@@ -121,8 +121,8 @@ fn top_foreign_refuses_a_single_result_in_braces() {
         "the refusal says how to spell it: {refusal}"
     );
     assert!(
-        refusal.ends_with(
-            "    1 | foreign f(Nat) -> {value: Nat};\n      |                    ^^^^^^^^^^"
+        refusal.contains(
+            "│  1 │ foreign f(Nat) -> {value: Nat};\n│    │                    ^^^^^^^^^^\n"
         ),
         "the refusal stands at the field: {refusal}"
     );
@@ -134,38 +134,38 @@ fn top_foreign_refuses_a_result_as_the_form_it_began() {
     for (source, expected, caret) in [
         (
             "foreign m(Nat) -> ();",
-            "`()` is the unit value, and a result is a type: a row that answers nothing is written `-> {}`",
+            "`()` is the unit value, and a result is a type\n│  a row that answers nothing is written `-> {}`",
             "                  ^^",
         ),
         (
             "foreign m(Nat) -> (Nat) -> Nat;",
-            "expected a wire result: a wire type, a braced list of labelled wire types, `{}` for none, or `Never`",
+            "expected: a wire result\n│  a wire type, a braced list of labelled wire types, `{}` for none, or `Never`",
             "                  ^",
         ),
         (
             "foreign m(Nat) -> ;",
-            "expected a wire result",
+            "expected: a wire result",
             "                  ^",
         ),
         (
             "foreign m(Nat) -> {Nat, Nat};",
-            "a result's field is written `label: type`, as in `status: Nat`; 'Nat' is read as a label and no `:` follows it",
+            "`Nat` is read as a label and no `:` follows it\n│  a result's field is written `label: type`, as in `status: Nat`",
             "                   ^^^",
         ),
         (
             "foreign m(Nat) -> {a: Nat, b};",
-            "'b' is read as a label and no `:` follows it",
+            "`b` is read as a label and no `:` follows it",
             "                           ^",
         ),
         (
             "foreign m(Nat) -> {a: };",
-            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Handle, List(...), or Option(...))",
+            "expected: a wire type",
             "                      ^",
         ),
         // A field whose separator is missing is no field standing alone: the brace reports it.
         (
             "foreign m(Nat) -> {a: Nat b: Nat};",
-            "Expected '}', obtained 'b'",
+            "expected: `}`\n│  obtained: `b`",
             "                          ^",
         ),
         // `List` reaches the wire type's own refusal, as a result and as an operand.
@@ -181,7 +181,7 @@ fn top_foreign_refuses_a_result_as_the_form_it_began() {
         ),
         (
             "foreign m(Nat) -> List();",
-            "expected a List or Option element type (Nat, Int, Bool, Bytes, or Handle — neither nests)",
+            "expected: a `List` or `Option` element type",
             "                       ^",
         ),
         (
@@ -191,14 +191,14 @@ fn top_foreign_refuses_a_result_as_the_form_it_began() {
         ),
         (
             "foreign m(Nat) -> /std/Nat;",
-            "a wire type is written bare: `Nat` rather than `/std/Nat`",
+            "a wire type is written bare, `Nat` rather than `/std/Nat`",
             "                  ^",
         ),
     ] {
         let report = source.parse::<Module>().unwrap_err().format();
         assert!(report.contains(expected), "{source:?} reported {report}");
         assert!(
-            report.ends_with(&format!("    1 | {source}\n      | {caret}")),
+            report.contains(&format!("│  1 │ {source}\n│    │ {caret}\n")),
             "{source:?} reported {report}"
         );
     }
@@ -210,7 +210,7 @@ fn top_foreign_reads_a_results_labels_as_a_tuple_types() {
     for (source, expected, caret) in [
         (
             "foreign g(Nat) -> {a: Nat, a: Nat};",
-            "a result names each of its fields once: 'a' labels an earlier one",
+            "`a` labels an earlier field\n│  a result names each of its fields once",
             "                           ^",
         ),
         (
@@ -220,14 +220,14 @@ fn top_foreign_reads_a_results_labels_as_a_tuple_types() {
         ),
         (
             "foreign g(Nat) -> {status: Nat, let: Bytes};",
-            "'let' is a reserved keyword, so it cannot be a name",
+            "`let` is a reserved keyword, so it cannot be a name",
             "                                ^^^",
         ),
     ] {
         let report = source.parse::<Module>().unwrap_err().format();
         assert!(report.contains(expected), "{source:?} reported {report}");
         assert!(
-            report.ends_with(&format!("    1 | {source}\n      | {caret}")),
+            report.contains(&format!("│  1 │ {source}\n│    │ {caret}\n")),
             "{source:?} reported {report}"
         );
     }
@@ -274,29 +274,29 @@ fn top_foreign_names_the_wire_vocabulary_it_refused() {
     for (source, expected) in [
         (
             "foreign f(Str) -> Nat;",
-            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Handle, List(...), or Option(...)), found 'Str'",
+            "expected: a wire type\n│  obtained: `Str`",
         ),
         // A result goes through the same parser, so it names the same vocabulary.
         (
             "foreign f() -> Str;",
-            "expected a wire type (Nat, Int, Bool, Byte, Flt, Bytes, Handle, List(...), or Option(...)), found 'Str'",
+            "expected: a wire type\n│  obtained: `Str`",
         ),
         (
             "foreign f(List(List(Nat))) -> Bool;",
-            "expected a List or Option element type (Nat, Int, Bool, Bytes, or Handle — neither nests), found 'List'",
+            "expected: a `List` or `Option` element type\n│  obtained: `List`",
         ),
         (
             "foreign f(Option(List(Nat))) -> Bool;",
-            "expected a List or Option element type (Nat, Int, Bool, Bytes, or Handle — neither nests), found 'List'",
+            "expected: a `List` or `Option` element type\n│  obtained: `List`",
         ),
         (
             "foreign f(List(Option(Nat))) -> Bool;",
-            "expected a List or Option element type (Nat, Int, Bool, Bytes, or Handle — neither nests), found 'Option'",
+            "expected: a `List` or `Option` element type\n│  obtained: `Option`",
         ),
         // A `/` stops `parse_identifier` before either arm is reached, so the qualified spelling is refused by name of its own.
         (
             "foreign f(/std/Nat) -> Nat;",
-            "a wire type is written bare: `Nat` rather than `/std/Nat`",
+            "a wire type is written bare, `Nat` rather than `/std/Nat`",
         ),
     ] {
         let report = source.parse::<Module>().unwrap_err().format();
@@ -371,7 +371,7 @@ fn a_list_of_bytes_is_not_a_wire_type() {
         .format();
 
     assert!(
-        refusal.contains("expected a List or Option element type"),
+        refusal.contains("expected: a `List` or `Option` element type"),
         "{refusal}"
     );
 }

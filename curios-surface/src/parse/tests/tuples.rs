@@ -174,7 +174,7 @@ fn struct_literal_disambiguates_from_tuple_type() {
     );
 }
 
-// A field label is a name like any other, so a keyword may not spell one. The refusal has to be an alternative of its own: `parse_label` may only refuse a keyword uncommittedly here, since a *positional* field is a term and a term may open with a keyword — and uncommitted it was discarded for the enclosing `}`, which reported `Expected '}', obtained 'e'` for a field written `end : Nat`.
+// A field label is a name like any other, so a keyword may not spell one. The refusal has to be an alternative of its own: `parse_label` may only refuse a keyword uncommittedly here, since a *positional* field is a term and a term may open with a keyword — and uncommitted it was discarded for the enclosing `}`, which reported `expected: `}`\n│  obtained: `e`` for a field written `end : Nat`.
 #[test]
 fn a_reserved_keyword_cannot_label_a_field() {
     for source in [

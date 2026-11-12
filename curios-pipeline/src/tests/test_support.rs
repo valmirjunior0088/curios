@@ -3,7 +3,7 @@
 use {
     crate::{compile::test_support::*, *},
     curios_common::{
-        Candidates, Digest, Facet, Object, RootKind, candidate_prefix, test_support::*,
+        Candidates, Digest, Facet, Object, Report, RootKind, candidate_prefix, test_support::*,
     },
     curios_core::{Definitions, Enter, Item, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
@@ -338,7 +338,7 @@ pub fn unused_binders(unit: &Unit) -> Vec<String> {
         .lints()
         .iter()
         .filter(|lint| lint.kind == LintKind::UnusedBinder)
-        .map(|lint| lint.message.clone())
+        .map(|lint| lint.report(&[]).message())
         .collect()
 }
 
@@ -794,8 +794,8 @@ pub fn pasted(source: &str) -> Result<String, String> {
                 source,
                 "a goal's span points into the program"
             );
-            let answer = solution(&report.message)
-                .unwrap_or_else(|| panic!("the goal is determined:\n{}", report.message));
+            let answer = solution(report)
+                .unwrap_or_else(|| panic!("the goal is determined:\n{}", report.message()));
             (span.start, span.end, answer)
         })
         .collect::<Vec<_>>();
@@ -822,20 +822,19 @@ pub fn declined(source: &str) -> bool {
 
     reports
         .iter()
-        .all(|report| report.message.contains("as the compiler holds it"))
+        .all(|report| report.message().contains("as the compiler holds it"))
 }
 
-/// The `? = …` line of a goal report, with the lines a long solution breaks onto: those are indented past the two spaces every other line of the report takes.
-pub fn solution(message: &str) -> Option<String> {
-    let mut lines = message.lines();
-    let first = lines
-        .by_ref()
-        .find_map(|line| line.strip_prefix("  ? = "))?;
-    let rest = lines.take_while(|line| line.starts_with("   "));
-    Some(
-        std::iter::once(first)
-            .chain(rest)
-            .collect::<Vec<_>>()
-            .join("\n"),
-    )
+/// What a goal report says the compiler worked out stands at the goal: the term its first line says is inferred, or, where the term is too wide for that line, the `? = …` fact with the lines it breaks onto.
+pub fn solution(report: &Report) -> Option<String> {
+    let inferred = report
+        .headline
+        .strip_prefix('`')
+        .and_then(|headline| headline.strip_suffix("` inferred"));
+    let stated = report
+        .facts
+        .iter()
+        .find_map(|fact| fact.strip_prefix("? = "));
+
+    inferred.or(stated).map(str::to_string)
 }

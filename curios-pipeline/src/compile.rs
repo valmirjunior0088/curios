@@ -8,7 +8,7 @@ use {
     curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
     curios_cert::{Globals, Verdict, certify_definitions, certify_program},
-    curios_common::{Candidates, Qualifier, Report, SyntaxRegistry, recurse},
+    curios_common::{Candidates, Kind, Qualifier, Report, Said, Style, SyntaxRegistry, recurse},
     curios_core::{
         Anchors, Arm, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec, Row,
         Subterm, Term, Transient, Zonked,
@@ -163,9 +163,36 @@ impl CompileError {
     }
 }
 
+impl CompileError {
+    /// What stopped the compile as a reader of `style` sees it: each report a block, a blank line between, the refusals as errors and the written goals as goals.
+    pub fn rendered(&self, style: &Style) -> String {
+        // The refusals lead a mixed batch, which is what its count says.
+        let refused = match self {
+            Self::Failure(reports) => reports.len(),
+            Self::Incomplete(_) => 0,
+            Self::Mixed { failures, .. } => *failures,
+        };
+
+        self.reports()
+            .iter()
+            .enumerate()
+            .map(|(index, report)| {
+                let kind = match index < refused {
+                    true => Kind::Error,
+                    false => Kind::Goal,
+                };
+
+                report.rendered(kind, style)
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
+}
+
 impl fmt::Display for CompileError {
+    /// [`CompileError::rendered`] for a reader standing nowhere who sees no colour.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&Report::render_all(self.reports()))
+        formatter.write_str(&self.rendered(&Style::plain()))
     }
 }
 
@@ -344,10 +371,22 @@ pub fn certifier_refusal(
         &Spelling::for_refusal(definitions, scope, syntax),
     );
 
-    CompileError::failure(match &verdict.name {
-        Some(name) => format!("the certifier refused {}: {refusal}", name.faithful()),
-        None => format!("the certifier refused a unit: {refusal}"),
-    })
+    certifier_refused(
+        match &verdict.name {
+            Some(name) => format!("`{}`", name.faithful()),
+            None => "a unit".to_string(),
+        },
+        refusal,
+    )
+}
+
+/// The compile error that says the certifier refused `refused`, in the certifier's own words.
+fn certifier_refused(refused: String, refusal: impl fmt::Display) -> CompileError {
+    let mut said = Said::line("certifier refusal");
+    said.stating(format_args!("refused: {refused}"));
+    said.stating(refusal);
+
+    CompileError::Failure(vec![Report::of(None, said)])
 }
 
 /// What type-checking refused a program with: the elaborator's own error where it was the elaborator that refused, beside the refusal as a compilation reports it.
@@ -1150,10 +1189,13 @@ fn judged(
             definitions,
             &Spelling::for_refusal(definitions, &scope.lexicons(), syntax),
         );
-        return Err(CompileError::failure(match &verdict.name {
-            Some(name) => format!("the certifier refused {}: {refusal}", name.faithful()),
-            None => format!("the certifier refused the entrypoint: {refusal}"),
-        }));
+        return Err(certifier_refused(
+            match &verdict.name {
+                Some(name) => format!("`{}`", name.faithful()),
+                None => "the entrypoint".to_string(),
+            },
+            refusal,
+        ));
     }
     // The program as the certifier stated it, the one it is erased from.
     let program = Zonked::project(&Program {

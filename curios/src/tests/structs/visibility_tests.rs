@@ -58,7 +58,7 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("exposes private item 'Secret'"),
+        error.contains("names the private `Secret`"),
         "unexpected error: {error}"
     );
 }
@@ -81,8 +81,9 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("exposes 'T' in its signature, and 'T' is in the private module '/M/Inner'")
-            && error.contains("mark '/M/Inner' pub, re-export 'T' beside 'g', or make 'g' private"),
+        error.contains("names `T` in its signature\n│  `T` is in the private module `/M/Inner`")
+            && error
+                .contains("mark `/M/Inner` `pub`, re-export `T` beside `g`, or make `g` private"),
         "unexpected error: {error}"
     );
 }
@@ -107,7 +108,7 @@ fn pub_concept_with_private_superclass_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("exposes private item 'Hidden'"),
+        error.contains("names the private `Hidden`"),
         "unexpected error: {error}"
     );
 }
@@ -151,7 +152,7 @@ fn pub_inductive_with_private_payload_type_is_rejected() {
 
     let error = error(source);
     assert!(
-        error.contains("exposes private item 'Secret'"),
+        error.contains("names the private `Secret`"),
         "unexpected error: {error}"
     );
 }
@@ -183,7 +184,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
         "#;
     let error = error(exposed);
     assert!(
-        error.contains("exposes private item 'Secret'"),
+        error.contains("names the private `Secret`"),
         "unexpected error: {error}"
     );
 }
@@ -275,7 +276,7 @@ fn async_future_plumbing_is_not_reachable_from_user_code() {
 
     let error = error(source);
     assert!(
-        error.contains("field '0'") && error.contains("private"),
+        error.contains("`0` of") && error.contains("private"),
         "unexpected error: {error}"
     );
 }

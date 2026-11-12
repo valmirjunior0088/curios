@@ -84,7 +84,7 @@ fn constructor_pattern_plain_binder_never_binds_a_hidden_payload() {
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))
         "#;
     assert!(
-        error(source).contains("constructor 'cons' takes 2 argument(s) but the match arm binds 3"),
+        error(source).contains("`cons` takes 2 payloads\n│  written: 3"),
         "{}",
         error(source)
     );
@@ -151,7 +151,7 @@ fn constructor_pattern_mark_on_explicit_payload_is_rejected() {
         "#;
     assert!(
         error(source).contains(
-            "payload 2 of 'cons' is an explicit payload (written with no mark), but was written with `@`"
+            "payload 2 of `cons` is an explicit payload, written with no mark\n│  it is written with `@`"
         ),
         "{}",
         error(source)

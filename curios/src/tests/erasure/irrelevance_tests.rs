@@ -58,7 +58,7 @@ fn large_elimination_of_a_prop_is_rejected() {
         "#;
     let error = error(source);
     assert!(
-        error.contains("cannot eliminate the proposition"),
+        error.contains("proof matched into data"),
         "unexpected error: {error}"
     );
 }

@@ -6,7 +6,7 @@
 
 use {
     crate::ErasedNames,
-    curios_common::{Note, Report},
+    curios_common::{Note, Report, Said},
     curios_num::Natural,
     curios_surface::Spellable,
     std::{collections::BTreeMap, rc::Rc},
@@ -189,42 +189,57 @@ impl Error {
         }));
 
         vec![Report {
-            span: extent.and_then(|extent| extent.resolved(anchors)),
-            message: refusal.message(&spelling),
             notes: refusal.notes(&spelling, anchors),
+            ..Report::of(
+                extent.and_then(|extent| extent.resolved(anchors)),
+                refusal.said(&spelling),
+            )
         }]
     }
 
-    /// The sentence one of erasure's own refusals says.
-    fn message(&self, spelling: &Rc<curios_surface::Spelling>) -> String {
+    /// What one of erasure's own refusals says: its tag, and the facts beneath it.
+    fn said(&self, spelling: &Rc<curios_surface::Spelling>) -> Said {
+        let through = |callee: &ErasedName| format!("`{}`", callee.spelled(spelling));
         match self {
             Self::Exhausted { term, refusal } => {
-                let spent = match refusal {
-                    curios_core::ReduceError::Exhausted {
-                        category,
-                        remaining,
-                        attempted,
-                    } => format!("\n  {category} needed {attempted} units with {remaining} left"),
-                    _ => String::new(),
-                };
-                format!(
-                    "erasure ran out of steps reading: {}{spent}",
-                    term.spelled(spelling)
-                )
+                let mut said = Said::line("budget spent");
+                said.stating(format_args!("erasing: {}", term.spelled(spelling)));
+                if let curios_core::ReduceError::Exhausted {
+                    category,
+                    remaining,
+                    attempted,
+                } = refusal
+                {
+                    said.stating(format_args!(
+                        "{category} needed {attempted} units with {remaining} left"
+                    ));
+                }
+
+                said
             }
-            Self::Unreadable { term, refusal } => match term {
-                Some(term) => format!(
-                    "compiler fault: erasure could not read {}, which the certifier accepted\n  the certifier refused it: {}",
-                    term.spelled(spelling),
+            Self::Unreadable { term, refusal } => {
+                let mut said = Said::line("compiler fault");
+                said.stating(match term {
+                    Some(term) => format!(
+                        "erasure could not read {}, which the certifier accepted",
+                        term.spelled(spelling)
+                    ),
+                    None => "erasure could not read a declaration at its instance, which the certifier accepted".to_string(),
+                });
+                said.stating(format_args!(
+                    "the certifier refused it: {}",
                     refusal.rendered(&curios_surface::Spelling::default())
-                ),
-                None => format!(
-                    "compiler fault: erasure could not read a declaration at its instance, which the certifier accepted\n  the certifier refused it: {}",
-                    refusal.rendered(&curios_surface::Spelling::default())
-                ),
-            },
+                ));
+
+                said
+            }
             Self::NatCaseKeyOverflow { value } => {
-                format!("natural dispatch key {value} does not fit a branch table")
+                let mut said = Said::line("key out of range");
+                said.stating(format_args!(
+                    "the `Nat` case {value} does not fit a branch table"
+                ));
+
+                said
             }
             Self::EvaluationCycle { steps } => {
                 let quoted = steps
@@ -239,34 +254,51 @@ impl Error {
                 };
                 let calls = steps
                     .iter()
-                    .filter_map(|(_, through)| through.as_ref())
-                    .map(|callee| format!("`{}`", callee.spelled(spelling)))
+                    .filter_map(|(_, callee)| callee.as_ref())
+                    .map(through)
                     .collect::<Vec<_>>();
                 let through = match calls.as_slice() {
                     [] => String::new(),
                     [call] => format!(" through a call to {call}"),
                     _ => format!(" through calls to {}", calls.join(", ")),
                 };
+                let mut said = Said::line("evaluation cycle");
                 match steps.len() {
-                    1 => format!(
-                        "{listed} evaluates itself{through} as it is initialized; a value may mention itself only under a lambda, where it is computed the first time it is read"
-                    ),
-                    _ => format!(
-                        "{listed} evaluate each other{through} as they are initialized; values may mention one another only under a lambda, where each is computed the first time it is read"
-                    ),
-                }
-            }
-            Self::InitializerPerformsEffect { member, through } => {
-                let through = match through {
-                    Some(callee) => {
-                        format!(" through a call to `{}`", callee.spelled(spelling))
+                    1 => {
+                        said.stating(format_args!(
+                            "{listed} evaluates itself{through} as it is initialized"
+                        ));
+                        said.stating("a value may mention itself only under a lambda");
+                        said.stating("there it is computed the first time it is read");
                     }
+                    _ => {
+                        said.stating(format_args!(
+                            "{listed} evaluate each other{through} as they are initialized"
+                        ));
+                        said.stating("values may mention one another only under a lambda");
+                        said.stating("there each is computed the first time it is read");
+                    }
+                }
+
+                said
+            }
+            Self::InitializerPerformsEffect {
+                member,
+                through: callee,
+            } => {
+                let reached = match callee {
+                    Some(callee) => format!(" through a call to {}", through(callee)),
                     None => String::new(),
                 };
-                format!(
-                    "the initializer of `{}` performs an effect{through}; a recursive value is computed when it is first read, or never, so its initializer may perform none",
+                let mut said = Said::line("effectful initializer");
+                said.stating(format_args!(
+                    "the initializer of `{}` performs an effect{reached}",
                     member.spelled(spelling)
-                )
+                ));
+                said.stating("a recursive value is computed when it is first read, or never");
+                said.stating("so its initializer may perform none");
+
+                said
             }
             Self::Located { .. } => {
                 unreachable!("a location is reported through what it holds")

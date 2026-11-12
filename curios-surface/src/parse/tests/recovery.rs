@@ -23,9 +23,9 @@ fn a_broken_item_is_skipped_to_the_next_anchor() {
     let first = broken(first);
     assert_eq!(first.text(), "pub let a : Nat = ;\n");
     assert!(
-        first.report.message.contains("expected a term"),
+        first.report.message().contains("expected: a term"),
         "{}",
-        first.report.message
+        first.report.message()
     );
     assert!(matches!(second, TopItem::Let(_)));
 }
@@ -107,7 +107,7 @@ fn the_whole_or_nothing_reading_refuses_at_the_first_broken_item() {
         .unwrap_err();
 
     assert!(
-        error.format().contains("expected a term"),
+        error.format().contains("expected: a term"),
         "{}",
         error.format()
     );
@@ -128,7 +128,7 @@ fn a_broken_last_item_reports_itself_rather_than_the_missing_tail() {
     .expect_err("the tail was swallowed");
 
     assert!(
-        error.format().contains("expected a term"),
+        error.format().contains("expected: a term"),
         "{}",
         error.format()
     );
@@ -152,9 +152,9 @@ fn a_private_let_that_fails_at_its_semicolon_costs_one_item() {
         let second = broken(second);
         assert_eq!(second.text(), failing);
         assert!(
-            second.report.message.contains("Expected ';'"),
+            second.report.message().contains("expected: `;`"),
             "{}",
-            second.report.message
+            second.report.message()
         );
         assert_eq!(
             second.declares.as_ref().map(|label| label.as_str()),
@@ -174,9 +174,9 @@ fn a_private_concept_broken_past_its_label_costs_one_item() {
     };
     let first = broken(first);
     assert!(
-        first.report.message.contains("a concept states its sort"),
+        first.report.message().contains("a concept states its sort"),
         "{}",
-        first.report.message
+        first.report.message()
     );
     assert_eq!(
         first.declares.as_ref().map(|label| label.as_str()),

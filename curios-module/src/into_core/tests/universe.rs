@@ -90,7 +90,7 @@ fn a_sort_outside_a_signature_is_refused_with_where_it_stands() {
         assert!(
             refusal
                 .to_string()
-                .contains(&format!("this one stands in {site}")),
+                .contains(&format!("`Sort` stands in {site}")),
             "{source}: {refusal}"
         );
     }

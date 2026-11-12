@@ -153,7 +153,7 @@ fn a_body_the_other_lambdas_type_refuses_is_refused_in_either_order() {
         )));
 
         assert!(
-            report.contains("no witness of /std/ops/Add(Byte) found"),
+            report.contains("wanted: /std/ops/Add(Byte)"),
             "unexpected report for `{call}`:\n{report}"
         );
     }
@@ -268,7 +268,7 @@ fn a_domain_nothing_ever_gives_is_reported_at_its_parameter() {
     ));
 
     assert!(
-        report.contains("the type of parameter 'x' was never determined"),
+        report.contains("the type of the parameter `x` was never determined"),
         "unexpected report:\n{report}"
     );
 }

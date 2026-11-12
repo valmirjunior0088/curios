@@ -144,15 +144,13 @@ fn rejects_use_of_unknown_item() {
     );
 }
 
-// The caret run a report ends with, which is what says how much of the source line it underlined.
+// The caret run under a report's pane, which is what says how much of the source line it underlined.
 fn underline(report: &str) -> String {
     report
         .lines()
-        .next_back()
+        .find(|line| line.contains('^'))
         .unwrap_or_default()
-        .trim()
-        .trim_start_matches('|')
-        .trim()
+        .trim_start_matches(['│', ' '])
         .to_string()
 }
 
@@ -268,7 +266,7 @@ fn an_unresolved_qualifier_names_the_modules_it_could_mean() {
     );
     assert!(
         report.contains(
-            "`Worker` is not in scope\n  `Worker` is `/Owner/Worker`: write it absolute, or `use /Owner/{Worker};`"
+            "`Worker` is not in scope\n  `Worker` is `/Owner/Worker`\n  write it absolute, or `use /Owner/{Worker};`"
         ),
         "reported {report}"
     );
@@ -290,7 +288,7 @@ fn an_unresolved_struct_name_names_the_binding_it_could_mean() {
     );
     assert!(
         report.contains(
-            "`Point` is not in scope\n  `Point` is `/Shapes/Point`: write it absolute, or `use /Shapes/{Point};`"
+            "`Point` is not in scope\n  `Point` is `/Shapes/Point`\n  write it absolute, or `use /Shapes/{Point};`"
         ),
         "reported {report}"
     );

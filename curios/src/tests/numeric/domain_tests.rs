@@ -158,7 +158,7 @@ fn every_bounded_operation_is_refused_one_past_the_edge_of_its_domain() {
         };
 
         assert!(
-            error.contains(&format!("of '{}' was not inferred", edge.operation)),
+            error.contains(&format!("of `{}` was not inferred", edge.operation)),
             "`{}` was refused, but not for `{}`'s bound:\n{error}",
             edge.outside,
             edge.operation
@@ -181,7 +181,7 @@ fn a_channel_of_no_capacity_is_refused_and_one_of_capacity_one_compiles() {
 
     let error = typecheck(&program(0)).expect_err("a channel holds at least one value");
     assert!(
-        error.contains("of 'Channel/new' was not inferred"),
+        error.contains("of `Channel/new` was not inferred"),
         "{error}"
     );
 }

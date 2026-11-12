@@ -32,12 +32,11 @@ pub fn declared_tests(
             ..
         } => {
             let (entrypoint, loader) = open(origin, declares, overlay).map_err(|refusal| {
-                CompileError::failure(
+                CompileError::Failure(
                     refusal
-                        .iter()
-                        .map(|diagnostic| diagnostic.render())
-                        .collect::<Vec<_>>()
-                        .join("\n\n"),
+                        .into_iter()
+                        .map(|diagnostic| diagnostic.report)
+                        .collect(),
                 )
             })?;
             let units = overlaid(units, overlay);

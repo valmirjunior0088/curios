@@ -7,7 +7,7 @@ mod tests;
 use {
     super::{Context, HeldFrames, Pending, Refusal, written},
     curios_analysis::{DeclaredPart, Erased},
-    curios_common::{InfixOp, Note, Plicity, Qualifier, Report, Span, SyntaxRegistry},
+    curios_common::{InfixOp, Note, Plicity, Qualifier, Report, Said, Span, SyntaxRegistry},
     curios_core::{
         Anchors, Atom, CalleeId, Definition, DefinitionKind, Definitions, Exhaustion, Extent, Free,
         Global, Item, Level, Lexicon, Mention, Places, Polarity, ReduceError, Spellings, Term,
@@ -89,7 +89,7 @@ impl CycleMember {
     /// How a report names it: a declaration by its name, a witness by the type it is declared at.
     fn spelled(&self, spelling: &Rc<Spelling>) -> String {
         match self {
-            CycleMember::Named(name) => format!("'{}'", spelling.symbol(name)),
+            CycleMember::Named(name) => format!("`{}`", spelling.symbol(name)),
             CycleMember::Witness { type_, .. } => {
                 format!("the witness of {}", type_.spelled(spelling))
             }
@@ -2028,18 +2028,17 @@ impl Error {
         };
 
         if let Self::Goals(goals) = self.unwrapped() {
-            // The line naming the declaration is spelled for a reader standing in it, as every other report's is.
-            let prefix = self.declaration_prefix(&for_reader(self.owner(), Rc::default()));
             return goals
                 .iter()
                 .map(|goal| {
                     let spelling = for_reader(goal.owner, Rc::clone(&goal.witnesses));
-                    let message = format!("{prefix}{}", goal_text(goal, &spelling));
-                    Report {
-                        span: placed(goal.extent.as_ref(), goal.owner),
-                        message: as_held(message, &spelling),
-                        notes: Vec::new(),
-                    }
+                    // Said before it is asked how its terms printed, which is known once every one has.
+                    let said = goal_said(goal, &spelling);
+
+                    Report::of(
+                        placed(goal.extent.as_ref(), goal.owner),
+                        held(said, &spelling),
+                    )
                 })
                 .collect();
         }
@@ -2051,13 +2050,15 @@ impl Error {
                 .clone()
                 .with_pretty_names(self.rename_map(&spelling)),
         );
-        // Rendered before the report is made: what a term printed as is known once every term has been.
-        let message = self.render_body(spelling, anchors);
+        // Said before the report is made: what a term printed as is known once every term has been.
+        let said = Displayed(self, Rc::clone(spelling), anchors).said();
         let notes = self.notes(spelling, anchors);
         vec![Report {
-            span: placed(self.innermost_extent(), self.owner()),
-            message: as_held(message, spelling),
             notes,
+            ..Report::of(
+                placed(self.innermost_extent(), self.owner()),
+                held(said, spelling),
+            )
         }]
     }
 
@@ -2093,7 +2094,7 @@ impl Error {
                 .collect(),
             Self::IndexedByItsGroup { member, .. } => note(
                 Anchors::label(anchors, member),
-                format!("'{}' is declared here", spelling.symbol(member)),
+                format!("`{}` is declared here", spelling.symbol(member)),
             )
             .into_iter()
             .collect(),
@@ -2143,7 +2144,7 @@ impl Error {
 
                         note(
                             extent.resolved(anchors),
-                            format!("'{}' is used here", spelling.symbol(&instantiated)),
+                            format!("`{}` is used here", spelling.symbol(&instantiated)),
                         )
                     })
                     .collect()
@@ -2180,51 +2181,6 @@ impl Error {
             | Self::InAlternative { error, .. }
             | Self::InScope { error, .. } => error.unwrapped(),
             error => error,
-        }
-    }
-
-    /// What the wrappers prefix a body with — `render_body`'s own lines for them, without the body.
-    fn declaration_prefix(&self, spelling: &Spelling) -> String {
-        match self {
-            Self::Located { error, .. }
-            | Self::InUnreachableArm { error, .. }
-            | Self::InAlternative { error, .. }
-            | Self::InScope { error, .. } => error.declaration_prefix(spelling),
-            Self::InDeclaration { names, error } => {
-                format!(
-                    "while elaborating {}:\n{}",
-                    declared(names, spelling),
-                    error.declaration_prefix(spelling)
-                )
-            }
-            _ => String::new(),
-        }
-    }
-
-    /// The message without any snippet — wrappers are transparent, every other variant renders through its own `Display`.
-    fn render_body(&self, spelling: &Rc<Spelling>, anchors: &[&Anchors]) -> String {
-        match self {
-            Self::Located { error, .. } | Self::InScope { error, .. } => {
-                error.render_body(spelling, anchors)
-            }
-            Self::InDeclaration { names, error } => {
-                format!(
-                    "while elaborating {}:\n{}",
-                    declared(names, spelling),
-                    error.render_body(spelling, anchors)
-                )
-            }
-            Self::InUnreachableArm { dead, error } => format!(
-                "{}\n{}",
-                error.render_body(spelling, anchors),
-                unreachable_arm_note(dead, spelling)
-            ),
-            Self::InAlternative { written, error } => format!(
-                "{}\n{}",
-                error.render_body(spelling, anchors),
-                alternative_note(written)
-            ),
-            error => Displayed(error, Rc::clone(spelling), anchors).to_string(),
         }
     }
 
@@ -2344,14 +2300,13 @@ impl From<UniverseError> for Error {
     }
 }
 
-/// `message`, saying so where a term in it is one its reader's printer declined ([`Spelling::declined`]): it holds a form no program writes, or it is past what a report prints, and what stands there is the term as the compiler holds it. A reader who takes that print for source is told it is none.
-fn as_held(message: String, spelling: &Spelling) -> String {
-    match spelling.declined() {
-        true => format!(
-            "{message}\n  a term above is shown as the compiler holds it, not as a program writes it"
-        ),
-        false => message,
+/// `said`, saying so as a fact where a term in it is one its reader's printer declined ([`Spelling::declined`]): it holds a form no program writes, or it is past what a report prints, and what stands there is the term as the compiler holds it. A reader who takes that print for source is told it is none.
+fn held(mut said: Said, spelling: &Spelling) -> Said {
+    if spelling.declined() {
+        said.stating("a term above is shown as the compiler holds it, not as a program writes it");
     }
+
+    said
 }
 
 /// The spelling every report of `module`'s shares before a reader stands anywhere: everything a reader could see — `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so every table has to be told the prelude exists — the shortening to know `Vec` is an unambiguous suffix, the plicity marks to know `Eq`'s first parameter is implicit.

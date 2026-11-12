@@ -400,7 +400,7 @@ fn a_family_read_under_a_short_budget_is_never_refused_as_not_positive() {
     for budget in (4..=20).map(|step| step * 2_000) {
         if let Err(report) = typecheck_within(budget, &source) {
             assert!(
-                !report.contains("not strictly positive") && report.contains("ran out"),
+                !report.contains("not strictly positive") && report.contains("budget"),
                 "at a budget of {budget}:\n{report}"
             );
             short += 1;

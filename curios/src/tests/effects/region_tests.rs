@@ -97,7 +97,7 @@ fn a_region_waits_for_the_arm_beside_it_to_state_its_type() {
 
 /// A region whose type is known and is no monad names that type, rather than reporting the bind's unsolved hole.
 ///
-/// The rigid twin of the refusal above. `elaborate_bang` reads the monad from the region, and when a *rigid* region yields none its head applies to nothing, so `?M(?B)` can never meet it — left to the wrapper's own inference it would report `no witness of Monad(?) found`, blaming a premise of `/std/Monad/bind`, a call the author never wrote, and printing a hole where the region's type is already in hand. `documentation/language.md` writes the first of these programs out with the intended reading beside it.
+/// The rigid twin of the refusal above. `elaborate_bang` reads the monad from the region, and when a *rigid* region yields none its head applies to nothing, so `?M(?B)` can never meet it — left to the wrapper's own inference it would report `wanted: Monad(?)`, blaming a premise of `/std/Monad/bind`, a call the author never wrote, and printing a hole where the region's type is already in hand. `documentation/language.md` writes the first of these programs out with the intended reading beside it.
 #[test]
 fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
     for (source, region) in [
@@ -131,12 +131,7 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
         ),
     ] {
         let error = typecheck(source).expect_err("a non-monadic region must refuse");
-        assert!(
-            error.contains(&format!(
-                "this region's type is {region}, which is no monad"
-            )),
-            "{error}"
-        );
+        assert!(error.contains(&format!("region: {region}")), "{error}");
         assert!(!error.contains("Monad/bind"), "{error}");
     }
 }
@@ -145,17 +140,11 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
 #[test]
 fn values_and_functions_report_the_same_invalid_sequencing_types() {
     for (binding, refusal) in [
-        (
-            "let n: Nat = Io/pure(3)!;",
-            "this region's type is Nat, which is no monad",
-        ),
-        (
-            "let cell: Cell({}) = Cell/new()!;",
-            "this region's type is Cell({}), which is no monad",
-        ),
+        ("let n: Nat = Io/pure(3)!;", "region: Nat"),
+        ("let cell: Cell({}) = Cell/new()!;", "region: Cell({})"),
         (
             "let xs: List(Nat) = Io/pure([1])!;",
-            "no witness of /std/Monad/Lift(Io, List) found",
+            "wanted: /std/Monad/Lift(Io, List)",
         ),
     ] {
         let function = binding.replacen(':', "() ->", 1);
@@ -232,7 +221,7 @@ fn a_region_that_names_no_monad_is_still_refused() {
         /std/print("x")
         "#,
     );
-    assert!(rigid.contains("no monad"), "unexpected error: {rigid}");
+    assert!(rigid.contains("not a monad"), "unexpected error: {rigid}");
 
     let undetermined = error(
         r#"

@@ -12,7 +12,7 @@ fn a_private_definition_nothing_reaches_is_reported_at_its_name() {
     "#
         ),
         [
-            "unused-declaration: unused declaration `helper`; delete it, make it `pub`, or name it `_helper` to keep it unused"
+            "unused-declaration: unused declaration\n  `helper` is never used\n  delete it, make it `pub`, or name it `_helper` to keep it unused"
         ]
     );
 }
@@ -113,7 +113,7 @@ fn a_definition_used_only_by_itself_is_dead() {
     "#
         ),
         [
-            "unused-declaration: unused declaration `go`; delete it, make it `pub`, or name it `_go` to keep it unused"
+            "unused-declaration: unused declaration\n  `go` is never used\n  delete it, make it `pub`, or name it `_go` to keep it unused"
         ]
     );
 }
@@ -129,8 +129,8 @@ fn two_dead_definitions_reaching_each_other_are_both_dead() {
     "#
         ),
         [
-            "unused-declaration: unused declaration `a`; delete it, make it `pub`, or name it `_a` to keep it unused",
-            "unused-declaration: unused declaration `b`; delete it, make it `pub`, or name it `_b` to keep it unused",
+            "unused-declaration: unused declaration\n  `a` is never used\n  delete it, make it `pub`, or name it `_a` to keep it unused",
+            "unused-declaration: unused declaration\n  `b` is never used\n  delete it, make it `pub`, or name it `_b` to keep it unused",
         ]
     );
 }
@@ -150,7 +150,9 @@ fn a_private_module_nothing_reaches_is_reported_once_at_the_mod() {
         Type
     "#
         ),
-        ["unused-declaration: unused module `Internal`; delete it or make it `pub`"]
+        [
+            "unused-declaration: unused module\n  `Internal` is never used\n  delete it or make it `pub`"
+        ]
     );
 }
 
@@ -167,7 +169,7 @@ fn a_private_module_one_declaration_of_which_is_reached_reports_the_others() {
     "#
         ),
         [
-            "unused-declaration: unused declaration `b`; delete it, make it `pub`, or name it `_b` to keep it unused"
+            "unused-declaration: unused declaration\n  `b` is never used\n  delete it, make it `pub`, or name it `_b` to keep it unused"
         ]
     );
 }
@@ -231,7 +233,9 @@ fn an_underscore_prefixed_module_keeps_nothing() {
         Type
     "#
         ),
-        ["unused-declaration: unused module `_Later`; delete it or make it `pub`"]
+        [
+            "unused-declaration: unused module\n  `_Later` is never used\n  delete it or make it `pub`"
+        ]
     );
 }
 
@@ -284,8 +288,8 @@ fn a_derived_witness_uses_the_vocabulary_its_body_will_name() {
     assert_eq!(
         unused(&spelling("")),
         [
-            "unused-declaration: unused declaration `call`; delete it, make it `pub`, or name it `_call` to keep it unused",
-            "unused-declaration: unused declaration `record`; delete it, make it `pub`, or name it `_record` to keep it unused",
+            "unused-declaration: unused declaration\n  `call` is never used\n  delete it, make it `pub`, or name it `_call` to keep it unused",
+            "unused-declaration: unused declaration\n  `record` is never used\n  delete it, make it `pub`, or name it `_record` to keep it unused",
         ],
         "the control stopped holding: with no derived witness, nothing names the renderers",
     );

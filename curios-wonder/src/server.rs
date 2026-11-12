@@ -804,7 +804,11 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
             range,
             severity: Some(severity),
             // No `source`: an editor appends it to the message's last line (Zed writes `expected: Str (curios)`, which reads as one clause), it trims a trailing newline that would have moved it, and with one server for the language it identifies nothing.
-            message: record.report.message.clone(),
+            // An editor lists a diagnostic by its first line, where a tag alone names nothing of the program. A goal's first line is its answer already.
+            message: match record.severity {
+                Severity::Goal => record.report.message(),
+                Severity::Error | Severity::Lint | Severity::Note => record.report.listed(),
+            },
             related_information: (!related.is_empty()).then_some(related),
             ..Diagnostic::default()
         },

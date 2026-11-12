@@ -532,7 +532,7 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
     };
     assert_eq!(record.severity, Severity::Error);
     assert!(
-        record.report.message.contains("expected a term"),
+        record.report.message().contains("expected: a term"),
         "{}",
         record.report.render()
     );
@@ -590,7 +590,7 @@ fn assert_mismatch(diagnostics: &[crate::Diagnosis]) {
         diagnostics
             .iter()
             .any(|record| record.severity == Severity::Error
-                && record.report.message.contains("type mismatch")),
+                && record.report.message().contains("type mismatch")),
         "{:?}",
         diagnostics
             .iter()
@@ -855,7 +855,7 @@ fn a_program_compiled_over_another_files_unit_is_judged_as_its_own_text_says() {
     );
     let refusal = verdict.expect_err("`f` in `b.crs` is refused");
     assert!(
-        refusal.contains("no witness of /std/ops/Add(/std/Bool) found"),
+        refusal.contains("wanted: /std/ops/Add(/std/Bool)"),
         "{refusal}"
     );
 }

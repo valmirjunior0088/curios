@@ -115,12 +115,6 @@ fn a_type_reaching_a_partial_definition_is_placed_at_the_name_it_reaches() {
 
         /std/print("x")
     "#;
-    let reports = refusal(source);
-    assert!(
-        reports[0].message.starts_with("while elaborating T:"),
-        "{}",
-        reports[0].message
-    );
     assert_eq!(placed(source), at("spin"));
 }
 
@@ -339,8 +333,8 @@ fn a_cycle_notes_every_member_but_the_one_it_stands_at() {
     assert_eq!(
         noted(source),
         [
-            note("b", "'b' is declared here"),
-            note("c", "'c' is declared here"),
+            note("b", "`b` is declared here"),
+            note("c", "`c` is declared here"),
         ]
     );
 }

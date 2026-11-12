@@ -143,7 +143,7 @@ fn the_server_publishes_from_the_buffer_and_clears() {
         "{published}"
     );
     assert!(
-        published.contains(r#""message":"goal `?`\n  ? : /std/Nat""#),
+        published.contains(r#""message":"`/std/Nat` expected""#),
         "{published}"
     );
     assert!(published.contains(r#""severity":3"#), "{published}");
@@ -190,7 +190,7 @@ fn a_save_after_the_disk_moved_under_a_closed_file_is_answered_again() {
     thread::sleep(QUIET);
 
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}]}}"#, uri));
-    let ahead = editor.ahead_of("goal `?`");
+    let ahead = editor.ahead_of("` expected");
     assert!(
         ahead.iter().any(
             |published| published.contains("helper.crs") && published.contains("type mismatch")
@@ -237,7 +237,7 @@ fn a_refusal_on_a_closed_file_fixed_on_disk_is_cleared_by_a_save() {
     thread::sleep(QUIET);
 
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"mod helper;\n\nlet m : /std/Nat = ?;\n/std/print(/helper/word)\n"}]}}"#, uri));
-    let ahead = editor.ahead_of("goal `?`");
+    let ahead = editor.ahead_of("` expected");
     let cleared = ahead.iter().position(|published| {
         published.contains("helper.crs") && published.contains(r#""diagnostics":[]"#)
     });
@@ -290,7 +290,7 @@ fn a_save_asks_about_every_open_document() {
     thread::sleep(QUIET);
 
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${util}","version":3},"contentChanges":[{"text":"pub let other : /std/Str = ?;\n"}]}}"#, util));
-    let ahead = editor.ahead_of("goal `?`");
+    let ahead = editor.ahead_of("` expected");
     assert!(
         ahead
             .iter()
@@ -412,7 +412,7 @@ fn a_lint_is_published_as_a_warning() {
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"use /std/{Bool};\n/std/print(\"\")\n"}}}"#, uri));
     let published = editor.receive();
     assert!(
-        published.contains(r#""message":"unused import `Bool`; delete it""#),
+        published.contains(r#""message":"unused import: `Bool` is never used\n  delete it""#),
         "{published}"
     );
     assert!(published.contains(r#""severity":2"#), "{published}");
@@ -495,7 +495,7 @@ fn a_header_that_does_not_parse_is_located_without_a_snippet() {
         "{published}"
     );
     assert!(
-        published.contains("Expected a top-level item"),
+        published.contains("syntax error: expected: a top-level item"),
         "{published}"
     );
     assert!(
@@ -714,7 +714,7 @@ fn a_place_is_answered_while_a_check_is_running() {
         second.contains("publishDiagnostics"),
         "then the check: {second}"
     );
-    assert!(second.contains("goal `?`"), "{second}");
+    assert!(second.contains("` expected"), "{second}");
 
     let output = editor.finish();
     assert!(output.status.success());
@@ -748,7 +748,7 @@ fn formatting_is_answered_while_a_check_is_running() {
         second.contains("publishDiagnostics"),
         "then the check: {second}"
     );
-    assert!(second.contains("goal `?`"), "{second}");
+    assert!(second.contains("` expected"), "{second}");
 
     let output = editor.finish();
     assert!(output.status.success());
@@ -794,8 +794,8 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
         String::from_utf8_lossy(&answered.stderr)
     );
     let text = stdout(&answered);
-    assert!(text.contains("--> <stdin>:1:21"), "{text}");
-    assert!(text.contains("--> <stdin>:3:21"), "{text}");
+    assert!(text.contains("╰─ error; <stdin>:1:21"), "{text}");
+    assert!(text.contains("╰─ error; <stdin>:3:21"), "{text}");
     assert!(!text.contains("_b"), "{text}");
 }
 
