@@ -518,7 +518,7 @@ An operator is a call of its concept's method, resolved as any witness is, intri
 
 A carrier whose division is total states `True`, and pays nothing. Why: [A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md).
 
-`+` also joins two texts, as `Str/concat` does: `"Hello, " + name`. Both operands are texts; a text built from values of other types is written with `Fmt/render`.
+`+` has no witness at `Str`: two texts are joined by `Str/concat` and a list of them by `Str/flatten`, and a text built from values of other types is written with `Fmt/render`.
 
 ## Sequencing and effects
 
@@ -1314,12 +1314,12 @@ satisfy Show(Meters) {
 A witness may take implicit parameters and require other witnesses, in a telescope separated from the concept application by `=>`. It takes no explicit parameter, since resolution has no explicit argument to give.
 
 ```crs
-use /std/{List, Show};
+use /std/{List, Show, Str};
 
 pub struct Bag(A: Type): pub Type { List(A) }
 
 satisfy (@A: Type, use Show(A)) => Show(Bag(A)) {
-    show(bag) = List/fold(bag.0, "", (value, result) => result + Show/show(value)),
+    show(bag) = List/fold(bag.0, "", (value, result) => Str/concat(result, Show/show(value))),
 }
 ```
 
@@ -1335,7 +1335,7 @@ pub concept Describe(A: Type): pub Type {
 }
 
 satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Describe({A, B}) {
-    describe(t) = "(" + Show/show(t.0) + ", " + Show/show(t.1) + ")",
+    describe(t) = Str/flatten(["(", Show/show(t.0), ", ", Show/show(t.1), ")"]),
 }
 ```
 
@@ -1344,7 +1344,7 @@ A function type has no key: a `satisfy` whose concept argument reduces to one is
 Witnesses that resolve through one another are one group, joined by `and` ([Recursive groups](#recursive-groups)). A lone witness may resolve through its own key with nothing said. A method written by another method of its witness — `neq(a, b) = Bool/not(a == b)` — reads that method alone, so only a method that reaches itself makes its witness recursive.
 
 ```crs
-use /std/{Nat, Show};
+use /std/{Nat, Show, Str};
 
 pub induct Tree: pub Type
 | leaf(Nat)
@@ -1358,7 +1358,8 @@ satisfy Show(Tree) {
     show(t) = match t | leaf(n) => Show/show(n) | node(f) => Show/show(f) end,
 }
 and Show(Forest) {
-    show(f) = match f | nil() => "" | cons(t, rest) => Show/show(t) + Show/show(rest) end,
+    show(f) =
+        match f | nil() => "" | cons(t, rest) => Str/concat(Show/show(t), Show/show(rest)) end,
 }
 ```
 

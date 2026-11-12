@@ -1660,6 +1660,17 @@ impl Displayed<'_> {
                 }
                 match need {
                     None => f.stating(needed),
+                    Some(Need::Joining(joining)) => {
+                        f.stating(needed);
+                        f.stating(format_args!(
+                            "`{}` joins two texts",
+                            joining.concat.spelled(spelling)
+                        ));
+                        f.stating(format_args!(
+                            "`{}` builds a text from a format",
+                            joining.render.spelled(spelling)
+                        ));
+                    }
                     Some(Need::Closing(type_)) => {
                         f.stating("a program closes with a term whose type has one");
                         f.stating(format_args!(

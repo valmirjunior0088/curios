@@ -95,6 +95,8 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     report: ReportSyntax {
         try_type: registry_name(&["std", "Try"]),
         try_run: registry_name(&["std", "Try", "run"]),
+        str_concat: registry_name(&["std", "Str", "concat"]),
+        fmt_render: registry_name(&["std", "Fmt", "render"]),
     },
     // These spellings are load-bearing for `tests::unused_declaration`, which declares them as source and asserts the references that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
     derivations: DerivationSyntax {

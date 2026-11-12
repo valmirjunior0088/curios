@@ -13,7 +13,7 @@
 
 use {
     super::{
-        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Need, Occurrence, Outcome,
+        Callee, Context, EmbeddingDiagnosis, Error, HeldFrames, Joining, Need, Occurrence, Outcome,
         ParkedWork, Reporting, Runner, ShapeDiagnosis, Witness, attempt_discharge, convert_outcome,
         declared, pending, reduce_with, resolved_for_display,
     },
@@ -142,11 +142,37 @@ fn diagnose_need(context: &mut Reporting, goal: &Term, site: Option<&Extent>) ->
     diagnose_embedding(context, goal, site)
         .map(Need::Embedding)
         .or_else(|| diagnose_closing(context, goal).map(Need::Closing))
+        .or_else(|| diagnose_joining(context, goal).map(Need::Joining))
 }
 
 /// The global `name` is, as a term a report spells by its reader's imports.
 fn global(name: SyntaxName) -> Term {
     Term::written(Global::Authored(name.qualifier()))
+}
+
+/// When `goal` is the registry's `Add` at `/std/Str`, the two functions that join text, for the report to name: `+` is no operator of text.
+fn diagnose_joining(context: &mut Reporting, goal: &Term) -> Option<Box<Joining>> {
+    let goal = reduce_with(context, goal).ok()?;
+    let (concept_name, _, params) = as_concept_app(context, &goal)?;
+    let syntax = context.syntax();
+    let Global::Authored(concept_path) = &concept_name else {
+        return None;
+    };
+    if *concept_path != syntax.operator.add.concept.qualifier() {
+        return None;
+    }
+    let [operand] = params.as_slice() else {
+        return None;
+    };
+    let operand = reduce_with(context, operand).ok()?;
+    let text = HeadKey::Nominal(Global::Authored(syntax.string.string.qualifier()));
+
+    (HeadKey::of_whnf(&operand)? == text).then(|| {
+        Box::new(Joining::new(
+            global(syntax.report.str_concat),
+            global(syntax.report.fmt_render),
+        ))
+    })
 }
 
 /// When `goal` is an application of the registry's `Program` concept, the type it was asked at, in display form: the type of a term that closes a program, which no witness executes.

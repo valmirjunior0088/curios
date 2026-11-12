@@ -561,18 +561,25 @@ impl ProgramSyntax {
     }
 }
 
-/// What a report names for its reader to write in place of a form that is refused: `/std/Try` and its `run`, where an action that may fail meets a region it has no edge into. Read by the elaborator's reports alone: no stage builds a term the program holds from them.
+/// What a report names for its reader to write in place of a form that is refused: `/std/Try` and its `run`, where an action that may fail meets a region it has no edge into, and `/std/Str/concat` and `/std/Fmt/render`, where `+` meets a `Str`. Read by the elaborator's reports alone: no stage builds a term the program holds from them.
 #[derive(Debug, Clone, Copy)]
 pub struct ReportSyntax {
     pub try_type: SyntaxName,
     pub try_run: SyntaxName,
+    pub str_concat: SyntaxName,
+    pub fmt_render: SyntaxName,
 }
 
 impl ReportSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self { try_type, try_run } = self;
+        let Self {
+            try_type,
+            try_run,
+            str_concat,
+            fmt_render,
+        } = self;
 
-        [try_type, try_run].into_iter()
+        [try_type, try_run, str_concat, fmt_render].into_iter()
     }
 }
 
