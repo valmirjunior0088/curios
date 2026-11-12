@@ -53,9 +53,9 @@ fn curios(root: &Path, arguments: &[&str]) -> Output {
         .expect("run the compiler")
 }
 
-/// Whether an invocation was served from the store, read off the report it wrote — which is the same question, asked the way a person at a terminal asks it.
+/// Whether an invocation was served from the store, read off the report it wrote — which is the same question, asked the way a person at a terminal asks it: a program the store held narrates no build, so its tree has no `emit` node.
 fn reused(output: &Output) -> bool {
-    String::from_utf8_lossy(&output.stderr).contains("; reused")
+    !String::from_utf8_lossy(&output.stderr).contains("emit;")
 }
 
 /// The native payload slots the project at `root` holds.
@@ -142,8 +142,8 @@ fn asking_for_a_stage_files_its_units_and_no_payload() {
     let run = curios(&root, &["run"]);
     let narrated = String::from_utf8_lossy(&run.stderr);
     assert!(
-        narrated.contains("/app; reused"),
-        "the library is the unit the question filed: {narrated}"
+        !narrated.contains("store;") && narrated.contains("emit;"),
+        "the library is the unit the question filed, so no unit is checked and filed again: {narrated}"
     );
     assert_eq!(
         slots(&root),
@@ -346,10 +346,9 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
             String::from_utf8_lossy(&refused.stderr)
         );
         assert_eq!(refused.status.success(), *answers, "{command:?}: {said}");
-        // `dep` is reused once the first command after the edit has filed it; `app`'s library and its payload never are.
+        // `dep` is reused once the first command after the edit has filed it; `app`'s library and its payload never are, which is what refuses each command again.
         assert!(
-            said.contains("no witness of /std/ops/Add(/std/Bool) found")
-                && !said.contains("app; reused"),
+            said.contains("no witness of /std/ops/Add(/std/Bool) found"),
             "{command:?}: {said}"
         );
     }
@@ -440,11 +439,11 @@ fn a_payload_is_not_reused_once_its_entry_no_longer_declares_what_it_names() {
         String::from_utf8_lossy(&compiled.stderr)
     );
 
-    // The units beneath the entry are reused, as nothing they read moved; the payload is not.
+    // The units beneath the entry are reused, as nothing they read moved; the payload is not, or the run would have succeeded.
     let asked = curios(&root, &["run"]);
     let said = String::from_utf8_lossy(&asked.stderr);
     assert!(
-        !said.contains("app; reused") && !asked.status.success(),
+        !asked.status.success(),
         "and the payload filed under the wider one does not answer for it: {said}"
     );
 }

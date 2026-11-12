@@ -880,7 +880,11 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
 
     let tested = curios(&root, &["test"], "");
     let narrated = String::from_utf8_lossy(&tested.stderr);
-    assert!(narrated.contains("/app; reused"), "{narrated}");
+    assert_eq!(
+        narrated.matches("store;").count(),
+        1,
+        "the library compiled with its tests is the unit the server filed, so the test run checks and files only the one its executable stands on: {narrated}"
+    );
 }
 
 /// A question about a file no package governs, or about standard input, opens no store: nothing is written beside it.

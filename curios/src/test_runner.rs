@@ -7,8 +7,8 @@ mod tests;
 
 use {
     crate::{
-        Access, Failure, Heading, Line, Reporting, Run, Served, Steps, Subject, bound, drained,
-        nested, note_unlinked, processing, report, serve_run, serving, unnested, url,
+        Access, Failure, Heading, Reporting, Run, Served, Steps, Subject, Then, bound, drained,
+        nested, note_unlinked, serve_run, serving, unnested, url,
     },
     curios::{Named, TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Step},
@@ -18,6 +18,7 @@ use {
     curios_pipeline::{CompileError, TestModule, TestRecord},
     curios_verdict::Verdicts,
     std::{
+        cell::RefCell,
         cmp::Reverse,
         collections::VecDeque,
         io::{self, Write},
@@ -140,7 +141,7 @@ pub fn shown(named: &Named) -> Subject {
     }
 }
 
-/// One subject's test program for `target`, compiled or reused, narrated as `run` narrates a compile: `Processing`, a `↳ Compiling` step for each unit it stands on, and `↳ Linking` for the program itself, which lasts until its payload exists — a test program is the whole program the units link into, and its back end is most of what a cold run takes.
+/// One subject's test program for `target`, compiled or reused, narrated as `run` narrates a compile: a tree for each unit it had to compile, and the subject's own, whose `emit` node lasts until its payload exists — a test program is the whole program the units link into, and its back end is most of what a cold run takes. One the store held narrates nothing.
 pub fn compiled(
     budget: u64,
     subject: &TestSubject,
@@ -149,20 +150,18 @@ pub fn compiled(
     under: &[Qualifier],
     target: Target,
 ) -> Result<Tested, CompileError> {
-    processing(shown, subject.manifest());
+    // Two callbacks write one narration, so it is lent to each in turn.
+    let steps = RefCell::new(Steps::program(shown, subject.manifest(), store, Then::More));
+    let tested = subject.compile(
+        budget,
+        store,
+        under,
+        target,
+        |stage| steps.borrow_mut().reached(&stage),
+        |progress| steps.borrow_mut().told(progress),
+    );
 
-    let mut steps = Steps::default();
-    let tested = subject.compile(budget, store, under, target, |progress| {
-        report(&mut steps, shown, progress);
-    });
-    match &tested {
-        Ok(tested) if tested.reused() => {
-            Line::nested(Heading::Linking, shown).outcome("reused");
-            eprintln!();
-        }
-        Ok(_) => steps.finish(),
-        Err(_) => steps.interrupted(),
-    }
+    steps.into_inner().ended(&tested);
 
     tested
 }

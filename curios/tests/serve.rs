@@ -211,7 +211,7 @@ fn run_serves_the_page_at_the_root_until_stopped() {
     let stderr = String::from_utf8_lossy(&stderr);
     assert!(stdout.is_empty(), "{stdout:?}");
     assert!(
-        stderr.contains(&format!("↳ Serving      http://127.0.0.1:{port}/\n")),
+        stderr.contains(&format!("╰─ serve; http://127.0.0.1:{port}/\n")),
         "{stderr}"
     );
 }
@@ -350,12 +350,12 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     in_order(
         &stderr,
         &[
-            "Processing     /app\n",
-            "↳ Linking      /app; ",
-            "Processing     app\n",
-            "↳ Linking      app; ",
-            "Processing     quiet\n",
-            "↳ Linking      quiet; ",
+            "/app\n",
+            "├─ emit; ",
+            "app\n",
+            "├─ emit; ",
+            "quiet\n",
+            "├─ check; ",
             "↳ Serving      http://127.0.0.1:",
             "↳ Testing      /app\n",
             "↳ Tested       /app; 1 passed, 1 failed, 1 exited\n",

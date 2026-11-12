@@ -548,6 +548,7 @@ fn a_test_subject_is_laid_out_as_a_page_for_a_browser() {
             &[Qualifier::empty()],
             Target::Browser,
             |_| {},
+            |_| {},
         )
         .expect("the subject compiles");
     let files = tested
@@ -594,6 +595,7 @@ fn a_test_subject_reaching_a_row_with_no_browser_table_is_refused_naming_the_tab
             None,
             &[Qualifier::empty()],
             Target::Browser,
+            |_| {},
             |_| {},
         )
         .expect("the subject compiles");

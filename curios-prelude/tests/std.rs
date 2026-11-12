@@ -100,7 +100,14 @@ fn declared() -> Vec<Qualifier> {
     let store = subject.filed(|_| Some(store()));
 
     subject
-        .compile(DEFAULT_BUDGET, store.as_ref(), &[], Target::Native, |_| {})
+        .compile(
+            DEFAULT_BUDGET,
+            store.as_ref(),
+            &[],
+            Target::Native,
+            |_| {},
+            |_| {},
+        )
         .unwrap_or_else(|error| panic!("the standard library failed to compile:\n{error}"))
         .declared()
         .copied()
@@ -119,6 +126,7 @@ fn run_module(module: &Qualifier) {
             store.as_ref(),
             std::slice::from_ref(module),
             Target::Native,
+            |_| {},
             |_| {},
         )
         .unwrap_or_else(|error| panic!("`{}` failed to compile:\n{error}", module.join()));

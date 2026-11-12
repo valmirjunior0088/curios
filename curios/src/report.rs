@@ -1,20 +1,22 @@
 //! What the CLI says while it works.
 //!
-//! One fixed heading column, then a subject. A top-level line takes a subject on: it is the header of the steps beneath it, or a complete fact of its own. A line marked with `↳` is a step of the header above it — one action on that subject, closed by what it came to:
+//! One transcript. A subject stands alone on a line, and beneath it a node for each thing done for it, written `label; outcome` ([`Tree`]):
 //!
 //! ```text
-//! Processing     hello
-//! ↳ Compiling    /dep; reused
-//! ↳ Compiling    /hello; 1.4s
-//! ↳ Linking      hello; 0.9s
-//! ↳ Running      hello
+//! /geometry
+//! ├─ check; 1.6s
+//! ╰─ store; 0.1s
+//! hello
+//! ├─ check; 0.1s
+//! ├─ build; 0.2s
+//! ╰─ emit; 0.4s
 //! ```
 //!
 //! **Everything here goes to stderr.** `curios run` hands stdout to the program it executes, so a status line written there would corrupt `curios run report.crs > report.json`.
 //!
-//! **A step's line is built by unterminated writes.** The prefix reaches the reader *before* the work it announces rather than after, which is the whole point — and a compiler that dies mid-operation leaves the line unterminated, so the last thing on screen is exactly how far it got. Rust's stderr is unbuffered, so this needs no flushing of its own. It also needs no cursor control, no repainting and no terminal detection: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal.
+//! **Nothing written is taken back.** There is no cursor control, no repainting and no terminal detection: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal. Rust's stderr is unbuffered, so a label reaches the reader before the work it names with no flushing of its own.
 //!
-//! **A header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Processing hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is the innermost one, so an interrupted compile names the step it died in rather than the subject around it. A header carries no outcome of its own: what became of the subject is what its steps say.
+//! **A heading column is what a command not drawn as a tree prints**: one word of [`Heading`], padded to a fixed width, then what it is about ([`fact`]).
 
 #[cfg(test)]
 mod tests;
@@ -32,6 +34,7 @@ use {
 /// What a status line is about.
 ///
 /// Four namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's and a foreign module's are identifiers their manifest rows chose, and a file's is whatever was typed or wherever it landed. Rendering all of them through one type is what keeps a print site from spelling a slash it did not derive.
+#[derive(PartialEq, Eq)]
 pub enum Subject {
     /// A unit, by the prefix it mounts, or a module, by its path: `/` for the root, which joins to nothing.
     Mounted(Qualifier),
@@ -41,7 +44,7 @@ pub enum Subject {
     Module(String),
     /// A file, as it was written on the command line or as it landed on disk.
     File(PathBuf),
-    /// The program on standard input, which was asked for as `-` and is reported as what that means: `↳ Compiling -` reads as a line the compiler failed to finish writing.
+    /// The program on standard input, which was asked for as `-` and is reported as what that means: a `-` alone on a line reads as one the compiler failed to finish writing.
     Stdin,
 }
 
@@ -189,27 +192,9 @@ pub fn nested(heading: Heading, subject: &Subject, outcome: Option<&str>) -> Str
     }
 }
 
-/// One complete step of the header above, on a line of its own — `↳ Running hello`, whose consequence is what follows on stdout rather than an outcome of its own.
-pub fn step(heading: Heading, subject: &Subject) {
-    eprintln!("{}", nested(heading, subject, None));
-}
-
 /// The step a page is served with, naming where a browser opens it — the one fact a reader needs from what follows, which is nothing until the server is stopped.
 pub fn serving(url: &str) {
     eprintln!("{}{url}", head(NESTED, Heading::Serving));
-}
-
-/// The header a build takes `subject` on with — `Processing serve` — naming `manifest` beside it when the invocation does not stand in the manifest's directory, which is the one case where what governs could otherwise be a guess.
-pub fn processing(subject: &Subject, manifest: Option<&Path>) {
-    let here = env::current_dir().and_then(|here| here.canonicalize());
-    let spelled = manifest
-        .zip(here.ok())
-        .and_then(|(manifest, here)| spelled_from(manifest, &here));
-
-    match spelled {
-        Some(manifest) => fact(Heading::Processing, format!("{subject} ({manifest})")),
-        None => fact(Heading::Processing, subject),
-    }
 }
 
 /// `manifest` as a reader standing in `here` would spell it: nothing when it sits right there, a climb of `../` when it sits above, and the path itself anywhere else — `--manifest` can name a file off to the side.
@@ -230,48 +215,151 @@ fn spelled_from(manifest: &Path, here: &Path) -> Option<String> {
     })
 }
 
-/// A subject being worked on, whose outcome arrives when the work is done.
-///
-/// **The caller terminates the line**, with an `eprintln!()` once the subject is finished with — there is no method for it, because closing a line is a bare newline and a method taking `self` to write one carries no data worth the ceremony. A line never terminated stays unterminated, which is the intended reading of an interrupted compilation rather than an omission to repair.
-pub struct Line {
-    /// When the line opened, for the [`Line::done`] that closes it with what the work took — gone once an outcome has said the work did not happen.
-    started: Option<Instant>,
+/// `path` as a reader standing where the invocation stands would spell it: as it is written where it is relative, by the climb from here and the descent to it where the two share more than the root, and whole anywhere else.
+pub fn from_here(path: &Path) -> String {
+    let here = env::current_dir().and_then(|here| here.canonicalize()).ok();
+
+    match (path.is_absolute(), here) {
+        // What stands on disk is read by where it is, so a link in the way to it does not hide what the two share.
+        (true, Some(here)) => between(
+            &path.canonicalize().unwrap_or_else(|_| path.to_path_buf()),
+            &here,
+        ),
+        _ => path.display().to_string(),
+    }
 }
 
-impl Line {
-    /// Open a line for `subject` — `Finished hello` — leaving it unterminated.
-    pub fn open(heading: Heading, subject: &Subject) -> Self {
-        Self::marked("", heading, subject)
+/// The absolute `path` as spelled from the directory `here`.
+fn between(path: &Path, here: &Path) -> String {
+    let shared = path
+        .components()
+        .zip(here.components())
+        .take_while(|(there, stood)| there == stood)
+        .count();
+
+    // The root alone is shared: the two are in different places, and the path is told whole.
+    if shared <= 1 {
+        return path.display().to_string();
     }
 
-    /// Open a line for a step of the header above it — `↳ Compiling /hello`.
-    pub fn nested(heading: Heading, subject: &Subject) -> Self {
-        Self::marked(NESTED, heading, subject)
-    }
+    let climb = "../".repeat(here.components().count() - shared);
+    let descent = path.components().skip(shared).collect::<PathBuf>();
 
-    fn marked(marker: &str, heading: Heading, subject: &Subject) -> Self {
-        eprint!("{}{subject}", head(marker, heading));
+    match descent.as_os_str().is_empty() {
+        true => format!("{climb}."),
+        false => format!("{climb}{}", descent.display()),
+    }
+}
+
+/// The connector of a node more are planned after.
+const BRANCH: &str = "├─ ";
+
+/// The connector of the last node a tree plans.
+const CORNER: &str = "╰─ ";
+
+/// One subject's tree: the subject alone on a line, and beneath it a node for each thing done for it, written `label; outcome`.
+///
+/// ```text
+/// /geometry
+/// ├─ check; 1.6s
+/// ╰─ store; 0.1s
+/// ```
+///
+/// **The subject's line is written with its first node**, so a subject nothing had to be done for says nothing: what the store already held is not narrated.
+///
+/// **A node's line is built by unterminated writes.** The label reaches the reader before the work it names, and what closes the line is what the work came to. A compiler that dies mid-step leaves the line open, so the last thing written is how far it got.
+///
+/// **The connector is the plan's.** `├─` is written where more nodes are planned and `╰─` at the last, before either's work is done, so a tree a refusal cuts short ends on `├─`: the steps it planned and never reached are the ones missing.
+pub struct Tree {
+    /// The subject's line, until the first node writes it.
+    line: Option<String>,
+    /// Whether the line names the manifest that governs the subject.
+    governed: bool,
+    /// When the open node's work began, where one is open.
+    opened: Option<Instant>,
+}
+
+impl Tree {
+    /// A tree for `subject`, naming `manifest` beside it when the invocation does not stand in the manifest's directory, which is the one case where what governs could otherwise be a guess.
+    pub fn of(subject: &Subject, manifest: Option<&Path>) -> Self {
+        let here = env::current_dir().and_then(|here| here.canonicalize());
+        let spelled = manifest
+            .zip(here.ok())
+            .and_then(|(manifest, here)| spelled_from(manifest, &here));
 
         Self {
-            started: Some(Instant::now()),
+            governed: spelled.is_some(),
+            line: Some(match spelled {
+                Some(manifest) => format!("{subject} ({manifest})"),
+                None => subject.to_string(),
+            }),
+            opened: None,
         }
     }
 
-    /// Close the work the line announced, with what it took — `; 1.4s`.
+    /// Leave the tree as it stands. A subject no node was written for says nothing, unless its line names the manifest that governs it: that is said whatever was done, since nothing else tells which package the invocation reached.
+    pub fn close(self) {
+        if let Some(line) = self.line.filter(|_| self.governed) {
+            eprintln!("{line}");
+        }
+    }
+
+    /// Open a node for `label`, the last its tree plans or not, leaving its line unterminated.
+    pub fn open(&mut self, label: &str, last: bool) {
+        if let Some(line) = self.line.take() {
+            eprintln!("{line}");
+        }
+        eprint!(
+            "{}{label}",
+            match last {
+                true => CORNER,
+                false => BRANCH,
+            }
+        );
+        self.opened = Some(Instant::now());
+    }
+
+    /// Whether a node is open: its label written and its outcome not yet.
+    pub fn is_open(&self) -> bool {
+        self.opened.is_some()
+    }
+
+    /// Close the open node with what its work took: `; 1.4s`.
     pub fn done(&mut self) {
+        eprintln!("; {}", self.taken());
+    }
+
+    /// Close the open node with how its work ended where it did not simply finish, and what it took: `; refused in 0.3s`.
+    pub fn verdict(&mut self, verdict: &str) {
+        eprintln!("; {verdict} in {}", self.taken());
+    }
+
+    /// Close the open node with what its work came to stand as, where that is the one fact it is read for: `; .curios/native/hello/hello`.
+    pub fn outcome(&mut self, outcome: impl fmt::Display) {
+        self.opened = None;
+        eprintln!("; {outcome}");
+    }
+
+    /// Close the open node with where its work came to stand, or as `failed` where it could not be done: why is `done`'s to say, handed back for whoever reports it beneath.
+    pub fn stands<E>(&mut self, done: Result<(), E>, place: impl fmt::Display) -> Result<(), E> {
+        match &done {
+            Ok(()) => self.outcome(place),
+            Err(_) => {
+                self.verdict("failed");
+                eprintln!();
+            }
+        }
+
+        done
+    }
+
+    /// What the open node's work took, which closes it.
+    fn taken(&mut self) -> String {
         let elapsed = self
-            .started
+            .opened
             .take()
             .map_or(0.0, |at| at.elapsed().as_secs_f64());
 
-        eprint!("; {elapsed:.1}s");
-    }
-
-    /// Report what happened instead of the work — `; reused` — or what it came to — `; 3 passed, 1 failed`.
-    ///
-    /// The timing the line opened with is abandoned: an outcome is what happened *instead* of the work, so there is nothing left to time.
-    pub fn outcome(&mut self, outcome: &str) {
-        self.started = None;
-        eprint!("; {outcome}");
+        format!("{elapsed:.1}s")
     }
 }

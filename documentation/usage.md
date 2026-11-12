@@ -95,6 +95,26 @@ Ten commands, and `wonder`'s six queries — eleven commands where the compiler 
 
 `--manifest` is taken by every command but `new` and `profile`. `--budget` is taken by every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile`. Both are stated under [Flags](#flags).
 
+## What a command reports
+
+A command narrates on standard error, in one form: a subject alone on a line, and beneath it a node for each thing done for it, the node's label written before its work and what the work came to after it.
+
+```text
+/geometry
+├─ check; 1.6s
+╰─ store; 0.1s
+hello
+├─ check; 0.1s
+├─ build; 0.2s
+╰─ emit; 0.4s
+```
+
+A subject is a unit by the prefix it mounts, an executable by its name, a file as it was written, or `<stdin>`, and the manifest that governs it is named beside it, `hello (../curios.toml)`, where the invocation does not stand in the manifest's directory. A unit is checked, `check`, and filed where a store keeps it, `store`. A program is checked, `check`, its own declarations elaborated, certified, erased and linked with the units it stands on; built, `build`, lowered and optimized; and emitted, `emit`, written as WebAssembly, optimized by Binaryen and, natively, compiled to machine code. What the store already held is not narrated: a subject nothing was done for says nothing, save one named beside its manifest, whose line says which package the invocation reached.
+
+A node that finished closes with what it took, `; 0.3s`. One that did not closes with how it ended and what it took — `; refused in 0.3s` where the compiler refuses the program, `; 1 goal in 0.3s` where written goals alone stopped it, `; failed in 0.3s` where the machine did — and what stopped it follows the tree, a blank line between. One whose point is where its work came to stand closes with that, spelled from where the invocation stands: `write; .curios/native/hello/hello`. `├─` is written where more nodes are planned and `╰─` at the last, each before its node's work, so a tree a refusal cuts short ends on `├─`.
+
+Nothing is rewritten or erased, and the bytes are the same in a pipe, a log file and a CI transcript as on a terminal.
+
 ## `run`
 
 ```sh
@@ -114,7 +134,7 @@ A running program's own exit code passes through untouched. A program that close
 
 ### Serving a page
 
-`--target browser` builds the program's [page](#the-page) as `compile --target browser` does, reads every file of it once, and serves it from memory on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until the command is stopped. It prints where a browser opens it — `↳ Serving   http://127.0.0.1:8000/?arg=--help` — and opens no browser.
+`--target browser` builds the program's [page](#the-page) as `compile --target browser` does, reads every file of it once, and serves it from memory on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until the command is stopped. It closes the program's tree with where a browser opens it — `╰─ serve; http://127.0.0.1:8000/?arg=--help` — and opens no browser.
 
 The page stands at the root: `/` and `/index.html` are its document, every other file stands at its page path, and the program's arguments are the address's query, each an `arg=` percent-encoded, so the printed address runs it with the words after the subject. Nothing reloads: a changed program is served by running the command again, and every reply says `Cache-Control: no-store`, so the browser asks for the new page rather than keeping the old.
 
@@ -129,7 +149,7 @@ curios compile scratch.crs -o s  # a loose program, which has nowhere else to go
 curios compile --target browser  # a page, under the store
 ```
 
-`--target` says what the program is built for: `native`, the default, writes an executable, and `browser` a directory holding a page. A declared executable's build is written under the store beside the governing manifest, under the target, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
+`--target` says what the program is built for: `native`, the default, writes an executable, and `browser` a directory holding a page. The command closes the program's tree with `write` and where the result stands, a page's directory with a trailing separator, whether or not anything had to be compiled. A declared executable's build is written under the store beside the governing manifest, under the target, nested under the package and named after the executable it built; `-o`/`--output <PATH>` writes it somewhere else instead. A program no package declares — a loose file, or standard input — is filed nowhere, so `--output` is the only place it can go, and without one the command is refused naming the flag that would build it.
 
 **The result is self-contained, including its `foreign` implementations.** Every [`[[foreign]]`](#the-manifest) module that answers a declaration the program reaches is compiled into the executable beside the program itself, so it runs where there is no manifest to read a row from, no `.wasm` beside it to hash and no compiler to turn one into a module. Nothing is read from the store or the package at run time, and the executable is the only file that has to travel. It is linked before it is written, as `run` links before it runs: a declaration the program reaches that no module and no operation of the host answers, a declaration two rows claim and an export of another type than its declaration crosses as are each refused, so no executable is written that would refuse to start.
 
@@ -195,7 +215,7 @@ The landing page is the root module's page: it opens with the manifest's `descri
 
 What is written is `index.html`, one page per other module at its source path with the suffix `.crs.html` — `/json/parse/lexer` is `parse/lexer.crs.html`, so a module named `index` never lands on the landing page — and, under `static/`, the stylesheet, the three brand fonts with their licenses, the mark, the search index as one script, and the script that runs the rail and the field. Files are overwritten by name and nothing else in the directory is touched. How the pages themselves are built, and why the search index is a script rather than a file to fetch, is [`curios-document`'s](../curios-document/README.md).
 
-A library that does not compile is not documented: its diagnostics are reported as `run` reports them, no page is written, and the exit is non-zero. Success ends with `Finished` naming the landing page, `<directory>/index.html`, under `--std` as well.
+A library that does not compile is not documented: its diagnostics are reported as `run` reports them, no page is written, and the exit is non-zero. Success closes the library's tree with `write` and the landing page, `<directory>/index.html` spelled from where the invocation stands, under `--std` as well.
 
 ## `test`
 
@@ -595,13 +615,13 @@ Set `CURIOS_CACHE` to share that half across projects; unset, each project keeps
 
 ## Reusing what was already built
 
-Neither `run` nor `compile` recompiles a declared executable nothing has changed. The precompiled payload is filed in the store beside the units, and an invocation whose entry file, whose entry's own modules and whose dependencies all still hold what they held is served from it — reported as `↳ Linking hello; reused` in place of the steps a compile shows: `↳ Compiling` for each unit, then `↳ Linking hello` for the program itself, timed through to the machine code it runs as. One slot serves both subcommands, so `compile` after `run` only writes the executable, and `run` after `compile` compiles nothing. `test` and `document` file what they compile the same way, so an invocation of either whose sources are unchanged recompiles nothing.
+Neither `run` nor `compile` recompiles a declared executable nothing has changed. The precompiled payload is filed in the store beside the units, and an invocation whose entry file, whose entry's own modules and whose dependencies all still hold what they held is served from it and narrates nothing, where a compile shows a tree for each unit it compiled and the program's own ([What a command reports](#what-a-command-reports)). One slot serves both subcommands, so `compile` after `run` only writes the executable, and `run` after `compile` compiles nothing. `test` and `document` file what they compile the same way, so an invocation of either whose sources are unchanged recompiles nothing.
 
 An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again.
 
 A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files the units it compiled from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, as a build does, keeping every declaration that read nothing the edit changed, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it files as a build would have, so the question after a saved edit is the last to compile it. It files no unit compiled from text an editor holds unsaved, nor any unit after one, so a server asking on every keystroke files nothing.
 
-A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `Skipped storing what this built; …` from a build, `Skipped storing what this compiled; …` from a question — and [`wonder --server`](#wonder) says it once a session, in a log message to its client.
+A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `note: what this built is not stored; …` from a build, each of whose `store` nodes closes `refused`, and `Skipped storing what this compiled; …` from a question — and [`wonder --server`](#wonder) says it once a session, in a log message to its client.
 
 A loose `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-loose split as everywhere else. Standard input has none either, so its test program is compiled every time.
 

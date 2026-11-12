@@ -72,7 +72,7 @@ fn document_writes_the_bundle_under_the_store() {
     assert!(output.stdout.is_empty(), "the status line is stderr's");
     let status = String::from_utf8_lossy(&output.stderr);
     assert!(
-        status.contains("Finished") && status.contains(".curios/documentation/shapes/index.html"),
+        status.contains("write; .curios/documentation/shapes/index.html"),
         "success names the landing page: {status}"
     );
 

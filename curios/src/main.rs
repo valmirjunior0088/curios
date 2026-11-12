@@ -47,7 +47,6 @@ use {
         fs, io, iter,
         path::{Path, PathBuf},
         process::ExitCode,
-        time::Instant,
     },
 };
 
@@ -203,14 +202,16 @@ fn dispatch() -> Result<(), Failure> {
 
                     Some(store.executing(&home.package, &home.executable))
                 });
-                let files = built(elaboration.budget, program, store)?;
+                let (files, mut tree) = built(elaboration.budget, program, store)?;
                 let listener = bound(port.unwrap_or(PORT))?;
                 let port = listener
                     .local_addr()
                     .map_err(|error| format!("cannot read the address served on: {error}"))?
                     .port();
 
-                serving(&url(port, &args));
+                // The address is what the node came to, and the one fact a reader needs from what follows, which is nothing until the server is stopped.
+                tree.open("serve", true);
+                tree.outcome(url(port, &args));
                 serve_page(&listener, Served { files })?;
 
                 return Ok(());
@@ -221,7 +222,6 @@ fn dispatch() -> Result<(), Failure> {
                 Entry::Stdin => Spelling::STDIN.as_bytes().to_vec(),
                 Entry::File(path) => path.as_os_str().as_encoded_bytes().to_vec(),
             };
-            let subject = subject_of(&program);
             let store = program.home().and_then(|home| {
                 let store = contract.access.filed(&home.root)?;
 
@@ -229,10 +229,21 @@ fn dispatch() -> Result<(), Failure> {
             });
             // Kept before the program is consumed: binding needs the manifest that declares it, and `payload_of` takes the program by value.
             let manifest = program.home().map(|home| home.manifest.clone());
-            let (cwasm, foreigns) = payload_of(elaboration.budget, program, store, Target::Native)?;
+            let Built {
+                payload: cwasm,
+                foreigns,
+                tree,
+            } = payload_of(
+                elaboration.budget,
+                program,
+                store,
+                Target::Native,
+                Then::Nothing,
+            )?;
             let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
 
-            step(Heading::Running, &subject);
+            // Nothing announces the run: what follows is the program's own output.
+            tree.close();
 
             // SAFETY: `payload_of` precompiled the payload in this process or read it back from the project's own store, where a compilation of this compiler filed it.
             let compiled = unsafe { Compiled::deserialize(&cwasm, foreigns) }?;
@@ -348,12 +359,13 @@ fn dispatch() -> Result<(), Failure> {
                 }
             }
 
-            let started = Instant::now();
-
-            match target {
+            let (written, mut tree) = match target {
                 Target::Native => {
-                    let (payload, foreigns) =
-                        payload_of(elaboration.budget, program, store, target)?;
+                    let Built {
+                        payload,
+                        foreigns,
+                        mut tree,
+                    } = payload_of(elaboration.budget, program, store, target, Then::More)?;
 
                     // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
                     let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
@@ -362,26 +374,35 @@ fn dispatch() -> Result<(), Failure> {
                     // Written out here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
                     let plugins = bindings.bundled(curios_cranelift::serialize)?;
 
-                    emit_exe(
+                    tree.open("write", true);
+
+                    let written = emit_exe(
                         &Bundle {
                             program: payload,
                             foreigns,
                             plugins,
                         },
                         &output,
-                    )?;
+                    );
+
+                    (written, tree)
                 }
                 Target::Browser => {
-                    let files = built(elaboration.budget, program, store)?;
+                    let (files, mut tree) = built(elaboration.budget, program, store)?;
 
-                    emit_page(&output, &files, owned)?;
+                    tree.open("write", true);
+
+                    (emit_page(&output, &files, owned), tree)
                 }
-            }
+            };
 
-            // Where it landed rather than what it was called: that is the one fact a finished build is read for, and the group above already named the subject twice. The time is the whole invocation's, payload and emission both, so it is measured here rather than by the line.
-            let mut line = Line::open(Heading::Finished, &Subject::File(output));
-            line.outcome(&format!("{:.1}s", started.elapsed().as_secs_f64()));
-            eprintln!();
+            // Where it landed rather than what it was called: that is the one fact a finished build is read for. A directory is told from a file by its trailing separator.
+            let place = match target {
+                Target::Native => from_here(&output),
+                Target::Browser => format!("{}/", from_here(&output)),
+            };
+
+            tree.stands(written, place)?;
         }
         Mode::Document {
             std,
@@ -389,28 +410,37 @@ fn dispatch() -> Result<(), Failure> {
             elaboration,
             ..
         } => {
-            let (record, directory) = match std {
-                // The standard library has no package to file its pages under, so the flag names where they go rather than a directory being guessed.
-                Some(directory) => (std_documentation()?, directory),
+            let (record, directory, mut tree) = match std {
+                // The standard library has no package to file its pages under, so the flag names where they go rather than a directory being guessed. Nothing is compiled for it, so its tree is its subject's alone.
+                Some(directory) => {
+                    let record = std_documentation()?;
+                    let tree = Tree::of(&Subject::Mounted(record.prefix), None);
+
+                    (record, directory, tree)
+                }
                 None => {
                     let library = contract.admit_library(subject, manifest, &here()?)?;
                     let store = contract.access.filed(&library.root);
-                    let record =
-                        documentation_of(elaboration.budget, &library.units, store.as_ref())?;
+                    let (record, tree) = documentation_of(
+                        elaboration.budget,
+                        &library.units,
+                        store.as_ref(),
+                        &Subject::package(&library.package),
+                    )?;
                     let directory = output_path
                         .unwrap_or_else(|| Store::at(library.root).documentation(&library.package));
-                    (record, directory)
+                    (record, directory, tree)
                 }
             };
 
-            write_documentation(&record, &directory)
-                .map_err(|error| format!("{}: {error}", directory.display()))?;
+            tree.open("write", true);
 
             // Where the pages landed, as `compile` ends on where its executable did: by default that is under the store, where nobody would look, and the landing page is the one file a reader opens.
-            fact(
-                Heading::Finished,
-                Subject::File(directory.join("index.html")),
-            );
+            tree.stands(
+                write_documentation(&record, &directory)
+                    .map_err(|error| format!("{}: {error}", directory.display())),
+                from_here(&directory.join("index.html")),
+            )?;
         }
         Mode::New { directory } => {
             for written in scaffold(&directory)? {
@@ -480,13 +510,12 @@ fn dispatch() -> Result<(), Failure> {
                 // A row already saying what it was asked to say is the ordinary outcome of a second `pin`, and worth saying rather than passing in silence.
                 true => fact(Heading::Pinned, format!("{named}; unchanged")),
                 false => {
-                    let mut line = Line::open(Heading::Pinned, &named);
-                    line.outcome(match pinned.wrote {
+                    let outcome = match pinned.wrote {
                         true => "written",
                         false => "would change",
-                    });
+                    };
 
-                    eprintln!();
+                    fact(Heading::Pinned, format!("{named}; {outcome}"));
                     for (key, before, after) in &pinned.fields {
                         match before {
                             Some(before) => detail(format!("{key}: {before} → {after}")),

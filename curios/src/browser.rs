@@ -1,7 +1,7 @@
 //! A browser build: the page a program is built into, shared by `compile`, which writes it, and `run`, which serves it, so the two cannot drift apart; the directory it is written as; and the name its program runs by.
 
 use {
-    crate::{Failure, payload_of},
+    crate::{Built, Failure, Then, Tree, payload_of},
     curios::{Named, linked_of},
     curios_browser::page,
     curios_package::{Program, Target},
@@ -10,20 +10,25 @@ use {
 };
 
 /// What `program` is built into for a browser: every file of its page by its page path — the module through Binaryen alone, filed in `store` as `payload_of` files it, the rows it reaches linked to the gateways its packages declare, and the page laid out by `curios-browser`, naming the program as its first argument and its title. Every file the page holds is read here, once, and what the page refuses is refused before anything is written or served.
+///
+/// The page's files come back with the subject's tree, in which its command goes on to say where the page stands: served, or written.
 pub fn built(
     budget: u64,
     program: Program,
     store: Option<Verdicts>,
-) -> Result<BTreeMap<String, Vec<u8>>, Failure> {
+) -> Result<(BTreeMap<String, Vec<u8>>, Tree), Failure> {
     // Kept before the program is consumed: the page names the program, stands at its package's root and links what the manifest declaring it names.
     let name = Named::of(&program).page_name();
     let package = program.home().map(|home| home.package.clone());
     let manifest = program.home().map(|home| home.manifest.clone());
 
-    let (module, foreigns) = payload_of(budget, program, store, Target::Browser)?;
+    let Built {
+        payload: module,
+        foreigns,
+        tree,
+    } = payload_of(budget, program, store, Target::Browser, Then::More)?;
     let linked = linked_of(manifest.as_deref(), &foreigns)?;
-
-    Ok(page(
+    let files = page(
         curios_browser::Program {
             name: &name,
             package: package.as_deref(),
@@ -31,7 +36,9 @@ pub fn built(
             foreigns: &foreigns,
         },
         linked,
-    )?)
+    )?;
+
+    Ok((files, tree))
 }
 
 /// Write `files`, each at its page path, under `directory`, creating what is missing. Where the directory is the store's own, `owned`, it is emptied first, so it holds the page and nothing an earlier build left; one `--output` names keeps whatever else it holds, a file of the page replacing the one of its name.

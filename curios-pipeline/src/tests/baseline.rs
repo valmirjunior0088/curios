@@ -85,6 +85,8 @@ fn folded_offered(
                     Progress::Recompiling(prefix) => format!("recompiling {}", prefix.join()),
                     Progress::Reused(prefix) => format!("reused {}", prefix.join()),
                     Progress::Compiled => "compiled".to_string(),
+                    Progress::Filing => "filing".to_string(),
+                    Progress::Filed => "filed".to_string(),
                     Progress::Entry => "entry".to_string(),
                 });
             },
@@ -116,7 +118,10 @@ fn a_miss_with_a_baseline_is_announced_as_a_recompile_and_handed_to_put() {
         put: Cell::new(0),
     };
 
-    assert_eq!(folded(&stub), ["recompiling /lib", "compiled"]);
+    assert_eq!(
+        folded(&stub),
+        ["recompiling /lib", "compiled", "filing", "filed"]
+    );
     assert_eq!(
         stub.put.get(),
         1,
@@ -132,7 +137,10 @@ fn a_miss_without_a_baseline_compiles_whole() {
         put: Cell::new(0),
     };
 
-    assert_eq!(folded(&stub), ["compiling /lib", "compiled"]);
+    assert_eq!(
+        folded(&stub),
+        ["compiling /lib", "compiled", "filing", "filed"]
+    );
     assert_eq!(stub.put.get(), 1);
 }
 
@@ -148,7 +156,7 @@ fn an_offered_baseline_is_taken_by_a_cache_and_by_nothing_else() {
 
     assert_eq!(
         folded_offered(Some(&taking), &[("lib", BASE)], Some(&offered)),
-        ["recompiling /lib", "compiled"]
+        ["recompiling /lib", "compiled", "filing", "filed"]
     );
     assert_eq!(
         folded_offered(None, &[("lib", BASE)], Some(&offered)),

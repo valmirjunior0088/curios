@@ -12,7 +12,7 @@ use {
     curios_module::{Overlay, RootSource, UnitSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, TestEnd},
     curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, Target, order},
-    curios_pipeline::{Cache, CompileError, Fold, Progress, TestModule, TestRecord},
+    curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule, TestRecord},
     curios_surface::{Entrypoint, Form},
     curios_verdict::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT, written_as_a_module},
@@ -263,6 +263,7 @@ impl TestSubject {
         store: Option<&Verdicts>,
         under: &[Qualifier],
         target: Target,
+        observe: impl FnMut(Stage<'_>),
         progress: impl FnMut(Progress<'_>),
     ) -> Result<Tested, CompileError> {
         let sources = self
@@ -295,7 +296,7 @@ impl TestSubject {
                 &self.entrypoint,
                 &self.loader,
                 under.to_vec(),
-                |_| {},
+                observe,
                 progress,
             )?;
         // What the target consumes, as `payload_of` makes it: machine code for the native runtime, and for a browser the module Binaryen wrote.

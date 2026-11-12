@@ -132,14 +132,20 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     in_order(
         &stderr(&output),
         &[
-            "Processing     /app\n",
-            "↳ Compiling    /app; ",
-            "↳ Linking      /app; ",
+            "/app\n",
+            "├─ check; ",
+            "╰─ store; ",
+            "/app\n",
+            "├─ check; ",
+            "├─ build; ",
+            "├─ emit; ",
             "↳ Testing      /app\n",
             "↳ Tested       /app; 3 passed, 1 failed, 1 trapped, 1 exited\n",
-            "Processing     app\n",
-            "↳ Compiling    /app; ",
-            "↳ Linking      app; ",
+            "/app\n",
+            "├─ check; ",
+            "╰─ store; ",
+            "app\n",
+            "├─ check; ",
         ],
     );
     assert_eq!(
@@ -205,17 +211,18 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
 
     let warm = curios(&root, &["test", "--filter", "/app/addition_passes"]);
     assert_eq!(stdout(&warm), stdout(&cold));
-    // Each payload comes back whole, so each target's one step is its program's rather than a unit's.
+    // Each payload comes back whole, so nothing of either target's build is narrated.
     in_order(
         &stderr(&warm),
         &[
-            "Processing     /app\n",
-            "↳ Linking      /app; reused\n",
             "↳ Testing      /app\n",
             "↳ Tested       /app; 1 passed, 0 failed, 5 skipped\n",
-            "Processing     app\n",
-            "↳ Linking      app; reused\n",
         ],
+    );
+    assert!(
+        !stderr(&warm).contains("check;"),
+        "stderr: {}",
+        stderr(&warm)
     );
 }
 
@@ -448,15 +455,23 @@ fn run_neither_runs_nor_reports_a_test() {
     let output = curios(&root, &["run"]);
 
     assert_eq!(stdout(&output), "ran\n", "stderr: {}", stderr(&output));
-    // The target is taken on, its library compiled as a step and the program linked as the next, and the handover is the last step before the program's own output.
+    // The library is checked and filed, then the program checked, built and emitted, its `emit` the last node before the program's own output: nothing announces the run.
     in_order(
         &stderr(&output),
         &[
-            "Processing     app\n",
-            "↳ Compiling    /app; ",
-            "↳ Linking      app; ",
-            "↳ Running      app\n",
+            "/app\n",
+            "├─ check; ",
+            "╰─ store; ",
+            "app\n",
+            "├─ check; ",
+            "├─ build; ",
+            "╰─ emit; ",
         ],
+    );
+    assert!(
+        !stderr(&output).contains("Running"),
+        "stderr: {}",
+        stderr(&output)
     );
     assert_eq!(output.status.code(), Some(0));
 }
@@ -543,16 +558,10 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
     // Each target is filed against its own chain, so the second invocation compiles nothing: every target's one step is its program's. A store handle shared across targets would carry the library's placement into every later fold, withholding each executable's payload on the invocation that first compiled it.
     let warm = curios(&root, &["test"]);
     assert_eq!(stdout(&warm), stdout(&cold));
-    in_order(
-        &stderr(&warm),
-        &[
-            "Processing     /app\n",
-            "↳ Linking      /app; reused\n",
-            "Processing     app\n",
-            "↳ Linking      app; reused\n",
-            "Processing     other\n",
-            "↳ Linking      other; reused\n",
-        ],
+    assert!(
+        !stderr(&warm).contains("check;"),
+        "stderr: {}",
+        stderr(&warm)
     );
 }
 

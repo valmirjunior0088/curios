@@ -1552,8 +1552,11 @@ where
         };
         progress(Progress::Compiled);
 
+        // Announced on its own: what a cache does with a unit is no part of compiling it, and it is where a large unit's record is made.
         if let Some(cache) = cache {
+            progress(Progress::Filing);
             curios_profile::profile!("cache::put" => cache.put(source, &unit));
+            progress(Progress::Filed);
         }
 
         answered(source, &unit)?;
@@ -1701,6 +1704,10 @@ pub enum Progress<'a> {
     Reused(&'a Qualifier),
     /// The subject just announced finished.
     Compiled,
+    /// The unit just compiled is about to be handed to the cache, which records what it compiled to and what each of its items read. Sent only where the fold has a cache, and followed by [`Progress::Filed`].
+    Filing,
+    /// The cache has taken the unit, or declined it: which, a cache says for itself.
+    Filed,
 }
 
 /// What a caller is told of a program's compile as it goes: each rung it produced ([`Stage`]), and its lowering, as soon as it is made ([`ReadLowering`]).
