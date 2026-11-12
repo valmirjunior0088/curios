@@ -52,7 +52,7 @@ type mismatch
 │  7 │     empty;
 │    │     ^^^^^
 │
-╰─ error; vector.crs:7:5
+╰─ [error] vector.crs:7:5
 ```
 
 `Vec(Nat, 0)` and `Vec(Nat, 1)` are simply different types, so the off-by-one never reaches the generated program — there is nothing to test for, because there is nothing to run. And the `counted` field that made that work does its thinking at compile time and then goes home: a proof weighs nothing, so a `Vec` in the WebAssembly is exactly the list.

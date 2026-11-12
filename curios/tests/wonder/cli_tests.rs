@@ -55,7 +55,7 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
         String::from_utf8_lossy(&answered.stderr)
     );
     let text = stdout(&answered);
-    assert!(text.contains("╰─ goal; <stdin>:1:20"), "{text}");
+    assert!(text.contains("╰─ [goal] <stdin>:1:20"), "{text}");
     // The check is narrated beside the answer, closed by what stopped it.
     let narrated = String::from_utf8_lossy(&answered.stderr);
     assert!(
@@ -140,7 +140,7 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     let answered = curios(&root, &["wonder", "-"], module);
     assert!(answered.status.success());
     let text = stdout(&answered);
-    assert!(text.contains("╰─ error; <stdin>:1:24"), "{text}");
+    assert!(text.contains("╰─ [error] <stdin>:1:24"), "{text}");
 
     let staged = curios(&root, &["wonder", "--stage", "core", "-"], module);
     let refusal = String::from_utf8_lossy(&staged.stderr);

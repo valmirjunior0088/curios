@@ -178,7 +178,7 @@ fn goal_reports_spell_no_universe_instances() {
     let error = compile(source).unwrap_err();
 
     assert_eq!(
-        error.matches("╰─ goal").count(),
+        error.matches("╰─ [goal]").count(),
         2,
         "unexpected error: {error}"
     );
@@ -358,7 +358,7 @@ fn an_abstract_witness_folds_back_to_its_operator() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(error.contains("a + a"), "operator not folded: {error}");
     assert!(
         !error.contains(").0("),
@@ -397,7 +397,7 @@ fn goal_types_spell_negated_equality_as_neq() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(error.contains("1 != 2"), "unexpected error: {error}");
     assert!(!error.contains("witness"), "unexpected error: {error}");
 }
@@ -414,7 +414,7 @@ fn a_wide_goal_type_breaks_across_lines_in_the_report() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(
         error.contains("first_argument: Nat,\n"),
         "expected a broken binder list: {error}"
@@ -434,9 +434,9 @@ fn a_hard_error_beside_a_goal_is_reported_with_it() {
     let error = compile(source).unwrap_err();
 
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(
-        error.find("type mismatch") < error.find("╰─ goal"),
+        error.find("type mismatch") < error.find("╰─ [goal]"),
         "the refusal comes first: {error}"
     );
 }

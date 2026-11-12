@@ -392,7 +392,7 @@ impl Report {
         self
     }
 
-    /// The report as a reader of `style` sees it, a block: what it says, alone on a line; what that rests on, a line a fact, on a trunk; each further place it is about, its code closed by what stands there; and its own place, its code closed by the word of what the report is, `kind`.
+    /// The report as a reader of `style` sees it, a block: what it says, alone on a line; what that rests on, a line a fact, on a trunk; each further place it is about, its code closed by what stands there; and its own place, its code closed by the word of what the report is, `kind`, in brackets.
     ///
     /// ```text
     /// `a` is already declared
@@ -405,17 +405,20 @@ impl Report {
     /// │  2 │ let a = 2;
     /// │    │     ^
     /// │
-    /// ╰─ error; lib.crs:2:5
+    /// ╰─ [error] lib.crs:2:5
     /// ```
     ///
     /// **The report's own place is its last line**, so the line a reader's eye ends on, and a terminal opens, is where the report stands; every further place stands before it.
     ///
+    /// **The kind stands in brackets**, where every other line a block or a transcript closes joins a label to what it came to with `;`: a kind is no step, and its place no outcome of one, so `format; rewritten` is a step and `[format]` a report.
+    ///
     /// **One gutter serves every pane of a report**: each line's number ends in the column the widest ends in, so every pane's code begins in one column. An empty line of the trunk stands above and below a pane, which sets the code apart from what is said of it.
     pub fn rendered(&self, kind: Kind, style: &Style) -> String {
         let trunk = style.dim("│");
-        let word = match kind.troubled() {
-            true => style.troubled(kind.word()),
-            false => kind.word().to_string(),
+        let badge = format!("[{}]", kind.word());
+        let badge = match kind.troubled() {
+            true => style.troubled(badge),
+            false => badge,
         };
         let gutter = self
             .notes
@@ -470,9 +473,9 @@ impl Report {
         match &self.span {
             Some(span) => {
                 lines.extend(pane(span));
-                lines.push(format!("{} {word}; {}", style.dim("╰─"), span.place(style)));
+                lines.push(format!("{} {badge} {}", style.dim("╰─"), span.place(style)));
             }
-            None => lines.push(format!("{} {word}", style.dim("╰─"))),
+            None => lines.push(format!("{} {badge}", style.dim("╰─"))),
         }
 
         lines.join("\n")

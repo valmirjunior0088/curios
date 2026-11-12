@@ -378,7 +378,7 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, l
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -401,7 +401,7 @@ compile SUBJECT — Program (its own file), store Write, leaves Executable, opti
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -424,7 +424,7 @@ compile SUBJECT --output out — Program (its own file), store Write, leaves Exe
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -447,7 +447,7 @@ document SUBJECT — Library, store Write, leaves Pages, options --std --output 
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → library app
@@ -472,7 +472,7 @@ test SUBJECT — Any, store Write, leaves Nothing, options --target --port --fil
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → entire app
@@ -517,7 +517,7 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → entire app
@@ -540,7 +540,7 @@ format SUBJECT — Files, store None, leaves Rewritten, options --check --width 
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → files <root>/work/app/lib.crs <root>/work/app/util.crs <root>/work/app/serve.crs <root>/work/app/helper.crs deep.crs <root>/work/app/bench.crs within 100
@@ -563,7 +563,7 @@ wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --st
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → entire app
@@ -586,7 +586,7 @@ wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --c
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → entire app
@@ -609,7 +609,7 @@ wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests 
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -632,7 +632,7 @@ wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, o
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -655,7 +655,7 @@ wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --t
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -678,7 +678,7 @@ wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, optio
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve
@@ -701,7 +701,7 @@ wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing,
   work/app: missing.crs → refused: unreadable file
 │  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ error
+╰─ [error]
   work: (none) → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work: serve → refused: <root>/work/curios.toml declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead
   work/app/helper: (none) → program serve

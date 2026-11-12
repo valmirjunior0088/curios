@@ -110,7 +110,7 @@ fn a_report_is_a_block_closed_by_its_own_place() {
             "│  2 │ let a = 2;\n",
             "│    │     ^\n",
             "│\n",
-            "╰─ error; lib.crs:2:5",
+            "╰─ [error] lib.crs:2:5",
         )
     );
 }
@@ -141,7 +141,7 @@ fn the_panes_of_a_report_share_one_gutter() {
             "│   9 │ let a = b;\n",
             "│     │     ^\n",
             "│\n",
-            "╰─ error; lib.crs:9:5",
+            "╰─ [error] lib.crs:9:5",
         )
     );
 }
@@ -151,13 +151,13 @@ fn the_panes_of_a_report_share_one_gutter() {
 fn a_report_closes_on_what_it_has_of_a_place() {
     assert_eq!(
         Report::unlocated("unused dependency").rendered(Kind::Lint, &Style::plain()),
-        "unused dependency\n╰─ lint"
+        "unused dependency\n╰─ [lint]"
     );
 
     let span = Span::new(Source::inline("x\n"), 0, 1);
     assert_eq!(
         Report::at(span, "`x` is not in scope").rendered(Kind::Error, &Style::plain()),
-        "`x` is not in scope\n│\n│  1 │ x\n│    │ ^\n│\n╰─ error; 1:1"
+        "`x` is not in scope\n│\n│  1 │ x\n│    │ ^\n│\n╰─ [error] 1:1"
     );
 }
 
@@ -281,6 +281,6 @@ fn what_is_said_is_a_line_and_the_facts_begun_after_it() {
     assert_eq!(report.facts, ["inferred: Nat", "expected: List(\n  Str)"]);
     assert_eq!(
         report.rendered(Kind::Error, &Style::plain()),
-        "type mismatch\n│  inferred: Nat\n│  expected: List(\n│    Str)\n╰─ error"
+        "type mismatch\n│  inferred: Nat\n│  expected: List(\n│    Str)\n╰─ [error]"
     );
 }

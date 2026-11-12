@@ -79,7 +79,7 @@ fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
         text.starts_with("unused import\n│  `Bool` is never used\n│  delete it"),
         "{text}"
     );
-    assert!(text.contains("╰─ lint; <stdin>:1:11"), "{text}");
+    assert!(text.contains("╰─ [lint] <stdin>:1:11"), "{text}");
     // The program is checked under its own name, a blank line parts the tree from the report, and the count closes.
     let narrated = String::from_utf8_lossy(&linted.stderr);
     assert!(narrated.starts_with("<stdin>\n╰─ check; "), "{narrated}");

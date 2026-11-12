@@ -30,7 +30,7 @@ fn solved_goal_reports_its_solution() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(error.contains("? : Type"), "unexpected error: {error}");
     assert!(
         error.contains("`/std/Nat` inferred"),
@@ -75,7 +75,7 @@ fn pinned_through_the_expected_type_reports_the_pin() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(
         error.contains("`Bool` inferred"),
         "unexpected error: {error}"
@@ -93,7 +93,7 @@ fn unconstrained_goal_reports_undetermined() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(
         error.contains("`Nat` expected"),
         "unexpected error: {error}"
@@ -114,7 +114,7 @@ fn report_includes_the_local_scope() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(error.contains("x : Nat"), "unexpected error: {error}");
 }
 
@@ -130,7 +130,7 @@ fn goal_in_synthesis_position_reports_a_meta_type() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(error.contains("`?` expected"), "unexpected error: {error}");
     // No `? =` clause: nothing determined the goal.
     assert!(!error.contains("inferred"), "unexpected error: {error}");
@@ -149,7 +149,7 @@ fn several_goals_report_together_in_declaration_order() {
     let error = compile(source).unwrap_err();
 
     assert_eq!(
-        error.matches("╰─ goal").count(),
+        error.matches("╰─ [goal]").count(),
         2,
         "unexpected error: {error}"
     );
@@ -175,7 +175,7 @@ fn item_and_entrypoint_tail_goals_share_one_batch() {
     let error = compile(source).unwrap_err();
 
     assert_eq!(
-        error.matches("╰─ goal").count(),
+        error.matches("╰─ [goal]").count(),
         2,
         "unexpected error: {error}"
     );
@@ -195,7 +195,7 @@ fn solved_and_unsolved_goals_share_one_batch() {
     let error = compile(source).unwrap_err();
 
     assert_eq!(
-        error.matches("╰─ goal").count(),
+        error.matches("╰─ [goal]").count(),
         2,
         "unexpected error: {error}"
     );
@@ -238,7 +238,7 @@ fn types_spell_operators_as_infix_not_witness_projections() {
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(error.contains("(1 + 2) * 3"), "unexpected error: {error}");
     assert!(!error.contains("witness"), "unexpected error: {error}");
 }
@@ -259,7 +259,7 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
 
     let error = compile(source).unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
     assert!(
         error.contains("`(Nat) -> Nat` expected"),
         "unexpected error: {error}"
@@ -298,7 +298,7 @@ fn typecheck_rejects_a_goal() {
     )
     .unwrap_err();
 
-    assert!(error.contains("╰─ goal"), "unexpected error: {error}");
+    assert!(error.contains("╰─ [goal]"), "unexpected error: {error}");
 }
 
 /// A refusal beside a written goal is the refusal's exit and both reports: the refused item's first, then the goal at its occurrence.

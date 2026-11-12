@@ -17,7 +17,7 @@ fn a_goal_in_a_local_let_annotation_is_reported() {
         /std/print("unreachable\n")
         "#;
     let error = typecheck(source).expect_err("a program with a written goal never compiles");
-    assert!(error.contains("╰─ goal"), "{error}");
+    assert!(error.contains("╰─ [goal]"), "{error}");
     assert!(error.contains("`Nat` inferred"), "{error}");
 }
 
@@ -33,7 +33,7 @@ fn a_goal_as_a_lambda_domain_is_reported() {
         /std/print("unreachable\n")
         "#;
     let error = typecheck(source).expect_err("a program with a written goal never compiles");
-    assert!(error.contains("╰─ goal"), "{error}");
+    assert!(error.contains("╰─ [goal]"), "{error}");
     assert!(error.contains("`Nat` inferred"), "{error}");
 }
 
@@ -49,5 +49,5 @@ fn a_goal_as_a_match_motive_is_reported() {
         /std/print("unreachable\n")
         "#;
     let error = typecheck(source).expect_err("a program with a written goal never compiles");
-    assert!(error.contains("╰─ goal"), "{error}");
+    assert!(error.contains("╰─ [goal]"), "{error}");
 }

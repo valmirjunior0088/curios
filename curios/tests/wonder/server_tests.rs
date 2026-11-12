@@ -794,8 +794,8 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
         String::from_utf8_lossy(&answered.stderr)
     );
     let text = stdout(&answered);
-    assert!(text.contains("╰─ error; <stdin>:1:21"), "{text}");
-    assert!(text.contains("╰─ error; <stdin>:3:21"), "{text}");
+    assert!(text.contains("╰─ [error] <stdin>:1:21"), "{text}");
+    assert!(text.contains("╰─ [error] <stdin>:3:21"), "{text}");
     assert!(!text.contains("_b"), "{text}");
 }
 

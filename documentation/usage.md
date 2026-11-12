@@ -125,10 +125,10 @@ type mismatch
 │  3 │ let label: Str = double(21);
 │    │                  ^^^^^^^^^^
 │
-╰─ error; demo.crs:3:18
+╰─ [error] demo.crs:3:18
 ```
 
-The first line is a tag: a few words that name the kind of thing reported, the same wherever it is met and whichever stage reports it, with nothing of the program in them. What is reported of this program follows on a trunk, a fact a line and in one order: what stands here, the terms at issue each behind a label, the rule it is held to, and the way out, said as what to write. Then comes the program's own text, an empty line of the trunk above and below it, with marks under what the report is about. The last line says what the report is and where it stands: `error` for what a rule refuses, `goal` for a [written goal](language.md#written-goals), `lint` for a [lint](#lint), then the file, the line and the column, the file spelled from where the invocation stands, as one word a terminal opens. A report about a second place shows that place first, closed by what stands there, so the report's own place is always its last line; and every pane of one report shares a gutter, so the code of each begins in one column:
+The first line is a tag: a few words that name the kind of thing reported, the same wherever it is met and whichever stage reports it, with nothing of the program in them. What is reported of this program follows on a trunk, a fact a line and in one order: what stands here, the terms at issue each behind a label, the rule it is held to, and the way out, said as what to write. Then comes the program's own text, an empty line of the trunk above and below it, with marks under what the report is about. The last line says what the report is, in brackets, and where it stands: `[error]` for what a rule refuses, `[goal]` for a [written goal](language.md#written-goals), `[lint]` for a [lint](#lint), then the file, the line and the column, the file spelled from where the invocation stands, as one word a terminal opens. A report about a second place shows that place first, closed by what stands there and a `;`, as a step of the tree is by what it came to, so the report's own place is always its last line, the one line in brackets; and every pane of one report shares a gutter, so the code of each begins in one column:
 
 ```text
 declaration cycle
@@ -149,7 +149,7 @@ declaration cycle
 │   9 │ let a: Nat = b;
 │     │     ^
 │
-╰─ error; demo.crs:9:5
+╰─ [error] demo.crs:9:5
 ```
 
 A goal's first line is its answer in place of a tag: what the compiler knows is wanted where it stands, `` `Nat` expected ``, or what it worked out stands there, `` `Nat` inferred ``; beneath it are the names in scope, each with its type, and each term the compiler found that fits, `? ≈ seed`. A text that is no form of the grammar is a `syntax error`, whose facts are what was `expected:` there and what was `obtained:` in its place, or the rule the text breaks and what to write. A build writes its reports on standard error after the tree, a blank line between; `wonder` and `lint` write them on standard output, as their answer.
@@ -702,7 +702,7 @@ Text written as a module — items with no final term — is checked as one, as 
 Diagnostics name it `<stdin>` where they would name a file, keeping line and column:
 
 ```text
-╰─ error; <stdin>:1:19
+╰─ [error] <stdin>:1:19
 ```
 
 The program's own standard input is spent on reading the source, so a read of it reports the end of the input. A program that reads its input wants a file, or a path the shell mints for it — `curios run <(your_generator)` is an ordinary file argument, and leaves standard input alone.
