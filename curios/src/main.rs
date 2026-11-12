@@ -179,14 +179,17 @@ fn dispatch() -> Result<(), Failure> {
     };
     let stood = env::current_dir().and_then(|here| here.canonicalize()).ok();
     // Each stream has a reader of its own: an answer redirected to a file is written no colour while the narration beside it, on a terminal, is.
-    paint(Style {
-        here: stood.clone(),
-        painted: seen(io::stderr().is_terminal()),
-    });
     let answered = Style {
-        here: stood,
+        here: stood.clone(),
         painted: seen(io::stdout().is_terminal()),
     };
+    paint(
+        Style {
+            here: stood,
+            painted: seen(io::stderr().is_terminal()),
+        },
+        answered.clone(),
+    );
 
     let Cli { mode, .. } = cli;
 

@@ -116,7 +116,7 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     let root = project("outcomes");
     let output = curios(&root, &["test"]);
 
-    // The library's unit is checked and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: a failing test says what went wrong itself, so its verdict stands beneath that with the body as written, and a trap's text and an exit's body are the runner's to add. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
+    // The library's unit is checked and filed; its test program is checked, built and emitted, and its tests follow on the same tree, each closed by how it ended: a failing test says what went wrong itself, behind the frame its own lines stand behind, so its verdict stands beneath that, and a trap's text is the runner's to add. The executable, whose library is compiled again without its tests, declares none, and closes with its tally at once. The run's tally is the last line.
     in_order(
         &stderr(&output),
         &[
@@ -129,12 +129,9 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "├─ emit; ",
             "├─ /app/doubling_passes; passed in ",
             "├─ /app/addition_passes; passed in ",
-            "├─ /app/equality_fails\nexpected 5 but got 4\n│  ╰─ failed in ",
-            "│       Test/equal(double(2), 5)\n",
+            "├─ /app/equality_fails\n│  ╎ expected 5 but got 4\n│  ╰─ failed in ",
             "├─ /app/overflow_traps; trapped in ",
-            "│      let v = /std/Proc/env(\"CURIOS_UNSET_OVERFLOW\")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/len(Option/unwrap_or(v, x[])))!; Test/assert(true)\n",
             "├─ /app/exits_seven; exited 7 in ",
-            "│    let _ = /std/Proc/exit(@{}, 7)!; Test/assert(true)\n",
             "├─ /app/effect_passes; passed in ",
             "╰─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
             "/app\n",
@@ -190,9 +187,7 @@ test fails_quietly =
         &stderr(&output),
         &[
             "├─ /app/quits_early; exited 0 in ",
-            "│    let _ = Proc/exit(@{}, 0)!; Test/assert(true)\n",
             "├─ /app/fails_quietly; exited 1 in ",
-            "│    let _ = Proc/exit(@{}, 1)!; Test/assert(true)\n",
             "╰─ 0 passed, 0 failed, 2 exited; ",
         ],
     );
@@ -225,13 +220,13 @@ test mutters =
     );
 
     let apart = curios(&root, &["test"]);
-    assert_eq!(stdout(&apart), "drawn\n", "stderr: {}", stderr(&apart));
+    assert_eq!(stdout(&apart), "│  ╎ drawn\n", "stderr: {}", stderr(&apart));
     in_order(
         &stderr(&apart),
         &[
             "├─ /app/quiet; passed in ",
             "├─ /app/draws\n│  ╰─ passed in ",
-            "├─ /app/mutters\nhalf\n│  ╰─ passed in ",
+            "├─ /app/mutters\n│  ╎ half\n│  ╰─ passed in ",
             "╰─ 3 passed, 0 failed; ",
         ],
     );
@@ -254,8 +249,8 @@ test mutters =
         &together,
         &[
             "├─ /app/quiet; passed in ",
-            "├─ /app/draws\ndrawn\n│  ╰─ passed in ",
-            "├─ /app/mutters\nhalf\n│  ╰─ passed in ",
+            "├─ /app/draws\n│  ╎ drawn\n│  ╰─ passed in ",
+            "├─ /app/mutters\n│  ╎ half\n│  ╰─ passed in ",
         ],
     );
 }

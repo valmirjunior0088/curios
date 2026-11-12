@@ -111,7 +111,6 @@ mod proof_binders;
 use proof_binders::*;
 
 mod test_tail;
-pub use test_tail::ScheduledTest;
 use test_tail::*;
 
 // A namespace rather than a root export, for `curios-native`'s `test_support` reason: `curios_elab::test_support::written_for_reader` says at its use site that the caller reached for scaffolding rather than product API.

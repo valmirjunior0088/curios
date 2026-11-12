@@ -18,7 +18,7 @@ mod compile;
 use compile::*;
 pub use compile::{
     After, Cache, Checked, CompileError, Earlier, EntryTail, Examined, Findings, Obligation,
-    Progress, Refused, TestModule, TestProgram, TestRecord, compile_units, declared_test_paths,
+    Progress, Refused, TestModule, TestProgram, compile_units, declared_test_paths,
     examine_entrypoint, recheck,
 };
 

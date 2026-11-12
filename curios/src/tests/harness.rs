@@ -435,13 +435,7 @@ fn a_selection_schedules_the_tests_at_or_under_any_of_its_prefixes() {
             program
                 .modules
                 .iter()
-                .flat_map(|module| {
-                    module
-                        .scheduled
-                        .iter()
-                        .map(|record| record.path)
-                        .chain(module.skipped.iter().copied())
-                })
+                .flat_map(|module| { module.scheduled.iter().chain(&module.skipped).copied() })
                 .map(|path| path.join())
                 .collect::<Vec<_>>(),
             ["/Map", "/Map/inner", "/MapBuilder/beside", "/Set/member"]
@@ -451,7 +445,7 @@ fn a_selection_schedules_the_tests_at_or_under_any_of_its_prefixes() {
             .modules
             .iter()
             .flat_map(|module| &module.scheduled)
-            .map(|record| record.path.join())
+            .map(|test| test.join())
             .collect::<Vec<_>>();
         let unmatched = program
             .unmatched
@@ -485,54 +479,6 @@ fn the_ordinary_program_holds_no_test_the_test_program_keeps() {
     assert!(survives(&anf_optm_tests(source), "/the_answer_holds"));
 }
 
-#[test]
-fn a_body_written_as_a_whole_term_form_is_recorded() {
-    // The runner slices a test's whole body from the generated thunk's extent, independently of the narrower action extent its interior may carry for a sequencing diagnostic.
-    let entrypoint = r#"
-        use /std/{Nat, Str, Bool, Io, Test};
-        test application =
-            Test/assert(1 + 1 == 2);
-        test matching =
-            match 1 + 1 == 2 : (_) => Test({}) | true => Test/assert(true) | false => Test/assert(false) end;
-        test binding =
-            let x = 1 + 1;
-            Test/assert(x == 2);
-        test sequencing =
-            Test/assert(Io/pure(true)!);
-        test binding_actions =
-            let x = Test/pure(2)!;
-            Test/assert(x == 2);
-        /std/print("ran\n")
-        "#
-    .parse::<Entrypoint>()
-    .expect("fixture parses");
-    let modules = Fold::new(DEFAULT_BUDGET, &[], None)
-        .tests(
-            &entrypoint,
-            &RootSource::none().tested(),
-            vec![Qualifier::empty()],
-            |_| {},
-            |_| {},
-        )
-        .expect("fixture compiles as a test program")
-        .modules;
-
-    assert_eq!(
-        modules
-            .iter()
-            .flat_map(|module| &module.scheduled)
-            .map(|record| record.body.as_str())
-            .collect::<Vec<_>>(),
-        [
-            "Test/assert(1 + 1 == 2)",
-            "match 1 + 1 == 2 : (_) => Test({}) | true => Test/assert(true) | false => Test/assert(false) end",
-            "let x = 1 + 1;\n            Test/assert(x == 2)",
-            "Test/assert(Io/pure(true)!)",
-            "let x = Test/pure(2)!;\n            Test/assert(x == 2)",
-        ]
-    );
-}
-
 /// A test program schedules the tests of the one unit compiled tested and of none it stands on, wherever the fold places that unit: a unit built for the ones after it holds no test, so a dependency's never reach a dependent's schedule.
 #[test]
 fn a_test_program_schedules_only_the_tested_units_tests() {
@@ -556,7 +502,7 @@ fn a_test_program_schedules_only_the_tested_units_tests() {
         modules
             .iter()
             .flat_map(|module| &module.scheduled)
-            .map(|record| record.path.join())
+            .map(|test| test.join())
             .collect::<Vec<_>>()
     };
 

@@ -151,22 +151,16 @@ fn run_module(module: &Qualifier) {
         match outcome {
             // The test answered that it held.
             Ok(TestEnd::Answered(true)) => passed += 1,
-            // The test said what went wrong and answered that it did not hold; its path and its body as written are what only the records know.
+            // The test said what went wrong and answered that it did not hold; its path is what only the schedule knows.
             Ok(TestEnd::Answered(false)) => {
-                failures.push_str(&format!("{}: failed\n{reported}", record.path.join()));
-                if !record.body.is_empty() {
-                    failures.push_str(&format!("{}\n", record.body));
-                }
+                failures.push_str(&format!("{}: failed\n{reported}", record.join()));
             }
             // An exit is a failure whatever its code: a verdict is answered, never exited with.
             Ok(TestEnd::Exited(code)) => {
-                failures.push_str(&format!(
-                    "{}: exited {code}\n{reported}",
-                    record.path.join()
-                ));
+                failures.push_str(&format!("{}: exited {code}\n{reported}", record.join()));
             }
             Err(error) => {
-                failures.push_str(&format!("{}: {error}\n{reported}", record.path.join()));
+                failures.push_str(&format!("{}: {error}\n{reported}", record.join()));
             }
         }
     }

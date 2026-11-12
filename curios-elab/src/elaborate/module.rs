@@ -14,7 +14,7 @@ use {
     super::{Mode, elaborate, elaborate_func_type_sized},
     crate::{
         Context, Declared, ErasedSite, Error, Established, GoalReport, GoalSite, Published,
-        Readers, RecordKeyword, ScheduledTest, Traces, Turns, Vectors, Zonked, body_levels, check,
+        Readers, RecordKeyword, Traces, Turns, Vectors, Zonked, body_levels, check,
         check_concept_registry, check_is_sort, check_proof_totality, check_type_totality,
         check_written_type_totality, classify_totality, compared_levels, decide_polarities,
         definition_variances, field_variances, finalize_definition, goal_sites, hold_prop,
@@ -1572,7 +1572,7 @@ fn elaborate_definitions_suffix<'s>(
         Some(Tail::Tests(scheduled)) => {
             let scheduled = scheduled
                 .iter()
-                .filter(|test| !poison.holds(&test.name))
+                .filter(|test| !poison.holds(test))
                 .cloned()
                 .collect::<Vec<_>>();
             // A test program's tail is judged at what `Test/main` answers, whether its tests held: the verdict is the value the entry hands back, where a program's unit says nothing a runner could read.
@@ -1858,7 +1858,7 @@ pub enum Tail<'a> {
     /// The program's own [`Entrypoint`], exactly as lowered.
     Entry(&'a Entrypoint),
     /// `Test/main([...])` over these tests, replacing the program's written entry; a unit with no tests gets `Test/main([])`.
-    Tests(&'a [ScheduledTest]),
+    Tests(&'a [Global]),
 }
 
 /// Elaborate one unit's [`Definitions`] against the units already established, then zonk and check it.

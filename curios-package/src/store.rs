@@ -150,7 +150,7 @@ fn shared() -> Option<PathBuf> {
 const SCHEMA: &str = "u81";
 
 /// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
-const PAYLOAD_SCHEMA: &str = "p11";
+const PAYLOAD_SCHEMA: &str = "p12";
 
 /// The slot a unit compiled by `compiler`, claiming `mounts`, declaring `declared` and `compiled` built or tested, is filed under.
 ///

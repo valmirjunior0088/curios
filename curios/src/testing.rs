@@ -12,7 +12,7 @@ use {
     curios_module::{Overlay, RootSource, UnitSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, TestEnd},
     curios_package::{Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
-    curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule, TestRecord},
+    curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule},
     curios_surface::{Entrypoint, Form},
     curios_verdict::{Program, Verdicts},
     curios_wonder::{STDIN_LABEL, STDIN_MOUNT, written_as_a_module},
@@ -348,8 +348,8 @@ impl Tested {
         &self.modules
     }
 
-    /// The record of each scheduled test, in schedule order: a test's index among them is the one it is run at.
-    pub fn scheduled(&self) -> impl Iterator<Item = &TestRecord> {
+    /// The path of each scheduled test, in schedule order: a test's index among them is the one it is run at.
+    pub fn scheduled(&self) -> impl Iterator<Item = &Qualifier> {
         self.modules.iter().flat_map(|module| &module.scheduled)
     }
 
@@ -360,13 +360,9 @@ impl Tested {
 
     /// Every test the subject declares, scheduled or not, by its path: the paths a selection meeting none of them is answered with the nearest of.
     pub fn declared(&self) -> impl Iterator<Item = &Qualifier> {
-        self.modules.iter().flat_map(|module| {
-            module
-                .scheduled
-                .iter()
-                .map(|record| &record.path)
-                .chain(&module.skipped)
-        })
+        self.modules
+            .iter()
+            .flat_map(|module| module.scheduled.iter().chain(&module.skipped))
     }
 
     /// Whether the program was taken from the store rather than compiled.
@@ -471,11 +467,11 @@ struct TestPayload {
     payload: Option<Vec<u8>>,
 }
 
-/// One module's tests as the store files them: the segments of its path, of each scheduled test's path beside its body, and of each skipped test's path.
+/// One module's tests as the store files them: the segments of its path, of each scheduled test's path and of each skipped test's.
 #[curios_archive::archived]
 struct ModulePayload {
     path: Vec<String>,
-    scheduled: Vec<(Vec<String>, String)>,
+    scheduled: Vec<Vec<String>>,
     skipped: Vec<Vec<String>>,
 }
 
@@ -490,7 +486,7 @@ fn encode(tested: &Tested) -> Option<curios_archive::Serialized> {
                 scheduled: module
                     .scheduled
                     .iter()
-                    .map(|record| (record.path.segments().to_vec(), record.body.clone()))
+                    .map(|test| test.segments().to_vec())
                     .collect(),
                 skipped: module
                     .skipped
@@ -521,14 +517,7 @@ fn decode(bytes: &[u8], foreigns: ForeignStore, target: Target) -> Option<Tested
         .into_iter()
         .map(|module| TestModule {
             path: Qualifier::from(module.path),
-            scheduled: module
-                .scheduled
-                .into_iter()
-                .map(|(path, body)| TestRecord {
-                    path: Qualifier::from(path),
-                    body,
-                })
-                .collect(),
+            scheduled: module.scheduled.into_iter().map(Qualifier::from).collect(),
             skipped: module.skipped.into_iter().map(Qualifier::from).collect(),
         })
         .collect();

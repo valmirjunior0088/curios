@@ -55,14 +55,23 @@ static PLAIN: Style = Style {
 /// Whoever reads standard error, decided once as the command starts.
 static READER: OnceLock<Style> = OnceLock::new();
 
-/// Write for `reader` from here on: where they stand, which a path is spelled from, and whether they see colour. Decided once, as the command starts, from what was asked and where standard error goes.
-pub fn paint(reader: Style) {
+/// Whoever reads standard output, decided beside [`READER`].
+static ANSWERED: OnceLock<Style> = OnceLock::new();
+
+/// Write for `reader` on standard error and for `answered` on standard output from here on: where each stands, which a path is spelled from, and whether each sees colour. Decided once, as the command starts, from what was asked and where each stream goes.
+pub fn paint(reader: Style, answered: Style) {
     let _ = READER.set(reader);
+    let _ = ANSWERED.set(answered);
 }
 
 /// Whoever reads standard error: what the transcript, and a report beside it, is written for.
 pub fn reader() -> &'static Style {
     READER.get().unwrap_or(&PLAIN)
+}
+
+/// Whoever reads standard output: what a line a test writes there is framed for.
+pub fn answered() -> &'static Style {
+    ANSWERED.get().unwrap_or(&PLAIN)
 }
 
 /// `text` as a subject is painted.
@@ -127,11 +136,11 @@ pub fn kept() -> Vec<u8> {
     held().clone().unwrap_or_default()
 }
 
-/// Relay `bytes`, which a program run elsewhere wrote on one of its standard streams, to `stream`, this process's of the same name, and onto what is kept of the transcript, where they fell.
-pub fn relayed(mut stream: impl Write, bytes: &[u8]) {
-    stream.write_all(bytes).expect("failed relaying");
-    if let Some(kept) = held().as_mut() {
-        kept.extend_from_slice(bytes);
+/// Relay what a test run elsewhere wrote on one of its standard streams, framed: `shown` to `stream`, this process's of the same name, and `kept`, the same bytes unpainted, onto what is kept of the transcript, where they fell.
+pub fn relayed(mut stream: impl Write, shown: &[u8], kept: &[u8]) {
+    stream.write_all(shown).expect("failed relaying");
+    if let Some(transcript) = held().as_mut() {
+        transcript.extend_from_slice(kept);
     }
 }
 
@@ -243,6 +252,87 @@ const CORNER: &str = "╰─";
 /// The trunk, beside what stands beneath a node more are planned after.
 const TRUNK: &str = "│";
 
+/// The trunk a test's own lines stand behind, dashed where the tree's is whole: what is written there is the test's, not the runner's.
+const STREAM: &str = "╎";
+
+/// Where a test's writes stand in the line they are on, which says whether its next byte opens a line and so stands behind the frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Column {
+    /// At a line's start.
+    #[default]
+    Start,
+    /// Past a line's start.
+    Within,
+    /// Past a carriage return, which left the line standing: the next byte writes over it from its start, unless it ends it.
+    Returned,
+}
+
+impl Column {
+    /// The column a stream is left in by `written`, the bytes last written from this one.
+    pub fn after(self, written: &[u8]) -> Self {
+        match written.last() {
+            None => self,
+            Some(b'\n') => Column::Start,
+            Some(b'\r') => Column::Returned,
+            Some(_) => Column::Within,
+        }
+    }
+}
+
+/// What a line of a test's own is owed before the run that opens it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Owed {
+    /// Nothing: the line is under way.
+    Nothing,
+    /// The frame, and a blank before the run.
+    Frame,
+    /// The frame alone, before a run that is only its line's end.
+    Bare,
+}
+
+/// The first run of `bytes`, which a test writes from `column`: what the line it goes on is owed before it, and how many of the bytes go on that line, through the one that ends or leaves it.
+pub fn framed_run(column: Column, bytes: &[u8]) -> (Owed, usize) {
+    let length = bytes
+        .iter()
+        .position(|byte| matches!(byte, b'\n' | b'\r'))
+        .map_or(bytes.len(), |end| end + 1);
+    let owed = match (column, bytes.first()) {
+        // A line's end after a carriage return is the one line's end, written in two bytes.
+        (_, None) | (Column::Within, _) | (Column::Returned, Some(b'\n')) => Owed::Nothing,
+        (Column::Start | Column::Returned, Some(b'\n' | b'\r')) => Owed::Bare,
+        (Column::Start | Column::Returned, Some(_)) => Owed::Frame,
+    };
+
+    (owed, length)
+}
+
+/// What a line is `owed`, as a reader of `style` sees it: the tree's trunk and the dashed one of what a test writes, which stands in the column the test's verdict closes it in.
+pub fn frame_of(owed: Owed, style: &Style) -> String {
+    let frame = format!("{}  {}", style.dim(TRUNK), style.dim(STREAM));
+
+    match owed {
+        Owed::Nothing => String::new(),
+        Owed::Bare => frame,
+        Owed::Frame => format!("{frame} "),
+    }
+}
+
+/// `bytes`, which a test wrote from `column` on, each line behind its frame for a reader of `style`: what a run that writes a test's output once the test has ended hands over whole. `column` is left where the bytes leave the stream.
+pub fn framed(column: &mut Column, bytes: &[u8], style: &Style) -> Vec<u8> {
+    let mut framed = Vec::with_capacity(bytes.len());
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        let (owed, length) = framed_run(*column, rest);
+        let (own, after) = rest.split_at(length);
+        framed.extend_from_slice(frame_of(owed, style).as_bytes());
+        framed.extend_from_slice(own);
+        *column = column.after(own);
+        rest = after;
+    }
+
+    framed
+}
+
 /// What a node's work wrote of its own on the standard streams while the node's line stood open, as whoever watched them saw it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Wrote {
@@ -268,11 +358,11 @@ pub enum Wrote {
 ///
 /// **The connector is the plan's.** `├─` is written where more nodes are planned and `╰─` at the last, before either's work is done, so a tree a refusal cuts short ends on `├─`: the steps it planned and never reached are the ones missing.
 ///
-/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), it flows as written, and the outcome closes the node beneath it, on a curve off the trunk:
+/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), each line of it stands behind a dashed trunk as it is written ([`framed_run`]), and the outcome closes the node beneath it, on a curve off the trunk that closes the dashed one:
 ///
 /// ```text
 /// ├─ /geometry/draws_a_square
-/// ■■■■
+/// │  ╎ ■■■■
 /// │  ╰─ passed in 0.1s
 /// ```
 pub struct Tree {

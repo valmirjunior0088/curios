@@ -360,7 +360,7 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let (written, after) = reply(&mut socket);
     shown.push_str(&written);
     assert_eq!(after, None);
-    // Past the address, each served subject's tests on a tree of its own: a test that wrote nothing closed on its line, one that wrote closed beneath what it wrote, and what only the runner knows beneath that.
+    // Past the address, each served subject's tests on a tree of its own: a test that wrote nothing closed on its line, and one that wrote closed beneath what it wrote, each line of that behind its frame.
     let run = |drawn: &str| {
         format!(
             concat!(
@@ -368,11 +368,9 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
                 "/app\n",
                 "├─ /app/holds; passed in _\n",
                 "├─ /app/fails\n",
-                "expected 2 but got 1\n",
+                "│  ╎ expected 2 but got 1\n",
                 "│  ╰─ failed in _\n",
-                "│       Test/equal(1, 2)\n",
                 "├─ /app/exits; exited 7 in _\n",
-                "│    let _ = /std/Proc/exit(@{{}}, 7)!; Test/assert(true)\n",
                 "╰─ 1 passed, 1 failed, 1 exited; _\n",
                 "app\n",
                 "├─ /own\n",
@@ -385,17 +383,17 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
             drawn = drawn,
         )
     };
-    assert_eq!(untimed(served(&shown)), run("drawn\n"));
+    assert_eq!(untimed(served(&shown)), run("│  ╎ drawn\n"));
 
     let (code, stdout, stderr) = serving.ended();
     assert_eq!(code, Some(1));
     // The terminal showed what the runner was sent, each stream its own: what a page's test wrote on its standard output is relayed on the command's.
-    assert_eq!(String::from_utf8_lossy(&stdout), "drawn\n");
+    assert_eq!(String::from_utf8_lossy(&stdout), "│  ╎ drawn\n");
     let stderr = String::from_utf8_lossy(&stderr);
     assert_eq!(untimed(served(&stderr)), run(""));
     assert_eq!(
         stderr,
-        shown.replace("drawn\n", ""),
+        shown.replace("│  ╎ drawn\n", ""),
         "the runner is sent the run from its first line"
     );
 }

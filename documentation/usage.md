@@ -284,11 +284,10 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 ├─ emit; 0.4s
 ├─ /demo/shapes/a_square_has_four_sides; passed in 0.0s
 ├─ /demo/two_is_three
-the condition was false
+│  ╎ the condition was false
 │  ╰─ failed in 0.0s
-│       Test/assert(2 == 3)
 ├─ /demo/render/draws_a_square
-■■■■
+│  ╎ ■■■■
 │  ╰─ passed in 0.1s
 ╰─ 2 passed, 1 failed; 0.1s
 2 passed, 1 failed; 0.1s
@@ -296,7 +295,7 @@ the condition was false
 
 Each selected test is a node, opened by its path before the test runs, so a test that never ends is the one whose line stands open, and closed by how it ended and what it took: `passed`, `failed`, `trapped`, `exited N`. A test that exits on its own has answered nothing, so it is `exited N` whatever `N`, `0` included. The tests run module by module, the modules in the order each declares its first test.
 
-What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written. Its first byte ends the line its node opened on, and the node closes beneath what was written, on a curve off the trunk, whichever stream that was and wherever either stream goes. A failing test says what went wrong itself, on its standard error, so its verdict always stands beneath; beneath the verdict the runner adds what only it knows, the test's body as written and, for a trap, the trap's text.
+What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written, each line behind a frame, the tree's trunk and a dashed one of its own, `│  ╎`, so what stands there reads as the test's. Its first byte ends the line its node opened on, and the node closes beneath what was written, on a curve that closes the dashed trunk, whichever stream that was and wherever either stream goes: a stream sent elsewhere carries its lines behind the frame too. A failing test says what went wrong itself, on its standard error, so its verdict always stands beneath. A test that trapped wrote nothing of why, so its trap's text stands beneath its verdict, which is the one thing the runner adds. Two things write past the frame and stand unframed: a child process a test starts with a stream of its own inherited, and a test that takes the terminal.
 
 A subject's tally closes its tree and the run's is the last line, each with what its tests took together where any ran: `N passed, N failed` always, since that pair is what the exit code turns on, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened. A subject that declares no test, or that the filter selects nothing from, closes with its tally at once.
 

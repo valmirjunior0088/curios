@@ -12,21 +12,22 @@ use host::*;
 
 use {
     crate::{
-        Access, Failure, Reporting, Run, Served, Steps, Subject, Then, Tree, Wrote, alone, bound,
-        cut, drained, keep, kept, relayed, serve_run, total, troubled, url,
+        Access, Column, Failure, Reporting, Run, Served, Steps, Subject, Then, Tree, Wrote, alone,
+        answered, bound, cut, drained, framed, keep, kept, reader, relayed, serve_run, total,
+        troubled, url,
     },
     curios::{TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Step},
-    curios_common::Qualifier,
+    curios_common::{Qualifier, Style},
     curios_native::{OsHost, TestEnd},
     curios_package::{Selection, Target},
-    curios_pipeline::{CompileError, TestModule, TestRecord},
+    curios_pipeline::{CompileError, TestModule},
     curios_verdict::Verdicts,
     std::{
         cell::RefCell,
         cmp::Reverse,
         collections::VecDeque,
-        io,
+        io::{self, Write},
         sync::Arc,
         time::{Duration, Instant},
     },
@@ -233,7 +234,7 @@ fn edits(path: &str, filter: &str) -> usize {
 struct Hand {
     tree: Tree,
     /// The scheduled tests yet to end, in schedule order, the one in hand first.
-    scheduled: VecDeque<TestRecord>,
+    scheduled: VecDeque<Qualifier>,
     tally: Totals,
     /// What the tests that ended took together, where any ran.
     spent: Option<Duration>,
@@ -328,43 +329,39 @@ impl<'a> Printer<'a> {
     /// Open the node of the subject in hand's next scheduled test, by its path, before it runs: a test that never ends is the one whose line stands open.
     pub fn began(&mut self) {
         let hand = self.hand.as_mut().expect(IN_HAND);
-        let path = hand.scheduled.front().expect(IN_HAND).path.join();
+        let path = hand.scheduled.front().expect(IN_HAND).join();
 
         hand.tree.open(&path, false);
     }
 
-    /// The test whose node is open ended as `outcome` after `taken`, having `wrote` of its own or not: its node closed with how it ended, then what only the runner knows of one that did not pass — a trap's text, which no test writes, and the declaration's body as written — and the subject's tally where it was the subject's last.
+    /// The test whose node is open ended as `outcome` after `taken`, having `wrote` of its own or not: its node closed with how it ended, then a trap's text, which no test writes and only the runner holds, and the subject's tally where it was the subject's last.
     pub fn ended(&mut self, outcome: Outcome, wrote: Wrote, taken: Duration) {
         let hand = self.hand.as_mut().expect(IN_HAND);
-        let record = hand.scheduled.pop_front().expect(IN_HAND);
-        let body = record.body.lines();
+        hand.scheduled.pop_front().expect(IN_HAND);
         let (verdict, beneath) = match outcome {
             Outcome::Answered(true) => {
                 hand.tally.passed += 1;
 
                 ("passed".to_string(), Vec::new())
             }
-            // The test said what went wrong itself, above its verdict.
+            // The test said what went wrong itself, on its own stream, above its verdict.
             Outcome::Answered(false) => {
                 hand.tally.failed += 1;
 
-                ("failed".to_string(), body.map(str::to_string).collect())
+                ("failed".to_string(), Vec::new())
             }
             // The test exited on its own before its entry answered, whatever the code: a verdict is answered, never exited with.
             Outcome::Exited(code) => {
                 hand.tally.exited += 1;
 
-                (format!("exited {code}"), body.map(str::to_string).collect())
+                (format!("exited {code}"), Vec::new())
             }
             Outcome::Trapped(trap) => {
                 hand.tally.trapped += 1;
 
                 (
                     "trapped".to_string(),
-                    trap.lines()
-                        .map(str::to_string)
-                        .chain(body.map(|line| format!("  {line}")))
-                        .collect(),
+                    trap.lines().map(str::to_string).collect(),
                 )
             }
         };
@@ -508,19 +505,30 @@ impl Reporting for Printing<'_, '_> {
     }
 }
 
-/// Relay what a page's test wrote as a native test's own writes fall: the line its node opened on ended ahead of the first byte, then each stream's bytes on this process's stream of the same name, standard output first.
+/// Relay what a page's test wrote as a native test's own writes fall: the line its node opened on ended ahead of the first byte, then each stream's bytes, each line behind its frame, on this process's stream of the same name, standard output first.
 fn relay(guest: &Streams) -> Wrote {
-    let Some(last) = guest.stderr.last().or(guest.stdout.last()) else {
+    if guest.stdout.is_empty() && guest.stderr.is_empty() {
         return Wrote::Nothing;
-    };
+    }
 
     cut();
-    relayed(io::stdout(), &guest.stdout);
-    relayed(io::stderr(), &guest.stderr);
+    let mut column = Column::Start;
+    for (bytes, style, stream) in [
+        (
+            &guest.stdout,
+            answered(),
+            &mut io::stdout() as &mut dyn Write,
+        ),
+        (&guest.stderr, reader(), &mut io::stderr()),
+    ] {
+        // What is kept is what was shown, unpainted, from the same column.
+        let shown = framed(&mut column.clone(), bytes, style);
+        relayed(stream, &shown, &framed(&mut column, bytes, &Style::plain()));
+    }
 
-    match last {
-        b'\n' => Wrote::Lines,
-        _ => Wrote::Open,
+    match column {
+        Column::Start => Wrote::Lines,
+        Column::Within | Column::Returned => Wrote::Open,
     }
 }
 
