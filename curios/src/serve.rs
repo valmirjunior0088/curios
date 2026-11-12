@@ -2,7 +2,7 @@
 //!
 //! **Only what a page needs.** A request is a `GET` of a path, answered with the file at that page path, or with `index.html`, the page's own name for its document, for `/`; the page stands at the root, so its relative paths resolve there. Every reply says `Cache-Control: no-store`, since a page changes by running the command again, and `Connection: close`, so no connection outlives its one request but a run's socket.
 //!
-//! **A run is the runner at the root, its socket, and one subject's page beside them.** `GET /` answers the runner, and the same request asking to upgrade opens the socket the runner drives the run over. The run is driven over one socket at a time: it is sent the step in hand — the first unreported test in plan order — and each outcome it sends back is taken as that step's, answered with what the command wrote for it and the next step. A socket asked for while another drives the run is refused, and one that closes, however it closes, lets the run go, so the next to open resumes it at the step in hand. `index.html` and every other path is the page of the subject in hand, which switches to the next subject with its last report; the run is complete when every step is taken.
+//! **A run is the runner at the root, its socket, and one subject's page beside them.** `GET /` answers the runner, and the same request asking to upgrade opens the socket the runner drives the run over. The run is driven over one socket at a time: it is sent the step in hand — the first unreported test in plan order — and each outcome it sends back is taken as that step's, answered with the next step and what the command has written that the socket has not been sent — every line of the run so far as the socket opens, so a page opened late or reloaded shows the whole report. A socket asked for while another drives the run is refused, and one that closes, however it closes, lets the run go, so the next to open resumes it at the step in hand. `index.html` and every other path is the page of the subject in hand, which switches to the next subject with its last report; the run is complete when every step is taken.
 //!
 //! **Loopback, and only by its own name.** The server binds `127.0.0.1` and refuses a request whose `Host` is not that address or `localhost` at its port, which keeps a page some other site loads from reaching it through a name that resolves here, and a socket asked for under an `Origin` other than those, which a browser states for every page and which no page can forge, so only the runner a run serves drives it.
 
@@ -69,8 +69,14 @@ pub struct Run<'a> {
     state: Mutex<State<'a>>,
 }
 
-/// What the command does with the step in hand's outcome — prints and tallies — answering what it wrote on each stream.
-type Reporting<'a> = Box<dyn FnMut(Step, Streams, &Posted) -> Streams + Send + 'a>;
+/// What a run hands each step's outcome to — the command, which prints and tallies — and the report it keeps of the run.
+pub trait Reporting {
+    /// Take `outcome` as `step`'s, `guest` being the streams its page kept.
+    fn took(&mut self, step: Step, guest: Streams, outcome: &Posted);
+
+    /// Everything written of the run so far, in the order it was written: what every socket is sent, from its first byte as it opens.
+    fn written(&self) -> &[u8];
+}
 
 /// Where a run is, whether a socket drives it, and what takes its outcomes.
 struct State<'a> {
@@ -78,18 +84,15 @@ struct State<'a> {
     page: usize,
     test: usize,
     driven: bool,
-    report: Reporting<'a>,
+    report: Box<dyn Reporting + Send + 'a>,
 }
 
 /// The step in hand's outcome is read only over a socket that has been sent that step, which a run past its last never sends.
 const DRIVEN_WHILE_IN_HAND: &str = "an outcome is read only while a step is in hand";
 
 impl<'a> Run<'a> {
-    /// A run over `pages`, each with how many tests it schedules, `report` taking each step's outcome.
-    pub fn new(
-        pages: Vec<(Served, usize)>,
-        report: impl FnMut(Step, Streams, &Posted) -> Streams + Send + 'a,
-    ) -> Self {
+    /// A run over `pages`, each with how many tests it schedules, `report` taking each step's outcome and keeping what is written of the run.
+    pub fn new(pages: Vec<(Served, usize)>, report: impl Reporting + Send + 'a) -> Self {
         Self {
             runner: runner(),
             pages,
@@ -131,19 +134,27 @@ impl<'a> Run<'a> {
         Some(Held(self))
     }
 
-    /// The step in hand's outcome taken, `guest` being the streams its page kept: what the command wrote for it, and the step in hand after it.
-    fn reported(&self, outcome: &Posted, guest: Streams) -> (Streams, Option<Step>) {
+    /// The step in hand's outcome taken, `guest` being the streams its page kept.
+    fn reported(&self, outcome: &Posted, guest: Streams) {
         let mut state = self.state();
         let step = step_of(&state, self.pages.len()).expect(DRIVEN_WHILE_IN_HAND);
 
-        let written = (state.report)(step, guest, outcome);
+        state.report.took(step, guest, outcome);
         state.test += 1;
         if state.test == self.pages[state.page].1 {
             state.page += 1;
             state.test = 0;
         }
+    }
 
-        (written, step_of(&state, self.pages.len()))
+    /// The reply due a socket that has been sent `sent` bytes of the report: the rest of it, and the step in hand — `sent` moved past what the reply carries.
+    fn reply(&self, sent: &mut usize) -> Reply {
+        let state = self.state();
+        let written = state.report.written();
+        let reply = Reply::new(&written[*sent..], step_of(&state, self.pages.len()));
+        *sent = written.len();
+
+        reply
     }
 }
 
@@ -309,17 +320,19 @@ fn answer(stream: TcpStream, site: &Site<'_>, port: u16) -> io::Result<()> {
     }
 }
 
-/// Drive the run `held` holds over `socket`: the step in hand sent at once, then each outcome the runner sends taken as that step's and answered with what the command wrote and the next step, until the last, after which the socket is closed and the accept, listening on `port`, woken. A message that is no outcome closes the socket saying so.
+/// Drive the run `held` holds over `socket`: the report so far and the step in hand sent at once, then each outcome the runner sends taken as that step's and answered with what the command wrote since and the next step, until the last, after which the socket is closed and the accept, listening on `port`, woken. A message that is no outcome closes the socket saying so.
 fn drive(
     mut socket: WebSocket<&TcpStream>,
     held: Held<'_, '_>,
     port: u16,
 ) -> tungstenite::Result<()> {
     let run = held.0;
-    let mut next = run.in_hand();
-    socket.send(said(&Reply::new(&[], &[], next)))?;
+    // What of the report this socket has been sent: nothing as it opens, so its first reply carries all of it.
+    let mut sent = 0;
+    let mut reply = run.reply(&mut sent);
+    socket.send(said(&reply))?;
 
-    while next.is_some() {
+    while reply.next.is_some() {
         let read = match socket.read()? {
             Message::Text(text) => {
                 Posted::parse(text.as_bytes()).and_then(|outcome| Ok((outcome.streams()?, outcome)))
@@ -335,9 +348,9 @@ fn drive(
             }));
         };
 
-        let (written, after) = run.reported(&outcome, Streams { stdout, stderr });
-        next = after;
-        socket.send(said(&Reply::new(&written.stdout, &written.stderr, next)))?;
+        run.reported(&outcome, Streams { stdout, stderr });
+        reply = run.reply(&mut sent);
+        socket.send(said(&reply))?;
     }
 
     socket.close(None)?;

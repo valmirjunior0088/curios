@@ -244,7 +244,7 @@ fn posted(stdout: &str, exit_code: &str, trap: &str, held: &str) -> Message {
     ))
 }
 
-/// The next reply `socket` is sent: what the command wrote on stdout, and the next step.
+/// The next reply `socket` is sent: what the command wrote, and the next step.
 fn reply(socket: &mut WebSocket<MaybeTlsStream<TcpStream>>) -> (String, Option<Step>) {
     let Message::Text(text) = socket.read().expect("a reply") else {
         panic!("a reply is a text message");
@@ -252,7 +252,7 @@ fn reply(socket: &mut WebSocket<MaybeTlsStream<TcpStream>>) -> (String, Option<S
     let reply = Reply::parse(text.as_bytes()).expect("a reply");
 
     (
-        String::from_utf8(reply.streams().expect("base64").0).unwrap(),
+        String::from_utf8(reply.decoded().expect("base64")).unwrap(),
         reply.next,
     )
 }
@@ -273,7 +273,7 @@ fn in_order(haystack: &str, needles: &[&str]) {
     }
 }
 
-/// `test --target browser` builds every subject, serves the runner at the root and the first subject's page beside it, drives the run over the socket the runner opens there — sending each step in plan order and taking each outcome as its step's — switches the page with a subject's last outcome, prints what native prints, and exits with the tri-state once every step is taken.
+/// `test --target browser` builds every subject, serves the runner at the root and the first subject's page beside it, drives the run over the socket the runner opens there — sending each step in plan order and taking each outcome as its step's — switches the page with a subject's last outcome, prints what native prints and sends the runner the same report, and exits with the tri-state once every step is taken.
 #[test]
 fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_taken() {
     let root = Temporary::new("cli-serve", "test");
@@ -304,21 +304,41 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     let own = posted("L293bjogcGFzc2VkCg==", "0", "null", "true");
 
     let mut socket = serving.socket();
-    assert_eq!(reply(&mut socket), (String::new(), step(0, 0)));
+    let (mut shown, first) = reply(&mut socket);
+    assert_eq!(first, step(0, 0));
     for (outcome, next) in [
         (held, step(0, 1)),
         (failed, step(0, 2)),
         (exited, step(1, 0)),
     ] {
         socket.send(outcome).unwrap();
-        assert_eq!(reply(&mut socket).1, next);
+        let (written, after) = reply(&mut socket);
+        shown.push_str(&written);
+        assert_eq!(after, next);
     }
     // The library's last outcome switched the page in hand to the executable's.
     let (status, _, executable) = serving.get("/index.wasm");
     assert_eq!(status, "HTTP/1.1 200 OK");
     assert_ne!(executable, library);
     socket.send(own).unwrap();
-    assert_eq!(reply(&mut socket), ("/own: passed\n".to_string(), None));
+    let (written, after) = reply(&mut socket);
+    shown.push_str(&written);
+    assert_eq!(after, None);
+    // The runner is sent the report whole, from the first subject's opening, which is written before any socket opens.
+    assert_eq!(
+        shown,
+        concat!(
+            "↳ Testing      /app\n",
+            "/app/holds: passed\n",
+            "/app/fails: failed\n  expected 2 but got 1\n    Test/equal(1, 2)\n",
+            "/app/exits: exited 7\n    Test/perform(() => let _ = /std/Proc/exit(@{}, 7)!; Io/pure(Test/assert(true)))\n",
+            "↳ Tested       /app; 1 passed, 1 failed, 1 exited\n",
+            "↳ Testing      /\n",
+            "/own: passed\n",
+            "↳ Tested       /; 1 passed, 0 failed\n",
+            "Finished       2 passed, 1 failed, 1 exited\n",
+        )
+    );
 
     let (code, stdout, stderr) = serving.ended();
     assert_eq!(code, Some(1));
@@ -347,7 +367,7 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     assert_eq!(stderr.matches("↳ Testing").count(), 2, "{stderr}");
 }
 
-/// A run every test of which passes exits 0, and a subject with nothing selected is built and never served, its modules reported skipped as it is built.
+/// A run every test of which passes exits 0, and a subject with nothing selected is built and never served, its modules reported skipped as it is built — on the terminal, and in the report the runner is sent as its socket opens.
 #[test]
 fn test_exits_zero_once_every_selected_test_has_passed() {
     let root = Temporary::new("cli-serve", "test-green");
@@ -355,11 +375,33 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
     let serving = Serving::start(&root, &["test", "--target", "browser", "--filter", "/own"]);
 
     let mut socket = serving.socket();
-    assert_eq!(reply(&mut socket).1, step(0, 0));
+    assert_eq!(
+        reply(&mut socket),
+        (
+            concat!(
+                "↳ Testing      /app\n",
+                "↳ Tested       /app; 0 passed, 0 failed, 3 skipped\n",
+                "↳ Testing      /\n",
+            )
+            .to_string(),
+            step(0, 0)
+        )
+    );
     socket
         .send(posted("L293bjogcGFzc2VkCg==", "0", "null", "true"))
         .unwrap();
-    assert_eq!(reply(&mut socket).1, None);
+    assert_eq!(
+        reply(&mut socket),
+        (
+            concat!(
+                "/own: passed\n",
+                "↳ Tested       /; 1 passed, 0 failed\n",
+                "Finished       1 passed, 0 failed, 3 skipped\n",
+            )
+            .to_string(),
+            None
+        )
+    );
 
     let (code, stdout, stderr) = serving.ended();
     assert_eq!(code, Some(0), "{}", String::from_utf8_lossy(&stderr));

@@ -231,11 +231,11 @@ Everything is built before anything is served, so a `--filter` matching nothing 
 
 The root is the run: a runner that opens each test in an iframe of its own, one at a time in the order native runs them, each a fresh realm with fresh instances of every gateway module — the browser's form of native's one instantiation per test. `index.html` beside it is the subject in hand's page, the test's index as the program's argument, and the page switches to the next subject with the last outcome of the one before, which is why no subject's page has a name of its own.
 
-The runner drives the run over a WebSocket it opens at `/`, which the command takes from one page at a time: it is sent the test in hand, the page posts its outcome to the runner when its program ends ([The page](#the-page)), and the runner sends it back over the socket, answered with what the command wrote and the next test to open.
+The runner drives the run over a WebSocket it opens at `/`, which the command takes from one page at a time: it is sent the test in hand, the page posts its outcome to the runner when its program ends ([The page](#the-page)), and the runner sends it back over the socket, answered with what the command wrote since its last reply and the next test to open; the first reply carries every line of the run written before it.
 
 A socket asked for while another drives the run is refused, so a second tab runs nothing and says so; one that closes, a reload's or a closed tab's, lets the run go, and the next page to open resumes it at the test in hand, which runs again. A socket is refused too where its `Origin` names another site, so only the runner a run serves drives it, and a page whose loader never starts — a gateway that fails to import — is reported trapped.
 
-The terminal shows what native shows, each module's `↳ Testing` and `↳ Tested` steps around one line per test as its outcome arrives and `Finished` at the end, and the runner page shows the same lines; a subject the filter selects nothing from is never served, and its modules report as it is built. Once the last verdict is in, the command stops serving and exits as `test` exits; a rerun is the command run again.
+The terminal shows what native shows, each module's `↳ Testing` and `↳ Tested` steps around one line per test as its outcome arrives and `Finished` at the end, and the runner page shows the same lines, a reloaded runner every one of them again; a subject the filter selects nothing from is never served, and its modules report as it is built, on both. Once the last verdict is in, the command stops serving and exits as `test` exits; a rerun is the command run again.
 
 ## `curate`
 

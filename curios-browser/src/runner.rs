@@ -1,4 +1,4 @@
-//! The run a test serve answers at its root: the runner document, which opens one page per test and reports each to the command, and the wire between the two over the socket the runner opens at `/` — each test's outcome as its page posted it, and the reply that carries what the command wrote for it and the step to open next. Each is one type rendered and read here, so the runner's script, the command and the suites meet on one spelling.
+//! The run a test serve answers at its root: the runner document, which opens one page per test and reports each to the command, and the wire between the two over the socket the runner opens at `/` — each test's outcome as its page posted it, and the reply that carries what the command has written that the socket has not been sent and the step to open next. Each is one type rendered and read here, so the runner's script, the command and the suites meet on one spelling.
 
 #[cfg(test)]
 mod tests;
@@ -55,20 +55,18 @@ impl Posted {
     }
 }
 
-/// What the command sends over the run's socket: what it wrote on each stream, in base64, and the step to open next — none once the run is complete. The first is sent as the socket opens, with nothing written and the step in hand.
+/// What the command sends over the run's socket: what it has written of the run that the socket has not been sent, in base64 and in the order written — all of it as the socket opens — and the step to open next, none once the run is complete.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reply {
-    pub stdout: String,
-    pub stderr: String,
+    pub written: String,
     pub next: Option<Step>,
 }
 
 impl Reply {
-    /// The reply carrying what the command wrote, and `next`.
-    pub fn new(stdout: &[u8], stderr: &[u8], next: Option<Step>) -> Self {
+    /// The reply carrying `written`, and `next`.
+    pub fn new(written: &[u8], next: Option<Step>) -> Self {
         Self {
-            stdout: STANDARD.encode(stdout),
-            stderr: STANDARD.encode(stderr),
+            written: STANDARD.encode(written),
             next,
         }
     }
@@ -78,18 +76,11 @@ impl Reply {
         json(self).into_bytes()
     }
 
-    /// What the command wrote on each stream, decoded.
-    pub fn streams(&self) -> Result<(Vec<u8>, Vec<u8>), String> {
-        let decoded = |stream: &str, name: &str| {
-            STANDARD
-                .decode(stream)
-                .map_err(|error| format!("the reply's {name} is not base64: {error}"))
-        };
-
-        Ok((
-            decoded(&self.stdout, "stdout")?,
-            decoded(&self.stderr, "stderr")?,
-        ))
+    /// What the command wrote, decoded.
+    pub fn decoded(&self) -> Result<Vec<u8>, String> {
+        STANDARD
+            .decode(&self.written)
+            .map_err(|error| format!("what the reply carries is not base64: {error}"))
     }
 
     /// The reply `message` spells, or why it spells none.

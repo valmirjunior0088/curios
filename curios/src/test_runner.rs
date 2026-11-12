@@ -1,17 +1,17 @@
 //! `curios test` as the command line shows it: the subjects a selection declares tests in, each compiled as a test program and narrated as `run` narrates a compile, and one printer of what their tests come to — each module's `↳ Testing` and `↳ Tested` steps, one line per test as it ends, a failing test's body, the `Finished` tally — fed by a source of verdicts. The native source runs each test here, in an instantiation of its own, `[argv0, index]` as the program's arguments, what is compiled, filed and run being the library's (`curios::test_subjects`). The guest prints its own outcome line and answers its verdict, which is read off what its entry hands back and never off an exit code; what only the compiler knows — the failing declaration's body as written, the module each test stands in, the tests the selection skipped — is printed here from the modules the compile hands back.
 //!
-//! **The printer writes each fact once and hands it back.** Every line it writes to the process's streams it also returns as the bytes written, so a source that answers a report elsewhere — a page's runner — carries the same rendering, and the terminal and the page cannot drift.
+//! **The printer has one output.** Every line it writes goes through one path, to the process's streams and, where the printer keeps its report, onto that in the order written: a page's runner is sent the report, so no line reaches the terminal alone and the terminal and the page cannot drift.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{
-        Access, Failure, Heading, Line, Run, Served, Steps, Subject, bound, drained, fact, nested,
-        note_unlinked, processing, report, serve_run, serving, unnested, url,
+        Access, Failure, Heading, Line, Reporting, Run, Served, Steps, Subject, bound, drained,
+        nested, note_unlinked, processing, report, serve_run, serving, unnested, url,
     },
     curios::{Named, TestSubject, Tested, test_subjects},
-    curios_browser::Posted,
+    curios_browser::{Posted, Step},
     curios_common::Qualifier,
     curios_native::{OsHost, TestEnd},
     curios_package::{Selection, Target},
@@ -84,29 +84,10 @@ impl From<Result<TestEnd, String>> for Outcome {
     }
 }
 
-/// Bytes on the two standard streams: what the printer wrote for one event, handed back so a reply can carry the same bytes, and what a guest wrote where a source hands its output over rather than the guest writing to the process's streams itself.
-#[derive(Default)]
+/// What a guest wrote on the two standard streams, where a source hands its output over rather than the guest writing to the process's streams itself.
 pub struct Streams {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
-}
-
-impl Streams {
-    /// Write both to the process's own streams, each whole.
-    fn emit(&self) {
-        io::stdout()
-            .write_all(&self.stdout)
-            .expect("failed printing to stdout");
-        io::stderr()
-            .write_all(&self.stderr)
-            .expect("failed printing to stderr");
-    }
-
-    /// Take `other` after these, stream to stream.
-    pub fn append(&mut self, other: Streams) {
-        self.stdout.extend(other.stdout);
-        self.stderr.extend(other.stderr);
-    }
 }
 
 /// Run the tests `selection` declares natively, narrowed to those at or under any of the paths `filters` where any is given, each declared subject filing what it compiled into a store `access` opens. `Ok(true)` when every selected test passed.
@@ -242,8 +223,10 @@ fn edits(path: &str, filter: &str) -> usize {
     row[filter.len()]
 }
 
-/// What a run of tests comes to, printed as it goes: the `↳ Testing` and `↳ Tested` steps around each module's tests, one line per test as it ends, and the `Finished` tally, each written to the process's streams and handed back as the bytes written — with the tally, every test the subjects declare, and the one reason a store refused filing.
+/// What a run of tests comes to, printed as it goes: the `↳ Testing` and `↳ Tested` steps around each module's tests, one line per test as it ends, and the `Finished` tally, each written to the process's streams and, where the printer keeps its report, kept in the order written — with the tally, every test the subjects declare, and the one reason a store refused filing.
 pub struct Printer<'a> {
+    /// Everything written so far, in the order written, where the printer keeps its report: a browser run's, which every page that drives it is sent.
+    report: Option<Vec<u8>>,
     /// The `--filter` arguments as written, for a refusal to name.
     filters: &'a [String],
     /// The prefixes every subject's test program schedules the tests at or under: those `filters` name, or the root where none is given.
@@ -273,6 +256,7 @@ impl<'a> Printer<'a> {
         };
 
         Self {
+            report: None,
             filters,
             under,
             totals: Totals::default(),
@@ -283,6 +267,27 @@ impl<'a> Printer<'a> {
             matched: vec![false; filters.len()],
             declared: Vec::new(),
             refusal: None,
+        }
+    }
+
+    /// A printer that keeps its report from its first write.
+    pub fn keeping(filters: &'a [String]) -> Self {
+        Self {
+            report: Some(Vec::new()),
+            ..Self::new(filters)
+        }
+    }
+
+    /// Everything written so far, in the order written: all of it where the printer keeps its report, and nothing where it does not.
+    pub fn report(&self) -> &[u8] {
+        self.report.as_deref().unwrap_or_default()
+    }
+
+    /// The one path every line takes: `bytes` written to `stream`, one of the process's own, and kept where the printer keeps its report.
+    fn write(&mut self, mut stream: impl Write, bytes: &[u8]) {
+        stream.write_all(bytes).expect("failed printing");
+        if let Some(report) = &mut self.report {
+            report.extend_from_slice(bytes);
         }
     }
 
@@ -304,16 +309,11 @@ impl<'a> Printer<'a> {
     }
 
     /// The subject whose tests are `modules` taken on, and every line up to its first scheduled test: each module's `↳ Testing` step, followed at once by its `↳ Tested` step where it schedules none.
-    pub fn opened(&mut self, modules: &[TestModule]) -> Streams {
+    pub fn opened(&mut self, modules: &[TestModule]) {
         self.modules.extend(modules.iter().cloned());
 
-        let written = Streams {
-            stdout: Vec::new(),
-            stderr: self.advanced().into_bytes(),
-        };
-        written.emit();
-
-        written
+        let lines = self.advanced();
+        self.write(io::stderr(), lines.as_bytes());
     }
 
     /// The lines that take the subject in hand to its next scheduled test: each module's `↳ Testing` step, followed at once by its `↳ Tested` step where it schedules none.
@@ -361,11 +361,10 @@ impl<'a> Printer<'a> {
     }
 
     /// The next scheduled test of the module in hand ended as `outcome`: `guest`'s streams first, where a source hands the guest's output over rather than the guest writing to the process's streams itself, then what only the runner knows, and the module's `↳ Tested` step where it was the module's last. The guest prints the outcome line of a test it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
-    pub fn ended(&mut self, outcome: Outcome, guest: Option<&Streams>) -> Streams {
-        let mut written = Streams::default();
+    pub fn ended(&mut self, outcome: Outcome, guest: Option<&Streams>) {
         if let Some(guest) = guest {
-            written.stdout.extend_from_slice(&guest.stdout);
-            written.stderr.extend_from_slice(&guest.stderr);
+            self.write(io::stdout(), &guest.stdout);
+            self.write(io::stderr(), &guest.stderr);
         }
 
         let record = &self.modules[0].scheduled[self.ended];
@@ -393,7 +392,7 @@ impl<'a> Printer<'a> {
                 body(record, &mut lines);
             }
         }
-        written.stdout.extend_from_slice(lines.as_bytes());
+        self.write(io::stdout(), lines.as_bytes());
 
         self.ended += 1;
         let ended = self.ended;
@@ -402,20 +401,21 @@ impl<'a> Printer<'a> {
             .pop_front_if(|module| module.scheduled.len() == ended)
         {
             let lines = self.closed(module) + &self.advanced();
-            written.stderr.extend_from_slice(lines.as_bytes());
+            self.write(io::stderr(), lines.as_bytes());
         }
-        written.emit();
-
-        written
     }
 
     /// A store's refusal, said once.
-    pub fn skipped(&self) {
+    pub fn skipped(&mut self) {
         if let Some(refusal) = &self.refusal {
-            fact(
-                Heading::Skipped,
-                format!("storing what this built; {refusal}"),
+            let line = format!(
+                "{}\n",
+                unnested(
+                    Heading::Skipped,
+                    format!("storing what this built; {refusal}")
+                )
             );
+            self.write(io::stderr(), line.as_bytes());
         }
     }
 
@@ -436,17 +436,11 @@ impl<'a> Printer<'a> {
     }
 
     /// The `Finished` line, closing the run with its tally — left out where it would repeat the one `↳ Tested` step the run wrote.
-    pub fn finished(&self) -> Streams {
-        let written = Streams {
-            stdout: Vec::new(),
-            stderr: match self.reported {
-                1 => Vec::new(),
-                _ => format!("{}\n", unnested(Heading::Finished, self.totals.line())).into_bytes(),
-            },
-        };
-        written.emit();
-
-        written
+    pub fn finished(&mut self) {
+        if self.reported != 1 {
+            let line = format!("{}\n", unnested(Heading::Finished, self.totals.line()));
+            self.write(io::stderr(), line.as_bytes());
+        }
     }
 
     /// Whether every test that ran passed.
@@ -455,7 +449,7 @@ impl<'a> Printer<'a> {
     }
 
     /// The end of a native run: a store's refusal said once, each filter that matched nothing refused by name, and the `Finished` line.
-    pub fn finish(self) -> Result<bool, CompileError> {
+    pub fn finish(mut self) -> Result<bool, CompileError> {
         self.skipped();
         self.unmatched()?;
         self.finished();
@@ -482,7 +476,7 @@ pub fn serve_tests(
     if let Selection::Program(program) = &selection {
         note_unlinked(program, "is tested");
     }
-    let mut printer = Printer::new(filters);
+    let mut printer = Printer::keeping(filters);
     // Each served subject's modules, in the order the runner opens its pages.
     let mut planned = Vec::new();
     let mut pages = Vec::new();
@@ -530,22 +524,40 @@ pub fn serve_tests(
     serving(&url(port, &[]));
     printer.opened(&planned[0]);
 
-    let run = Run::new(pages, |step, guest, posted| {
-        let mut written = printer.ended(outcome_of(posted), Some(&guest));
-
-        // The subject's last test closes it, and opens the next subject or ends the run, in the same reply.
-        if !printer.in_hand() {
-            match planned.get(step.subject + 1) {
-                Some(next) => written.append(printer.opened(next)),
-                None => written.append(printer.finished()),
-            }
-        }
-
-        written
-    });
+    let run = Run::new(
+        pages,
+        Printing {
+            printer: &mut printer,
+            planned: &planned,
+        },
+    );
     serve_run(&listener, run)?;
 
     Ok(printer.green())
+}
+
+/// A browser run's printer, with each served subject's modules in the order the runner opens its pages: what the run hands each outcome to, and whose report it sends.
+struct Printing<'p, 'a> {
+    printer: &'p mut Printer<'a>,
+    planned: &'p [Vec<TestModule>],
+}
+
+impl Reporting for Printing<'_, '_> {
+    fn took(&mut self, step: Step, guest: Streams, outcome: &Posted) {
+        self.printer.ended(outcome_of(outcome), Some(&guest));
+
+        // The subject's last test closes it, and opens the next subject or ends the run.
+        if !self.printer.in_hand() {
+            match self.planned.get(step.subject + 1) {
+                Some(next) => self.printer.opened(next),
+                None => self.printer.finished(),
+            }
+        }
+    }
+
+    fn written(&self) -> &[u8] {
+        self.printer.report()
+    }
 }
 
 /// How a test ended, read off what its page posted: a trap, the word its entry answered, or the exit that left it unanswered — read once here, as native's end is read into [`Outcome`] once. A page that posted none of the three, which the harness never does, is read as a trap saying so.

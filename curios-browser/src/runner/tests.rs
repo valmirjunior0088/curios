@@ -34,7 +34,6 @@ fn an_outcome_that_is_none_is_refused_saying_so() {
 fn a_reply_carries_what_was_written_in_base64_and_the_next_step() {
     let reply = Reply::new(
         b"/app/t: passed\n",
-        b"",
         Some(Step {
             subject: 0,
             test: 1,
@@ -42,13 +41,14 @@ fn a_reply_carries_what_was_written_in_base64_and_the_next_step() {
     );
 
     assert_eq!(Reply::parse(&reply.render()).unwrap(), reply);
+    assert_eq!(reply.decoded().unwrap(), b"/app/t: passed\n");
     assert_eq!(
         String::from_utf8(reply.render()).unwrap(),
-        r#"{"stdout":"L2FwcC90OiBwYXNzZWQK","stderr":"","next":{"subject":0,"test":1}}"#
+        r#"{"written":"L2FwcC90OiBwYXNzZWQK","next":{"subject":0,"test":1}}"#
     );
     assert_eq!(
-        String::from_utf8(Reply::new(b"", b"", None).render()).unwrap(),
-        r#"{"stdout":"","stderr":"","next":null}"#
+        String::from_utf8(Reply::new(b"", None).render()).unwrap(),
+        r#"{"written":"","next":null}"#
     );
 }
 

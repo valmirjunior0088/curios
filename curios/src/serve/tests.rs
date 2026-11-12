@@ -217,7 +217,24 @@ fn page(document: &str, program: &[u8]) -> Served {
     }
 }
 
-/// A run of two pages, the first scheduling two tests and the second one, served on a port of its own: an outcome taken is answered with the guest's stdout and a line naming its step on stdout, and the posted trap, where there is one, on stderr; the thread serving the run ends once every step is taken.
+/// A run's report as a test keeps it: a line written before anything is served, then for each outcome taken the guest's stdout, a line naming its step and the posted trap, where there is one.
+struct Kept(Vec<u8>);
+
+impl Reporting for Kept {
+    fn took(&mut self, step: Step, guest: Streams, outcome: &Posted) {
+        self.0.extend(guest.stdout);
+        self.0
+            .extend(format!("step {}/{}\n", step.subject, step.test).into_bytes());
+        self.0
+            .extend(outcome.trap.clone().unwrap_or_default().into_bytes());
+    }
+
+    fn written(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+/// A run of two pages, the first scheduling two tests and the second one, served on a port of its own, its report kept by [`Kept`]; the thread serving the run ends once every step is taken.
 fn running() -> (u16, thread::JoinHandle<Result<(), String>>) {
     let listener = bound(0).expect("a port of loopback's own");
     let port = listener.local_addr().unwrap().port();
@@ -227,16 +244,7 @@ fn running() -> (u16, thread::JoinHandle<Result<(), String>>) {
                 (page("<!doctype html>first", b"\0asm1"), 2),
                 (page("<!doctype html>second", b"\0asm2"), 1),
             ],
-            |step, guest, posted| Streams {
-                stdout: format!(
-                    "{}step {}/{}\n",
-                    String::from_utf8_lossy(&guest.stdout),
-                    step.subject,
-                    step.test
-                )
-                .into_bytes(),
-                stderr: posted.trap.clone().unwrap_or_default().into_bytes(),
-            },
+            Kept(b"begun\n".to_vec()),
         );
 
         serve_run(&listener, run)
@@ -262,17 +270,15 @@ fn outcome(stdout: &str, trap: Option<&str>) -> Message {
     ))
 }
 
-/// The next reply `socket` is sent: what was written on each stream, and the next step.
-fn reply(socket: &mut Socket) -> (String, String, Option<Step>) {
+/// The next reply `socket` is sent: what was written, and the next step.
+fn reply(socket: &mut Socket) -> (String, Option<Step>) {
     let Message::Text(text) = socket.read().expect("a reply") else {
         panic!("a reply is a text message");
     };
     let reply = Reply::parse(text.as_bytes()).expect("a reply");
-    let (stdout, stderr) = reply.streams().expect("base64");
 
     (
-        String::from_utf8(stdout).unwrap(),
-        String::from_utf8(stderr).unwrap(),
+        String::from_utf8(reply.decoded().expect("base64")).unwrap(),
         reply.next,
     )
 }
@@ -350,7 +356,7 @@ fn a_socket_is_refused_from_another_origin_at_another_version_or_without_a_key()
     .expect("the runner's own origin opens the socket")
     .0;
     assert_eq!(
-        reply(&mut socket).2,
+        reply(&mut socket).1,
         Some(Step {
             subject: 0,
             test: 0
@@ -359,16 +365,15 @@ fn a_socket_is_refused_from_another_origin_at_another_version_or_without_a_key()
 }
 
 #[test]
-fn the_socket_is_sent_the_step_in_hand_and_drives_the_run_to_its_end() {
+fn the_socket_is_sent_the_report_so_far_and_the_step_in_hand_and_drives_the_run_to_its_end() {
     let (port, served) = running();
     let mut socket = socket(port).expect("the run's socket opens");
 
-    // Opened, it is sent the step in hand with nothing written.
+    // Opened, it is sent what was written before anything was served, and the step in hand.
     assert_eq!(
         reply(&mut socket),
         (
-            String::new(),
-            String::new(),
+            "begun\n".to_string(),
             Some(Step {
                 subject: 0,
                 test: 0
@@ -381,7 +386,6 @@ fn the_socket_is_sent_the_step_in_hand_and_drives_the_run_to_its_end() {
         reply(&mut socket),
         (
             "histep 0/0\n".to_string(),
-            String::new(),
             Some(Step {
                 subject: 0,
                 test: 1
@@ -391,7 +395,7 @@ fn the_socket_is_sent_the_step_in_hand_and_drives_the_run_to_its_end() {
     // The first page's last step switches the page in hand.
     socket.send(outcome("", None)).unwrap();
     assert_eq!(
-        reply(&mut socket).2,
+        reply(&mut socket).1,
         Some(Step {
             subject: 1,
             test: 0
@@ -399,18 +403,16 @@ fn the_socket_is_sent_the_step_in_hand_and_drives_the_run_to_its_end() {
     );
     assert_eq!(get(port, "/index.html").2, b"<!doctype html>second");
     assert_eq!(get(port, "/index.wasm").2, b"\0asm2");
-    // The last step, trapped: its trap on stderr, no next step, and the serve ends, its port closed.
+    // The last step, trapped: its trap written, no next step, and the serve ends, its port closed.
     socket.send(outcome("", Some("boom"))).unwrap();
-    assert_eq!(
-        reply(&mut socket),
-        ("step 1/0\n".to_string(), "boom".to_string(), None)
-    );
+    assert_eq!(reply(&mut socket), ("step 1/0\nboom".to_string(), None));
     served.join().unwrap().unwrap();
     assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).is_err());
 }
 
 #[test]
-fn a_second_socket_is_refused_while_one_drives_and_the_next_resumes_at_the_step_in_hand() {
+fn a_second_socket_is_refused_while_one_drives_and_the_next_resumes_at_the_step_in_hand_sent_the_whole_report()
+ {
     let (port, _served) = running();
     let mut driving = socket(port).expect("the run's socket opens");
     reply(&mut driving);
@@ -422,15 +424,18 @@ fn a_second_socket_is_refused_while_one_drives_and_the_next_resumes_at_the_step_
         other => panic!("a second socket is refused, not {:?}", other.map(|_| ())),
     }
 
-    // Once the driving socket has closed, the run is let go, and the next to open resumes it where it stands.
+    // Once the driving socket has closed, the run is let go, and the next to open resumes it where it stands, sent everything written so far.
     driving.close(None).unwrap();
     while driving.read().is_ok() {}
     let mut resumed = socket(port).expect("a socket opens once none drives the run");
     assert_eq!(
-        reply(&mut resumed).2,
-        Some(Step {
-            subject: 0,
-            test: 1
-        })
+        reply(&mut resumed),
+        (
+            "begun\nstep 0/0\n".to_string(),
+            Some(Step {
+                subject: 0,
+                test: 1
+            })
+        )
     );
 }

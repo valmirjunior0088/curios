@@ -1,4 +1,4 @@
-// The runner of a test serve, which `curios test --target browser` answers at its root. It drives the run over a socket it opens at `/`, which the command takes from one runner at a time: each step it is sent it runs in an iframe of its own — the current subject's page at `index.html`, the test's index as the program's argument — admitting the page's posts by the window they come from and the origin they come at, sends the test's outcome back, and shows the lines the command wrote for it. The document hands it the key the page spells its arguments under in a JSON block; the pure pieces are exported for the Node suite beside this file, and `main` runs where a document stands.
+// The runner of a test serve, which `curios test --target browser` answers at its root. It drives the run over a socket it opens at `/`, which the command takes from one runner at a time: each step it is sent it runs in an iframe of its own — the current subject's page at `index.html`, the test's index as the program's argument — admitting the page's posts by the window they come from and the origin they come at, sends the test's outcome back, and shows what the command wrote — its whole report so far in the first reply, what it wrote since in each after. The document hands it the key the page spells its arguments under in a JSON block; the pure pieces are exported for the Node suite beside this file, and `main` runs where a document stands.
 
 /** The outcome reported for a page whose document loaded with no `started` posted: its loader never ran, which a gateway that fails to import causes, and a run with no timeout would otherwise wait on it forever. */
 export const NEVER_STARTED = {
@@ -93,8 +93,7 @@ export const main = () => {
   });
   socket.addEventListener("message", async (event) => {
     const reply = JSON.parse(event.data);
-    lines.append(decoder.decode(decoded(reply.stdout)));
-    lines.append(decoder.decode(decoded(reply.stderr)));
+    lines.append(decoder.decode(decoded(reply.written)));
 
     if (reply.next === null) {
       complete = true;

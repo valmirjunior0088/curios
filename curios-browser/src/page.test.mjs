@@ -368,7 +368,7 @@ test("a test page served by the command answers its word through its gateway, an
     await (await fetch(`${base}/index.wasm`)).arrayBuffer(),
   );
 
-  // The run's socket, as the runner opens it: sent the first step at once.
+  // The run's socket, as the runner opens it: sent the report so far and the first step at once.
   const socket = new WebSocket(`ws://127.0.0.1:${await port}/`);
   const replies = [];
   const waiting = [];
@@ -385,7 +385,12 @@ test("a test page served by the command answers its word through its gateway, an
     replies.length > 0
       ? Promise.resolve(replies.shift())
       : new Promise((resolve) => waiting.push(resolve));
-  assert.deepEqual((await replied()).next, { subject: 0, test: 0 });
+  const opening = await replied();
+  assert.equal(
+    Buffer.from(opening.written, "base64").toString(),
+    "↳ Testing      /app\n",
+  );
+  assert.deepEqual(opening.next, { subject: 0, test: 0 });
 
   const posted = [];
   globalThis.parent = {
@@ -418,8 +423,8 @@ test("a test page served by the command answers its word through its gateway, an
   const reply = await replied();
   assert.equal(reply.next, null);
   assert.equal(
-    Buffer.from(reply.stdout, "base64").toString(),
-    "/app/doubling: passed\n",
+    Buffer.from(reply.written, "base64").toString(),
+    "/app/doubling: passed\n↳ Tested       /app; 1 passed, 0 failed\n",
   );
 
   const { code, stdout } = await ended;
