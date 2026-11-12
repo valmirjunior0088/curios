@@ -87,7 +87,7 @@ fn folded_offered(
                     Progress::Compiled => "compiled".to_string(),
                     Progress::Filing => "filing".to_string(),
                     Progress::Filed => "filed".to_string(),
-                    Progress::Entry => "entry".to_string(),
+                    Progress::Entry { .. } => "entry".to_string(),
                 });
             },
             None,
@@ -216,6 +216,7 @@ fn program_through(source: &str, cache: &dyn Cache) -> String {
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                progress: &mut |_| {},
             },
         )
         .map(TestProgram::built)
@@ -301,6 +302,7 @@ fn compiled_through(source: &str, cache: &dyn Cache) -> Result<(), String> {
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                progress: &mut |_| {},
             },
         )
         .map(TestProgram::built)
@@ -358,6 +360,7 @@ let wrong: Nat = \"a\";
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                progress: &mut |_| {},
             },
         )
         .map(TestProgram::built)

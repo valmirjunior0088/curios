@@ -183,6 +183,7 @@ fn a_unit_whose_items_are_placed_apart_again_keeps_every_erased_form() {
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                progress: &mut |_| {},
             },
         )
         .map(TestProgram::built)

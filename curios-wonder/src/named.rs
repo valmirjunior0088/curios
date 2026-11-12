@@ -13,7 +13,7 @@ use {
     curios_common::{Source, Span},
     curios_core::{Anchors, Declared, Global},
     curios_module::{Heading, Overlay, PreparedText, heading, identity},
-    curios_pipeline::{Cache, Fold},
+    curios_pipeline::{Cache, Fold, Progress},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::{
@@ -104,6 +104,7 @@ pub fn written(
     file: &Path,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
+    progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Vec<Written>, Vec<Diagnosis>> {
     let store = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = store.as_ref().map(|store| store as &dyn Cache);
@@ -113,8 +114,9 @@ pub fn written(
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
 
-            Fold::new(budget, &units, through)
-                .lowered_unit(|_| {}, |scope, text| reading.read(scope, text, None))
+            Fold::new(budget, &units, through).lowered_unit(&mut *progress, |scope, text| {
+                reading.read(scope, text, None)
+            })
         }
         Subject::Entry {
             units,
@@ -128,7 +130,7 @@ pub fn written(
             Fold::new(budget, &units, through).lowered(
                 &entrypoint,
                 &loader.tested(),
-                |_| {},
+                &mut *progress,
                 |scope, text, entry| reading.read(scope, text, Some(entry)),
             )
         }

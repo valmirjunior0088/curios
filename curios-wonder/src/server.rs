@@ -21,7 +21,7 @@
 //! **UTF-16 exists only here.** The engine's coordinates are bytes; a `Position` is derived from the span's own text at the boundary, in both directions, and nothing below this file knows the protocol's unit.
 
 use {
-    crate::{Asked, Diagnosed, Diagnosis, Named, Severity, Written},
+    crate::{Asked, Diagnosed, Diagnosis, Named, Severity, Silent, Written},
     curios_common::{Report, Source, Span},
     curios_core::Declared,
     curios_module::Overlay,
@@ -646,8 +646,8 @@ impl Analyst {
                         written: texts,
                         ..
                     } = match raised {
-                        Raised::Warming => asked.diagnosed(budget, overlay),
-                        Raised::Document => asked.checked(budget, overlay, document),
+                        Raised::Warming => asked.diagnosed(budget, overlay, &mut Silent),
+                        Raised::Document => asked.checked(budget, overlay, document, &mut Silent),
                     };
                     unfiled = unfiled.take().or(refusal);
                     written.get_or_insert(texts);
@@ -715,7 +715,7 @@ impl Analyst {
             LogMessage::METHOD.to_string(),
             LogMessageParams {
                 typ: MessageType::WARNING,
-                message: format!("Skipped storing what this session compiles; {refusal}"),
+                message: format!("what this session compiles is not stored; {refusal}"),
             },
         )))
     }

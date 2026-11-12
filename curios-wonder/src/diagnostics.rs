@@ -8,7 +8,7 @@ use {
         supply_entrypoint,
     },
     curios_package::Unlinked,
-    curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold},
+    curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold, Progress},
     curios_surface::{Entrypoint, Form},
     curios_unit::Unit,
     curios_verdict::Verdicts,
@@ -176,14 +176,15 @@ pub enum Origin {
 ///
 /// **A lint is reported beside whatever the verdict was**, after it. A lint is decided by the lowering, so a program that lowers has its lints whether elaboration then refused it, left a goal batch, or accepted it; only a program that does not lower — a parse failure, an unresolved name — reports its error alone, since there is nothing to have read the lints off.
 ///
-/// `cache` is consulted for units already built, and filed into where the disk holds every text the fold has read — see the `wonder` module documentation.
+/// `cache` is consulted for units already built, and filed into where the disk holds every text the fold has read — see the `wonder` module documentation. `progress` is told each step the fold takes.
 pub fn diagnostics(
     budget: u64,
     subject: Subject,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
+    progress: &mut dyn FnMut(Progress<'_>),
 ) -> Diagnosed {
-    diagnosed_reading(budget, subject, overlay, cache, None)
+    diagnosed_reading(budget, subject, overlay, cache, None, progress)
 }
 
 /// [`diagnostics`](diagnostics()), with what `file` writes read off the subject's lowering in the same fold ([`Diagnosed::written`]): what an editor's check answers a place in the document from, the lowering being there whether or not the subject elaborates.
@@ -193,8 +194,9 @@ pub fn checked(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     file: &Path,
+    progress: &mut dyn FnMut(Progress<'_>),
 ) -> Diagnosed {
-    diagnosed_reading(budget, subject, overlay, cache, Some(file))
+    diagnosed_reading(budget, subject, overlay, cache, Some(file), progress)
 }
 
 /// [`diagnostics`](diagnostics()), reading what `file` writes where there is one.
@@ -204,6 +206,7 @@ fn diagnosed_reading(
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     file: Option<&Path>,
+    progress: &mut dyn FnMut(Progress<'_>),
 ) -> Diagnosed {
     let store = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = store.as_ref().map(|store| store as &dyn Cache);
@@ -238,10 +241,9 @@ fn diagnosed_reading(
     let mut diagnosed = match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
-            let found = fold(&units).units(
-                |_| {},
-                |_, produced| Ok(produced.last().map(Findings::of_unit).unwrap_or_default()),
-            );
+            let found = fold(&units).units(&mut *progress, |_, produced| {
+                Ok(produced.last().map(Findings::of_unit).unwrap_or_default())
+            });
             match found {
                 Ok(findings) => Diagnosed::found(None, findings),
                 Err(error) => Diagnosed::refused(error),
@@ -256,7 +258,9 @@ fn diagnosed_reading(
             Ok((entrypoint, loader)) => {
                 let units = overlaid(units, overlay);
                 let checked =
-                    fold(&units).check(&entrypoint, &loader.tested(), EntryTail::Program, |_| {});
+                    fold(&units).check(&entrypoint, &loader.tested(), EntryTail::Program, |step| {
+                        progress(step)
+                    });
                 answered(checked)
             }
             Err(refusal) => Diagnosed {

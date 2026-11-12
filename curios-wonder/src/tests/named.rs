@@ -24,6 +24,7 @@ fn asked(program: &str, overlay: &Overlay) -> Vec<Written> {
         Path::new("<stdin>"),
         overlay,
         None,
+        &mut |_| {},
     )
     .expect("the program lowers")
 }
@@ -211,6 +212,7 @@ fn a_library_is_asked_through_one_of_its_files() {
         file,
         &overlay,
         None,
+        &mut |_| {},
     )
     .expect("the library lowers");
     let offset = LIBRARY.rfind("answer").expect("the library writes it");

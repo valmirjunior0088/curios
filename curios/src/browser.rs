@@ -2,7 +2,7 @@
 
 use {
     crate::{Built, Failure, Then, Tree, payload_of},
-    curios::{Named, linked_of},
+    curios::{linked_of, page_name},
     curios_browser::page,
     curios_package::{Program, Target},
     curios_verdict::Verdicts,
@@ -18,7 +18,7 @@ pub fn built(
     store: Option<Verdicts>,
 ) -> Result<(BTreeMap<String, Vec<u8>>, Tree), Failure> {
     // Kept before the program is consumed: the page names the program, stands at its package's root and links what the manifest declaring it names.
-    let name = Named::of(&program).page_name();
+    let name = page_name(&program.named());
     let package = program.home().map(|home| home.package.clone());
     let manifest = program.home().map(|home| home.manifest.clone());
 

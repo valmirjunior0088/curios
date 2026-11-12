@@ -815,7 +815,10 @@ fn the_server_logs_once_that_the_store_takes_nothing() {
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}"#, uri));
     let logged = editor.receive();
     assert!(logged.contains("window/logMessage"), "{logged}");
-    assert!(logged.contains("Skipped storing"), "{logged}");
+    assert!(
+        logged.contains("what this session compiles is not stored"),
+        "{logged}"
+    );
     let published = editor.receive();
     assert!(published.contains(r#""diagnostics":[]"#), "{published}");
 

@@ -18,13 +18,14 @@
 //!
 //! **A run that sends pages its report keeps the transcript** ([`keep`]): every byte written here, from then on, is what a page is sent, so the page shows what the terminal showed.
 //!
-//! **A heading column is what a command not drawn as a tree prints**: one word of [`Heading`], padded to a fixed width, then what it is about ([`fact`]).
+//! **What is said of no one subject stands under none**: a `note:` of how the command took what it was asked ([`note`]), a step taken for every subject ([`alone`]), and what the whole invocation came to, as its last line ([`total`]).
 
 #[cfg(test)]
 mod tests;
 
 use {
     curios_common::Qualifier,
+    curios_package::Named,
     curios_wonder::STDIN_LABEL,
     std::{
         env, fmt,
@@ -74,7 +75,7 @@ pub fn relayed(mut stream: impl Write, bytes: &[u8]) {
 /// What a status line is about.
 ///
 /// Four namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's and a foreign module's are identifiers their manifest rows chose, and a file's is whatever was typed or wherever it landed. Rendering all of them through one type is what keeps a print site from spelling a slash it did not derive.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Subject {
     /// A unit, by the prefix it mounts, or a module, by its path: `/` for the root, which joins to nothing.
     Mounted(Qualifier),
@@ -95,6 +96,16 @@ impl Subject {
     pub fn package(name: &str) -> Self {
         Self::Mounted(Qualifier::empty().with(name))
     }
+
+    /// What a program or a library is reported as: the name that was asked for, never the file it resolved to. A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a line with what the reader already knew; a loose file is what was asked for, so it is reported as written.
+    pub fn of(named: &Named) -> Self {
+        match named {
+            Named::Library(package) => Self::package(package),
+            Named::Executable(name) => Self::Executable(name.clone()),
+            Named::File(path) => Self::File(path.clone()),
+            Named::Stdin => Self::Stdin,
+        }
+    }
 }
 
 impl fmt::Display for Subject {
@@ -114,91 +125,7 @@ impl fmt::Display for Subject {
     }
 }
 
-/// Declare every heading once — the variant, its documentation, and the word it prints — so the enum and the list the column is measured from cannot drift apart: a list kept by hand beside the enum would go unchecked, and a missing entry would only make the column too narrow.
-macro_rules! headings {
-    ($($(#[$note:meta])* $variant:ident => $word:literal,)+) => {
-        /// Every word that can head a status line. The tense is the contract: a present participle opens a line before its work and may accrue what it came to, a past participle states a settled fact after it, and the imperative addresses the reader.
-        #[derive(Clone, Copy, PartialEq, Eq)]
-        pub enum Heading {
-            $($(#[$note])* $variant,)+
-        }
-
-        impl Heading {
-            /// The word itself.
-            const fn text(self) -> &'static str {
-                match self {
-                    $(Self::$variant => $word,)+
-                }
-            }
-        }
-
-        /// Every heading, so the column below is measured rather than kept by hand.
-        const HEADINGS: &[Heading] = &[$(Heading::$variant,)+];
-    };
-}
-
-headings! {
-    /// A subject being taken on: the header of the steps that deal with it. Deliberately neutral about which steps those are, since what follows may be a compile or a reuse, then a run or a test.
-    Processing => "Processing",
-    /// A unit being obtained — closed by the time its compile took, or by `reused` when the store already held it.
-    Compiling => "Compiling",
-    /// A subject's program being made of its compiled units, through to the machine code a run executes — closed by the time that took, or by `reused` when the store already held the payload. A step of its own, and not a second `Compiling`, because a library's tests are a program named as its unit is.
-    Linking => "Linking",
-    /// A module's tests begun, the report of each that runs following on stdout.
-    Testing => "Testing",
-    /// A module's tests finished, with their tally.
-    Tested => "Tested",
-    /// The handover to the program itself.
-    Running => "Running",
-    /// A program's page being served, at the address a browser opens it at.
-    Serving => "Serving",
-    /// Work that could not be done and was not required — never a failure, always a reason.
-    Skipped => "Skipped",
-    /// The whole invocation, summarized by what it produced.
-    Finished => "Finished",
-    /// A dependency brought into the store.
-    Fetched => "Fetched",
-    /// A manifest row written, or — under `--check` — one that would be.
-    Pinned => "Pinned",
-    /// What a delivery turned out to be, said before the pin derived from it is believed.
-    Delivered => "Delivered",
-    /// One file or directory scaffolding produced.
-    Created => "Created",
-    /// The command to run next.
-    Try => "Try",
-}
-
-/// The widest heading in `headings`.
-const fn widest(headings: &[Heading]) -> usize {
-    let (mut max, mut index) = (0, 0);
-
-    while index < headings.len() {
-        let width = headings[index].text().len();
-
-        if width > max {
-            max = width;
-        }
-
-        index += 1;
-    }
-
-    max
-}
-
-/// The heading column: the widest heading, and the five columns every line keeps to its right.
-pub const HEADING_WIDTH: usize = widest(HEADINGS) + 5;
-
-/// A line's heading column, padded out to where its subject begins, once here rather than at each write site.
-fn head(heading: Heading) -> String {
-    format!("{:<HEADING_WIDTH$}", heading.text())
-}
-
-/// One complete fact, on a line of its own.
-pub fn fact(heading: Heading, detail: impl fmt::Display) {
-    say(format_args!("{}{detail}\n", head(heading)));
-}
-
-/// How a build is taken rather than anything it did: a line of its own ahead of the header, spelled as a question spells its note.
+/// How a command took what it was asked rather than anything it did for a subject: a line of its own under none, spelled as a question spells its note.
 pub fn note(text: impl fmt::Display) {
     say(format_args!("note: {text}\n"));
 }
@@ -224,14 +151,6 @@ pub fn apart() {
 /// End the line of the node standing open, where what it names is about to write of its own: its outcome then closes it beneath ([`Tree::ended`]). Free of any tree because whoever sees the write holds none: a test's host, which runs where the test does.
 pub fn cut() {
     say("\n");
-}
-
-/// What a question says where the store took nothing of what it compiled: the fact a build states for the same reason, in a question's words. A store nobody can write otherwise reads as a compiler that is slow.
-pub fn unfiled(refusal: String) {
-    fact(
-        Heading::Skipped,
-        format!("storing what this compiled; {refusal}"),
-    );
 }
 
 /// `manifest` as a reader standing in `here` would spell it: nothing when it sits right there, a climb of `../` when it sits above, and the path itself anywhere else — `--manifest` can name a file off to the side.

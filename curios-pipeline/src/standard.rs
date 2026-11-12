@@ -82,7 +82,7 @@ impl<'a> Fold<'a> {
     {
         let mut observe = observe;
 
-        self.under_entry(progress, |predecessors| {
+        self.under_entry(progress, |predecessors, progress| {
             compile_entrypoint(
                 self.budget,
                 predecessors,
@@ -93,6 +93,7 @@ impl<'a> Fold<'a> {
                 Told {
                     observe: &mut observe,
                     read: self.read,
+                    progress,
                 },
             )
             .map(TestProgram::built)
@@ -114,7 +115,7 @@ impl<'a> Fold<'a> {
     {
         let mut observe = observe;
 
-        self.under_entry(progress, |predecessors| {
+        self.under_entry(progress, |predecessors, progress| {
             compile_entrypoint(
                 self.budget,
                 predecessors,
@@ -125,6 +126,7 @@ impl<'a> Fold<'a> {
                 Told {
                     observe: &mut observe,
                     read: self.read,
+                    progress,
                 },
             )
         })
@@ -141,7 +143,7 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.under_entry(progress, |predecessors| {
+        self.under_entry(progress, |predecessors, progress| {
             check_entrypoint(
                 self.budget,
                 predecessors,
@@ -149,7 +151,12 @@ impl<'a> Fold<'a> {
                 &UnitSource::entry(entrypoint, loader),
                 self.cache,
                 tail,
-                self.read,
+                // A check hands no rung on.
+                Told {
+                    observe: &mut |_: Stage<'_>| {},
+                    read: self.read,
+                    progress,
+                },
             )
         })
     }
@@ -297,11 +304,11 @@ impl<'a> Fold<'a> {
         })
     }
 
-    /// The fold with an entry on top: the prelude, the units, then `entry` over all of them, bracketed by the progress events the entry step cannot announce for itself. The entry's declarations are a unit as the ones before it are, taken from the cache or handed to it by the step itself, which knows the term that closes the program beside them.
+    /// The fold with an entry on top: the prelude, the units, then `entry` over all of them, handed the fold's progress to announce itself with and followed by the event that says it finished. The entry's declarations are a unit as the ones before it are, taken from the cache or handed to it by the step itself, which knows the term that closes the program beside them.
     fn under_entry<P, E, T>(self, progress: P, entry: E) -> Result<T, CompileError>
     where
         P: FnMut(Progress<'_>),
-        E: FnOnce(Predecessors<'_>) -> Result<T, CompileError>,
+        E: FnOnce(Predecessors<'_>, &mut dyn FnMut(Progress<'_>)) -> Result<T, CompileError>,
     {
         // The subject is the program on top, whose step tells the reader itself: no unit beneath it is read.
         self.scoped_before(0, None, progress, |prelude, _, produced, progress| {
@@ -311,9 +318,8 @@ impl<'a> Fold<'a> {
                 .chain(produced.iter())
                 .collect::<Vec<_>>();
 
-            // The entry is announced here rather than inside `compile_entrypoint`, which stays free of the concern: it is the last step of this fold, and bracketing it costs one event where threading a second callback down would cost a signature.
-            progress(Progress::Entry);
-            let compiled = entry(Predecessors::over(&predecessors))?;
+            // The entry step announces itself, since what its announcement says, whether its declarations are held, is known first there; that it finished is said here, where the fold's last step ends.
+            let compiled = entry(Predecessors::over(&predecessors), progress)?;
             progress(Progress::Compiled);
 
             Ok(compiled)

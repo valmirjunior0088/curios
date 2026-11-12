@@ -1,21 +1,21 @@
 //! The one-shot transport: ask about what the command line admitted, and render the answer for a reader.
 //!
-//! **The answer goes to stdout, and nothing else does.** A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder --stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, and a question has one: that the store took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
+//! **The answer goes to stdout, and nothing else does.** A query executes no program, so stdout is free to be the answer — which is what lets `curios wonder --stage wasm app > app.wat` mean what it says. Status lines stay on stderr as everywhere else, told to whoever narrates the question ([`Telling`]): that the store took nothing of what it compiled, handed to the caller, which has the terminal to say it on.
 //!
 //! **Exit 0 means the question was answered, including when the answer is a list of errors.** Non-zero means it could not be asked: no such subject, no such stage, a scope that cannot be assembled. `stage`, `cost` and `tests` are where the two meet — a program that stops before the answer has not answered the question, so what stopped it goes to stderr, stdout stays empty rather than holding text nothing downstream expected, and the exit is a build's: 2 when written goals alone stopped it, and 1 when anything was refused.
 
 use {
     crate::{
-        Declaration, Diagnosed, Diagnosis, Named, Origin, Reached, Refusal, STDIN_LABEL, Severity,
-        Subject, Uncosted, Written, checked, cost, declared_tests, diagnostics, stage, unit_stage,
-        written,
+        Declaration, DeclaredTest, Diagnosed, Diagnosis, Named, Origin, Reached, Refusal,
+        STDIN_LABEL, Severity, Subject, Uncosted, Written, checked, cost, declared_tests,
+        diagnostics, stage, unit_stage, written,
     },
     curios_common::Span,
     curios_core::Declared,
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
     curios_package::{Entry, Library, Program, Selection},
-    curios_pipeline::CompileError,
+    curios_pipeline::{CompileError, Progress},
     curios_verdict::{Session, Verdicts},
     std::{
         collections::BTreeSet,
@@ -26,9 +26,82 @@ use {
     },
 };
 
-/// One thing a question can be about, resolved: the subject, and the store it reads and files into.
+/// Whoever a question tells of its work as it goes, beside the answer it writes on standard output: each subject as it is taken on, each step of the subject's compile, how that compile ended, that an answer is about to be written, and why the store took nothing where it could not. The command line narrates with it; the language server asks in silence (`Silent`).
+pub trait Telling {
+    /// A subject is about to be compiled: what a report names it, and the manifest that declares it where one does.
+    fn asked(&mut self, named: &curios_package::Named, manifest: Option<&Path>);
+
+    /// A step of the compile in hand, beside the store it files into, which says for itself whether it took what it was handed.
+    fn step(&mut self, progress: Progress<'_>, store: Option<&Verdicts>);
+
+    /// The compile in hand is over.
+    fn ended(&mut self, ended: Ended);
+
+    /// An answer is about to be written on standard output.
+    fn answering(&mut self);
+
+    /// The store took nothing of what the question compiled, for the reason given.
+    fn unfiled(&mut self, refusal: String);
+}
+
+/// A question asked in silence.
+pub struct Silent;
+
+impl Telling for Silent {
+    fn asked(&mut self, _: &curios_package::Named, _: Option<&Path>) {}
+
+    fn step(&mut self, _: Progress<'_>, _: Option<&Verdicts>) {}
+
+    fn ended(&mut self, _: Ended) {}
+
+    fn answering(&mut self) {}
+
+    fn unfiled(&mut self, _: String) {}
+}
+
+/// How the compile of a question's subject ended, read off what it reported: a lint stops nothing, so a subject that reported only lints ended as one that reported nothing did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ended {
+    /// It reached its end.
+    Done,
+    /// Written goals alone stopped it, this many.
+    Goals(usize),
+    /// It was refused.
+    Refused,
+}
+
+impl Ended {
+    /// How a compile that reported `diagnostics` ended.
+    pub fn of(diagnostics: &[Diagnosis]) -> Self {
+        let count = |severity| {
+            diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.severity == severity)
+                .count()
+        };
+
+        match (count(Severity::Error), count(Severity::Goal)) {
+            (0, 0) => Ended::Done,
+            (0, goals) => Ended::Goals(goals),
+            _ => Ended::Refused,
+        }
+    }
+
+    /// How a compile that came to `compiled` ended.
+    fn of_compile<T>(compiled: &Result<T, CompileError>) -> Self {
+        match compiled {
+            Ok(_) => Ended::Done,
+            Err(CompileError::Incomplete(goals)) => Ended::Goals(goals.len()),
+            Err(_) => Ended::Refused,
+        }
+    }
+}
+
+/// One thing a question can be about, resolved: the subject, what a report names it with the manifest that declares it, and the store it reads and files into.
 pub struct Asked {
     pub subject: Subject,
+    pub named: curios_package::Named,
+    pub manifest: Option<PathBuf>,
     pub store: Option<Verdicts>,
 }
 
@@ -65,6 +138,8 @@ impl Asked {
             .map(|home| Verdicts::at(home.root.clone()).executing(&home.package, &home.executable));
         let declares = program.declares();
         let unlinked = program.unlinked().cloned();
+        let named = program.named();
+        let manifest = program.home().map(|home| home.manifest.clone());
 
         Ok(Self {
             subject: Subject::Entry {
@@ -73,6 +148,8 @@ impl Asked {
                 declares,
                 unlinked,
             },
+            named,
+            manifest,
             store,
         })
     }
@@ -80,6 +157,8 @@ impl Asked {
     /// A library, asked about as the unit entire.
     fn about_library(library: Library) -> Self {
         Self {
+            named: library.named(),
+            manifest: Some(library.manifest),
             subject: Subject::Unit {
                 units: library.units,
             },
@@ -97,14 +176,58 @@ impl Asked {
         self
     }
 
-    /// Every diagnostic, goal and lint the subject reports, with what it reached and why its store took nothing, where it could not.
-    pub fn diagnosed(self, budget: u64, overlay: &Overlay) -> Diagnosed {
-        diagnostics(budget, self.subject, overlay, self.store.as_ref())
+    /// The subject and its store, `telling` told that the subject is taken on.
+    fn taken(self, telling: &mut dyn Telling) -> (Subject, Option<Verdicts>) {
+        telling.asked(&self.named, self.manifest.as_deref());
+
+        (self.subject, self.store)
+    }
+
+    /// Every diagnostic, goal and lint the subject reports, with what it reached and why its store took nothing, where it could not, `telling` told of the compile as it goes.
+    pub fn diagnosed(self, budget: u64, overlay: &Overlay, telling: &mut dyn Telling) -> Diagnosed {
+        let (subject, store) = self.taken(telling);
+        let store = store.as_ref();
+        let diagnosed = diagnostics(budget, subject, overlay, store, &mut |progress| {
+            telling.step(progress, store);
+        });
+        telling.ended(Ended::of(&diagnosed.diagnostics));
+
+        diagnosed
     }
 
     /// [`Asked::diagnosed`], with what `file` writes read off the same fold's lowering of the subject ([`Diagnosed::written`]).
-    pub fn checked(self, budget: u64, overlay: &Overlay, file: &Path) -> Diagnosed {
-        checked(budget, self.subject, overlay, self.store.as_ref(), file)
+    pub fn checked(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        file: &Path,
+        telling: &mut dyn Telling,
+    ) -> Diagnosed {
+        let (subject, store) = self.taken(telling);
+        let store = store.as_ref();
+        let diagnosed = checked(budget, subject, overlay, store, file, &mut |progress| {
+            telling.step(progress, store);
+        });
+        telling.ended(Ended::of(&diagnosed.diagnostics));
+
+        diagnosed
+    }
+
+    /// Every test the subject declares, in declaration order, beside why its store took nothing, where it could not.
+    pub fn tests(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        telling: &mut dyn Telling,
+    ) -> (Result<Vec<DeclaredTest>, CompileError>, Option<String>) {
+        let (subject, store) = self.taken(telling);
+        let store = store.as_ref();
+        let declared = declared_tests(budget, subject, overlay, store, &mut |progress| {
+            telling.step(progress, store);
+        });
+        telling.ended(Ended::of_compile(&declared));
+
+        (declared, refused(store))
     }
 
     /// The subject's rung `name`, handed to `shown` where the driver emits it, beside why its store took nothing, where it could not.
@@ -114,9 +237,24 @@ impl Asked {
         overlay: &Overlay,
         name: &str,
         shown: impl FnMut(&str),
+        telling: &mut dyn Telling,
     ) -> (Result<Reached, Refusal>, Option<String>) {
-        let cache = self.store.as_ref();
-        let reached = stage(budget, self.subject, overlay, cache, name, shown);
+        let (subject, store) = self.taken(telling);
+        let cache = store.as_ref();
+        let reached = stage(
+            budget,
+            subject,
+            overlay,
+            cache,
+            name,
+            shown,
+            &mut |progress| telling.step(progress, cache),
+        );
+        telling.ended(match &reached {
+            Ok(Reached::Rendered(rendering)) => Ended::of(&rendering.diagnostics),
+            Err(Refusal::Diagnostics(diagnostics)) => Ended::of(diagnostics),
+            _ => Ended::Done,
+        });
 
         (reached, refused(cache))
     }
@@ -126,9 +264,17 @@ impl Asked {
         self,
         budget: u64,
         overlay: &Overlay,
+        telling: &mut dyn Telling,
     ) -> (Result<Vec<Fate>, Uncosted>, Option<String>) {
-        let cache = self.store.as_ref();
-        let fates = cost(budget, self.subject, overlay, cache);
+        let (subject, store) = self.taken(telling);
+        let cache = store.as_ref();
+        let fates = cost(budget, subject, overlay, cache, &mut |progress| {
+            telling.step(progress, cache);
+        });
+        telling.ended(match &fates {
+            Err(Uncosted::Diagnostics(diagnostics)) => Ended::of(diagnostics),
+            _ => Ended::Done,
+        });
 
         (fates, refused(cache))
     }
@@ -139,40 +285,49 @@ impl Asked {
         budget: u64,
         overlay: &Overlay,
         file: &Path,
+        telling: &mut dyn Telling,
     ) -> (Result<Vec<Written>, Vec<Diagnosis>>, Option<String>) {
-        let cache = self.store.as_ref();
-        let texts = written(budget, self.subject, file, overlay, cache);
+        let (subject, store) = self.taken(telling);
+        let cache = store.as_ref();
+        let texts = written(budget, subject, file, overlay, cache, &mut |progress| {
+            telling.step(progress, cache);
+        });
+        telling.ended(match &texts {
+            Err(diagnostics) => Ended::of(diagnostics),
+            Ok(_) => Ended::Done,
+        });
 
         (texts, refused(cache))
     }
 }
 
-/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, a blank line between each. `unfiled` is told why, where a store took nothing of what the question compiled.
+/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, a blank line between each, `telling` told of each subject's compile as it goes and why, where a store took nothing of what the question compiled.
 pub fn wonder_diagnostics(
     budget: u64,
     selection: Selection,
-    unfiled: impl FnOnce(String),
+    telling: &mut dyn Telling,
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
     let answers = Asked::every(selection)?;
 
-    let (reports, refusal) = rendered(answers, budget, &overlay);
+    let (reports, refusal) = rendered(answers, budget, &overlay, telling);
     if !reports.is_empty() {
+        telling.answering();
         println!("{}", reports.join("\n\n"));
     }
     if let Some(refusal) = refusal {
-        unfiled(refusal);
+        telling.unfiled(refusal);
     }
 
     Ok(())
 }
 
-/// `wonder --tests [SUBJECT]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0. `unfiled` is told as [`wonder_diagnostics`]' is.
+/// `wonder --tests [SUBJECT]`: every test `selection` declares, one path per line, in declaration order — the library's, then each executable's, when it is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_tests(
     budget: u64,
     selection: Selection,
-    unfiled: impl FnOnce(String),
+    telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
@@ -183,12 +338,17 @@ pub fn wonder_tests(
         if let Some(said) = asked.subject.said_unlinked(&overlay, "was checked") {
             eprintln!("note: {said}");
         }
-        let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref());
-        refusal = refusal.or_else(|| refused(asked.store.as_ref()));
+        let (records, unstored) = asked.tests(budget, &overlay, telling);
+        refusal = refusal.or(unstored);
         match records {
-            Ok(records) => records
-                .iter()
-                .for_each(|record| println!("{}", record.path)),
+            Ok(records) => {
+                if !records.is_empty() {
+                    telling.answering();
+                }
+                records
+                    .iter()
+                    .for_each(|record| println!("{}", record.path));
+            }
             Err(error) => {
                 listed = Err(error);
                 break;
@@ -196,7 +356,7 @@ pub fn wonder_tests(
         }
     }
     if let Some(refusal) = refusal {
-        unfiled(refusal);
+        telling.unfiled(refusal);
     }
 
     listed
@@ -218,6 +378,7 @@ pub fn rendered(
     answers: Vec<Asked>,
     budget: u64,
     overlay: &Overlay,
+    telling: &mut dyn Telling,
 ) -> (Vec<String>, Option<String>) {
     let mut seen = BTreeSet::new();
     let mut unfiled = None;
@@ -229,7 +390,7 @@ pub fn rendered(
                 diagnostics,
                 unfiled: refusal,
                 ..
-            } = asked.diagnosed(budget, overlay);
+            } = asked.diagnosed(budget, overlay, telling);
             unfiled = unfiled.take().or(refusal);
 
             diagnostics
@@ -249,20 +410,20 @@ pub enum Staged {
 
 /// `wonder --stage STAGE [SUBJECT]`: the rung of what `staged` is, reprinted, to stdout.
 ///
-/// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering. `unfiled` is told as [`wonder_diagnostics`]' is.
+/// `finish` renders the one rung the driver cannot: `wasm-optm` is the module after Binaryen, which this crate does not link, so the engine hands the emitted module back and the product that owns Binaryen prints it. Every other rung is printed here, from the driver's own rendering. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_stage(
     budget: u64,
     name: &str,
     staged: Staged,
     finish: impl FnOnce(Box<curios_wasm::Module>),
-    unfiled: impl FnOnce(String),
+    telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
     let program = match staged {
         Staged::Program(program) => program,
         Staged::Library(library) => {
-            return library_stage(budget, name, library, &overlay, unfiled);
+            return library_stage(budget, name, library, &overlay, telling);
         }
     };
 
@@ -272,9 +433,9 @@ pub fn wonder_stage(
         eprintln!("note: {said}");
     }
 
-    // The rung is the answer and goes to stdout, where the driver emits it.
+    // The rung is the answer and goes to stdout, where the driver emits it: once every unit the program stands on is compiled, and before anything downstream of the rung is.
     let shown = |text: &str| println!("{text}");
-    let (reached, unstored) = asked.staged(budget, &overlay, name, shown);
+    let (reached, unstored) = asked.staged(budget, &overlay, name, shown, telling);
     let answered = match reached {
         Ok(Reached::Rendered(rendering)) => {
             // What stopped the compilation after the rung is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
@@ -292,7 +453,7 @@ pub fn wonder_stage(
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     };
     if let Some(unstored) = unstored {
-        unfiled(unstored);
+        telling.unfiled(unstored);
     }
 
     answered
@@ -304,11 +465,12 @@ fn library_stage(
     name: &str,
     library: Library,
     overlay: &Overlay,
-    unfiled: impl FnOnce(String),
+    telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let file = asked_through(&library)?;
-    let store = Verdicts::at(library.root);
+    let store = Verdicts::at(library.root.clone());
 
+    telling.asked(&library.named(), Some(&library.manifest));
     let reached = unit_stage(
         budget,
         library.units,
@@ -316,8 +478,16 @@ fn library_stage(
         overlay,
         Some(&store),
         name,
-        |text| println!("{text}"),
+        &mut |progress| telling.step(progress, Some(&store)),
     );
+    telling.ended(match &reached {
+        Err(Refusal::Diagnostics(diagnostics)) => Ended::of(diagnostics),
+        _ => Ended::Done,
+    });
+    if let Ok(rendered) = &reached {
+        telling.answering();
+        println!("{rendered}");
+    }
     let answered = match reached {
         Ok(_) => Ok(()),
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
@@ -326,7 +496,7 @@ fn library_stage(
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     };
     if let Some(unstored) = refused(Some(&store)) {
-        unfiled(unstored);
+        telling.unfiled(unstored);
     }
 
     answered
@@ -372,14 +542,14 @@ impl FromStr for Place {
     }
 }
 
-/// `wonder --at LINE:COLUMN [SUBJECT]`: the name written at a place of the file `staged` is asked through, to stdout — one row, then its declaration's head and prose where its text is held — and nothing where no name stands there. `unfiled` is told as [`wonder_diagnostics`]' is.
+/// `wonder --at LINE:COLUMN [SUBJECT]`: the name written at a place of the file `staged` is asked through, to stdout — one row, then its declaration's head and prose where its text is held — and nothing where no name stands there. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
     place: Place,
-    unfiled: impl FnOnce(String),
+    telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
-    for_names(budget, staged, unfiled, |texts| {
+    for_names(budget, staged, telling, |texts| {
         let names = texts.iter().flat_map(|text| &text.names);
         let offset = texts
             .first()
@@ -398,13 +568,13 @@ pub fn wonder_at(
     })
 }
 
-/// `wonder --declarations [SUBJECT]`: every definition the file `staged` is asked through declares, one row per line to stdout, in the order they are written. `unfiled` is told as [`wonder_diagnostics`]' is.
+/// `wonder --declarations [SUBJECT]`: every definition the file `staged` is asked through declares, one row per line to stdout, in the order they are written. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_declarations(
     budget: u64,
     staged: Staged,
-    unfiled: impl FnOnce(String),
+    telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
-    for_names(budget, staged, unfiled, |texts| {
+    for_names(budget, staged, telling, |texts| {
         for named in texts
             .iter()
             .flat_map(|text| &text.names)
@@ -419,7 +589,7 @@ pub fn wonder_declarations(
 fn for_names(
     budget: u64,
     staged: Staged,
-    unfiled: impl FnOnce(String),
+    telling: &mut dyn Telling,
     answer: impl FnOnce(&[Written]),
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
@@ -447,16 +617,17 @@ fn for_names(
         eprintln!("note: {said}");
     }
 
-    let (texts, unstored) = asked.written(budget, &overlay, &file);
+    let (texts, unstored) = asked.written(budget, &overlay, &file, telling);
     let answered = match texts {
         Ok(texts) => {
+            telling.answering();
             answer(&texts);
             Ok(())
         }
         Err(diagnostics) => Err(stopped(diagnostics)),
     };
     if let Some(unstored) = unstored {
-        unfiled(unstored);
+        telling.unfiled(unstored);
     }
 
     answered
@@ -503,11 +674,11 @@ fn no_such_stage(asked: &str) -> CompileError {
 ///
 /// Two columns, because the analysis should not need this crate: `awk -F'\t' '$2 == "absorbed"'` is a whole question, and a diff of two runs is a diff of two files. The rows are ordered by name for the same reason — a report that reproduces is what makes a regression something to read rather than something to judge.
 ///
-/// `unfiled` is told as [`wonder_diagnostics`]' is.
+/// `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_cost(
     budget: u64,
     program: Program,
-    unfiled: impl FnOnce(String),
+    telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
@@ -517,9 +688,10 @@ pub fn wonder_cost(
         eprintln!("note: {said}");
     }
 
-    let (fates, unstored) = asked.costed(budget, &overlay);
+    let (fates, unstored) = asked.costed(budget, &overlay, telling);
     let answered = match fates {
         Ok(fates) => {
+            telling.answering();
             for fate in fates {
                 // The outcome is one token and its count, so a column stays a column: `specialized 3` reads as one answer and splits as one field.
                 let outcome = match fate.outcome {
@@ -536,7 +708,7 @@ pub fn wonder_cost(
         Err(Uncosted::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     };
     if let Some(unstored) = unstored {
-        unfiled(unstored);
+        telling.unfiled(unstored);
     }
 
     answered

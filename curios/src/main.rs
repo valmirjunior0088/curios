@@ -295,15 +295,39 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         // The tri-state `run` exits with, read off what was reported: a lint is as much a finding as an error, and a goal batch alone is the incomplete state it is everywhere else.
-        Mode::Lint { elaboration, .. } => match lint(
-            elaboration.budget,
-            contract.admit_any(subject, manifest, &here()?)?,
-            unfiled,
-        )? {
-            Linted::Clean => {}
-            Linted::Goals => return Err(Failure::Concluded(Concluded::Incomplete)),
-            Linted::Findings => return Err(Failure::Concluded(Concluded::Failed)),
-        },
+        Mode::Lint { elaboration, .. } => {
+            let Linted {
+                lints,
+                errors,
+                goals,
+            } = lint(
+                elaboration.budget,
+                contract.admit_any(subject, manifest, &here()?)?,
+                &mut Asking::checking(),
+            )?;
+            // The count of lints always, since it is what the command is asked for, and of what else was reported where anything was.
+            let counted = |count: usize, one: &str| match count {
+                1 => format!("1 {one}"),
+                count => format!("{count} {one}s"),
+            };
+            let reported = [(errors, "error"), (goals, "goal")]
+                .into_iter()
+                .filter(|(count, _)| *count > 0)
+                .map(|(count, one)| counted(count, one));
+
+            total(
+                iter::once(counted(lints, "lint"))
+                    .chain(reported)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                None,
+            );
+            match (lints + errors, goals) {
+                (0, 0) => {}
+                (0, _) => return Err(Failure::Concluded(Concluded::Incomplete)),
+                _ => return Err(Failure::Concluded(Concluded::Failed)),
+            }
+        }
         Mode::Compile {
             target: TargetValue(target),
             output_path,
@@ -693,17 +717,17 @@ fn dispatch() -> Result<(), Failure> {
             Query::Check => wonder_diagnostics(
                 elaboration.budget,
                 contract.admit_any(subject, manifest, &here()?)?,
-                unfiled,
+                &mut Asking::checking(),
             )?,
             Query::Tests => wonder_tests(
                 elaboration.budget,
                 contract.admit_any(subject, manifest, &here()?)?,
-                unfiled,
+                &mut Asking::checking(),
             )?,
             Query::Cost => wonder_cost(
                 elaboration.budget,
                 contract.admit_program(subject, manifest, None, &here()?)?,
-                unfiled,
+                &mut Asking::reading(),
             )?,
             // The one rung the engine hands back unrendered is Binaryen's, and this is the crate that links it.
             Query::Stage(name) => wonder_stage(
@@ -724,18 +748,18 @@ fn dispatch() -> Result<(), Failure> {
                 |module| {
                     optimize(&module, true, |stage| println!("{stage}"));
                 },
-                unfiled,
+                &mut Asking::reading(),
             )?,
             Query::At(place) => wonder_at(
                 elaboration.budget,
                 contract.admit_staged(subject, manifest, &here()?)?,
                 place,
-                unfiled,
+                &mut Asking::reading(),
             )?,
             Query::Declarations => wonder_declarations(
                 elaboration.budget,
                 contract.admit_staged(subject, manifest, &here()?)?,
-                unfiled,
+                &mut Asking::reading(),
             )?,
             Query::Server => serve(elaboration.budget, manifest)?,
         },

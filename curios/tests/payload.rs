@@ -136,7 +136,16 @@ fn asking_for_a_stage_files_its_units_and_no_payload() {
         String::from_utf8_lossy(&shown.stdout).starts_with("(module"),
         "the answer is the rung, on stdout"
     );
-    assert!(shown.stderr.is_empty(), "and nothing was narrated");
+    // A rung reprints the program, so what is narrated is the unit it stands on and never the program.
+    let narrated = String::from_utf8_lossy(&shown.stderr);
+    assert!(
+        narrated.contains("/app\n├─ check; ") && narrated.contains("╰─ store; "),
+        "{narrated}"
+    );
+    assert!(
+        !narrated.contains("build;") && !narrated.contains("emit;"),
+        "{narrated}"
+    );
     assert_eq!(slots(&root), 0, "a question files no payload");
 
     let run = curios(&root, &["run"]);

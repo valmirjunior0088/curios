@@ -171,6 +171,11 @@ pub struct Library {
 }
 
 impl Library {
+    /// The library, as a report names it.
+    pub fn named(&self) -> Named {
+        Named::Library(self.package.clone())
+    }
+
     /// Every file the library is written in: its header, and every file module its `mod` lines reach.
     pub fn declared_files(&self) -> Result<Vec<PathBuf>, String> {
         self.units.last().map_or(Ok(Vec::new()), |unit| {
@@ -186,6 +191,19 @@ pub enum Entry {
     Stdin,
     /// A file on disk.
     File(PathBuf),
+}
+
+/// Which subject a program or a library is, as a report names it: what was asked for, never the file it resolved to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Named {
+    /// A package's library, by the package's name.
+    Library(String),
+    /// A package's executable, by its name.
+    Executable(String),
+    /// A file no unit declares, as it was given.
+    File(PathBuf),
+    /// The program on standard input.
+    Stdin,
 }
 
 /// One program: its entry, and what it is compiled against.
@@ -280,6 +298,15 @@ impl Program {
     /// Where its text comes from.
     pub fn entry(&self) -> &Entry {
         &self.entry
+    }
+
+    /// The program, as a report names it: the executable its package declares it as, the file it was given as, or standard input.
+    pub fn named(&self) -> Named {
+        match (self.entry(), self.home()) {
+            (_, Some(home)) => Named::Executable(home.executable.clone()),
+            (Entry::File(path), None) => Named::File(path.clone()),
+            (Entry::Stdin, None) => Named::Stdin,
+        }
     }
 
     /// Where it belongs — `None` for a loose program, which has no project and so no store.

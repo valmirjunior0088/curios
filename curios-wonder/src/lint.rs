@@ -3,29 +3,26 @@
 //! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, read off the union of the prefixes every unit spelled — and it adds it only when the subject is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
 
 use {
-    crate::{Asked, Diagnosed, Severity},
+    crate::{Asked, Diagnosed, Severity, Telling},
     curios_common::{Qualifier, Report},
     curios_module::Overlay,
     curios_package::Selection,
     std::collections::BTreeSet,
 };
 
-/// What `curios lint` found, in the order its exit code ranks them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Linted {
-    /// Nothing reported: exit 0.
-    Clean,
-    /// Goals and nothing else: the incomplete state `run` exits 2 on.
-    Goals,
-    /// A lint or an error: exit 1.
-    Findings,
+/// What `curios lint` found, each distinct fact counted once: its lints, an unused dependency among them, the errors beside them, and the written goals. A lint or an error is exit 1, goals and nothing else the incomplete state `run` exits 2 on, and none of the three exit 0.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Linted {
+    pub lints: usize,
+    pub errors: usize,
+    pub goals: usize,
 }
 
-/// `curios lint [SUBJECT]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached. `unfiled` is told why, where a store took nothing of what the lint compiled, which changes neither the report nor what is returned.
+/// `curios lint [SUBJECT]`: every diagnostic, goal and lint of what `selection` selects rendered to stdout, each distinct fact once, and for the package entire every dependency nothing reached. `telling` is told of each subject's compile as it goes and why, where a store took nothing of what the lint compiled, which changes neither the report nor what is returned.
 pub fn lint(
     budget: u64,
     selection: Selection,
-    unfiled: impl FnOnce(String),
+    telling: &mut dyn Telling,
 ) -> Result<Linted, String> {
     let overlay = Overlay::default();
     // A dependency is a fact of the package, so only the package entire is asked which of its dependencies nothing reached.
@@ -44,7 +41,7 @@ pub fn lint(
 
     let mut seen = Renderings::default();
     let mut reached = BTreeSet::new();
-    let mut linted = Linted::Clean;
+    let mut linted = Linted::default();
     let mut unstored = None;
     for asked in Asked::every(selection)? {
         let Diagnosed {
@@ -52,35 +49,39 @@ pub fn lint(
             reached: unit_reached,
             unfiled: refusal,
             ..
-        } = asked.diagnosed(budget, &overlay);
+        } = asked.diagnosed(budget, &overlay, telling);
         reached.extend(unit_reached);
         // The first, since every subject of a package asks one store.
         unstored = unstored.or(refusal);
         for diagnostic in diagnostics {
-            linted = linted.max(match diagnostic.severity {
-                Severity::Goal => Linted::Goals,
-                Severity::Error | Severity::Lint => Linted::Findings,
-                // A note says how the question was answered, which is nothing to fix.
-                Severity::Note => Linted::Clean,
-            });
-            seen.insert_rendered(diagnostic.render());
+            if seen.insert_rendered(diagnostic.render()) {
+                match diagnostic.severity {
+                    Severity::Lint => linted.lints += 1,
+                    Severity::Error => linted.errors += 1,
+                    Severity::Goal => linted.goals += 1,
+                    // A note says how the question was answered, which is nothing to fix.
+                    Severity::Note => {}
+                }
+            }
         }
     }
 
     if let Some(dependencies) = dependencies {
         for name in unused_dependencies(&dependencies, &reached) {
-            linted = Linted::Findings;
-            seen.insert_rendered(
-                Report::unlocated(format!("unused dependency `{name}`; delete its row")).render(),
-            );
+            let rendered =
+                Report::unlocated(format!("unused dependency `{name}`; delete its row")).render();
+            if seen.insert_rendered(rendered) {
+                linted.lints += 1;
+            }
         }
     }
 
     if !seen.rendered.is_empty() {
+        telling.answering();
         println!("{}", seen.rendered.join("\n\n"));
     }
     if let Some(unstored) = unstored {
-        unfiled(unstored);
+        telling.unfiled(unstored);
     }
 
     Ok(linted)
@@ -107,10 +108,14 @@ struct Renderings {
 }
 
 impl Renderings {
-    fn insert_rendered(&mut self, rendering: String) {
-        if self.distinct.insert(rendering.clone()) {
+    /// Keep `rendering` where it is the first of its text, answering whether it is.
+    fn insert_rendered(&mut self, rendering: String) -> bool {
+        let first = self.distinct.insert(rendering.clone());
+        if first {
             self.rendered.push(rendering);
         }
+
+        first
     }
 }
 

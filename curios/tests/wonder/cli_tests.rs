@@ -25,7 +25,12 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
     let text = stdout(&answered);
     assert!(text.starts_with("goal `?`"), "{text}");
     assert!(text.contains("--> <stdin>:1:20"), "{text}");
-    assert!(answered.stderr.is_empty(), "nothing is narrated");
+    // The check is narrated beside the answer, closed by what stopped it.
+    let narrated = String::from_utf8_lossy(&answered.stderr);
+    assert!(
+        narrated.starts_with("<stdin>\n╰─ check; 1 goal in "),
+        "{narrated}"
+    );
 }
 
 /// `--manifest` takes the file as it is spelled, and a bare `curios.toml` names the one in the working directory: its parent is the empty path, which is no directory to resolve on its own.

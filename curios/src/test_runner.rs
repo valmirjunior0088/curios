@@ -15,7 +15,7 @@ use {
         Access, Failure, Reporting, Run, Served, Steps, Subject, Then, Tree, Wrote, alone, bound,
         cut, drained, keep, kept, note_unlinked, note_unstored, relayed, serve_run, total, url,
     },
-    curios::{Named, TestSubject, Tested, test_subjects},
+    curios::{TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Step},
     curios_common::Qualifier,
     curios_native::{OsHost, TestEnd},
@@ -111,7 +111,7 @@ pub fn run_tests(
     let mut printer = Printer::new(filters);
 
     for subject in test_subjects(selection, drained)? {
-        let shown = shown(subject.named());
+        let shown = Subject::of(subject.named());
         let store = subject.filed(|root| access.filed(root));
         let (tested, tree) = compiled(
             budget,
@@ -146,16 +146,6 @@ pub fn run_tests(
     printer.finish()
 }
 
-/// What a subject is reported as.
-pub fn shown(named: &Named) -> Subject {
-    match named {
-        Named::Library(package) => Subject::package(package),
-        Named::Executable(name) => Subject::Executable(name.clone()),
-        Named::File(path) => Subject::File(path.clone()),
-        Named::Stdin => Subject::Stdin,
-    }
-}
-
 /// One subject's test program for `target`, compiled or reused, narrated as `run` narrates a compile: a tree for each unit it had to compile, and the subject's own, whose `emit` node lasts until its payload exists — a test program is the whole program the units link into, and its back end is most of what a cold run takes. One the store held narrates nothing. The subject's tree comes back with the program, for the tests `then` says follow on it.
 pub fn compiled(
     budget: u64,
@@ -167,14 +157,14 @@ pub fn compiled(
     then: Then,
 ) -> Result<(Tested, Tree), CompileError> {
     // Two callbacks write one narration, so it is lent to each in turn.
-    let steps = RefCell::new(Steps::program(shown, subject.manifest(), store, then));
+    let steps = RefCell::new(Steps::program(shown, subject.manifest(), then));
     let tested = subject.compile(
         budget,
         store,
         under,
         target,
         |stage| steps.borrow_mut().reached(&stage),
-        |progress| steps.borrow_mut().told(progress),
+        |progress| steps.borrow_mut().told(progress, store),
     );
     let mut steps = steps.into_inner();
 
@@ -453,7 +443,7 @@ pub fn serve_tests(
     let mut pages = Vec::new();
 
     for subject in test_subjects(selection, drained)? {
-        let shown = shown(subject.named());
+        let shown = Subject::of(subject.named());
         let store = subject.filed(|root| access.filed(root));
         let (tested, tree) = compiled(
             budget,

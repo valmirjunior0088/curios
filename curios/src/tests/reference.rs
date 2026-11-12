@@ -26,7 +26,13 @@ fn every_crs_example_reports_nothing() {
             declares: None,
             unlinked: None,
         };
-        let reports = diagnostics(DEFAULT_BUDGET, subject, &Overlay::default(), None);
+        let reports = diagnostics(
+            DEFAULT_BUDGET,
+            subject,
+            &Overlay::default(),
+            None,
+            &mut |_| {},
+        );
         wrong.extend(reports.diagnostics.iter().map(|report| report.render()));
     }
 

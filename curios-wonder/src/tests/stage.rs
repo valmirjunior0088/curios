@@ -25,6 +25,7 @@ fn rung(name: &str, text: &str) -> Result<(String, crate::Rendering), crate::Ref
         None,
         name,
         |rung| handed.push_str(rung),
+        &mut |_| {},
     );
 
     match reached {
@@ -76,7 +77,6 @@ fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
     let rung = |name: &str| {
         let library = RootSource::labelled_module("answers", "answers.crs", LIBRARY)
             .expect("the text is written as a module");
-        let mut handed = String::new();
 
         crate::unit_stage(
             DEFAULT_BUDGET,
@@ -85,13 +85,12 @@ fn a_library_is_reprinted_at_a_units_rungs_and_no_other() {
             &overlay,
             None,
             name,
-            |rung| handed.push_str(rung),
+            &mut |_| {},
         )
-        .map(|rendering| (handed, rendering))
     };
 
     for name in ["text", "core", "core-elab"] {
-        let (handed, _) = rung(name).unwrap_or_else(|_| panic!("{name} is a unit's rung"));
+        let handed = rung(name).unwrap_or_else(|_| panic!("{name} is a unit's rung"));
         assert!(handed.contains("answer"), "{name} reprinted {handed:?}");
     }
     assert!(matches!(rung("anf"), Err(crate::Refusal::Unit)));

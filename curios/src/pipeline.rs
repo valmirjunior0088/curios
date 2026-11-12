@@ -9,12 +9,18 @@ use {
     curios_common::Source,
     curios_document::Documentation,
     curios_module::{RootSource, UnitSource},
-    curios_package::{Entry, Program, Runs, Target},
+    curios_package::{Entry, Named, Program, Runs, Target},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage},
     curios_surface::{Entrypoint, Form},
     curios_verdict::Verdicts,
     curios_wasm::Module,
-    std::{cell::RefCell, fs, io, path::Path, sync::Arc},
+    curios_wonder::{Ended, Telling},
+    std::{
+        cell::RefCell,
+        fs, io, mem,
+        path::{Path, PathBuf},
+        sync::Arc,
+    },
 };
 
 /// Say, ahead of everything a command reports of `program`, that its file is one its package's directory holds and no unit declares, where it is one: the command takes it on its own, which `taken` words, and nothing after would say what it was not compiled against, so a name of the package refused in it reads as a typo. What would declare it follows the form it is written in ([`Unlinked::note`](curios_package::Unlinked::note)), read off the disk: a file that cannot be read is a program's to report.
@@ -39,7 +45,7 @@ pub fn payload_of(
     target: Target,
     then: Then,
 ) -> Result<Built, CompileError> {
-    let subject = subject_of(&program);
+    let subject = Subject::of(&program.named());
     let runs = match target {
         Target::Native => Runs::Native { engine: engine() },
         Target::Browser => Runs::Browser,
@@ -107,7 +113,8 @@ pub fn payload_of(
         ),
         &entrypoint,
         &loader,
-        Steps::program(&subject, manifest.as_deref(), cache.as_ref(), then),
+        Steps::program(&subject, manifest.as_deref(), then),
+        cache.as_ref(),
         |module| match target {
             Target::Native => to_cwasm(module).map_err(CompileError::failure),
             Target::Browser => Ok(optimize(module, false, |_| {})),
@@ -157,26 +164,14 @@ pub fn documentation_of(
     store: Option<&Verdicts>,
     subject: &Subject,
 ) -> Result<(Documentation, Tree), CompileError> {
-    let steps = RefCell::new(Steps::library(subject, store));
+    let mut steps = Steps::library(subject);
     let documented = Fold::new(budget, units, store.map(|store| store as &dyn Cache))
-        .documentation(|progress| steps.borrow_mut().told(progress));
-    let mut steps = steps.into_inner();
+        .documentation(|progress| steps.told(progress, store));
 
     steps.ended(&documented);
     unstored(store);
 
     documented.map(|documentation| (documentation, steps.into_tree()))
-}
-
-/// What a program is reported as — the name that was asked for, never the file it resolved to.
-///
-/// A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a status line with what the reader already knew. A loose file *is* what was asked for, so it reports as written. Standard input was asked for as `-`, which reports as nothing a reader can act on, so it is the one subject named rather than echoed.
-pub fn subject_of(program: &Program) -> Subject {
-    match (program.entry(), program.home()) {
-        (_, Some(home)) => Subject::Executable(home.executable.clone()),
-        (Entry::File(path), None) => Subject::File(path.clone()),
-        (Entry::Stdin, None) => Subject::Stdin,
-    }
 }
 
 /// The entry program, what its own modules resolve against, and the text it was parsed from: a file when there is one, and otherwise standard input, drained to end.
@@ -195,14 +190,15 @@ pub fn drained() -> Result<String, CompileError> {
         .map_err(|error| CompileError::failure(format!("failed to read standard input: {error}")))
 }
 
-/// Compile `entrypoint` against `units` in the order given, and make the payload `finish` makes of the module, narrated by `steps`, whose subject's tree comes back with the payload.
+/// Compile `entrypoint` against `units` in the order given, and make the payload `finish` makes of the module, narrated by `steps` beside `store`, the one the fold files into, whose subject's tree comes back with the payload.
 ///
 /// The program's last build node stays open until `finish` returns, so what it reports is what the payload took: the optimized program emitted and compiled to what a run executes.
 pub fn compile_entry<P>(
     fold: Fold<'_>,
     entrypoint: &Entrypoint,
     loader: &RootSource,
-    steps: Steps<'_>,
+    steps: Steps,
+    store: Option<&Verdicts>,
     finish: impl FnOnce(&Module) -> Result<P, CompileError>,
 ) -> Result<(P, ForeignStore, Tree), CompileError> {
     // Two callbacks write one narration, the stages a program reaches and the units the fold goes through, so it is lent to each in turn.
@@ -212,7 +208,7 @@ pub fn compile_entry<P>(
             entrypoint,
             loader,
             |stage| steps.borrow_mut().reached(&stage),
-            |progress| steps.borrow_mut().told(progress),
+            |progress| steps.borrow_mut().told(progress, store),
         )
         .and_then(|(module, foreigns)| finish(&module).map(|payload| (payload, foreigns)));
     let mut steps = steps.into_inner();
@@ -231,23 +227,47 @@ pub enum Then {
     More,
 }
 
-/// Whose tree a narration is handed back as, once the fold is done.
+/// What a narration makes of its subject beyond the units it stands on.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Closing {
-    /// The entry program's, compiled after every unit.
+    /// The entry program, compiled after every unit and built: its `check`, `build` and `emit`, and what follows them.
     Program(Then),
-    /// The last unit's, where the subject is a library and no program is compiled.
+    /// The entry program, checked and built no further: its `check` is the last node of its tree.
+    Checked,
+    /// Nothing: only the units are narrated, where a question reprints the program or reads it rather than checks it.
+    Units,
+    /// The last unit, where the subject is a library and no program is compiled: its tree goes on past the fold.
     Library,
+}
+
+/// How a narrated compile ended.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum How {
+    /// It reached its end.
+    Done,
+    /// Written goals alone stopped it, this many.
+    Goals(usize),
+    /// It was refused, or, where what could not be done was the payload, failed.
+    Stopped,
+}
+
+impl How {
+    /// How a compile that came to `compiled` ended.
+    fn of<T>(compiled: &Result<T, CompileError>) -> Self {
+        match compiled {
+            Ok(_) => How::Done,
+            Err(CompileError::Incomplete(goals)) => How::Goals(goals.len()),
+            Err(_) => How::Stopped,
+        }
+    }
 }
 
 /// A compile narrated: a tree for each unit the fold compiles, with a `check` node and, where there is a store, a `store` node; and the subject's own tree, whose `check`, `build` and `emit` nodes open and close as the program reaches each stage. A unit the store held narrates nothing.
 ///
 /// The nodes outlive each event, which is why they are kept here rather than written whole: `check` and the `; 1.4s` that closes it are two writes to one line, with the work between them.
-pub struct Steps<'a> {
-    subject: &'a Subject,
-    manifest: Option<&'a Path>,
-    /// The store the fold files into, asked once a unit's filing ends whether it took the unit.
-    store: Option<&'a Verdicts>,
+pub struct Steps {
+    subject: Subject,
+    manifest: Option<PathBuf>,
     closing: Closing,
     /// The unit the fold last compiled and its tree, kept past its last node since a library's is the subject's.
     unit: Option<(Subject, Tree)>,
@@ -256,59 +276,54 @@ pub struct Steps<'a> {
     emitting: bool,
 }
 
-impl<'a> Steps<'a> {
-    /// The narration of a program's compile: `subject` is the entry, named beside `manifest` where the invocation stands elsewhere, and `then` what follows its build.
-    pub fn program(
-        subject: &'a Subject,
-        manifest: Option<&'a Path>,
-        store: Option<&'a Verdicts>,
-        then: Then,
-    ) -> Self {
+impl Steps {
+    fn new(subject: &Subject, manifest: Option<&Path>, closing: Closing) -> Self {
         Self {
-            subject,
-            manifest,
-            store,
-            closing: Closing::Program(then),
+            subject: subject.clone(),
+            manifest: manifest.map(Path::to_path_buf),
+            closing,
             unit: None,
             program: None,
             emitting: false,
         }
     }
 
+    /// The narration of a program's compile: `subject` is the entry, named beside `manifest` where the invocation stands elsewhere, and `then` what follows its build.
+    pub fn program(subject: &Subject, manifest: Option<&Path>, then: Then) -> Self {
+        Self::new(subject, manifest, Closing::Program(then))
+    }
+
     /// The narration of a library's compile, where no program is: `subject` is the last unit, and its tree goes on past the fold.
-    pub fn library(subject: &'a Subject, store: Option<&'a Verdicts>) -> Self {
-        Self {
-            subject,
-            manifest: None,
-            store,
-            closing: Closing::Library,
-            unit: None,
-            program: None,
-            emitting: false,
-        }
+    pub fn library(subject: &Subject) -> Self {
+        Self::new(subject, None, Closing::Library)
     }
 
     /// Whether `unit`'s tree goes on past the fold: the library's own does, for what its command writes of it.
     fn goes_on(&self, unit: &Subject) -> bool {
-        self.closing == Closing::Library && unit == self.subject
+        self.closing == Closing::Library && *unit == self.subject
     }
 
-    /// Fold one [`Progress`] event onto the trees, opening and closing nodes as units and the entry begin and end.
-    pub fn told(&mut self, progress: Progress<'_>) {
+    /// Fold one [`Progress`] event onto the trees, opening and closing nodes as units and the entry begin and end. `store` is the one the fold files into, which says whether a unit has a `store` node to come and, once its filing ends, whether the store took it.
+    pub fn told(&mut self, progress: Progress<'_>, store: Option<&Verdicts>) {
         match progress {
             // A recompile over a baseline reads as a compile: what the node reports is that the unit is being checked and how long it took.
             Progress::Compiling(prefix) | Progress::Recompiling(prefix) => {
                 let subject = Subject::Mounted(*prefix);
                 let mut tree = Tree::of(&subject, None);
 
-                tree.open("check", self.store.is_none() && !self.goes_on(&subject));
+                tree.open("check", store.is_none() && !self.goes_on(&subject));
                 self.unit = Some((subject, tree));
             }
-            // The entry program is the subject, and its compile a tree of its own after every unit's.
-            Progress::Entry => {
-                let mut tree = Tree::of(self.subject, self.manifest);
+            // The entry program is the subject, and its compile a tree of its own after every unit's. A build checks it whether or not the store held its declarations, since it is erased and linked either way; a question that only checks it has nothing to narrate of one the store held.
+            Progress::Entry { held } => {
+                let last = match (self.closing, held) {
+                    (Closing::Program(_), _) => false,
+                    (Closing::Checked, false) => true,
+                    (Closing::Checked, true) | (Closing::Units | Closing::Library, _) => return,
+                };
+                let mut tree = Tree::of(&self.subject, self.manifest.as_deref());
 
-                tree.open("check", false);
+                tree.open("check", last);
                 self.program = Some(tree);
             }
             // What the store held is not narrated.
@@ -333,7 +348,7 @@ impl<'a> Steps<'a> {
             }
             // A store that took nothing says so itself, and why is said once after the fold ([`unstored`]).
             Progress::Filed => {
-                let refused = self.store.is_some_and(|store| store.refused().is_some());
+                let refused = store.is_some_and(|store| store.refused().is_some());
 
                 if let Some((_, tree)) = &mut self.unit {
                     match refused {
@@ -345,9 +360,9 @@ impl<'a> Steps<'a> {
         }
     }
 
-    /// Fold a stage the entry program reached onto its tree: its erased form ends `check` and begins `build`, and its optimized form ends `build` and begins `emit`, which lasts until the payload is made.
+    /// Fold a stage the entry program reached onto its tree: its erased form ends `check` and begins `build`, and its optimized form ends `build` and begins `emit`, which lasts until the payload is made. A program that is only checked has neither.
     pub fn reached(&mut self, stage: &Stage<'_>) {
-        let Some(tree) = &mut self.program else {
+        let (Closing::Program(then), Some(tree)) = (self.closing, &mut self.program) else {
             return;
         };
 
@@ -358,15 +373,15 @@ impl<'a> Steps<'a> {
             }
             Stage::CpsOptm(_) => {
                 tree.done();
-                tree.open("emit", self.closing == Closing::Program(Then::Nothing));
+                tree.open("emit", then == Then::Nothing);
                 self.emitting = true;
             }
             _ => {}
         }
     }
 
-    /// Close the node the compile ended in, with what it took where the compile succeeded, and with how it was stopped otherwise: a count of the goals where they alone stopped it, `failed` where the payload could not be made, `refused` in every other case. A blank line then separates the tree from the reports.
-    pub fn ended<T>(&mut self, compiled: &Result<T, CompileError>) {
+    /// Close the node the compile ended in, where one is open, and answer whether one was: with what it took where the compile reached its end, with the count of the goals where they alone stopped it, as `failed` where the payload could not be made, and as `refused` in every other case.
+    pub fn closed(&mut self, how: How) -> bool {
         let emitting = self.emitting;
         let open = self
             .unit
@@ -376,35 +391,124 @@ impl<'a> Steps<'a> {
             .chain(self.program.as_mut())
             .find(|tree| tree.is_open());
         let Some(tree) = open else {
-            return;
+            return false;
         };
 
-        match compiled {
-            Ok(_) => tree.done(),
-            Err(error) => {
-                match error {
-                    CompileError::Incomplete(goals) if goals.len() == 1 => tree.verdict("1 goal"),
-                    CompileError::Incomplete(goals) => {
-                        tree.verdict(&format!("{} goals", goals.len()));
-                    }
-                    _ if emitting => tree.verdict("failed"),
-                    _ => tree.verdict("refused"),
-                }
-                apart();
-            }
+        match how {
+            How::Done => tree.done(),
+            How::Goals(1) => tree.verdict("1 goal"),
+            How::Goals(goals) => tree.verdict(&format!("{goals} goals")),
+            How::Stopped if emitting => tree.verdict("failed"),
+            How::Stopped => tree.verdict("refused"),
+        }
+
+        true
+    }
+
+    /// [`Steps::closed`] by what a build's compile came to, a blank line then parting the tree from the reports of what stopped it.
+    pub fn ended<T>(&mut self, compiled: &Result<T, CompileError>) {
+        if self.closed(How::of(compiled)) && compiled.is_err() {
+            apart();
         }
     }
 
     /// The subject's tree, for the command to go on writing: the one the compile opened, or the subject's with no node yet where nothing of it had to be compiled.
     pub fn into_tree(self) -> Tree {
         let opened = match self.closing {
-            Closing::Program(_) => self.program,
+            Closing::Program(_) | Closing::Checked => self.program,
+            Closing::Units => None,
             Closing::Library => self
                 .unit
-                .filter(|(subject, _)| subject == self.subject)
+                .filter(|(subject, _)| *subject == self.subject)
                 .map(|(_, tree)| tree),
         };
 
-        opened.unwrap_or_else(|| Tree::of(self.subject, self.manifest))
+        opened.unwrap_or_else(|| Tree::of(&self.subject, self.manifest.as_deref()))
+    }
+}
+
+/// A question narrated, as [`Telling`] tells it: each subject's compile as a build's is, the units it had to compile and, where the question checks a program, the program's own `check`; a blank line ahead of the answer where anything was narrated; and, after the answer, why the store took nothing where it could not.
+pub struct Asking {
+    /// Whether the question checks a program, and so narrates its check. A rung or a cost reprints the program, and a question about its names reads it: those narrate what it stands on and never the program.
+    checks: bool,
+    /// The narration of the subject in hand.
+    steps: Option<Steps>,
+    /// Whether anything was narrated that no blank line has yet parted from what follows.
+    narrated: bool,
+}
+
+impl Asking {
+    /// The narration of a question that checks what it is asked about.
+    pub fn checking() -> Self {
+        Self {
+            checks: true,
+            steps: None,
+            narrated: false,
+        }
+    }
+
+    /// The narration of a question that reprints or reads the program it is asked about, and so narrates only the units the program stands on.
+    pub fn reading() -> Self {
+        Self {
+            checks: false,
+            steps: None,
+            narrated: false,
+        }
+    }
+
+    /// Part what was narrated from what follows it, once.
+    fn parted(&mut self) {
+        if mem::take(&mut self.narrated) {
+            apart();
+        }
+    }
+}
+
+impl Telling for Asking {
+    fn asked(&mut self, named: &Named, manifest: Option<&Path>) {
+        let closing = match (self.checks, named) {
+            // A library is the last of its units, narrated as each of them is.
+            (_, Named::Library(_)) | (false, _) => Closing::Units,
+            (true, _) => Closing::Checked,
+        };
+
+        self.steps = Some(Steps::new(&Subject::of(named), manifest, closing));
+    }
+
+    fn step(&mut self, progress: Progress<'_>, store: Option<&Verdicts>) {
+        let Some(steps) = &mut self.steps else {
+            return;
+        };
+
+        match progress {
+            Progress::Compiling(_) | Progress::Recompiling(_) => self.narrated = true,
+            // A program that is not narrated begins once every unit it stands on is compiled, and what a question prints of it follows from there.
+            Progress::Entry { .. } if steps.closing == Closing::Units => {
+                if mem::take(&mut self.narrated) {
+                    apart();
+                }
+            }
+            Progress::Entry { held: false } => self.narrated = true,
+            _ => {}
+        }
+        steps.told(progress, store);
+    }
+
+    fn ended(&mut self, ended: Ended) {
+        if let Some(mut steps) = self.steps.take() {
+            steps.closed(match ended {
+                Ended::Done => How::Done,
+                Ended::Goals(goals) => How::Goals(goals),
+                Ended::Refused => How::Stopped,
+            });
+        }
+    }
+
+    fn answering(&mut self) {
+        self.parted();
+    }
+
+    fn unfiled(&mut self, refusal: String) {
+        note(format!("what this compiled is not stored; {refusal}"));
     }
 }

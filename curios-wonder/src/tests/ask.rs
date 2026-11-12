@@ -22,6 +22,8 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
             },
             unlinked: None,
         },
+        named: curios_package::Named::Stdin,
+        manifest: None,
         store: None,
     };
 
@@ -29,6 +31,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
         vec![asked("/std/print(nope)"), asked("/std/print(nope)")],
         DEFAULT_BUDGET,
         &Overlay::default(),
+        &mut Silent,
     );
     let [one] = same.as_slice() else {
         panic!("two subjects, one fact, got {same:?}");
@@ -39,6 +42,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
         vec![asked("/std/print(nope)"), asked("/std/print(other)")],
         DEFAULT_BUDGET,
         &Overlay::default(),
+        &mut Silent,
     );
     assert_eq!(
         different.len(),

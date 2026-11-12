@@ -8,7 +8,7 @@ use {
     crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid},
     curios_cps::{Fate, descendants, fates},
     curios_module::Overlay,
-    curios_pipeline::{Cache, Fold, Stage},
+    curios_pipeline::{Cache, Fold, Progress, Stage},
     curios_verdict::Verdicts,
     std::collections::BTreeMap,
 };
@@ -32,6 +32,7 @@ pub fn cost(
     subject: Subject,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
+    progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Vec<Fate>, Uncosted> {
     let Subject::Entry {
         units,
@@ -57,7 +58,7 @@ pub fn cost(
             Stage::CpsOptm(module) => after = descendants(module),
             _ => {}
         },
-        |_| {},
+        &mut *progress,
     );
 
     match compiled {

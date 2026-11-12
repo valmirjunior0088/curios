@@ -523,6 +523,7 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
         },
         &overlay,
         Some(&store),
+        &mut |_| {},
     )
     .diagnostics;
 
@@ -554,6 +555,7 @@ fn a_store_that_cannot_be_written_is_named_beside_the_answer() {
             },
             &overlay,
             Some(&store),
+            &mut |_| {},
         )
     };
 
@@ -648,6 +650,7 @@ fn checked(root: &Path, overlay: &Overlay, session: &Session) -> Vec<crate::Diag
         },
         overlay,
         Some(&store),
+        &mut |_| {},
     )
     .diagnostics
 }

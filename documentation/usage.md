@@ -397,6 +397,18 @@ A lint is an exact finding the compilation already has and nothing stops on: `ru
 
 Output is what `wonder` prints — each diagnostic, goal and lint rendered as `run` reports it, a blank line between — and the exit is the tri-state: 1 when a lint or an error was reported, 2 when only goals were, 0 when nothing but a note was. A program that does not lower reports its error alone, since the lints are read off the lowering; one that lowers and is then refused reports its lints beside the refusal. Each unit is linted as `curios test` compiles it, its tests included, so a declaration only a test reads is reached.
 
+Standard error narrates what had to be compiled, as [`wonder`](#wonder) does, and its last line counts what was found, the lints always and the errors and goals beside them where there were any — `2 lints`, `0 lints`, `1 lint, 1 error`, `0 lints, 1 goal`:
+
+```text
+/demo
+├─ check; 0.3s
+╰─ store; 0.0s
+demo
+╰─ check; 0.1s
+
+2 lints
+```
+
 ## `format`
 
 ```sh
@@ -430,7 +442,7 @@ A file that cannot be formatted closes as `format; refused`, why following, and 
 
 ## `wonder`
 
-`curios wonder [QUERY] [SUBJECT]` answers a question from the compilation that would build the subject, and executes nothing: with no query, the check. The subject is the one argument, read as every command reads its own, and a query is an option, one at most, so no word is ever both: `curios wonder tests` checks the executable named `tests`. The answer goes to stdout and nothing else does, so it can be redirected; exit 0 means the question was answered, including when the answer is a list of errors, and non-zero that it could not be — no such subject, no such stage, a scope that cannot be assembled — or that the program stopped before the answer, which exits as a build would: 2 when written goals alone stopped it, 1 otherwise.
+`curios wonder [QUERY] [SUBJECT]` answers a question from the compilation that would build the subject, and executes nothing: with no query, the check. The subject is the one argument, read as every command reads its own, and a query is an option, one at most, so no word is ever both: `curios wonder tests` checks the executable named `tests`. The answer goes to stdout and nothing else does, so it can be redirected; standard error narrates the units the question had to compile, each checked and stored as a build's are ([What a command reports](#what-a-command-reports)), and, where the question is the check or `--tests`, the check of a program the store did not hold, with a blank line then parting the trees from the answer. A question that reprints or reads a program — a rung, `--cost`, `--at`, `--declarations` — narrates what the program stands on and never the program, and one the store answers whole narrates nothing. Exit 0 means the question was answered, including when the answer is a list of errors, and non-zero that it could not be — no such subject, no such stage, a scope that cannot be assembled — or that the program stopped before the answer, which exits as a build would: 2 when written goals alone stopped it, 1 otherwise.
 
 | Query | Answers |
 | --- | --- |
@@ -682,7 +694,7 @@ An edit anywhere the program was built from is a miss, and so is a damaged or ha
 
 A question — [`wonder`](#wonder), and [`lint`](#lint) with it — reads the store and files the units it compiled from the text on disk, the units a build would have filed and no payload, so a build after a question compiles only what the question did not, and the question after it compiles nothing. A unit it finds filed from an earlier text of the same sources it compiles over that unit as a baseline, as a build does, keeping every declaration that read nothing the edit changed, which is what keeps a question about one declaration from costing the whole library it sits in; what it compiles that way it files as a build would have, so the question after a saved edit is the last to compile it. It files no unit compiled from text an editor holds unsaved, nor any unit after one, so a server asking on every keystroke files nothing.
 
-A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `note: what this built is not stored; …` from a build, each of whose `store` nodes closes `refused`, and `Skipped storing what this compiled; …` from a question — and [`wonder --server`](#wonder) says it once a session, in a log message to its client.
+A store that cannot be written costs the reuse and never the answer. The command says so once on standard error and goes on — `note: what this built is not stored; …` from a build and `note: what this compiled is not stored; …` from a question, each of whose `store` nodes closes `refused` — and [`wonder --server`](#wonder) says it once a session, in a log message to its client.
 
 A loose `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-loose split as everywhere else. Standard input has none either, so its test program is compiled every time.
 

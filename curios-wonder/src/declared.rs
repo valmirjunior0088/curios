@@ -3,7 +3,7 @@
 use {
     crate::{DeclaredTest, Overlaid, Subject, open, overlaid, tested_last},
     curios_module::{Overlay, PreparedText},
-    curios_pipeline::{Cache, CompileError, EntryTail, Fold, declared_test_paths},
+    curios_pipeline::{Cache, CompileError, EntryTail, Fold, Progress, declared_test_paths},
     curios_unit::Unit,
     curios_verdict::Verdicts,
     std::cell::RefCell,
@@ -15,6 +15,7 @@ pub fn declared_tests(
     subject: Subject,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
+    progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Vec<DeclaredTest>, CompileError> {
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let cache = reached.as_ref().map(|cache| cache as &dyn Cache);
@@ -22,7 +23,7 @@ pub fn declared_tests(
     let paths = match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
-            Fold::new(budget, &units, cache).test_paths(|_| {})?
+            Fold::new(budget, &units, cache).test_paths(&mut *progress)?
         }
         Subject::Entry {
             units,
@@ -47,7 +48,12 @@ pub fn declared_tests(
             };
             Fold::new(budget, &units, cache)
                 .reading(&read)
-                .check(&entrypoint, &loader.tested(), EntryTail::Program, |_| {})?
+                .check(
+                    &entrypoint,
+                    &loader.tested(),
+                    EntryTail::Program,
+                    &mut *progress,
+                )?
                 .verdict?;
 
             lowered.into_inner()

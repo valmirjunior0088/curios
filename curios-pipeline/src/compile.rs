@@ -811,27 +811,19 @@ where
 /// **Erasure is a verdict, which is why the line is drawn under it rather than under the certifier.** It narrows every numeral into the erased carriers and refuses one that does not fit, and it hands the module to the erased representation's verifier, which rejects the recursion classes the language does not admit — a mutual value group no forcing order satisfies among them. Stopping at the certifier would let `wonder` report a clean program that `run` then refuses, which is the one thing that query may not do. Below here nothing decides: `lower_from_anf` — private, so named here rather than linked — returns no `Result` at all.
 ///
 /// The erased module is discarded. Producing it is the whole cost, and the caller wants the Core module. `read`, where there is one, is told the program's lowering as soon as it is made ([`ReadLowering`]).
-pub fn check_entrypoint(
+pub fn check_entrypoint<O>(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
     cache: Option<&dyn Cache>,
     tail: EntryTail,
-    read: Option<ReadLowering<'_>>,
-) -> Result<Checked, CompileError> {
-    let (entry, entered) = enter(
-        budget,
-        predecessors,
-        syntax,
-        source,
-        cache,
-        tail,
-        Told {
-            observe: &mut |_: Stage<'_>| {},
-            read,
-        },
-    )?;
+    told: Told<'_, O>,
+) -> Result<Checked, CompileError>
+where
+    O: FnMut(Stage<'_>),
+{
+    let (entry, entered) = enter(budget, predecessors, syntax, source, cache, tail, told)?;
     let verdict = entered.and_then(|mut entered| {
         if let Some(erased) = entered.erased.take() {
             erased?;
@@ -902,7 +894,11 @@ fn enter<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    let Told { observe, read } = told;
+    let Told {
+        observe,
+        read,
+        progress,
+    } = told;
     let tested = matches!(tail, EntryTail::Test { .. });
     let entrypoint = source
         .entrypoint()
@@ -910,6 +906,10 @@ where
     observe(Stage::Text(entrypoint));
 
     let (hit, baseline) = held(source, None, cache);
+    // Announced here, where it is first known whether the declarations are held, which is what the announcement says.
+    progress(Progress::Entry {
+        held: hit.is_some(),
+    });
     // A hit was compiled after the units in scope, which is what made it one; a baseline after the ones its offer names.
     let earlier = hit
         .as_ref()
@@ -1698,8 +1698,8 @@ pub enum Progress<'a> {
     Compiling(&'a Qualifier),
     /// A mounted unit is about to be compiled over a baseline — an earlier compilation of its sources, every item the edit did not reach reused from it — named by the prefix it claims. Followed by [`Progress::Compiled`] as a [`Progress::Compiling`] is.
     Recompiling(&'a Qualifier),
-    /// The entry program is about to be compiled. Unnamed: it owns the empty prefix, so only the caller knows what was asked for.
-    Entry,
+    /// The entry program is about to be compiled. Its declarations are a unit of their own, `held` where the cache handed them back, on which its final term alone is elaborated anew. Unnamed: it owns the empty prefix, so only the caller knows what was asked for.
+    Entry { held: bool },
     /// A mounted unit came from the store instead; nothing is compiled for it, and no [`Progress::Compiled`] follows.
     Reused(&'a Qualifier),
     /// The subject just announced finished.
@@ -1710,10 +1710,11 @@ pub enum Progress<'a> {
     Filed,
 }
 
-/// What a caller is told of a program's compile as it goes: each rung it produced ([`Stage`]), and its lowering, as soon as it is made ([`ReadLowering`]).
+/// What a caller is told of a program's compile as it goes: each rung it produced ([`Stage`]), its lowering, as soon as it is made ([`ReadLowering`]), and the step the program announces itself with ([`Progress::Entry`]), which says what only its compile knows.
 pub struct Told<'a, O> {
     pub observe: &'a mut O,
     pub read: Option<ReadLowering<'a>>,
+    pub progress: &'a mut dyn FnMut(Progress<'_>),
 }
 
 /// A program compiled under its tail, with what a test program's tail read: what [`Fold::tests`](crate::Fold::tests) hands back, and, its modules empty, what a program's compile is.
@@ -1757,7 +1758,11 @@ where
     O: FnMut(Stage<'_>),
 {
     curios_profile::profile!("compile_entrypoint");
-    let Told { observe, read } = told;
+    let Told {
+        observe,
+        read,
+        progress,
+    } = told;
     // Compiling reports no lint, so the findings go unread.
     let (_, entered) = enter(
         budget,
@@ -1769,6 +1774,7 @@ where
         Told {
             observe: &mut *observe,
             read,
+            progress,
         },
     )?;
     let mut entered = entered?;

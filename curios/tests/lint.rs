@@ -65,7 +65,7 @@ fn a_clean_file_no_mod_declares_lints_clean_behind_its_note() {
     );
 }
 
-/// A lint is reported on stdout as `wonder` reports it, and turns the exit into 1; a clean program exits 0 with nothing said.
+/// A lint is reported on stdout as `wonder` reports it, and turns the exit into 1; a clean program exits 0 with nothing on stdout. Standard error narrates the check either way, and ends on the count.
 #[test]
 fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
     let root = temporary("stdin");
@@ -83,11 +83,17 @@ fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
         "{text}"
     );
     assert!(text.contains("--> <stdin>:1:11"), "{text}");
-    assert!(linted.stderr.is_empty(), "nothing is narrated");
+    // The program is checked under its own name, a blank line parts the tree from the report, and the count closes.
+    let narrated = String::from_utf8_lossy(&linted.stderr);
+    assert!(narrated.starts_with("<stdin>\n╰─ check; "), "{narrated}");
+    assert!(narrated.ends_with("s\n\n1 lint\n"), "{narrated}");
 
     let clean = curios(&root, &["lint", "-"], "/std/print(\"\")\n");
     assert!(clean.status.success());
     assert!(clean.stdout.is_empty());
+    let narrated = String::from_utf8_lossy(&clean.stderr);
+    assert!(narrated.starts_with("<stdin>\n╰─ check; "), "{narrated}");
+    assert!(narrated.ends_with("s\n0 lints\n"), "{narrated}");
 }
 
 /// Goals alone are the incomplete state every subcommand exits 2 on; a goal beside a lint is 1, since the lint is what there is to act on.
@@ -176,9 +182,10 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
     let taken = package("stored");
     let stored = curios(&taken, &["lint"], "");
     assert_eq!(stored.status.code(), Some(0), "{}", stdout(&stored));
+    let filed = String::from_utf8_lossy(&stored.stderr);
     assert!(
-        stored.stderr.is_empty(),
-        "a store that took the units is not narrated"
+        filed.contains("╰─ store; ") && !filed.contains("refused") && !filed.contains("note:"),
+        "a store that took the units says nothing of itself: {filed}"
     );
 
     let refused = package("unstored");
@@ -190,12 +197,14 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
     assert_eq!(unstored.status.code(), stored.status.code(), "{narrated}");
     assert_eq!(stdout(&unstored), stdout(&stored), "the report is the same");
     assert_eq!(
-        narrated.matches("Skipped").count(),
+        narrated
+            .matches("note: what this compiled is not stored; ")
+            .count(),
         1,
         "once, for a library and a program asked of one store: {narrated}"
     );
     assert!(
-        narrated.contains("storing what this compiled"),
-        "{narrated}"
+        narrated.contains("╰─ store; refused in "),
+        "and each unit's own node says the store took nothing: {narrated}"
     );
 }

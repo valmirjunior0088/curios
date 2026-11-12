@@ -8,7 +8,14 @@ use {
 
 /// Every declaration's fate, asked for the way the one-shot transport asks.
 fn fates_of(text: &str) -> Vec<Fate> {
-    cost(DEFAULT_BUDGET, loose(text), &Overlay::default(), None).expect("the program compiles")
+    cost(
+        DEFAULT_BUDGET,
+        loose(text),
+        &Overlay::default(),
+        None,
+        &mut |_| {},
+    )
+    .expect("the program compiles")
 }
 
 /// `text` as a loose subject, the way the one-shot transport forms one from standard input.
@@ -31,6 +38,7 @@ fn a_module_has_no_fates_to_report() {
         loose("let helper(x : /std/Nat) -> /std/Nat = x + 1;\n"),
         &Overlay::default(),
         None,
+        &mut |_| {},
     );
 
     assert!(matches!(refused, Err(Uncosted::Unit)), "{refused:?}");

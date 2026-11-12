@@ -102,7 +102,11 @@ fn checks(source: &str, budget: u64, scope: &[&Unit]) -> bool {
         &UnitSource::entry(&entrypoint, &RootSource::none()),
         None,
         EntryTail::Program,
-        None,
+        Told {
+            observe: &mut |_: Stage<'_>| {},
+            read: None,
+            progress: &mut |_| {},
+        },
     )
     .is_ok()
 }

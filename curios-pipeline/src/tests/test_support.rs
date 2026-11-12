@@ -206,6 +206,7 @@ pub fn compile_with_units(
             Told {
                 observe: &mut |_: Stage<'_>| {},
                 read: None,
+                progress: &mut |_| {},
             },
         )
         .map(TestProgram::built)

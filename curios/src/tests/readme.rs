@@ -58,7 +58,13 @@ fn the_error_shown_is_what_wonder_prints() {
         declares: None,
         unlinked: None,
     };
-    let reports = diagnostics(DEFAULT_BUDGET, subject, &Overlay::default(), None);
+    let reports = diagnostics(
+        DEFAULT_BUDGET,
+        subject,
+        &Overlay::default(),
+        None,
+        &mut |_| {},
+    );
     let printed: Vec<String> = reports
         .diagnostics
         .iter()

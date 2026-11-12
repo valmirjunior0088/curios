@@ -11,7 +11,7 @@ use {
     curios_common::{Qualifier, Source},
     curios_module::{Overlay, RootSource, UnitSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, TestEnd},
-    curios_package::{Entry, LIBRARY, Runs, Selection, Spelling, Target, order},
+    curios_package::{Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule, TestRecord},
     curios_surface::{Entrypoint, Form},
     curios_verdict::{Program, Verdicts},
@@ -27,38 +27,15 @@ use {
 /// What stands in for a library's entry text when the payload is keyed. A library is compiled through [`Entrypoint::trivial`], which is built rather than parsed and so has no text of its own; the key has to be *something* constant, and naming it here says which constant and why. The library's own content reaches the address through the unit chain, so nothing depends on this being the program.
 const LIBRARY_KEY: &str = "<library>";
 
-/// Which subject a test program is compiled for, as a report names it.
-pub enum Named {
-    /// A package's library, by the package's name.
-    Library(String),
-    /// A package's executable, by its name.
-    Executable(String),
-    /// A file no unit declares, as it was given.
-    File(PathBuf),
-    /// The program on standard input.
-    Stdin,
-}
-
-impl Named {
-    /// Which subject `program` is, as `run` and `compile` name one: the executable its package declares it as, the file it was given as, or standard input.
-    pub fn of(program: &curios_package::Program) -> Self {
-        match (program.entry(), program.home()) {
-            (_, Some(home)) => Named::Executable(home.executable.clone()),
-            (Entry::File(path), None) => Named::File(path.clone()),
-            (Entry::Stdin, None) => Named::Stdin,
-        }
-    }
-
-    /// The name the subject's page runs its program by, which is its first argument and the page's title: the package's name for its library, an executable's name, a loose file's stem, and `stdin` for standard input, which a URL could not spell as `-`.
-    pub fn page_name(&self) -> String {
-        match self {
-            Named::Library(name) | Named::Executable(name) => name.clone(),
-            Named::File(path) => path.file_stem().map_or_else(
-                || "program".to_string(),
-                |stem| stem.to_string_lossy().into_owned(),
-            ),
-            Named::Stdin => "stdin".to_string(),
-        }
+/// The name a subject's page runs its program by, which is its first argument and the page's title: the package's name for its library, an executable's name, a loose file's stem, and `stdin` for standard input, which a URL could not spell as `-`.
+pub fn page_name(named: &Named) -> String {
+    match named {
+        Named::Library(name) | Named::Executable(name) => name.clone(),
+        Named::File(path) => path.file_stem().map_or_else(
+            || "program".to_string(),
+            |stem| stem.to_string_lossy().into_owned(),
+        ),
+        Named::Stdin => "stdin".to_string(),
     }
 }
 
@@ -430,7 +407,7 @@ impl Tested {
 
         page(
             curios_browser::Program {
-                name: &subject.named.page_name(),
+                name: &page_name(&subject.named),
                 package: subject
                     .filing
                     .as_ref()

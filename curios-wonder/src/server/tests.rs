@@ -101,6 +101,7 @@ fn check(program: &str) -> Diagnosed {
         &Overlay::default(),
         None,
         Path::new("<stdin>"),
+        &mut |_| {},
     )
 }
 
