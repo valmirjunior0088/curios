@@ -39,6 +39,15 @@ impl ValueEnum for TargetValue {
     }
 }
 
+/// When what a command reports is painted, as `--color` takes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Color {
+    /// Where standard error is a terminal and `NO_COLOR` is not set.
+    Auto,
+    Always,
+    Never,
+}
+
 /// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder --stage`'s help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
 
@@ -548,6 +557,17 @@ struct ParsedCli {
     )]
     pub profile: Option<PathBuf>,
 
+    // Global for the reason `--profile` is: it is about the invocation, whichever command it runs.
+    #[arg(
+        long = "color",
+        value_name = "WHEN",
+        value_enum,
+        default_value_t = Color::Auto,
+        global = true,
+        help = "Paint what the command reports on standard error"
+    )]
+    pub color: Color,
+
     #[command(subcommand)]
     pub mode: Mode,
 }
@@ -557,6 +577,7 @@ struct ParsedCli {
 pub struct Cli {
     #[cfg(feature = "profile")]
     pub profile: Option<PathBuf>,
+    pub color: Color,
     pub mode: Mode,
 }
 
@@ -605,6 +626,7 @@ impl Cli {
         Ok(Self {
             #[cfg(feature = "profile")]
             profile: parsed.profile,
+            color: parsed.color,
             mode: parsed.mode,
         })
     }

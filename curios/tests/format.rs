@@ -227,3 +227,48 @@ fn a_width_is_refused_for_a_file_a_package_governs_before_anything_is_written() 
         );
     }
 }
+
+/// `text` with every attribute code taken out.
+fn stripped(text: &str) -> String {
+    let mut stripped = String::new();
+    let mut rest = text;
+
+    while let Some((before, coded)) = rest.split_once("\x1b[") {
+        stripped.push_str(before);
+        rest = coded.split_once('m').map_or("", |(_, after)| after);
+    }
+    stripped.push_str(rest);
+
+    stripped
+}
+
+/// Colour is a layer over what a command reports: asked for, it paints a subject bold, the tree dim and what went wrong red, over bytes that are the plain report's once the codes are taken out; and a pipe, which is no terminal, is written none unless it is asked for.
+#[test]
+fn a_painted_report_stripped_of_its_codes_is_the_plain_one() {
+    let root = temporary("painted");
+    write(&root, "loose.crs", "let x:/std/Nat=1;\nx\n");
+    write(&root, "broken.crs", "let = ;\n");
+    let reported = |color: &[&str]| {
+        let arguments = [color, &["format", "--check", "loose.crs", "broken.crs"]].concat();
+        let output = curios(&root, &arguments, "");
+        assert!(!output.status.success());
+
+        String::from_utf8(output.stderr).unwrap()
+    };
+
+    let plain = reported(&["--color", "never"]);
+    assert!(
+        plain.starts_with("loose.crs\n╰─ format; would change\nbroken.crs\n╰─ format; refused\n\n"),
+        "{plain}"
+    );
+    assert_eq!(reported(&[]), plain, "a pipe is written no code");
+
+    let painted = reported(&["--color", "always"]);
+    assert!(
+        painted.starts_with(
+            "\x1b[1mloose.crs\x1b[0m\n\x1b[2m╰─\x1b[0m format; would change\n\x1b[1mbroken.crs\x1b[0m\n\x1b[2m╰─\x1b[0m format; \x1b[31mrefused\x1b[0m\n\n"
+        ),
+        "{painted:?}"
+    );
+    assert_eq!(stripped(&painted), plain);
+}

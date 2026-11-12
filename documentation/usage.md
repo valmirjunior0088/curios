@@ -113,7 +113,9 @@ A subject is a unit by the prefix it mounts, an executable by its name, a file a
 
 A node that finished closes with what it took, `; 0.3s`. One that did not closes with how it ended and what it took — `; refused in 0.3s` where the compiler refuses the program, `; 1 goal in 0.3s` where written goals alone stopped it, `; failed in 0.3s` where the machine did — and what stopped it follows the tree, a blank line between. One whose point is where its work came to stand closes with that, spelled from where the invocation stands: `write; .curios/native/hello/hello`. `├─` is written where more nodes are planned and `╰─` at the last, each before its node's work, so a tree a refusal cuts short ends on `├─`.
 
-Nothing is rewritten or erased, and the bytes are the same in a pipe, a log file and a CI transcript as on a terminal.
+Nothing is rewritten or erased, and the bytes are the same in a pipe, a log file and a CI transcript as on a terminal, colour apart.
+
+Colour is a layer over those bytes and changes none of them: a subject bold, the tree and the times dim, and what went wrong — `refused`, `failed`, `trapped`, `exited N`, a count of failures that is not zero — red. `--color <WHEN>` decides it once: `always`, `never`, or `auto`, the default, which paints where standard error is a terminal and the environment's `NO_COLOR` is unset or empty.
 
 ## `run`
 
@@ -632,6 +634,7 @@ The tri-state describes a command line that parsed. One that did not — an unkn
 | --- | --- | --- |
 | `--manifest <PATH>` | every command but `new` and `profile` | use this `curios.toml` as the governing package's, instead of the nearest one |
 | `--budget <UNITS>` | every command that elaborates, which is every one but `new`, `curate`, `pin`, `format` and `profile` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
+| `--color <WHEN>` | every command, on either side of it | paint what the command reports on standard error: `auto`, `always` or `never` ([What a command reports](#what-a-command-reports)) |
 | `-h`/`--help` | `curios` and every command | what that command takes, with the default each flag was built with |
 | `-V`/`--version` | `curios` itself | the build's version, so a bug report can say which compiler produced the output |
 | `--profile <PATH>` | every command, on either side of it | write one record per span and event to `PATH` — present only in a compiler built with the `profile` feature, and inert without it. [`profile`](#profile) reads the stream back |

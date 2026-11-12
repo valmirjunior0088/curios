@@ -13,7 +13,8 @@ use host::*;
 use {
     crate::{
         Access, Failure, Reporting, Run, Served, Steps, Subject, Then, Tree, Wrote, alone, bound,
-        cut, drained, keep, kept, note_unlinked, note_unstored, relayed, serve_run, total, url,
+        cut, drained, keep, kept, note_unlinked, note_unstored, relayed, serve_run, total,
+        troubled, url,
     },
     curios::{TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Step},
@@ -55,20 +56,23 @@ impl Totals {
         self.skipped += other.skipped;
     }
 
-    /// The tally: `passed` and `failed` always, since that pair is what the exit code turns on, and the rarer `trapped`, `exited` and `skipped` only when they happened.
+    /// The tally: `passed` and `failed` always, since that pair is what the exit code turns on, and the rarer `trapped`, `exited` and `skipped` only when they happened. A count of what went wrong is painted as trouble where it is not zero.
     fn line(&self) -> String {
+        let wrong = |count: usize, word: &str| match count {
+            0 => format!("0 {word}"),
+            count => troubled(format!("{count} {word}")),
+        };
         let mut parts = vec![
             format!("{} passed", self.passed),
-            format!("{} failed", self.failed),
+            wrong(self.failed, "failed"),
         ];
-        for (count, word) in [
-            (self.trapped, "trapped"),
-            (self.exited, "exited"),
-            (self.skipped, "skipped"),
-        ] {
+        for (count, word) in [(self.trapped, "trapped"), (self.exited, "exited")] {
             if count > 0 {
-                parts.push(format!("{count} {word}"));
+                parts.push(wrong(count, word));
             }
+        }
+        if self.skipped > 0 {
+            parts.push(format!("{} skipped", self.skipped));
         }
 
         parts.join(", ")

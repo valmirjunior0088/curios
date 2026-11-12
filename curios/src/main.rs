@@ -45,8 +45,11 @@ use {
     },
     std::{
         collections::BTreeSet,
+        env,
         ffi::OsString,
-        fs, io, iter,
+        fs,
+        io::{self, IsTerminal},
+        iter,
         path::{Path, PathBuf},
         process::ExitCode,
     },
@@ -169,6 +172,16 @@ fn dispatch() -> Result<(), Failure> {
     if let Some(path) = cli.profile.clone() {
         install_profiling(path);
     }
+
+    // Decided once, before anything is written: asked for or refused outright, and otherwise on where standard error goes and whether the reader has said `NO_COLOR`, which a value that is not empty says.
+    paint(match cli.color {
+        Color::Always => true,
+        Color::Never => false,
+        Color::Auto => {
+            io::stderr().is_terminal()
+                && env::var_os("NO_COLOR").is_none_or(|unpainted| unpainted.is_empty())
+        }
+    });
 
     let Cli { mode, .. } = cli;
 
@@ -310,14 +323,14 @@ fn dispatch() -> Result<(), Failure> {
                 1 => format!("1 {one}"),
                 count => format!("{count} {one}s"),
             };
-            let reported = [(errors, "error"), (goals, "goal")]
-                .into_iter()
-                .filter(|(count, _)| *count > 0)
-                .map(|(count, one)| counted(count, one));
+            let beside = [
+                (errors > 0).then(|| troubled(counted(errors, "error"))),
+                (goals > 0).then(|| counted(goals, "goal")),
+            ];
 
             total(
                 iter::once(counted(lints, "lint"))
-                    .chain(reported)
+                    .chain(beside.into_iter().flatten())
                     .collect::<Vec<_>>()
                     .join(", "),
                 None,
@@ -680,7 +693,7 @@ fn dispatch() -> Result<(), Failure> {
                                     // A file that cannot be formatted is refused, its tree said ahead of why.
                                     let mut tree = Tree::of(&subject, None);
                                     tree.open("format", true);
-                                    tree.outcome("refused");
+                                    tree.outcome(troubled("refused"));
                                     apart();
                                 })?;
 
