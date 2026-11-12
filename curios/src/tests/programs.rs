@@ -58,7 +58,6 @@ fn every_program_lints_clean() {
             units: Vec::new(),
             origin: Origin::File(path),
             declares: None,
-            unlinked: None,
         }));
     }
     assert!(

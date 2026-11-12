@@ -521,7 +521,7 @@ impl Contract {
         debug_assert_eq!(self.accepts, Accepts::Entire, "{}", self.command);
 
         match Self::selection(subject, manifest, directory)? {
-            Selection::Entire(entire) => Ok(entire),
+            Selection::Entire(entire) => Ok(*entire),
             Selection::Library(_) | Selection::Program(_) => Err(format!(
                 "`{}` takes the governing package entire, and no subject",
                 self.command

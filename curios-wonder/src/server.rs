@@ -34,13 +34,12 @@ use {
         DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
         DocumentFormattingParams, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse,
         GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-        HoverProviderCapability, InitializeParams, Location, LogMessageParams, MarkupContent,
-        MarkupKind, MessageType, OneOf, Position, PublishDiagnosticsParams, Range,
-        ServerCapabilities, SymbolKind, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit,
-        Uri,
+        HoverProviderCapability, InitializeParams, Location, MarkupContent, MarkupKind, OneOf,
+        Position, PublishDiagnosticsParams, Range, ServerCapabilities, SymbolKind,
+        TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
         notification::{
             DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument,
-            LogMessage, Notification, PublishDiagnostics,
+            Notification, PublishDiagnostics,
         },
         request::{DocumentSymbolRequest, Formatting, GotoDefinition, HoverRequest, Request},
     },
@@ -93,7 +92,6 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
             manifest: manifest.map(Path::to_path_buf),
             published: BTreeMap::new(),
             spent: None,
-            told: false,
             // A closure rather than the channel's own type, so this file names no channel crate: `lsp-server` re-exports none, and what the analyst needs is only a way to send.
             sender: {
                 let sender = connection.sender.clone();
@@ -577,8 +575,6 @@ struct Analyst {
     published: BTreeMap<PathBuf, BTreeSet<PathBuf>>,
     /// How long the last batch of checks took — what the settle before the next burst is a fraction of. `None` until one has run.
     spent: Option<Duration>,
-    /// Whether this session has told its client that the store takes nothing of what it compiles. Once is the whole of it: one store refuses every unit for one reason, and a line per check would say nothing new.
-    told: bool,
     sender: Box<dyn Fn(Message) -> Result<(), String> + Send>,
 }
 
@@ -632,7 +628,6 @@ impl Analyst {
         let asked = Selection::of(spelling, self.manifest.as_deref(), directory, overlay)
             .and_then(Asked::every);
         let budget = self.budget;
-        let mut unfiled = None;
         // What the document writes, read off the subject's lowering in this check's own fold: a file selects one subject, the unit that declares it or itself.
         let mut written = None;
         let records = match asked {
@@ -642,14 +637,12 @@ impl Analyst {
                     let asked = asked.reusing(session);
                     let Diagnosed {
                         diagnostics,
-                        unfiled: refusal,
                         written: texts,
                         ..
                     } = match raised {
                         Raised::Warming => asked.diagnosed(budget, overlay, &mut Silent),
                         Raised::Document => asked.checked(budget, overlay, document, &mut Silent),
                     };
-                    unfiled = unfiled.take().or(refusal);
                     written.get_or_insert(texts);
 
                     diagnostics
@@ -661,9 +654,6 @@ impl Analyst {
                 report: Report::unlocated(message),
             }],
         };
-
-        // Before a warming check is dropped: what it could not file is a fact about the store, whichever check met it first.
-        self.tell(unfiled)?;
 
         // A warming check is run for what it leaves on this thread and in the store, never for what it says: it names a directory, so every record it holds is about a file no editor has opened, and a manifest it cannot find is not a fault to report to anybody.
         if raised == Raised::Warming {
@@ -700,24 +690,6 @@ impl Analyst {
             );
 
         Ok(())
-    }
-
-    /// Tell the client, once a session, that the store took nothing of what a check compiled, and why.
-    ///
-    /// **A log line, since a server has no terminal.** A store nobody can write costs every session the work the last one did, and otherwise reads as a server that is slow to start; the answer it publishes is the one it would have published.
-    fn tell(&mut self, unfiled: Option<String>) -> Result<(), String> {
-        let Some(refusal) = unfiled.filter(|_| !self.told) else {
-            return Ok(());
-        };
-        self.told = true;
-
-        (self.sender)(Message::Notification(lsp_server::Notification::new(
-            LogMessage::METHOD.to_string(),
-            LogMessageParams {
-                typ: MessageType::WARNING,
-                message: format!("what this session compiles is not stored; {refusal}"),
-            },
-        )))
     }
 }
 
@@ -770,7 +742,6 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
         Severity::Error => DiagnosticSeverity::ERROR,
         Severity::Goal => DiagnosticSeverity::INFORMATION,
         Severity::Lint => DiagnosticSeverity::WARNING,
-        Severity::Note => DiagnosticSeverity::HINT,
     };
 
     let lies_in = |span: &Span| {
@@ -807,7 +778,7 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
             // An editor lists a diagnostic by its first line, where a tag alone names nothing of the program. A goal's first line is its answer already.
             message: match record.severity {
                 Severity::Goal => record.report.message(),
-                Severity::Error | Severity::Lint | Severity::Note => record.report.listed(),
+                Severity::Error | Severity::Lint => record.report.listed(),
             },
             related_information: (!related.is_empty()).then_some(related),
             ..Diagnostic::default()

@@ -25,7 +25,6 @@ fn every_crs_example_reports_nothing() {
                 text: example,
             },
             declares: None,
-            unlinked: None,
         };
         let reports = diagnostics(
             DEFAULT_BUDGET,

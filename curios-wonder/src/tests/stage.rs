@@ -19,7 +19,6 @@ fn rung(name: &str, text: &str) -> Result<(String, crate::Rendering), crate::Ref
                 text: text.to_string(),
             },
             declares: None,
-            unlinked: None,
         },
         &Overlay::default(),
         None,

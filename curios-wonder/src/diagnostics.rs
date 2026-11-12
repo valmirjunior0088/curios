@@ -7,7 +7,6 @@ use {
         Overlay, PreparedText, RootSource, UnitSource, open_entrypoint, overlay_entrypoint,
         supply_entrypoint,
     },
-    curios_package::Unlinked,
     curios_pipeline::{Cache, Checked, CompileError, Earlier, EntryTail, Findings, Fold, Progress},
     curios_surface::{Entrypoint, Form},
     curios_unit::Unit,
@@ -17,7 +16,6 @@ use {
         collections::BTreeSet,
         fs,
         path::{Path, PathBuf},
-        sync::Arc,
     },
 };
 
@@ -25,8 +23,6 @@ use {
 pub struct Diagnosed {
     pub diagnostics: Vec<Diagnosis>,
     pub reached: BTreeSet<Qualifier>,
-    /// Why the store took nothing of what this compilation would have filed, where it could not be written: the store's own first refusal, for a transport with somewhere to say it. No part of the answer, which is what it would have been.
-    pub unfiled: Option<String>,
     /// What the file a check was asked about writes, read off the subject's lowering in that check's own fold (`checked`): every text of the file the subject was lowered from, with the names each writes. Empty where no file was asked about, or the subject did not lower.
     pub written: Vec<Written>,
 }
@@ -43,55 +39,12 @@ pub enum Subject {
         ///
         /// An `Option` rather than a possibly-empty list, because the two differ: a program that declared *none* sees nothing but its own names, and one that declared *nothing* sees everything a program may name. A loose program is the second.
         declares: Option<Vec<Qualifier>>,
-        /// Why the file is in none of the units of the package that holds it, when one does — the note the answer opens with.
-        unlinked: Option<Unlinked>,
     },
     /// A unit: the last of `units`, compiled against the ones before it. Its verdicts are the answer.
     Unit { units: Vec<RootSource> },
 }
 
 impl Subject {
-    /// What is said of a program selected loose from inside a package before anything else ([`Unlinked::note`]), `taken` being what the question did with it, beside the text its form was read off: the overlay's where it holds one, as every read is.
-    fn unlinked(&self, overlay: &Overlay, taken: &str) -> Option<(String, Option<Arc<Source>>)> {
-        let Subject::Entry {
-            unlinked: Some(unlinked),
-            ..
-        } = self
-        else {
-            return None;
-        };
-
-        let source = match overlay.get(&unlinked.file) {
-            Some(text) => Some(Source::held(&unlinked.file, text)),
-            None => Source::read(&unlinked.file).ok(),
-        };
-        // A file that cannot be read is a program's to report.
-        let form = source.as_ref().map_or(Form::Program, |source| {
-            Form::of(&unlinked.file, source.text())
-        });
-
-        Some((unlinked.note(taken, form), source))
-    }
-
-    /// `Self::unlinked`'s words alone, for a question whose answer is no list of diagnostics and that says it on standard error.
-    pub fn said_unlinked(&self, overlay: &Overlay, taken: &str) -> Option<String> {
-        self.unlinked(overlay, taken).map(|(said, _)| said)
-    }
-
-    /// The note a program selected loose from inside a package opens with, located at its file's start so an editor places it on the document asked about.
-    fn note(&self, overlay: &Overlay) -> Option<Diagnosis> {
-        let (message, source) = self.unlinked(overlay, "was checked")?;
-        let report = match source {
-            Some(source) => Report::at(Span::new(source, 0, 0), message),
-            None => Report::unlocated(message),
-        };
-
-        Some(Diagnosis {
-            severity: Severity::Note,
-            report,
-        })
-    }
-
     /// The refusal of a loose file written as a module whose stem is no name a module can take: it can be mounted nowhere to be checked item by item, and checked as a program it would be refused at its last line for a term it was never meant to hold.
     fn unnameable(&self, overlay: &Overlay) -> Option<Diagnosis> {
         let Subject::Entry {
@@ -141,7 +94,6 @@ impl Subject {
                 units,
                 origin,
                 declares: None,
-                unlinked,
             } if units.is_empty() => {
                 let module = match &origin {
                     Origin::File(path) => RootSource::loose_module(path, overlay),
@@ -156,7 +108,6 @@ impl Subject {
                         units,
                         origin,
                         declares: None,
-                        unlinked,
                     },
                 }
             }
@@ -218,13 +169,10 @@ fn diagnosed_reading(
     let store = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = store.as_ref().map(|store| store as &dyn Cache);
 
-    // Taken before the subject is formed, since it is the one fact about the file asked that no compilation of it says.
-    let note = subject.note(overlay);
     if let Some(refusal) = subject.unnameable(overlay) {
         return Diagnosed {
-            diagnostics: note.into_iter().chain([refusal]).collect(),
+            diagnostics: vec![refusal],
             reached: BTreeSet::new(),
-            unfiled: None,
             written: Vec::new(),
         };
     }
@@ -273,19 +221,11 @@ fn diagnosed_reading(
             Err(refusal) => Diagnosed {
                 diagnostics: refusal,
                 reached: BTreeSet::new(),
-                unfiled: None,
                 written: Vec::new(),
             },
         },
     };
     diagnosed.written = written.take();
-
-    // First, because it says how everything after it was answered.
-    if let Some(note) = note {
-        diagnosed.diagnostics.insert(0, note);
-    }
-    // Asked once the fold is over, which is when the store has been handed anything, and whatever the answer was: a store nobody can write is true either way.
-    diagnosed.unfiled = cache.and_then(Verdicts::refused);
 
     diagnosed
 }
@@ -308,7 +248,6 @@ impl Diagnosed {
         Self {
             diagnostics,
             reached,
-            unfiled: None,
             written: Vec::new(),
         }
     }
@@ -318,7 +257,6 @@ impl Diagnosed {
         Self {
             diagnostics: of_error(error),
             reached: BTreeSet::new(),
-            unfiled: None,
             written: Vec::new(),
         }
     }

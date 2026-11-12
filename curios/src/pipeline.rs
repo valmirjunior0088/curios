@@ -3,7 +3,7 @@
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher or writes it beside a page. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Subject, Tree, apart, note, reader},
+    crate::{Subject, Tree, apart, reader},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
     curios_common::{Source, Style},
@@ -11,27 +11,20 @@ use {
     curios_module::{RootSource, UnitSource},
     curios_package::{Entry, Named, Program, Runs, Target},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage},
-    curios_surface::{Entrypoint, Form},
+    curios_surface::Entrypoint,
     curios_verdict::Verdicts,
     curios_wasm::Module,
     curios_wonder::{Ended, Telling},
     std::{
         cell::RefCell,
-        fs, io, mem,
+        io, mem,
         path::{Path, PathBuf},
-        sync::Arc,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
     },
 };
-
-/// Say, ahead of everything a command reports of `program`, that its file is one its package's directory holds and no unit declares, where it is one: the command takes it on its own, which `taken` words, and nothing after would say what it was not compiled against, so a name of the package refused in it reads as a typo. What would declare it follows the form it is written in ([`Unlinked::note`](curios_package::Unlinked::note)), read off the disk: a file that cannot be read is a program's to report.
-pub fn note_unlinked(program: &Program, taken: &str) {
-    if let Some(unlinked) = program.unlinked() {
-        let form = fs::read_to_string(&unlinked.file)
-            .map_or(Form::Program, |text| Form::of(&unlinked.file, &text));
-
-        note(unlinked.note(taken, form));
-    }
-}
 
 /// The payload `program` is built into for `target`, taken from `cache` when nothing it was made from has changed, and compiled — and filed there — otherwise: natively the precompiled `.cwasm`, filed under the engine that will run it, and for a browser the module Binaryen wrote, which any browser runs. `cache` is the store its command opened for it to file into, and `None` compiles everything and files nothing.
 ///
@@ -50,8 +43,6 @@ pub fn payload_of(
         Target::Native => Runs::Native { engine: engine() },
         Target::Browser => Runs::Browser,
     };
-
-    note_unlinked(&program, "is compiled");
 
     // A loose program has no project, so it has no store to consult: what a compilation may reuse is a fact about the project it is in, and a loose program is in none.
     let entry = match program.entry() {
@@ -125,8 +116,6 @@ pub fn payload_of(
         cache.payload_put(program, &sources, payload, foreigns, runs);
     }
 
-    unstored(cache.as_ref());
-
     compiled.map(|(payload, foreigns, tree)| Built {
         payload,
         foreigns,
@@ -139,18 +128,6 @@ pub struct Built {
     pub payload: Vec<u8>,
     pub foreigns: ForeignStore,
     pub tree: Tree,
-}
-
-/// Say why `store` took nothing of what a build compiled, where it took nothing. After the fold rather than during it: one unwritable store refuses everything for the same reason, so the reason is one line however many units went past it, each of whose `store` node says only that it was refused. Said even when the compilation failed, because a store nobody can write is true either way and the next run pays for it either way.
-pub fn unstored(store: Option<&Verdicts>) {
-    if let Some(refusal) = store.and_then(Verdicts::refused) {
-        note_unstored(&refusal);
-    }
-}
-
-/// Say that a store took nothing of what a build compiled, for the reason it gave.
-pub fn note_unstored(refusal: &str) {
-    note(format!("what this built is not stored; {refusal}"));
 }
 
 /// The interface of the last of `units` — a package's library, compiled against everything before it — made from the compilation that builds it, whose units are filed into `store` when there is one.
@@ -169,7 +146,6 @@ pub fn documentation_of(
         .documentation(|progress| steps.told(progress, store));
 
     steps.ended(&documented);
-    unstored(store);
 
     documented.map(|documentation| (documentation, steps.into_tree()))
 }
@@ -262,6 +238,9 @@ impl How {
     }
 }
 
+/// Whether a command has said why its store took nothing: said once, beneath the first `store` node the store refused.
+static WHY_UNSTORED: AtomicBool = AtomicBool::new(false);
+
 /// A compile narrated: a tree for each unit the fold compiles, with a `check` node and, where there is a store, a `store` node; and the subject's own tree, whose `check`, `build` and `emit` nodes open and close as the program reaches each stage. A unit the store held narrates nothing.
 ///
 /// The nodes outlive each event, which is why they are kept here rather than written whole: `check` and the `; 1.4s` that closes it are two writes to one line, with the work between them.
@@ -346,14 +325,19 @@ impl Steps {
                     tree.open("store", last);
                 }
             }
-            // A store that took nothing says so itself, and why is said once after the fold ([`unstored`]).
+            // A store that took nothing says so at its node, and why beneath the first node it refused: a store nobody can write refuses every unit for one reason, so the reason is one line however many units went past it.
             Progress::Filed => {
-                let refused = store.is_some_and(|store| store.refused().is_some());
+                let refusal = store.and_then(Verdicts::refused);
 
                 if let Some((_, tree)) = &mut self.unit {
-                    match refused {
-                        true => tree.verdict("refused"),
-                        false => tree.done(),
+                    match refusal {
+                        Some(reason) => {
+                            tree.verdict("refused");
+                            if !WHY_UNSTORED.swap(true, Ordering::Relaxed) {
+                                tree.detail(reason);
+                            }
+                        }
+                        None => tree.done(),
                     }
                 }
             }
@@ -508,10 +492,6 @@ impl Telling for Asking {
 
     fn answering(&mut self) {
         self.parted();
-    }
-
-    fn unfiled(&mut self, refusal: String) {
-        note(format!("what this compiled is not stored; {refusal}"));
     }
 
     fn reader(&self) -> Style {

@@ -19,7 +19,6 @@ fn asked(program: &str, overlay: &Overlay) -> Vec<Written> {
                 text: program.to_string(),
             },
             declares: None,
-            unlinked: None,
         },
         Path::new("<stdin>"),
         overlay,

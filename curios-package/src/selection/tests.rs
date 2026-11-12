@@ -159,7 +159,7 @@ fn a_name_selects_a_declared_executable() {
     assert!(refusal.contains("\"serve\""), "{refusal}");
 }
 
-/// **The placement.** A file is placed by what declares it, whichever command asks: an executable's entry is that executable, and a file beside it that no `mod` declares is loose, told what would declare it.
+/// **The placement.** A file is placed by what declares it, whichever command asks: an executable's entry is that executable, and a file beside it that no `mod` declares is loose.
 #[test]
 fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
     let root = tree(
@@ -181,35 +181,10 @@ fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
         "serve"
     );
 
+    // A file the package holds and no `mod` reaches is taken on its own, as one no package holds is.
     let scratch = selected(Some("scratch.crs"), &root).expect("a loose file");
     assert!(scratch.home().is_none());
-    let unlinked = scratch
-        .unlinked()
-        .expect("the package holds it, and says why it is in no unit");
-    assert_eq!(unlinked.file, root.join("scratch.crs"));
-    assert_eq!(unlinked.package, "app");
-    // The library and the program beside it both read their modules from the package's directory, so either could declare it.
-    assert_eq!(
-        unlinked.remedy,
-        "declare it with `mod scratch;` in lib.crs, or with `mod scratch;` in serve.crs"
-    );
-
-    // What declares it follows the form it is written in, whatever the command did with it.
-    let file = root.join("scratch.crs");
-    assert_eq!(
-        unlinked.note("was checked", Form::Module),
-        format!(
-            "{} is in no unit of `/app`, so it was checked on its own against `/std`: declare it with `mod scratch;` in lib.crs, or with `mod scratch;` in serve.crs",
-            file.display()
-        )
-    );
-    assert_eq!(
-        unlinked.note("is compiled", Form::Program),
-        format!(
-            "{} is in no unit of `/app`, so it is compiled on its own against `/std`: an `[[executables]]` row in its manifest declares it",
-            file.display()
-        )
-    );
+    assert_eq!(scratch.entry(), &Entry::File(root.join("scratch.crs")));
 }
 
 /// A file no manifest governs is loose, and has nothing to be told.
@@ -219,7 +194,7 @@ fn a_file_argument_needs_no_project() {
 
     let program = selected(Some("scratch.crs"), &root).expect("a loose file");
     assert_eq!(program.entry(), &Entry::File(root.join("scratch.crs")));
-    assert!(program.home().is_none() && program.unlinked().is_none());
+    assert!(program.home().is_none());
 }
 
 /// A declared executable's binary lands in the governing root's store, nested under the package that declares it.
@@ -521,17 +496,14 @@ fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose()
 
     let other = selected(Some("other.crs"), &root).expect("an undeclared module");
     assert!(other.home().is_none());
-    assert_eq!(
-        other.unlinked().expect("the package holds it").remedy,
-        "declare it with `mod other;` in serve.crs"
-    );
+    assert_eq!(other.entry(), &Entry::File(root.join("other.crs")));
 }
 
-/// What would put an unlinked file in a unit: the `mod` line in the header of the module above it, every missing link of the chain where that module is undeclared too, nothing for a spelling no module has, and a library to write it in for a package that has none.
+/// A file its package's directory holds is a unit's only where a `mod` chain reaches it: below a declared module that does not declare it, in a directory no module names, spelled as no module could be, or beside a program that does not declare it, it is loose.
 #[test]
-fn an_unlinked_file_is_told_what_would_declare_it() {
+fn a_file_no_mod_chain_reaches_is_loose_wherever_it_sits() {
     let root = tree(
-        "unlinked-remedies",
+        "unreached",
         &[
             ("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n"),
             ("lib.crs", "pub mod parse;\n"),
@@ -542,36 +514,19 @@ fn an_unlinked_file_is_told_what_would_declare_it() {
             ("odd-name.crs", ""),
         ],
     );
-
-    for (file, remedy) in [
-        (
-            "parse/lexer.crs",
-            "declare it with `mod lexer;` in parse.crs",
-        ),
-        (
-            "deep/inner.crs",
-            "declare it with `mod deep;` in lib.crs and `mod inner;` in deep.crs",
-        ),
-        (
-            "./notes.txt",
-            "its spelling names no module a `mod` could declare",
-        ),
-        (
-            "odd-name.crs",
-            "its spelling names no module a `mod` could declare",
-        ),
+    for file in [
+        "parse/lexer.crs",
+        "deep/inner.crs",
+        "./notes.txt",
+        "odd-name.crs",
     ] {
-        let written = selected(Some(file), &root)
-            .expect("a loose file")
-            .unlinked()
-            .map(|unlinked| unlinked.remedy.clone())
-            .unwrap_or_else(|| panic!("{file} is held by the package"));
-        assert_eq!(written, remedy, "{file}");
+        let program = selected(Some(file), &root).expect("a loose file");
+        assert!(program.home().is_none(), "{file}");
     }
 
-    // A program beside the manifest reads its modules beside itself, so it could declare a file there; one whose directory holds no root's modules has only a library to be declared in.
+    // A program beside the manifest reads its modules beside itself, and one in a directory of its own reads them there.
     let programs = tree(
-        "unlinked-no-library",
+        "unreached-no-library",
         &[
             (
                 "curios.toml",
@@ -583,38 +538,10 @@ fn an_unlinked_file_is_told_what_would_declare_it() {
             ("notes/stray.crs", ""),
         ],
     );
-    for (file, expected) in [
-        ("stray.crs", "declare it with `mod stray;` in exe.crs"),
-        (
-            "notes/stray.crs",
-            "declare it with `mod notes;` in exe.crs and `mod stray;` in notes.crs",
-        ),
-    ] {
-        let remedy = selected(Some(file), &programs)
-            .expect("a loose file")
-            .unlinked()
-            .map(|unlinked| unlinked.remedy.clone())
-            .expect("the package holds it");
-        assert_eq!(remedy, expected, "{file}");
+    for file in ["stray.crs", "notes/stray.crs"] {
+        let program = selected(Some(file), &programs).expect("a loose file");
+        assert!(program.home().is_none(), "{file}");
     }
-
-    let headless = tree(
-        "unlinked-headless",
-        &[
-            (
-                "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"tool\"\n\n[[executables]]\nname = \"serve\"\npath = \"tools/serve.crs\"\n",
-            ),
-            ("tools/serve.crs", "/std/print(\"\")\n"),
-            ("stray.crs", ""),
-        ],
-    );
-    let remedy = selected(Some("stray.crs"), &headless)
-        .expect("a loose file")
-        .unlinked()
-        .map(|unlinked| unlinked.remedy.clone())
-        .expect("the package holds it");
-    assert_eq!(remedy, "`/tool` has no library to declare it in");
 }
 
 /// A file no manifest above it governs is loose, with nothing to be told.
@@ -654,10 +581,7 @@ fn a_file_no_member_holds_under_an_umbrella_is_loose() {
 
     for stray in ["scratch.crs", "tools/scratch.crs"] {
         let program = selected(Some(stray), &root).expect("an answer, not a refusal");
-        assert!(
-            program.home().is_none() && program.unlinked().is_none(),
-            "{stray}"
-        );
+        assert!(program.home().is_none(), "{stray}");
     }
 }
 

@@ -44,10 +44,10 @@ fn stdout(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
-/// A file a package holds and no `mod` declares is linted on its own, and the note saying so is no finding: a clean one exits 0.
+/// A file a package holds and no `mod` declares is linted on its own, with nothing said of that: a clean one exits 0 and reports nothing.
 #[test]
-fn a_clean_file_no_mod_declares_lints_clean_behind_its_note() {
-    let root = temporary("unlinked");
+fn a_clean_file_no_mod_declares_lints_clean_on_its_own() {
+    let root = temporary("unreached");
     write(
         &root,
         "curios.toml",
@@ -59,10 +59,7 @@ fn a_clean_file_no_mod_declares_lints_clean_behind_its_note() {
     let linted = curios(&root, &["lint", "stray.crs"], "");
     let text = stdout(&linted);
     assert_eq!(linted.status.code(), Some(0), "{text}");
-    assert!(
-        text.starts_with("stray.crs is in no unit of `/app`"),
-        "{text}"
-    );
+    assert!(text.is_empty(), "{text}");
 }
 
 /// A lint is reported on stdout as `wonder` reports it, and turns the exit into 1; a clean program exits 0 with nothing on stdout. Standard error narrates the check either way, and ends on the count.
@@ -167,7 +164,7 @@ fn an_unused_dependency_is_reported_for_the_package_entire() {
     assert!(one.stdout.is_empty());
 }
 
-/// A store that cannot be written costs the reuse and never the answer: `lint` reports and exits as it would have, and says once on standard error that nothing was stored, however many subjects the package has.
+/// A store that cannot be written costs the reuse and never the answer: `lint` reports and exits as it would have, each unit's `store` node says it was refused, and why is said once, beneath the first of them, however many subjects the package has.
 #[test]
 fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
     let package = |name: &str| {
@@ -187,7 +184,7 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
     assert_eq!(stored.status.code(), Some(0), "{}", stdout(&stored));
     let filed = String::from_utf8_lossy(&stored.stderr);
     assert!(
-        filed.contains("╰─ store; ") && !filed.contains("refused") && !filed.contains("note:"),
+        filed.contains("╰─ store; ") && !filed.contains("refused"),
         "a store that took the units says nothing of itself: {filed}"
     );
 
@@ -199,15 +196,24 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
 
     assert_eq!(unstored.status.code(), stored.status.code(), "{narrated}");
     assert_eq!(stdout(&unstored), stdout(&stored), "the report is the same");
+    // Each unit's own node says the store took nothing, and the reason hangs beneath the first alone.
+    let lines = narrated.lines().collect::<Vec<_>>();
+    let refused = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.contains("store; refused in "))
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    assert!(refused.len() > 1, "a library and a program: {narrated}");
+    let beneath = lines[refused[0] + 1];
+    assert!(
+        beneath.starts_with(['│', ' ']) && !beneath.contains('─'),
+        "a detail of the node, no node of its own: {narrated}"
+    );
+    let reason = beneath.trim_start_matches(['│', ' ']);
     assert_eq!(
-        narrated
-            .matches("what this compiled is not stored; ")
-            .count(),
+        narrated.matches(reason).count(),
         1,
         "once, for a library and a program asked of one store: {narrated}"
-    );
-    assert!(
-        narrated.contains("╰─ store; refused in "),
-        "and each unit's own node says the store took nothing: {narrated}"
     );
 }

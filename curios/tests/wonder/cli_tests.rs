@@ -5,7 +5,7 @@ use {
     std::{
         fs,
         io::Write,
-        process::{Command, Output, Stdio},
+        process::{Command, Stdio},
     },
 };
 
@@ -96,54 +96,9 @@ fn a_file_is_placed_in_its_unit() {
     assert!(text.contains("util.crs:1:27"), "{text}");
 }
 
-/// Every question about a file its package holds and no unit declares says so first, and names what the file's form is declared by: the `mod` line for one written as a module, and the `[[executables]]` row for one written as a program, which a `mod` line would be refused over. Where the answer is a list of diagnostics the note opens it; where it is the tests, the rung or the fates on standard output, the note stands beside it on standard error.
+/// A file under a package that no `mod` reaches is in no unit, so it is checked on its own, as a unit of its own where it is written as a module, with nothing said of that, on a cold store and on a warm one alike, since placement walks the headers and not the record of a compile. Declaring it puts it in the library.
 #[test]
-fn every_question_about_a_file_no_unit_declares_names_what_its_form_is_declared_by() {
-    let root = project("undeclared-forms");
-    write(&root, "items.crs", "pub let w : /std/Str = \"a\";\n");
-    write(&root, "scratch.crs", "/std/print(\"x\")\n");
-    let stderr = |output: &Output| String::from_utf8_lossy(&output.stderr).into_owned();
-
-    for (file, remedy) in [
-        ("items.crs", "declare it with `mod items;` in lib.crs"),
-        (
-            "scratch.crs",
-            "an `[[executables]]` row in its manifest declares it",
-        ),
-    ] {
-        let said = |taken: &str| {
-            format!(
-                "{file} is in no unit of `/app`, so it {taken} on its own against `/std`: {remedy}"
-            )
-        };
-
-        for question in [&["wonder", file][..], &["lint", file]] {
-            let answered = stdout(&curios(&root, question, ""));
-            assert!(
-                answered.starts_with(&said("was checked")),
-                "{question:?}: {answered}"
-            );
-        }
-
-        let listed = stderr(&curios(&root, &["wonder", "--tests", file], ""));
-        assert!(listed.starts_with(&said("was checked")), "{listed}");
-
-        for question in [
-            &["wonder", "--stage", "text", file][..],
-            &["wonder", "--cost", file],
-        ] {
-            let answered = stderr(&curios(&root, question, ""));
-            assert!(
-                answered.starts_with(&said("is compiled")),
-                "{question:?}: {answered}"
-            );
-        }
-    }
-}
-
-/// A file under a package that no `mod` reaches is in no unit, so it is checked on its own — written as a module, as a unit of its own — behind a note saying so and what would declare it, on a cold store and on a warm one alike, since placement walks the headers and not the record of a compile. Declaring it puts it in the library, and the note goes.
-#[test]
-fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
+fn a_file_no_mod_declares_is_checked_on_its_own() {
     let root = project("undeclared");
     write(&root, "stray.crs", "pub let w : /std/Str = 1;\n");
 
@@ -151,18 +106,10 @@ fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
     assert!(cold.status.success());
     let text = stdout(&cold);
     assert!(
-        text.starts_with("stray.crs is in no unit of `/app`"),
-        "{text}"
+        text.starts_with("type mismatch"),
+        "checked on its own, and nothing said of it: {text}"
     );
-    assert!(
-        text.contains("declare it with `mod stray;` in lib.crs"),
-        "{text}"
-    );
-    assert!(
-        !text.contains("stray.crs:1:1"),
-        "a note is its message alone: {text}"
-    );
-    assert!(text.contains("type mismatch"), "checked on its own: {text}");
+    assert!(text.contains("stray.crs:1:24"), "{text}");
 
     // Warm: the library is served from the store, and placement still walks the headers.
     let built = curios(&root, &["run", "app"], "");
@@ -172,19 +119,14 @@ fn a_file_no_mod_declares_is_checked_on_its_own_behind_a_note() {
         String::from_utf8_lossy(&built.stderr)
     );
     let warm = curios(&root, &["wonder", "stray.crs"], "");
-    assert!(
-        stdout(&warm).contains("is in no unit of `/app`"),
-        "{}",
-        stdout(&warm)
-    );
+    assert_eq!(stdout(&warm), text);
 
     write(&root, "lib.crs", "pub mod util;\npub mod stray;\n");
     let declared = curios(&root, &["wonder", "stray.crs"], "");
-    let text = stdout(&declared);
-    assert!(!text.contains("is in no unit"), "{text}");
     assert!(
-        text.contains("stray.crs:1:24"),
-        "its own error, read as the library's: {text}"
+        stdout(&declared).contains("stray.crs:1:24"),
+        "its own error, read as the library's: {}",
+        stdout(&declared)
     );
 }
 

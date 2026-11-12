@@ -56,7 +56,6 @@ fn the_error_shown_is_what_wonder_prints() {
             text: example,
         },
         declares: None,
-        unlinked: None,
     };
     let reports = diagnostics(
         DEFAULT_BUDGET,

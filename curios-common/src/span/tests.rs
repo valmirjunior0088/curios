@@ -150,8 +150,8 @@ fn the_panes_of_a_report_share_one_gutter() {
 #[test]
 fn a_report_closes_on_what_it_has_of_a_place() {
     assert_eq!(
-        Report::unlocated("the store is read-only").rendered(Kind::Note, &Style::plain()),
-        "the store is read-only\n╰─ note"
+        Report::unlocated("unused dependency").rendered(Kind::Lint, &Style::plain()),
+        "unused dependency\n╰─ lint"
     );
 
     let span = Span::new(Source::inline("x\n"), 0, 1);
@@ -183,7 +183,7 @@ fn a_painted_report_stripped_of_its_codes_is_the_plain_one() {
     )
     .stating("delete one");
 
-    for kind in [Kind::Error, Kind::Goal, Kind::Lint, Kind::Note] {
+    for kind in [Kind::Error, Kind::Goal, Kind::Lint] {
         let seen = report.rendered(kind, &painted);
         assert_eq!(stripped(&seen), report.rendered(kind, &Style::plain()));
         assert_eq!(

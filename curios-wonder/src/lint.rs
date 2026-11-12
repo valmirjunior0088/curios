@@ -43,25 +43,19 @@ pub fn lint(
     let reader = telling.reader();
     let mut reached = BTreeSet::new();
     let mut linted = Linted::default();
-    let mut unstored = None;
     for asked in Asked::every(selection)? {
         let Diagnosed {
             diagnostics,
             reached: unit_reached,
-            unfiled: refusal,
             ..
         } = asked.diagnosed(budget, &overlay, telling);
         reached.extend(unit_reached);
-        // The first, since every subject of a package asks one store.
-        unstored = unstored.or(refusal);
         for diagnostic in diagnostics {
             if seen.insert_rendered(diagnostic.rendered(&reader)) {
                 match diagnostic.severity {
                     Severity::Lint => linted.lints += 1,
                     Severity::Error => linted.errors += 1,
                     Severity::Goal => linted.goals += 1,
-                    // A note says how the question was answered, which is nothing to fix.
-                    Severity::Note => {}
                 }
             }
         }
@@ -83,10 +77,6 @@ pub fn lint(
         telling.answering();
         answer(format_args!("{}\n", seen.rendered.join("\n\n")));
     }
-    if let Some(unstored) = unstored {
-        telling.unfiled(unstored);
-    }
-
     Ok(linted)
 }
 

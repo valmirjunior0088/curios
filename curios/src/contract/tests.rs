@@ -208,13 +208,8 @@ impl Standing<'_> {
             .unwrap_or_default()
     }
 
-    /// A program as a row writes it: declared by its executable's name, or loose by its entry — marked when a package holds the file and declares it nowhere.
+    /// A program as a row writes it: declared by its executable's name, or loose by its entry.
     fn program(&self, program: &Program) -> String {
-        let unlinked = match program.unlinked() {
-            Some(_) => " unlinked",
-            None => "",
-        };
-
         match (program.home(), program.entry()) {
             (Some(home), _) => format!(
                 "program {}{}",
@@ -222,7 +217,7 @@ impl Standing<'_> {
                 self.through(program.through())
             ),
             (None, Entry::Stdin) => "loose -".to_string(),
-            (None, Entry::File(path)) => format!("loose {}{unlinked}", self.path(path)),
+            (None, Entry::File(path)) => format!("loose {}", self.path(path)),
         }
     }
 
@@ -377,7 +372,7 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, l
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: `run` takes a program, and a library is not one: name an executable or a program file
   work/app: util.crs → refused: `run` takes a program, and a library is not one: name an executable or a program file
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → refused: `run` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -423,7 +418,7 @@ compile SUBJECT --output out — Program (its own file), store Write, leaves Exe
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
   work/app: util.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -471,7 +466,7 @@ test SUBJECT — Any, store Write, leaves Nothing, options --target --port --fil
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -516,7 +511,7 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -562,7 +557,7 @@ wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --st
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -585,7 +580,7 @@ wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --c
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -608,7 +603,7 @@ wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests 
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: `wonder --cost` takes a program, and a library is not one: name an executable or a program file
   work/app: util.crs → refused: `wonder --cost` takes a program, and a library is not one: name an executable or a program file
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → refused: `wonder --cost` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -631,7 +626,7 @@ wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, o
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -654,7 +649,7 @@ wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --t
   work/app: bench.crs → program bench
   work/app: lib.crs → refused: `wonder --stage` takes a program, and a library is not one: name an executable or a program file
   work/app: util.crs → refused: `wonder --stage` takes a program, and a library is not one: name an executable or a program file
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → refused: `wonder --stage` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -677,7 +672,7 @@ wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, optio
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
@@ -700,7 +695,7 @@ wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing,
   work/app: bench.crs → program bench
   work/app: lib.crs → library app through lib.crs
   work/app: util.crs → library app through util.crs
-  work/app: stray.crs → loose stray.crs unlinked
+  work/app: stray.crs → loose stray.crs
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file

@@ -27,7 +27,6 @@ fn loose(text: &str) -> Subject {
             text: text.to_string(),
         },
         declares: None,
-        unlinked: None,
     }
 }
 

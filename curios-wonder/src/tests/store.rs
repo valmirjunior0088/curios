@@ -538,17 +538,16 @@ fn a_broken_declaration_over_a_baseline_is_its_own_record() {
     );
 }
 
-/// A store that cannot be written is named beside the answer, which is the one it would have been.
+/// A store that cannot be written costs nothing of the answer, which is the one it would have been, and holds why it took nothing for whoever narrates the compile.
 #[test]
-fn a_store_that_cannot_be_written_is_named_beside_the_answer() {
+fn a_store_that_cannot_be_written_answers_as_one_that_can() {
     let refused = mounted_project("unfiled-named");
     unwritable(&refused);
     let taken = mounted_project("unfiled-none");
     let overlay = Overlay::default();
     let asked = |root: &Path| {
         let store = Verdicts::at(root.to_path_buf());
-
-        diagnostics(
+        let answer = diagnostics(
             DEFAULT_BUDGET,
             Subject::Unit {
                 units: crate::overlaid(mounted(root), &overlay),
@@ -556,26 +555,23 @@ fn a_store_that_cannot_be_written_is_named_beside_the_answer() {
             &overlay,
             Some(&store),
             &mut |_| {},
-        )
+        );
+
+        (answer, store.refused())
     };
 
-    let answer = asked(&refused);
+    let (answer, refusal) = asked(&refused);
     assert!(answer.diagnostics.is_empty(), "{:?}", answer.diagnostics);
     assert!(
-        answer
-            .unfiled
+        refusal
             .as_deref()
             .is_some_and(|refusal| refusal.contains("verdicts")),
-        "the refusal names the slot it happened at: {:?}",
-        answer.unfiled
+        "the refusal names the slot it happened at: {refusal:?}"
     );
 
-    let answer = asked(&taken);
+    let (answer, refusal) = asked(&taken);
     assert!(answer.diagnostics.is_empty(), "{:?}", answer.diagnostics);
-    assert_eq!(
-        answer.unfiled, None,
-        "a store that took the units says nothing"
-    );
+    assert_eq!(refusal, None, "a store that took the units says nothing");
 }
 
 /// `/beta`'s library reading a name of `/alpha`'s, at the type `/alpha` first declares it.

@@ -13,8 +13,7 @@ use host::*;
 use {
     crate::{
         Access, Failure, Reporting, Run, Served, Steps, Subject, Then, Tree, Wrote, alone, bound,
-        cut, drained, keep, kept, note_unlinked, note_unstored, relayed, serve_run, total,
-        troubled, url,
+        cut, drained, keep, kept, relayed, serve_run, total, troubled, url,
     },
     curios::{TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Step},
@@ -109,9 +108,6 @@ pub fn run_tests(
     access: Access,
     filters: &[String],
 ) -> Result<bool, CompileError> {
-    if let Selection::Program(program) = &selection {
-        note_unlinked(program, "is tested");
-    }
     let mut printer = Printer::new(filters);
 
     for subject in test_subjects(selection, drained)? {
@@ -126,7 +122,7 @@ pub fn run_tests(
             Target::Native,
             Then::More,
         )?;
-        printer.took(store.as_ref(), &tested);
+        printer.took(&tested);
 
         let run = tested.loaded(&subject).map_err(CompileError::failure)?;
         printer.opened(tree, tested.modules());
@@ -262,8 +258,6 @@ pub struct Printer<'a> {
     matched: Vec<bool>,
     /// Every test the subjects compiled so far declare, selected or not: the paths a refused filter is answered with the nearest of.
     declared: Vec<Qualifier>,
-    /// The first reason a store refused filing, since a store nobody can write refuses every subject for one reason.
-    refusal: Option<String>,
 }
 
 impl<'a> Printer<'a> {
@@ -281,7 +275,6 @@ impl<'a> Printer<'a> {
             hand: None,
             matched: vec![false; filters.len()],
             declared: Vec::new(),
-            refusal: None,
         }
     }
 
@@ -290,12 +283,8 @@ impl<'a> Printer<'a> {
         &self.under
     }
 
-    /// Take what a subject's compile declared and which filters it selected a test under, and keep the first reason its store refused filing.
-    pub fn took(&mut self, store: Option<&Verdicts>, tested: &Tested) {
-        self.refusal = self
-            .refusal
-            .take()
-            .or_else(|| store.and_then(Verdicts::refused));
+    /// Take what a subject's compile declared and which filters it selected a test under.
+    pub fn took(&mut self, tested: &Tested) {
         for (prefix, matched) in self.under.iter().zip(&mut self.matched) {
             *matched |= !tested.unmatched().contains(prefix);
         }
@@ -385,13 +374,6 @@ impl<'a> Printer<'a> {
         self.settled();
     }
 
-    /// A store's refusal, said once.
-    pub fn unstored(&self) {
-        if let Some(refusal) = &self.refusal {
-            note_unstored(refusal);
-        }
-    }
-
     /// Refuse each filter no subject's compile selected a test under, by name.
     pub fn unmatched(&self) -> Result<(), CompileError> {
         let unmatched = self
@@ -418,9 +400,8 @@ impl<'a> Printer<'a> {
         self.totals.all_green()
     }
 
-    /// The end of a native run: a store's refusal said once, each filter that matched nothing refused by name, and the run's tally.
+    /// The end of a native run: each filter that matched nothing refused by name, and the run's tally.
     pub fn finish(self) -> Result<bool, CompileError> {
-        self.unstored();
         self.unmatched()?;
         self.finished();
 
@@ -438,9 +419,6 @@ pub fn serve_tests(
 ) -> Result<bool, Failure> {
     // Before the first line, so a page is sent the run whole.
     keep();
-    if let Selection::Program(program) = &selection {
-        note_unlinked(program, "is tested");
-    }
     let mut printer = Printer::new(filters);
     // Each served subject's tree and modules, in the order the runner opens its pages.
     let mut planned = VecDeque::new();
@@ -458,7 +436,7 @@ pub fn serve_tests(
             Target::Browser,
             Then::Nothing,
         )?;
-        printer.took(store.as_ref(), &tested);
+        printer.took(&tested);
 
         match tested.page(&subject)? {
             // Its tests are run once every subject is built and the address is said, so its build's tree ends here and its tests stand on one of their own.
@@ -474,8 +452,7 @@ pub fn serve_tests(
         }
     }
 
-    // What native says at its end is said before anything is served: a store's refusal, and a filter matching nothing, which ends the run.
-    printer.unstored();
+    // What native says at its end is said before anything is served: a filter matching nothing, which ends the run.
     printer.unmatched()?;
     let Some((tree, modules)) = planned.pop_front() else {
         printer.finished();

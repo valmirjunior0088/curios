@@ -14,8 +14,6 @@ pub enum Kind {
     Goal,
     /// An exact finding nothing stops on.
     Lint,
-    /// How a command took what it was asked.
-    Note,
 }
 
 impl Kind {
@@ -25,7 +23,6 @@ impl Kind {
             Kind::Error => "error",
             Kind::Goal => "goal",
             Kind::Lint => "lint",
-            Kind::Note => "note",
         }
     }
 

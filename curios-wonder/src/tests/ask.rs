@@ -20,14 +20,13 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
                 label: "<stdin>".to_string(),
                 text: text.to_string(),
             },
-            unlinked: None,
         },
         named: curios_package::Named::Stdin,
         manifest: None,
         store: None,
     };
 
-    let (same, _) = rendered(
+    let same = rendered(
         vec![asked("/std/print(nope)"), asked("/std/print(nope)")],
         DEFAULT_BUDGET,
         &Overlay::default(),
@@ -38,7 +37,7 @@ fn one_fact_reached_by_two_subjects_is_rendered_once() {
     };
     assert!(one.contains("`nope` is not in scope"), "{one}");
 
-    let (different, _) = rendered(
+    let different = rendered(
         vec![asked("/std/print(nope)"), asked("/std/print(other)")],
         DEFAULT_BUDGET,
         &Overlay::default(),

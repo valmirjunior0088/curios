@@ -49,7 +49,7 @@ mod pin;
 pub use pin::{Pinned, Pinning, Probe, Repoint, Subject, Transport, pin};
 
 mod selection;
-pub use selection::{Entire, Entry, Home, Library, Named, Program, Selection, Spelling, Unlinked};
+pub use selection::{Entire, Entry, Home, Library, Named, Program, Selection, Spelling};
 
 mod served;
 pub use served::Served;

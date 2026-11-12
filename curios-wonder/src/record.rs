@@ -11,8 +11,6 @@ pub enum Severity {
     Goal,
     /// An unused import, binder or declaration — see `curios_module::Lint`.
     Lint,
-    /// How the question was answered rather than anything wrong with the program: a file a package holds and none of its units declares, checked on its own.
-    Note,
 }
 
 impl Severity {
@@ -22,7 +20,6 @@ impl Severity {
             Severity::Error => Kind::Error,
             Severity::Goal => Kind::Goal,
             Severity::Lint => Kind::Lint,
-            Severity::Note => Kind::Note,
         }
     }
 }
@@ -46,17 +43,7 @@ impl Diagnosis {
 
     /// The diagnostic as a reader of `style` sees it: its report, a block closed by the word of what it is.
     pub fn rendered(&self, style: &Style) -> String {
-        match self.severity {
-            // A note's span is only the start of the file it already names, which is where an editor places it: code shown there would read as a refusal of the file's first line.
-            Severity::Note => Report {
-                span: None,
-                ..self.report.clone()
-            }
-            .rendered(Kind::Note, style),
-            Severity::Error | Severity::Goal | Severity::Lint => {
-                self.report.rendered(self.severity.kind(), style)
-            }
-        }
+        self.report.rendered(self.severity.kind(), style)
     }
 }
 

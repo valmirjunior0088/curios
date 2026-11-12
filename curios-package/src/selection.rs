@@ -13,12 +13,11 @@ mod tests;
 
 use {
     crate::{
-        EXECUTABLE, EXTENSION, Executable, Governing, LIBRARY, Package, Store, Target,
-        module_below, module_of, order, reachable,
+        EXECUTABLE, Executable, Governing, LIBRARY, Package, Store, Target, module_below,
+        module_of, order, reachable,
     },
     curios_common::{Qualifier, RootKind},
     curios_module::{Overlay, RootSource, identity, open_entrypoint, overlay_entrypoint},
-    curios_surface::Form,
     std::path::{Path, PathBuf},
 };
 
@@ -62,8 +61,8 @@ fn names_a_file(argument: &str) -> bool {
 
 /// What an argument selects.
 pub enum Selection {
-    /// The governing package entire.
-    Entire(Entire),
+    /// The governing package entire, boxed since it holds everything that governs the invocation where a program holds its own units alone.
+    Entire(Box<Entire>),
     /// A package's library.
     Library(Library),
     /// One program.
@@ -87,7 +86,7 @@ impl Selection {
                         manifest.display()
                     ));
                 }
-                None => Self::Program(Program::loose(Entry::Stdin, None)),
+                None => Self::Program(Program::loose(Entry::Stdin)),
             },
             Spelling::File(path) => placed(path, manifest, overlay)?,
             Spelling::Name(name) => {
@@ -99,7 +98,7 @@ impl Selection {
             Spelling::Nothing => {
                 let governing = Governing::found(manifest, directory)?;
                 governing.check_compiler()?;
-                Self::Entire(Entire { governing })
+                Self::Entire(Box::new(Entire { governing }))
             }
         })
     }
@@ -211,7 +210,6 @@ pub struct Program {
     entry: Entry,
     scope: Scope,
     through: Option<PathBuf>,
-    unlinked: Option<Unlinked>,
 }
 
 /// What a program is compiled against. Private, so a program is loose or declared by construction and never a loose one carrying a declared one's scope.
@@ -247,43 +245,13 @@ impl Home {
     }
 }
 
-/// Why a file a package's directory holds is in none of its units, and the note a command that takes it on its own opens with ([`Unlinked::note`]).
-#[derive(Debug, Clone)]
-pub struct Unlinked {
-    /// The file, as it was asked about.
-    pub file: PathBuf,
-    /// The name of the package whose directory holds it.
-    pub package: String,
-    /// What would put it in a unit as a module: the `mod` line and the file it goes in, or why nothing can declare it.
-    pub remedy: String,
-}
-
-impl Unlinked {
-    /// The note a command opens with where it takes the file on its own: that no unit of its package holds it, what the command does with it, which is `taken` — `was checked`, `is compiled` — and what would declare it.
-    ///
-    /// **What declares it follows the form it is written in**, a module by a `mod` line and a program by a row of its manifest, and never the command: a `mod` line over a file that ends in a term is refused, and so is a build of a file of items alone, so a remedy worded by the command names a declaration the file's form refuses. Said here, once, so every command that takes such a file says the same of it.
-    pub fn note(&self, taken: &str, form: Form) -> String {
-        let remedy = match form {
-            Form::Module => self.remedy.as_str(),
-            Form::Program => "an `[[executables]]` row in its manifest declares it",
-        };
-
-        format!(
-            "{} is in no unit of `/{}`, so it {taken} on its own against `/std`: {remedy}",
-            self.file.display(),
-            self.package
-        )
-    }
-}
-
 impl Program {
-    /// A program compiled against the prelude alone, carrying why a package that holds its file declares it nowhere.
-    fn loose(entry: Entry, unlinked: Option<Unlinked>) -> Self {
+    /// A program compiled against the prelude alone.
+    fn loose(entry: Entry) -> Self {
         Self {
             entry,
             scope: Scope::Loose,
             through: None,
-            unlinked,
         }
     }
 
@@ -330,11 +298,6 @@ impl Program {
         self.through.as_deref()
     }
 
-    /// Why its file is in none of the units of the package that holds it — `None` for a declared program, and for a loose one no package holds.
-    pub fn unlinked(&self) -> Option<&Unlinked> {
-        self.unlinked.as_ref()
-    }
-
     /// The units it is compiled against, predecessors first — none for a loose program.
     pub fn into_units(self) -> Vec<RootSource> {
         match self.scope {
@@ -376,14 +339,10 @@ fn program(governing: &Governing, executable: &Executable) -> Result<Program, St
             units: order(governing)?,
         },
         through: None,
-        unlinked: None,
     })
 }
 
-/// What a file whose spelling names no module is told.
-const UNSPELLED: &str = "its spelling names no module a `mod` could declare";
-
-/// `file`, placed in the unit whose `mod` chain declares it, and loose when none does.
+/// `file`, placed in the unit whose `mod` chain declares it, and loose when none does: a file its package's directory holds and no `mod` reaches is taken on its own, as one no package holds is.
 fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<Selection, String> {
     let spelled = identity(&file);
 
@@ -394,8 +353,6 @@ fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<S
     let directory = identity(&governing.directory);
 
     // A file is a unit's when its `mod` chain reaches it, and roots that sit in one directory share it: the package's directory holds the library's modules and those of every executable beside the manifest alike. Where a file sits says which roots may declare it, and only their chains say which does; the package's reading has already refused a file two of them reach.
-    let mut remedies = Vec::new();
-    let mut unspelled = false;
     for executable in &governing.package.executables {
         let entry = identity(&governing.directory.join(&executable.path));
         if spelled == entry {
@@ -403,34 +360,22 @@ fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<S
         }
 
         let namespace = RootSource::namespace_of(&entry);
-        if !spelled.starts_with(&namespace) {
-            continue;
-        }
-        let Some(module) = module_below(&namespace, &spelled) else {
-            unspelled = true;
-            continue;
-        };
-        if entry_declares(&entry, &module, overlay) {
+        let declared = spelled.starts_with(&namespace)
+            && module_below(&namespace, &spelled)
+                .is_some_and(|module| entry_declares(&entry, &module, overlay));
+        if declared {
             return Ok(Selection::Program(
                 program(&governing, executable)?.selected_through(file),
             ));
         }
-        remedies.push(declaration(
-            module.segments(),
-            &entry,
-            &directory,
-            |below| entry_declares(&entry, &Qualifier::from(below.to_vec()), overlay),
-        ));
     }
 
     // Everything else the package's directory holds is its library's to declare, when it has one.
     let header = directory.join(LIBRARY);
-    if header.is_file() {
-        let Some(module) = module_of(&governing.package, &directory, &spelled) else {
-            return Ok(unlinked(file, &governing, UNSPELLED.to_string()));
-        };
-
-        // Placement reads only the module chain: an unlinked file inherits neither this package's dependencies nor its compiler requirement.
+    if header.is_file()
+        && let Some(module) = module_of(&governing.package, &directory, &spelled)
+    {
+        // Placement reads only the module chain: a file no chain reaches inherits neither this package's dependencies nor its compiler requirement.
         let library = RootSource::mounted(
             &governing.package.name,
             RootKind::Ordinary,
@@ -455,80 +400,14 @@ fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<S
                 through: Some(file),
             }));
         }
-
-        // The library is the package's own namespace, so it leads what could declare the file.
-        let package = governing.package.name.clone();
-        remedies.insert(
-            0,
-            declaration(&module.segments()[1..], &header, &directory, |below| {
-                let mut segments = vec![package.clone()];
-                segments.extend(below.iter().cloned());
-                library
-                    .declares_module(&Qualifier::from(segments))
-                    .unwrap_or(true)
-            }),
-        );
     }
 
-    let remedy = match (remedies.is_empty(), unspelled) {
-        (false, _) => format!("declare it {}", remedies.join(", or ")),
-        (true, true) => UNSPELLED.to_string(),
-        (true, false) => format!(
-            "`/{}` has no library to declare it in",
-            governing.package.name
-        ),
-    };
-
-    Ok(unlinked(file, &governing, remedy))
+    Ok(loose(file))
 }
 
-/// `file`, loose, with no package to say anything about it.
+/// `file`, loose: a program compiled against the prelude alone.
 fn loose(file: PathBuf) -> Selection {
-    Selection::Program(Program::loose(Entry::File(file), None))
-}
-
-/// `file`, loose although `governing`'s package holds it, carrying `remedy` — what would put it in a unit.
-fn unlinked(file: PathBuf, governing: &Governing, remedy: String) -> Selection {
-    let unlinked = Unlinked {
-        file: file.clone(),
-        package: governing.package.name.clone(),
-        remedy,
-    };
-
-    Selection::Program(Program::loose(Entry::File(file), Some(unlinked)))
-}
-
-/// The `mod` lines that would declare the module `below` a root's mount from `header`: one for each link of the chain past the deepest module `declared` says the chain already reaches, each in the file its parent module is read from, the root's own links in `header`, named from `package`, the directory its reader works in — `with `mod tests;` in lib.crs and `mod io;` in tests.crs`.
-fn declaration(
-    below: &[String],
-    header: &Path,
-    package: &Path,
-    declared: impl Fn(&[String]) -> bool,
-) -> String {
-    let namespace = RootSource::namespace_of(header);
-    let reached = (1..below.len())
-        .rev()
-        .find(|depth| declared(&below[..*depth]))
-        .unwrap_or(0);
-
-    let links = (reached..below.len())
-        .map(|depth| {
-            let file = match depth {
-                0 => header.to_path_buf(),
-                _ => below[..depth - 1]
-                    .iter()
-                    .fold(namespace.clone(), |path, segment| path.join(segment))
-                    .join(format!("{}.{EXTENSION}", below[depth - 1])),
-            };
-            format!(
-                "`mod {};` in {}",
-                below[depth],
-                file.strip_prefix(package).unwrap_or(&file).display()
-            )
-        })
-        .collect::<Vec<_>>();
-
-    format!("with {}", links.join(" and "))
+    Selection::Program(Program::loose(Entry::File(file)))
 }
 
 /// Whether a `mod` chain from `entry` reaches `module`, reading `overlay`'s text before the disk. An entry that cannot be read or parsed places the file in its program anyway: the compilation reports that fault on its own account, and a file that only looks unlinked because its entry is broken is no finding.

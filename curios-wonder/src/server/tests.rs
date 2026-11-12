@@ -96,7 +96,6 @@ fn check(program: &str) -> Diagnosed {
                 text: program.to_string(),
             },
             declares: None,
-            unlinked: None,
         },
         &Overlay::default(),
         None,

@@ -10,7 +10,7 @@ use {
         STDIN_LABEL, Severity, Subject, Uncosted, Written, checked, cost, declared_tests,
         diagnostics, stage, unit_stage, written,
     },
-    curios_common::{Kind, Report, Span, Style},
+    curios_common::{Span, Style},
     curios_core::Declared,
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
@@ -61,9 +61,6 @@ pub trait Telling {
     /// An answer is about to be written on standard output.
     fn answering(&mut self);
 
-    /// The store took nothing of what the question compiled, for the reason given.
-    fn unfiled(&mut self, refusal: String);
-
     /// Whoever reads the answer on standard output: where they stand and whether they see colour, which is what a diagnostic of the answer is written for.
     fn reader(&self) -> Style;
 
@@ -82,8 +79,6 @@ impl Telling for Silent {
     fn ended(&mut self, _: Ended) {}
 
     fn answering(&mut self) {}
-
-    fn unfiled(&mut self, _: String) {}
 
     fn reader(&self) -> Style {
         Style::plain()
@@ -172,7 +167,6 @@ impl Asked {
             .home()
             .map(|home| Verdicts::at(home.root.clone()).executing(&home.package, &home.executable));
         let declares = program.declares();
-        let unlinked = program.unlinked().cloned();
         let named = program.named();
         let manifest = program.home().map(|home| home.manifest.clone());
 
@@ -181,7 +175,6 @@ impl Asked {
                 units: program.into_units(),
                 origin,
                 declares,
-                unlinked,
             },
             named,
             manifest,
@@ -218,7 +211,7 @@ impl Asked {
         (self.subject, self.store)
     }
 
-    /// Every diagnostic, goal and lint the subject reports, with what it reached and why its store took nothing, where it could not, `telling` told of the compile as it goes.
+    /// Every diagnostic, goal and lint the subject reports, with what it reached, `telling` told of the compile as it goes.
     pub fn diagnosed(self, budget: u64, overlay: &Overlay, telling: &mut dyn Telling) -> Diagnosed {
         let (subject, store) = self.taken(telling);
         let store = store.as_ref();
@@ -248,13 +241,13 @@ impl Asked {
         diagnosed
     }
 
-    /// Every test the subject declares, in declaration order, beside why its store took nothing, where it could not.
+    /// Every test the subject declares, in declaration order.
     pub fn tests(
         self,
         budget: u64,
         overlay: &Overlay,
         telling: &mut dyn Telling,
-    ) -> (Result<Vec<DeclaredTest>, CompileError>, Option<String>) {
+    ) -> Result<Vec<DeclaredTest>, CompileError> {
         let (subject, store) = self.taken(telling);
         let store = store.as_ref();
         let declared = declared_tests(budget, subject, overlay, store, &mut |progress| {
@@ -262,10 +255,10 @@ impl Asked {
         });
         telling.ended(Ended::of_compile(&declared));
 
-        (declared, refused(store))
+        declared
     }
 
-    /// The subject's rung `name`, handed to `shown` where the driver emits it, beside why its store took nothing, where it could not.
+    /// The subject's rung `name`, handed to `shown` where the driver emits it.
     pub fn staged(
         self,
         budget: u64,
@@ -273,7 +266,7 @@ impl Asked {
         name: &str,
         shown: impl FnMut(&str),
         telling: &mut dyn Telling,
-    ) -> (Result<Reached, Refusal>, Option<String>) {
+    ) -> Result<Reached, Refusal> {
         let (subject, store) = self.taken(telling);
         let cache = store.as_ref();
         let reached = stage(
@@ -291,16 +284,16 @@ impl Asked {
             _ => Ended::Done,
         });
 
-        (reached, refused(cache))
+        reached
     }
 
-    /// What the optimizer did to each of the subject's declarations, beside why its store took nothing, where it could not.
+    /// What the optimizer did to each of the subject's declarations.
     pub fn costed(
         self,
         budget: u64,
         overlay: &Overlay,
         telling: &mut dyn Telling,
-    ) -> (Result<Vec<Fate>, Uncosted>, Option<String>) {
+    ) -> Result<Vec<Fate>, Uncosted> {
         let (subject, store) = self.taken(telling);
         let cache = store.as_ref();
         let fates = cost(budget, subject, overlay, cache, &mut |progress| {
@@ -311,17 +304,17 @@ impl Asked {
             _ => Ended::Done,
         });
 
-        (fates, refused(cache))
+        fates
     }
 
-    /// What `file` of the subject writes, text by text, beside why its store took nothing, where it could not.
+    /// What `file` of the subject writes, text by text.
     pub fn written(
         self,
         budget: u64,
         overlay: &Overlay,
         file: &Path,
         telling: &mut dyn Telling,
-    ) -> (Result<Vec<Written>, Vec<Diagnosis>>, Option<String>) {
+    ) -> Result<Vec<Written>, Vec<Diagnosis>> {
         let (subject, store) = self.taken(telling);
         let cache = store.as_ref();
         let texts = written(budget, subject, file, overlay, cache, &mut |progress| {
@@ -332,11 +325,11 @@ impl Asked {
             Ok(_) => Ended::Done,
         });
 
-        (texts, refused(cache))
+        texts
     }
 }
 
-/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, a blank line between each, `telling` told of each subject's compile as it goes and why, where a store took nothing of what the question compiled.
+/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, a blank line between each, `telling` told of each subject's compile as it goes.
 pub fn wonder_diagnostics(
     budget: u64,
     selection: Selection,
@@ -346,15 +339,11 @@ pub fn wonder_diagnostics(
 
     let answers = Asked::every(selection)?;
 
-    let (reports, refusal) = rendered(answers, budget, &overlay, telling);
+    let reports = rendered(answers, budget, &overlay, telling);
     if !reports.is_empty() {
         telling.answering();
         answer(format_args!("{}\n", reports.join("\n\n")));
     }
-    if let Some(refusal) = refusal {
-        telling.unfiled(refusal);
-    }
-
     Ok(())
 }
 
@@ -366,18 +355,9 @@ pub fn wonder_tests(
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
-    let mut refusal = None;
     let mut listed = Ok(());
     for asked in Asked::every(selection).map_err(CompileError::failure)? {
-        // The answer is the list on standard output, so what is said of how the file was taken goes beside it.
-        if let Some(said) = asked.subject.said_unlinked(&overlay, "was checked") {
-            eprintln!(
-                "{}",
-                Report::unlocated(said).rendered(Kind::Note, &telling.bystander())
-            );
-        }
-        let (records, unstored) = asked.tests(budget, &overlay, telling);
-        refusal = refusal.or(unstored);
+        let records = asked.tests(budget, &overlay, telling);
         match records {
             Ok(records) => {
                 if !records.is_empty() {
@@ -393,16 +373,7 @@ pub fn wonder_tests(
             }
         }
     }
-    if let Some(refusal) = refusal {
-        telling.unfiled(refusal);
-    }
-
     listed
-}
-
-/// Why `store` took nothing of what a question compiled, where it could not be written: asked once the question's fold is over, since that is when the store has been handed anything, and whether or not the question was answered, since a store nobody can write is true either way.
-fn refused(store: Option<&Verdicts>) -> Option<String> {
-    store.and_then(Verdicts::refused)
 }
 
 /// Every answer's diagnostics, rendered, each distinct fact once.
@@ -410,35 +381,21 @@ fn refused(store: Option<&Verdicts>) -> Option<String> {
 /// **The subjects of a whole package overlap, and one fact is still one fact.** Every executable is compiled against the library, so a diagnostic in the library is reached by the library's own subject and again by each executable's — one unbound variable printed three times in a package declaring two programs, which is what an agent's one-error-at-a-time loop then walks through. Collapsing is safe because a rendering carries the source, the line and the column beneath the message: two that compare equal say the same thing about the same place, and two about different places never compare equal.
 ///
 /// The subjects themselves are still compiled apart, which is what keeps this a report about a package rather than about one compilation of it. What that costs — the library folded once per subject, answered from the store when there is one and recompiled when there is not — is the price of the same independence.
-///
-/// Beside them, the first reason a store gave for taking nothing of what an answer compiled: one store refuses every unit for one reason, and the subjects of a package share it.
 pub fn rendered(
     answers: Vec<Asked>,
     budget: u64,
     overlay: &Overlay,
     telling: &mut dyn Telling,
-) -> (Vec<String>, Option<String>) {
+) -> Vec<String> {
     let mut seen = BTreeSet::new();
-    let mut unfiled = None;
     let reader = telling.reader();
 
-    let reports = answers
+    answers
         .into_iter()
-        .flat_map(|asked| {
-            let Diagnosed {
-                diagnostics,
-                unfiled: refusal,
-                ..
-            } = asked.diagnosed(budget, overlay, telling);
-            unfiled = unfiled.take().or(refusal);
-
-            diagnostics
-        })
+        .flat_map(|asked| asked.diagnosed(budget, overlay, telling).diagnostics)
         .map(|diagnostic| diagnostic.rendered(&reader))
         .filter(|rendered| seen.insert(rendered.clone()))
-        .collect();
-
-    (reports, unfiled)
+        .collect()
 }
 
 /// What `wonder --stage` reprints a rung of: a program, at any rung, or a library through one of its files, at the rungs a unit has.
@@ -468,17 +425,11 @@ pub fn wonder_stage(
 
     let refusal = written_as_a_module(label_of(program.entry()));
     let asked = Asked::about_program(program).map_err(CompileError::failure)?;
-    if let Some(said) = asked.subject.said_unlinked(&overlay, "is compiled") {
-        eprintln!(
-            "{}",
-            Report::unlocated(said).rendered(Kind::Note, &telling.bystander())
-        );
-    }
 
     // The rung is the answer and goes to stdout, where the driver emits it: once every unit the program stands on is compiled, and before anything downstream of the rung is.
     let shown = |text: &str| answer(format_args!("{text}\n"));
-    let (reached, unstored) = asked.staged(budget, &overlay, name, shown, telling);
-    let answered = match reached {
+    let reached = asked.staged(budget, &overlay, name, shown, telling);
+    match reached {
         Ok(Reached::Rendered(rendering)) => {
             // What stopped the compilation after the rung is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
             let bystander = telling.bystander();
@@ -494,12 +445,7 @@ pub fn wonder_stage(
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
         Err(Refusal::Unit) => Err(CompileError::failure(refusal)),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
-    };
-    if let Some(unstored) = unstored {
-        telling.unfiled(unstored);
     }
-
-    answered
 }
 
 /// [`wonder_stage`] for a library: its unit's rung, reprinted, to stdout. The file the library was selected through is the one whose text the `text` rung reprints, and its header where it was selected through none.
@@ -531,18 +477,13 @@ fn library_stage(
         telling.answering();
         answer(format_args!("{rendered}\n"));
     }
-    let answered = match reached {
+    match reached {
         Ok(_) => Ok(()),
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
         // Whoever admits a library admits it at a rung a unit has, and refuses it at any other in its own words.
         Err(Refusal::Unit) => unreachable!("a library was admitted at a program's rung"),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
-    };
-    if let Some(unstored) = refused(Some(&store)) {
-        telling.unfiled(unstored);
     }
-
-    answered
 }
 
 /// The file of `library` a question about one file is about: the one it was selected through, or its header, which leads the files a library is written in.
@@ -656,27 +597,16 @@ fn for_names(
             (Asked::about_library(library), file)
         }
     };
-    if let Some(said) = asked.subject.said_unlinked(&overlay, "is read") {
-        eprintln!(
-            "{}",
-            Report::unlocated(said).rendered(Kind::Note, &telling.bystander())
-        );
-    }
 
-    let (texts, unstored) = asked.written(budget, &overlay, &file, telling);
-    let answered = match texts {
+    let texts = asked.written(budget, &overlay, &file, telling);
+    match texts {
         Ok(texts) => {
             telling.answering();
             answer(&texts);
             Ok(())
         }
         Err(diagnostics) => Err(stopped(diagnostics)),
-    };
-    if let Some(unstored) = unstored {
-        telling.unfiled(unstored);
     }
-
-    answered
 }
 
 /// One name as a row: the declaration's path, what it is declared as, and where its name is written, a tab between each — the place left out where no file holds it.
@@ -730,15 +660,9 @@ pub fn wonder_cost(
 
     let refusal = written_as_a_module(label_of(program.entry()));
     let asked = Asked::about_program(program).map_err(CompileError::failure)?;
-    if let Some(said) = asked.subject.said_unlinked(&overlay, "is compiled") {
-        eprintln!(
-            "{}",
-            Report::unlocated(said).rendered(Kind::Note, &telling.bystander())
-        );
-    }
 
-    let (fates, unstored) = asked.costed(budget, &overlay, telling);
-    let answered = match fates {
+    let fates = asked.costed(budget, &overlay, telling);
+    match fates {
         Ok(fates) => {
             telling.answering();
             for fate in fates {
@@ -755,12 +679,7 @@ pub fn wonder_cost(
         }
         Err(Uncosted::Unit) => Err(CompileError::failure(refusal)),
         Err(Uncosted::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
-    };
-    if let Some(unstored) = unstored {
-        telling.unfiled(unstored);
     }
-
-    answered
 }
 
 /// What stopped a question before it could answer, classified as the compile path classifies a build's failure — so goals alone are the incomplete state that exits 2, and anything refused beside them the failure that exits 1. The refusals come first, which is how a mixed failure says which reports are which; it renders as the reports did, a blank line between each.

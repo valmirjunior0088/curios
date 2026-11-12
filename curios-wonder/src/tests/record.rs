@@ -15,7 +15,6 @@ fn of(text: &str) -> Vec<crate::Diagnosis> {
                 label: "<stdin>".to_string(),
                 text: text.to_string(),
             },
-            unlinked: None,
         },
         &Overlay::default(),
         None,

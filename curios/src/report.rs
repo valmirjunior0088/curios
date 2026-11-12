@@ -26,7 +26,7 @@
 mod tests;
 
 use {
-    curios_common::{Kind, Qualifier, Report, Style},
+    curios_common::{Qualifier, Style},
     curios_package::Named,
     curios_wonder::STDIN_LABEL,
     std::{
@@ -186,14 +186,6 @@ impl fmt::Display for Subject {
             Self::Stdin => formatter.write_str(STDIN_LABEL),
         }
     }
-}
-
-/// How a command took what it was asked rather than anything it did for a subject: a line of its own under none, spelled as a question spells its note.
-pub fn note(text: impl fmt::Display) {
-    say(format_args!(
-        "{}\n",
-        Report::unlocated(text.to_string()).rendered(Kind::Note, reader())
-    ));
 }
 
 /// A step taken for no one subject, on a line of its own under none: `serve; http://127.0.0.1:8000/`, where what is served is every subject's.

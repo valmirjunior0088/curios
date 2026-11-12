@@ -799,9 +799,9 @@ fn diagnostics_on_a_broken_file_lists_every_refusal() {
     assert!(!text.contains("_b"), "{text}");
 }
 
-/// A server over a store it cannot write says so once, in a log message, and publishes what it would have.
+/// A server over a store it cannot write publishes what it would have, and says nothing of the store: the first message after a document opens is its check, and so is the one after an edit.
 #[test]
-fn the_server_logs_once_that_the_store_takes_nothing() {
+fn the_server_says_nothing_of_a_store_that_takes_nothing() {
     let root = project("unstored");
     // A file where the slots would go.
     write(&root, ".curios/verdicts", "");
@@ -813,21 +813,12 @@ fn the_server_logs_once_that_the_store_takes_nothing() {
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}"#, uri));
-    let logged = editor.receive();
-    assert!(logged.contains("window/logMessage"), "{logged}");
-    assert!(
-        logged.contains("what this session compiles is not stored"),
-        "{logged}"
-    );
     let published = editor.receive();
     assert!(published.contains(r#""diagnostics":[]"#), "{published}");
 
     editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"pub let word : /std/Str = \"placed again\";\n"}]}}"#, uri));
     let again = editor.receive();
-    assert!(
-        again.contains("textDocument/publishDiagnostics"),
-        "the second check says nothing more of the store: {again}"
-    );
+    assert!(again.contains("textDocument/publishDiagnostics"), "{again}");
 
     let output = editor.finish();
     assert!(
