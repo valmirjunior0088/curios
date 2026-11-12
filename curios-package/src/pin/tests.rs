@@ -37,6 +37,7 @@ fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
         "probe",
         &Repoint::Carried("foreign/probe.wasm".into()),
         false,
+        |_| {},
     )
     .expect("the module is carried");
 
@@ -76,6 +77,7 @@ fn a_gateway_is_pinned_into_the_browser_table() {
         "dom",
         &Repoint::Carried("web/dom.js".into()),
         false,
+        |_| {},
     )
     .expect("the gateway is carried");
 
@@ -127,6 +129,7 @@ fn an_inline_delivery_is_re_pinned_inline() {
         "probe",
         &Repoint::Carried("probe.wasm".into()),
         false,
+        |_| {},
     )
     .expect("the row is re-pinned");
 
@@ -152,6 +155,7 @@ fn pinning_a_row_to_what_it_already_says_writes_nothing() {
         "probe",
         &repoint,
         false,
+        |_| {},
     )
     .expect("the first pin writes");
     let after_first = fs::read_to_string(&governing.manifest).expect("read it back");
@@ -162,6 +166,7 @@ fn pinning_a_row_to_what_it_already_says_writes_nothing() {
         "probe",
         &repoint,
         false,
+        |_| {},
     )
     .expect("the second pin runs");
 
@@ -187,6 +192,7 @@ fn a_checked_pin_reports_what_it_would_write_and_writes_nothing() {
         "probe",
         &Repoint::Carried("probe.wasm".into()),
         true,
+        |_| {},
     )
     .expect("the check runs");
 
@@ -211,6 +217,7 @@ fn a_written_row_disturbs_nothing_beside_it() {
         "probe",
         &Repoint::Carried("probe.wasm".into()),
         false,
+        |_| {},
     )
     .expect("the module is carried");
 
@@ -233,6 +240,7 @@ fn repointing_a_module_to_a_url_clears_the_path_it_carried() {
         "probe",
         &Repoint::Carried("probe.wasm".into()),
         false,
+        |_| {},
     )
     .expect("the module is carried");
 
@@ -254,6 +262,7 @@ fn a_row_that_is_not_there_cannot_be_refreshed() {
         "absent",
         &Repoint::Refresh,
         false,
+        |_| {},
     )
     .expect_err("there is no row to re-pin");
 
@@ -277,6 +286,7 @@ fn a_module_outside_the_package_is_refused_as_no_plain_relative_path() {
         "probe",
         &Repoint::Carried("../elsewhere.wasm".into()),
         false,
+        |_| {},
     )
     .expect_err("a module is named from the manifest");
 
@@ -303,6 +313,7 @@ fn a_dependency_named_otherwise_than_it_declares_itself_is_refused() {
         "wrongname",
         &Repoint::Carried("../dep".into()),
         false,
+        |_| {},
     )
     .expect_err("a package is referred to by the name it declares");
 
@@ -325,6 +336,7 @@ fn a_row_with_no_hash_is_given_one_by_a_refresh() {
         "dom",
         &Repoint::Refresh,
         false,
+        |_| {},
     )
     .expect("the refresh writes the hash the refusal asked for");
 
@@ -349,6 +361,7 @@ fn a_row_naming_no_file_is_given_its_table_by_a_pin() {
         "dom",
         &Repoint::Carried("web/dom.js".into()),
         false,
+        |_| {},
     )
     .expect("the pin writes the table the row lacks");
 
@@ -370,6 +383,7 @@ fn a_pin_that_would_leave_the_manifest_unreadable_writes_nothing() {
         "dom",
         &Repoint::Carried("web/dom.js".into()),
         false,
+        |_| {},
     )
     .expect_err("the dependency row still lacks its hash");
 

@@ -34,7 +34,9 @@ use {
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost},
-    curios_package::{Entry, Pinning, Repoint, Spelling, Store, Target, curate, pin, scaffold},
+    curios_package::{
+        Entry, Fetch, Pinning, Repoint, Spelling, Store, Target, Transport, curate, pin, scaffold,
+    },
     curios_pipeline::CompileError,
     curios_surface::Formatted,
     curios_wonder::{
@@ -443,56 +445,114 @@ fn dispatch() -> Result<(), Failure> {
             )?;
         }
         Mode::New { directory } => {
-            for written in scaffold(&directory)? {
-                // A trailing separator is what tells a reader the first line is the directory the other two landed in.
-                match written.is_dir() {
-                    true => fact(Heading::Created, format!("{}/", written.display())),
-                    false => fact(Heading::Created, written.display()),
-                }
-            }
+            let written = scaffold(&directory)?;
+            // The directory is the subject, and each file a node spelled from inside it; the last node is the command that runs what was written.
+            let mut tree = Tree::of(&Subject::Directory(directory.clone()), None);
 
-            fact(
-                Heading::Try,
-                format!("cd {} && curios run", directory.display()),
-            );
+            for file in written.iter().filter(|written| !written.is_dir()) {
+                tree.open("write", false);
+                tree.outcome(file.strip_prefix(&directory).unwrap_or(file).display());
+            }
+            tree.open("try", true);
+            tree.outcome(format!("cd {} && curios run", directory.display()));
         }
         Mode::Curate { .. } => {
             let entire = contract.admit_entire(subject, manifest, &here()?)?;
 
-            // Past tense because it is: every round has fetched before the acquisitions come back to be reported.
-            let curated = curate(&entire.governing)?;
-            for acquisition in curated.packages {
-                fact(Heading::Fetched, Subject::package(&acquisition.name));
+            // The fetch in hand's tree, and whether its transport has delivered: each is a subject of its own, its one node open while it arrives.
+            let mut fetching: Option<(Tree, bool)> = None;
+            let begun = |subject: Subject| {
+                let mut tree = Tree::of(&subject, None);
+                tree.open("fetch", true);
+
+                Some((tree, false))
+            };
+            let curated = curate(&entire.governing, |fetch| match fetch {
+                Fetch::Package(acquisition) => {
+                    fetching = begun(Subject::package(&acquisition.name));
+                }
+                // After the packages, in the order they are brought in: a module is named by a manifest a tree had to arrive for.
+                Fetch::Module(acquisition) => {
+                    fetching = begun(Subject::Module(acquisition.name.clone()));
+                }
+                Fetch::Arrived => {
+                    if let Some((_, arrived)) = &mut fetching {
+                        *arrived = true;
+                    }
+                }
+                Fetch::Placed => {
+                    if let Some((mut tree, _)) = fetching.take() {
+                        tree.done();
+                    }
+                }
+            });
+            // A fetch that stopped closes its node with how: its transport failed where nothing arrived, and what arrived was refused where something did.
+            if let (Err(_), Some((mut tree, arrived))) = (&curated, fetching) {
+                tree.verdict(match arrived {
+                    true => "refused",
+                    false => "failed",
+                });
+                apart();
             }
-            // After the packages, in the order they were brought in: a module is named by a manifest a tree had to arrive for.
-            for acquisition in curated.modules {
-                fact(Heading::Fetched, Subject::Module(acquisition.name));
-            }
+            let curated = curated?;
+
+            total(
+                format!("{} fetched", curated.packages.len() + curated.modules.len()),
+                None,
+            );
         }
         Mode::Pin { row } => {
             // Found without reading the manifest's rows, since the row a pin repairs may be one the manifest cannot be read with yet: what is written is what is checked.
             let pinning = Pinning::found(manifest, &here()?)?;
             let (subject, name, repoint, check) = asked(row);
-            let pinned = pin(&pinning, subject, &name, &repoint, check)?;
-            let named = Subject::Module(name);
+            let foreign = matches!(subject, curios_package::Subject::Foreign(_));
+            let mut tree = Tree::of(&Subject::Module(name.clone()), None);
+            let mut fetched = false;
+            let pinned = pin(
+                &pinning,
+                subject,
+                &name,
+                &repoint,
+                check,
+                |delivery| match delivery {
+                    // The line stands open while a delivery arrives: a module's on a node of its own, which what arrived then closes, and a dependency's, which nothing describes, on the pin's.
+                    Transport::Asked => match foreign {
+                        true => tree.open("deliver", false),
+                        false => tree.open("pin", true),
+                    },
+                    Transport::Answered => fetched = true,
+                },
+            );
+            // A pin that stopped with a node open closes it with how: the transport failed where nothing arrived, and a rule refused what did. One refused before any delivery began has no node to close.
+            if pinned.is_err() && tree.is_open() {
+                tree.verdict(match fetched {
+                    true => "refused",
+                    false => "failed",
+                });
+                apart();
+            }
+            let pinned = pinned?;
 
             // Before what was written, because this is what the write is about to believe.
             if let Some(probe) = &pinned.probe {
-                fact(
-                    Heading::Delivered,
-                    format!("{named}: {} bytes, {}", probe.bytes, probe.kind),
-                );
+                // A carried module was read where it lies, with nothing to wait for.
+                if !tree.is_open() {
+                    tree.open("deliver", false);
+                }
+                tree.outcome(format!("{} bytes, {}", grouped(probe.bytes), probe.kind));
 
                 // What the row's `[foreign.answers]` may name as an export, read by compiling the module — which `curios-package` cannot do and this can, since the runtime is here. A module that will not compile reports why instead, and that is the more useful half of the answer. Bytes with no magic are not put to it: the line above has already answered, and wasmtime would answer again by printing both magic numbers byte by byte.
                 let read = |at| module_exports(&fs::read(at).map_err(|error| error.to_string())?);
                 match probe.magic.then(|| read(&probe.at)) {
                     None => {}
                     Some(Ok(exports)) if exports.is_empty() => {
-                        detail("exports: none — nothing here can answer a `foreign` declaration");
+                        tree.detail(
+                            "exports: none — nothing here can answer a `foreign` declaration",
+                        );
                     }
-                    Some(Ok(exports)) => detail(format!("exports: {}", exports.join(", "))),
+                    Some(Ok(exports)) => tree.detail(format!("exports: {}", exports.join(", "))),
                     // Onto one line, because a report is one fact per line and an engine's diagnostics are written for a terminal of their own.
-                    Some(Err(error)) => detail(format!(
+                    Some(Err(error)) => tree.detail(format!(
                         "will not compile: {}",
                         error.split_whitespace().collect::<Vec<_>>().join(" ")
                     )),
@@ -500,28 +560,25 @@ fn dispatch() -> Result<(), Failure> {
 
                 // Only for a fetch. A module the package carries arrived inside the tree its consumer pinned; one that came over the wire is vouched for by nothing until this row says what it must hash to.
                 if probe.fetched {
-                    detail(
+                    tree.detail(
                         "nothing verified this download — the hash below is derived from it, not checked against it",
                     );
                 }
             }
 
-            match pinned.fields.is_empty() {
+            if !tree.is_open() {
+                tree.open("pin", true);
+            }
+            tree.outcome(match (pinned.fields.is_empty(), pinned.wrote) {
                 // A row already saying what it was asked to say is the ordinary outcome of a second `pin`, and worth saying rather than passing in silence.
-                true => fact(Heading::Pinned, format!("{named}; unchanged")),
-                false => {
-                    let outcome = match pinned.wrote {
-                        true => "written",
-                        false => "would change",
-                    };
-
-                    fact(Heading::Pinned, format!("{named}; {outcome}"));
-                    for (key, before, after) in &pinned.fields {
-                        match before {
-                            Some(before) => detail(format!("{key}: {before} → {after}")),
-                            None => detail(format!("{key}: {after}")),
-                        }
-                    }
+                (true, _) => "unchanged",
+                (false, true) => "recorded",
+                (false, false) => "would change",
+            });
+            for (key, before, after) in &pinned.fields {
+                match before {
+                    Some(before) => tree.detail(format!("{key}: {before} → {after}")),
+                    None => tree.detail(format!("{key}: {after}")),
                 }
             }
 
@@ -552,48 +609,82 @@ fn dispatch() -> Result<(), Failure> {
                 .collect::<Result<Vec<_>, _>>()?;
 
             // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
-            let mut dirty = Vec::new();
+            //
+            // A file that changes is a subject, its one node saying what became of it; one that does not is counted, and the count is the last line. Standard input formatted onto standard output is an answer, of which nothing is said.
+            let (mut changed, mut unchanged, mut counted) = (0usize, 0usize, false);
             let mut rewritten = BTreeSet::new();
+            let becomes = match check {
+                true => "would change",
+                false => "rewritten",
+            };
             for admitted in admitted {
                 match admitted {
                     // Standard input is answered on standard output, whole, so a pipe gets the canonical text whether or not anything moved.
                     Rewritten::Stdin(width) => {
                         let text = io::read_to_string(io::stdin())
                             .map_err(|error| format!("failed to read standard input: {error}"))?;
-                        match Formatted::from_source(&Source::labelled(STDIN_LABEL, &text), width)?
-                        {
-                            Formatted::Changed(_) if check => {
-                                dirty.push(Spelling::STDIN.to_string())
+                        let formatted =
+                            Formatted::from_source(&Source::labelled(STDIN_LABEL, &text), width)?;
+
+                        match (check, formatted) {
+                            (true, Formatted::Changed(_)) => {
+                                let mut tree = Tree::of(&Subject::Stdin, None);
+                                tree.open("format", true);
+                                tree.outcome(becomes);
+                                changed += 1;
+                                counted = true;
                             }
-                            Formatted::Unchanged(_) if check => {}
-                            Formatted::Changed(text) | Formatted::Unchanged(text) => {
-                                print!("{text}")
+                            (true, Formatted::Unchanged(_)) => {
+                                unchanged += 1;
+                                counted = true;
+                            }
+                            (false, Formatted::Changed(text) | Formatted::Unchanged(text)) => {
+                                print!("{text}");
                             }
                         }
                     }
                     Rewritten::Files(paths, width) => {
+                        counted = true;
                         // Two subjects naming one file rewrite it once.
                         for path in paths
                             .into_iter()
                             .filter(|path| rewritten.insert(path.clone()))
                         {
-                            match Formatted::from_path(&path, width)? {
-                                Formatted::Unchanged(_) => {}
-                                Formatted::Changed(text) => match check {
-                                    true => dirty.push(path.display().to_string()),
-                                    false => fs::write(&path, text)
-                                        .map_err(|error| format!("{}: {error}", path.display()))?,
-                                },
+                            let subject = Subject::File(PathBuf::from(from_here(&path)));
+                            let formatted =
+                                Formatted::from_path(&path, width).inspect_err(|_| {
+                                    // A file that cannot be formatted is refused, its tree said ahead of why.
+                                    let mut tree = Tree::of(&subject, None);
+                                    tree.open("format", true);
+                                    tree.outcome("refused");
+                                    apart();
+                                })?;
+
+                            match formatted {
+                                Formatted::Unchanged(_) => unchanged += 1,
+                                Formatted::Changed(text) => {
+                                    let mut tree = Tree::of(&subject, None);
+                                    tree.open("format", true);
+                                    let written = match check {
+                                        true => Ok(()),
+                                        false => fs::write(&path, text).map_err(|error| {
+                                            format!("{}: {error}", path.display())
+                                        }),
+                                    };
+                                    tree.stands(written, becomes)?;
+                                    changed += 1;
+                                }
                             }
                         }
                     }
                 }
             }
-            if !dirty.is_empty() {
-                return Err(Failure::Error(format!(
-                    "would reformat: {}",
-                    dirty.join(", ")
-                )));
+            if counted {
+                total(format!("{changed} {becomes}, {unchanged} unchanged"), None);
+            }
+            // `--check` is the question, and its answer is the exit code.
+            if check && changed > 0 {
+                return Err(Failure::Concluded(Concluded::Failed));
             }
         }
         Mode::Wonder {

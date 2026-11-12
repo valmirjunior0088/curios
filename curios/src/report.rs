@@ -84,6 +84,8 @@ pub enum Subject {
     Module(String),
     /// A file, as it was written on the command line or as it landed on disk.
     File(PathBuf),
+    /// A directory, as it was written: the separator it is shown closed by is what tells a reader the nodes beneath are what landed in it.
+    Directory(PathBuf),
     /// The program on standard input, which was asked for as `-` and is reported as what that means: a `-` alone on a line reads as one the compiler failed to finish writing.
     Stdin,
 }
@@ -102,6 +104,11 @@ impl fmt::Display for Subject {
             Self::Mounted(prefix) => formatter.write_str(&prefix.join()),
             Self::Executable(name) | Self::Module(name) => formatter.write_str(name),
             Self::File(path) => write!(formatter, "{}", path.display()),
+            Self::Directory(path) => write!(
+                formatter,
+                "{}/",
+                path.display().to_string().trim_end_matches('/')
+            ),
             Self::Stdin => formatter.write_str(STDIN_LABEL),
         }
     }
@@ -209,6 +216,11 @@ pub fn total(text: impl fmt::Display, taken: Option<Duration>) {
     }
 }
 
+/// A blank line, between a tree and the report of what stopped it.
+pub fn apart() {
+    say("\n");
+}
+
 /// End the line of the node standing open, where what it names is about to write of its own: its outcome then closes it beneath ([`Tree::ended`]). Free of any tree because whoever sees the write holds none: a test's host, which runs where the test does.
 pub fn cut() {
     say("\n");
@@ -220,13 +232,6 @@ pub fn unfiled(refusal: String) {
         Heading::Skipped,
         format!("storing what this compiled; {refusal}"),
     );
-}
-
-/// One detail of the line above, in the columns a heading would occupy — the keys a `pin` wrote, under the row it wrote them into.
-///
-/// Headingless because it is not a thing that happened, which is what every heading names; it is part of what the line above already reported.
-pub fn detail(text: impl fmt::Display) {
-    say(format_args!("{:<HEADING_WIDTH$}  {text}\n", ""));
 }
 
 /// `manifest` as a reader standing in `here` would spell it: nothing when it sits right there, a climb of `../` when it sits above, and the path itself anywhere else — `--manifest` can name a file off to the side.
@@ -331,6 +336,8 @@ pub struct Tree {
     governed: bool,
     /// When the open node's work began, where one is open.
     opened: Option<Instant>,
+    /// Whether the node last opened is the last its tree plans, which is whether the trunk goes on beside what stands beneath it.
+    last: bool,
 }
 
 impl Tree {
@@ -348,6 +355,7 @@ impl Tree {
                 None => subject.to_string(),
             }),
             opened: None,
+            last: false,
         }
     }
 
@@ -376,6 +384,15 @@ impl Tree {
             }
         ));
         self.opened = Some(Instant::now());
+        self.last = last;
+    }
+
+    /// One line of what the node last closed came to, beneath it and beside the trunk where the trunk goes on: the keys a `pin` wrote, under the node that wrote them.
+    pub fn detail(&mut self, text: impl fmt::Display) {
+        match self.last {
+            true => say(format_args!("     {text}\n")),
+            false => say(format_args!("{TRUNK}    {text}\n")),
+        }
     }
 
     /// Whether a node is open: its label written and its outcome not yet.
@@ -405,7 +422,7 @@ impl Tree {
             Ok(()) => self.outcome(place),
             Err(_) => {
                 self.verdict("failed");
-                say("\n");
+                apart();
             }
         }
 
@@ -450,6 +467,20 @@ impl Tree {
     fn taken(&mut self) -> String {
         seconds(self.opened.take().map_or(Duration::ZERO, |at| at.elapsed()))
     }
+}
+
+/// A count as the transcript spells one, its thousands apart: `4,312`.
+pub fn grouped(count: u64) -> String {
+    let digits = count.to_string();
+
+    digits
+        .char_indices()
+        .flat_map(|(at, digit)| {
+            let apart = at > 0 && (digits.len() - at).is_multiple_of(3);
+
+            apart.then_some(',').into_iter().chain([digit])
+        })
+        .collect()
 }
 
 /// A time as the transcript spells one: seconds, to a tenth.

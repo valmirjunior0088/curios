@@ -102,7 +102,7 @@ fn a_live_project_acquires_nothing() {
 
     let governing = Governing::of(&root.join("app")).unwrap();
 
-    assert!(curate(&governing).unwrap().is_empty());
+    assert!(curate(&governing, |_| {}).unwrap().is_empty());
 }
 
 /// A pin of a name the umbrella enumerates is refused by `order` as a direct pin of a live member; the walk declines to fetch on its behalf first, so a refused row costs no network round trip.
@@ -127,7 +127,7 @@ fn a_pin_of_a_live_member_is_not_acquired() {
 
     let governing = Governing::of(&root.join("app")).unwrap();
 
-    assert!(curate(&governing).unwrap().is_empty());
+    assert!(curate(&governing, |_| {}).unwrap().is_empty());
 }
 
 /// **A fetchable catalog row is acquired.** A marker resolved *after* the dispatch that decides what to fetch would land in the store at a hash nothing had put there: `curate` would acquire nothing, `order` would refuse the dependency naming `curate`, and running it would change nothing — a dead end whose error message names the command that cannot escape it.
@@ -226,7 +226,7 @@ fn a_fetched_revision_is_verified_and_placed() {
         },
     };
 
-    fetch(&Store::at(root.to_path_buf()), &acquisition)
+    fetch(&Store::at(root.to_path_buf()), &acquisition, || {})
         .expect("a revision this machine is serving");
 
     let placed = Store::at(root.to_path_buf()).source(&expected);
@@ -304,6 +304,7 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
     let refusal = fetch(
         &Store::at(root.to_path_buf()),
         &pinned(&origin, absent, &expected),
+        || {},
     )
     .expect_err("a revision this remote does not hold");
 
@@ -343,7 +344,7 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
             }
         }
 
-        fetch(&store, &pinned(&origin, rev, &expected)).unwrap_or_else(|refusal| {
+        fetch(&store, &pinned(&origin, rev, &expected), || {}).unwrap_or_else(|refusal| {
             panic!("{rev} names a revision this remote holds: {refusal}")
         });
         assert!(store.source(&expected).join("lib.crs").is_file(), "{rev}");
@@ -406,7 +407,7 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
     );
 
     let governing = Governing::of(&root.join("app")).unwrap();
-    let fetched = curate(&governing).expect("a snapshot both mirrors serve");
+    let fetched = curate(&governing, |_| {}).expect("a snapshot both mirrors serve");
 
     assert_eq!(fetched.packages.len(), 1, "{fetched:?}");
     assert!(
@@ -442,7 +443,7 @@ fn a_fetched_module_matching_its_pin_is_placed() {
     };
 
     let store = Store::at(root.to_path_buf());
-    fetch_module(&store, &acquisition).expect("a delivery matching its pin");
+    fetch_module(&store, &acquisition, || {}).expect("a delivery matching its pin");
 
     assert_eq!(fs::read(store.foreign(&hash)).unwrap(), b"\0asm\x01\0\0\0");
 }
@@ -467,7 +468,8 @@ fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
     };
 
     let store = Store::at(root.to_path_buf());
-    let refusal = fetch_module(&store, &acquisition).expect_err("a delivery failing its pin");
+    let refusal =
+        fetch_module(&store, &acquisition, || {}).expect_err("a delivery failing its pin");
 
     assert!(refusal.contains("is not what it is pinned to"), "{refusal}");
     assert!(

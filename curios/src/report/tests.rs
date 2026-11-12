@@ -1,6 +1,15 @@
-//! How the paths a report names are spelled from where the invocation stands.
+//! How the paths and the counts a report names are spelled.
 
 use {super::*, std::path::Path};
+
+#[test]
+fn a_count_is_spelled_with_its_thousands_apart() {
+    assert_eq!(grouped(0), "0");
+    assert_eq!(grouped(999), "999");
+    assert_eq!(grouped(4312), "4,312");
+    assert_eq!(grouped(1_000_000), "1,000,000");
+    assert_eq!(grouped(12_345_678), "12,345,678");
+}
 
 /// A manifest beside the invocation goes unsaid, one above it is a climb from where the reader stands, and one off to the side is its own path.
 #[test]

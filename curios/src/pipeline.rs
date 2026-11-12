@@ -3,7 +3,7 @@
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher or writes it beside a page. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Subject, Tree, note},
+    crate::{Subject, Tree, apart, note},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
     curios_common::Source,
@@ -390,7 +390,7 @@ impl<'a> Steps<'a> {
                     _ if emitting => tree.verdict("failed"),
                     _ => tree.verdict("refused"),
                 }
-                eprintln!();
+                apart();
             }
         }
     }

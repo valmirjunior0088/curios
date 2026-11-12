@@ -88,12 +88,24 @@ impl Curated {
     }
 }
 
-/// Bring every snapshot the governing package reaches into the store, and then every foreign module the manifests now readable name.
+/// One fetch of a `curate`, as whoever narrates it is told: what is about to be fetched, that its transport delivered it, and that it was held to its pin and placed. A fetch that stops says nothing more: its error is `curate`'s, and how far it had come says whether the transport failed or what it brought was refused.
+pub enum Fetch<'a> {
+    /// A package's tree is about to be fetched.
+    Package(&'a Acquisition),
+    /// A foreign module is about to be fetched.
+    Module(&'a ModuleAcquisition),
+    /// The transport delivered what was just announced, which nothing has judged yet.
+    Arrived,
+    /// What arrived is what was pinned, and is in the store.
+    Placed,
+}
+
+/// Bring every snapshot the governing package reaches into the store, and then every foreign module the manifests now readable name, `told` of each fetch as it goes.
 ///
 /// Iterated to a fixed point rather than walked once, because a dependency's own dependencies cannot be read until it is there: each round materializes what the manifests currently reachable declare, and the next round sees further. A round that fetches nothing new is the end of it — and a round that fetches without revealing anything is impossible, since a fetched tree either has a manifest or is refused for having none.
 ///
 /// Modules come after, in one pass. A fetched module is a file and declares nothing, so it can reveal no further rows — which is what lets this be a pass rather than another fixed point.
-pub fn curate(governing: &Governing) -> Result<Curated, String> {
+pub fn curate(governing: &Governing, mut told: impl FnMut(Fetch<'_>)) -> Result<Curated, String> {
     let store = governing.store();
     let mut curated = Curated::default();
 
@@ -117,7 +129,9 @@ pub fn curate(governing: &Governing) -> Result<Curated, String> {
                 continue;
             }
 
-            fetch(&store, &acquisition)?;
+            told(Fetch::Package(&acquisition));
+            fetch(&store, &acquisition, || told(Fetch::Arrived))?;
+            told(Fetch::Placed);
             curated.packages.push(acquisition);
         }
     };
@@ -128,7 +142,9 @@ pub fn curate(governing: &Governing) -> Result<Curated, String> {
             continue;
         }
 
-        fetch_module(&store, &acquisition)?;
+        told(Fetch::Module(&acquisition));
+        fetch_module(&store, &acquisition, || told(Fetch::Arrived))?;
+        told(Fetch::Placed);
         curated.modules.push(acquisition);
     }
 
@@ -240,7 +256,11 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
 /// **Shelled out, as `git` is, and for the reason the module doc gives.** Acceptance is by hash, so any transport may deliver the bytes — which makes the one already installed the right one to use rather than an HTTP client vendored into this crate. What `curate` owns is the criterion, not the download.
 ///
 /// The scratch path is keyed by the digest the row states rather than by what arrives, so a delivery that fails its hash is removed and nothing is ever filed under a key it does not have.
-fn fetch_module(store: &Store, acquisition: &ModuleAcquisition) -> Result<(), String> {
+fn fetch_module(
+    store: &Store,
+    acquisition: &ModuleAcquisition,
+    arrived: impl FnOnce(),
+) -> Result<(), String> {
     let placed = store.foreign(&acquisition.hash);
     let scratch = placed.with_extension("fetching");
 
@@ -254,8 +274,11 @@ fn fetch_module(store: &Store, acquisition: &ModuleAcquisition) -> Result<(), St
         "the foreign module {} of {}",
         acquisition.name, acquisition.package
     );
-    let outcome = deliver_module(&scratch, &acquisition.url, &subject)
-        .and_then(|()| accept_module(&scratch, &placed, acquisition));
+    let outcome = deliver_module(&scratch, &acquisition.url, &subject).and_then(|()| {
+        arrived();
+
+        accept_module(&scratch, &placed, acquisition)
+    });
 
     if outcome.is_err() {
         let _ = fs::remove_file(&scratch);
@@ -366,14 +389,17 @@ fn catalogued<'a>(governing: &'a Governing, name: &str) -> Option<&'a Dependency
 /// Fetch `acquisition`, verify it, and place it — in that order, and only in that order.
 ///
 /// The tree is hashed where it lands temporarily and moved into the store only once it has been accepted, so a failed or interrupted fetch cannot leave a directory the store would later read as a verified delivery.
-fn fetch(store: &Store, acquisition: &Acquisition) -> Result<(), String> {
+fn fetch(store: &Store, acquisition: &Acquisition, arrived: impl FnOnce()) -> Result<(), String> {
     let scratch = store.source(acquisition.hash()).with_extension("fetching");
     let _ = fs::remove_dir_all(&scratch);
     fs::create_dir_all(&scratch)
         .map_err(|error| format!("failed to create {}: {error}", scratch.display()))?;
 
-    let outcome = deliver(&scratch, &acquisition.url, &acquisition.snapshot.rev)
-        .and_then(|()| accept(&scratch, store, acquisition));
+    let outcome = deliver(&scratch, &acquisition.url, &acquisition.snapshot.rev).and_then(|()| {
+        arrived();
+
+        accept(&scratch, store, acquisition)
+    });
 
     if outcome.is_err() {
         let _ = fs::remove_dir_all(&scratch);

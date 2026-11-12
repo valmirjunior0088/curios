@@ -15,7 +15,7 @@ pub use compiler::compiler;
 
 mod curate;
 use curate::*;
-pub use curate::{Acquisition, Curated, ModuleAcquisition, curate, declared_modules};
+pub use curate::{Acquisition, Curated, Fetch, ModuleAcquisition, curate, declared_modules};
 
 mod format;
 pub use format::FormatSettings;
@@ -46,7 +46,7 @@ mod new;
 pub use new::scaffold;
 
 mod pin;
-pub use pin::{Pinned, Pinning, Probe, Repoint, Subject, pin};
+pub use pin::{Pinned, Pinning, Probe, Repoint, Subject, Transport, pin};
 
 mod selection;
 pub use selection::{Entire, Entry, Home, Library, Program, Selection, Spelling, Unlinked};

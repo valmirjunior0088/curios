@@ -222,6 +222,15 @@ impl Probe {
     }
 }
 
+/// The one part of a pin that waits on something else, the transport a delivery is fetched through, as whoever narrates the pin is told of it. A pin of what the package carries, or of a sibling on disk, fetches nothing and tells nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Transport {
+    /// The transport is about to be asked.
+    Asked,
+    /// It delivered, and nothing has judged what it brought yet.
+    Answered,
+}
+
 /// What one `curios pin` settled.
 #[derive(Debug)]
 pub struct Pinned {
@@ -244,7 +253,7 @@ impl Pinned {
     }
 }
 
-/// Write what `repoint` says the row `name` should state, answering what changed.
+/// Write what `repoint` says the row `name` should state, answering what changed, `told` of the delivery it fetches where it fetches one.
 ///
 /// **Nothing is written when nothing differs**, so pinning a row to what it already says is a no-op that reports one, and `check` turns the whole thing into a question — the delivery still happens, because what a row *should* say cannot be known without it, and only the write is withheld.
 ///
@@ -255,6 +264,7 @@ pub fn pin(
     name: &str,
     repoint: &Repoint,
     check: bool,
+    mut told: impl FnMut(Transport),
 ) -> Result<Pinned, String> {
     let text = fs::read_to_string(&pinning.manifest)
         .map_err(|error| format!("failed to read {}: {error}", pinning.manifest.display()))?;
@@ -273,8 +283,10 @@ pub fn pin(
     }
 
     let settled = match subject {
-        Subject::Foreign(target) => settled_foreign(pinning, target, name, repoint, &before)?,
-        Subject::Dependency => settled_dependency(pinning, name, repoint, &before)?,
+        Subject::Foreign(target) => {
+            settled_foreign(pinning, target, name, repoint, &before, &mut told)?
+        }
+        Subject::Dependency => settled_dependency(pinning, name, repoint, &before, &mut told)?,
     };
 
     // What the row says now, against what it would say — so a second identical pin has nothing to write and says so.
@@ -463,10 +475,13 @@ fn fetched_module(
     url: &str,
     subject: &str,
     target: Target,
+    told: &mut dyn FnMut(Transport),
 ) -> Result<(FileHash, Probe), String> {
     let staged = Staged::new(store)?;
 
+    told(Transport::Asked);
     deliver_module(staged.path(), url, subject)?;
+    told(Transport::Answered);
 
     let bytes = fs::read(staged.path())
         .map_err(|error| format!("failed to read what was fetched from {url}: {error}"))?;
@@ -479,12 +494,19 @@ fn fetched_module(
 }
 
 /// Fetch `rev` of `url` and file the tree under the digest it turns out to have, answering that digest and the package it declares itself to be.
-fn fetched_tree(store: &Store, url: &str, rev: &str) -> Result<(TreeHash, String), String> {
+fn fetched_tree(
+    store: &Store,
+    url: &str,
+    rev: &str,
+    told: &mut dyn FnMut(Transport),
+) -> Result<(TreeHash, String), String> {
     let staged = Staged::new(store)?;
 
     fs::create_dir_all(staged.path())
         .map_err(|error| format!("failed to create {}: {error}", staged.path().display()))?;
+    told(Transport::Asked);
     deliver(staged.path(), url, rev)?;
+    told(Transport::Answered);
 
     let hash = TreeHash::of(staged.path())?;
     let declared = declares(staged.path())?;
@@ -563,6 +585,7 @@ fn settled_foreign(
     name: &str,
     repoint: &Repoint,
     document: &DocumentMut,
+    told: &mut dyn FnMut(Transport),
 ) -> Result<Settled, String> {
     let store = pinning.store();
     let carried = |path: &Path| -> Result<Settled, String> {
@@ -586,9 +609,14 @@ fn settled_foreign(
         })
     };
 
-    let fetched = |url: &str| -> Result<Settled, String> {
-        let (hash, probe) =
-            fetched_module(&store, url, &format!("the foreign module {name:?}"), target)?;
+    let mut fetched = |url: &str| -> Result<Settled, String> {
+        let (hash, probe) = fetched_module(
+            &store,
+            url,
+            &format!("the foreign module {name:?}"),
+            target,
+            told,
+        )?;
 
         Ok(Settled {
             fields: vec![
@@ -631,6 +659,7 @@ fn settled_dependency(
     name: &str,
     repoint: &Repoint,
     document: &DocumentMut,
+    told: &mut dyn FnMut(Transport),
 ) -> Result<Settled, String> {
     let store = pinning.store();
     let agreed = |declared: &str, at: &str| -> Result<(), String> {
@@ -643,8 +672,8 @@ fn settled_dependency(
         }
     };
 
-    let fetched = |url: &str, rev: &str| -> Result<Settled, String> {
-        let (hash, declared) = fetched_tree(&store, url, rev)?;
+    let mut fetched = |url: &str, rev: &str| -> Result<Settled, String> {
+        let (hash, declared) = fetched_tree(&store, url, rev, told)?;
         agreed(&declared, &format!("{url} at {rev}"))?;
 
         Ok(Settled {

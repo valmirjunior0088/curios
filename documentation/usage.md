@@ -289,6 +289,18 @@ curios curate
 
 It reaches the network through programs already on the machine ([why](../curios-package/README.md#a-pin-is-derived-by-one-command-and-checked-everywhere-else)). A package tree comes through `git`, and a `[[foreign]]` module through `curl` or `wget`, whichever is on `PATH`. A project with no `[[foreign]]` row that names a `url` needs neither of those two; one that has one and has neither installed is refused naming the module and both programs.
 
+Each fetch is a subject of its own — a package by the prefix it mounts, a module by its row's name — whose one node stands open while it arrives, and the last line counts what was brought in, `0 fetched` where the store already held everything:
+
+```text
+/json
+╰─ fetch; 1.4s
+sha2
+╰─ fetch; 0.3s
+2 fetched
+```
+
+A fetch whose transport fails closes as `fetch; failed in 2.0s`, and one whose delivery is not what its row pins as `fetch; refused in 1.4s`; why follows the tree, and nothing after it is fetched.
+
 ## `pin`
 
 ```sh
@@ -327,15 +339,19 @@ Exactly one delivery form is required. `--path` and `--url` say where the row po
 
 What was fetched is filed in the store under the digest it turns out to have, so the `curate` that follows finds it there.
 
-A module is described before its pin is written. What arrived is reported first — its size, whether it is a WebAssembly module, and **what it exports**, which is what a `[foreign.answers]` entry may name as the export that answers a declaration:
+The row is the subject, by its name. A module is described before its pin is written: what arrived is a node of its own, `deliver`, open while a fetch arrives and closed by its size and whether it is a WebAssembly module, with **what it exports** beneath, which is what a `[foreign.answers]` entry may name as the export that answers a declaration. The `pin` node closes the tree with what became of the row — `recorded` where the manifest was written, `unchanged` where the row already said so, `would change` under `--check` — and each key it set beneath, beside what the key said before where it said anything:
 
-```
-Delivered      sha2: 12484 bytes, a WebAssembly module
-                 exports: alloc, memory, SHA256_Digest
-                 nothing verified this download — the hash below is derived from it, not checked against it
+```text
+sha2
+├─ deliver; 12,484 bytes, a WebAssembly module
+│    exports: alloc, memory, SHA256_Digest
+│    nothing verified this download — the hash below is derived from it, not checked against it
+╰─ pin; recorded
+     url: https://example.org/libsha2.wasm
+     hash: f1:93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
 ```
 
-The export list is read by compiling the module, so a module this toolchain cannot link reports why instead. The last line appears only for a fetch, since a carried module arrived inside the tree its consumer pinned.
+The export list is read by compiling the module, so a module this toolchain cannot link reports why instead. The line about verification appears only for a fetch, since a carried module arrived inside the tree its consumer pinned. A dependency has no `deliver` node, since nothing describes a tree, and its `pin` node stands open while a repository arrives. A node open when the pin stops closes with how — `failed` where the transport brought nothing, `refused` where a rule refused what it brought — and a pin refused before any delivery began reports why and nothing else.
 
 `--target` is required on `pin foreign`, and names the table of the row that is written, `[foreign.native]` or `[foreign.browser]`, inline where its author wrote it inline; the other table is left as it was. A browser delivery is described as the JavaScript gateway it is, whose exports are held to its rows where the page loads it, so nothing is read of them here. The manifest is edited in place, keeping its comments and order, then read back and compared key by key with what went in, so no row the command was not asked about changes. Pinning a row to what it already says writes nothing and reports that it did.
 
@@ -350,6 +366,17 @@ curios new <DIR>
 The directory's name is the package's, and it is checked before anything is written — so a name the manifest could not hold fails with an empty disk rather than half a package.
 
 It writes the manifest, `lib.crs`, `exe.crs` and a `.gitignore` for `.curios/`, and no flag asks for fewer ([why](../curios-package/README.md#new-starts-a-package-whole)). Deleting either file makes the package a library alone or a program alone.
+
+The directory is the subject, each file written a node, and the last node the command that runs what was written:
+
+```text
+hello/
+├─ write; curios.toml
+├─ write; lib.crs
+├─ write; exe.crs
+├─ write; .gitignore
+╰─ try; cd hello && curios run
+```
 
 ## `lint`
 
@@ -388,6 +415,18 @@ There is one canonical style, and its one setting is the width a line is written
 The canonical form writes no byte-order mark, and writes a character that prints as nothing or as a blank inside a literal by its escape, `\u{200D}`, so that a reader sees it.
 
 Formatting is verified before anything is written — the output must reparse to exactly the same program or Core text, with every comment preserved — so a formatter defect refuses rather than corrupts.
+
+A file that changes is a subject, spelled from where the invocation stands, with one node saying what became of it: `rewritten`, or `would change` under `--check`, which writes nothing and exits 1 where anything would. A file already canonical says nothing, and the last line counts both:
+
+```text
+lib.crs
+╰─ format; rewritten
+shapes.crs
+╰─ format; rewritten
+2 rewritten, 5 unchanged
+```
+
+A file that cannot be formatted closes as `format; refused`, why following, and nothing after it is formatted. Standard input formatted onto standard output is an answer, of which nothing is said; under `--check` it is a subject as a file is, `<stdin>`.
 
 ## `wonder`
 
