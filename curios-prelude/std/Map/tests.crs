@@ -79,7 +79,7 @@ let _a_smaller_natural_encodes_before_a_larger(
     b: Nat,
     under: Holds(a < b),
 ) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =
-    Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Hash/nat/of_lt(a, b, under));
+    Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Nat/hash/of_lt(a, b, under));
 
 -- An integer at or above zero encodes as its natural, and one below as the complement of the natural `-1 - i`'s, so no byte is spent on the sign.
 test an_integer_encodes_as_its_natural_or_as_a_complement =
@@ -122,7 +122,7 @@ let _a_smaller_integer_encodes_before_a_larger(
     b: Int,
     under: Holds(a < b),
 ) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =
-    Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Hash/int/of_lt(a, b, under));
+    Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Int/hash/of_lt(a, b, under));
 
 -- An insert stands in a type, everything it reaches being known to terminate: what three inserts leave is decided by reduction, in the order of the numbers.
 let _an_insert_stands_in_a_type: Eq()(

@@ -1,5 +1,4 @@
 use /std/{Nat, Int, Byte, Bytes, Eq, Ordering, proved, Bool};
-use /std/Hash/{nat};
 
 -- A run with every byte complemented, a byte at a time so that conversion carries it across a cons.
 let flipped(b: Bytes) -> Bytes =
@@ -81,42 +80,42 @@ let halves(
 
 --- An integer's encoding, in the order of the numbers: a smaller integer's is before a larger one's as `Bytes/ord` reads them, and no integer's begins another's.
 ---
---- At or above zero it is its natural's, [`nat/code`]; below zero it is the complement, byte by byte, of the code of `-1 - i`. No byte is spent on the sign: a natural's code leads with a byte in the upper half and a complement's with one in the lower, so every integer below zero is before every other, and the more negative of two comes first.
-pub let code(i: Int) -> Bytes =
-    match i >= +0 | true => nat/code(Int/abs(i)) | false => flipped(nat/code(Int/abs(i) - 1)) end;
+--- At or above zero it is its natural's, [`Nat/hash`]; below zero it is the complement, byte by byte, of the encoding of `-1 - i`. No byte is spent on the sign: a natural's encoding leads with a byte in the upper half and a complement's with one in the lower, so every integer below zero is before every other, and the more negative of two comes first.
+pub let hash(i: Int) -> Bytes =
+    match i >= +0 | true => Nat/hash(Int/abs(i)) | false => flipped(Nat/hash(Int/abs(i) - 1)) end;
 
---- `a < b` gives `a`'s code below `b`'s at a byte: by the naturals' law where both are at or above zero, by that law reversed where both are below, and by the half each leads in where zero is between them.
+--- `a < b` gives `a`'s encoding below `b`'s at a byte: by the naturals' law where both are at or above zero, by that law reversed where both are below, and by the half each leads in where zero is between them.
 pub let of_lt(
     a: Int,
     b: Int,
     under: Bool/Holds(a < b),
-) -> Bool/Holds(Bytes/ord/below(code(a), code(b))) =
+) -> Bool/Holds(Bytes/ord/below(hash(a), hash(b))) =
     match a >= +0
     | true =>
         match b >= +0
-        | true => nat/of_lt(Int/abs(a), Int/abs(b), proved())
+        | true => Nat/hash/of_lt(Int/abs(a), Int/abs(b), proved())
         | false => match proved(@Bool/False) end
         end
     | false =>
         match b >= +0
         | true =>
             halves(
-                nat/code(Int/abs(a) - 1),
-                nat/code(Int/abs(b)),
-                nat/leads(Int/abs(a) - 1),
-                nat/leads(Int/abs(b)))
+                Nat/hash(Int/abs(a) - 1),
+                Nat/hash(Int/abs(b)),
+                Nat/hash/leads(Int/abs(a) - 1),
+                Nat/hash/leads(Int/abs(b)))
         | false =>
             reversed(
-                nat/code(Int/abs(b) - 1),
-                nat/code(Int/abs(a) - 1),
-                nat/of_lt(Int/abs(b) - 1, Int/abs(a) - 1, proved()))
+                Nat/hash(Int/abs(b) - 1),
+                Nat/hash(Int/abs(a) - 1),
+                Nat/hash/of_lt(Int/abs(b) - 1, Int/abs(a) - 1, proved()))
         end
     end;
 
---- The order of two integers is the order of their codes.
-pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(code(a), code(b))) =
+--- The order of two integers is the order of their encodings.
+pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(hash(a), hash(b))) =
     match a < b
-    | true => Eq/sym(Bytes/ord/below/lt(code(a), code(b), of_lt(a, b, Bool/True/qed())))
+    | true => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
     | false =>
         match b < a
         | true =>
@@ -124,26 +123,26 @@ pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(code(a), code(
                 Int/ord/of_gt(a, b, Bool/True/qed()),
                 Eq/sym(
                     Eq/trans(
-                        Bytes/ord/flips(code(b), code(a)),
+                        Bytes/ord/flips(hash(b), hash(a)),
                         Eq/cong(
                             Ordering/flip,
-                            Bytes/ord/below/lt(code(b), code(a), of_lt(b, a, Bool/True/qed()))))))
+                            Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, Bool/True/qed()))))))
         | false =>
             Eq/subst(
-                (y: Int) => Eq()(Int/ord(a, y), Bytes/ord(code(a), code(y))),
+                (y: Int) => Eq()(Int/ord(a, y), Bytes/ord(hash(a), hash(y))),
                 Int/le/antisym(a, b, proved(), proved()),
-                Eq/sym(Bytes/ord/refl(code(a))))
+                Eq/sym(Bytes/ord/refl(hash(a))))
         end
     end;
 
---- Distinct integers have distinct codes: two with one code are `eq` in their order, which is equality.
-pub let injective(a: Int, b: Int, same: Eq()(code(a), code(b))) -> Eq()(a, b) =
+--- Distinct integers have distinct encodings: two with one encoding are `eq` in their order, which is equality.
+pub let injective(a: Int, b: Int, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
     Int/ord/eq(
         a,
         b,
         Eq/trans(
             monotone(a, b),
             Eq/subst(
-                (z: Bytes) => Eq()(Bytes/ord(code(a), z), Ordering/eq()),
+                (z: Bytes) => Eq()(Bytes/ord(hash(a), z), Ordering/eq()),
                 same,
-                Bytes/ord/refl(code(a)))));
+                Bytes/ord/refl(hash(a)))));

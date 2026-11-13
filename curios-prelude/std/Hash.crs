@@ -1,9 +1,3 @@
---- A natural's encoding in the order of the numbers, with the laws that say so.
-pub mod nat;
-
---- An integer's encoding in the order of the numbers, with the laws that say so.
-pub mod int;
-
 use /std/{Nat, Byte, Bytes, Bool, List};
 
 --- How a value encodes to the bytes that identify it.

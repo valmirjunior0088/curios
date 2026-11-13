@@ -26,7 +26,7 @@ let first(l: Nat, t: Nat, @fits: Bool/Holds(t < 16)) -> Bytes =
 let rest(n: Nat) -> Bytes =
     match n < 16 | true => x[] | false => x[..rest(n / 256), Nat/to_byte(n % 256)] end;
 
--- The code in one walk: the rank counted on the way down, the first byte written where the top is left, and the bytes appended on the way back.
+-- The encoding in one walk: the rank counted on the way down, the first byte written where the top is left, and the bytes appended on the way back.
 let from(n: Nat, l: Nat) -> Bytes =
     match n < 16
     | true => first(l, n)
@@ -36,7 +36,7 @@ let from(n: Nat, l: Nat) -> Bytes =
 --- A natural's encoding, in the order of the numbers: a smaller number's is before a larger one's as `Bytes/ord` reads them, and no number's begins another's.
 ---
 --- The first byte is `0x80 + 16 * rank + top`, where `rank` is how many bytes follow it, below seven, and `top` the number those bytes leave, below sixteen; then the `rank` bytes, most significant first. A rank of seven or more writes a `0xFF` for every seven and then the same. So a number below 16 is one byte, below 4 096 two and below `2^20` three.
-pub let code(n: Nat) -> Bytes =
+pub let hash(n: Nat) -> Bytes =
     from(n, 0);
 
 -- The walk from a count writes the first byte of that count past the number's rank, and then the number's bytes.
@@ -337,7 +337,7 @@ let tails(
 let level(x: Nat, y: Nat, le: Bool/Holds(x <= y), ge: Bool/Holds(y <= x)) -> Bool/Holds(x == y) =
     Eq/subst((v: Nat) => Bool/Holds(x == v), Nat/le/antisym(x, y, le, ge), Bool/True/qed());
 
--- A code read as its first byte and then its bytes, on both sides of a comparison.
+-- An encoding read as its first byte and then its bytes, on both sides of a comparison.
 let split(
     a: Nat,
     b: Nat,
@@ -345,9 +345,9 @@ let split(
         Bytes/ord/below(
             x[..first(rank(a), top(a), @top_below(a)), ..rest(a)],
             x[..first(rank(b), top(b), @top_below(b)), ..rest(b)])),
-) -> Bool/Holds(Bytes/ord/below(code(a), code(b))) =
+) -> Bool/Holds(Bytes/ord/below(hash(a), hash(b))) =
     Eq/subst(
-        (z: Bytes) => Bool/Holds(Bytes/ord/below(z, code(b))),
+        (z: Bytes) => Bool/Holds(Bytes/ord/below(z, hash(b))),
         Eq/sym(from_count(a, 0)),
         Eq/subst(
             (z: Bytes) =>
@@ -356,12 +356,12 @@ let split(
             Eq/sym(from_count(b, 0)),
             parted));
 
---- `a < b` gives `a`'s code below `b`'s at a byte: by their first bytes where the ranks or the tops differ, and by the bytes after them where both agree.
+--- `a < b` gives `a`'s encoding below `b`'s at a byte: by their first bytes where the ranks or the tops differ, and by the bytes after them where both agree.
 pub let of_lt(
     a: Nat,
     b: Nat,
     under: Bool/Holds(a < b),
-) -> Bool/Holds(Bytes/ord/below(code(a), code(b))) =
+) -> Bool/Holds(Bytes/ord/below(hash(a), hash(b))) =
     let top_a: Bool/Holds(top(a) < 16) = top_below(a);
     let top_b: Bool/Holds(top(b) < 16) = top_below(b);
     let ranks: Bool/Holds(rank(a) <= rank(b)) = rank_mono(a, b, proved());
@@ -400,10 +400,10 @@ pub let of_lt(
             end
         end);
 
---- The order of two numbers is the order of their codes.
-pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(code(a), code(b))) =
+--- The order of two numbers is the order of their encodings.
+pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(b))) =
     match a < b
-    | true => Eq/sym(Bytes/ord/below/lt(code(a), code(b), of_lt(a, b, Bool/True/qed())))
+    | true => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
     | false =>
         match b < a
         | true =>
@@ -411,32 +411,32 @@ pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(code(a), code(
                 Nat/ord/of_gt(a, b, Bool/True/qed()),
                 Eq/sym(
                     Eq/trans(
-                        Bytes/ord/flips(code(b), code(a)),
+                        Bytes/ord/flips(hash(b), hash(a)),
                         Eq/cong(
                             Ordering/flip,
-                            Bytes/ord/below/lt(code(b), code(a), of_lt(b, a, Bool/True/qed()))))))
+                            Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, Bool/True/qed()))))))
         | false =>
             Eq/subst(
-                (y: Nat) => Eq()(Nat/ord(a, y), Bytes/ord(code(a), code(y))),
+                (y: Nat) => Eq()(Nat/ord(a, y), Bytes/ord(hash(a), hash(y))),
                 Nat/le/antisym(a, b, proved(), proved()),
-                Eq/sym(Bytes/ord/refl(code(a))))
+                Eq/sym(Bytes/ord/refl(hash(a))))
         end
     end;
 
---- Distinct numbers have distinct codes: two with one code are `eq` in their order, which is equality.
-pub let injective(a: Nat, b: Nat, same: Eq()(code(a), code(b))) -> Eq()(a, b) =
+--- Distinct numbers have distinct encodings: two with one encoding are `eq` in their order, which is equality.
+pub let injective(a: Nat, b: Nat, same: Eq()(hash(a), hash(b))) -> Eq()(a, b) =
     Nat/ord/eq(
         a,
         b,
         Eq/trans(
             monotone(a, b),
             Eq/subst(
-                (z: Bytes) => Eq()(Bytes/ord(code(a), z), Ordering/eq()),
+                (z: Bytes) => Eq()(Bytes/ord(hash(a), z), Ordering/eq()),
                 same,
-                Bytes/ord/refl(code(a)))));
+                Bytes/ord/refl(hash(a)))));
 
---- A code leads with a byte in the upper half: the one byte `0x7F` is below every code, which is what leaves the lower half to the complements an integer below zero is written as.
-pub let leads(n: Nat) -> Bool/Holds(Bytes/ord/below(x[0x7F], code(n))) =
+--- An encoding leads with a byte in the upper half: the one byte `0x7F` is below every encoding, which is what leaves the lower half to the complements an integer below zero is written as.
+pub let leads(n: Nat) -> Bool/Holds(Bytes/ord/below(x[0x7F], hash(n))) =
     let fits: Bool/Holds(top(n) < 16) = top_below(n);
     Eq/subst(
         (z: Bytes) => Bool/Holds(Bytes/ord/below(x[0x7F], z)),

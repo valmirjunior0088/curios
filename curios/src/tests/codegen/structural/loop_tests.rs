@@ -614,7 +614,7 @@ fn a_fold_handed_a_known_step_calls_it_in_place() {
     );
 }
 
-/// `programs/spines` as written: both its calls of `/std/Map/insert` hand the one encoding `Hash/nat/code`, which is substituted into it and, through the call it hands the parameter on to, into the recursive descent, so a leaf's key is encoded by a direct call.
+/// `programs/spines` as written: both its calls of `/std/Map/insert` hand the one encoding `Nat/hash`, which is substituted into it and, through the call it hands the parameter on to, into the recursive descent, so a leaf's key is encoded by a direct call.
 #[test]
 fn a_map_inserts_leaf_key_is_encoded_through_a_direct_call() {
     let source = include_str!(concat!(
@@ -630,7 +630,7 @@ fn a_map_inserts_leaf_key_is_encoded_through_a_direct_call() {
 
     assert!(!insert.body.contains("call_indirect"), "{}", insert.body);
     assert!(
-        insert.body.contains("$/std/Hash/nat/from"),
+        insert.body.contains("$/std/Nat/hash/from"),
         "{}",
         insert.body
     );

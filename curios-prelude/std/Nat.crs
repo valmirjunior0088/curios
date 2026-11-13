@@ -46,6 +46,10 @@ pub use log2/{let log2};
 pub mod ord;
 pub use ord/{let ord};
 
+--- A natural's encoding in the order of the numbers, with the laws that say so.
+pub mod hash;
+pub use hash/{let hash};
+
 --- Recursion on a measure that descends, by a bound the measure fits under.
 pub mod descend;
 pub use descend/{let descend};
@@ -212,13 +216,13 @@ satisfy Ord(Nat) {
     ord = ord,
 }
 
---- The code of [`Hash/nat`]: in the order of the numbers, so a smaller number's is before a larger one's.
+--- The encoding [`hash`] writes: in the order of the numbers, so a smaller number's is before a larger one's.
 satisfy Hash(Nat) {
-    hash = Hash/nat/code,
+    hash = hash,
 }
 
---- The code in the order of the numbers, whose injectivity is that order's.
+--- The encoding in the order of the numbers, whose injectivity is that order's.
 satisfy Map/Key(Nat) {
-    injective = Hash/nat/injective,
-    monotone = Hash/nat/monotone,
+    injective = hash/injective,
+    monotone = hash/monotone,
 }

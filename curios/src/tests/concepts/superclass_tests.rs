@@ -130,7 +130,7 @@ fn a_literals_law_is_stated_over_the_superclass_it_writes() {
         use /std/{Nat, Bytes, Hash};
         use /std/Map/{Key};
         let flat: Hash(Nat) = Hash { hash(n) = x[] };
-        let _forged: Key(Nat) = Key { use flat, use _, injective = Hash/nat/injective, monotone = Hash/nat/monotone };
+        let _forged: Key(Nat) = Key { use flat, use _, injective = Nat/hash/injective, monotone = Nat/hash/monotone };
         /std/print("")
         "#;
 

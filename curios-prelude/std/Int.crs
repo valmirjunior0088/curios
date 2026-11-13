@@ -47,6 +47,10 @@ pub use shl/{let shl};
 pub mod ord;
 pub use ord/{let ord};
 
+--- An integer's encoding in the order of the numbers, with the laws that say so.
+pub mod hash;
+pub use hash/{let hash};
+
 --- Division with remainder rounded toward negative infinity, certified: `of` hands back the quotient and a remainder from zero to below the divisor, with Euclid's identity and the remainder's bound, where `/` and `%` round toward zero.
 pub mod DivMod;
 pub use DivMod/{let DivMod};
@@ -198,13 +202,13 @@ satisfy Ord(Int) {
     ord = ord,
 }
 
---- The code of [`Hash/int`]: its natural's at or above zero and a complement below, so a smaller integer's is before a larger one's.
+--- The encoding [`hash`] writes: its natural's at or above zero and a complement below, so a smaller integer's is before a larger one's.
 satisfy Hash(Int) {
-    hash = Hash/int/code,
+    hash = hash,
 }
 
---- The code in the order of the numbers, whose injectivity is that order's.
+--- The encoding in the order of the numbers, whose injectivity is that order's.
 satisfy Map/Key(Int) {
-    injective = Hash/int/injective,
-    monotone = Hash/int/monotone,
+    injective = hash/injective,
+    monotone = hash/monotone,
 }
