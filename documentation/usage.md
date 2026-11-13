@@ -154,6 +154,28 @@ declaration cycle
 
 A goal's first line is its answer in place of a tag: what the compiler knows is wanted where it stands, `` `Nat` expected ``, or what it worked out stands there, `` `Nat` inferred ``; beneath it are the names in scope, each with its type, and each term the compiler found that fits, `? ≈ seed`. A text that is no form of the grammar is a `syntax error`, whose facts are what was `expected:` there and what was `obtained:` in its place, or the rule the text breaks and what to write. A build writes its reports on standard error after the tree, a blank line between; `wonder` and `lint` write them on standard output, as their answer.
 
+What a command refuses before it compiles anything is a report of the same form: a subject it cannot take, a flag that cannot stand, a line that does not parse, a manifest it cannot read, a dependency it cannot place or fetch, a `foreign` nothing answers. It closes on what it is about. That is a row of a manifest, at its line and column with the row shown, where a manifest states what is refused; a file or a directory as a whole; or a flag, a filter or a command by the word that was written. A way out that is a command stands on the line above, behind `try`:
+
+```text
+hash mismatch
+│  the dependency `json` was fetched from https://example.org/json at v1.2
+│  expected: c1:ab12…
+│  obtained: c1:9f3c…
+│  intended if this row pins a branch or a tag, and it has moved
+│  pay close attention if this row pins a commit, which should not move
+│  a tree that changed under one means its history was rewritten
+│
+│  7 │ json = { source = "git", url = "https://example.org/json", rev = "v1.2", hash = "c1:ab12…" }
+│    │ ^^^^
+│
+├─ try; curios pin dependency json --refresh
+╰─ [error] curios.toml:7:1
+```
+
+A tag is the same wherever the refusal is met, so a tool or a reader may know one by it: `unknown …` for what was named and is not there, `missing …` for what was not written, `duplicate …` and `conflicting …` for what was written twice, `invalid …` for what was written and cannot be read as what it should be, `not a …` for a thing of the wrong kind, `surplus …` for what a command takes none of, `compiler fault` for what no program or manifest earns. What follows the tag is this refusal's own: what stands there, `expected:` and `obtained:` where two values disagree, the rule, and the way out.
+
+A program that stops while it runs is not reported this way: the line it stops on is its own ([`run`](#run)). The rule and what it rejected are [A command narrates on one transcript and reports in blocks](design/tools/a-command-narrates-on-one-transcript-and-reports-in-blocks.md)'s.
+
 Colour is a layer over those bytes and changes none of them: a subject bold, the tree and the times dim, and what went wrong — `refused`, `failed`, `trapped`, `exited N`, a count of failures that is not zero — red. `--color <WHEN>` decides it once: `always`, `never`, or `auto`, the default, which paints where standard error is a terminal and the environment's `NO_COLOR` is unset or empty.
 
 ## `run`

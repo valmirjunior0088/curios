@@ -88,11 +88,11 @@ fn a_command_that_is_a_way_out_reaches_the_report() {
             "missing hash\n",
             "│  `digest` states no `hash` in `[foreign.native]`\n",
             "│  a file is accepted against one however it arrives\n",
-            "├─ try; curios pin foreign digest --target native --refresh\n",
             "│\n",
             "│  6 │ [foreign.native]\n",
             "│    │          ^^^^^^\n",
             "│\n",
+            "├─ try; curios pin foreign digest --target native --refresh\n",
             "╰─ [error] app/curios.toml:6:10",
         )
     );

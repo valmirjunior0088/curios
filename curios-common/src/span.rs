@@ -436,7 +436,7 @@ impl Report {
         self
     }
 
-    /// The report as a reader of `style` sees it, a block: what it says, alone on a line; what that rests on, a line a fact, on a trunk; each further place it is about, its code closed by what stands there; each command that is a way out, behind `try`; and what it is about, closed by the word of what the report is, `kind`, in brackets: its own place under its code, or a file or a name, which has no code to show.
+    /// The report as a reader of `style` sees it, a block: what it says, alone on a line; what that rests on, a line a fact, on a trunk; each further place it is about, its code closed by what stands there; and what it is about, closed by the word of what the report is, `kind`, in brackets: its own place under its code, or a file or a name, which has no code to show; each command that is a way out stands behind `try` on the line above that close.
     ///
     /// ```text
     /// `a` is already declared
@@ -514,21 +514,22 @@ impl Report {
                 note.span.place(style)
             ));
         }
+        // The report's own code stands under everything said of it, and each way out between that code and the line that closes the block, so the last thing above the place is what to run.
+        if let Some(About::Place(span)) = &self.about {
+            lines.extend(pane(span));
+        }
         lines.extend(
             self.tries
                 .iter()
                 .map(|command| format!("{} try; {command}", style.dim("├─"))),
         );
-        let closed = |subject: String| format!("{} {badge} {subject}", style.dim("╰─"));
-        match &self.about {
-            Some(About::Place(span)) => {
-                lines.extend(pane(span));
-                lines.push(closed(span.place(style)));
-            }
-            Some(About::Path(path)) => lines.push(closed(style.spelled(path))),
-            Some(About::Named(name)) => lines.push(closed(name.clone())),
-            None => lines.push(format!("{} {badge}", style.dim("╰─"))),
-        }
+        let closing = style.dim("╰─");
+        lines.push(match &self.about {
+            Some(About::Place(span)) => format!("{closing} {badge} {}", span.place(style)),
+            Some(About::Path(path)) => format!("{closing} {badge} {}", style.spelled(path)),
+            Some(About::Named(name)) => format!("{closing} {badge} {name}"),
+            None => format!("{closing} {badge}"),
+        });
 
         lines.join("\n")
     }

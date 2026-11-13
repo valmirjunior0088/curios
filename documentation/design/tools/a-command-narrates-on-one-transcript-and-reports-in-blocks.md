@@ -1,0 +1,31 @@
+# A command narrates on one transcript and reports in blocks
+
+**Decision.** What a command says takes one of three forms, each with one writer, and which form a line takes says whose it is.
+
+- **What a command does is a transcript**, written on standard error and nowhere else. A subject stands alone on its line, and each step is a node of a tree beneath it, `label; outcome`: the label written before the work, the outcome after it — a time where the step succeeded, a verdict and a time where it did not, `refused` where a rule said no and `failed` where the machine did, or the place its product stands. Nothing is erased or redrawn, a unit taken from the store prints nothing, and the bytes are the same in a pipe as on a terminal, colour apart. A test is a node opened before it runs; what it writes is relayed as it writes it, each line behind a dashed trunk, and a test that wrote nothing closes on its own line. A total is the last line, flush left.
+- **What a command finds or refuses is a report, and a report is a block.** Its first line is a tag: one to three lower-case words that name the kind of thing reported, with nothing of the program in them, the same whichever stage or command meets it. Beneath it, on a trunk, stand its facts, a statement a line in one order — what stands here, each value at issue behind a label, the rule, the way out — then each further place it is about, its line shown and closed by what stands there, then its own place. A way out that is a command stands behind `try` on the line above the close. The block closes on its kind in brackets and what it is about: `[error]`, `[goal]`, `[lint]` or `[format]`, then a place in a text, a file or a directory as a whole, or a thing by the name that was written.
+- **A report is data until the edge that writes it** (`curios_common::Report`): a tag, facts, further places, ways out and what it is about, with no severity and no reader in it. Whoever prints decides the kind and the reader — where they stand, which a path is spelled from, and whether they see colour, which changes no byte beneath it — and an editor is handed the same data, never a rendering.
+- **A refusal of what a manifest states stands at the row that states it**, named by the keys that lead there and found in the manifest's text when the refusal is reported (`curios_package::Refused`). The records a manifest is read into keep no positions.
+- **What a running program stops on is its own, and is one line**: the kind of stop, a colon, and what there is to say of it (`curios_native::Stop`). It is no block, it carries no frame of the machine, and a built executable says it as `curios run` does. What could not be linked is a block where the compiler meets it and that same line where a built executable does, from one value (`curios_native::Unlinked`).
+
+**Rationale.**
+
+- **One writer per form keeps the forms from drifting.** A transcript that is only ever appended to is the same text in a terminal, a log and a continuous-integration page, so no second renderer exists to disagree with it, and a step that hangs is the line left open. A report drawn in one place has one shape for a parse failure, a type mismatch, a lint, a manifest row and a mistyped flag, so a reader learns it once.
+- **A tag is what a reader, a search and a tool can hold on to.** A sentence that carries the program's names is different every time it is met; a tag is the same, and the facts beneath it are where this program's names go. Statements a line each, in one order, let the eye find the value it wants without parsing prose.
+- **The kind stands in brackets because `;` is taken.** On every other line of a tree `;` joins a label to what it came to, and a kind is no step whose outcome is a place: `format; rewritten` is a step, and `[format]` closes a report.
+- **A place is the most useful thing a refusal can end on**, so every block ends on what it is about, in a form a terminal opens where it is a place. A manifest's refusal is most useful at the row, and reading the text again for where the row stands costs nothing on the one path that reports.
+- **A program's stop belongs to the program.** Once a program runs, what it prints is its own, and so is the line it stops on: a frame around it would be the compiler speaking for a program that, built into an executable, runs with no compiler beside it. The frames the engine can list name machine code, which the program's author did not write.
+- **Structure is data because every consumer needs a different drawing.** A terminal, a pipe, an editor, a served test page and a test of the compiler each show a report their own way; a rendering parsed back for its parts would hold each to the others' wording.
+
+**Rejected.**
+
+- **A live display beside the transcript**, a bar or a spinner that erases what it wrote: two renderers, one of which a pipe cannot show.
+- **Capturing what a test writes and showing it on failure**, which hides the output of a test that hangs, and reorders it against the test's own timing.
+- **A stream of results beside the answer a test's entry gives**, or an entry that reports its own failure: a program is self-contained and ends as every program does, and a failing test's message is its own output.
+- **A severity before the headline**, `error: type mismatch`: the kind is known to whoever prints and is the same for every report of a run, so it closes the block and the tag leads.
+- **A sentence as the headline**, which no reader can match and which pushes the facts into clauses.
+- **`kind; subject` as the closing line**, which reads as a step of the tree and collides with the step `format`.
+- **A note for a file no `mod` reaches, or for a store that took nothing**: neither is a finding about the program, and a reader who asked about a file is not asking where it hangs.
+- **A block for a run-time stop**, under a kind of its own, and **the engine's frames beneath it**.
+- **Positions carried through the manifest's records**, a span on every field for a refusal most reads never make.
+- **The parser library's own message for a line that does not parse**: its wording is another program's, and a report is built from the parts it keeps of its refusal, never from its text.
