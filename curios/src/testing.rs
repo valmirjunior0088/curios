@@ -10,7 +10,7 @@ use {
     curios_browser::page,
     curios_common::{Qualifier, Source},
     curios_module::{Overlay, RootSource, UnitSource, open_entrypoint, supply_entrypoint},
-    curios_native::{Compiled, TestEnd},
+    curios_native::{Compiled, Stop, TestEnd},
     curios_package::{Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule},
     curios_surface::{Entrypoint, Form},
@@ -430,7 +430,7 @@ impl TestRun {
         &self,
         index: usize,
         host: impl FnOnce(Vec<Vec<u8>>) -> H,
-    ) -> Result<TestEnd, String> {
+    ) -> Result<TestEnd, Stop> {
         let arguments = vec![self.argv0.clone(), index.to_string().into_bytes()];
 
         self.compiled

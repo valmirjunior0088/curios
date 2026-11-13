@@ -20,6 +20,10 @@ pub use plugin::{DeclaredModule, plugin_bindings};
 mod unlinked;
 pub use unlinked::Unlinked;
 
+mod stop;
+pub use stop::Stop;
+use stop::*;
+
 mod host;
 use host::*;
 

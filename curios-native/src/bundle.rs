@@ -4,7 +4,7 @@
 //!
 //! **The store travels because a `.cwasm` cannot answer for it.** The rows a program's `ffi` imports are typed by live in the compilation, not in the artifact: `Nat` and `Int` both cross as an `i64`, so re-deriving a signature from the module's import types would lose the signedness a result is boxed by. `curios-verdict` files the store beside a payload for exactly that reason, and this carries the same value the rest of the way — to a machine that has no store, no manifest and no sources.
 
-use {curios_abi::ForeignStore, std::collections::BTreeMap};
+use {crate::Stop, curios_abi::ForeignStore, std::collections::BTreeMap};
 
 /// Magic trailing the footer, marking an image as a bundled Curios executable.
 ///
@@ -53,24 +53,28 @@ pub fn append_bundle(image: &mut Vec<u8>, bundle: &Bundle) -> Result<(), String>
 /// Recover the [`Bundle`] that [`append_bundle`] appended to `image`.
 ///
 /// Errors if the footer is absent, carries the wrong magic, claims a length larger than the image body, or does not validate as a bundle. Validation is bytecheck's, which is what makes reading bytes off a file on disk sound rather than a reinterpretation of whatever is there.
-pub fn extract_bundle(image: &[u8]) -> Result<Bundle, String> {
+pub fn extract_bundle(image: &[u8]) -> Result<Bundle, Stop> {
+    let unbundled = || Stop::of("not a bundle", "this executable holds no Curios payload");
     if image.len() < FOOTER_LEN {
-        return Err("not a bundled Curios executable (no payload)".into());
+        return Err(unbundled());
     }
 
     let (body, footer) = image.split_at(image.len() - FOOTER_LEN);
     let (len_bytes, magic) = footer.split_at(8);
 
     if magic != MAGIC {
-        return Err("not a bundled Curios executable (bad footer)".into());
+        return Err(unbundled());
     }
 
     let len = u64::from_le_bytes(len_bytes.try_into().unwrap()) as usize;
 
     if len > body.len() {
-        return Err("corrupt Curios executable (payload length exceeds image)".into());
+        return Err(Stop::of(
+            "corrupt bundle",
+            "this executable states a payload longer than itself",
+        ));
     }
 
     curios_archive::from_bytes::<Bundle>(&body[body.len() - len..])
-        .map_err(|error| format!("corrupt Curios executable ({error})"))
+        .map_err(|error| Stop::of("corrupt bundle", error))
 }

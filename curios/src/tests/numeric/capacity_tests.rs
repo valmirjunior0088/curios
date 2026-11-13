@@ -12,7 +12,7 @@ fn a_requested_length_past_the_runtime_bound_refuses_before_allocating() {
     for (index, row) in rows.iter().enumerate() {
         let error = run_row(&compiled, index).expect_err("the logical length exceeds the bound");
         assert!(
-            error.contains("panicked: a value is past what the runtime can hold"),
+            error.contains("panic: a value is past what the runtime can hold"),
             "wrong refusal for {row}: {error}"
         );
         assert!(
@@ -41,7 +41,7 @@ fn a_channel_capacity_past_the_runtime_bound_refuses_before_allocating() {
         );
         let error = error(&source);
         assert!(
-            error.contains("panicked: a value is past what the runtime can hold"),
+            error.contains("panic: a value is past what the runtime can hold"),
             "wrong refusal at capacity {count}: {error}"
         );
     }

@@ -36,7 +36,7 @@ fn a_power_past_the_limb_array_capacity_refuses_before_multiplying() {
     for (index, row) in rows.iter().enumerate() {
         let error = run_row(&compiled, index).expect_err("the power exceeds the array capacity");
         assert!(
-            error.contains("panicked: a value is past what the runtime can hold"),
+            error.contains("panic: a value is past what the runtime can hold"),
             "wrong refusal for {row}: {error}"
         );
         assert!(

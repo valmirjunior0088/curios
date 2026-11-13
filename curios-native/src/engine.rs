@@ -1,7 +1,8 @@
 use {
     super::{
-        BundledPlugin, Lift, Lower, Plugin, Replied, Reply, Unlinked, anyref_array_type, bool_of,
-        filled, i8_array_type, longs_array_type, words_array_type,
+        BundledPlugin, Lift, Lower, Plugin, Raised, Replied, Reply, Stop, Unlinked,
+        anyref_array_type, bool_of, filled, i8_array_type, longs_array_type, raised,
+        words_array_type,
     },
     curios_abi::{
         Answer, Answered, Carrier, ENTRY, ForeignFunction, ForeignStore, Handle, HostOp, HostOps,
@@ -16,8 +17,8 @@ use {
         thread,
     },
     wasmtime::{
-        AnyRef, ArrayType, Caller, Config, Engine, FuncType, HeapType, Linker, Module, RefType,
-        Rooted, Store, StoreLimits, StoreLimitsBuilder, Val, ValType,
+        AnyRef, ArrayType, Caller, Config, Engine, FuncType, GcHeapOutOfMemory, HeapType, Linker,
+        Module, RefType, Rooted, Store, StoreLimits, StoreLimitsBuilder, Trap, Val, ValType,
     },
 };
 
@@ -73,13 +74,18 @@ const HOST_RESERVE: usize = 16 << 20;
 /// Run `enter` on a thread whose stack is a module's, and answer what it answers.
 ///
 /// **Every entry into a module goes through here**, because the engine's limit bounds a stack and reserves none: where the thread's own stack ends first, the process aborts with no trap. So the limit [`shared_engine`] sets and the stack this thread is built with are one constant, and no caller's thread — a system's main thread, a test's two mebibytes — is what a module runs on. A panic on the thread reaches the caller as itself.
-pub fn on_guest_stack<T: Send>(enter: impl FnOnce() -> T + Send) -> Result<T, String> {
+pub fn on_guest_stack<T: Send>(enter: impl FnOnce() -> T + Send) -> Result<T, Stop> {
     thread::scope(|scope| {
         let guest = thread::Builder::new()
             .name("guest".to_owned())
             .stack_size(GUEST_STACK + HOST_RESERVE)
             .spawn_scoped(scope, enter)
-            .map_err(|error| format!("cannot reserve the program's stack: {error}"))?;
+            .map_err(|error| {
+                Stop::of(
+                    "host failure",
+                    format_args!("the program's stack could not be reserved: {error}"),
+                )
+            })?;
 
         match guest.join() {
             Ok(answer) => Ok(answer),
@@ -185,7 +191,8 @@ impl Entered {
                 trampoline(caller, params, results).map(|()| None)
             }),
             settle: Arc::new(|_, _, _| {
-                Err(wasmtime::Error::msg(
+                Err(raised(
+                    "compiler fault",
                     "the call asks again for an answer given at once",
                 ))
             }),
@@ -207,7 +214,10 @@ impl Entered {
             ask: Arc::new(ask),
             settle: Arc::new(move |caller, settled, results| {
                 let settled = settled.downcast::<R>().map_err(|_| {
-                    wasmtime::Error::msg("the call asks again for an answer another call left")
+                    raised(
+                        "compiler fault",
+                        "the call asks again for an answer another call left",
+                    )
                 })?;
 
                 reply(caller, *settled, results)
@@ -575,7 +585,7 @@ fn laned(
                 Ok(Some(settled)) => Some(Ok(settled)),
                 Ok(None) => Some(Err(token)),
                 Err(Refusal(why)) => {
-                    return Err(wasmtime::Error::msg(format!("{name}: {why}")));
+                    return Err(raised("host failure", format_args!("{name}: {why}")));
                 }
             },
             (token, true) => {
@@ -615,7 +625,7 @@ fn link(
     answers: &Answers,
     host: &Arc<dyn HostOps + Send + Sync>,
     name: &str,
-) -> Result<(), String> {
+) -> Result<(), Stop> {
     let (declared, entered) = answering(foreigns, bindings, answers, name)?;
     let trampoline = match &declared.signature().returns {
         WireReturn::Answers(results) => {
@@ -630,9 +640,12 @@ fn link(
                 move |caller: &mut Caller<'_, Guest>, params: &[Val], results: &mut [Val]| {
                     match ask(caller, params, results)? {
                         None => Ok(()),
-                        Some(_) => Err(wasmtime::Error::msg(format!(
-                            "{name}: a call that does not return cannot be answered later"
-                        ))),
+                        Some(_) => Err(raised(
+                            "compiler fault",
+                            format_args!(
+                                "{name}: a call that does not return cannot be answered later"
+                            ),
+                        )),
                     }
                 },
             ) as Trampoline
@@ -647,7 +660,12 @@ fn link(
             move |mut caller, params, results| trampoline(&mut caller, params, results),
         )
         .map(|_| ())
-        .map_err(|error| format!("failed to define {name}: {error}"))
+        .map_err(|error| {
+            Stop::of(
+                "compiler fault",
+                format_args!("`{name}` could not be defined: {error}"),
+            )
+        })
 }
 
 /// Answer every row of the table under the name the standard library declares it by ([`HostOp::declared`]). Each import lifts its operands as the row types them, calls the method, and lowers the reply through [`Replied`], at once or once it has come. Generated from the rows it binds, so no row goes unanswered, none is answered twice, and no answer's types can differ from the row's.
@@ -687,13 +705,13 @@ impl fmt::Display for ExitTrap {
 
 impl Error for ExitTrap {}
 
-/// A refusal the emitted program raised through `sys.panic`: the message it handed over, carried out of the wasm call as a trap exactly as an exit is, and rendered by `instantiate` as `panicked: …` — the sentence is the report, and the frames follow it as context.
+/// A refusal the emitted program raised through `sys.panic`: the message it handed over, carried out of the wasm call as a trap exactly as an exit is, and said where the run ends as `panic: …`, the sentence being the whole of the stop.
 #[derive(Debug)]
 struct PanicTrap(Vec<u8>);
 
 impl fmt::Display for PanicTrap {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "panicked: {}", String::from_utf8_lossy(&self.0))
+        write!(f, "panic: {}", String::from_utf8_lossy(&self.0))
     }
 }
 
@@ -702,7 +720,7 @@ impl Error for PanicTrap {}
 /// What a run answers of how a program ended: one reading where its entry returned, of the result it handed back, and one where `proc_exit` unwound it, of the code. A trap is neither, and is every run's error alike.
 pub trait Ended: Sized + Send {
     /// The entry returned `result`, read while the store it lives in is open.
-    fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, String>;
+    fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, Stop>;
 
     /// `proc_exit` ended the run with `code`.
     fn exited(code: u8) -> Self;
@@ -710,7 +728,7 @@ pub trait Ended: Sized + Send {
 
 /// A program's exit code: the code it exited with, and `0` where its entry returned. What the entry hands back there is the unit every program's description yields, which says nothing and is not read.
 impl Ended for u8 {
-    fn returned(_: &Store<Guest>, _: Option<Rooted<AnyRef>>) -> Result<Self, String> {
+    fn returned(_: &Store<Guest>, _: Option<Rooted<AnyRef>>) -> Result<Self, Stop> {
         Ok(0)
     }
 
@@ -730,12 +748,17 @@ pub enum TestEnd {
 
 /// A test program's entry answers a `Bool` ([`ENTRY`]), read as the reference it is handed back as, and a reference that is no i31 word is refused rather than read as a verdict. The unit a program's entry hands back is a struct, no word, so a module that is no test program is never read as one whose tests held.
 impl Ended for TestEnd {
-    fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, String> {
-        let refused = || format!("{ENTRY} answered no Bool");
+    fn returned(store: &Store<Guest>, result: Option<Rooted<AnyRef>>) -> Result<Self, Stop> {
+        let refused = || Stop::of("compiler fault", format_args!("`{ENTRY}` answered no Bool"));
         let word = result
             .ok_or_else(refused)?
             .as_i31(store)
-            .map_err(|error| format!("failed to read what {ENTRY} answered: {error}"))?
+            .map_err(|error| {
+                Stop::of(
+                    "compiler fault",
+                    format_args!("what `{ENTRY}` answered could not be read: {error}"),
+                )
+            })?
             .ok_or_else(refused)?;
 
         bool_of(word.get_i32())
@@ -816,7 +839,7 @@ impl Compiled {
         bindings: ForeignBindings,
         host: Answers,
         waiter: Arc<dyn HostOps + Send + Sync>,
-    ) -> Result<E, String> {
+    ) -> Result<E, Stop> {
         instantiate(
             shared_engine(),
             heap,
@@ -833,7 +856,7 @@ impl Compiled {
         &self,
         host: H,
         bindings: ForeignBindings,
-    ) -> Result<u8, String> {
+    ) -> Result<u8, Stop> {
         let host = Arc::new(host);
 
         self.run_in(GUEST_HEAP, bindings, host_rows(Arc::clone(&host)), host)
@@ -844,7 +867,7 @@ impl Compiled {
         &self,
         host: H,
         bindings: ForeignBindings,
-    ) -> Result<TestEnd, String> {
+    ) -> Result<TestEnd, Stop> {
         let host = Arc::new(host);
 
         self.run_in(GUEST_HEAP, bindings, host_rows(Arc::clone(&host)), host)
@@ -860,7 +883,7 @@ pub fn instantiate<E: Ended>(
     bindings: ForeignBindings,
     host: Answers,
     waiter: Arc<dyn HostOps + Send + Sync>,
-) -> Result<E, String> {
+) -> Result<E, Stop> {
     on_guest_stack(move || entered(engine, heap, module, foreigns, bindings, host, waiter))?
 }
 
@@ -873,7 +896,7 @@ fn entered<E: Ended>(
     bindings: ForeignBindings,
     host: Answers,
     waiter: Arc<dyn HostOps + Send + Sync>,
-) -> Result<E, String> {
+) -> Result<E, Stop> {
     let mut store = guest_store(engine, heap);
 
     // A module is instantiated into the program's own store, ahead of the program, and answers its rows there beside an embedder's.
@@ -910,11 +933,19 @@ fn entered<E: Ended>(
 
                             Err(wasmtime::Error::from(PanicTrap(message)))
                         })
-                        .map_err(|error| format!("failed to define panic: {error}"))?;
+                        .map_err(|error| {
+                            Stop::of(
+                                "compiler fault",
+                                format_args!("`{PANIC}` could not be defined: {error}"),
+                            )
+                        })?;
                 }
                 name => {
-                    return Err(format!(
-                        "the module imports {SYS}.{name}, and {SYS} holds {PANIC} alone"
+                    return Err(Stop::of(
+                        "compiler fault",
+                        format_args!(
+                            "the program imports `{SYS}.{name}`, and `{SYS}` holds `{PANIC}` alone"
+                        ),
                     ));
                 }
             },
@@ -928,27 +959,43 @@ fn entered<E: Ended>(
                 import.name(),
             )?,
             namespace => {
-                return Err(format!(
-                    "the module imports {}.{}, but host imports live in {SYS} or {FFI}",
-                    namespace,
-                    import.name(),
+                return Err(Stop::of(
+                    "compiler fault",
+                    format_args!(
+                        "the program imports `{namespace}.{}`, and host imports live in `{SYS}` or `{FFI}`",
+                        import.name()
+                    ),
                 ));
             }
         }
     }
 
-    let instance = linker
-        .instantiate(&mut store, module)
-        .map_err(|error| format!("failed to instantiate module: {error}"))?;
+    let instance = linker.instantiate(&mut store, module).map_err(|error| {
+        Stop::of(
+            "compiler fault",
+            format_args!(
+                "the program could not be instantiated: {}",
+                error.root_cause()
+            ),
+        )
+    })?;
 
-    let entry = instance
-        .get_func(&mut store, ENTRY)
-        .ok_or_else(|| format!("failed to access {ENTRY}: the module exports none"))?;
+    let entry = instance.get_func(&mut store, ENTRY).ok_or_else(|| {
+        Stop::of(
+            "compiler fault",
+            format_args!("the program exports no `{ENTRY}`"),
+        )
+    })?;
     // A program that can suspend answers turns, advanced until it yields; one that cannot answers what it yields at once.
     let ended = match entry.ty(&store).results().len() {
         1 => entry
             .typed::<(), Option<Rooted<AnyRef>>>(&store)
-            .map_err(|error| format!("failed to access {ENTRY}: {error}"))?
+            .map_err(|error| {
+                Stop::of(
+                    "compiler fault",
+                    format_args!("`{ENTRY}` is no entry: {error}"),
+                )
+            })?
             .call(&mut store, ()),
         _ => run_turns(&mut store, &instance, entry, &*waiter),
     };
@@ -957,11 +1004,40 @@ fn entered<E: Ended>(
         Ok(result) => E::returned(&store, result),
         Err(error) => match error.downcast_ref::<ExitTrap>() {
             Some(ExitTrap(code)) => Ok(E::exited(*code)),
-            // The trap is the root of the chain and the backtrace a context wrapped around it, so the error's own `Display` shows only the frames; the cause — a refusal's own sentence, or the engine's for a null reference or an exhausted stack — is what a reader needs first.
-            None => match error.downcast_ref::<PanicTrap>() {
-                Some(panic) => Err(format!("{panic}\n{error}")),
-                None => Err(format!("execution failed: {}\n{error}", error.root_cause())),
-            },
+            None => Err(stopped(&error)),
         },
+    }
+}
+
+/// How `error` stopped the run, read off the root of the engine's chain: the program's own refusal, a stop a host operation raised, or the engine's trap, each said under the tag of its kind. The engine's display of a trap is its frames, which are the machine's and say nothing of the program.
+fn stopped(error: &wasmtime::Error) -> Stop {
+    if let Some(PanicTrap(message)) = error.downcast_ref::<PanicTrap>() {
+        return Stop::of("panic", String::from_utf8_lossy(message));
+    }
+    if let Some(Raised(stop)) = error.downcast_ref::<Raised>() {
+        return stop.clone();
+    }
+    if error.downcast_ref::<GcHeapOutOfMemory<()>>().is_some() {
+        return Stop::of(
+            "heap exhausted",
+            "the program holds more at once than its heap may grow to",
+        );
+    }
+
+    match error.downcast_ref::<Trap>() {
+        Some(Trap::StackOverflow) => Stop::of(
+            "stack exhausted",
+            "the program's calls nested deeper than its stack holds",
+        ),
+        Some(Trap::UnreachableCodeReached) => Stop::of(
+            "unreachable code",
+            "the program reached a point it was compiled never to reach",
+        ),
+        Some(Trap::IntegerOverflow) => Stop::of("overflow", "an integer operation left its range"),
+        Some(Trap::IntegerDivisionByZero) => {
+            Stop::of("division by zero", "an integer was divided by zero")
+        }
+        Some(trap) => Stop::of("compiler fault", trap),
+        None => Stop::of("host failure", error.root_cause()),
     }
 }

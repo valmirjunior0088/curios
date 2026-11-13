@@ -433,10 +433,11 @@ fn a_live_set_past_the_heap_it_was_given_stops_on_the_engines_refusal() {
     .expect("the build compiles");
     let (system, _io) = MockHost::builder().build();
     let refusal = run_within_heap(&compiled, system, 64 << 20)
-        .expect_err("a live set past the heap cannot be held");
+        .expect_err("a live set past the heap cannot be held")
+        .to_string();
 
     assert!(
-        refusal.contains("GC heap out of memory"),
+        refusal.starts_with("heap exhausted: "),
         "the program must stop on the engine's refusal to grow its heap: {refusal}"
     );
 }
@@ -465,7 +466,7 @@ fn a_recursion_with_no_end_stops_on_the_stack_it_was_given() {
     .expect_err("a recursion with no end cannot answer");
 
     assert!(
-        refusal.contains("call stack exhausted"),
+        refusal.starts_with("stack exhausted: "),
         "the program must stop on the engine's trap: {refusal}"
     );
 }

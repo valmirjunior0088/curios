@@ -299,7 +299,7 @@ test("a row that states no browser table is refused for a browser, naming the ro
   assert.equal(status, 1);
   assert.match(
     stderr,
-    /`\/app\/double` is answered by the foreign row "native" of app, which states no `\[foreign\.browser\]`: the browser target has nothing to link for it/,
+    /`\/app\/double` is answered by the foreign row `native` of `\/app`\n│ {2}that row states no `\[foreign\.browser\]`\n│ {2}the browser target has nothing to link for it/,
   );
   assert.ok(!existsSync(join(root, "page")));
 });

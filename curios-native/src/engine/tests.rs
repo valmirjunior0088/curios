@@ -44,6 +44,7 @@ fn linked(foreigns: &ForeignStore, bindings: &ForeignBindings, name: &str) -> Re
         &filer(),
         name,
     )
+    .map_err(|stop| stop.to_string())
 }
 
 /// A host to file what an answer gives later with, which no link here calls.

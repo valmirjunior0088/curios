@@ -46,7 +46,7 @@ fn a_nonzero_result_past_the_limb_array_capacity_refuses_before_allocating_the_r
         let error =
             run_row(&compiled, index).expect_err("the magnitude exceeds the array capacity");
         assert!(
-            error.contains("panicked: a value is past what the runtime can hold"),
+            error.contains("panic: a value is past what the runtime can hold"),
             "wrong refusal for {row}: {error}"
         );
         assert!(

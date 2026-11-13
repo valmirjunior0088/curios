@@ -19,7 +19,7 @@ use {
     curios::{TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Step, Stream},
     curios_common::{Qualifier, Report, Style},
-    curios_native::{OsHost, TestEnd},
+    curios_native::{OsHost, Stop, TestEnd},
     curios_package::{Refused, Selection, Target},
     curios_pipeline::{CompileError, TestModule},
     curios_verdict::Verdicts,
@@ -86,12 +86,12 @@ pub enum Outcome {
     Trapped(String),
 }
 
-impl From<Result<TestEnd, String>> for Outcome {
-    fn from(end: Result<TestEnd, String>) -> Self {
+impl From<Result<TestEnd, Stop>> for Outcome {
+    fn from(end: Result<TestEnd, Stop>) -> Self {
         match end {
             Ok(TestEnd::Answered(held)) => Outcome::Answered(held),
             Ok(TestEnd::Exited(code)) => Outcome::Exited(code),
-            Err(trap) => Outcome::Trapped(trap),
+            Err(stop) => Outcome::Trapped(stop.to_string()),
         }
     }
 }

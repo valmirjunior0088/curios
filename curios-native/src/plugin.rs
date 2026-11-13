@@ -15,7 +15,7 @@
 use {
     super::{
         Answers, BundledPlugin, Entered, ForeignBindings, Guest, Lift, Lower, MachineCode, Stated,
-        Trampoline, Unlinked, shared_engine,
+        Stop, Trampoline, Unlinked, raised, shared_engine,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireReturn, WireType},
     std::{collections::BTreeMap, fmt, sync::Arc},
@@ -217,22 +217,29 @@ impl Plugin {
         self: &Arc<Self>,
         store: &mut Store<Guest>,
         answers: &mut Answers,
-    ) -> Result<(), String> {
+    ) -> Result<(), Stop> {
         let subject = &self.subject;
 
         // Instantiating runs the module's start function, an entry into it like any other, on the stack the program is about to run on.
         let instance = Linker::new(shared_engine())
             .instantiate(&mut *store, self.compiled.module())
             .map_err(|error| {
-                format!(
-                    "{subject} could not be instantiated: {}",
-                    error.root_cause()
+                Stop::of(
+                    "module failure",
+                    format_args!(
+                        "{subject} could not be instantiated: {}",
+                        error.root_cause()
+                    ),
                 )
             })?;
 
         // What `of` read off the module's types is found again on the instance: a failure here is this file's own.
-        let missing =
-            |what: &str| format!("{subject} lost its `{what}` between its types and its instance");
+        let missing = |what: &str| {
+            Stop::of(
+                "compiler fault",
+                format_args!("{subject} lost its `{what}` between its types and its instance"),
+            )
+        };
         let memory = instance
             .get_memory(&mut *store, MEMORY)
             .ok_or_else(|| missing(MEMORY))?;
@@ -297,10 +304,10 @@ struct Instantiated {
 
 /// A call into the module that failed, as the refusal a run reports: who failed, in what, and the cause at the root of the engine's chain. A trap's own display is its frames, so the root is the sentence that says what happened.
 fn failed(subject: &Subject, what: &str, error: wasmtime::Error) -> wasmtime::Error {
-    wasmtime::Error::msg(format!(
-        "{subject} failed in `{what}`: {}",
-        error.root_cause()
-    ))
+    raised(
+        "module failure",
+        format_args!("{subject} failed in `{what}`: {}", error.root_cause()),
+    )
 }
 
 impl Instantiated {
@@ -312,10 +319,13 @@ impl Instantiated {
         bytes: &[u8],
     ) -> wasmtime::Result<u32> {
         let length = u32::try_from(bytes.len()).map_err(|_| {
-            wasmtime::Error::msg(format!(
-                "a byte string of {} bytes is too long to cross to {subject}",
-                bytes.len()
-            ))
+            raised(
+                "value too large",
+                format_args!(
+                    "a byte string of {} bytes is too long to cross to {subject}",
+                    bytes.len()
+                ),
+            )
         })?;
 
         // The module owns what it hands out: a call's argument is its to release, as the canonical ABI has it, so nothing is freed from this side.
@@ -331,9 +341,12 @@ impl Instantiated {
         self.memory
             .write(&mut *caller, offset as usize, bytes)
             .map_err(|_| {
-                wasmtime::Error::msg(format!(
-                    "{subject} allocated {length} bytes at {offset}, past the end of its memory"
-                ))
+                raised(
+                    "invalid answer",
+                    format_args!(
+                        "{subject} allocated {length} bytes at {offset}, past the end of its memory"
+                    ),
+                )
             })?;
 
         Ok(offset)
@@ -353,9 +366,12 @@ impl Instantiated {
         self.memory
             .read(&mut *caller, offset as usize, &mut bytes)
             .map_err(|_| {
-                wasmtime::Error::msg(format!(
-                    "{subject} answered `{export}` with {length} bytes at {offset}, past the end of its memory"
-                ))
+                raised(
+                    "invalid answer",
+                    format_args!(
+                        "{subject} answered `{export}` with {length} bytes at {offset}, past the end of its memory"
+                    ),
+                )
             })?;
 
         Ok(bytes)
@@ -458,9 +474,10 @@ fn lower_scalar(
         Crossing::Bool => match value.unwrap_i32() {
             0 => false.lower(caller, slot),
             1 => true.lower(caller, slot),
-            word => Err(wasmtime::Error::msg(format!(
-                "{subject} answered `{export}` with {word}, which is not a Bool"
-            ))),
+            word => Err(raised(
+                "invalid answer",
+                format_args!("{subject} answered `{export}` with {word}, which is no `Bool`"),
+            )),
         },
         // A word past 255 is refused here rather than truncated into a different byte.
         Crossing::Byte => {
@@ -468,9 +485,10 @@ fn lower_scalar(
 
             u8::try_from(word)
                 .map_err(|_| {
-                    wasmtime::Error::msg(format!(
-                        "{subject} answered `{export}` with {word}, which is not a byte"
-                    ))
+                    raised(
+                        "invalid answer",
+                        format_args!("{subject} answered `{export}` with {word}, which is no byte"),
+                    )
                 })?
                 .lower(caller, slot)
         }

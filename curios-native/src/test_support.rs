@@ -285,7 +285,7 @@ pub fn run_within_heap<H: HostOps + Send + Sync + 'static>(
     compiled: &Compiled,
     host: H,
     heap: usize,
-) -> Result<u8, String> {
+) -> Result<u8, Stop> {
     let host = Arc::new(host);
 
     compiled.run_in(
@@ -302,7 +302,7 @@ pub fn run_raw<H: HostOps + Send + Sync + 'static>(
     host: H,
     raw: Vec<(HostOp, Vec<RawValue>)>,
     bindings: ForeignBindings,
-) -> Result<u8, String> {
+) -> Result<u8, Stop> {
     let host = Arc::new(host);
     let mut answers = host_rows(Arc::clone(&host));
 

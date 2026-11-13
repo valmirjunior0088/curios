@@ -1,5 +1,5 @@
 use {
-    super::{Element, ExitTrap, Guest, Returned},
+    super::{Element, ExitTrap, Guest, Returned, raised},
     curios_abi::{
         Encoded, Handle, HostOp, ReplyShape, Termination, WireLeaf, WireReply, WireType, WireValue,
     },
@@ -390,8 +390,12 @@ impl<R: WireReply> Reply for Replied<R> {
         caller: &mut Caller<'_, Guest>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
-        let refused =
-            |sentence: String| wasmtime::Error::msg(format!("{}: {sentence}", self.op.declared()));
+        let refused = |sentence: String| {
+            raised(
+                "host failure",
+                format_args!("{}: {sentence}", self.op.declared()),
+            )
+        };
 
         let values = match self.reply.encode() {
             Encoded::Reply(values) => values,

@@ -202,7 +202,7 @@ fn run_linked(source: &str, modules: Vec<DeclaredModule>) -> Result<u8, String> 
         compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |_| {})
             .expect("compile succeeded");
 
-    let bindings = plugin_bindings(&foreigns, modules)?;
+    let bindings = plugin_bindings(&foreigns, modules).map_err(|unlinked| unlinked.to_string())?;
     let (system, _io) = MockHost::builder().build();
 
     run_wasm(&module, foreigns, system, bindings)
@@ -262,7 +262,7 @@ fn a_plugin_byte_past_255_is_refused() {
     .expect_err("256 is not a byte");
 
     assert!(
-        refusal.contains("with 256, which is not a byte"),
+        refusal.starts_with("invalid answer: ") && refusal.contains("with 256, which is no byte"),
         "{refusal}"
     );
 }

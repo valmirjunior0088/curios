@@ -16,10 +16,10 @@ export class ExitSignal extends Error {
   }
 }
 
-/** Thrown by the `panic` import — the compiler's own refusal, an overflow or a read past the end — to unwind the wasm stack with the sentence the program handed over. Surfaces as the run's `trap`, prefixed `panicked:` exactly as the native runtime prints it. */
+/** Thrown by the `panic` import — the compiler's own refusal, an overflow or a read past the end — to unwind the wasm stack with the sentence the program handed over. Surfaces as the run's `trap`, behind `panic:` exactly as the native runtime says it. */
 export class PanicSignal extends Error {
   constructor(message) {
-    super(`panicked: ${message}`);
+    super(`panic: ${message}`);
   }
 }
 

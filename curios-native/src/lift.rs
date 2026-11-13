@@ -1,5 +1,5 @@
 use {
-    super::Guest,
+    super::{Guest, raised},
     curios_abi::{
         ClosedCode, Handle, Mode, SerialFlow, SerialOp, SerialParity, StdioMode, WireLeaf, WireType,
     },
@@ -42,7 +42,7 @@ impl Lift for Handle {
 fn lift_code<T: ClosedCode>(params: &[Val], what: &str) -> Result<T, wasmtime::Error> {
     let code = params[0].unwrap_i64().cast_unsigned();
 
-    T::from_code(code).ok_or_else(|| wasmtime::Error::msg(format!("{code} is not {what}")))
+    T::from_code(code).ok_or_else(|| raised("compiler fault", format_args!("{code} is not {what}")))
 }
 
 impl Lift for Mode {
@@ -104,7 +104,8 @@ impl Lift for u8 {
     fn lift(_: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         let word = params[0].unwrap_i32();
 
-        u8::try_from(word).map_err(|_| wasmtime::Error::msg(format!("{word} is not a byte")))
+        u8::try_from(word)
+            .map_err(|_| raised("compiler fault", format_args!("{word} is not a byte")))
     }
 }
 
@@ -113,7 +114,10 @@ pub fn bool_of(word: i32) -> Result<bool, wasmtime::Error> {
     match word {
         0 => Ok(false),
         1 => Ok(true),
-        word => Err(wasmtime::Error::msg(format!("{word} is not a Bool"))),
+        word => Err(raised(
+            "compiler fault",
+            format_args!("{word} is not a Bool"),
+        )),
     }
 }
 
@@ -187,12 +191,12 @@ lift_tuple!(A 0, B 1, C 2, D 3, E 4, F 5, G 6);
 /// Read a list of scalars: the guest's flat array, one element per slot, each already narrowed by the guest to what the wire carries — `$longs` for a `Nat` or `Int`, `$words` for a `Bool`.
 fn lift_scalars(caller: &mut Caller<'_, Guest>, param: &Val) -> Result<Vec<Val>, wasmtime::Error> {
     let Val::AnyRef(Some(anyref)) = param else {
-        return Err(wasmtime::Error::msg("expected non-null anyref"));
+        return Err(raised("compiler fault", "expected non-null anyref"));
     };
 
     let array_ref = anyref
         .as_array(&*caller)?
-        .ok_or_else(|| wasmtime::Error::msg("expected array ref"))?;
+        .ok_or_else(|| raised("compiler fault", "expected array ref"))?;
 
     let len = array_ref.len(&*caller)?;
 
@@ -250,12 +254,12 @@ impl Lift for Vec<u8> {
 
     fn lift(caller: &mut Caller<'_, Guest>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         let Val::AnyRef(Some(anyref)) = &params[0] else {
-            return Err(wasmtime::Error::msg("expected non-null anyref"));
+            return Err(raised("compiler fault", "expected non-null anyref"));
         };
 
         let array_ref = anyref
             .as_array(&*caller)?
-            .ok_or_else(|| wasmtime::Error::msg("expected array ref"))?;
+            .ok_or_else(|| raised("compiler fault", "expected array ref"))?;
 
         // The whole body in one copy: read an element at a time, a byte string costs a decoded value a byte, which is what a program that shuttles bytes to a module pays twice for each.
         let mut bytes = vec![0; array_ref.len(&*caller)? as usize];
@@ -272,12 +276,12 @@ fn lift_bytes_array(
     param: &Val,
 ) -> Result<Vec<Vec<u8>>, wasmtime::Error> {
     let Val::AnyRef(Some(anyref)) = param else {
-        return Err(wasmtime::Error::msg("expected non-null anyref"));
+        return Err(raised("compiler fault", "expected non-null anyref"));
     };
 
     let array_ref = anyref
         .as_array(&*caller)?
-        .ok_or_else(|| wasmtime::Error::msg("expected array ref"))?;
+        .ok_or_else(|| raised("compiler fault", "expected array ref"))?;
 
     let len = array_ref.len(&*caller)?;
 
@@ -358,9 +362,12 @@ where
 
         match values.len() {
             1 => Ok(values.pop()),
-            length => Err(wasmtime::Error::msg(format!(
-                "an option holds one value where it holds any, and this one holds {length}"
-            ))),
+            length => Err(raised(
+                "compiler fault",
+                format_args!(
+                    "an option holds one value where it holds any, and this one holds {length}"
+                ),
+            )),
         }
     }
 }

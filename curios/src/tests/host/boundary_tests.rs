@@ -11,6 +11,7 @@ fn answering(source: &str, host: MockHost, op: HostOp, reply: Vec<RawValue>) -> 
     let compiled = compile(source).expect("the program compiles");
 
     run_raw(&compiled, host, vec![(op, reply)], ForeignBindings::empty())
+        .map_err(|stop| stop.to_string())
 }
 
 /// What `source` wrote when `op` answered `reply` raw on every call.

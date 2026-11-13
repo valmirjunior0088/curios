@@ -4,6 +4,7 @@
 
 use {
     super::{ExitTrap, Guest},
+    crate::raised,
     curios_abi::{ADVANCE, DEADLOCK, Handle, HostOps},
     wasmtime::{
         AnyRef, AsContextMut, Func, Instance, OwnedRooted, RootScope, Rooted, Store, TypedFunc,
@@ -107,7 +108,7 @@ fn finish(
 /// Wait on `on`; a system that refuses the wait refuses the run.
 fn waited(host: &(dyn HostOps + Send + Sync), on: Vec<Handle>) -> Result<(), wasmtime::Error> {
     host.wait(on)
-        .map_err(|refusal| wasmtime::Error::msg(refusal.0))
+        .map_err(|refusal| raised("host failure", refusal.0))
 }
 
 /// What `turn` leaves to do, its references owned past the scope it was read in.
@@ -141,7 +142,7 @@ fn handles(
     mut store: impl AsContextMut,
     on: Option<Rooted<AnyRef>>,
 ) -> Result<Vec<Handle>, wasmtime::Error> {
-    let not_a_list = || wasmtime::Error::msg("a turn's handles are not a list");
+    let not_a_list = || raised("compiler fault", "a turn's handles are not a list");
     let on = on
         .ok_or_else(not_a_list)?
         .as_array(&store)?

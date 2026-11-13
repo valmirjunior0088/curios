@@ -33,7 +33,7 @@ use {
     curios_common::{Kind, Report, Source, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
-    curios_native::{Bundle, Compiled, OsHost},
+    curios_native::{Bundle, Compiled, OsHost, Stop},
     curios_package::{
         Entry, Fetch, Pinning, Refused, Repoint, Spelling, Store, Target, Transport, curate, pin,
         scaffold,
@@ -81,6 +81,8 @@ enum Failure {
     Stopped(CompileError),
     /// What a command refuses before anything is compiled, as its report: rendered where it is printed, for whoever reads it there.
     Refused(Box<Report>),
+    /// A program that could not go on, with how it stopped: said on one line, as the program built into an executable says it of itself.
+    Halted(Stop),
     Error(String),
     Concluded(Concluded),
 }
@@ -98,6 +100,12 @@ enum Concluded {
 impl From<String> for Failure {
     fn from(message: String) -> Self {
         Failure::Error(message)
+    }
+}
+
+impl From<Stop> for Failure {
+    fn from(stop: Stop) -> Self {
+        Failure::Halted(stop)
     }
 }
 
@@ -273,6 +281,10 @@ fn dispatch() -> Result<(), Failure> {
                 Then::Nothing,
             )?;
             let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
+            // Linked here as the run links, entering nothing, so what could not be linked is the compiler's to refuse, at the row that declares it, before the program has taken a step.
+            bindings
+                .check(&foreigns)
+                .map_err(|refusal| unlinked(refusal, manifest.as_deref()))?;
 
             // Nothing announces the run: what follows is the program's own output.
             tree.close();
@@ -844,6 +856,11 @@ fn main() -> ExitCode {
         }
         Err(Failure::Refused(report)) => {
             eprintln!("{}", report.rendered(Kind::Error, reader()));
+
+            ExitCode::FAILURE
+        }
+        Err(Failure::Halted(stop)) => {
+            eprintln!("{stop}");
 
             ExitCode::FAILURE
         }

@@ -26,5 +26,7 @@ pub fn run_wasm<H: HostOps + Send + Sync + 'static>(
     host: H,
     bindings: ForeignBindings,
 ) -> Result<u8, String> {
-    to_compiled(module, foreigns)?.run(host, bindings)
+    to_compiled(module, foreigns)?
+        .run(host, bindings)
+        .map_err(|stop| stop.to_string())
 }

@@ -44,10 +44,3 @@ impl fmt::Display for Unlinked {
         }
     }
 }
-
-// Scaffolding while the run's own failures are still held as text: it goes when they are typed.
-impl From<Unlinked> for String {
-    fn from(unlinked: Unlinked) -> Self {
-        unlinked.to_string()
-    }
-}
