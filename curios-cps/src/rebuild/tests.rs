@@ -124,3 +124,138 @@ fn a_function_called_both_ways_is_copied_for_its_unique_call_within_the_allowanc
         assert_eq!(rebuilds(&module).len(), rebuilt, "{module}");
     }
 }
+
+/// `pick(t)` hands `t` back, by a jump or by both edges of a switch on its tag, and `main` builds a `Pair` beside what a call of it answered: a constant `Pair` where `fresh` is false, and one built of a computed value, which nothing else holds, where it is true.
+fn handed_back_by(switch: bool, fresh: bool) -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let pick = module.reserve_function();
+    let pick_return = module.reserve_continuation();
+    let [t, tag, c, v, r, x, y, n] =
+        ["t", "tag", "c", "v", "r", "x", "y", "n"].map(|name| module.add_value(Some(name.into())));
+
+    let back = || Edge {
+        target: pick_return,
+        args: vec![Atom::Value(t)],
+    };
+    let hands = match switch {
+        true => module.add_node(Node::Switch {
+            scrutinee: Atom::Value(tag),
+            cases: std::collections::BTreeMap::from([(1, back())]),
+            default: Some(back()),
+        }),
+        false => module.add_node(Node::ApplyCont(back())),
+    };
+    let read_tag = module.add_node(Node::LetIntrinsic {
+        result: tag,
+        op: Intrinsic::RowGet(pair, 0),
+        args: vec![Atom::Value(t)],
+        next: hands,
+    });
+    module.define_function(
+        pick,
+        Function {
+            debug_name: Some("pick".into()),
+            params: vec![t],
+            return_cont: pick_return,
+            body: read_tag,
+            droppable: false,
+        },
+    );
+
+    let exit = module.add_node(halt(vec![Atom::Value(n)]));
+    let build = module.add_node(Node::LetValue {
+        result: n,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(y)]),
+        next: exit,
+    });
+    let bump = module.add_node(Node::LetIntrinsic {
+        result: y,
+        op: Intrinsic::NatAdd,
+        args: vec![Atom::Value(x), nat(1)],
+        next: build,
+    });
+    let read = module.add_node(Node::LetIntrinsic {
+        result: x,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(r)],
+        next: bump,
+    });
+    let answered = module.reserve_continuation();
+    module.define_continuation(
+        answered,
+        Continuation {
+            debug_name: None,
+            params: vec![r],
+            body: read,
+        },
+    );
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(pick),
+        args: vec![Atom::Value(c)],
+        return_to: answered,
+    });
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![answered],
+        body: call,
+    });
+    let held = module.add_node(Node::LetValue {
+        result: c,
+        value: ValueExpr::Row(
+            pair,
+            vec![
+                nat(1),
+                match fresh {
+                    true => Atom::Value(v),
+                    false => nat(7),
+                },
+            ],
+        ),
+        next: scope,
+    });
+    let computed = module.add_node(Node::LetIntrinsic {
+        result: v,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: held,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![pick],
+        body: computed,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// What a switch's edge hands a function's return is handed back as what a jump hands is: a constant a function returns that way is no value to write into where it is answered, and a value nothing else holds is rebuilt there by either route.
+#[test]
+fn a_switchs_edge_to_a_return_hands_back_what_a_jump_does() {
+    for switch in [false, true] {
+        assert_eq!(
+            rebuilds(&handed_back_by(switch, false)).len(),
+            0,
+            "a constant handed back, by a switch's edge: {switch}"
+        );
+        assert_eq!(
+            rebuilds(&handed_back_by(switch, true)).len(),
+            1,
+            "a value nothing else holds handed back, by a switch's edge: {switch}"
+        );
+    }
+}

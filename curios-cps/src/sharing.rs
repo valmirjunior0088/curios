@@ -9,7 +9,7 @@
 use {
     super::{
         Atom, Callee, ContinuationId, FunctionId, Intrinsic, Lattice, Literal, Module, Node,
-        NodeId, RowId, Slot, Solver, ValueExpr, ValueId, analyze_calls,
+        NodeId, RowId, Slot, Solver, ValueExpr, ValueId, analyze_calls, return_edges,
     },
     std::{
         cell::RefCell,
@@ -222,8 +222,8 @@ pub fn routes(module: &Module) -> Routes {
                 for node in nodes {
                     let node = *node;
                     rules.add(move |solver| match module.node(node) {
-                        Some(Node::ApplyCont(edge)) => {
-                            for (index, atom) in edge.args.iter().enumerate() {
+                        Some(Node::ApplyCont(_) | Node::Switch { .. }) => {
+                            for (index, atom) in handed_back(module, function, node) {
                                 if shared(solver, world, atom) {
                                     solver.join(
                                         (world, Key::Returned(function, index)),
@@ -552,25 +552,31 @@ fn aggregates(module: &Module, shape: &Shape) -> BTreeSet<ValueId> {
                 let node = *node;
                 rules.add(move |solver| {
                     let arity = arities.get(&function).copied().unwrap_or(0);
-                    let handed = match module.node(node) {
-                        Some(Node::ApplyCont(edge)) => {
-                            edge.args.iter().map(|atom| fact(solver, atom)).collect()
+                    let handed: Vec<(usize, Aggregate)> = match module.node(node) {
+                        Some(Node::ApplyCont(_) | Node::Switch { .. }) => {
+                            handed_back(module, function, node)
+                                .into_iter()
+                                .map(|(index, atom)| (index, fact(solver, atom)))
+                                .collect()
                         }
                         Some(Node::ApplyFun {
                             callee: Callee::Known(callee),
                             ..
                         }) => (0..arity)
                             .map(|index| {
-                                solver
+                                let returned = solver
                                     .fact(&TagKey::Returned(*callee, index))
                                     .cloned()
-                                    .unwrap_or_default()
+                                    .unwrap_or_default();
+                                (index, returned)
                             })
                             .collect(),
-                        other if anything(other) => vec![Aggregate::any(); arity],
+                        other if anything(other) => {
+                            (0..arity).map(|index| (index, Aggregate::any())).collect()
+                        }
                         _ => Vec::new(),
                     };
-                    for (index, handed) in handed.into_iter().enumerate() {
+                    for (index, handed) in handed {
                         solver.join(TagKey::Returned(function, index), handed);
                     }
                 });
@@ -925,18 +931,23 @@ impl Shape {
                                     enter(edge.target);
                                 }
                                 Node::Switch { cases, default, .. } => {
-                                    for (key, edge) in cases {
-                                        shape.entries.entry(edge.target).or_default().push(Entry {
-                                            args: edge.args.clone(),
-                                            case: Some((at, *key)),
-                                        });
-                                        enter(edge.target);
+                                    // An edge to the function's return hands its arguments back, as a jump there does, and enters no continuation.
+                                    if !return_edges(terminator, definition.return_cont).is_empty()
+                                    {
+                                        shape.returns.entry(function).or_default().push(at);
                                     }
-                                    if let Some(edge) = default {
-                                        shape.entries.entry(edge.target).or_default().push(Entry {
-                                            args: edge.args.clone(),
-                                            case: None,
-                                        });
+                                    let keyed = cases.iter().map(|(key, edge)| (Some(*key), edge));
+                                    for (key, edge) in
+                                        keyed.chain(default.iter().map(|edge| (None, edge)))
+                                    {
+                                        if edge.target != definition.return_cont {
+                                            shape.entries.entry(edge.target).or_default().push(
+                                                Entry {
+                                                    args: edge.args.clone(),
+                                                    case: key.map(|key| (at, key)),
+                                                },
+                                            );
+                                        }
                                         enter(edge.target);
                                     }
                                 }
@@ -1256,9 +1267,9 @@ fn node_sites(node: &Node, own_return: ContinuationId) -> Vec<(ValueId, Site, Ed
             push(scrutinee, Site::Read, None);
             let keyed = cases.iter().map(|(key, edge)| (Some(*key), edge));
             for (key, edge) in keyed.chain(default.iter().map(|edge| (None, edge))) {
-                for atom in &edge.args {
+                for (index, atom) in edge.args.iter().enumerate() {
                     let site = match edge.target == own_return {
-                        true => Site::Escape,
+                        true => Site::Return(index),
                         false => Site::Jump(edge.target),
                     };
                     push(atom, site, Some((edge.target, key)));
@@ -1463,8 +1474,8 @@ impl<'s> Facts<'s> {
                 for node in nodes {
                     let node = *node;
                     rules.add(move |solver| match module.node(node) {
-                        Some(Node::ApplyCont(edge)) => {
-                            for (index, atom) in edge.args.iter().enumerate() {
+                        Some(Node::ApplyCont(_) | Node::Switch { .. }) => {
+                            for (index, atom) in handed_back(module, function, node) {
                                 if shared(solver, atom) {
                                     solver.join(Key::Returned(function, index), Shared(true));
                                 }
@@ -1649,13 +1660,13 @@ fn sources(
     for (function, nodes) in &shape.returns {
         for node in nodes {
             let opaque = match module.node(*node) {
-                Some(Node::ApplyCont(edge)) => edge
-                    .args
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, atom)| matches!(atom, Atom::Literal(_) | Atom::Fun(_)))
-                    .map(|(index, _)| index)
-                    .collect(),
+                Some(Node::ApplyCont(_) | Node::Switch { .. }) => {
+                    handed_back(module, *function, *node)
+                        .into_iter()
+                        .filter(|(_, atom)| matches!(atom, Atom::Literal(_) | Atom::Fun(_)))
+                        .map(|(index, _)| index)
+                        .collect()
+                }
                 Some(Node::ApplyFun {
                     callee: Callee::Known(_),
                     ..
@@ -1685,6 +1696,17 @@ fn clear_of_constants(
     };
     !possible.contains(&None)
         && guard(module, shape, value, node).is_some_and(|tag| !possible.contains(&Some(tag)))
+}
+
+/// What `node` hands `function`'s return, each argument with the place it is handed back at: a jump's arguments, and those of every edge of a switch that goes there, a switch's edge to the return being a return as a jump to it is.
+fn handed_back(module: &Module, function: FunctionId, node: NodeId) -> Vec<(usize, &Atom)> {
+    let (Some(node), Some(definition)) = (module.node(node), module.function(function)) else {
+        return Vec::new();
+    };
+    return_edges(node, definition.return_cont)
+        .into_iter()
+        .flat_map(|edge| edge.args.iter().enumerate())
+        .collect()
 }
 
 /// Whether a call hands its parameter `index` a value dead after it, and no other parameter of the call that same value, or a filler, the null no one holds.
@@ -1936,15 +1958,23 @@ fn constant_tags(module: &Module, shape: &Shape) -> BTreeMap<ValueId, Tags> {
                         .chain(default.as_ref())
                         .cloned()
                         .collect::<Vec<_>>();
+                    let (block, _) = shape.place[&node_id];
+                    let function = shape.owner[&block];
+                    let own_return = module.function(function).unwrap().return_cont;
                     rules.add(move |solver| {
                         for edge in &edges {
                             for (index, atom) in edge.args.iter().enumerate() {
                                 let handed = possible(solver, atom);
-                                if let Some(param) = module
-                                    .continuation(edge.target)
-                                    .and_then(|target| target.params.get(index))
-                                {
-                                    solver.join(TagKey::Value(*param), handed);
+                                match edge.target == own_return {
+                                    true => solver.join(TagKey::Returned(function, index), handed),
+                                    false => {
+                                        if let Some(param) = module
+                                            .continuation(edge.target)
+                                            .and_then(|target| target.params.get(index))
+                                        {
+                                            solver.join(TagKey::Value(*param), handed);
+                                        }
+                                    }
                                 }
                             }
                         }
