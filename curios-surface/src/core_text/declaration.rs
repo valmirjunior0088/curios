@@ -6,46 +6,58 @@
 
 use {
     super::{
-        Fields, OpenedEntry, ReadError, Reader, Refusal, core_read, malformed, telescope_read,
-        universe_context_read, value, value_fields, value_list, value_module, value_term,
-        value_unmarked, value_word,
+        Fields, LabelRead, OpenedEntry, ReadError, Reader, Refusal, TelescopeEntry, core_read,
+        malformed, parameter_entry, proving_telescope, telescope_read, universe_context_read,
+        value, value_fields, value_list, value_module, value_term, value_unmarked, value_word,
     },
     crate::{
-        CasePayloadParam, CoreHead, CoreText, CoreValue, Frame, FuncTypeParam, Rendered, Shown,
-        TopCase, TopConcept, TopInduct, TopStruct, decoration_fields, sub,
+        CasePayloadParam, CoreHead, CoreText, CoreValue, DecoratorField, Frame, FuncTypeParam,
+        Rendered, Shown, TopCase, TopConcept, TopInduct, TopStruct, decoration_fields, sub,
     },
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Bound, Cursor, Free, Global, InductDecl, InductParam, Polarity, StructDecl,
+        Atom, Bound, Cursor, Free, Global, InductDecl, InductParam, Label, Polarity, StructDecl,
         Telescope, Term, UniverseContext, Variance,
     },
+    std::iter,
 };
 
 /// One binder of a declaration's telescope: its mark, its type, the variable a later type reads it by, whether the rest of its own telescope reads it, and whether it has a hint or is so read.
-pub struct Binder {
+pub struct DeclaredBinder {
     pub mark: Plicity,
     pub type_: Term,
     pub label: Free,
+    /// The label Core keeps for the binder, which a whole write states beside its word.
+    pub kept: Option<Label>,
     pub variable: Term,
     pub read: bool,
     pub named: bool,
 }
 
-impl Binder {
+impl DeclaredBinder {
     /// Whether this binder is read as a value: in place of a superclass edge's word, which resolution reads it by, its word.
     fn variable_is(&self, term: &Term) -> bool {
         term.mentions_free(&self.label)
     }
 
-    /// The word this binder is written by where it has a hint or `read` says something reads it, and none where it is written as its type alone.
+    /// What a whole write states of this binder's label beside its word.
+    fn core<D: Rendered>(&self, frame: Frame<'_, D>) -> Vec<DecoratorField<D>> {
+        frame.label_fields(self.kept.as_ref())
+    }
+
+    /// The word this binder is written by where it has a hint or `read` says something reads it, `_` where nothing does and its decorator states something, which stands before a word and reads back as no hint, and none where it is written as its type alone.
     fn word<D: Rendered>(&self, read: bool, frame: Frame<'_, D>) -> Option<String> {
-        (self.named || read).then(|| frame.spelling.label(&self.label))
+        match self.named || read {
+            true => Some(frame.spelling.label(&self.label)),
+            false => (!self.core(frame).is_empty()).then(|| "_".to_string()),
+        }
     }
 
     /// This binder under its mark: by its word where it has a hint or `read` says something reads it, and as its type alone otherwise.
     pub fn written<D: Rendered>(&self, read: bool, frame: Frame<'_, D>) -> FuncTypeParam<D> {
         FuncTypeParam {
             plicity: self.mark,
+            core: self.core(frame),
             label: self.word(read, frame),
             type_: sub(self.type_.clone(), frame),
         }
@@ -56,18 +68,20 @@ impl Binder {
 pub fn binders<D: Rendered, B: Bound>(
     cursor: &mut Cursor<'_, B>,
     frame: Frame<'_, D>,
-) -> Vec<Binder> {
+) -> Vec<DeclaredBinder> {
     let mut binders = Vec::new();
     while let (Some((hint, type_)), Some(mark)) = (cursor.entry(), cursor.mark()) {
+        let kept = cursor.label().copied();
         let label = frame.label(cursor.label());
         let read = cursor.binder_used();
         let named = hint.is_some() || read;
         let variable = Term::free_var(&label);
         cursor.advance(variable.clone());
-        binders.push(Binder {
+        binders.push(DeclaredBinder {
             mark,
             type_,
             label,
+            kept,
             variable,
             read,
             named,
@@ -132,7 +146,13 @@ pub fn family_declared<D: Rendered>(
     // Each part written in the order the text holds it, the head before the cases, which is the order a reader meets a node a part shares with a later one.
     let index_types = indices
         .iter()
-        .map(|index| (index.word(false, frame), sub(index.type_.clone(), frame)))
+        .map(|index| {
+            (
+                index.core(frame),
+                index.word(false, frame),
+                sub(index.type_.clone(), frame),
+            )
+        })
         .collect();
     let result_sort = sub(entry.result_sort.clone(), frame);
     let cases = entry
@@ -155,7 +175,11 @@ pub fn family_declared<D: Rendered>(
 }
 
 /// Whether a case whose signature is `telescope` reads the family's parameter `param` past its own parameters, which are read at `params`.
-fn reads(telescope: &Telescope<Vec<Term>>, params: &[Binder], param: &Binder) -> bool {
+fn reads(
+    telescope: &Telescope<Vec<Term>>,
+    params: &[DeclaredBinder],
+    param: &DeclaredBinder,
+) -> bool {
     let mut cursor = telescope.cursor();
     for each in params {
         if cursor.entry().is_none() {
@@ -179,7 +203,7 @@ fn reads(telescope: &Telescope<Vec<Term>>, params: &[Binder], param: &Binder) ->
 fn case_written<D: Rendered>(
     tag: &Atom,
     signature: &InductParam,
-    params: &[Binder],
+    params: &[DeclaredBinder],
     indexed: bool,
     frame: Frame<'_, D>,
 ) -> TopCase<D> {
@@ -199,6 +223,7 @@ fn case_written<D: Rendered>(
         .iter()
         .map(|binder| CasePayloadParam {
             plicity: binder.mark,
+            core: binder.core(frame),
             label: binder.word(false, frame),
             type_: sub(binder.type_.clone(), frame),
         })
@@ -229,7 +254,7 @@ pub struct RecordWritten<D: Rendered = Shown> {
     pub params: Vec<FuncTypeParam<D>>,
     pub rep_pub: bool,
     pub result_sort: crate::Term<D>,
-    pub fields: Vec<(Plicity, Option<String>, crate::Term<D>)>,
+    pub fields: Vec<crate::StructField<D>>,
     pub words: Vec<String>,
 }
 
@@ -244,19 +269,7 @@ impl<D: Rendered> RecordWritten<D> {
             label: label_of(name),
             params: self.params,
             result_sort: self.result_sort,
-            fields: self
-                .fields
-                .into_iter()
-                .map(|(plicity, label, type_)| crate::StructField {
-                    doc: None,
-                    plicity,
-                    param: crate::TupleTypeParam {
-                        label: label.map(crate::Label::from),
-                        func_params: None,
-                        type_,
-                    },
-                })
-                .collect(),
+            fields: self.fields,
         }
     }
 
@@ -273,12 +286,13 @@ impl<D: Rendered> RecordWritten<D> {
             fields: self
                 .fields
                 .into_iter()
-                .map(|(plicity, label, type_)| crate::ConceptField {
+                .map(|field| crate::ConceptField {
                     doc: None,
-                    plicity,
-                    label: label.map(crate::Label::from),
+                    plicity: field.plicity,
+                    core: field.param.core,
+                    label: field.param.label,
                     func_params: None,
-                    type_,
+                    type_: field.param.type_,
                 })
                 .collect(),
         }
@@ -313,10 +327,19 @@ pub fn record_declared<D: Rendered>(record: &StructDecl, frame: Frame<'_, D>) ->
         .iter()
         .map(|field| {
             let label = match field.mark {
-                Plicity::Witness => field.read.then(|| frame.spelling.label(&field.label)),
+                Plicity::Witness => field.word(field.read, frame),
                 _ => field.word(false, frame),
             };
-            (field.mark, label, sub(field.type_.clone(), frame))
+            crate::StructField {
+                doc: None,
+                plicity: field.mark,
+                param: crate::TupleTypeParam {
+                    core: field.core(frame),
+                    label: label.map(crate::Label::from),
+                    func_params: None,
+                    type_: sub(field.type_.clone(), frame),
+                },
+            }
         })
         .collect();
 
@@ -397,20 +420,17 @@ pub fn family_entry_read(
     let params = family
         .params
         .iter()
-        .map(|param| {
-            (
-                param.plicity,
-                param.label.as_deref().unwrap_or("_"),
-                &param.type_,
-            )
-        })
-        .collect::<Vec<_>>();
+        .map(parameter_entry)
+        .collect::<Result<Vec<_>, _>>()?;
     let indices = family
         .indices
         .iter()
-        .map(|(label, type_)| (Plicity::Explicit, label.as_deref().unwrap_or("_"), type_))
-        .collect::<Vec<_>>();
-    let (params, (indices, cases)) = telescope_read(&params, reader, &mut |reader, params| {
+        .map(|(core, label, type_)| {
+            let label = LabelRead::of(core, label.as_deref().unwrap_or("_"), type_.span())?;
+            Ok((Plicity::Explicit, label, type_))
+        })
+        .collect::<Result<Vec<TelescopeEntry<'_>>, ReadError>>()?;
+    let (read, (indices_read, cases)) = telescope_read(&params, reader, &mut |reader, params| {
         let (indices, ()) = telescope_read(&indices, reader, &mut |_, _| Ok(()))?;
         let cases = family
             .cases
@@ -419,8 +439,8 @@ pub fn family_entry_read(
             .collect::<Result<Vec<_>, _>>()?;
         Ok((indices, cases))
     })?;
-    let indices = Telescope::build(
-        indices
+    let indices_built = Telescope::build(
+        indices_read
             .into_iter()
             .map(|(_, binder, type_)| (binder, type_)),
         (),
@@ -428,7 +448,10 @@ pub fn family_entry_read(
 
     let mut entry = InductDecl {
         universe_context: scheme.clone(),
-        arity: Telescope::build_marked(params, indices),
+        arity: proving_telescope(
+            Telescope::build_marked(read, proving_telescope(indices_built, &indices)),
+            &params,
+        ),
         constructors: cases.into(),
         result_sort: core_read(&family.result_sort, reader)?,
         module: parent(name),
@@ -478,14 +501,15 @@ fn case_read(
         .payload
         .iter()
         .map(|param| {
-            (
-                param.plicity,
+            let label = LabelRead::of(
+                &param.core,
                 param.label.as_deref().unwrap_or("_"),
-                &param.type_,
-            )
+                param.type_.span(),
+            )?;
+            Ok((param.plicity, label, &param.type_))
         })
-        .collect::<Vec<_>>();
-    let (payload, targets) = telescope_read(&payload, reader, &mut |reader, _| {
+        .collect::<Result<Vec<TelescopeEntry<'_>>, ReadError>>()?;
+    let (payload_read, targets) = telescope_read(&payload, reader, &mut |reader, _| {
         case.target
             .iter()
             .flatten()
@@ -493,12 +517,19 @@ fn case_read(
             .collect::<Result<Vec<_>, _>>()
     })?;
 
-    Ok((
-        Atom::from(case.label.as_str()),
-        InductParam {
-            telescope: Telescope::build_marked(own.into_iter().chain(payload), targets),
-        },
-    ))
+    // A case's parameters are its family's binders, so what its text states of its binders' labels is its payload's alone.
+    let own_count = own.len();
+    let telescope = Telescope::build_marked(own.into_iter().chain(payload_read), targets);
+    let telescope = match payload.iter().any(|(_, label, _)| label.proof) {
+        true => telescope.with_proofs(
+            &iter::repeat_n(false, own_count)
+                .chain(payload.iter().map(|(_, label, _)| label.proof))
+                .collect::<Vec<_>>(),
+        ),
+        false => telescope,
+    };
+
+    Ok((Atom::from(case.label.as_str()), InductParam { telescope }))
 }
 
 /// A record's entry from a structure's form: its parameters by their words, the sort it lands in, and its fields, each plain or under `@` and by its label where it has one.
@@ -517,15 +548,15 @@ pub fn record_entry_read(
                 Refusal::ProgramForm("a field's signature sugar"),
                 field.param.type_.span(),
             )),
-            None => Ok((
-                field.plicity,
-                field
+            None => {
+                let word = field
                     .param
                     .label
                     .as_ref()
-                    .map_or("_", |label| label.as_str()),
-                &field.param.type_,
-            )),
+                    .map_or("_", |label| label.as_str());
+                let label = LabelRead::of(&field.param.core, word, field.param.type_.span())?;
+                Ok((field.plicity, label, &field.param.type_))
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -551,11 +582,11 @@ pub fn concept_entry_read(
                 Refusal::ProgramForm("a method's signature sugar"),
                 field.type_.span(),
             )),
-            None => Ok((
-                field.plicity,
-                field.label.as_ref().map_or("_", |label| label.as_str()),
-                &field.type_,
-            )),
+            None => {
+                let word = field.label.as_ref().map_or("_", |label| label.as_str());
+                let label = LabelRead::of(&field.core, word, field.type_.span())?;
+                Ok((field.plicity, label, &field.type_))
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
     // A superclass edge is named by no field label of the concept's, whatever word a later field reads it by.
@@ -597,27 +628,21 @@ fn entry_template(
 fn entry_with_fields(
     params: &[crate::FuncTypeParam<CoreText>],
     result_sort: &crate::Term<CoreText>,
-    fields: &[(Plicity, &str, &crate::Term<CoreText>)],
+    fields: &[TelescopeEntry<'_>],
     reader: &mut Reader<'_>,
 ) -> Result<StructDecl, ReadError> {
     let params = params
         .iter()
-        .map(|param| {
-            (
-                param.plicity,
-                param.label.as_deref().unwrap_or("_"),
-                &param.type_,
-            )
-        })
-        .collect::<Vec<_>>();
-    let (params, fields) = telescope_read(&params, reader, &mut |reader, _| {
+        .map(parameter_entry)
+        .collect::<Result<Vec<_>, _>>()?;
+    let (read, fields_read) = telescope_read(&params, reader, &mut |reader, _| {
         telescope_read(fields, reader, &mut |_, _| Ok(()))
-            .map(|(fields, ())| Telescope::build_marked(fields, ()))
+            .map(|(read, ())| proving_telescope(Telescope::build_marked(read, ()), fields))
     })?;
 
     Ok(StructDecl {
         universe_context: UniverseContext::empty(),
-        arity: Telescope::build_marked(params, fields),
+        arity: proving_telescope(Telescope::build_marked(read, fields_read), &params),
         result_sort: core_read(result_sort, reader)?,
         module: Qualifier::empty(),
         rep_public: false,

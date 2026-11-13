@@ -10,16 +10,17 @@ mod list_layout_tests;
 
 use {
     super::{
-        Alternative, Apply, Argument, BytesPattern, BytesSegment, CasePayloadParam, Choose,
+        Alternative, Apply, Argument, Binder, BytesPattern, BytesSegment, CasePayloadParam, Choose,
         ChooseArm, ChooseTest, ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic,
         CoreItem, CoreMember, CoreText, CoreValue, Decorated, DecoratorField, Dialect, Doc, Field,
         FieldSugarParam, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
-        Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, ListPattern, Literal,
-        Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
-        PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm, StructField, StructLit,
-        StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet,
-        TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessField, intrinsic_form, intrinsic_path,
+        InductIndex, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry,
+        ListPattern, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern,
+        NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm,
+        StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign,
+        TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple,
+        TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField, intrinsic_form,
+        intrinsic_path,
     },
     crate::{ELIDED, Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
@@ -283,85 +284,182 @@ fn print_flt(value: Floating) -> Printer {
     pure(string)
 }
 
-/// The optional `; ih` tail of a `Nat` fold's succ arm or a `List`/`Bytes` fold's cons arm — any irrefutable pattern, printed through `print_pattern`; `None` prints nothing at all (a plain case-split), matching how it was written.
-fn print_cons_ih(ih: Option<Pattern>) -> Printer {
-    match ih {
-        Some(ih) => flat([pure("; "), print_pattern(ih)]),
-        None => pure(""),
+impl<D: Layout> TreePrinter<D> {
+    /// A binder: its word, under what Core text's decorator states of the label Core keeps for it.
+    fn binder(self, binder: Binder<D>) -> Printer {
+        D::bound(self, binder.core, pure(binder.label))
     }
-}
 
-fn print_pattern_field(field: PatternField) -> Printer {
-    match field.label {
-        Some(label) => flat([pure(label), pure(" = "), print_pattern(field.value)]),
-        None => print_pattern(field.value),
+    /// The optional `; ih` tail of a `Nat` fold's succ arm or a `List`/`Bytes` fold's cons arm — any irrefutable pattern, printed through [`TreePrinter::pattern`]; `None` prints nothing at all (a plain case-split), matching how it was written.
+    fn cons_ih(self, ih: Option<Pattern<D>>) -> Printer {
+        match ih {
+            Some(ih) => flat([pure("; "), self.pattern(ih)]),
+            None => pure(""),
+        }
     }
-}
 
-/// A binder pattern: a plain name, a tuple pattern, or a struct pattern — the literal mirror of the `Tuple`/`StructLit` term-printing arms below, with `Term` replaced by `Pattern`.
-fn print_pattern(pattern: Pattern) -> Printer {
-    match pattern {
-        Pattern::Binder(name) => pure(name),
-        Pattern::Tuple(fields) => {
-            if fields.len() == 1 {
-                let field = fields.into_iter().next().unwrap();
-                // A labeled one-element tuple pattern needs no trailing comma — the `=` already disambiguates it from a grouped pattern.
-                let trailer = if field.label.is_some() { ")" } else { ",)" };
-                flat([pure("("), print_pattern_field(field), pure(trailer)])
-            } else {
+    fn pattern_field(self, field: PatternField<D>) -> Printer {
+        match field.label {
+            Some(label) => flat([pure(label), pure(" = "), self.pattern(field.value)]),
+            None => self.pattern(field.value),
+        }
+    }
+
+    /// A binder pattern: a plain name, a tuple pattern, or a struct pattern — the literal mirror of the `Tuple`/`StructLit` term-printing arms below, with `Term` replaced by `Pattern`.
+    fn pattern(self, pattern: Pattern<D>) -> Printer {
+        match pattern {
+            Pattern::Binder(binder) => self.binder(binder),
+            Pattern::Tuple(fields) => {
+                if fields.len() == 1 {
+                    let field = fields.into_iter().next().unwrap();
+                    // A labeled one-element tuple pattern needs no trailing comma — the `=` already disambiguates it from a grouped pattern.
+                    let trailer = if field.label.is_some() { ")" } else { ",)" };
+                    flat([pure("("), self.pattern_field(field), pure(trailer)])
+                } else {
+                    listed(
+                        "(",
+                        fields
+                            .into_iter()
+                            .map(|field| self.pattern_field(field))
+                            .collect(),
+                        ")",
+                    )
+                }
+            }
+            Pattern::Struct { head, fields } => flat([
+                pure(head.join()),
+                pure(" "),
+                listed_block(
+                    "{",
+                    fields
+                        .into_iter()
+                        .map(|field| self.pattern_field(field))
+                        .collect(),
+                    "}",
+                ),
+            ]),
+        }
+    }
+
+    fn match_pattern_field(self, field: MatchPatternField<D>) -> Printer {
+        match field.label {
+            Some(label) => flat([pure(label), pure(" = "), self.match_pattern(field.value)]),
+            None => self.match_pattern(field.value),
+        }
+    }
+
+    /// An arm's alternatives: on one line where they fit, and otherwise from the arm's line with each continuation at the arm's column, after its bar. Short atoms pack as many to a line as fit, as a list's simple entries do, and an alternative that takes something apart stands on a line of its own. Each marks where its pattern ends, for the reason a term is marked — see `term_followed`: a literal leaf may be spelled another way than it was written.
+    fn alternatives(self, alternatives: Vec<Alternative<D>>) -> Printer {
+        let items = alternatives
+            .into_iter()
+            .enumerate()
+            .map(|(index, alternative)| {
+                let written = match alternative.span {
+                    Some(span) => reached(span.end),
+                    None => flat([]),
+                };
+                let bar = match index {
+                    0 => flat([]),
+                    _ => pure("| "),
+                };
+
+                FillItem {
+                    compact: packs(&alternative.pattern),
+                    printer: flat([bar, self.match_pattern(alternative.pattern), written]),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        group(flow(items))
+    }
+
+    /// A match-arm pattern: a plain binder, an inductive constructor tag applied to sub-patterns, a tuple pattern, or a struct pattern — the refutable counterpart of [`TreePrinter::pattern`] (see `MatchPattern`'s doc comment). `Variant` stays positional (constructors have no field labels); `Tuple`/`Struct` mirror [`TreePrinter::pattern`]'s own field-printing exactly.
+    fn match_pattern(self, pattern: MatchPattern<D>) -> Printer {
+        match pattern {
+            MatchPattern::Binder(binder) => self.binder(binder),
+            MatchPattern::Variant { tag, args } => flat([
+                pure(tag),
                 listed(
                     "(",
-                    fields.into_iter().map(print_pattern_field).collect(),
+                    args.into_iter()
+                        .map(|(plicity, pattern)| {
+                            flat([print_plicity(plicity), self.match_pattern(pattern)])
+                        })
+                        .collect(),
                     ")",
-                )
+                ),
+            ]),
+            MatchPattern::Tuple(fields) => {
+                if fields.len() == 1 {
+                    let field = fields.into_iter().next().unwrap();
+                    // A labeled one-element tuple pattern needs no trailing comma — the `=` already disambiguates it from a grouped pattern.
+                    let trailer = if field.label.is_some() { ")" } else { ",)" };
+                    flat([pure("("), self.match_pattern_field(field), pure(trailer)])
+                } else {
+                    listed(
+                        "(",
+                        fields
+                            .into_iter()
+                            .map(|field| self.match_pattern_field(field))
+                            .collect(),
+                        ")",
+                    )
+                }
             }
+            MatchPattern::Struct { head, fields } => flat([
+                pure(head.join()),
+                pure(" "),
+                listed_block(
+                    "{",
+                    fields
+                        .into_iter()
+                        .map(|field| self.match_pattern_field(field))
+                        .collect(),
+                    "}",
+                ),
+            ]),
+            MatchPattern::Bool(false) => pure("false"),
+            MatchPattern::Bool(true) => pure("true"),
+            MatchPattern::Char(character) => print_char_literal(character),
+            MatchPattern::Nat(NatPattern::Zero) => pure("0"),
+            MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
+                flat([self.binder(pred_label), pure(" + 1"), self.cons_ih(ih)])
+            }
+            MatchPattern::Nat(NatPattern::Lit(NatLiteral(n, radix))) => {
+                pure(format_radix(&n, radix))
+            }
+            MatchPattern::List(ListPattern::Nil) => pure("[]"),
+            MatchPattern::List(ListPattern::Cons {
+                head_label,
+                tail_label,
+                ih,
+            }) => flat([
+                pure("["),
+                self.binder(head_label),
+                pure(", .."),
+                self.binder(tail_label),
+                pure("]"),
+                self.cons_ih(ih),
+            ]),
+            MatchPattern::Bytes(BytesPattern::End) => pure("x[]"),
+            MatchPattern::Bytes(BytesPattern::Atom {
+                head_label,
+                tail_label,
+                ih,
+            }) => flat([
+                pure("x["),
+                self.binder(head_label),
+                pure(", .."),
+                self.binder(tail_label),
+                pure("]"),
+                self.cons_ih(ih),
+            ]),
         }
-        Pattern::Struct { head, fields } => flat([
-            pure(head.join()),
-            pure(" "),
-            listed_block(
-                "{",
-                fields.into_iter().map(print_pattern_field).collect(),
-                "}",
-            ),
-        ]),
     }
-}
-
-fn print_match_pattern_field(field: MatchPatternField) -> Printer {
-    match field.label {
-        Some(label) => flat([pure(label), pure(" = "), print_match_pattern(field.value)]),
-        None => print_match_pattern(field.value),
-    }
-}
-
-/// An arm's alternatives: on one line where they fit, and otherwise from the arm's line with each continuation at the arm's column, after its bar. Short atoms pack as many to a line as fit, as a list's simple entries do, and an alternative that takes something apart stands on a line of its own. Each marks where its pattern ends, for the reason a term is marked — see `term_followed`: a literal leaf may be spelled another way than it was written.
-fn print_alternatives(alternatives: Vec<Alternative>) -> Printer {
-    let items = alternatives
-        .into_iter()
-        .enumerate()
-        .map(|(index, alternative)| {
-            let written = match alternative.span {
-                Some(span) => reached(span.end),
-                None => flat([]),
-            };
-            let bar = match index {
-                0 => flat([]),
-                _ => pure("| "),
-            };
-
-            FillItem {
-                compact: packs(&alternative.pattern),
-                printer: flat([bar, print_match_pattern(alternative.pattern), written]),
-            }
-        })
-        .collect::<Vec<_>>();
-
-    group(flow(items))
 }
 
 /// Whether an alternative is a short atom a run of them packs: a binder, a literal, or a constructor over no payload.
-fn packs(pattern: &MatchPattern) -> bool {
+fn packs<D: Dialect>(pattern: &MatchPattern<D>) -> bool {
     match pattern {
         MatchPattern::Binder(_)
         | MatchPattern::Bool(_)
@@ -375,82 +473,6 @@ fn packs(pattern: &MatchPattern) -> bool {
         | MatchPattern::Nat(NatPattern::Succ { .. })
         | MatchPattern::List(ListPattern::Cons { .. })
         | MatchPattern::Bytes(BytesPattern::Atom { .. }) => false,
-    }
-}
-
-/// A match-arm pattern: a plain binder, an inductive constructor tag applied to sub-patterns, a tuple pattern, or a struct pattern — the refutable counterpart of `print_pattern` (see `MatchPattern`'s doc comment). `Variant` stays positional (constructors have no field labels); `Tuple`/`Struct` mirror `print_pattern`'s own field-printing exactly.
-pub fn print_match_pattern(pattern: MatchPattern) -> Printer {
-    match pattern {
-        MatchPattern::Binder(name) => pure(name),
-        MatchPattern::Variant { tag, args } => flat([
-            pure(tag),
-            listed(
-                "(",
-                args.into_iter()
-                    .map(|(plicity, pattern)| {
-                        flat([print_plicity(plicity), print_match_pattern(pattern)])
-                    })
-                    .collect(),
-                ")",
-            ),
-        ]),
-        MatchPattern::Tuple(fields) => {
-            if fields.len() == 1 {
-                let field = fields.into_iter().next().unwrap();
-                // A labeled one-element tuple pattern needs no trailing comma — the `=` already disambiguates it from a grouped pattern.
-                let trailer = if field.label.is_some() { ")" } else { ",)" };
-                flat([pure("("), print_match_pattern_field(field), pure(trailer)])
-            } else {
-                listed(
-                    "(",
-                    fields.into_iter().map(print_match_pattern_field).collect(),
-                    ")",
-                )
-            }
-        }
-        MatchPattern::Struct { head, fields } => flat([
-            pure(head.join()),
-            pure(" "),
-            listed_block(
-                "{",
-                fields.into_iter().map(print_match_pattern_field).collect(),
-                "}",
-            ),
-        ]),
-        MatchPattern::Bool(false) => pure("false"),
-        MatchPattern::Bool(true) => pure("true"),
-        MatchPattern::Char(character) => print_char_literal(character),
-        MatchPattern::Nat(NatPattern::Zero) => pure("0"),
-        MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
-            flat([pure(pred_label), pure(" + 1"), print_cons_ih(ih)])
-        }
-        MatchPattern::Nat(NatPattern::Lit(NatLiteral(n, radix))) => pure(format_radix(&n, radix)),
-        MatchPattern::List(ListPattern::Nil) => pure("[]"),
-        MatchPattern::List(ListPattern::Cons {
-            head_label,
-            tail_label,
-            ih,
-        }) => flat([
-            pure("["),
-            pure(head_label),
-            pure(", .."),
-            pure(tail_label),
-            pure("]"),
-            print_cons_ih(ih),
-        ]),
-        MatchPattern::Bytes(BytesPattern::End) => pure("x[]"),
-        MatchPattern::Bytes(BytesPattern::Atom {
-            head_label,
-            tail_label,
-            ih,
-        }) => flat([
-            pure("x["),
-            pure(head_label),
-            pure(", .."),
-            pure(tail_label),
-            pure("]"),
-            print_cons_ih(ih),
-        ]),
     }
 }
 
@@ -582,6 +604,9 @@ trait Layout: Dialect {
     /// A case, its label, payload and targets after its bar, under the decorator before it.
     fn cased(printer: TreePrinter<Self>, fields: Self::Fields, case: Printer) -> Printer;
 
+    /// A binder's word under the decorator before it, which states the rest of the label Core keeps for the binder: beside the word, which it is read with.
+    fn bound(printer: TreePrinter<Self>, fields: Self::Fields, word: Printer) -> Printer;
+
     /// A declaration under the decorator its head states, before its declaring word or the `and` of a group's later member.
     fn headed(printer: TreePrinter<Self>, head: &Self::Head, member: Printer) -> Printer;
 
@@ -609,6 +634,10 @@ impl Layout for Program {
 
     fn cased(_: TreePrinter<Self>, (): (), case: Printer) -> Printer {
         case
+    }
+
+    fn bound(_: TreePrinter<Self>, (): (), word: Printer) -> Printer {
+        word
     }
 
     fn headed(_: TreePrinter<Self>, _: &(), member: Printer) -> Printer {
@@ -806,7 +835,7 @@ impl<D: Layout> TreePrinter<D> {
     fn func_type_param(self, param: FuncTypeParam<D>) -> Printer {
         let typed = self.term(param.type_);
         let body = match param.label {
-            Some(label) => flat([pure(label), pure(": "), typed]),
+            Some(label) => flat([D::bound(self, param.core, pure(label)), pure(": "), typed]),
             None => typed,
         };
         flat([print_plicity(param.plicity), body])
@@ -817,7 +846,7 @@ impl<D: Layout> TreePrinter<D> {
         let plicity = param.plicity();
         let member = match param {
             FuncSugarParam::Bound { binder, type_, .. } => {
-                flat([print_pattern(binder), pure(": "), self.term(type_)])
+                flat([self.pattern(binder), pure(": "), self.term(type_)])
             }
             FuncSugarParam::Premise(type_) => self.term(type_),
         };
@@ -871,15 +900,16 @@ impl<D: Layout> TreePrinter<D> {
             annotation,
         } = param;
         let bound = match annotation {
-            Some(ty) => flat([print_pattern(pattern), pure(": "), self.term(ty)]),
-            None => print_pattern(pattern),
+            Some(ty) => flat([self.pattern(pattern), pure(": "), self.term(ty)]),
+            None => self.pattern(pattern),
         };
         flat([print_plicity(plicity), bound])
     }
 
-    fn labeled(self, (label, ty): (Option<String>, Term<D>)) -> Printer {
+    /// One entry of a family's index telescope: `label : type`, its word under what Core text's decorator states of its binder, or the type alone.
+    fn index(self, (core, label, ty): InductIndex<D>) -> Printer {
         match label {
-            Some(label) => flat([pure(label), pure(": "), self.term(ty)]),
+            Some(label) => flat([D::bound(self, core, pure(label)), pure(": "), self.term(ty)]),
             None => self.term(ty),
         }
     }
@@ -888,7 +918,7 @@ impl<D: Layout> TreePrinter<D> {
     fn field(self, param: TupleTypeParam<D>) -> Printer {
         match (param.label, param.func_params) {
             (Some(label), Some(params)) => flat([
-                pure(label.to_string()),
+                D::bound(self, param.core, pure(label.to_string())),
                 listed(
                     "(",
                     params
@@ -900,9 +930,11 @@ impl<D: Layout> TreePrinter<D> {
                 pure(" -> "),
                 self.term(param.type_),
             ]),
-            (Some(label), None) => {
-                flat([pure(label.to_string()), pure(": "), self.term(param.type_)])
-            }
+            (Some(label), None) => flat([
+                D::bound(self, param.core, pure(label.to_string())),
+                pure(": "),
+                self.term(param.type_),
+            ]),
             (None, _) => self.term(param.type_),
         }
     }
@@ -1149,7 +1181,7 @@ impl<D: Layout> TreePrinter<D> {
                                         value,
                                     } => flat([
                                         pure("| "),
-                                        print_alternatives(alternatives),
+                                        self.alternatives(alternatives),
                                         pure(" = "),
                                         self.term(value),
                                     ]),
@@ -1183,7 +1215,7 @@ impl<D: Layout> TreePrinter<D> {
                                 flat([
                                     separator(),
                                     pure("| "),
-                                    print_alternatives(arm.alternatives),
+                                    self.alternatives(arm.alternatives),
                                     self.attached_body(" =>", arm.body),
                                 ])
                             })
@@ -1209,7 +1241,7 @@ impl<D: Layout> TreePrinter<D> {
                             };
                             parts.extend([
                                 pure(keyword),
-                                print_pattern(member.binder),
+                                self.pattern(member.binder),
                                 self.let_signature(member.signature, false),
                             ]);
                         }
@@ -1368,6 +1400,7 @@ impl<D: Layout> TreePrinter<D> {
                 flat([
                     print_plicity(param.plicity),
                     self.field(TupleTypeParam {
+                        core: param.core,
                         label: param.label.map(Label::from),
                         func_params: None,
                         type_: param.type_,
@@ -1426,7 +1459,7 @@ impl<D: Layout> TreePrinter<D> {
     /// The head's arity after the name: the (mandatory) result sort, preceded by an index telescope when the inductive is indexed. `: Sort` for a plain type, `: (indices) -> Sort` for an indexed one — the spellings `parse_induct_arity` accepts, so a printed declaration round-trips.
     fn top_induct_arity(
         self,
-        indices: Vec<(Option<String>, Term<D>)>,
+        indices: Vec<InductIndex<D>>,
         rep_pub: bool,
         result_sort: Term<D>,
     ) -> Printer {
@@ -1442,10 +1475,7 @@ impl<D: Layout> TreePrinter<D> {
             pure(": "),
             listed(
                 "(",
-                indices
-                    .into_iter()
-                    .map(|index| self.labeled(index))
-                    .collect(),
+                indices.into_iter().map(|index| self.index(index)).collect(),
                 ")",
             ),
             pure(" -> "),
@@ -1549,21 +1579,25 @@ impl<D: Layout> TreePrinter<D> {
 
     /// A concept field as written: a superclass as `use T`, by the word a later field reads it by where Core text names one, `use w: T`, and a method by its name and type, sugar included.
     fn concept_field_written(self, field: ConceptField<D>) -> Printer {
-        // A superclass edge is a `use` member: the mark and its type, and no label but the word Core text reads it by.
-        let (false, Some(label)) = (field.is_super(), field.label.clone()) else {
-            return match field.label {
-                Some(label) if field.is_super() => flat([
-                    pure("use "),
-                    pure(label.to_string()),
-                    pure(": "),
-                    self.term(field.type_),
-                ]),
-                _ => flat([pure("use "), self.term(field.type_)]),
-            };
+        let edge = field.is_super();
+        let ConceptField {
+            core,
+            label,
+            func_params,
+            type_,
+            ..
+        } = field;
+        let Some(label) = label else {
+            return flat([pure("use "), self.term(type_)]);
         };
-        match field.func_params {
+        let word = D::bound(self, core, pure(label.to_string()));
+        // A superclass edge is a `use` member: the mark and its type, and no label but the word Core text reads it by.
+        if edge {
+            return flat([pure("use "), word, pure(": "), self.term(type_)]);
+        }
+        match func_params {
             Some(params) => flat([
-                pure(label),
+                word,
                 listed(
                     "(",
                     params
@@ -1573,9 +1607,9 @@ impl<D: Layout> TreePrinter<D> {
                     ")",
                 ),
                 pure(" -> "),
-                self.term(field.type_),
+                self.term(type_),
             ]),
-            None => flat([pure(label), pure(": "), self.term(field.type_)]),
+            None => flat([word, pure(": "), self.term(type_)]),
         }
     }
 
@@ -1702,6 +1736,10 @@ impl Layout for CoreText {
         printer.decorated(fields, case)
     }
 
+    fn bound(printer: TreePrinter<Self>, fields: Vec<DecoratorField>, word: Printer) -> Printer {
+        printer.beside(fields, word)
+    }
+
     fn headed(printer: TreePrinter<Self>, head: &CoreHead, member: Printer) -> Printer {
         printer.decorated(head.fields.clone(), member)
     }
@@ -1790,6 +1828,14 @@ impl Layout for Shown {
         printer.decorated(fields, case)
     }
 
+    fn bound(
+        printer: TreePrinter<Self>,
+        fields: Vec<DecoratorField<Shown>>,
+        word: Printer,
+    ) -> Printer {
+        printer.beside(fields, word)
+    }
+
     fn headed(printer: TreePrinter<Self>, head: &CoreHead<Shown>, member: Printer) -> Printer {
         printer.decorated(head.fields.clone(), member)
     }
@@ -1857,6 +1903,14 @@ impl<D: CoreWritten> TreePrinter<D> {
     }
 
     /// `node` under a decorator setting each of `fields`, or `node` alone where it sets none: where the render writes decorators above, the two on the line they are reached on where they fit it whole and otherwise the decorator on a line of its own and `node` on the line beneath it, and beside it otherwise.
+    /// `node` under a decorator written beside it whatever its line holds: a binder's, whose word the decorator is read with.
+    fn beside(self, fields: Vec<DecoratorField<D>>, node: Printer) -> Printer {
+        match fields.is_empty() {
+            true => node,
+            false => flat([self.decorator_fields("#{", fields), pure(" "), node]),
+        }
+    }
+
     fn decorated(self, fields: Vec<DecoratorField<D>>, node: Printer) -> Printer {
         if fields.is_empty() {
             return node;
@@ -1980,6 +2034,11 @@ pub fn print_core_term(term: Term<CoreText>) -> Printer {
 
 pub fn print_term(term: Term) -> Printer {
     PROGRAM.term(term)
+}
+
+/// A program's match-arm pattern alone, as a report names a row by it.
+pub fn print_match_pattern(pattern: MatchPattern) -> Printer {
+    PROGRAM.match_pattern(pattern)
 }
 
 /// A shown term, laid out as `options` say.

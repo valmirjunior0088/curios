@@ -215,3 +215,63 @@ let /m/witness~/std/ops/Add(Nat)#1 : (use w: /C()) -> #BoolType = /m/witness~3;
       (witness_name)))
   (entry
     (witness_name)))
+
+================================================================================
+A binder's word under the decorator stating the rest of its label
+================================================================================
+
+(#{written = 0} P: Prop, #{written = 1, proof = true} h: P) =>
+    let #{proof = true} k: P = h;
+    match k
+    | mk(@#{written = 2} b) => b
+    end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (entry
+    (lambda
+      (lambda_parameters
+        (lambda_parameter
+          (decorator
+            (decorator_field
+              (identifier)
+              (number)))
+          (identifier)
+          (sort))
+        (lambda_parameter
+          (decorator
+            (decorator_field
+              (identifier)
+              (number))
+            (decorator_field
+              (identifier)
+              (boolean)))
+          (identifier)
+          (path
+            (identifier))))
+      (let_term
+        (let_binding
+          (decorator
+            (decorator_field
+              (identifier)
+              (boolean)))
+          (identifier)
+          (path
+            (identifier))
+          (path
+            (identifier)))
+        (match_term
+          (path
+            (identifier))
+          (match_arm
+            (constructor_pattern
+              (identifier)
+              (constructor_argument
+                (decorator
+                  (decorator_field
+                    (identifier)
+                    (number)))
+                (identifier)))
+            (path
+              (identifier))))))))

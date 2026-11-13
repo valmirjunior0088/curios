@@ -14,8 +14,9 @@ use {
         record_read, sort_read, tuple_read, tuple_type_read, variant_read,
     },
     crate::{
-        Apply, CoreForm, CoreText, CoreValue, Decorated, DecoratorField, FormScope, Literal,
-        NumLit, ProofLiteral, StructLit, StructLitEntry, Subterm, Term, TupleField, TupleType,
+        Apply, Binder, CoreForm, CoreText, CoreValue, Decorated, DecoratorField, FormScope,
+        Literal, NumLit, ProofLiteral, StructLit, StructLitEntry, Subterm, Term, TupleField,
+        TupleType,
     },
     curios_abi::ForeignFunction,
     curios_common::{Plicity, Qualifier, Sign, Span, recurse},
@@ -185,19 +186,32 @@ impl<'s> Reader<'s> {
 
     /// A fresh local, under `word` where it has one.
     pub fn fresh(&mut self, word: Option<&str>) -> Free {
-        let free = Free::local(self.minted, word);
+        self.minted_at(word, None)
+    }
+
+    /// A fresh local, under `word` where it has one, at `written` among its declaration's written binders where the text states a place: a scope closing over it remembers both as the binder's label.
+    fn minted_at(&mut self, word: Option<&str>, written: Option<u32>) -> Free {
+        let free = match written {
+            Some(written) => Free::local_written(self.minted, word, written),
+            None => Free::local(self.minted, word),
+        };
         self.minted += 1;
         free
     }
 
-    /// `read` with a binder in scope for each of `words`, in order, each opened at a local of its own, which `read` is handed to close over: `_` binds nothing a later word reads.
-    pub fn binding<R>(&mut self, words: &[&str], read: impl FnOnce(&mut Self, &[Free]) -> R) -> R {
+    /// `read` with a binder in scope for each of `labels`, in order, each opened at a local of its own under its word and at the place its decorator states, which `read` is handed to close over: `_` binds nothing a later word reads.
+    pub fn binding<R>(
+        &mut self,
+        labels: &[LabelRead<'_>],
+        read: impl FnOnce(&mut Self, &[Free]) -> R,
+    ) -> R {
         let depth = self.bound.len();
-        let frees = words
+        let frees = labels
             .iter()
-            .map(|word| {
-                let free = self.fresh(Some(*word).filter(|word| *word != "_"));
-                if *word != "_" {
+            .map(|label| {
+                let word = Some(label.word).filter(|word| *word != "_");
+                let free = self.minted_at(word, label.written);
+                if let Some(word) = word {
                     self.bound.push((word.to_string(), free));
                 }
                 free
@@ -221,6 +235,57 @@ impl<'s> Reader<'s> {
         self.free.insert(word.to_string(), free);
         free
     }
+}
+
+/// A binder's label as the text writes it, each field by the name Core's label gives it: its word, the hint, and what the decorator before the word states of the rest — where the binder sits among its declaration's written binders, and whether it binds a proof.
+#[derive(Debug, Clone, Copy)]
+pub struct LabelRead<'t> {
+    pub word: &'t str,
+    pub written: Option<u32>,
+    pub proof: bool,
+}
+
+impl<'t> LabelRead<'t> {
+    /// `word` under the decorator whose fields are `fields`.
+    pub fn of(
+        fields: &'t [DecoratorField],
+        word: &'t str,
+        span: Option<&'t Span>,
+    ) -> Result<Self, ReadError> {
+        let mut fields = Fields::of(fields, span)?;
+        let written = fields
+            .take("written")
+            .map(|value| {
+                u32::try_from(value_number(value)?)
+                    .map_err(|_| malformed("a place among a declaration's written binders", value))
+            })
+            .transpose()?;
+        let proof = fields
+            .take("proof")
+            .map(value_bool)
+            .transpose()?
+            .unwrap_or(false);
+        fields.finish()?;
+
+        Ok(Self {
+            word,
+            written,
+            proof,
+        })
+    }
+
+    /// A pattern's binder, its word under its decorator.
+    pub fn binder(binder: &'t Binder<CoreText>) -> Result<Self, ReadError> {
+        Self::of(&binder.core, binder.label.as_str(), binder.label.span())
+    }
+}
+
+/// Whether each of `labels` binds a proof, where one of them states that it does: what a node read over them states of its binders, which Core's own closing leaves unstated.
+pub fn stated_proofs(labels: &[LabelRead<'_>]) -> Option<Vec<bool>> {
+    labels
+        .iter()
+        .any(|label| label.proof)
+        .then(|| labels.iter().map(|label| label.proof).collect())
 }
 
 /// The fields a decorator states of one node, each taken by the reader of what it sets; one no reader takes is refused.

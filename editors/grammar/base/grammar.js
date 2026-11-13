@@ -29,7 +29,7 @@ module.exports = grammar({
     [$.function_type_parameter, $.parenthesized],
     [$.function_type_parameter, $.tuple_field],
     [$.function_type_parameter, $._pattern],
-    [$.let_member, $._pattern],
+    [$.let_member, $._binder],
     // `satisfy(...)` starts either a witness telescope or a contextual function call; what follows the parentheses decides.
     [$.satisfy_item, $._path_head],
     // A sort word in parentheses may be a term or a lambda binder; the closing suffix decides.
@@ -142,7 +142,12 @@ module.exports = grammar({
     // A named parameter, plain or `@`, or a `use` premise, which has no name.
     type_parameter: ($) =>
       choice(
-        seq(optional("@"), field("name", $._name), ":", field("type", $._term)),
+        seq(
+          optional("@"),
+          field("name", $._binder),
+          ":",
+          field("type", $._term),
+        ),
         seq("use", field("type", $._term)),
       ),
 
@@ -162,7 +167,7 @@ module.exports = grammar({
 
     index: ($) =>
       choice(
-        seq(field("name", $._name), ":", field("type", $._term)),
+        seq(field("name", $._binder), ":", field("type", $._term)),
         field("type", $._term),
       ),
 
@@ -179,7 +184,12 @@ module.exports = grammar({
     // Plain or `@`, named or the type alone.
     payload: ($) =>
       choice(
-        seq(optional("@"), field("name", $._name), ":", field("type", $._term)),
+        seq(
+          optional("@"),
+          field("name", $._binder),
+          ":",
+          field("type", $._term),
+        ),
         seq(optional("@"), field("type", $._term)),
       ),
 
@@ -209,12 +219,12 @@ module.exports = grammar({
     field_declaration: ($) =>
       choice(
         seq(
-          field("name", $._name),
+          field("name", $._binder),
           field("parameters", $.function_type_parameters),
           "->",
           field("type", $._term),
         ),
-        seq(field("name", $._name), ":", field("type", $._term)),
+        seq(field("name", $._binder), ":", field("type", $._term)),
         field("type", $._term),
       ),
 
@@ -318,7 +328,12 @@ module.exports = grammar({
     function_type_parameter: ($) =>
       choice(
         seq("use", field("type", $._term)),
-        seq(optional("@"), field("name", $._name), ":", field("type", $._term)),
+        seq(
+          optional("@"),
+          field("name", $._binder),
+          ":",
+          field("type", $._term),
+        ),
         seq(optional("@"), field("type", $._term)),
       ),
 
@@ -613,7 +628,7 @@ module.exports = grammar({
 
     _pattern: ($) =>
       choice(
-        $._name,
+        $._binder,
         $.tuple_pattern,
         $.struct_pattern,
         $.parenthesized_pattern,
@@ -651,7 +666,7 @@ module.exports = grammar({
         $.tuple_match_pattern,
         $.struct_match_pattern,
         $.parenthesized_match_pattern,
-        $._name,
+        $._binder,
       ),
 
     constructor_pattern: ($) =>
@@ -661,7 +676,12 @@ module.exports = grammar({
 
     // `pred + 1`, with an optional `; hypothesis` receiving the fold result.
     successor_pattern: ($) =>
-      seq(field("predecessor", $._name), "+", $.number, optional($.hypothesis)),
+      seq(
+        field("predecessor", $._binder),
+        "+",
+        $.number,
+        optional($.hypothesis),
+      ),
 
     hypothesis: ($) => seq(";", $._pattern),
 
@@ -670,10 +690,10 @@ module.exports = grammar({
         seq("[", "]"),
         seq(
           "[",
-          field("head", $._name),
+          field("head", $._binder),
           ",",
           "..",
-          field("tail", $._name),
+          field("tail", $._binder),
           "]",
           optional($.hypothesis),
         ),
@@ -684,10 +704,10 @@ module.exports = grammar({
         seq("x[", "]"),
         seq(
           "x[",
-          field("head", $._name),
+          field("head", $._binder),
           ",",
           "..",
-          field("tail", $._name),
+          field("tail", $._binder),
           "]",
           optional($.hypothesis),
         ),
@@ -720,6 +740,9 @@ module.exports = grammar({
         $._path_head,
         ...SORT_WORDS.map((word) => alias(word, $.identifier)),
       ),
+
+    // A name where a binder binds it, which Core text's grammar writes under the decorator stating its label.
+    _binder: ($) => $._name,
 
     // The name a declaration states, and the sort a declaration's type lands in: a program's are a name and a sort word, and Core text's grammar widens each.
     _declared_name: ($) => $._name,

@@ -90,6 +90,8 @@ impl fmt::Display for MatchPattern {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncTypeParam<D: Dialect = Program> {
     pub plicity: Plicity,
+    /// What the decorator before the binder's word states of the label Core keeps for it: Core text's, and nothing in a program. Written only before a word, so a member with none states nothing here.
+    pub core: D::Fields,
     pub label: Option<String>,
     pub type_: Term<D>,
 }
@@ -97,6 +99,8 @@ pub struct FuncTypeParam<D: Dialect = Program> {
 /// One Σ-type / struct-declaration field as written: an optional label and the field type. Shared by tuple types and `struct` declarations (the `TopStruct` fields reuse this grammar).
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleTypeParam<D: Dialect = Program> {
+    /// What the decorator before the label states of the label Core keeps for the field's binder: Core text's, and nothing in a program. Written only before a label.
+    pub core: D::Fields,
     /// The written label, carrying the span of the word alone, or `None` for a positional field. Spanned because a `struct` declaration reuses this grammar and its duplicate-field refusal points at the label that arrived second, as every other duplicate refusal in this stage does.
     pub label: Option<Label>,
     /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `TupleTypeParam::desugared_type`). Always paired with a label.
@@ -147,7 +151,7 @@ pub struct FuncType<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncParam<D: Dialect = Program> {
     pub plicity: Plicity,
-    pub pattern: Pattern,
+    pub pattern: Pattern<D>,
     /// `None` is the surface `(x) => …` form, sugar for `(x : _) => …`; it lowers to a hole, solved by `curios_elab::elaborate` against the expected function type when the lambda is checked, or synthesized from the annotation when inferred.
     pub annotation: Option<Term<D>>,
 }
@@ -198,7 +202,7 @@ impl<D: Dialect> TupleField<D> {
                     .iter()
                     .map(|(plicity, name, ty)| FuncParam {
                         plicity: *plicity,
-                        pattern: Pattern::Binder(name.clone()),
+                        pattern: Pattern::Binder(name.clone().into()),
                         annotation: ty.clone(),
                     })
                     .collect(),
@@ -221,22 +225,61 @@ pub struct Tuple<D: Dialect = Program> {
 
 /// A binder pattern at `let`, lambda-parameter, or function-definition-sugar parameter position: a plain name, or a tuple/struct destructuring that desugars — at lowering, in `into_core` — into a fresh synthetic binder plus a chain of ordinary projection `let`s, exactly what a person would hand-write. Always irrefutable: unlike a match-arm pattern, there is no constructor-tag case, since these binder sites never dispatch on shape — a tuple/struct value always has exactly one shape.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Pattern {
+pub enum Pattern<D: Dialect = Program> {
     /// A name, or `_`, which holds the position and binds nothing. A member with no binder at all — a `use` premise — is not a pattern: the site that admits one holds it apart ([`FuncSugarParam::Premise`]).
-    Binder(Label),
-    Tuple(Vec<PatternField>),
+    Binder(Binder<D>),
+    Tuple(Vec<PatternField<D>>),
     /// A structure's fields under the name the structure is written by, kept as written for the lowering to resolve: the pattern is held to the structure its binder is.
     Struct {
         head: Name,
-        fields: Vec<PatternField>,
+        fields: Vec<PatternField<D>>,
     },
+}
+
+/// A binder's word as written, under what the decorator before it states of the label Core keeps for it — where the binder sits among its declaration's written binders and whether it binds a proof, `#{written = 2, proof = true} h`: Core text's, and nothing in a program, whose binder is its word alone. The word is the label's hint; the decorator states the rest of it, each field by the name Core's label gives it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Binder<D: Dialect = Program> {
+    pub core: D::Fields,
+    pub label: Label,
+}
+
+impl<D: Dialect> Deref for Binder<D> {
+    type Target = Label;
+
+    fn deref(&self) -> &Label {
+        &self.label
+    }
+}
+
+impl<D: Dialect> From<Label> for Binder<D> {
+    /// The word alone, under no decorator.
+    fn from(label: Label) -> Self {
+        Self {
+            core: D::Fields::default(),
+            label,
+        }
+    }
+}
+
+impl<D: Dialect> From<&str> for Binder<D> {
+    /// The word alone, under no decorator.
+    fn from(word: &str) -> Self {
+        Label::from(word).into()
+    }
+}
+
+impl<D: Dialect> From<String> for Binder<D> {
+    /// The word alone, under no decorator.
+    fn from(word: String) -> Self {
+        Label::from(word).into()
+    }
 }
 
 /// One tuple-pattern / struct-pattern field: a labeled sub-pattern (`label = pattern`) or a bare positional one. The literal mirror of [`TupleField`] with `Term` replaced by `Pattern` in the value slot — construction and destructuring read as inverses of each other.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PatternField {
+pub struct PatternField<D: Dialect = Program> {
     pub label: Option<String>,
-    pub value: Pattern,
+    pub value: Pattern<D>,
 }
 
 /// An ordered guarded ladder: `choose | test => body | … | _ => default end`. There is no scrutinee — the arms are tried top-to-bottom and the first that fires selects its body; the mandatory final `| _ =>` supplies the fallthrough. An arm's [`ChooseTest`] is either a `Bool` condition (`| cond =>`) or a refutable bind (`| pattern = value =>`, Rust `if let`). Lowering right-folds the ladder into nested `Bool` matches / single-row matrix matches (`into_core::match_compile`'s `ladder_region`), so each body inherits the definitional refinement of its condition for free (the same `refine_head` keying a hand-written `match cond | true => … | false => …` would get). A dispatch form, not an elimination — it consumes no scrutinee, so it is not a `match` at all: it enumerates no shapes, so the `_` default is mandatory (as in a headed `Nat` literal dispatch). No motive.
@@ -261,7 +304,7 @@ pub enum ChooseTest<D: Dialect = Program> {
     Cond(Term<D>),
     /// `| pattern | … = value =>` — a refutable bind (Rust `if let`): the arm fires when `value` matches one of the (refutable, possibly nested) alternatives, binding its sub-patterns in the body. A bare-[`MatchPattern::Binder`] alternative is irrefutable and rejected by lowering — it would be a plain `let`.
     Bind {
-        alternatives: Vec<Alternative>,
+        alternatives: Vec<Alternative<D>>,
         value: Term<D>,
     },
 }
@@ -311,13 +354,13 @@ pub struct Match<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatrixArm<D: Dialect = Program> {
     /// At least one.
-    pub alternatives: Vec<Alternative>,
+    pub alternatives: Vec<Alternative<D>>,
     pub body: Term<D>,
 }
 
 impl<D: Dialect> MatrixArm<D> {
     /// The arm of one pattern, written nowhere: an arm the compiler built.
-    pub fn of(pattern: MatchPattern, body: Term<D>) -> Self {
+    pub fn of(pattern: MatchPattern<D>, body: Term<D>) -> Self {
         Self {
             alternatives: vec![Alternative {
                 pattern,
@@ -330,13 +373,13 @@ impl<D: Dialect> MatrixArm<D> {
 
 /// One of the patterns an arm writes before its `=>`: the arm is taken by a value any of them matches, its names bound as that one binds them.
 #[derive(Debug, Clone)]
-pub struct Alternative {
-    pub pattern: MatchPattern,
+pub struct Alternative<D: Dialect = Program> {
+    pub pattern: MatchPattern<D>,
     /// Where the pattern is written, or `None` for one the compiler built. A location, as a [`Term`]'s span is, and no part of what the alternative is.
     pub span: Option<Span>,
 }
 
-impl PartialEq for Alternative {
+impl<D: Dialect> PartialEq for Alternative<D> {
     fn eq(&self, other: &Self) -> bool {
         self.pattern == other.pattern
     }
@@ -344,34 +387,34 @@ impl PartialEq for Alternative {
 
 /// A match-arm pattern: genuinely refutable, unlike [`Pattern`] (which is always irrefutable — see its own doc comment). Distinct from `Pattern` on purpose, even though `Tuple`/`Struct` mirror its field grammar exactly: a `let`/lambda/function-sugar binder site never dispatches on shape, but a match arm's whole point is dispatching on shape, so the two must never be conflated.
 #[derive(Debug, Clone, PartialEq)]
-pub enum MatchPattern {
+pub enum MatchPattern<D: Dialect = Program> {
     /// A plain name (or `_`) — never splits a column by itself: where another row takes the column apart, a row that writes one is under every case of it (see `curios-elab`'s matrix compiler).
-    Binder(Label),
+    Binder(Binder<D>),
     /// An inductive constructor tag applied to sub-patterns — positional (constructors have no field labels in this language). Each argument retains its plicity mark (`@`/`use`): a payload slot the constructor declared implicit must be matched with `@`. The marks lower to the Core arm untouched; core elaboration checks them against the constructor's canonical payload plicities.
     Variant {
         tag: String,
-        args: Vec<(Plicity, MatchPattern)>,
+        args: Vec<(Plicity, MatchPattern<D>)>,
     },
     /// A tuple pattern — field grammar mirrors [`PatternField`] exactly.
-    Tuple(Vec<MatchPatternField>),
+    Tuple(Vec<MatchPatternField<D>>),
     /// A struct pattern — the same labeled/punned/positional grammar as struct literals and the irrefutable [`Pattern::Struct`], not the positional constructor-call shape (structs have field labels; inductive constructors don't).
     Struct {
         head: Name,
-        fields: Vec<MatchPatternField>,
+        fields: Vec<MatchPatternField<D>>,
     },
     /// A `Bool` literal leaf: `true` or `false`.
     Bool(bool),
     /// A character literal leaf — a `Nat` dispatch case spelled by its scalar value, printed back as written.
     Char(char),
     /// A nested `Nat` literal leaf — the `0`/`n+1; ih` (induction) or bare literal (dispatch) shapes a headed `Nat` match takes.
-    Nat(NatPattern),
+    Nat(NatPattern<D>),
     /// A nested `List` literal leaf — the `[]`/`[head,..tail][; ih]` shapes a headed `List` match takes.
-    List(ListPattern),
+    List(ListPattern<D>),
     /// A nested `Bytes` literal leaf — the `x[]` and `x[head, ..tail][; ih]` shapes a headed packed-sequence match takes.
-    Bytes(BytesPattern),
+    Bytes(BytesPattern<D>),
 }
 
-impl MatchPattern {
+impl<D: Dialect> MatchPattern<D> {
     /// Whether this leaf is a genuine single-dispatch shape (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`), as opposed to `Binder`/`Tuple`/`Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections) — so there is nothing for a dependent motive to attach to. Used by the matrix compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`List`/`Bytes` each nest their own sub-pattern, so a plain [`std::mem::discriminant`] comparison on the outer variant already treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same dispatchable shape, with no separate classifier needed.
     pub fn is_dispatchable(&self) -> bool {
         !matches!(
@@ -383,13 +426,13 @@ impl MatchPattern {
 
 /// The two shapes a nested `Nat` leaf can take — see [`MatchPattern::Nat`].
 #[derive(Debug, Clone, PartialEq)]
-pub enum NatPattern {
+pub enum NatPattern<D: Dialect = Program> {
     /// The `0` leaf.
     Zero,
     /// The `pred + 1; ih` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches. The `; ih` binds the *fold result*, not scrutinee shape, so it takes any irrefutable [`Pattern`] (`; (cur, live)` destructures a tuple-valued hypothesis exactly as a `let` binder would); it is optional, exactly like the `; ih` on the `List`/`Bytes` cons leaves below — omitting it makes the arm an ordinary case split.
     Succ {
-        pred_label: Label,
-        ih: Option<Pattern>,
+        pred_label: Binder<D>,
+        ih: Option<Pattern<D>>,
     },
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, lowered to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
     ///
@@ -401,35 +444,35 @@ pub enum NatPattern {
 
 /// The two shapes a nested `List` leaf can take — see [`MatchPattern::List`].
 #[derive(Debug, Clone, PartialEq)]
-pub enum ListPattern {
+pub enum ListPattern<D: Dialect = Program> {
     /// The `[]` leaf.
     Nil,
     /// The `[head, ..tail][; ih]` leaf. `ih` is `None` when `; ih` is omitted (lowering mints a fresh internal name) — a plain case-split with no fold hypothesis; when written it is any irrefutable [`Pattern`], like the `Nat` succ leaf's.
     Cons {
-        head_label: Label,
-        tail_label: Label,
-        ih: Option<Pattern>,
+        head_label: Binder<D>,
+        tail_label: Binder<D>,
+        ih: Option<Pattern<D>>,
     },
 }
 
 /// The two shapes a nested `Bytes` leaf can take — see [`MatchPattern::Bytes`].
 #[derive(Debug, Clone, PartialEq)]
-pub enum BytesPattern {
+pub enum BytesPattern<D: Dialect = Program> {
     /// The `x[]` leaf.
     End,
     /// The `x[head, ..tail][; ih]` leaf; `ih` is optional (and an irrefutable [`Pattern`]) exactly as on the `List` cons leaf.
     Atom {
-        head_label: Label,
-        tail_label: Label,
-        ih: Option<Pattern>,
+        head_label: Binder<D>,
+        tail_label: Binder<D>,
+        ih: Option<Pattern<D>>,
     },
 }
 
 /// One tuple-pattern / struct-pattern field in a [`MatchPattern`]: a labeled sub-pattern (`label = pattern`) or a bare positional one. The literal mirror of [`PatternField`] with `Pattern` replaced by `MatchPattern`.
 #[derive(Debug, Clone, PartialEq)]
-pub struct MatchPatternField {
+pub struct MatchPatternField<D: Dialect = Program> {
     pub label: Option<String>,
-    pub value: MatchPattern,
+    pub value: MatchPattern<D>,
 }
 
 /// One parameter of the function-definition sugar `let f(x : T, …) -> R = body`. A plain-name (`Pattern::Binder`) binder flows into both the Π-type binder and the lambda parameter. A compound (tuple/struct) pattern has no single name to give the Π-type binder, so it lowers to an *anonymous* Π-binder (see `LetSignature::type_`) — its destructured leaves are visible only in the function's value body, never in a later parameter's type or the output type.
@@ -442,7 +485,7 @@ pub enum FuncSugarParam<D: Dialect = Program> {
     /// `binder: type`, plain or under `@`.
     Bound {
         implicit: bool,
-        binder: Pattern,
+        binder: Pattern<D>,
         type_: Term<D>,
     },
 }
@@ -488,6 +531,7 @@ pub fn func_sugar_type_params<D: Dialect>(params: &[FuncSugarParam<D>]) -> Vec<F
         .iter()
         .map(|param| FuncTypeParam {
             plicity: param.plicity(),
+            core: D::Fields::default(),
             label: match param {
                 FuncSugarParam::Bound {
                     binder: Pattern::Binder(name),
@@ -521,7 +565,7 @@ pub fn func_sugar_params<D: Dialect>(params: &[FuncSugarParam<D>]) -> Vec<FuncPa
             plicity: param.plicity(),
             pattern: match param {
                 FuncSugarParam::Bound { binder, .. } => binder.clone(),
-                FuncSugarParam::Premise(_) => Pattern::Binder(Label::from("_")),
+                FuncSugarParam::Premise(_) => Pattern::Binder("_".into()),
             },
             annotation: Some(param.type_().clone()),
         })
@@ -556,7 +600,7 @@ impl<D: Dialect> LetSignature<D> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LetBinding<D: Dialect = Program> {
     /// The bound pattern — `let x = …`, `let (x, y) = …`, or the `f` in the `let f(…) -> R = …` function-definition sugar. A compound pattern here is grammatically legal for the function-sugar form too, but pointless: a function's own binding is never itself a tuple/struct value, so destructuring it fails the same "not a tuple/struct" projection type error a hand-written misuse would (no special-casing needed).
-    pub binder: Pattern,
+    pub binder: Pattern<D>,
     pub signature: LetSignature<D>,
 }
 

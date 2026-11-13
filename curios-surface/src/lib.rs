@@ -21,7 +21,7 @@ pub use dialect::{
 mod term;
 use term::*;
 pub use term::{
-    Alternative, Apply, Argument, BytesPattern, Choose, ChooseArm, ChooseTest, Field, Func,
+    Alternative, Apply, Argument, Binder, BytesPattern, Choose, ChooseArm, ChooseTest, Field, Func,
     FuncParam, FuncSugarParam, FuncType, FuncTypeParam, Infix, Let, LetBinding, LetGroup,
     LetSignature, ListPattern, Match, MatchPattern, MatchPatternField, MatrixArm, NatPattern,
     NumLit, Pattern, PatternField, Proj, ProofLiteral, StrLit, StructLit, StructLitEntry, Subterm,

@@ -36,12 +36,12 @@ const MATCH_TAKES_BARS: &[&str] = &[
 // A `match` written as another language writes it, `match n { 0 => …, _ => … }`, reads as a scrutinee that is a structure literal, which commits at its brace and reports the `}` it wanted at the first arrow. Probed before the scrutinee: a name, a brace, a pattern that opens with no parenthesis and an arrow are no literal's beginning — an entry is a term, and a lambda's parameters are parenthesized — so the refusal is exact, and stands at the brace.
 //
 // A refusal the pattern grammar commits to stays in the probe: where the scrutinee is a structure literal, what stands in its braces is a term, `match Wrap { Option/some(7) } | …`, which no pattern's rule judges.
-fn refuse_braced_match<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
+fn refuse_braced_match<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ()> {
     look_ahead(
         parse_name
             .and_drop(parse_literal("{"))
             .and_drop(not_ahead("("))
-            .and_drop(uncommit(parse_match_pattern))
+            .and_drop(uncommit(parse_match_pattern::<D>))
             .and_drop(take_exact("=>")),
     )
     .map(|_| true)
@@ -62,7 +62,7 @@ pub fn parse_match_prefix<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, (Term<D>, Option<Term<D>>)> {
     parse_keyword("match")
-        .and_keep(refuse_braced_match)
+        .and_keep(refuse_braced_match::<D>)
         .and_keep(parse_term::<D>)
         .and(
             parse_literal(":")
@@ -75,8 +75,8 @@ pub fn parse_match_prefix<'a, D: Grammar>(
 }
 
 // One of an arm's alternatives: a pattern, beside where it is written.
-fn parse_alternative<'a>(state: ParserState<'a>) -> Parsed<'a, Alternative> {
-    spanned(parse_match_pattern)
+fn parse_alternative<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Alternative<D>> {
+    spanned(parse_match_pattern::<D>)
         .map(|(span, pattern)| Alternative {
             pattern,
             span: Some(trimmed(span)),
@@ -85,16 +85,16 @@ fn parse_alternative<'a>(state: ParserState<'a>) -> Parsed<'a, Alternative> {
 }
 
 // An alternative after the first: a term has no bare `|`, so past a pattern a bar can be nothing but another alternative, and what follows it must be one.
-fn parse_later_alternative<'a>(state: ParserState<'a>) -> Parsed<'a, Alternative> {
+fn parse_later_alternative<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Alternative<D>> {
     parse_literal("|")
-        .and_keep(commit(parse_alternative))
+        .and_keep(commit(parse_alternative::<D>))
         .parse(state)
 }
 
 // The alternatives of an arm: one pattern, then another after each `|`, up to what follows them.
-fn parse_alternatives<'a>(state: ParserState<'a>) -> Parsed<'a, Vec<Alternative>> {
-    parse_alternative
-        .and(many0(parse_later_alternative))
+fn parse_alternatives<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Vec<Alternative<D>>> {
+    parse_alternative::<D>
+        .and(many0(parse_later_alternative::<D>))
         .map(|(first, mut rest)| {
             rest.insert(0, first);
             rest
@@ -108,7 +108,7 @@ pub fn parse_induct_match_branch<'a, D: Grammar>(
 ) -> Parsed<'a, MatrixArm<D>> {
     parse_literal("|")
         .and_keep(commit(
-            parse_alternatives
+            parse_alternatives::<D>
                 .and_drop(parse_literal("=>"))
                 .and(parse_term::<D>),
         ))
@@ -117,9 +117,9 @@ pub fn parse_induct_match_branch<'a, D: Grammar>(
 }
 
 // The `; ih` induction-hypothesis tail on a `Nat` succ or `List`/`Bytes` cons leaf pattern: `;` sets the hypothesis apart from the scrutinee's shape. The hypothesis binds the *fold result*, not scrutinee shape, so it takes the same irrefutable pattern grammar a `let` binder does — `; ih` a plain name, `; (cur, live)` a destructuring. A plain case-split needs no hypothesis, so the tail may be omitted — `None`, not a placeholder; lowering mints a fresh internal name for it directly.
-pub fn parse_cons_ih<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Pattern>> {
+pub fn parse_cons_ih<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Option<Pattern<D>>> {
     parse_literal(";")
-        .and_keep(parse_pattern)
+        .and_keep(parse_pattern::<D>)
         .map(Some)
         .or(pure(None))
         .parse(state)
@@ -128,7 +128,7 @@ pub fn parse_cons_ih<'a>(state: ParserState<'a>) -> Parsed<'a, Option<Pattern>> 
 // A bind arm `| pattern | … = value => body` (Rust `if let`): the arm fires when `value` matches one of the refutable alternatives. The `=` separator is guarded against `==` (equality) and `=>` (an empty value) via `not_ahead`, mirroring the `!` vs `!=` idiom. Tried *after* the condition arm, since a bind pattern like `some(x)` also parses as a condition term and the condition arm cannot take a bind arm from it: `=` is no infix operator, so a condition term stops there and the arm fails wanting its `=>`. Reading it second is what lets it keep its commitments — a pattern the grammar refuses by name, a qualified constructor above all, is then the diagnosis instead of being re-read as an ordinary call and reported at the `=` that follows it.
 pub fn parse_bind_arm<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ChooseArm<D>> {
     parse_literal("|")
-        .and_keep(parse_alternatives)
+        .and_keep(parse_alternatives::<D>)
         .and_drop(
             take_exact("=")
                 .and_drop(not_ahead("="))

@@ -8,9 +8,9 @@ use {
         parse_tuple_type, parse_type, parse_usize_raw, refused,
     },
     crate::{
-        Apply, Argument, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding, LetGroup,
-        LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, declared, parse_identifier_raw,
-        parse_whitespace,
+        Apply, Argument, Binder, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding,
+        LetGroup, LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, declared,
+        parse_identifier_raw, parse_whitespace,
     },
     curios_common::{InfixOp, Plicity, Span, is_identifier_char, is_keyword, recurse},
     curios_parse::{
@@ -69,14 +69,14 @@ pub fn parse_binding<'a, D: Grammar>(
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
 fn parse_let_group<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, LetGroup<D>> {
     parse_keyword("let")
-        .and_keep(parse_let_binder)
+        .and_keep(parse_let_binder::<D>)
         .and(parse_local_let_signature)
         .map(|(binder, signature)| LetBinding { binder, signature })
         .and(many0(|| {
             parse_keyword("and")
-                .and_keep(commit(parse_binding))
-                .map(|(label, signature)| LetBinding {
-                    binder: Pattern::Binder(label),
+                .and_keep(commit(D::parse_fields.and(parse_binding)))
+                .map(|(core, (label, signature))| LetBinding {
+                    binder: Pattern::Binder(Binder { core, label }),
                     signature,
                 })
         }))
@@ -98,7 +98,7 @@ pub fn parse_func_sugar_param<'a, D: Grammar>(
             Plicity::Witness => parse_premise(start)
                 .map(|read| read.map(FuncSugarParam::Premise))
                 .boxed(),
-            Plicity::Explicit | Plicity::Implicit => parse_pattern
+            Plicity::Explicit | Plicity::Implicit => parse_pattern::<D>
                 .and_drop(parse_literal(":"))
                 .and(parse_term::<D>)
                 .map(move |(binder, type_)| {
@@ -112,7 +112,7 @@ pub fn parse_func_sugar_param<'a, D: Grammar>(
                 // Its type alone, or its binder alone where that is `_`, which no type is.
                 .or(parse_term::<D>
                     .map(|_| ())
-                    .or(parse_pattern.map(|_| ()))
+                    .or(parse_pattern::<D>.map(|_| ()))
                     .flat_map(move |()| refused(&start, DEFINITION_NAMES_ITS_MEMBERS)))
                 .boxed(),
         })

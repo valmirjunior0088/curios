@@ -134,9 +134,14 @@ pub struct TopForeign<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CasePayloadParam<D: Dialect = Program> {
     pub plicity: Plicity,
+    /// What the decorator before the binder's word states of the label Core keeps for it, as [`FuncTypeParam::core`](crate::FuncTypeParam) does: Core text's, and nothing in a program.
+    pub core: D::Fields,
     pub label: Option<String>,
     pub type_: Term<D>,
 }
+
+/// One entry of an `induct` head's index telescope: what the decorator before its word states of the label Core keeps for its binder (Core text's, and nothing in a program, as [`FuncTypeParam::core`](crate::FuncTypeParam) is), its word where it has one, and its type.
+pub type InductIndex<D = Program> = (<D as Dialect>::Fields, Option<String>, Term<D>);
 
 /// One value constructor of an `induct` declaration: a tag label, its payload telescope (see [`CasePayloadParam`]), and — for an indexed family — the `target` pinning which indices this constructor produces.
 #[derive(Debug, Clone, PartialEq)]
@@ -163,7 +168,7 @@ pub struct TopInduct<D: Dialect = Program> {
     /// The parameters of the type constructor's function type, and written as one's are: a named plain or `@` parameter, or a `use` premise, which has no name. A plain or `@` parameter is *implicit* on every value constructor regardless of its mark (the desugar applies those marks), with the call-site `@` available to supply one positionally when wanted. On the type-constructor function a parameter is *explicit* by default (types are written out); a declaration-site `@` makes it implicit there too (`induct Eq(@A : Type) : (x : A, y : A)` — `A` is recoverable from the indices, so types are written `Eq()(x, y)`). A `use` parameter is a witness slot at both: the type names the dictionary resolution found for it, and a value constructor finds the same one.
     pub params: Vec<FuncTypeParam<D>>,
     /// The head's index telescope, `induct Vec(T : Type) : (n : Nat)`. Names are optional and documentary — needed only when a later index's type depends on an earlier one; they are *not* in scope in the cases.
-    pub indices: Vec<(Option<String>, Term<D>)>,
+    pub indices: Vec<InductIndex<D>>,
     /// The arity's result sort — `Type` or `Prop`. Written after the index telescope (`: (n : Nat) -> Prop`) or in its place when there are no indices (`: Prop`); defaults to `Type` when omitted.
     pub result_sort: Term<D>,
     pub cases: Vec<TopCase<D>>,
@@ -198,6 +203,8 @@ pub struct ConceptField<D: Dialect = Program> {
     pub doc: Option<Doc>,
     /// Plain for a method, `use` for a superclass edge, which is the field telescope's witness member.
     pub plicity: Plicity,
+    /// What the decorator before the field's word states of the label Core keeps for its binder, as [`FuncTypeParam::core`](crate::FuncTypeParam) does: Core text's, and nothing in a program.
+    pub core: D::Fields,
     /// The method's name, carrying the span of the word alone, as [`TopCase::label`] does and for the same reasons — a field is reached as a path segment (`Show/show`). A superclass edge has none in a program, which reaches it by resolution, and the word a later field reads it by in Core text, where a binder is a variable.
     pub label: Option<Label>,
     /// `Some` for the signature sugar `label(params) -> type_` — the written parameter list, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label : (params) -> type_` (see `ConceptField::desugared_type`). Never set on a superclass edge.

@@ -8,11 +8,11 @@ use {
         parse_word_raw, raised, refusing,
     },
     crate::{
-        CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
-        Module, Name, Program, StructField, Term, TopCase, TopConcept, TopForeign, TopInduct,
-        TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, UseGroup, WitnessField,
-        parse_declared_label, parse_doc, parse_identifier_raw, parse_term, parse_whitespace,
-        reserved_keyword, text_after, word_after,
+        CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem,
+        InductIndex, Label, Module, Name, Program, StructField, Term, TopCase, TopConcept,
+        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
+        UseGroup, WitnessField, parse_declared_label, parse_doc, parse_identifier_raw, parse_term,
+        parse_whitespace, reserved_keyword, text_after, word_after,
     },
     curios_abi::{WireLeaf, WireResults, WireReturn, WireSignature, WireType},
     curios_common::{Plicity, is_keyword},
@@ -558,13 +558,17 @@ pub fn parse_induct_payload_field<'a, D: Grammar>(
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Witness => commit(fail_from(&start, PAYLOAD_TAKES_NO_USE)).boxed(),
-            Plicity::Explicit | Plicity::Implicit => parse_identifier
+            Plicity::Explicit | Plicity::Implicit => D::parse_fields
+                .and(parse_identifier)
                 .and_drop(parse_literal(":"))
                 .and(parse_term::<D>)
-                .map(|(name, type_): (&str, Term<D>)| (Some(name.to_string()), type_))
-                .or(parse_term::<D>.map(|type_| (None, type_)))
-                .map(move |(label, type_)| CasePayloadParam {
+                .map(|((core, name), type_): ((D::Fields, &str), Term<D>)| {
+                    (core, Some(name.to_string()), type_)
+                })
+                .or(parse_term::<D>.map(|type_| (D::Fields::default(), None, type_)))
+                .map(move |(core, label, type_)| CasePayloadParam {
                     plicity,
+                    core,
                     label,
                     type_,
                 })
@@ -638,20 +642,25 @@ pub fn parse_induct_param<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
         .flat_map(|(start, plicity)| match plicity {
             // A declaration's parameter list is no other grammar's, so a refused premise is raised where it stands.
             Plicity::Witness => raised(parse_named_premise(start))
-                .map(|(label, type_)| FuncTypeParam {
+                .map(|(core, label, type_)| FuncTypeParam {
                     plicity: Plicity::Witness,
+                    core,
                     label,
                     type_,
                 })
                 .boxed(),
-            Plicity::Explicit | Plicity::Implicit => parse_identifier
+            Plicity::Explicit | Plicity::Implicit => D::parse_fields
+                .and(parse_identifier)
                 .and_drop(parse_literal(":"))
                 .and(parse_term::<D>)
-                .map(move |(name, type_): (&str, Term<D>)| FuncTypeParam {
-                    plicity,
-                    label: Some(name.to_string()),
-                    type_,
-                })
+                .map(
+                    move |((core, name), type_): ((D::Fields, &str), Term<D>)| FuncTypeParam {
+                        plicity,
+                        core,
+                        label: Some(name.to_string()),
+                        type_,
+                    },
+                )
                 .boxed(),
         })
         .parse(state)
@@ -670,18 +679,19 @@ fn parse_declaration_params<'a, D: Grammar>(
         .parse(state)
 }
 
-// A head index-telescope entry: `n : Nat` or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional, and an index is always written, so a mark is refused where it stands.
-pub fn parse_induct_index<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, (Option<String>, Term<D>)> {
+// A head index-telescope entry: `n : Nat`, its word under what Core text's decorator states of its binder, or a bare `Nat`. The name is documentary (and a dependency hook for later entries) — never in scope in the cases — so it is optional, and an index is always written, so a mark is refused where it stands.
+pub fn parse_induct_index<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, InductIndex<D>> {
     mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
-            Plicity::Explicit => parse_identifier
+            Plicity::Explicit => D::parse_fields
+                .and(parse_identifier)
                 .and_drop(parse_literal(":"))
                 .and(parse_term::<D>)
-                .map(|(name, ty): (&str, Term<D>)| (Some(name.to_string()), ty))
-                .or(parse_term::<D>.map(|ty| (None, ty)))
+                .map(|((core, name), ty): ((D::Fields, &str), Term<D>)| {
+                    (core, Some(name.to_string()), ty)
+                })
+                .or(parse_term::<D>.map(|ty| (D::Fields::default(), None, ty)))
                 .boxed(),
             Plicity::Implicit | Plicity::Witness => {
                 commit(fail_from(&start, INDEX_TAKES_NO_MARK)).boxed()
@@ -691,7 +701,7 @@ pub fn parse_induct_index<'a, D: Grammar>(
 }
 
 /// A parsed inductive head arity: the index telescope (each binder optionally named) and the sort it lands in.
-type InductArity<D> = (Vec<(Option<String>, Term<D>)>, bool, Term<D>);
+type InductArity<D> = (Vec<InductIndex<D>>, bool, Term<D>);
 
 /// A declaration-local result sort, with an independent representation visibility marker. This parser is deliberately not used for ordinary sort positions: `pub Type` and `pub Prop` are not terms.
 fn parse_representation_sort<'a, D: Grammar>(
@@ -899,7 +909,8 @@ pub fn parse_top_struct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, 
 
 // A concept field: `label : term`, the signature sugar `label(params) -> term` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar (mirroring top-level `let`'s function sugar) — or `use Concept(args)`, a superclass edge, whose type must be a concept application, checked at lowering. A method takes no mark.
 pub fn parse_concept_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ConceptField<D>> {
-    let method = parse_declared_label
+    let method = D::parse_fields
+        .and(parse_declared_label)
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_func_type_param, || {
@@ -916,22 +927,26 @@ pub fn parse_concept_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
                     .and_keep(commit(parse_term::<D>))
                     .map(|type_| (None, type_))),
         )
-        .map(|(label, (func_params, type_)): (Label, _)| ConceptField {
-            doc: None,
-            plicity: Plicity::Explicit,
-            label: Some(label),
-            func_params,
-            type_,
-        });
+        .map(
+            |((core, label), (func_params, type_)): ((D::Fields, Label), _)| ConceptField {
+                doc: None,
+                plicity: Plicity::Explicit,
+                core,
+                label: Some(label),
+                func_params,
+                type_,
+            },
+        );
 
     // A concept's field list is no other grammar's, so a refused edge or a marked method is raised where it stands.
     let field = mark()
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Witness => raised(parse_named_premise(start))
-                .map(|(label, type_)| ConceptField {
+                .map(|(core, label, type_)| ConceptField {
                     doc: None,
                     plicity: Plicity::Witness,
+                    core,
                     label: label.map(Label::from),
                     func_params: None,
                     type_,

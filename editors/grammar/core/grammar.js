@@ -81,21 +81,27 @@ module.exports = grammar(curios, {
     // A `use` binder's word, where something reads it.
     concept_field: ($, original) =>
       choice(
-        seq("use", field("name", $._name), ":", field("type", $._term)),
+        seq("use", field("name", $._binder), ":", field("type", $._term)),
         original,
       ),
 
     function_type_parameter: ($, original) =>
       choice(
-        seq("use", field("name", $._name), ":", field("type", $._term)),
+        seq("use", field("name", $._binder), ":", field("type", $._term)),
         original,
       ),
 
     type_parameter: ($, original) =>
       choice(
-        seq("use", field("name", $._name), ":", field("type", $._term)),
+        seq("use", field("name", $._binder), ":", field("type", $._term)),
         original,
       ),
+
+    // A binder's word under the decorator stating the rest of the label Core keeps for it: where it sits among its declaration's written binders and whether it binds a proof, `#{written = 1, proof = true} h`.
+    _binder: ($, original) => seq(optional($.decorator), original),
+
+    // A local group's later member, its word under its binder's decorator.
+    let_member: ($, original) => seq(optional($.decorator), original),
 
     // An intrinsic's operand may be a structure value, the universe instance a cell or a channel is held at.
     argument: ($, original) => choice(original, $.decorator_struct),

@@ -15,6 +15,10 @@ end
 let /p : Prop =
     #{node = InductType}
     /Holds();
+let /lemma : (#{written = 0} P: Prop, #{proof = true} h: P) -> P =
+    (#{written = 0} P2: Prop, #{written = 1, proof = true} h2: P2) =>
+        let #{proof = true} k: P2 = h2;
+        k;
 test /held = 1;
 let /m/witness~/std/ops/Add(Nat)#1 : (use w: /C()) -> #BoolType = /m/witness~3;
 /Wit/w(#NatAdd(n, 1), #CellPoll(T, c, {levels = [u], qualities = [Param(0)]}))

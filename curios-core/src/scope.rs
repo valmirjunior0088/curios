@@ -573,7 +573,7 @@ impl Label {
     }
 
     /// Whether this binder binds a proof, as its declaration stated when it was published; `false` for a binder nothing has decided.
-    pub(crate) fn binds_proof(&self) -> bool {
+    pub fn binds_proof(&self) -> bool {
         self.proof
     }
 
@@ -588,7 +588,7 @@ impl Label {
     }
 
     /// Where the binder sits among its declaration's written binders, when the lowering wrote it.
-    pub(crate) fn written(&self) -> Option<u32> {
+    pub fn written(&self) -> Option<u32> {
         self.written
     }
 }

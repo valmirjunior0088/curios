@@ -4,17 +4,20 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, called, core_read, malformed, nested, tree,
-        value, value_fields, value_term, value_variant, word,
+        Decoration, Fields, LabelRead, ReadError, Reader, Refusal, called, core_read, malformed,
+        nested, stated_proofs, tree, value, value_fields, value_term, value_variant, word,
     },
     crate::{
-        BytesPattern, CoreText, Frame, FuncParam, ListPattern, MatchPattern, MatrixArm, NatLiteral,
-        NatPattern, Pattern, Radix, Rendered, label_terms, sub,
+        Binder, BytesPattern, CoreText, DecoratorField, Frame, FuncParam, Label, ListPattern,
+        MatchPattern, MatrixArm, NatLiteral, NatPattern, Pattern, Radix, Rendered, label_terms,
+        sub,
     },
     curios_common::Plicity,
     curios_core::{
-        Atom, Carrier, Cases, Free, InductArm, Many, Match, MatchResult, Scope, Term, Three, Two,
+        Arity, Atom, Carrier, Cases, Free, InductArm, Many, Match, MatchResult, Scope, Term, Three,
+        Two,
     },
+    std::{array, iter},
 };
 
 /// A match: its head and motive, then each arm.
@@ -57,7 +60,9 @@ pub fn match_written<D: Rendered>(
                     frame,
                 )
             })
-            .chain(std::iter::once_with(|| arm(binder("_"), default, frame)))
+            .chain(iter::once_with(|| {
+                arm(binder(Vec::new(), "_"), default, frame)
+            }))
             .collect(),
         Cases::Induct {
             cases,
@@ -73,7 +78,7 @@ pub fn match_written<D: Rendered>(
                 .chain(
                     default
                         .into_iter()
-                        .map(|default| arm(binder("_"), default, frame)),
+                        .map(|default| arm(binder(Vec::new(), "_"), default, frame)),
                 )
                 .collect()
         }
@@ -82,14 +87,17 @@ pub fn match_written<D: Rendered>(
                 empty_case,
                 cons_case,
             } => {
+                let [predecessor_core, hypothesis_core] = cores(cons_case.label_iter(), frame);
                 let ((predecessor, hypothesis), step) = frame.open_two(cons_case);
                 vec![
                     arm(MatchPattern::Nat(NatPattern::Zero), empty_case, frame),
                     arm(
                         MatchPattern::Nat(NatPattern::Succ {
-                            pred_label: crate::Label::from(frame.spelling.word(&predecessor)),
-                            ih: Some(Pattern::Binder(crate::Label::from(
-                                frame.spelling.word(&hypothesis),
+                            pred_label: decorated(predecessor_core, &predecessor, frame),
+                            ih: Some(Pattern::Binder(decorated(
+                                hypothesis_core,
+                                &hypothesis,
+                                frame,
                             ))),
                         }),
                         step,
@@ -101,15 +109,18 @@ pub fn match_written<D: Rendered>(
                 empty_case,
                 cons_case,
             } => {
+                let [head_core, tail_core, hypothesis_core] = cores(cons_case.label_iter(), frame);
                 let ((head, tail, hypothesis), step) = frame.open_three(cons_case);
                 vec![
                     arm(MatchPattern::Bytes(BytesPattern::End), empty_case, frame),
                     arm(
                         MatchPattern::Bytes(BytesPattern::Atom {
-                            head_label: crate::Label::from(frame.spelling.word(&head)),
-                            tail_label: crate::Label::from(frame.spelling.word(&tail)),
-                            ih: Some(Pattern::Binder(crate::Label::from(
-                                frame.spelling.word(&hypothesis),
+                            head_label: decorated(head_core, &head, frame),
+                            tail_label: decorated(tail_core, &tail, frame),
+                            ih: Some(Pattern::Binder(decorated(
+                                hypothesis_core,
+                                &hypothesis,
+                                frame,
                             ))),
                         }),
                         step,
@@ -123,15 +134,18 @@ pub fn match_written<D: Rendered>(
                 cons_case,
             } => {
                 held.push(("carrier", nested(vec![("elem", value(sub(elem, frame)))])));
+                let [head_core, tail_core, hypothesis_core] = cores(cons_case.label_iter(), frame);
                 let ((head, tail, hypothesis), step) = frame.open_three(cons_case);
                 vec![
                     arm(MatchPattern::List(ListPattern::Nil), empty_case, frame),
                     arm(
                         MatchPattern::List(ListPattern::Cons {
-                            head_label: crate::Label::from(frame.spelling.word(&head)),
-                            tail_label: crate::Label::from(frame.spelling.word(&tail)),
-                            ih: Some(Pattern::Binder(crate::Label::from(
-                                frame.spelling.word(&hypothesis),
+                            head_label: decorated(head_core, &head, frame),
+                            tail_label: decorated(tail_core, &tail, frame),
+                            ih: Some(Pattern::Binder(decorated(
+                                hypothesis_core,
+                                &hypothesis,
+                                frame,
                             ))),
                         }),
                         step,
@@ -149,9 +163,33 @@ pub fn match_written<D: Rendered>(
     frame.decorated(fields, elimination)
 }
 
-/// A binder pattern by its word.
-fn binder(word: &str) -> MatchPattern {
-    MatchPattern::Binder(crate::Label::from(word))
+/// A binder pattern by its word, under what the decorator states of its label.
+fn binder<D: Rendered>(core: Vec<DecoratorField<D>>, word: &str) -> MatchPattern<D> {
+    MatchPattern::Binder(Binder {
+        core,
+        label: Label::from(word),
+    })
+}
+
+/// The binder a render opened at `local`, by its word, under what the decorator states of its label.
+fn decorated<D: Rendered>(
+    core: Vec<DecoratorField<D>>,
+    local: &Free,
+    frame: Frame<'_, D>,
+) -> Binder<D> {
+    Binder {
+        core,
+        label: Label::from(frame.spelling.word(local)),
+    }
+}
+
+/// What a whole write states of each binder of a scope of `N` binders beside its word, in order.
+fn cores<'l, D: Rendered, const N: usize>(
+    labels: impl Iterator<Item = Option<&'l curios_core::Label>>,
+    frame: Frame<'_, D>,
+) -> [Vec<DecoratorField<D>>; N] {
+    let mut labels = labels.map(|label| frame.label_fields(label));
+    array::from_fn(|_| labels.next().unwrap_or_default())
 }
 
 /// A written motive: the function over its binders the family it states is.
@@ -159,14 +197,19 @@ fn motive_written<D: Rendered>(
     motive: Scope<curios_core::Many>,
     frame: Frame<'_, D>,
 ) -> crate::Term<D> {
+    let cores = motive
+        .label_iter()
+        .map(|label| frame.label_fields(label))
+        .collect::<Vec<_>>();
     let labels = frame.labels(motive.label_iter());
     let terms = label_terms(&labels);
     let opened = motive.open(&terms.iter().collect::<Vec<_>>());
     let params = labels
         .iter()
-        .map(|label| FuncParam {
+        .zip(cores)
+        .map(|(label, core)| FuncParam {
             plicity: Plicity::Explicit,
-            pattern: Pattern::Binder(crate::Label::from(frame.spelling.word(label))),
+            pattern: Pattern::Binder(decorated(core, label, frame)),
             annotation: None,
         })
         .collect();
@@ -178,7 +221,7 @@ fn motive_written<D: Rendered>(
 }
 
 /// One arm: its pattern, then its body.
-fn arm<D: Rendered>(pattern: MatchPattern, body: Term, frame: Frame<'_, D>) -> MatrixArm<D> {
+fn arm<D: Rendered>(pattern: MatchPattern<D>, body: Term, frame: Frame<'_, D>) -> MatrixArm<D> {
     MatrixArm::of(pattern, sub(body, frame))
 }
 
@@ -188,6 +231,11 @@ fn constructor_arm<D: Rendered>(
     induct_arm: InductArm,
     frame: Frame<'_, D>,
 ) -> MatrixArm<D> {
+    let mut cores = induct_arm
+        .label_iter()
+        .map(|label| frame.label_fields(label))
+        .collect::<Vec<_>>()
+        .into_iter();
     let labels = frame.labels(induct_arm.label_iter());
     let terms = label_terms(&labels);
     let args = labels
@@ -199,7 +247,13 @@ fn constructor_arm<D: Rendered>(
                 .get(index)
                 .copied()
                 .unwrap_or(Plicity::Explicit);
-            (mark, binder(&frame.spelling.word(label)))
+            (
+                mark,
+                binder(
+                    cores.next().unwrap_or_default(),
+                    &frame.spelling.word(label),
+                ),
+            )
         })
         .collect();
     let body = induct_arm.open(&terms.iter().collect::<Vec<_>>());
@@ -270,17 +324,17 @@ pub fn match_read(
             MatchPattern::Nat(NatPattern::Zero),
             MatchPattern::Nat(NatPattern::Succ { pred_label, ih }),
         ] => {
-            let hypothesis =
-                binder_word(ih.as_ref()).ok_or_else(|| refused("a fold's hypothesis, `; ih`"))?;
+            let hypothesis = hypothesis_read(ih.as_ref())
+                .ok_or_else(|| refused("a fold's hypothesis, `; ih`"))??;
+            let labels = [LabelRead::binder(pred_label)?, hypothesis];
             Cases::FreeMonoid {
                 carrier: Carrier::Nat {
                     empty_case: core_read(&arms[0].body, reader)?,
-                    cons_case: scope_read(
-                        &[pred_label.as_str(), hypothesis],
-                        &arms[1].body,
-                        reader,
-                    )
-                    .map(|(frees, body)| Scope::close(Two, &[&frees[0], &frees[1]], body))?,
+                    cons_case: scope_read(&labels, &arms[1].body, reader).map(
+                        |(frees, body)| {
+                            proving_scope(Scope::close(Two, &[&frees[0], &frees[1]], body), &labels)
+                        },
+                    )?,
                 },
             }
         }
@@ -292,8 +346,13 @@ pub fn match_read(
                 ih,
             }),
         ] => {
-            let hypothesis =
-                binder_word(ih.as_ref()).ok_or_else(|| refused("a fold's hypothesis, `; ih`"))?;
+            let hypothesis = hypothesis_read(ih.as_ref())
+                .ok_or_else(|| refused("a fold's hypothesis, `; ih`"))??;
+            let labels = [
+                LabelRead::binder(head_label)?,
+                LabelRead::binder(tail_label)?,
+                hypothesis,
+            ];
             let elem = carrier.take().ok_or_else(|| {
                 refused("a list fold's element, `#{cases = {carrier = {elem = T}}}`")
             })?;
@@ -301,11 +360,7 @@ pub fn match_read(
                 carrier: Carrier::List {
                     elem: core_read(&elem, reader)?,
                     empty_case: core_read(&arms[0].body, reader)?,
-                    cons_case: three_read(
-                        [head_label.as_str(), tail_label.as_str(), hypothesis],
-                        &arms[1].body,
-                        reader,
-                    )?,
+                    cons_case: three_read(&labels, &arms[1].body, reader)?,
                 },
             }
         }
@@ -317,21 +372,22 @@ pub fn match_read(
                 ih,
             }),
         ] => {
-            let hypothesis =
-                binder_word(ih.as_ref()).ok_or_else(|| refused("a fold's hypothesis, `; ih`"))?;
+            let hypothesis = hypothesis_read(ih.as_ref())
+                .ok_or_else(|| refused("a fold's hypothesis, `; ih`"))??;
+            let labels = [
+                LabelRead::binder(head_label)?,
+                LabelRead::binder(tail_label)?,
+                hypothesis,
+            ];
             Cases::FreeMonoid {
                 carrier: Carrier::Bytes {
                     empty_case: core_read(&arms[0].body, reader)?,
-                    cons_case: three_read(
-                        [head_label.as_str(), tail_label.as_str(), hypothesis],
-                        &arms[1].body,
-                        reader,
-                    )?,
+                    cons_case: three_read(&labels, &arms[1].body, reader)?,
                 },
             }
         }
         [.., MatchPattern::Binder(default)]
-            if default.as_str() == "_"
+            if is_bare_wildcard(default)
                 && patterns[..patterns.len() - 1].iter().all(|pattern| {
                     matches!(
                         pattern,
@@ -362,29 +418,22 @@ pub fn match_read(
             for (index, (arm, pattern)) in arms.iter().zip(&patterns).enumerate() {
                 match pattern {
                     MatchPattern::Variant { tag, args } if default.is_none() => {
-                        let mut words = Vec::with_capacity(args.len());
+                        let mut labels = Vec::with_capacity(args.len());
                         let mut marks = Vec::with_capacity(args.len());
                         for (mark, arg) in args {
-                            let MatchPattern::Binder(word) = arg else {
+                            let MatchPattern::Binder(binder) = arg else {
                                 return Err(refused(
                                     "a constructor's arm over its payload's binders",
                                 ));
                             };
-                            words.push(word.as_str());
+                            labels.push(LabelRead::binder(binder)?);
                             marks.push(*mark);
                         }
-                        let (frees, body) = scope_read(&words, &arm.body, reader)?;
-                        let binders = frees.iter().collect::<Vec<_>>();
-                        cases.push((
-                            Atom::from(tag.as_str()),
-                            InductArm::new(
-                                Scope::close(Many(binders.len()), &binders, body),
-                                marks,
-                            ),
-                        ));
+                        let body = many_read(&labels, &arm.body, reader)?;
+                        cases.push((Atom::from(tag.as_str()), InductArm::new(body, marks)));
                     }
-                    MatchPattern::Binder(word)
-                        if word.as_str() == "_" && index + 1 == arms.len() =>
+                    MatchPattern::Binder(binder)
+                        if is_bare_wildcard(binder) && index + 1 == arms.len() =>
                     {
                         default = Some(core_read(&arm.body, reader)?);
                     }
@@ -423,49 +472,76 @@ fn motive_read(
     let crate::Subterm::Func(crate::Func { params, body }) = motive.as_subterm() else {
         return Err(refused());
     };
-    let words = params
+    let labels = params
         .iter()
         .map(|param| match (&param.pattern, &param.annotation) {
-            (Pattern::Binder(word), None) => Ok(word.as_str()),
+            (Pattern::Binder(binder), None) => LabelRead::binder(binder),
             _ => Err(refused()),
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let (frees, body) = scope_read(&words, body, reader)?;
-    let binders = frees.iter().collect::<Vec<_>>();
 
-    Ok(Scope::close(Many(binders.len()), &binders, body))
+    many_read(&labels, body, reader)
 }
 
-/// The word a fold's hypothesis binds, where it is one.
-fn binder_word(pattern: Option<&crate::Pattern>) -> Option<&str> {
+/// The label a fold's hypothesis binds, where it is a binder.
+fn hypothesis_read(
+    pattern: Option<&Pattern<CoreText>>,
+) -> Option<Result<LabelRead<'_>, ReadError>> {
     match pattern? {
-        Pattern::Binder(word) => Some(word.as_str()),
+        Pattern::Binder(binder) => Some(LabelRead::binder(binder)),
         Pattern::Tuple(_) | Pattern::Struct { .. } => None,
     }
 }
 
-/// `body` read under binders for `words`, with the locals they were opened at.
+/// Whether `binder` is a default arm's `_` under no decorator: a default binds nothing in Core, so nothing is stated of its label.
+fn is_bare_wildcard(binder: &Binder<CoreText>) -> bool {
+    binder.as_str() == "_" && binder.core.is_empty()
+}
+
+/// `body` read under binders for `labels`, with the locals they were opened at.
 fn scope_read(
-    words: &[&str],
+    labels: &[LabelRead<'_>],
     body: &crate::Term<CoreText>,
     reader: &mut Reader<'_>,
 ) -> Result<(Vec<Free>, Term), ReadError> {
-    reader.binding(words, |reader, frees| {
+    reader.binding(labels, |reader, frees| {
         Ok((frees.to_vec(), core_read(body, reader)?))
     })
 }
 
+/// `scope`, read over `labels`, its binders stating whether each binds a proof where a label states one does.
+fn proving_scope<A: Arity>(scope: Scope<A>, labels: &[LabelRead<'_>]) -> Scope<A> {
+    match stated_proofs(labels) {
+        Some(proofs) => scope.with_proofs(&proofs),
+        None => scope,
+    }
+}
+
+/// `body` read under binders for `labels`, closed over them however many they are.
+fn many_read(
+    labels: &[LabelRead<'_>],
+    body: &crate::Term<CoreText>,
+    reader: &mut Reader<'_>,
+) -> Result<Scope<Many>, ReadError> {
+    let (frees, body) = scope_read(labels, body, reader)?;
+    let binders = frees.iter().collect::<Vec<_>>();
+
+    Ok(proving_scope(
+        Scope::close(Many(binders.len()), &binders, body),
+        labels,
+    ))
+}
+
 /// A fold's step over its head, its tail and its hypothesis.
 fn three_read(
-    words: [&str; 3],
+    labels: &[LabelRead<'_>],
     body: &crate::Term<CoreText>,
     reader: &mut Reader<'_>,
 ) -> Result<Scope<Three>, ReadError> {
-    let (frees, body) = scope_read(&words, body, reader)?;
+    let (frees, body) = scope_read(labels, body, reader)?;
 
-    Ok(Scope::close(
-        Three,
-        &[&frees[0], &frees[1], &frees[2]],
-        body,
+    Ok(proving_scope(
+        Scope::close(Three, &[&frees[0], &frees[1], &frees[2]], body),
+        labels,
     ))
 }

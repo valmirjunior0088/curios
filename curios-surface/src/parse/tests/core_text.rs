@@ -199,7 +199,7 @@ fn a_witness_binder_takes_its_word_in_core_text_alone() {
     }
     match core("(use d, x) => d").as_subterm() {
         Subterm::Func(Func { params, .. }) => {
-            assert_eq!(params[0].pattern, Pattern::Binder(Label::from("d")))
+            assert_eq!(params[0].pattern, Pattern::Binder("d".into()))
         }
         other => panic!("expected a function, got {other:?}"),
     }

@@ -3,21 +3,26 @@
 //! **`let x: T = v; tail` builds a block**, and consecutive `let`s one block of them all, as Core holds them; a block whose tail is a block of its own writes it between parentheses. **`let f: T = b and g: U = c; tail` builds a group**, and a group of one member is that `let` under `#{node = Rec}`, a member being in scope of its own body.
 
 use {
-    super::{ReadError, Reader, Refusal, core_read, tree, word_value},
+    super::{LabelRead, ReadError, Reader, Refusal, core_read, stated_proofs, tree, word_value},
     crate::{
-        CoreText, Frame, LetBinding, LetGroup, LetSignature, Pattern, Rendered, label_terms, sub,
+        Binder, CoreText, DecoratorField, Frame, Label, LetBinding, LetGroup, LetSignature,
+        Pattern, Rendered, label_terms, sub,
     },
-    curios_core::{Bound, Free, Let, Many, Rec, Scope, Subterm, Term},
+    curios_core::{Bound, Free, Let, Many, Rec, RecGroup, Scope, Subterm, Term},
 };
 
-/// One binding of a block or a group: its word, its type and its value.
+/// One binding of a block or a group: its word under what the decorator states of its label, its type and its value.
 fn binding<D: Rendered>(
+    core: Vec<DecoratorField<D>>,
     word: String,
     type_: crate::Term<D>,
     body: crate::Term<D>,
 ) -> LetBinding<D> {
     LetBinding {
-        binder: Pattern::Binder(crate::Label::from(word)),
+        binder: Pattern::Binder(Binder {
+            core,
+            label: Label::from(word),
+        }),
         signature: LetSignature::Name {
             type_: Some(type_),
             body,
@@ -28,6 +33,7 @@ fn binding<D: Rendered>(
 /// A block: each binding under the ones before it, then its tail. The printer writes a tail that is a block of its own between parentheses, since a run of statements reads as one block.
 pub fn let_written<D: Rendered>(block: Let, frame: Frame<'_, D>) -> crate::Term<D> {
     let (bindings, tail) = block.into_parts();
+    let mut cores = tail.label_iter().map(|label| frame.label_fields(label));
     let labels = frame.labels(tail.label_iter());
     let terms = label_terms(&labels);
     let terms = terms.iter().collect::<Vec<_>>();
@@ -39,6 +45,7 @@ pub fn let_written<D: Rendered>(block: Let, frame: Frame<'_, D>) -> crate::Term<
             let value = each.value().release(&terms[..index]);
             LetGroup {
                 members: vec![binding(
+                    cores.next().unwrap_or_default(),
                     frame.spelling.word(&labels[index]),
                     sub(type_, frame),
                     sub(value, frame),
@@ -54,6 +61,7 @@ pub fn let_written<D: Rendered>(block: Let, frame: Frame<'_, D>) -> crate::Term<
 /// A group: each member under every member's name, then its tail; a group of one member under `#{node = Rec}`, which a block of that one binding would otherwise be.
 pub fn rec_written<D: Rendered>(block: Rec, frame: Frame<'_, D>) -> crate::Term<D> {
     let (group, tail) = block.into_parts();
+    let mut cores = tail.label_iter().map(|label| frame.label_fields(label));
     let labels = frame.labels(tail.label_iter());
     let terms = label_terms(&labels);
     let terms = terms.iter().collect::<Vec<_>>();
@@ -63,6 +71,7 @@ pub fn rec_written<D: Rendered>(block: Rec, frame: Frame<'_, D>) -> crate::Term<
         .enumerate()
         .map(|(index, member)| {
             binding(
+                cores.next().unwrap_or_default(),
                 frame.spelling.word(&labels[index]),
                 sub(member.type_.open(&terms), frame),
                 sub(member.body.open(&terms), frame),
@@ -135,9 +144,9 @@ fn statements_read(
 }
 
 /// A block's bindings from `members` on, each type and value read under the bindings before it, which `read` holds; then what follows the block under all of them.
-fn block_read(
-    members: &[&LetBinding<CoreText>],
-    read: &mut Vec<(Free, Term, Term)>,
+fn block_read<'t>(
+    members: &[&'t LetBinding<CoreText>],
+    read: &mut Vec<(Free, LabelRead<'t>, Term, Term)>,
     rest: &[LetGroup<CoreText>],
     tail: &crate::Term<CoreText>,
     reader: &mut Reader<'_>,
@@ -146,11 +155,11 @@ fn block_read(
         let tail = statements_read(rest, tail, reader)?;
         return Ok(block(std::mem::take(read), tail));
     };
-    let (word, type_, value) = member_parts(member, tail)?;
+    let (label, type_, value) = member_parts(member, tail)?;
     let type_ = core_read(type_, reader)?;
     let value = core_read(value, reader)?;
-    reader.binding(&[word], |reader, frees| {
-        read.push((frees[0], type_, value));
+    reader.binding(&[label], |reader, frees| {
+        read.push((frees[0], label, type_, value));
         block_read(later, read, rest, tail, reader)
     })
 }
@@ -167,8 +176,8 @@ fn group_read(
         .iter()
         .map(|member| member_parts(member, tail))
         .collect::<Result<Vec<_>, _>>()?;
-    let words = parts.iter().map(|(word, _, _)| *word).collect::<Vec<_>>();
-    reader.binding(&words, |reader, frees| {
+    let labels = parts.iter().map(|(label, _, _)| *label).collect::<Vec<_>>();
+    reader.binding(&labels, |reader, frees| {
         let items = parts
             .iter()
             .zip(frees)
@@ -177,42 +186,52 @@ fn group_read(
             })
             .collect::<Result<Vec<_>, ReadError>>()?;
         let tail = statements_read(rest, tail, reader)?;
+        let group = RecGroup::closing(items);
+        let tail = Scope::close(Many(frees.len()), &frees.iter().collect::<Vec<_>>(), tail);
+        let block = match stated_proofs(&labels) {
+            Some(proofs) => Rec::new(group.with_proofs(&proofs), tail.with_proofs(&proofs)),
+            None => Rec::new(group, tail),
+        };
 
-        Ok(Term::rec(items, tail))
+        Ok(Term::from(Subterm::Rec(block)))
     })
 }
 
-/// A member's word, type and value, as Core text writes one: `let x: T = v`.
+/// A member's label, type and value, as Core text writes one: `let x: T = v`.
 fn member_parts<'t>(
     member: &'t LetBinding<CoreText>,
     tail: &crate::Term<CoreText>,
 ) -> Result<
     (
-        &'t str,
+        LabelRead<'t>,
         &'t crate::Term<CoreText>,
         &'t crate::Term<CoreText>,
     ),
     ReadError,
 > {
     let refused = |form: &'static str| ReadError::at(Refusal::ProgramForm(form), tail.span());
-    let Pattern::Binder(word) = &member.binder else {
+    let Pattern::Binder(binder) = &member.binder else {
         return Err(refused("a `let`'s pattern"));
     };
     match &member.signature {
         LetSignature::Name {
             type_: Some(type_),
             body,
-        } => Ok((word.as_str(), type_, body)),
+        } => Ok((LabelRead::binder(binder)?, type_, body)),
         LetSignature::Name { type_: None, .. } => Err(refused("a `let` that states no type")),
         LetSignature::Func { .. } => Err(refused("a `let`'s definition sugar")),
     }
 }
 
-/// One block of `items`, each closed over the bindings before it, over `tail` closed over all of them, which stays a node of its own where it is a block: a block written as a tail is one the text wrote apart.
-fn block(items: Vec<(Free, Term, Term)>, tail: Term) -> Term {
+/// One block of `items`, each closed over the bindings before it, over `tail` closed over all of them, which stays a node of its own where it is a block: a block written as a tail is one the text wrote apart. Its binders state whether each binds a proof where an item's label states one does.
+fn block(items: Vec<(Free, LabelRead<'_>, Term, Term)>, tail: Term) -> Term {
     let binders = items
         .iter()
-        .map(|(binder, _, _)| binder)
+        .map(|(binder, _, _, _)| binder)
+        .collect::<Vec<_>>();
+    let labels = items
+        .iter()
+        .map(|(_, label, _, _)| *label)
         .collect::<Vec<_>>();
     let closed = |term: &Term, count: usize| match count {
         0 => term.clone(),
@@ -223,13 +242,15 @@ fn block(items: Vec<(Free, Term, Term)>, tail: Term) -> Term {
     let bindings = items
         .iter()
         .enumerate()
-        .map(|(index, (_, type_, value))| {
+        .map(|(index, (_, _, type_, value))| {
             curios_core::LetBinding::new(closed(type_, index), closed(value, index))
         })
         .collect();
+    let tail = Scope::close(Many(binders.len()), &binders, tail);
+    let tail = match stated_proofs(&labels) {
+        Some(proofs) => tail.with_proofs(&proofs),
+        None => tail,
+    };
 
-    Term::from(Subterm::Let(Let::new(
-        bindings,
-        Scope::close(Many(binders.len()), &binders, tail),
-    )))
+    Term::from(Subterm::Let(Let::new(bindings, tail)))
 }

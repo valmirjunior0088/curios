@@ -789,6 +789,18 @@ impl RecGroup {
         )
     }
 
+    /// This group with each member's binder stating whether it binds a proof, one answer per member in order, in every scope that closes over the members: the group a text stating the marks writes.
+    pub fn with_proofs(&self, proofs: &[bool]) -> Self {
+        Self::from_scopes(
+            self.iter()
+                .map(|member| RecMemberScopes {
+                    type_: member.type_.clone().with_proofs(proofs),
+                    body: member.body.clone().with_proofs(proofs),
+                })
+                .collect(),
+        )
+    }
+
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &RecMemberScopes> + Clone {
         self.members.iter()
     }

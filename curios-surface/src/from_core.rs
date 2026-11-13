@@ -14,11 +14,12 @@ use {
         intrinsic_global,
     },
     crate::{
-        Alternative, Apply, Argument, BytesPattern, BytesSegment, Dialect, Field, Func, FuncParam,
-        FuncType, FuncTypeParam, Infix, Label, Let, LetBinding, LetGroup, LetSignature, ListEntry,
-        ListPattern, Literal, Match, MatchPattern, MatchPatternField, MatrixArm, Name, NatLiteral,
-        NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, StrLit,
-        StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam,
+        Alternative, Apply, Argument, Binder, BytesPattern, BytesSegment, Dialect, Field, Func,
+        FuncParam, FuncType, FuncTypeParam, Infix, Label, Let, LetBinding, LetGroup, LetSignature,
+        ListEntry, ListPattern, Literal, Match, MatchPattern, MatchPatternField, MatrixArm, Name,
+        NatLiteral, NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix,
+        StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType,
+        TupleTypeParam,
     },
     curios_common::{InfixOp, Plicity, Qualifier, Sign, recurse},
     curios_core::Bound,
@@ -290,6 +291,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 // An unnameable label nothing references is left out, so the field reads the way source wrote it.
                 let named = hint.is_some() || cursor.binder_used();
                 fields.push(TupleTypeParam {
+                    core: (),
                     label: named.then(|| Label::from(frame.word(&label))),
                     func_params: None,
                     type_: sub(type_, frame)?,
@@ -410,7 +412,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 let value = binding.value().release(&refs[..index]);
                 groups.push(LetGroup {
                     members: vec![LetBinding {
-                        binder: Pattern::Binder(Label::from(frame.word(&labels[index]))),
+                        binder: Pattern::Binder(Label::from(frame.word(&labels[index])).into()),
                         signature: LetSignature::Name {
                             type_: Some(sub(type_, frame)?),
                             body: sub(value, frame)?,
@@ -440,7 +442,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
                 .enumerate()
                 .map(|(index, member)| {
                     Some(LetBinding {
-                        binder: Pattern::Binder(Label::from(frame.word(&labels[index]))),
+                        binder: Pattern::Binder(Label::from(frame.word(&labels[index])).into()),
                         signature: LetSignature::Name {
                             type_: Some(sub(member.type_.open(&refs), frame)?),
                             body: sub(member.body.open(&refs), frame)?,
@@ -557,14 +559,12 @@ fn written_row(
 }
 
 /// A row's pattern as a program writes it, each binder under the next of `names`: what a report names an arm by.
-pub fn written_pattern(
+pub fn written_pattern<D: Dialect>(
     pattern: &curios_core::Pattern,
-    names: &mut dyn Iterator<Item = Label>,
-) -> MatchPattern {
-    let name = next_name;
-
+    names: &mut dyn Iterator<Item = Binder<D>>,
+) -> MatchPattern<D> {
     match pattern {
-        curios_core::Pattern::Binder => MatchPattern::Binder(name(names)),
+        curios_core::Pattern::Binder => MatchPattern::Binder(next_name(names)),
         curios_core::Pattern::Variant { tag, args } => MatchPattern::Variant {
             tag: tag.as_string(),
             args: args
@@ -580,7 +580,7 @@ pub fn written_pattern(
         curios_core::Pattern::Bool(value) => MatchPattern::Bool(*value),
         curios_core::Pattern::Zero => MatchPattern::Nat(NatPattern::Zero),
         curios_core::Pattern::Succ(hypothesis) => {
-            let pred_label = name(names);
+            let pred_label = next_name(names);
 
             MatchPattern::Nat(NatPattern::Succ {
                 pred_label,
@@ -593,8 +593,8 @@ pub fn written_pattern(
         curios_core::Pattern::Character(character) => MatchPattern::Char(*character),
         curios_core::Pattern::Nil => MatchPattern::List(ListPattern::Nil),
         curios_core::Pattern::Cons(hypothesis) => {
-            let head_label = name(names);
-            let tail_label = name(names);
+            let head_label = next_name(names);
+            let tail_label = next_name(names);
 
             MatchPattern::List(ListPattern::Cons {
                 head_label,
@@ -604,8 +604,8 @@ pub fn written_pattern(
         }
         curios_core::Pattern::End => MatchPattern::Bytes(BytesPattern::End),
         curios_core::Pattern::Atom(hypothesis) => {
-            let head_label = name(names);
-            let tail_label = name(names);
+            let head_label = next_name(names);
+            let tail_label = next_name(names);
 
             MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
@@ -617,14 +617,14 @@ pub fn written_pattern(
 }
 
 /// The next of a row's names, or `_` past the last: a row's body binds one name for each binder its pattern writes.
-fn next_name(names: &mut dyn Iterator<Item = Label>) -> Label {
-    names.next().unwrap_or_else(|| Label::from("_".to_string()))
+fn next_name<D: Dialect>(names: &mut dyn Iterator<Item = Binder<D>>) -> Binder<D> {
+    names.next().unwrap_or_else(|| "_".into())
 }
 
-fn written_fields(
+fn written_fields<D: Dialect>(
     fields: &[(Option<String>, curios_core::Pattern)],
-    names: &mut dyn Iterator<Item = Label>,
-) -> Vec<MatchPatternField> {
+    names: &mut dyn Iterator<Item = Binder<D>>,
+) -> Vec<MatchPatternField<D>> {
     fields
         .iter()
         .map(|(label, field)| MatchPatternField {
@@ -635,7 +635,10 @@ fn written_fields(
 }
 
 /// What a fold's hypothesis is bound by, as a program writes it, each binder under the next of `names`.
-fn written_bind(bind: &curios_core::Bind, names: &mut dyn Iterator<Item = Label>) -> Pattern {
+fn written_bind<D: Dialect>(
+    bind: &curios_core::Bind,
+    names: &mut dyn Iterator<Item = Binder<D>>,
+) -> Pattern<D> {
     match bind {
         curios_core::Bind::Binder => Pattern::Binder(next_name(names)),
         curios_core::Bind::Fields(fields) => Pattern::Tuple(written_binds(fields, names)),
@@ -647,10 +650,10 @@ fn written_bind(bind: &curios_core::Bind, names: &mut dyn Iterator<Item = Label>
 }
 
 /// The fields of a hypothesis's pattern, each as [`written_bind`] writes it.
-fn written_binds(
+fn written_binds<D: Dialect>(
     fields: &[(Option<String>, curios_core::Bind)],
-    names: &mut dyn Iterator<Item = Label>,
-) -> Vec<PatternField> {
+    names: &mut dyn Iterator<Item = Binder<D>>,
+) -> Vec<PatternField<D>> {
     fields
         .iter()
         .map(|(label, field)| PatternField {
@@ -716,6 +719,7 @@ fn parameter_types(
 
     params[slot] = Some(FuncTypeParam {
         plicity,
+        core: (),
         label: named.then(|| frame.word(&label)),
         type_: written,
     });
@@ -771,10 +775,13 @@ fn lambda_parameters(
 
     params[slot] = Some(FuncParam {
         plicity,
-        pattern: Pattern::Binder(Label::from(match named {
-            true => word,
-            false => "_".to_string(),
-        })),
+        pattern: Pattern::Binder(
+            Label::from(match named {
+                true => word,
+                false => "_".to_string(),
+            })
+            .into(),
+        ),
         annotation,
     });
     Some(body)
@@ -1178,10 +1185,10 @@ fn string_literal(
 }
 
 /// The word a binder a scope opened is written as: its name, or `_` where the compiler minted it with none and `body` never refers to it.
-fn binder(label: &curios_core::Free, body: &curios_core::Term, frame: Frame) -> Label {
+fn binder(label: &curios_core::Free, body: &curios_core::Term, frame: Frame) -> Binder {
     match label.hint().is_some() || body.mentions_free(label) {
-        true => Label::from(frame.word(label)),
-        false => Label::from("_"),
+        true => Label::from(frame.word(label)).into(),
+        false => "_".into(),
     }
 }
 
@@ -1192,7 +1199,7 @@ fn hypothesis(
     frame: Frame,
 ) -> Option<Pattern> {
     (label.hint().is_some() || body.mentions_free(label))
-        .then(|| Pattern::Binder(Label::from(frame.word(label))))
+        .then(|| Pattern::Binder(Label::from(frame.word(label)).into()))
 }
 
 /// An elimination as the `match` that lowers to it: each case as the pattern a program writes it by.
@@ -1259,7 +1266,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                 arms.push(MatrixArm::of(MatchPattern::Nat(pattern), sub(body, frame)?));
             }
             arms.push(MatrixArm::of(
-                MatchPattern::Binder(Label::from("_")),
+                MatchPattern::Binder("_".into()),
                 sub(default, frame)?,
             ));
 
@@ -1294,7 +1301,7 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
             // The fallthrough a match may end in, standing for every constructor it does not name.
             if let Some(default) = default {
                 arms.push(MatrixArm::of(
-                    MatchPattern::Binder(Label::from("_")),
+                    MatchPattern::Binder("_".into()),
                     sub(default, frame)?,
                 ));
             }

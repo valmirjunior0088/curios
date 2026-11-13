@@ -378,7 +378,7 @@ fn dispatching(arms: &[MatrixArm]) -> Result<&[MatrixArm], Error> {
                         pattern: MatchPattern::Binder(name),
                         ..
                     },
-                ] if name == "_" => Ok(init),
+                ] if name.as_str() == "_" => Ok(init),
                 [
                     Alternative {
                         pattern: MatchPattern::Binder(name),

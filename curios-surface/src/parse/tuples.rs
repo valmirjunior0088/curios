@@ -2,12 +2,13 @@ use {
     super::{
         Grammar, TUPLE_FIELD_TAKES_NO_MARK, begins_a_name, digit_led, members,
         parse_apply_argument, parse_block_string_literal, parse_bool_intrinsic,
-        parse_bytes_literal, parse_char_lit, parse_func_param, parse_func_type_param, parse_held,
-        parse_identifier, parse_label, parse_list_literal, parse_literal, parse_mark, parse_name,
-        parse_number, parse_string_literal, parse_word_raw, refuse_dangling_dot,
+        parse_bytes_literal, parse_char_lit, parse_decorated_binder, parse_func_param,
+        parse_func_type_param, parse_held, parse_identifier, parse_list_literal, parse_literal,
+        parse_mark, parse_name, parse_number, parse_string_literal, parse_word_raw,
+        refuse_dangling_dot,
     },
     crate::{
-        FieldSugarParam, FuncTypeParam, Label, StructLit, StructLitEntry, Subterm, Term, Tuple,
+        Binder, FieldSugarParam, FuncTypeParam, StructLit, StructLitEntry, Subterm, Term, Tuple,
         TupleField, TupleType, TupleTypeParam, parse_identifier_raw, parse_term, parse_whitespace,
         reserved_keyword,
     },
@@ -47,9 +48,12 @@ pub fn parse_tuple_type_field<'a, D: Grammar>(
     parse_field_member.or(refuse_field_mark).parse(state)
 }
 
+/// A field's label under its decorator, and the parameters its signature sugar writes.
+type SugaredField<D> = (Binder<D>, Vec<FuncTypeParam<D>>);
+
 // A Σ-type / struct-declaration field, past whatever mark its site takes: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
 pub fn parse_field_member<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, TupleTypeParam<D>> {
-    parse_label
+    parse_decorated_binder::<D>
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_func_type_param, || {
@@ -59,26 +63,31 @@ pub fn parse_field_member<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
         )
         .and_drop(parse_literal("->"))
         // Past the arrow the list is this sugar's, so a member it refuses is its own to report.
-        .flat_map(|(label, params)| members(params).map(move |params| (label, params)))
+        .flat_map(|(labelled, params)| {
+            members(params).map(move |params| (labelled.clone(), params))
+        })
         // A field's type position commits once its introducer is read: past a `->` or a `:` nothing else may stand here, and the unlabeled alternative below would otherwise read the label alone as the whole type and leave the enclosing `}` to complain at the introducer.
         .and(commit(parse_term::<D>))
         .map(
-            |((label, params), output): ((Label, Vec<FuncTypeParam<D>>), Term<D>)| TupleTypeParam {
-                label: Some(label),
+            |((binder, params), output): (SugaredField<D>, Term<D>)| TupleTypeParam {
+                core: binder.core,
+                label: Some(binder.label),
                 func_params: Some(params),
                 type_: output,
             },
         )
-        .or(parse_label
+        .or(parse_decorated_binder::<D>
             .and_drop(parse_literal(":"))
             .and(commit(parse_term::<D>))
-            .map(|(label, type_): (Label, Term<D>)| TupleTypeParam {
-                label: Some(label),
+            .map(|(binder, type_): (Binder<D>, Term<D>)| TupleTypeParam {
+                core: binder.core,
+                label: Some(binder.label),
                 func_params: None,
                 type_,
             }))
         .or(refuse_numbered_field_label)
         .or(parse_term::<D>.map(|type_| TupleTypeParam {
+            core: D::Fields::default(),
             label: None,
             func_params: None,
             type_,

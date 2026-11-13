@@ -416,7 +416,7 @@ impl<'m> Compiler<'m> {
     /// The pattern of the row at `row` as it is written.
     fn written(&self, row: usize) -> String {
         let mut names = self.labels[row].iter().map(|(hint, _)| {
-            curios_surface::Label::from(hint.clone().unwrap_or_else(|| "_".to_string()))
+            curios_surface::Label::from(hint.clone().unwrap_or_else(|| "_".to_string())).into()
         });
 
         written_pattern(&self.row(row).pattern, &mut names).to_string()

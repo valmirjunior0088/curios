@@ -147,6 +147,112 @@
 #          ^ source.curios.core punctuation.bracket.curios
 #           ^ source.curios.core punctuation.bracket.curios
 #            ^ source.curios.core punctuation.separator.curios
+>let /lemma : (#{written = 0} P: Prop, #{proof = true} h: P) -> P =
+#^^^ source.curios.core keyword.control.curios
+#   ^ source.curios.core
+#    ^ source.curios.core punctuation.separator.path.curios
+#     ^^^^^ source.curios.core entity.name.function.curios
+#          ^ source.curios.core
+#           ^ source.curios.core keyword.operator.assignment.curios
+#            ^ source.curios.core
+#             ^ source.curios.core punctuation.bracket.curios
+#              ^^ source.curios.core meta.decorator.curios punctuation.definition.decorator.begin.curios
+#                ^^^^^^^ source.curios.core meta.decorator.curios entity.other.attribute-name.curios
+#                       ^ source.curios.core meta.decorator.curios
+#                        ^ source.curios.core meta.decorator.curios keyword.operator.assignment.curios
+#                         ^ source.curios.core meta.decorator.curios
+#                          ^ source.curios.core meta.decorator.curios constant.numeric.decimal.curios
+#                           ^ source.curios.core meta.decorator.curios punctuation.definition.decorator.end.curios
+#                            ^ source.curios.core
+#                             ^ source.curios.core entity.name.type.curios
+#                              ^ source.curios.core keyword.operator.assignment.curios
+#                               ^ source.curios.core
+#                                ^^^^ source.curios.core storage.type.sort.curios
+#                                    ^ source.curios.core punctuation.separator.curios
+#                                     ^ source.curios.core
+#                                      ^^ source.curios.core meta.decorator.curios punctuation.definition.decorator.begin.curios
+#                                        ^^^^^ source.curios.core meta.decorator.curios entity.other.attribute-name.curios
+#                                             ^ source.curios.core meta.decorator.curios
+#                                              ^ source.curios.core meta.decorator.curios keyword.operator.assignment.curios
+#                                               ^ source.curios.core meta.decorator.curios
+#                                                ^^^^ source.curios.core meta.decorator.curios constant.language.boolean.curios
+#                                                    ^ source.curios.core meta.decorator.curios punctuation.definition.decorator.end.curios
+#                                                     ^ source.curios.core
+#                                                      ^ source.curios.core variable.other.curios
+#                                                       ^ source.curios.core keyword.operator.assignment.curios
+#                                                        ^ source.curios.core
+#                                                         ^ source.curios.core entity.name.type.curios
+#                                                          ^ source.curios.core punctuation.bracket.curios
+#                                                           ^ source.curios.core
+#                                                            ^^ source.curios.core keyword.operator.arrow.curios
+#                                                              ^ source.curios.core
+#                                                               ^ source.curios.core entity.name.type.curios
+#                                                                ^ source.curios.core
+#                                                                 ^ source.curios.core keyword.operator.assignment.curios
+>    (#{written = 0} P2: Prop, #{written = 1, proof = true} h2: P2) =>
+#^^^^ source.curios.core
+#    ^ source.curios.core punctuation.bracket.curios
+#     ^^ source.curios.core meta.decorator.curios punctuation.definition.decorator.begin.curios
+#       ^^^^^^^ source.curios.core meta.decorator.curios entity.other.attribute-name.curios
+#              ^ source.curios.core meta.decorator.curios
+#               ^ source.curios.core meta.decorator.curios keyword.operator.assignment.curios
+#                ^ source.curios.core meta.decorator.curios
+#                 ^ source.curios.core meta.decorator.curios constant.numeric.decimal.curios
+#                  ^ source.curios.core meta.decorator.curios punctuation.definition.decorator.end.curios
+#                   ^ source.curios.core
+#                    ^^ source.curios.core entity.name.type.curios
+#                      ^ source.curios.core keyword.operator.assignment.curios
+#                       ^ source.curios.core
+#                        ^^^^ source.curios.core storage.type.sort.curios
+#                            ^ source.curios.core punctuation.separator.curios
+#                             ^ source.curios.core
+#                              ^^ source.curios.core meta.decorator.curios punctuation.definition.decorator.begin.curios
+#                                ^^^^^^^ source.curios.core meta.decorator.curios entity.other.attribute-name.curios
+#                                       ^ source.curios.core meta.decorator.curios
+#                                        ^ source.curios.core meta.decorator.curios keyword.operator.assignment.curios
+#                                         ^ source.curios.core meta.decorator.curios
+#                                          ^ source.curios.core meta.decorator.curios constant.numeric.decimal.curios
+#                                           ^ source.curios.core meta.decorator.curios punctuation.separator.curios
+#                                            ^ source.curios.core meta.decorator.curios
+#                                             ^^^^^ source.curios.core meta.decorator.curios entity.other.attribute-name.curios
+#                                                  ^ source.curios.core meta.decorator.curios
+#                                                   ^ source.curios.core meta.decorator.curios keyword.operator.assignment.curios
+#                                                    ^ source.curios.core meta.decorator.curios
+#                                                     ^^^^ source.curios.core meta.decorator.curios constant.language.boolean.curios
+#                                                         ^ source.curios.core meta.decorator.curios punctuation.definition.decorator.end.curios
+#                                                          ^ source.curios.core
+#                                                           ^^ source.curios.core variable.other.curios
+#                                                             ^ source.curios.core keyword.operator.assignment.curios
+#                                                              ^ source.curios.core
+#                                                               ^^ source.curios.core entity.name.type.curios
+#                                                                 ^ source.curios.core punctuation.bracket.curios
+#                                                                  ^ source.curios.core
+#                                                                   ^^ source.curios.core keyword.operator.arrow.curios
+>        let #{proof = true} k: P2 = h2;
+#^^^^^^^^ source.curios.core
+#        ^^^ source.curios.core keyword.control.curios
+#           ^ source.curios.core
+#            ^^ source.curios.core meta.decorator.curios punctuation.definition.decorator.begin.curios
+#              ^^^^^ source.curios.core meta.decorator.curios entity.other.attribute-name.curios
+#                   ^ source.curios.core meta.decorator.curios
+#                    ^ source.curios.core meta.decorator.curios keyword.operator.assignment.curios
+#                     ^ source.curios.core meta.decorator.curios
+#                      ^^^^ source.curios.core meta.decorator.curios constant.language.boolean.curios
+#                          ^ source.curios.core meta.decorator.curios punctuation.definition.decorator.end.curios
+#                           ^ source.curios.core
+#                            ^ source.curios.core variable.other.curios
+#                             ^ source.curios.core keyword.operator.assignment.curios
+#                              ^ source.curios.core
+#                               ^^ source.curios.core entity.name.type.curios
+#                                 ^ source.curios.core
+#                                  ^ source.curios.core keyword.operator.assignment.curios
+#                                   ^ source.curios.core
+#                                    ^^ source.curios.core variable.other.curios
+#                                      ^ source.curios.core punctuation.separator.curios
+>        k;
+#^^^^^^^^ source.curios.core
+#        ^ source.curios.core variable.other.curios
+#         ^ source.curios.core punctuation.separator.curios
 >test /held = 1;
 #^^^^ source.curios.core keyword.control.curios
 #    ^ source.curios.core

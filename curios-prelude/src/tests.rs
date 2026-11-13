@@ -421,7 +421,7 @@ fn written_whole(
     (scope, Rc::new(spelling))
 }
 
-/// Every unit of the prelude reads back as the unit it is, item for item and by Core's equality, each read over the units before it, from the tree of Core text it is written whole as and from the text that tree prints as, and as again where each node met again is named: the writer is the reader's inverse, and the printer and the parser hold one another to every form the prelude's terms take.
+/// Every unit of the prelude reads back as the unit it is, item for item and by Core's equality, each read over the units before it, from the tree of Core text it is written whole as and from the text that tree prints as, and as again where each node met again is named: the writer is the reader's inverse, and the printer and the parser hold one another to every form the prelude's terms take. What it reads back is written whole as the text it was read from, so each binder's label, which Core's equality does not read, is read as the text states it.
 #[test]
 fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
     with_prelude(|prelude| {
@@ -457,6 +457,23 @@ fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
                         );
                     }
                     assert_eq!(read.items.len(), written.items.len(), "the unit's items");
+                    // Core's equality reads no binder's label, so the text the unit read back writes is held to the one it was read from: what a whole write states of each binder is read onto it.
+                    let again = read.spelled(&spelling).to_string();
+                    if let Some((line, (was, is))) = text
+                        .lines()
+                        .zip(again.lines())
+                        .enumerate()
+                        .find(|(_, (was, is))| was != is)
+                    {
+                        panic!(
+                            "from its {from}, line {line} writes again otherwise:\n{was}\nas\n{is}"
+                        );
+                    }
+                    assert_eq!(
+                        again.lines().count(),
+                        text.lines().count(),
+                        "from its {from}"
+                    );
                 }
             }
         }

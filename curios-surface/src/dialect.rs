@@ -2,7 +2,7 @@
 //!
 //! **One tree and one grammar, marked by the dialect.** Every node a program writes is a node Core text writes too, so the tree and the parser are written once, generic over a [`Dialect`], and a dialect states each form only one of them writes as a type: Core text's a node it reads, a program's one no value inhabits. So a program's tree holds no decorator and no declared path, and its grammar has no production for one: what Core text writes and a program does not is refused in a program as the token the grammar did not expect.
 //!
-//! **What Core text writes beyond a program.** An operand under a decorator, `#{field = value, …} operand`, a witness named by its identity and an intrinsic node by its variant ([`CoreForm`]); a declaration's head, the decorator before it and the absolute name it declares ([`CoreHead`]); the decorator before a case; a `use` binder's word, where a program's witness binder has none; and the file a `.crsc` is ([`CoreFile`]), whose items are joined into groups by `and` whatever their kinds, and whose entry states its type.
+//! **What Core text writes beyond a program.** An operand under a decorator, `#{field = value, …} operand`, a witness named by its identity and an intrinsic node by its variant ([`CoreForm`]); a declaration's head, the decorator before it and the absolute name it declares ([`CoreHead`]); the decorator before a case, and before a binder's word ([`Binder`](crate::Binder)); a `use` binder's word, where a program's witness binder has none; and the file a `.crsc` is ([`CoreFile`]), whose items are joined into groups by `and` whatever their kinds, and whose entry states its type.
 //!
 //! **What a print shows and no grammar reads back is a dialect too**, [`Shown`]: Core text's forms over its own terms, and the forms only a bounded print or a reader's spelling writes ([`ShownForm`]). A dump, a certifier's refusal and a report's term are shown, since each may elide; a tree no parser makes a shown one, so none is ever read as Core text.
 //!
@@ -21,8 +21,8 @@ pub trait Dialect: Clone + fmt::Debug + PartialEq + 'static {
     type Form: Clone + fmt::Debug + PartialEq;
     /// What a declaration's head writes beside its label.
     type Head: Clone + fmt::Debug + PartialEq;
-    /// What a case states beside its tag and payload.
-    type Fields: Clone + fmt::Debug + PartialEq;
+    /// What a decorator states: before a case, a declaration's word, a group's `and`, or a binder's word. None where nothing is written.
+    type Fields: Clone + fmt::Debug + PartialEq + Default;
 }
 
 /// The language a person writes: a `.crs` file, a program or a module.

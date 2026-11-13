@@ -2,9 +2,9 @@
 
 use {
     crate::{
-        CoreForm, CoreValue, Decorated, DecoratorField, ELIDED_LITERAL_CHARACTERS, FuncParam,
-        FuncTypeParam, Minting, Name, Occurrence, Pattern, ProofLiteral, Radix, Rendered, Shown,
-        Spelling, StrLit, StructLit, StructLitEntry, TupleField, core_written,
+        Binder, CoreForm, CoreValue, Decorated, DecoratorField, ELIDED_LITERAL_CHARACTERS,
+        FuncParam, FuncTypeParam, Literal, Minting, Name, Occurrence, Pattern, ProofLiteral, Radix,
+        Rendered, Shown, Spelling, StrLit, StructLit, StructLitEntry, TupleField, core_written,
     },
     curios_common::{Plicity, Qualifier, Sign, is_identifier_char, recurse},
     curios_core::{
@@ -305,6 +305,25 @@ impl<D: Rendered> Frame<'_, D> {
         self.reader().is_none()
     }
 
+    /// What a whole write states beside a binder's word of the label Core keeps for it, each field by the name the label gives it: where the binder sits among its declaration's written binders, and that it binds a proof, each where the label says so. Nothing in any other render, which names a binder by its word alone.
+    pub fn label_fields(&self, label: Option<&Label>) -> Vec<DecoratorField<D>> {
+        let Some(label) = label.filter(|_| self.spelling.writes_whole()) else {
+            return Vec::new();
+        };
+        let mut fields = Vec::new();
+        if let Some(written) = label.written() {
+            fields.push(("written", value(numeral(written, Sign::Unmarked))));
+        }
+        if label.binds_proof() {
+            fields.push((
+                "proof",
+                value(tree(crate::Subterm::Literal(Literal::Bool(true)))),
+            ));
+        }
+
+        decoration_fields(fields)
+    }
+
     /// `node` under a decorator setting each of `fields` in Core text proper, and `node` as it stands in a reader's spelling, which writes no decorator, or where it sets none.
     pub fn decorated(&self, fields: Vec<Decoration<D>>, node: crate::Term<D>) -> crate::Term<D> {
         match self.core_text() && !fields.is_empty() {
@@ -387,6 +406,7 @@ pub fn parameter_types<D: Rendered>(
     };
     let raw = cursor.label();
     let label = frame.label(raw);
+    let core = frame.label_fields(raw);
     let plicity = plicities
         .get(cursor.args().len())
         .copied()
@@ -398,9 +418,12 @@ pub fn parameter_types<D: Rendered>(
     };
     let typed = sub(ty.clone(), frame);
     let slot = params.len();
+    // What a decorator states of a binder stands before a word, so an unnamed one that states something is written as `_`, which reads back as no hint.
+    let word = (!named && !core.is_empty()).then(|| "_".to_string());
     params.push(FuncTypeParam {
         plicity,
-        label: None,
+        core,
+        label: word,
         type_: typed,
     });
     cursor.advance(Term::free_var(&label));
@@ -424,6 +447,7 @@ pub fn lambda_parameters<D: Rendered>(
         return sub(cursor.body().expect("a cursor past every entry"), minting);
     }
     let label = minting.label(cursor.label());
+    let core = minting.label_fields(cursor.label());
     let plicity = plicities
         .get(cursor.args().len())
         .copied()
@@ -439,7 +463,7 @@ pub fn lambda_parameters<D: Rendered>(
     let slot = params.len();
     params.push(FuncParam {
         plicity,
-        pattern: Pattern::Binder(crate::Label::from(String::new())),
+        pattern: Pattern::Binder(crate::Label::from(String::new()).into()),
         annotation,
     });
     cursor.advance(Term::free_var(&label));
@@ -450,10 +474,13 @@ pub fn lambda_parameters<D: Rendered>(
         false => named,
     };
 
-    params[slot].pattern = Pattern::Binder(crate::Label::from(match named {
-        true => spelled,
-        false => "_".to_string(),
-    }));
+    params[slot].pattern = Pattern::Binder(Binder {
+        core,
+        label: crate::Label::from(match named {
+            true => spelled,
+            false => "_".to_string(),
+        }),
+    });
     output
 }
 

@@ -80,6 +80,7 @@ pub fn fn_over(domains: Vec<Term>, output: Term) -> Term {
             .into_iter()
             .map(|domain| FuncTypeParam {
                 plicity: Plicity::Explicit,
+                core: (),
                 label: None,
                 type_: domain,
             })

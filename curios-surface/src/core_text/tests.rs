@@ -7,11 +7,11 @@ use {
     },
     curios_common::{Qualifier, Source},
     curios_core::{
-        Arm, Atom, CalleeId, Cases, Definition, DefinitionKind, Definitions, Field, Free, Global,
-        HeadKey, InductDecl, InductParam, Intrinsic, Item, Level, Match, MatchResult, Matrix,
-        MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality, QualityParam, RecItem, Row,
-        Sort, StructDecl, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var,
-        WitnessId, WitnessKey, WitnessOrigin,
+        Arm, Atom, CalleeId, Cases, Definition, DefinitionKind, Definitions, Field, Free, Func,
+        FuncType, Global, HeadKey, InductDecl, InductParam, Intrinsic, Item, Let, Level, Match,
+        MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality,
+        QualityParam, RecItem, Row, Sort, StructDecl, Subterm, Telescope, Term, UniverseContext,
+        UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -588,6 +588,81 @@ fn a_local_no_binder_binds_reads_back_as_itself() {
     let read = term_to_core(&parsed).unwrap_or_else(|error| panic!("{text}\n{error}"));
     assert_eq!(read, term, "{text}");
     assert_eq!(written(&term), "(x: #NatType) => stray");
+}
+
+/// `term` written whole, checked against `expected`, then read back: the term it reads back as, and that term written whole again, which is the same text where everything the text states was read.
+fn whole_round_trip(term: &Term, expected: &str) -> Term {
+    let whole = Rc::new(Spelling::core_text().written_whole());
+    let text = term.spelled(&whole).to_string();
+    assert_eq!(text, expected);
+    let parsed = parse_whole_term::<CoreText>(&Source::inline(&text))
+        .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
+    let read = term_to_core(&parsed).unwrap_or_else(|error| panic!("{text}\n{error}"));
+    assert_eq!(
+        read.spelled(&whole).to_string(),
+        text,
+        "the label a text states is read"
+    );
+
+    read
+}
+
+/// What Core keeps of a binder beside its hint is written whole before the binder's word, each field by the name the label gives it, and read back onto the label: where the binder sits among its declaration's written binders, and that it binds a proof. A lambda's `h` and a `let`'s `k` state both; a report names each by its word alone.
+#[test]
+fn a_binders_label_is_written_whole_before_its_word_and_read_back() {
+    let (p, h, k) = (
+        Free::local_written(0, Some("P"), 0),
+        Free::local_written(1, Some("h"), 1),
+        Free::local_written(2, Some("k"), 2),
+    );
+    let Subterm::Let(block) = Term::unwrap_or_clone(Term::let_(
+        &k,
+        Term::free_var(&p),
+        Term::free_var(&h),
+        Term::free_var(&k),
+    )) else {
+        unreachable!("a `let` was built");
+    };
+    let (bindings, tail) = block.into_parts();
+    let block = Term::from(Subterm::Let(Let::new(bindings, tail.with_proofs(&[true]))));
+    let Subterm::Func(Func { telescope }) = Term::unwrap_or_clone(Term::func(
+        [(p, Term::prop()), (h, Term::free_var(&p))],
+        block,
+    )) else {
+        unreachable!("a function was built");
+    };
+    let term = Term::from(Subterm::Func(Func {
+        telescope: telescope.with_proofs(&[false, true]),
+    }));
+
+    let read = whole_round_trip(
+        &term,
+        "(#{written = 0} P: Prop, #{written = 1, proof = true} h: P) =>\n    let #{written = 2, proof = true} k: P = h;\n    k",
+    );
+    assert_eq!(read, term);
+    assert_eq!(written(&term), "(P: Prop, h: P) => let k: P = h;\n    k");
+}
+
+/// A binder written as its type alone that states something of its label is written whole as `_`, which reads back as no hint: a function type's unnamed parameter that binds a proof.
+#[test]
+fn an_unnamed_binder_that_states_its_label_is_written_as_a_wildcard() {
+    let (x, unnamed) = (Free::local(0, Some("x")), Free::local(1, None));
+    let Subterm::FuncType(FuncType { telescope }) = Term::unwrap_or_clone(Term::func_type(
+        [(x, nat_type()), (unnamed, Term::prop())],
+        nat_type(),
+    )) else {
+        unreachable!("a function type was built");
+    };
+    let term = Term::from(Subterm::FuncType(FuncType {
+        telescope: telescope.with_proofs(&[false, true]),
+    }));
+
+    let read = whole_round_trip(&term, "(x: #NatType, #{proof = true} _: Prop) -> #NatType");
+    let Subterm::FuncType(FuncType { telescope }) = Term::unwrap_or_clone(read) else {
+        panic!("a function type reads back as one");
+    };
+    assert_eq!(telescope.proofs(), [false, true]);
+    assert_eq!(telescope.labels(), ["x", ""]);
 }
 
 /// A node met again is written once under sharing and read back as that one node: a tower of sixty pairs, each over one pair below twice, is a graph of sixty-one nodes whose tree has 2⁶⁰ leaves, and it is written and read in its graph's size. A term with no node met twice is written as a whole write without sharing writes it.

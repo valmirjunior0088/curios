@@ -16,6 +16,7 @@ use {
         Arm, Ascribed, Atom, Bang, Bind, Func, Global, Infix, Matrix, Method, NumLit, Pattern, Row,
         Subterm, Term, Transient,
     },
+    std::iter,
 };
 
 /// An elaboration-only form under the node it is.
@@ -125,7 +126,7 @@ fn matrix_written<D: Rendered>(
             .into_iter()
             .flat_map(|arm| arm.alternatives)
             .map(|Row { pattern, body }| {
-                let places = &mut std::iter::repeat_with(|| crate::Label::from("_".to_string()));
+                let places = &mut iter::repeat_with(|| "_".into());
 
                 MatrixArm::of(written_pattern(&pattern, places), sub(body, frame))
             })
@@ -315,15 +316,18 @@ pub fn node_transient_read(
 }
 
 /// A row's pattern as Core holds it, each binder a place among the row's.
-fn pattern_read(pattern: &MatchPattern, at: &crate::Term<CoreText>) -> Result<Pattern, ReadError> {
-    let fields = |fields: &[crate::MatchPatternField]| {
+fn pattern_read(
+    pattern: &MatchPattern<CoreText>,
+    at: &crate::Term<CoreText>,
+) -> Result<Pattern, ReadError> {
+    let fields = |fields: &[crate::MatchPatternField<CoreText>]| {
         fields
             .iter()
             .map(|field| Ok((field.label.clone(), pattern_read(&field.value, at)?)))
             .collect::<Result<Vec<_>, ReadError>>()
     };
     Ok(match pattern {
-        MatchPattern::Binder(_) => Pattern::Binder,
+        MatchPattern::Binder(binder) => place_read(binder, at).map(|()| Pattern::Binder)?,
         MatchPattern::Variant { tag, args } => Pattern::Variant {
             tag: Atom::from(tag.as_str()),
             args: args
@@ -353,12 +357,15 @@ fn pattern_read(pattern: &MatchPattern, at: &crate::Term<CoreText>) -> Result<Pa
 
 /// What a fold's hypothesis is bound by, where one is written.
 fn bind_read(
-    pattern: Option<&crate::Pattern>,
+    pattern: Option<&crate::Pattern<CoreText>>,
     at: &crate::Term<CoreText>,
 ) -> Result<Option<Bind>, ReadError> {
-    fn bind(pattern: &crate::Pattern, at: &crate::Term<CoreText>) -> Result<Bind, ReadError> {
+    fn bind(
+        pattern: &crate::Pattern<CoreText>,
+        at: &crate::Term<CoreText>,
+    ) -> Result<Bind, ReadError> {
         match pattern {
-            crate::Pattern::Binder(_) => Ok(Bind::Binder),
+            crate::Pattern::Binder(binder) => place_read(binder, at).map(|()| Bind::Binder),
             crate::Pattern::Tuple(fields) => Ok(Bind::Fields(
                 fields
                     .iter()
@@ -369,6 +376,20 @@ fn bind_read(
         }
     }
     pattern.map(|pattern| bind(pattern, at)).transpose()
+}
+
+/// A row's place: a binder whose label the row's body states, its function's own binder, so a decorator before it states nothing the pattern holds and is refused.
+fn place_read(
+    binder: &crate::Binder<CoreText>,
+    at: &crate::Term<CoreText>,
+) -> Result<(), ReadError> {
+    match binder.core.is_empty() {
+        true => Ok(()),
+        false => Err(ReadError::at(
+            Refusal::Malformed("a row's place, whose label the row's body states"),
+            binder.label.span().or(at.span()),
+        )),
+    }
 }
 
 /// The refusal of a struct pattern in a row: what its head resolved to is Core's and no form of Core text's.

@@ -1717,10 +1717,13 @@ fn process_items(
                         let lower = Lowerer::new(context, Some(name));
 
                         // Parameters and indices are minted before any of their types is lowered, and each type sees the binders before it — a later index type naming an earlier parameter must mean *that* binder.
-                        let head_binders =
-                            lower.mint(u.params.iter().map(param_name).chain(
-                                u.indices.iter().map(|(n, _)| n.clone().unwrap_or_default()),
-                            ));
+                        let head_binders = lower.mint(
+                            u.params.iter().map(param_name).chain(
+                                u.indices
+                                    .iter()
+                                    .map(|(_, n, _)| n.clone().unwrap_or_default()),
+                            ),
+                        );
                         let (param_binders, index_binders) = head_binders.split_at(u.params.len());
 
                         let mut head_prefixes = lower.prefixes(&head_binders);
@@ -1750,7 +1753,7 @@ fn process_items(
                             .indices
                             .iter()
                             .enumerate()
-                            .map(|(i, (_, t))| {
+                            .map(|(i, (_, _, t))| {
                                 let seen = u.params.len() + i;
                                 let ty = head_prefixes.under(seen, || lower.input_type(t))?;
                                 Ok((index_binders[i].1, ty))

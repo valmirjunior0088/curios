@@ -4,12 +4,14 @@
 
 use {
     super::{
-        Fields, ReadError, Reader, Refusal, called, core_read, malformed, numeral, telescope_read,
-        term_global, term_number, tree, value, value_variant, word,
+        Fields, LabelRead, ReadError, Reader, Refusal, called, core_read, malformed, numeral,
+        proving_telescope, telescope_read, term_global, term_number, tree, value, value_variant,
+        word,
     },
     crate::{CoreText, Frame, Rendered, TupleField, TupleTypeParam, sub},
     curios_common::{Plicity, Sign},
-    curios_core::{Field, Proj, Term, Tuple, TupleType},
+    curios_core::{Field, Proj, Subterm, Term, Tuple, TupleType},
+    std::iter,
 };
 
 /// A tuple type: each field's type, under its label where it has one a reader wrote or a later field reads.
@@ -22,14 +24,21 @@ pub fn tuple_type_written<D: Rendered>(
     while let Some((_, type_)) = cursor.entry() {
         let raw = cursor.label();
         let label = frame.label(raw);
+        let core = frame.label_fields(raw);
         frame.mint.note_tuple_label(&label);
         let named = match raw {
             Some(name) => name.hint().is_some() || cursor.binder_used(),
             None => false,
         };
         let type_ = sub(type_, frame);
+        // What a decorator states of a field's binder stands before a label, so an unlabelled one that states something is written as `_`, which reads back as no hint.
+        let word = match named {
+            true => Some(frame.spelling.label(&label)),
+            false => (!core.is_empty()).then(|| "_".to_string()),
+        };
         fields.push(TupleTypeParam {
-            label: named.then(|| crate::Label::from(frame.spelling.label(&label))),
+            core,
+            label: word.map(crate::Label::from),
             func_params: None,
             type_,
         });
@@ -44,7 +53,7 @@ pub fn tuple_written<D: Rendered>(
     Tuple { fields, names }: Tuple,
     frame: Frame<'_, D>,
 ) -> crate::Term<D> {
-    let mut names = names.into_iter().chain(std::iter::repeat(None));
+    let mut names = names.into_iter().chain(iter::repeat(None));
     let fields = fields
         .into_iter()
         .map(|field| TupleField {
@@ -106,20 +115,22 @@ pub fn tuple_type_read(
                 Refusal::ProgramForm("a field's signature sugar"),
                 field.type_.span(),
             )),
-            None => Ok((
-                Plicity::Explicit,
-                field.label.as_ref().map_or("_", |label| label.as_str()),
-                &field.type_,
-            )),
+            None => {
+                let word = field.label.as_ref().map_or("_", |label| label.as_str());
+                let label = LabelRead::of(&field.core, word, field.type_.span())?;
+                Ok((Plicity::Explicit, label, &field.type_))
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let (entries, ()) = telescope_read(&entries, reader, &mut |_, _| Ok(()))?;
+    let (read, ()) = telescope_read(&entries, reader, &mut |_, _| Ok(()))?;
+    let built = Term::tuple_type(read.into_iter().map(|(_, binder, type_)| (binder, type_)));
+    let Subterm::TupleType(TupleType { telescope }) = Term::unwrap_or_clone(built) else {
+        unreachable!("a tuple type was built");
+    };
 
-    Ok(Term::tuple_type(
-        entries
-            .into_iter()
-            .map(|(_, binder, type_)| (binder, type_)),
-    ))
+    Ok(Term::from(Subterm::TupleType(TupleType {
+        telescope: proving_telescope(telescope, &entries),
+    })))
 }
 
 /// A tuple: each field's value, under the label it was written with where it carries one; a tuple with none carries no names.

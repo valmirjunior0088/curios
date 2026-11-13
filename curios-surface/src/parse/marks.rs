@@ -177,17 +177,19 @@ pub fn parse_premise<'a, D: Grammar>(start: Mark) -> impl Parser<'a, Read<Term<D
     }
 }
 
-/// What follows `use` where the site declares and its binder may be read by a later member: in Core text the word it binds and its type, `use d: Show(A)`, or its type alone; in a program its type alone, as [`parse_premise`] reads it.
+/// What follows `use` where the site declares and its binder may be read by a later member: in Core text the word it binds, under what its decorator states of the binder, and its type, `use d: Show(A)`, or its type alone; in a program its type alone, as [`parse_premise`] reads it.
 pub fn parse_named_premise<'a, D: Grammar>(
     start: Mark,
-) -> impl Parser<'a, Read<(Option<String>, Term<D>)>> {
+) -> impl Parser<'a, Read<(D::Fields, Option<String>, Term<D>)>> {
     move |state: ParserState<'a>| {
-        let premise = parse_premise::<D>(start.clone()).map(|read| read.map(|type_| (None, type_)));
+        let premise = parse_premise::<D>(start.clone())
+            .map(|read| read.map(|type_| (D::Fields::default(), None, type_)));
         match D::NAMES_WITNESSES {
-            true => parse_identifier
+            true => D::parse_fields
+                .and(parse_identifier)
                 .and_drop(parse_literal(":"))
                 .and(parse_term::<D>)
-                .map(|(label, type_)| Ok((Some(label.to_string()), type_)))
+                .map(|((core, label), type_)| Ok((core, Some(label.to_string()), type_)))
                 .or(premise)
                 .parse(state),
             false => premise.parse(state),
