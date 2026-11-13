@@ -84,7 +84,12 @@ fn library() -> TestSubject {
         &std_directory(),
         &Overlay::default(),
     )
-    .unwrap_or_else(|refusal| panic!("the standard library's package is refused: {refusal}"));
+    .unwrap_or_else(|refusal| {
+        panic!(
+            "the standard library's package is refused: {}",
+            refusal.render()
+        )
+    });
     let mut subjects = test_subjects(selection, || {
         unreachable!("the package entire reads nothing on standard input")
     })

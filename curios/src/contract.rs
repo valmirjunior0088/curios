@@ -416,7 +416,12 @@ impl Contract {
             spelling => spelling,
         };
 
-        Selection::of(spelling, manifest, directory, &Overlay::default())
+        Ok(Selection::of(
+            spelling,
+            manifest,
+            directory,
+            &Overlay::default(),
+        )?)
     }
 
     /// The program `subject` selects: a program, or the package entire's sole or `default` one — named by its own file where the contract says so, and with somewhere to put what is built, `output` included.

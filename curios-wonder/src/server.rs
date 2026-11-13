@@ -22,7 +22,7 @@
 
 use {
     crate::{Asked, Diagnosed, Diagnosis, Named, Severity, Silent, Written},
-    curios_common::{Report, Source, Span},
+    curios_common::{Source, Span},
     curios_core::Declared,
     curios_module::Overlay,
     curios_package::{FormatSettings, Selection, Spelling},
@@ -649,9 +649,9 @@ impl Analyst {
                 })
                 .collect(),
             // A scope that cannot be assembled is an answer about the document, not a server failure: the manifest is what is wrong, and the document is where the editor is looking.
-            Err(message) => vec![Diagnosis {
+            Err(report) => vec![Diagnosis {
                 severity: Severity::Error,
-                report: Report::unlocated(message),
+                report: *report,
             }],
         };
 

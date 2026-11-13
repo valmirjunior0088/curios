@@ -14,7 +14,7 @@ use {
     curios_core::Declared,
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
-    curios_package::{Entry, Library, Program, Selection, Spelling},
+    curios_package::{Entry, Library, Program, Refused, Selection, Spelling},
     curios_pipeline::{CompileError, Progress},
     curios_surface::{Formatted, Width},
     curios_verdict::{Session, Verdicts},
@@ -138,7 +138,7 @@ pub struct Asked {
 
 impl Asked {
     /// Every subject `selection` is asked about: one for a program or a library, and for the governing package entire its library and then every program it declares, each a subject of its own.
-    pub fn every(selection: Selection) -> Result<Vec<Self>, String> {
+    pub fn every(selection: Selection) -> Result<Vec<Self>, Box<Report>> {
         Ok(match selection {
             Selection::Program(program) => vec![Self::about_program(program)?],
             Selection::Library(library) => vec![Self::about_library(library)],
@@ -156,7 +156,7 @@ impl Asked {
     }
 
     /// A program, asked about as its entry — the one place the transport drains standard input on the engine's behalf.
-    fn about_program(program: Program) -> Result<Self, String> {
+    fn about_program(program: Program) -> Result<Self, Box<Report>> {
         let origin = match program.entry() {
             Entry::Stdin => Origin::Text {
                 label: STDIN_LABEL.to_string(),
@@ -366,7 +366,7 @@ pub fn wonder_tests(
     let overlay = Overlay::default();
 
     let mut listed = Ok(());
-    for asked in Asked::every(selection).map_err(CompileError::failure)? {
+    for asked in Asked::every(selection).map_err(|report| CompileError::Failure(vec![*report]))? {
         let records = asked.tests(budget, &overlay, telling);
         match records {
             Ok(records) => {
@@ -775,7 +775,11 @@ fn label_of(entry: &Entry) -> String {
 }
 
 /// Standard input, drained to end.
-fn read_stdin() -> Result<String, String> {
-    io::read_to_string(io::stdin())
-        .map_err(|error| format!("failed to read standard input: {error}"))
+fn read_stdin() -> Result<String, Box<Report>> {
+    io::read_to_string(io::stdin()).map_err(|error| {
+        Refused::of("unreadable input")
+            .stating("standard input could not be read")
+            .stating(error)
+            .about_named(STDIN_LABEL)
+    })
 }

@@ -260,6 +260,7 @@ fn a_loose_file_does_not_use_the_surrounding_packages_compiler_version() {
         &Overlay::default(),
     )
     .err()
-    .expect("a declared file uses its package's version");
+    .expect("a declared file uses its package's version")
+    .render();
     assert!(error.contains("requires Curios"), "{error}");
 }

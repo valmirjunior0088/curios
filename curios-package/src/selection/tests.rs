@@ -24,14 +24,19 @@ fn selection(argument: Option<&str>, directory: &Path) -> Result<Selection, Stri
         spelling => spelling,
     };
 
-    Selection::of(spelling, None, directory, &Overlay::default())
+    Ok(Selection::of(
+        spelling,
+        None,
+        directory,
+        &Overlay::default(),
+    )?)
 }
 
 /// The program `argument` means to a command that needs one, standing in `directory`, or the refusal it earns.
 fn selected(argument: Option<&str>, directory: &Path) -> Result<Program, String> {
     match selection(argument, directory)? {
         Selection::Program(program) => Ok(program),
-        Selection::Entire(entire) => entire.default_program(),
+        Selection::Entire(entire) => Ok(entire.default_program()?),
         Selection::Library(_) => panic!("{argument:?} selects a library"),
     }
 }
@@ -161,7 +166,7 @@ fn a_name_selects_a_declared_executable() {
 
     let refusal = entry(Some("absent"), &root).expect_err("no such executable");
     assert!(
-        refusal.contains("no executable named \"absent\""),
+        refusal.contains("declares no executable named `absent`"),
         "{refusal}"
     );
     assert!(refusal.contains("`serve`"), "{refusal}");
@@ -306,6 +311,7 @@ fn standard_input_is_governed_by_no_manifest() {
     ) else {
         panic!("a manifest cannot govern standard input");
     };
+    let refusal = refusal.render();
     assert!(refusal.contains("no manifest governs"), "{refusal}");
 }
 
@@ -403,9 +409,7 @@ fn a_found_executable_is_listed_with_the_file_that_declares_it() {
 
     let refusal = entry(None, &root).expect_err("two executables and no default");
     assert!(
-        refusal.ends_with(
-            "; it declares the executable `serve`, the package's own executable `app` that `exe.crs` beside the manifest declares"
-        ),
+        refusal.contains("it declares: `serve`, `app`, by `exe.crs`"),
         "{refusal}"
     );
 }
@@ -430,15 +434,15 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
     );
 
     let refusal = entry(None, &root).expect_err("no exe.crs to mean");
-    assert_eq!(
-        refusal,
-        "\"app\" has no executable of its own: no `exe.crs` sits beside the manifest, and no `[[executables]]` row declares one by that name; it declares the executable `serve`"
+    assert!(
+        refusal.starts_with("unknown executable\n│  `app` has no executable of its own\n│  no `exe.crs` sits beside the manifest, and no `[[executables]]` row declares one by that name\n│  it declares: `serve`\n"),
+        "{refusal}"
     );
 
     // Asked for by name rather than through `default`, the same absence earns the same words.
     let refusal = entry(Some("app"), &root).expect_err("no exe.crs to mean");
     assert!(
-        refusal.starts_with("\"app\" has no executable of its own"),
+        refusal.contains("`app` has no executable of its own"),
         "{refusal}"
     );
 }
@@ -462,9 +466,9 @@ fn a_bare_command_on_a_package_of_a_library_alone_says_how_to_declare_one() {
     );
 
     let refusal = entry(None, &root).expect_err("no executable to mean");
-    assert_eq!(
-        refusal,
-        "\"app\" declares no executable: add `exe.crs`, or declare one with `[[executables]]`"
+    assert!(
+        refusal.starts_with("no executable\n│  `app` declares no executable\n│  add `exe.crs`, or declare one with `[[executables]]`\n"),
+        "{refusal}"
     );
 }
 
@@ -703,6 +707,7 @@ fn an_umbrella_named_outright_is_still_refused() {
     ) else {
         panic!("an umbrella named by hand is refused");
     };
+    let refusal = refusal.render();
     assert!(refusal.contains("declares an umbrella"), "{refusal}");
 }
 
@@ -719,5 +724,6 @@ fn a_named_manifest_places_no_file_outside_its_package() {
     ) else {
         panic!("a file outside the named package is refused");
     };
+    let refusal = refusal.render();
     assert!(refusal.contains("is outside the package"), "{refusal}");
 }

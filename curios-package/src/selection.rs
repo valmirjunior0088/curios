@@ -13,10 +13,10 @@ mod tests;
 
 use {
     crate::{
-        EXECUTABLE, Executable, Governing, LIBRARY, Package, Store, Target, module_below,
+        EXECUTABLE, Executable, Governing, LIBRARY, Package, Refused, Store, Target, module_below,
         module_of, order, reachable,
     },
-    curios_common::{Qualifier, RootKind},
+    curios_common::{Qualifier, Report, RootKind},
     curios_module::{Overlay, RootSource, identity, open_entrypoint, overlay_entrypoint},
     std::path::{Path, PathBuf},
 };
@@ -76,15 +76,15 @@ impl Selection {
         manifest: Option<&Path>,
         directory: &Path,
         overlay: &Overlay,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Box<Report>> {
         Ok(match spelling {
             // Answered before anything looks for a manifest, which is also why no manifest can govern it.
             Spelling::Stdin => match manifest {
                 Some(manifest) => {
-                    return Err(format!(
-                        "`-` is standard input, which no manifest governs: drop `--manifest {}`",
-                        manifest.display()
-                    ));
+                    return Err(Refused::of("surplus flag")
+                        .stating("`-` is standard input, which no manifest governs")
+                        .stating(format_args!("drop `--manifest {}`", manifest.display()))
+                        .about_named("--manifest"));
                 }
                 None => Self::Program(Program::loose(Entry::Stdin)),
             },
@@ -92,7 +92,7 @@ impl Selection {
             Spelling::Name(name) => {
                 let governing = Governing::found(manifest, directory)?;
                 governing.check_compiler()?;
-                let executable = named(&governing.package, &name)?;
+                let executable = named(&governing, &name)?;
                 Self::Program(program(&governing, executable)?)
             }
             Spelling::Nothing => {
@@ -111,7 +111,7 @@ pub struct Entire {
 
 impl Entire {
     /// Its library, compiled against everything it depends on — `None` when no `lib.crs` sits beside the manifest.
-    pub fn library(&self) -> Result<Option<Library>, String> {
+    pub fn library(&self) -> Result<Option<Library>, Box<Report>> {
         if !self.governing.directory.join(LIBRARY).is_file() {
             return Ok(None);
         }
@@ -126,7 +126,7 @@ impl Entire {
     }
 
     /// Every program it declares, in declaration order.
-    pub fn programs(&self) -> Result<Vec<Program>, String> {
+    pub fn programs(&self) -> Result<Vec<Program>, Box<Report>> {
         self.governing
             .package
             .executables
@@ -136,12 +136,12 @@ impl Entire {
     }
 
     /// The program no argument means to a command that needs one: the sole one, or the one `default` names.
-    pub fn default_program(&self) -> Result<Program, String> {
-        program(&self.governing, sole(&self.governing.package)?)
+    pub fn default_program(&self) -> Result<Program, Box<Report>> {
+        program(&self.governing, sole(&self.governing)?)
     }
 
     /// Every file the package is written in: its library's, then each program's, in declaration order.
-    pub fn declared_files(&self) -> Result<Vec<PathBuf>, String> {
+    pub fn declared_files(&self) -> Result<Vec<PathBuf>, Box<Report>> {
         let mut files = match self.library()? {
             Some(library) => library.declared_files()?,
             None => Vec::new(),
@@ -176,9 +176,10 @@ impl Library {
     }
 
     /// Every file the library is written in: its header, and every file module its `mod` lines reach.
-    pub fn declared_files(&self) -> Result<Vec<PathBuf>, String> {
+    pub fn declared_files(&self) -> Result<Vec<PathBuf>, Box<Report>> {
         self.units.last().map_or(Ok(Vec::new()), |unit| {
-            unit.declared_files().map_err(|error| error.to_string())
+            unit.declared_files()
+                .map_err(|error| Box::new(error.report()))
         })
     }
 }
@@ -307,17 +308,18 @@ impl Program {
     }
 
     /// Every file the program is written in: its entry, and every file module its entry's `mod` lines reach — none for a program on standard input.
-    pub fn declared_files(&self) -> Result<Vec<PathBuf>, String> {
+    pub fn declared_files(&self) -> Result<Vec<PathBuf>, Box<Report>> {
         let Entry::File(entry) = &self.entry else {
             return Ok(Vec::new());
         };
-        let (entrypoint, loader, _) = open_entrypoint(entry).map_err(|error| error.format())?;
+        let (entrypoint, loader, _) =
+            open_entrypoint(entry).map_err(|error| Box::new(error.report()))?;
 
         let mut files = vec![entry.clone()];
         files.extend(
             loader
                 .entry_declared_files(&entrypoint.module.items)
-                .map_err(|error| error.to_string())?,
+                .map_err(|error| Box::new(error.report()))?,
         );
 
         Ok(files)
@@ -325,7 +327,7 @@ impl Program {
 }
 
 /// `executable`, declared by the package `governing` governs, and everything needed to compile it.
-fn program(governing: &Governing, executable: &Executable) -> Result<Program, String> {
+fn program(governing: &Governing, executable: &Executable) -> Result<Program, Box<Report>> {
     Ok(Program {
         entry: Entry::File(governing.directory.join(&executable.path)),
         scope: Scope::Declared {
@@ -343,7 +345,11 @@ fn program(governing: &Governing, executable: &Executable) -> Result<Program, St
 }
 
 /// `file`, placed in the unit whose `mod` chain declares it, and loose when none does: a file its package's directory holds and no `mod` reaches is taken on its own, as one no package holds is.
-fn placed(file: PathBuf, manifest: Option<&Path>, overlay: &Overlay) -> Result<Selection, String> {
+fn placed(
+    file: PathBuf,
+    manifest: Option<&Path>,
+    overlay: &Overlay,
+) -> Result<Selection, Box<Report>> {
     let spelled = identity(&file);
 
     // An umbrella found first declares no unit, so nothing declares the file — exactly as when no manifest is above it at all.
@@ -426,8 +432,9 @@ fn entry_declares(entry: &Path, module: &Qualifier, overlay: &Overlay) -> bool {
         .unwrap_or(true)
 }
 
-/// The executable `name` names.
-fn named<'a>(package: &'a Package, name: &str) -> Result<&'a Executable, String> {
+/// The executable `name` names in the package `governing` governs.
+fn named<'a>(governing: &'a Governing, name: &str) -> Result<&'a Executable, Box<Report>> {
+    let package = &governing.package;
     if let Some(executable) = package
         .executables
         .iter()
@@ -437,50 +444,64 @@ fn named<'a>(package: &'a Package, name: &str) -> Result<&'a Executable, String>
     }
 
     // The package's own name is declared by a file's presence rather than by a row, so the refusal names the file: this is the one name `Document::package` lets a `default` state without a row behind it, and the reader who wrote that `default` has to be told what declares it.
-    match name == package.name {
-        true => Err(format!(
-            "{name:?} has no executable of its own: no `{EXECUTABLE}` sits beside the manifest, and no `[[executables]]` row declares one by that name{}",
-            candidates(package)
+    let refused = match name == package.name {
+        true => Refused::of("unknown executable")
+            .stating(format_args!("`{name}` has no executable of its own"))
+            .stating(format_args!(
+                "no `{EXECUTABLE}` sits beside the manifest, and no `[[executables]]` row declares one by that name"
+            )),
+        false => Refused::of("unknown executable").stating(format_args!(
+            "`{}` declares no executable named `{name}`",
+            package.name
         )),
-        false => Err(format!(
-            "{:?} declares no executable named {name:?}{}",
-            package.name,
-            candidates(package)
-        )),
-    }
+    };
+
+    Err(candidates(refused, package).about_path(&governing.manifest))
 }
 
 /// The executable no argument means: the sole one, or the one `default` names.
-fn sole(package: &Package) -> Result<&Executable, String> {
+fn sole(governing: &Governing) -> Result<&Executable, Box<Report>> {
+    let package = &governing.package;
     if let Some(default) = &package.default {
-        return named(package, default);
+        return named(governing, default);
     }
 
     match package.executables.as_slice() {
         [executable] => Ok(executable),
-        [] => Err(format!(
-            "{:?} declares no executable: add `exe.crs`, or declare one with `[[executables]]`",
-            package.name
-        )),
-        _ => Err(format!(
-            "{:?} declares more than one executable and no `default`, so a bare command means none of them in particular{}",
-            package.name,
-            candidates(package)
-        )),
+        [] => Err(Refused::of("no executable")
+            .stating(format_args!("`{}` declares no executable", package.name))
+            .stating(format_args!(
+                "add `{EXECUTABLE}`, or declare one with `[[executables]]`"
+            ))
+            .about_path(&governing.manifest)),
+        _ => Err(candidates(
+            Refused::of("ambiguous executable").stating(format_args!(
+                "`{}` declares more than one executable and no `default`",
+                package.name
+            )),
+            package,
+        )
+        .stating("name one, or state `default`")
+        .about_path(&governing.manifest)),
     }
 }
 
-/// The executables a package does declare, for a refusal that leaves the reader somewhere to go.
-fn candidates(package: &Package) -> String {
+/// `refused`, resting as well on the executables `package` does declare, which leaves the reader somewhere to go: each by its name, and the package's own by the file that declares it, since no row does.
+fn candidates(refused: Refused, package: &Package) -> Refused {
     match package.executables.as_slice() {
-        [] => String::new(),
-        executables => format!(
-            "; it declares {}",
+        [] => refused,
+        executables => refused.stating(format_args!(
+            "it declares: {}",
             executables
                 .iter()
-                .map(|executable| package.describe(executable))
+                .map(
+                    |executable| match executable.path == Path::new(EXECUTABLE) {
+                        true => format!("`{}`, by `{EXECUTABLE}`", executable.name),
+                        false => format!("`{}`", executable.name),
+                    }
+                )
                 .collect::<Vec<_>>()
                 .join(", ")
-        ),
+        )),
     }
 }
