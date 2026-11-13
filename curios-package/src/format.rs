@@ -8,9 +8,9 @@
 mod tests;
 
 use {
-    crate::{Governing, MANIFEST, Package, Umbrella},
+    crate::{Governing, MANIFEST, Package, Refused, Umbrella},
     clap::Args,
-    curios_common::LINE_WIDTH,
+    curios_common::{LINE_WIDTH, Report},
     curios_surface::{NARROWEST, Width},
     serde::{Deserialize, Deserializer, de::Error},
     std::path::{Path, PathBuf},
@@ -28,17 +28,21 @@ pub struct FormatSettings {
 
 impl FormatSettings {
     /// The width a file is formatted within, from the one place that states it: `governing`'s `[format]` where a package governs the file, and these settings, the command line's, where none does. A setting stated here where a package governs is refused, naming the manifest that owns the package's format.
-    pub fn width_under(&self, governing: Option<&Governing>) -> Result<Width, String> {
+    pub fn width_under(&self, governing: Option<&Governing>) -> Result<Width, Box<Report>> {
         let settings = match governing {
             None => self.clone(),
             Some(governing) => {
                 let (stated, owner) = governing.format()?;
                 if *self != Self::default() {
-                    return Err(format!(
-                        "the package `{}` takes its format from {}, which a flag does not override: write the setting under its `[format]` table, or format the text through standard input, which no manifest governs",
-                        governing.package.name,
-                        owner.display()
-                    ));
+                    return Err(Refused::of("surplus flag")
+                        .stating(format_args!(
+                            "the package `{}` takes its format from {}",
+                            governing.package.name,
+                            owner.display()
+                        ))
+                        .stating("a flag does not override it")
+                        .stating("write the setting under its `[format]` table, or format the text through standard input, which no manifest governs")
+                        .about_named("--width"));
                 }
                 stated.cloned().unwrap_or_default()
             }
@@ -50,7 +54,11 @@ impl FormatSettings {
     }
 
     /// [`FormatSettings::width_under`] for `file`: under the package `manifest` names or the one whose manifest is nearest above it, whose stated compiler the running one must be, and under nothing where no package governs it.
-    pub fn width_of_file(&self, file: &Path, manifest: Option<&Path>) -> Result<Width, String> {
+    pub fn width_of_file(
+        &self,
+        file: &Path,
+        manifest: Option<&Path>,
+    ) -> Result<Width, Box<Report>> {
         let governing = Governing::of_file(file, manifest)?;
         if let Some(governing) = &governing {
             governing.check_compiler()?;
@@ -80,17 +88,20 @@ pub fn format_owner<'a>(
     package: &'a Package,
     directory: &Path,
     umbrella: Option<(&'a Umbrella, &Path)>,
-) -> Result<(Option<&'a FormatSettings>, PathBuf), String> {
+) -> Result<(Option<&'a FormatSettings>, PathBuf), Box<Report>> {
     let manifest = directory.join(MANIFEST);
     match umbrella {
         Some((umbrella, root)) => {
             let owner = root.join(MANIFEST);
             if package.format.is_some() {
-                return Err(format!(
-                    "{} inherits `[format]` from the umbrella at {}; remove its local `[format]` table",
-                    manifest.display(),
-                    owner.display()
-                ));
+                return Err(Refused::of("duplicate setting")
+                    .stating(format_args!(
+                        "`[format]` is inherited from the umbrella at {}",
+                        owner.display()
+                    ))
+                    .stating("remove the local table")
+                    .entry(["format"])
+                    .located_at(&manifest));
             }
             Ok((umbrella.format.as_ref(), owner))
         }

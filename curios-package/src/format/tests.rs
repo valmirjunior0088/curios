@@ -133,9 +133,10 @@ fn a_member_formats_at_its_umbrellas_width_and_states_none_of_its_own() {
 
     let refusal = Governing::of(&root.join("own"))
         .err()
-        .expect("a member restates `[format]`");
+        .expect("a member restates `[format]`")
+        .render();
     assert!(
-        refusal.contains("inherits `[format]` from the umbrella at"),
+        refusal.contains("`[format]` is inherited from the umbrella at"),
         "{refusal}"
     );
     assert!(
@@ -183,7 +184,8 @@ fn a_flag_sets_the_width_of_what_no_package_governs_and_is_refused_where_one_doe
 
     let refusal = narrow
         .width_of_file(&root.join("app/lib.crs"), None)
-        .unwrap_err();
+        .unwrap_err()
+        .render();
     assert!(
         refusal.contains("the package `app` takes its format from"),
         "{refusal}"
@@ -214,7 +216,8 @@ fn a_file_outside_the_package_manifest_names_is_refused() {
 
     let refusal = FormatSettings::default()
         .width_of_file(&root.join("loose.crs"), Some(&root.join("app/curios.toml")))
-        .unwrap_err();
+        .unwrap_err()
+        .render();
     assert!(
         refusal.contains("`--manifest` cannot place it"),
         "{refusal}"

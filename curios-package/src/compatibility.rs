@@ -5,6 +5,7 @@ mod tests;
 
 use {
     crate::{MANIFEST, Package, Refused, Umbrella},
+    curios_common::Report,
     semver::Version,
     std::{
         fmt,
@@ -27,14 +28,15 @@ impl CompilerVersion {
         )
     }
 
-    /// Refuse every compiler but this one before a package is compiled or its cached executable is selected.
-    fn require_current(&self, manifest: &Path) -> Result<(), String> {
+    /// Refuse every compiler but this one before a package is compiled or its cached executable is selected, at the `compiler` of `manifest`, which states this version.
+    fn require_current(&self, manifest: &Path) -> Result<(), Box<Report>> {
         let current = Self::current();
         if current.0.cmp_precedence(&self.0).is_ne() {
-            return Err(format!(
-                "{} requires Curios {self}; this compiler is Curios {current}",
-                manifest.display()
-            ));
+            return Err(Refused::of("compiler mismatch")
+                .stating(format_args!("this package requires Curios {self}"))
+                .stating(format_args!("this compiler is Curios {current}"))
+                .value(["compiler"])
+                .located_at(manifest));
         }
         Ok(())
     }
@@ -68,7 +70,7 @@ pub fn require_compiler(
     package: &Package,
     directory: &Path,
     umbrella: Option<(&Umbrella, &Path)>,
-) -> Result<(), String> {
+) -> Result<(), Box<Report>> {
     let (stated, owner) = compiler_requirement(package, directory, umbrella)?;
     stated.require_current(&owner)
 }
@@ -78,24 +80,34 @@ pub fn compiler_requirement<'a>(
     package: &'a Package,
     directory: &Path,
     umbrella: Option<(&'a Umbrella, &Path)>,
-) -> Result<(&'a CompilerVersion, PathBuf), String> {
+) -> Result<(&'a CompilerVersion, PathBuf), Box<Report>> {
     let manifest = directory.join(MANIFEST);
     match umbrella {
         Some((umbrella, root)) => {
             let owner = root.join(MANIFEST);
             if package.compiler.is_some() {
-                return Err(format!(
-                    "{} inherits `compiler` from the umbrella at {}; remove its local `compiler` field",
-                    manifest.display(), owner.display()
-                ));
+                return Err(Refused::of("duplicate setting")
+                    .stating(format_args!(
+                        "`compiler` is inherited from the umbrella at {}",
+                        owner.display()
+                    ))
+                    .stating("remove the local field")
+                    .entry(["compiler"])
+                    .located_at(&manifest));
             }
             Ok((&umbrella.compiler, owner))
         }
-        None => Ok((package.compiler.as_ref().ok_or_else(|| {
-            format!(
-                "{} declares no compiler version; a standalone package must state `compiler = \"{}\"`",
-                manifest.display(), CompilerVersion::current()
-            )
-        })?, manifest)),
+        None => Ok((
+            package.compiler.as_ref().ok_or_else(|| {
+                Refused::of("missing compiler version")
+                    .stating("this package states no `compiler`")
+                    .stating(format_args!(
+                        "a standalone package states one, as `compiler = \"{}\"`",
+                        CompilerVersion::current()
+                    ))
+                    .about_path(&manifest)
+            })?,
+            manifest,
+        )),
     }
 }

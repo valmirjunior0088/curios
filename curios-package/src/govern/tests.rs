@@ -111,12 +111,14 @@ fn a_directory_no_manifest_is_above_is_governed_by_nothing() {
 
     let refusal = Governing::of(&root)
         .map(|_| ())
-        .expect_err("no manifest at or above the tree");
+        .expect_err("no manifest at or above the tree")
+        .render();
     assert!(
-        refusal.contains(&format!(
-            "no `curios.toml` in {} or any directory above it",
-            root.display()
-        )),
+        refusal.contains("no `curios.toml` in this directory or any directory above it"),
+        "{refusal}"
+    );
+    assert!(
+        refusal.ends_with(&format!("╰─ [error] {}", root.display())),
         "{refusal}"
     );
 }
@@ -209,7 +211,8 @@ fn an_umbrella_root_is_governed_by_no_package() {
     for directory in [".", "notes"] {
         let refusal = Governing::of(&root.join(directory))
             .map(|_| ())
-            .expect_err("an umbrella declares no package");
+            .expect_err("an umbrella declares no package")
+            .render();
         // A manifest *is* there, so the refusal names what it declares rather than reporting one missing.
         assert!(
             refusal.contains("declares an umbrella"),
@@ -251,9 +254,10 @@ fn a_member_with_no_manifest_is_refused_against_the_umbrella() {
 
     let refusal = Governing::of(&root.join("app"))
         .map(|_| ())
-        .expect_err("a member nothing declares");
+        .expect_err("a member nothing declares")
+        .render();
     assert!(
-        refusal.contains("enumerates the member \"bsae\""),
+        refusal.contains("the umbrella lists the member `bsae`"),
         "{refusal}"
     );
     assert!(refusal.contains("no `curios.toml` sits in"), "{refusal}");
@@ -286,9 +290,10 @@ fn a_member_listed_twice_is_refused_as_listed_twice() {
 
     let refusal = Governing::of(&root.join("app"))
         .map(|_| ())
-        .expect_err("one member listed twice");
+        .expect_err("one member listed twice")
+        .render();
     assert!(
-        refusal.contains("lists the member \"base\" twice, as \"base\" and as \"./base\""),
+        refusal.contains("the umbrella lists `base` twice\n│  as `base` and as `./base`"),
         "{refusal}"
     );
     assert!(!refusal.contains("two members"), "{refusal}");

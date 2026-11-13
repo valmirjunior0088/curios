@@ -7,7 +7,7 @@ mod tests;
 
 use {
     curios_common::{About, Report, Said, Source, Span},
-    std::{fmt, ops::Range, sync::Arc},
+    std::{fmt, ops::Range, path::Path, sync::Arc},
     toml_edit::{Document, Item, Table, TableLike, Value},
 };
 
@@ -126,6 +126,34 @@ impl Refused {
         };
 
         tries.into_iter().fold(report, Report::trying)
+    }
+
+    /// [`located`](Self::located) in the manifest at `path`, read again for where the refusal stands, and about that file where it cannot be read.
+    pub fn located_at(self, path: &Path) -> Box<Report> {
+        match Source::read(path) {
+            Ok(source) => Box::new(self.located(&source)),
+            Err(_) => self.about(About::Path(path.to_path_buf())),
+        }
+    }
+
+    /// The report of this refusal about the file or the directory at `path`, as a whole.
+    pub fn about_path(self, path: &Path) -> Box<Report> {
+        self.about(About::Path(path.to_path_buf()))
+    }
+
+    /// The report of this refusal about what `name` names: a flag, a row, standard input.
+    pub fn about_named(self, name: impl Into<String>) -> Box<Report> {
+        self.about(About::Named(name.into()))
+    }
+
+    fn about(self, about: About) -> Box<Report> {
+        let Self { said, tries, .. } = self;
+
+        Box::new(
+            tries
+                .into_iter()
+                .fold(Report::about(about, said), Report::trying),
+        )
     }
 }
 

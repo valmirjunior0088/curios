@@ -44,9 +44,12 @@ fn a_compiler_version_is_bare_and_never_a_range() {
 fn a_standalone_package_states_its_own_compiler() {
     let root = Temporary::new("compatibility", "standalone");
     write(&root, MANIFEST, "name = \"app\"\n");
-    let error = Governing::of(&root).err().expect("a version is required");
+    let error = Governing::of(&root)
+        .err()
+        .expect("a version is required")
+        .render();
     assert!(
-        error.contains("standalone package must state `compiler"),
+        error.contains("a standalone package states one, as `compiler"),
         "{error}"
     );
     assert!(
@@ -104,7 +107,7 @@ fn another_version_newer_or_older_names_the_manifest_and_both_versions() {
             "{error}"
         );
         assert!(
-            error.contains(&format!("requires Curios {required};")),
+            error.contains(&format!("this package requires Curios {required}\n")),
             "{error}"
         );
         assert!(
@@ -133,9 +136,10 @@ fn only_enumerated_members_inherit_the_umbrellas_compiler() {
     Governing::of(&root.join("member")).expect("the enumerated member inherits");
     let error = Governing::of(&root.join("stray"))
         .err()
-        .expect("an unlisted package stands alone");
+        .expect("an unlisted package stands alone")
+        .render();
     assert!(
-        error.contains("standalone package must state `compiler"),
+        error.contains("a standalone package states one, as `compiler"),
         "{error}"
     );
     write(
@@ -149,9 +153,13 @@ fn only_enumerated_members_inherit_the_umbrellas_compiler() {
     );
     let error = Governing::of(&root.join("member"))
         .err()
-        .expect("a member cannot override its umbrella");
-    assert!(error.contains("inherits `compiler`"), "{error}");
-    assert!(error.contains("remove its local `compiler`"), "{error}");
+        .expect("a member cannot override its umbrella")
+        .render();
+    assert!(
+        error.contains("`compiler` is inherited from the umbrella at"),
+        "{error}"
+    );
+    assert!(error.contains("remove the local field"), "{error}");
 }
 
 #[test]
@@ -206,7 +214,7 @@ fn dependencies_use_their_own_umbrella_and_never_the_consumers() {
         .err()
         .expect("the dependency states no version of its own");
     assert!(
-        error.contains("standalone package must state `compiler"),
+        error.contains("a standalone package states one, as `compiler"),
         "{error}"
     );
 }

@@ -11,9 +11,10 @@ mod tests;
 
 use {
     crate::{
-        FormatSettings, MANIFEST, Manifest, Package, Store, Umbrella, compiler_requirement,
-        format_owner, require_compiler,
+        FormatSettings, MANIFEST, Manifest, Package, Refused, Step, Store, Umbrella,
+        compiler_requirement, format_owner, require_compiler,
     },
+    curios_common::Report,
     curios_module::identity,
     std::{
         collections::BTreeMap,
@@ -41,7 +42,7 @@ pub struct Governing {
 
 impl Governing {
     /// Check the selected package's effective minimum before compiling or reusing a cached executable.
-    pub(crate) fn check_compiler(&self) -> Result<(), String> {
+    pub(crate) fn check_compiler(&self) -> Result<(), Box<Report>> {
         require_compiler(
             &self.package,
             &self.directory,
@@ -52,7 +53,7 @@ impl Governing {
     }
 
     /// The governing package's format, with the manifest that owns it: the enumerating umbrella's, or the package's own.
-    pub(crate) fn format(&self) -> Result<(Option<&FormatSettings>, PathBuf), String> {
+    pub(crate) fn format(&self) -> Result<(Option<&FormatSettings>, PathBuf), Box<Report>> {
         format_owner(
             &self.package,
             &self.directory,
@@ -68,7 +69,7 @@ impl Governing {
     }
 
     /// What governs an invocation, by the manifest it named when it named one and by the one nearest `directory` otherwise.
-    pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, String> {
+    pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, Box<Report>> {
         match manifest {
             Some(path) => Self::at(path),
             None => Self::of(directory),
@@ -78,17 +79,22 @@ impl Governing {
     /// What governs an invocation started where the process is standing.
     ///
     /// The working directory is read here rather than by each caller, because "where the invocation started" is this lookup's own input and every caller would otherwise spell the same two lines to supply it.
-    pub fn here(manifest: Option<&Path>) -> Result<Self, String> {
-        let directory = std::env::current_dir().map_err(|error| error.to_string())?;
+    pub fn here(manifest: Option<&Path>) -> Result<Self, Box<Report>> {
+        let directory = std::env::current_dir().map_err(|error| {
+            Refused::of("unreadable directory")
+                .stating("the working directory could not be read")
+                .stating(error)
+                .about_named("the working directory")
+        })?;
 
         Self::found(manifest, &directory)
     }
 
     /// What governs an invocation started in `directory`: the package whose manifest is nearest, at `directory` or above it.
-    pub fn of(directory: &Path) -> Result<Self, String> {
+    pub fn of(directory: &Path) -> Result<Self, Box<Report>> {
         let directory = directory
             .canonicalize()
-            .map_err(|error| format!("{}: {error}", directory.display()))?;
+            .map_err(|error| unreadable(directory, &error))?;
 
         let (package, at) = nearest_package(&directory)?;
 
@@ -98,15 +104,16 @@ impl Governing {
     /// What governs an invocation whose manifest was named outright, walking upward only for the umbrella.
     ///
     /// The explicit override exists for scripting, and it overrides exactly the search: which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.
-    pub fn at(manifest: &Path) -> Result<Self, String> {
+    pub fn at(manifest: &Path) -> Result<Self, Box<Report>> {
         // Canonical through `identity`, which is what reads a bare `curios.toml` as the working directory's: its parent is `""`, which canonicalizes to nothing, so canonicalizing the parent directly would refuse the file as missing.
         let manifest = identity(manifest);
 
         let Manifest::Package(package) = Manifest::from_path(&manifest)? else {
-            return Err(format!(
-                "{} declares an umbrella, and an umbrella compiles nothing of its own: name one of its members instead",
-                manifest.display()
-            ));
+            return Err(Refused::of("not a package")
+                .stating("this manifest declares an umbrella")
+                .stating("an umbrella compiles nothing of its own")
+                .stating("name one of its members")
+                .about_path(&manifest));
         };
 
         // Read after the manifest, because a file that was read is a canonical path with a directory over it.
@@ -119,18 +126,20 @@ impl Governing {
     }
 
     /// What governs `file`: the package `manifest` names, which must hold it, or the package whose manifest is nearest above it. `None` where no manifest is above it, or where the first one found is an umbrella's, which declares no package — the file is then no package's.
-    pub fn of_file(file: &Path, manifest: Option<&Path>) -> Result<Option<Self>, String> {
+    pub fn of_file(file: &Path, manifest: Option<&Path>) -> Result<Option<Self>, Box<Report>> {
         let spelled = identity(file);
 
         match manifest {
             Some(named) => {
                 let governing = Self::at(named)?;
                 if !spelled.starts_with(identity(&governing.directory)) {
-                    return Err(format!(
-                        "{} is outside the package {} declares, so `--manifest` cannot place it",
-                        file.display(),
-                        named.display()
-                    ));
+                    return Err(Refused::of("outside the package")
+                        .stating(format_args!(
+                            "this file is outside the package {} declares",
+                            named.display()
+                        ))
+                        .stating("`--manifest` cannot place it")
+                        .about_path(file));
                 }
                 Ok(Some(governing))
             }
@@ -145,7 +154,7 @@ impl Governing {
     }
 
     /// `package`, read from `manifest` at `at`, under whichever umbrella enumerates it.
-    fn rooted(package: Package, manifest: PathBuf, at: PathBuf) -> Result<Self, String> {
+    fn rooted(package: Package, manifest: PathBuf, at: PathBuf) -> Result<Self, Box<Report>> {
         let umbrella = umbrella_over(&at)?;
         let umbrella_at = umbrella
             .as_ref()
@@ -177,54 +186,73 @@ impl Governing {
 /// Each member's declared name, and the directory its manifest sits in.
 ///
 /// Every refusal here is the umbrella's: an entry no manifest answers, an entry that is itself an umbrella, and two entries declaring one name — each named against the umbrella's manifest, since that is the file somebody wrote (law 4).
-fn members(root: &Path, umbrella: &Umbrella) -> Result<BTreeMap<String, PathBuf>, String> {
+fn members(root: &Path, umbrella: &Umbrella) -> Result<BTreeMap<String, PathBuf>, Box<Report>> {
     let mut members = BTreeMap::new();
     // Which entry placed each name, for a refusal that quotes the entry as the umbrella wrote it.
     let mut entries = BTreeMap::new();
 
-    for member in &umbrella.members {
+    for (index, member) in umbrella.members.iter().enumerate() {
         let directory = root.join(member);
         let manifest = directory.join(MANIFEST);
+        // Every refusal of an entry stands at the entry, in the umbrella's manifest.
+        let listed = |refused: Refused| {
+            refused
+                .entry([Step::key("members"), Step::Row(index)])
+                .located_at(&root.join(MANIFEST))
+        };
 
         // Asked before the read, because the read's refusal names the file it could not open and nothing else: an entry somebody mistyped is a fault in the umbrella's row (law 4), and the reader has to be sent there rather than to a path they never spelled.
         if !manifest.is_file() {
-            return Err(format!(
-                "the umbrella at {} enumerates the member {:?}, and no `{MANIFEST}` sits in {}",
-                root.join(MANIFEST).display(),
-                member.display(),
-                directory.display()
+            return Err(listed(
+                Refused::of("missing member")
+                    .stating(format_args!(
+                        "the umbrella lists the member `{}`",
+                        member.display()
+                    ))
+                    .stating(format_args!(
+                        "no `{MANIFEST}` sits in {}",
+                        directory.display()
+                    )),
             ));
         }
 
         let Manifest::Package(package) = Manifest::from_path(&manifest)? else {
-            return Err(format!(
-                "the member {} declares an umbrella, and umbrellas do not nest",
-                member.display()
+            return Err(listed(
+                Refused::of("nested umbrella")
+                    .stating(format_args!(
+                        "the member `{}` declares an umbrella",
+                        member.display()
+                    ))
+                    .stating("umbrellas do not nest"),
             ));
         };
 
         // Canonical, as every location the walk compares is: `base` and `./base` are one member, and a refusal that read them as two would send the reader after a second package that does not exist.
         let directory = directory
             .canonicalize()
-            .map_err(|error| format!("{}: {error}", directory.display()))?;
+            .map_err(|error| unreadable(&directory, &error))?;
 
         if let Some(earlier) = members.insert(package.name.clone(), directory.clone()) {
             let written: &PathBuf = &entries[&package.name];
-            return Err(match earlier == directory {
-                true => format!(
-                    "the umbrella at {} lists the member {:?} twice, as {:?} and as {:?}",
-                    root.join(MANIFEST).display(),
-                    package.name,
-                    written.display().to_string(),
-                    member.display().to_string()
-                ),
-                false => format!(
-                    "two members declare the name {:?}: {} and {}",
-                    package.name,
-                    earlier.display(),
-                    directory.display()
-                ),
-            });
+            return Err(listed(match earlier == directory {
+                true => Refused::of("duplicate member")
+                    .stating(format_args!("the umbrella lists `{}` twice", package.name))
+                    .stating(format_args!(
+                        "as `{}` and as `{}`",
+                        written.display(),
+                        member.display()
+                    )),
+                false => Refused::of("duplicate name")
+                    .stating(format_args!(
+                        "two members declare the name `{}`",
+                        package.name
+                    ))
+                    .stating(format_args!(
+                        "{} and {}",
+                        earlier.display(),
+                        directory.display()
+                    )),
+            }));
         }
         entries.insert(package.name, member.clone());
     }
@@ -235,21 +263,24 @@ fn members(root: &Path, umbrella: &Umbrella) -> Result<BTreeMap<String, PathBuf>
 /// The package whose manifest is nearest `directory`, and the directory that manifest sits in.
 ///
 /// **The first manifest found decides.** A package nested in another's directory is its own, since its manifest is nearer; and an umbrella found first governs no package, since it declares none, so standing in its tree outside every member is refused for what it is rather than walked past to something further up.
-fn nearest_package(directory: &Path) -> Result<(Package, PathBuf), String> {
+fn nearest_package(directory: &Path) -> Result<(Package, PathBuf), Box<Report>> {
     let Some(at) = nearest_manifest(directory) else {
-        return Err(format!(
-            "no `{MANIFEST}` in {} or any directory above it; run a `.crs` file by name, or work inside a package",
-            directory.display()
-        ));
+        return Err(Refused::of("no manifest")
+            .stating(format_args!(
+                "no `{MANIFEST}` in this directory or any directory above it"
+            ))
+            .stating("run a `.crs` file by name, or work inside a package")
+            .about_path(directory));
     };
     let path = at.join(MANIFEST);
 
     // An umbrella declares no definitions, so standing in its tree there is nothing to compile — and unlike a missing manifest, this one is worth naming for what it is.
     let Manifest::Package(package) = Manifest::from_path(&path)? else {
-        return Err(format!(
-            "{} declares an umbrella, and an umbrella compiles nothing of its own: work in one of its members instead",
-            path.display()
-        ));
+        return Err(Refused::of("not a package")
+            .stating("this manifest declares an umbrella")
+            .stating("an umbrella compiles nothing of its own")
+            .stating("work in one of its members")
+            .about_path(&path));
     };
 
     Ok((package, at))
@@ -266,7 +297,7 @@ pub fn nearest_manifest(directory: &Path) -> Option<PathBuf> {
 /// The umbrella above `directory` that enumerates it, and the directory that umbrella's manifest sits in.
 ///
 /// The first umbrella found decides the answer either way. Umbrellas do not nest, so there is no second one above it to ask, and one that does not enumerate this package governs nothing rather than deferring upward.
-pub fn umbrella_over(directory: &Path) -> Result<Option<(Umbrella, PathBuf)>, String> {
+pub fn umbrella_over(directory: &Path) -> Result<Option<(Umbrella, PathBuf)>, Box<Report>> {
     for at in directory.ancestors().skip(1) {
         let path = at.join(MANIFEST);
         if !path.is_file() {
@@ -286,6 +317,13 @@ pub fn umbrella_over(directory: &Path) -> Result<Option<(Umbrella, PathBuf)>, St
     }
 
     Ok(None)
+}
+
+/// The refusal of a directory the system would not resolve, in the system's words.
+fn unreadable(directory: &Path, error: &std::io::Error) -> Box<Report> {
+    Refused::of("unreadable directory")
+        .stating(error)
+        .about_path(directory)
 }
 
 /// Whether two paths name one directory, compared through the filesystem rather than by spelling: `members` may point deep (`"tools/cli"`), and a path that does not resolve simply is not this one.

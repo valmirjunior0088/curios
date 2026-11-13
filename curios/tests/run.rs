@@ -64,7 +64,7 @@ fn another_compiler_version_refuses_a_previously_cached_executable() {
     assert!(!refused.status.success(), "{refused:?}");
     let error = String::from_utf8_lossy(&refused.stderr);
     assert!(
-        error.contains(&format!("requires Curios {required};")),
+        error.contains(&format!("this package requires Curios {required}\n")),
         "{error}"
     );
     assert!(error.contains(env!("CARGO_PKG_VERSION")), "{error}");
