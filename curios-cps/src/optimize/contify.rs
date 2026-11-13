@@ -71,7 +71,7 @@ const CONTIFICATION_NODE_OVERHEAD: usize = 3;
 
 /// One admitted loop-entry copy whose sole external caller can receive its body as a continuation.
 ///
-/// The copy's complete extent must contain no call back to the root from a nested function: that call would follow the copy and give it another external entry. Ordinary self-tail calls belong to the root itself and become backedges. Preparation mints nothing; application copies and contifies immediately, with no graph mutation between them that could invalidate admission.
+/// The copy's complete extent must contain no call back to the root from a nested function: that call would follow the copy and give it another external entry. Ordinary self-tail calls belong to the root itself and become backedges. Preparation mints nothing and reads the loop's extent as the module stands; application copies and contifies immediately, with no graph mutation between them that could invalidate admission.
 struct LoopEntryPlan {
     function: FunctionId,
     call: NodeId,
@@ -80,7 +80,13 @@ struct LoopEntryPlan {
 }
 
 impl LoopEntryPlan {
-    fn prepare(module: &Module, analysis: &CallAnalysis, callee: FunctionId) -> Option<Self> {
+    /// The plan that gives `callee`'s external call `entry` a copy, where the loop admits one: the first external call keeps the loop itself, so the entries a plan serves count from one.
+    fn prepare(
+        module: &Module,
+        analysis: &CallAnalysis,
+        callee: FunctionId,
+        entry: usize,
+    ) -> Option<Self> {
         let alone = !analysis.call_graph[&callee]
             .iter()
             .any(|&next| next != callee && function_reaches(&analysis.call_graph, next, callee));
@@ -112,7 +118,7 @@ impl LoopEntryPlan {
         }
         Some(Self {
             function: callee,
-            call: external[1],
+            call: *external.get(entry)?,
             intro: introducing_letfun(module, &BTreeSet::from([callee]))?,
             copy,
         })
@@ -143,23 +149,33 @@ impl LoopEntryPlan {
     }
 }
 
-/// Give one additional caller a contified copy of a small self-tail loop.
+/// Give each additional caller of a small self-tail loop a contified copy.
 ///
-/// The admitted plan bounds the complete copy and contification scaffolding, and proves the copy has one external entry. Copying and contification are one rewrite, so no intermediate function waits for a later round to make the expansion useful. One candidate is taken per call in function/site order, under the module's entry-copy budget.
+/// An admitted plan bounds the complete copy and contification scaffolding, and proves the copy has one external entry. Copying and contification are one rewrite, so no intermediate function waits for a later round to make the expansion useful. Every loop's extra entries are taken in function and site order, each a copy charged to the module's entry-copy budget, against the one call analysis the pass begins with.
+///
+/// One analysis serves every plan, because a copy leaves the others admissible. It mints the nodes of one loop inside the function that called it and retargets that one call: no site the snapshot names changes its callee or its owner, a loop keeps its first external call and so stays, and what a plan reads of the graph, whether its loop stands alone and whether a caller is reached from it, is read off edges the rewrite only removes or shortens, the caller calling directly what it reached through the loop. A loop copied into another's body grows that body, which the other's plan reads as it stands. What the snapshot misses is the call a copied body makes to another loop, one more entry for that loop, which the next round's analysis finds. One copy a call would cost a module a round of every pass for each, as `fixpoint_pass_measurements` shows.
 pub fn separate_loop_entries(module: &mut Module, budget: &mut usize) -> bool {
     if *budget == 0 {
         return false;
     }
     let analysis = analyze_calls(module);
-    let chosen = module
+    let loops = module
         .live_functions()
-        .find_map(|(callee, _)| LoopEntryPlan::prepare(module, &analysis, callee));
-    let Some(plan) = chosen else {
-        return false;
-    };
-    plan.apply(module);
-    *budget -= 1;
-    true
+        .map(|(callee, _)| callee)
+        .collect::<Vec<_>>();
+    let mut changed = false;
+    for callee in loops {
+        let mut entry = 1;
+        while *budget > 0
+            && let Some(plan) = LoopEntryPlan::prepare(module, &analysis, callee, entry)
+        {
+            plan.apply(module);
+            *budget -= 1;
+            changed = true;
+            entry += 1;
+        }
+    }
+    changed
 }
 
 pub fn function_reaches(

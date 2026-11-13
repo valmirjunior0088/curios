@@ -355,6 +355,137 @@ fn a_loop_copy_is_contified_immediately_with_its_capturing_helpers() {
     module.verify().unwrap();
 }
 
+/// `main` calling a self-tail loop `calls` times in a row, each call resuming into the next and the last returning: the loop, and its calls.
+fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
+    let mut module = Module::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let loop_function = module.reserve_function();
+    let loop_return = module.reserve_continuation();
+    let loop_param = module.add_value(Some("loop argument".into()));
+    let recur = module.reserve_continuation();
+    let recur_param = module.add_value(Some("recur argument".into()));
+    let recur_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(loop_function),
+        args: vec![Atom::Value(recur_param)],
+        return_to: loop_return,
+    });
+    module.define_continuation(
+        recur,
+        Continuation {
+            debug_name: Some("recur".into()),
+            params: vec![recur_param],
+            body: recur_body,
+        },
+    );
+    let switch = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(loop_param),
+        cases: BTreeMap::from([(
+            0,
+            Edge {
+                target: loop_return,
+                args: vec![Atom::Value(loop_param)],
+            },
+        )]),
+        default: Some(Edge {
+            target: recur,
+            args: vec![Atom::Value(loop_param)],
+        }),
+    });
+    let loop_body = module.add_node(Node::LetCont {
+        continuations: vec![recur],
+        body: switch,
+    });
+    module.define_function(
+        loop_function,
+        Function {
+            debug_name: Some("loop".into()),
+            params: vec![loop_param],
+            return_cont: loop_return,
+            body: loop_body,
+            droppable: false,
+        },
+    );
+
+    // Built last call first: each earlier call resumes into a continuation holding what runs after it.
+    let mut rest = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(loop_function),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
+        return_to: entry_return,
+    });
+    let mut sites = vec![rest];
+    for _ in 1..calls {
+        let answered = module.add_value(None);
+        let next = module.add_continuation(Continuation {
+            debug_name: Some("next".into()),
+            params: vec![answered],
+            body: rest,
+        });
+        let call = module.add_node(Node::ApplyFun {
+            callee: Callee::Known(loop_function),
+            args: vec![Atom::Literal(Literal::Nat(Natural::from(1u32)))],
+            return_to: next,
+        });
+        sites.push(call);
+        rest = module.add_node(Node::LetCont {
+            continuations: vec![next],
+            body: call,
+        });
+    }
+    let body = module.add_node(Node::LetFun {
+        functions: vec![loop_function],
+        body: rest,
+    });
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(entry);
+    (module, loop_function, sites)
+}
+
+/// Every extra entry of a loop is given its copy by one call: one call keeps the loop, each other receives a contified copy while the allowance lasts, and a second call finds nothing left.
+#[test]
+fn every_extra_entry_of_a_loop_is_copied_in_one_call() {
+    for (allowance, copies) in [(8, 3), (2, 2)] {
+        let (mut module, loop_function, sites) = loop_called(4);
+        module.verify().unwrap();
+        let mut budget = allowance;
+        assert!(separate_loop_entries(&mut module, &mut budget));
+        assert_eq!(budget, allowance - copies);
+        assert_eq!(
+            sites
+                .iter()
+                .filter(|&&site| matches!(module.node(site), Some(Node::LetCont { .. })))
+                .count(),
+            copies,
+            "an allowance of {allowance}"
+        );
+        assert_eq!(
+            sites
+                .iter()
+                .filter(|&&site| matches!(module.node(site), Some(Node::ApplyFun { callee: Callee::Known(target), .. }) if *target == loop_function))
+                .count(),
+            sites.len() - copies
+        );
+        module.verify().unwrap();
+        let before = arenas(&module);
+        assert_eq!(
+            separate_loop_entries(&mut module, &mut budget),
+            copies < sites.len() - 1 && budget > 0
+        );
+        if budget == 0 {
+            assert_eq!(arenas(&module), before);
+        }
+    }
+}
+
 #[test]
 fn an_exhausted_entry_budget_does_not_mint_a_copy() {
     let PolymorphicLoop { module, .. } = polymorphic_loop(true, 0);
