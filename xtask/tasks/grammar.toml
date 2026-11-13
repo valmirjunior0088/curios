@@ -30,7 +30,7 @@ run = [
 ]
 
 [test]
-description = "Regenerate the parsers and refuse drift from the committed ones, then parse the standard library, the corpus and the board's Core text"
+description = "Regenerate the parsers, then parse the standard library, the corpus and the board's Core text"
 dir = "editors/grammar"
 consumes = ["installed"]
 run = [
