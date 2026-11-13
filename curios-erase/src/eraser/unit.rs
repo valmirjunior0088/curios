@@ -433,7 +433,7 @@ fn left_open(item: &curios_core::Item) -> usize {
 fn universe_context(item: &curios_core::Item) -> &curios_core::UniverseContext {
     match item {
         curios_core::Item::Let(definition) => &definition.universe_context,
-        curios_core::Item::Rec(rec) => &rec.universe_context,
+        curios_core::Item::Rec(rec) => rec.universe_context(),
     }
 }
 
@@ -457,11 +457,11 @@ fn at_sorts(item: &curios_core::Item, sorts: Sorts) -> Cow<'_, curios_core::Item
             curios_core::Item::Let(Box::new(at))
         }
         curios_core::Item::Rec(rec) => {
-            let mut at = curios_core::RecItem::clone(rec);
-            at.group = rec
-                .group
-                .map_members(|body| curios_core::instantiate_qualities(body, &qualities));
-            at.universe_context.quality_count = 0;
+            let mut at = rec.with_group(
+                rec.group()
+                    .map_members(|body| curios_core::instantiate_qualities(body, &qualities)),
+            );
+            at.universe_context_mut().quality_count = 0;
 
             curios_core::Item::Rec(at)
         }

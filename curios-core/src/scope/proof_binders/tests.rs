@@ -108,9 +108,10 @@ fn a_lets_binders_are_asked() {
 
     let stated = block.stating_proofs(&mut sorts).expect("answers");
 
-    let Subterm::Let(Let { tail, .. }) = &*stated else {
+    let Subterm::Let(let_) = &*stated else {
         panic!("not a `let`: {stated:?}");
     };
+    let tail = let_.tail();
     assert_eq!([tail.binds_proof(0), tail.binds_proof(1)], [true, true]);
     assert_eq!(proofs(tail.body()), [false]);
 }
@@ -133,9 +134,10 @@ fn a_scope_inside_a_let_reads_the_blocks_binders_in_its_order() {
 
     let stated = block.stating_proofs(&mut sorts).expect("answers");
 
-    let Subterm::Let(Let { bindings, tail }) = &*stated else {
+    let Subterm::Let(let_) = &*stated else {
         panic!("not a `let`: {stated:?}");
     };
+    let (bindings, tail) = (let_.bindings(), let_.tail());
     assert_eq!(proofs(bindings[2].value()), [true]);
     assert_eq!(proofs(tail.body()), [true]);
     assert!(sorts.entered.is_empty(), "every binder entered was left");
@@ -262,9 +264,10 @@ fn a_carried_lets_binders_and_the_literals_under_it_state_what_its_twins_do() {
 
     let carried = incoming.with_proofs_of(&stated);
 
-    let Subterm::Let(Let { bindings, tail }) = &*carried else {
+    let Subterm::Let(let_) = &*carried else {
         panic!("not a `let`: {carried:?}");
     };
+    let (bindings, tail) = (let_.bindings(), let_.tail());
     assert_eq!([tail.binds_proof(0), tail.binds_proof(1)], [true, true]);
     assert_eq!(proofs(tail.body()), [true]);
     let Subterm::Apply(apply) = &**bindings[1].value() else {

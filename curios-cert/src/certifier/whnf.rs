@@ -202,8 +202,6 @@ fn whnf_within(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceErro
             Subterm::Apply(apply) => step_apply(certifier, apply)?,
             Subterm::Proj(proj) => step_proj(certifier, proj)?,
             Subterm::Func(func) => step_func(certifier, func)?,
-            // A block whose tail binds other than one binder per binding does not fire, and is charged nothing: `step_let` opens the tail over one value per binding, which such a block has no reading of.
-            Subterm::Let(let_) if !let_.opens() => Step::Stop(Term::from(Subterm::Let(let_))),
             Subterm::Let(let_) => Step::Continue(step_let(certifier, let_)?),
             Subterm::Instance(instance) => step_instance(certifier, instance)?,
             // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for.
@@ -600,7 +598,7 @@ fn step_func(certifier: &mut Certifier, func: Func) -> Result<Step, ReduceError>
 /// The elaborator's reducer substitutes by the same rule. Binding each value as a fresh definition and opening the tail over *those* would avoid copying a value into every use, but spell reducts with names the other checker's reduction does not have. A substitution is visibly the rule, and an environment is a second place a variable's meaning can come from. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
 fn step_let(certifier: &mut Certifier, let_: Let) -> Result<Term, ReduceError> {
     // One values vector, and a fresh ref vector at every binding — so the ref vectors together are triangular in the run's length, which the surface language makes as long as a program likes.
-    let bindings = let_.bindings.len() as u64;
+    let bindings = let_.bindings().len() as u64;
     certifier.spend(
         Cost::collection(bindings)
             .saturating_add(Cost::buffer(
@@ -609,16 +607,16 @@ fn step_let(certifier: &mut Certifier, let_: Let) -> Result<Term, ReduceError> {
             .saturating_add(Cost::term(1).saturating_mul(bindings)),
     )?;
 
-    let mut values: Vec<Term> = Vec::with_capacity(let_.bindings.len());
+    let mut values: Vec<Term> = Vec::with_capacity(let_.bindings().len());
 
-    for binding in &let_.bindings {
+    for binding in let_.bindings() {
         let refs = values.iter().collect::<Vec<_>>();
         values.push(binding.value().release(&refs));
     }
 
     let refs = values.iter().collect::<Vec<_>>();
 
-    Ok(let_.tail.open(&refs))
+    Ok(let_.tail().open(&refs))
 }
 
 /// Delta: unfold a definition at the instance its reference states, which is the one position a definition unfolds from, and only where the instance states its scheme whole ([`curios_core::UniverseContext::stated_by`]); otherwise the reference is the normal form it is.
@@ -791,21 +789,18 @@ fn expose_rec_tail(certifier: &mut Certifier, term: Term) -> Result<Term, Reduce
         }
 
         match Term::unwrap_or_clone(term) {
-            // A block whose tail binds other than one binder per member strips to nothing, so stripping stops at it as it stops at a projection.
-            Subterm::Rec(rec) if rec.opens() => term = whnf(certifier, unfold_rec(rec))?,
+            Subterm::Rec(rec) => term = whnf(certifier, unfold_rec(rec))?,
             other => return Ok(other.into()),
         }
     }
 }
 
 /// Open a `rec` group's tail over its members. A pure binder operation: it mints nothing and unfolds no fixed point.
-///
-/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller here asks before it opens one: the opening is `Scope::open`, whose assert is the only reader of that count. It says nothing of a member scope's own count, which a projection's reduct opens through `RecGroup::member_body` without passing here at all.
 pub fn unfold_rec(rec: Rec) -> Term {
-    let members = rec.group.members();
+    let members = rec.group().members();
     let refs = members.iter().collect::<Vec<_>>();
 
-    rec.tail.open(&refs)
+    rec.tail().open(&refs)
 }
 
 /// Unfold a `rec` head that some eliminator demands the value of.
@@ -837,7 +832,7 @@ fn force(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceError> {
         }
 
         match Term::unwrap_or_clone(term) {
-            Subterm::Rec(rec) if rec.opens() => term = whnf(certifier, unfold_rec(rec))?,
+            Subterm::Rec(rec) => term = whnf(certifier, unfold_rec(rec))?,
             // An application no unfolding opens is stuck as a `match` on a variable is: kept where the recursion is finished, its group gone from it, and the folded call otherwise.
             Subterm::Apply(apply) => match unfold_rec_apply(certifier, apply.clone())? {
                 Some(unfolded) => term = whnf(certifier, unfolded)?,
@@ -877,7 +872,7 @@ fn forced_group(certifier: &mut Certifier, folded: &Term) -> Result<Option<RecGr
     }
 
     match &**folded {
-        Subterm::Rec(rec) => Ok(Some(rec.group.clone())),
+        Subterm::Rec(rec) => Ok(Some(rec.group().clone())),
         Subterm::Apply(Apply { head, .. }) => {
             let head = whnf(certifier, head.clone())?;
             let head = expose_rec_tail(certifier, head)?;
@@ -902,8 +897,7 @@ pub fn unfold_spelling(
     }
 
     match &**term {
-        // A block whose tail binds other than one binder per member has no unfolding to withhold, so there is none to hand back either.
-        Subterm::Rec(rec) if rec.opens() => Ok(Some(whnf(certifier, unfold_rec(rec.clone()))?)),
+        Subterm::Rec(rec) => Ok(Some(whnf(certifier, unfold_rec(rec.clone()))?)),
         Subterm::Apply(apply) => match unfold_rec_apply(certifier, apply.clone())? {
             Some(unfolded) => Ok(Some(whnf(certifier, unfolded)?)),
             None => Ok(None),

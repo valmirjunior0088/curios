@@ -640,19 +640,37 @@ impl Carrier {
 }
 
 /// A straight-line block of `let` bindings: `bindings` in written order, then a `tail` continuation in scope of all of them. Binding `i` is stored under the `i` binders before it — its `type_` and `value` may reference bindings `0..i` but never binding `i` itself; a `let` is non-recursive, self- and mutual reference is [`Rec`]'s job. A whole run of source `let`s is one `Let`, not a nest, so every walk over it (`traverse`/`reach`/`reduce`/ `erase`/`elaborate`) is a loop over `bindings` rather than one native stack frame per binding — which is what keeps a long local `let` sequence from overflowing the stack.
+///
+/// The tail binds one binder per binding, held by [`Let::new`], the one construction door: every builder closes the tail over the binders it builds the bindings from and every rebuild keeps both counts, so a tail counted otherwise is a defect of whatever built it, stopped there rather than carried to a reader that opens the tail over one value per binding.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Let {
-    pub bindings: Vec<LetBinding>,
-    pub tail: Scope<Many>,
+    bindings: Vec<LetBinding>,
+    tail: Scope<Many>,
 }
 
 impl Let {
-    /// Whether this block's tail binds one binder per binding, which is what opening it over their values requires.
-    ///
-    /// The count is a fact about a sibling field that nothing here relates it to, so it is asked rather than assumed: a reducer that opened the tail over the wrong number of values would reach `Scope::open`'s `assert!` and abort, where its rule is to stand stuck on every shape it cannot take (`curios-cert`'s README). A block answering `false` is refused where a module enters the certifier (`under_bindings`), so what a reducer meets answering `false` arrived another way.
-    pub fn opens(&self) -> bool {
-        self.tail.arity() == self.bindings.len()
+    /// The block of `bindings` and `tail`, whose binders are one per binding.
+    pub fn new(bindings: Vec<LetBinding>, tail: Scope<Many>) -> Self {
+        assert_eq!(
+            tail.arity(),
+            bindings.len(),
+            "a block's tail binds one binder per binding"
+        );
+        Self { bindings, tail }
+    }
+
+    pub fn bindings(&self) -> &[LetBinding] {
+        &self.bindings
+    }
+
+    /// The continuation, closed over one binder per binding.
+    pub fn tail(&self) -> &Scope<Many> {
+        &self.tail
+    }
+
+    pub fn into_parts(self) -> (Vec<LetBinding>, Scope<Many>) {
+        (self.bindings, self.tail)
     }
 }
 
@@ -704,7 +722,7 @@ pub struct RecGroup {
 impl RecGroup {
     /// A group of `members`, each a binder with its type and its body, every term closed over every binder in order.
     ///
-    /// **The only door, and why there is one.** A member scope's arity is a fact about the members the group holds, and nothing in the representation relates the two. A constructor taking scopes already closed takes the two counts apart, and `member_type` and `member_body` then open a scope over one term per member through `Scope::open`'s `assert!` — the only reader of either count, and a reducer reaches it before `check_group` runs. Taking the binders here makes the arity *be* the member count rather than a second number to agree with, so the disagreement cannot be written. A restored archive reconstructs the fields directly and so passes no constructor at all, which is why `validate_stored_identities` reads the count at the seam a unit is stored.
+    /// **The door, and why there is one.** A member scope's arity is a fact about the members the group holds, and `member_type` and `member_body` open a scope over one term per member. Taking the binders here makes the arity *be* the member count rather than a second number to agree with, so the disagreement cannot be written; the traversals that rebuild a group in place go through `RecGroup::from_scopes`, which holds them to it.
     pub fn closing(members: Vec<(Free, Term, Term)>) -> Self {
         let binders = members
             .iter()
@@ -725,10 +743,14 @@ impl RecGroup {
         }
     }
 
-    /// A group of scopes already closed, holding nothing between their arity and the member count — the door [`RecGroup::closing`] exists to remove.
-    ///
-    /// Reached by the traversals that rebuild a group in place, which preserve every arity because they reopen nothing, and by `curios-core`'s `test_support`, so a fixture can build the form a restored archive could carry and put it to the seam that reads it.
+    /// A group of scopes already closed, each binding one binder per member: what the traversals that rebuild a group in place hand back, which preserve every arity because they reopen nothing.
     pub(crate) fn from_scopes(items: Vec<RecMemberScopes>) -> Self {
+        assert!(
+            items.iter().all(|member| {
+                member.type_.arity() == items.len() && member.body.arity() == items.len()
+            }),
+            "a group's member scopes bind one binder per member"
+        );
         Self {
             members: Rc::new(items),
         }
@@ -786,15 +808,6 @@ impl RecGroup {
         self.iter().len()
     }
 
-    /// Whether every member scope binds one binder per member, which is what opening one over the group requires.
-    ///
-    /// True of every group [`RecGroup::closing`] builds and of every one a traversal rebuilds, so no construction in Rust can answer `false`. A restored archive reconstructs the fields directly and passes no constructor, which is the one way a group answering `false` enters a compilation — read at the seam a unit is stored (`validate_stored_identities`) and again where a walk meets one (`check_group`).
-    pub fn counted(&self) -> bool {
-        self.iter().all(|member| {
-            member.type_.arity() == self.length() && member.body.arity() == self.length()
-        })
-    }
-
     /// One term per member, each denoting that member and needing nothing in scope to do it — what every scope in this group opens over.
     pub fn members(&self) -> Vec<Term> {
         (0..self.length())
@@ -840,19 +853,37 @@ impl RecGroup {
 /// A block of mutually recursive bindings with a tail in scope of the shared group.
 ///
 /// This is the *only* recursion form. A demanded member occurrence is this same node with a tail that selects one member — see [`Term::rec_proj`] — rather than a form of its own, so the rule that checks a group is the rule that checks an occurrence of it. A self-describing occurrence node is rejected for what it costs: a node well-formed standing alone is one no scope gates, and a certifier could type one from the group it carried without ever checking that group.
+///
+/// The tail binds one binder per member, held by [`Rec::new`] as [`Let::new`] holds a block's.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Rec {
-    pub group: RecGroup,
-    pub tail: Scope<Many>,
+    group: RecGroup,
+    tail: Scope<Many>,
 }
 
 impl Rec {
-    /// Whether this block's tail binds one binder per member, which is what opening it over them requires — [`Let::opens`] of the other block form, and asked for the same reason.
-    ///
-    /// A tail that *selects* a member needs no opening at all, opening it being the identity ([`Rec::as_proj`]), so a projection is reduced by stepping to the member's body and this count never comes up. The member scopes it steps through carry a count of their own, which `check_group` reads at the boundary and this question does not cover: a reducer handed a projection out of a group whose member scopes disagree with its members opens one of them through `member_body` before any typing rule has read either count, which `documentation/roadmap/soundness/000-findings.md` holds as an entry.
-    pub fn opens(&self) -> bool {
-        self.tail.arity() == self.group.length()
+    /// The block of `group` and `tail`, whose binders are one per member.
+    pub fn new(group: RecGroup, tail: Scope<Many>) -> Self {
+        assert_eq!(
+            tail.arity(),
+            group.length(),
+            "a group's tail binds one binder per member"
+        );
+        Self { group, tail }
+    }
+
+    pub fn group(&self) -> &RecGroup {
+        &self.group
+    }
+
+    /// The continuation, closed over one binder per member.
+    pub fn tail(&self) -> &Scope<Many> {
+        &self.tail
+    }
+
+    pub fn into_parts(self) -> (RecGroup, Scope<Many>) {
+        (self.group, self.tail)
     }
 
     /// The member index this block's tail selects, when it selects one rather than computing something of its own — see [`Term::rec_proj`].

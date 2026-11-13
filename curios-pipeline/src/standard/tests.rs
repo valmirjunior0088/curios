@@ -855,7 +855,7 @@ fn std_vocabulary_reach_reproduction() {
 fn introduced(item: &Item) -> &DefinitionKind {
     match item {
         Item::Let(definition) => &definition.kind,
-        Item::Rec(rec) => &rec.definitions[0].kind,
+        Item::Rec(rec) => &rec.exports()[0].kind,
     }
 }
 

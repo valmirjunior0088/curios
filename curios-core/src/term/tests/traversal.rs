@@ -486,9 +486,10 @@ fn a_term_holds_a_group_where_a_rec_node_stands() {
         vec![(f, nat.clone(), Term::free_var(&f))],
         Term::free_var(&f),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+    let Subterm::Rec(block) = &*rec else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
     let projection = Term::rec_proj(group.clone(), 0);
 
     assert!(rec.has_group());

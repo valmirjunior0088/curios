@@ -114,7 +114,7 @@ fn structural_rec_proj(context: &mut Context, body: impl FnOnce(&Free) -> Term) 
     let Subterm::Rec(rec) = Term::unwrap_or_clone(rec) else {
         unreachable!()
     };
-    Term::rec_proj(rec.group, 0)
+    Term::rec_proj(rec.into_parts().0, 0)
 }
 
 #[test]

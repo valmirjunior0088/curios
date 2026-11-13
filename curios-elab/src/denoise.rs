@@ -11,7 +11,7 @@ use {
     super::Context,
     crate::DefinedGroup,
     curios_core::{
-        Apply, Bound, Enter, Func, Global, Quality, Rec, RecGroup, Subterm, Term, Universes, Visit,
+        Apply, Bound, Enter, Func, Global, Quality, RecGroup, Subterm, Term, Universes, Visit,
         instantiate_qualities,
     },
     std::{collections::HashSet, rc::Rc},
@@ -114,9 +114,10 @@ pub fn named_members(context: &Context, term: &Term) -> Term {
             if !seen.insert(node.clone()) {
                 return Enter::Skip(());
             }
-            let Subterm::Rec(Rec { group, .. }) = &**node else {
+            let Subterm::Rec(block) = &**node else {
                 return Enter::Descend;
             };
+            let group = block.group();
             if groups.iter().any(|(known, _)| known == group) {
                 return Enter::Skip(());
             }
@@ -156,9 +157,10 @@ fn named_with(table: &Rc<Vec<(RecGroup, Vec<Term>)>>, term: &Term) -> Term {
     let mut visit = Visit::rewriting_shared(
         |_, _| None,
         Box::new(move |_, term| {
-            let Subterm::Rec(Rec { group, tail }) = &**term else {
+            let Subterm::Rec(block) = &**term else {
                 return None;
             };
+            let (group, tail) = (block.group(), block.tail());
             let (_, members) = captured.iter().find(|(known, _)| known == group)?;
             let refs = members.iter().collect::<Vec<_>>();
             // The opened tail is named in turn, since a substituted node is not descended into.
@@ -180,9 +182,10 @@ fn refold_with(table: &Rc<Vec<(RecGroup, Vec<Global>)>>, term: &Term) -> Term {
 
 /// The node-level refold: a `Rec` whose group the table knows opens its tail over the members' names, and the opened tail is refolded in turn, since a substituted node is not descended into.
 fn refold_node(table: &Rc<Vec<(RecGroup, Vec<Global>)>>, term: &Term) -> Option<Term> {
-    let Subterm::Rec(Rec { group, tail }) = &**term else {
+    let Subterm::Rec(block) = &**term else {
         return None;
     };
+    let (group, tail) = (block.group(), block.tail());
     let projected = group.projected();
     let (_, names) = table.iter().find(|(known, _)| *known == projected)?;
     if names.len() != group.length() {

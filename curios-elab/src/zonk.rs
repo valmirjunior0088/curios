@@ -11,9 +11,9 @@ use {
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, Definitions, Entrypoint,
         Extent, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance, Intrinsic,
-        Item, Let, LetBinding, Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Proj, Rec,
-        RecItem, Sort, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        Universes, Var, Variant, Visit, project_erased_universes,
+        Item, Let, LetBinding, Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Proj, Rec, Sort,
+        Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Var,
+        Variant, Visit, project_erased_universes,
     },
     std::{
         cell::RefCell,
@@ -91,7 +91,7 @@ impl<'a> Zonk<'a> {
             // Inside the group's scopes: a group closes over finished terms, whatever was solved in it materialized before it closed (`elaborate_module_rec`), so zonking it reports what was left unsolved and spells its levels, and places nothing under its binder.
             Item::Rec(rec) => {
                 let mut refusal = None;
-                let group = rec.group.map_members(|term| {
+                let group = rec.group().map_members(|term| {
                     self.zonk_term(term).unwrap_or_else(|error| {
                         refusal.get_or_insert(error);
                         term.clone()
@@ -99,10 +99,7 @@ impl<'a> Zonk<'a> {
                 });
                 match refusal {
                     Some(error) => Err(error),
-                    None => Ok(Item::Rec(RecItem {
-                        group,
-                        ..rec.clone()
-                    })),
+                    None => Ok(Item::Rec(rec.with_group(group))),
                 }
             }
         }
@@ -523,8 +520,9 @@ impl<'a> Zonk<'a> {
                 },
             }),
 
-            Subterm::Let(Let { bindings, tail }) => Subterm::Let(Let {
-                bindings: bindings
+            Subterm::Let(block) => Subterm::Let(Let::new(
+                block
+                    .bindings()
                     .iter()
                     .map(|binding| {
                         Ok(LetBinding::new(
@@ -533,13 +531,13 @@ impl<'a> Zonk<'a> {
                         ))
                     })
                     .collect::<Result<_, Error>>()?,
-                tail: tail.try_map_body(|b| self.zonk_term(b))?,
-            }),
+                block.tail().try_map_body(|b| self.zonk_term(b))?,
+            )),
 
-            Subterm::Rec(Rec { group, tail }) => Subterm::Rec(Rec {
-                group: group.try_map_members(|term| self.zonk_term(term))?,
-                tail: tail.try_map_body(|b| self.zonk_term(b))?,
-            }),
+            Subterm::Rec(block) => Subterm::Rec(Rec::new(
+                block.group().try_map_members(|term| self.zonk_term(term))?,
+                block.tail().try_map_body(|b| self.zonk_term(b))?,
+            )),
 
             // Handled in `zonk_term` before dispatch.
             Subterm::Metavar(_) => unreachable!("metavariable handled by `zonk_term`"),

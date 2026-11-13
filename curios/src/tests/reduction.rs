@@ -1004,7 +1004,7 @@ fn a_published_binder_states_whether_it_binds_a_proof() {
         panic!("a `let`: {:?}", function.telescope.terminal());
     };
     assert_eq!(
-        [block.tail.binds_proof(0), block.tail.binds_proof(1)],
+        [block.tail().binds_proof(0), block.tail().binds_proof(1)],
         [false, true]
     );
 }

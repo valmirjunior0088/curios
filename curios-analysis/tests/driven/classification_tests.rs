@@ -9,7 +9,7 @@ use {
     curios_cert::Certifier,
     curios_common::Qualifier,
     curios_core::{
-        Cases, Exhaustion, Free, Global, Intrinsic, Level, Match, Nat, Rec, Reducer, Subterm, Term,
+        Cases, Exhaustion, Free, Global, Intrinsic, Level, Match, Nat, Reducer, Subterm, Term,
         Totality,
     },
     curios_num::{Integer, Natural, Rounding},
@@ -37,9 +37,10 @@ fn a_size_the_budget_cannot_read_refuses_the_classification() {
         )],
         Term::free_var(&f),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+    let Subterm::Rec(block) = &*rec else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
 
     let mut starved = Certifier::new(0, SYNTAX);
     assert!(group_totality(&mut starved, group).is_err_and(|error| error.is_exhausted()));

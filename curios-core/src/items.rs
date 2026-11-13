@@ -115,7 +115,7 @@ impl Outlines {
 fn first_name(item: &Item) -> Option<&Global> {
     match item {
         Item::Let(definition) => Some(&definition.name),
-        Item::Rec(rec) => rec.definitions.first().map(|definition| &definition.name),
+        Item::Rec(rec) => rec.exports().first().map(|definition| &definition.name),
     }
 }
 
@@ -123,7 +123,7 @@ fn first_name(item: &Item) -> Option<&Global> {
 fn generated_by(item: &Item) -> Option<Global> {
     let kind = match item {
         Item::Let(definition) => &definition.kind,
-        Item::Rec(rec) => &rec.definitions[0].kind,
+        Item::Rec(rec) => &rec.exports()[0].kind,
     };
 
     kind.generated_from().map(Global::Authored)

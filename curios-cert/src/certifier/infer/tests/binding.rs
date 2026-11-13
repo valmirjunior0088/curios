@@ -3,7 +3,7 @@
 use {
     crate::certifier::infer::test_support::*,
     crate::*,
-    curios_core::{Intrinsic, Rec, Reducer, Subterm, Term, Totality},
+    curios_core::{Intrinsic, Reducer, Subterm, Term, Totality},
 };
 
 /// `match v | true => Nat | false => Bool`: a type that is `Nat` exactly where `v` is `true`, which every fixture here reads a `Bool` through.
@@ -359,9 +359,10 @@ fn a_call_through_a_let_bound_argument_is_graded_by_value() {
         [(countdown, signature, body)],
         Term::apply(Term::free_var(&countdown), [nat(3)]),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*term else {
+    let Subterm::Rec(block) = &*term else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
 
     assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
     assert_eq!(certifier.group_verdict(group), Some(Totality::Total));
@@ -379,9 +380,10 @@ fn a_group_under_a_let_is_filed_by_value() {
     let group_over = |value: Term| Term::rec([(f, nat_type(), value)], Term::free_var(&f));
     let term = Term::let_(&k, nat_type(), nat(5), group_over(Term::free_var(&k)));
     let by_value = group_over(nat(5));
-    let Subterm::Rec(Rec { group, .. }) = &*by_value else {
+    let Subterm::Rec(block) = &*by_value else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
 
     assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
     assert_eq!(certifier.group_verdict(group), Some(Totality::Total));

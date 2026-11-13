@@ -14,8 +14,8 @@ use {
     super::{Context, ErasedSite, Error, ZonkPass, proof_position, reduce, zonk_solved_term_metas},
     curios_analysis::{Erased, blocker, group_totality, known_to_terminate, yields_a_sort_where},
     curios_core::{
-        Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, MetavarId, Rec,
-        Sharing, Subterm, Term, Totality,
+        Definition, Definitions, Enter, Entrypoint, Extent, Free, Global, Item, MetavarId, Sharing,
+        Subterm, Term, Totality,
     },
     std::{
         collections::{BTreeSet, HashMap, HashSet},
@@ -132,7 +132,7 @@ pub fn classify_totality(context: &mut Context, item: &Item) -> Result<(), Error
     // A group that does not descend makes every member partial, whatever each body looks like on its own.
     let rejected = match item {
         Item::Let(_) => false,
-        Item::Rec(rec) => group_totality(context, &rec.group)? == Totality::Partial,
+        Item::Rec(rec) => group_totality(context, rec.group())? == Totality::Partial,
     };
     let definitions = item.definitions();
     let own = definitions
@@ -564,7 +564,8 @@ fn locally_partial(
             if let Some(&partial) = state.1.get(term) {
                 return ControlFlow::Continue(Enter::Skip(partial));
             }
-            if let Subterm::Rec(Rec { group, .. }) = &**term {
+            if let Subterm::Rec(block) = &**term {
+                let group = block.group();
                 match group_totality(state.0, group) {
                     Err(spent) => return ControlFlow::Break(spent),
                     Ok(Totality::Partial) => {

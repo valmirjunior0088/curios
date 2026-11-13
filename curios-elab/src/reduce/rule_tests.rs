@@ -434,7 +434,7 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
     match &*term {
         Subterm::Let(let_) => {
             assert_eq!(
-                let_.bindings.len(),
+                let_.bindings().len(),
                 depth,
                 "the chain must collapse to one flat block"
             )

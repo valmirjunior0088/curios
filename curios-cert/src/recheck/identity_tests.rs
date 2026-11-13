@@ -162,10 +162,10 @@ fn an_entry_mentioning_a_free_local_is_refused() {
 fn a_definition_position_holding_a_loose_bound_variable_is_refused() {
     let loose = || Term::var(Var::bound(0));
     // `let x : Nat = 0; <index 1>`: the block binds one binder and its tail reaches past it, which is why the tail's own arity is no answer to this.
-    let past_a_binder = Term::from(Subterm::Let(Let {
-        bindings: vec![LetBinding::new(nat(), zero())],
-        tail: Scope::constant(Many(1), Term::var(Var::bound(1))),
-    }));
+    let past_a_binder = Term::from(Subterm::Let(Let::new(
+        vec![LetBinding::new(nat(), zero())],
+        Scope::constant(Many(1), Term::var(Var::bound(1))),
+    )));
 
     for (position, definitions) in [
         ("a body", holding(vec![authored(&held(), nat(), loose())])),

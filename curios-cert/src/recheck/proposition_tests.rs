@@ -205,8 +205,8 @@ fn member_proofs(definitions: &Definitions, name: &Global) -> Vec<bool> {
         .items
         .iter()
         .find_map(|item| match item {
-            Item::Rec(rec) if rec.definitions.iter().any(|member| member.name == *name) => {
-                Some(rec.definitions.iter().map(|member| member.proof).collect())
+            Item::Rec(rec) if rec.exports().iter().any(|member| member.name == *name) => {
+                Some(rec.exports().iter().map(|member| member.proof).collect())
             }
             _ => None,
         })

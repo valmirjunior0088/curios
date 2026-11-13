@@ -97,8 +97,6 @@ pub enum Counted {
     Parameters,
     /// The indices an occurrence supplies, or the targets a constructor states, against the declaration's index telescope.
     Indices,
-    /// The names a recursive group is exported under, against the members it holds.
-    GroupMembers,
     /// The arguments of a call, against the parameters of the function's type or the foreign row.
     Arguments,
     /// The components a projection reaches past — the index it names plus one — against the tuple or structure it projects from.
@@ -111,10 +109,6 @@ pub enum Counted {
     MotiveBinders,
     /// An arm's binders, against the constructor's signature.
     ArmBinders,
-    /// A recursive member's scope binders, or a `rec` tail's, against the members its group holds.
-    GroupBinders,
-    /// A `let` tail's binders, against the bindings its block holds.
-    BlockBinders,
 }
 
 impl fmt::Display for Counted {
@@ -124,9 +118,6 @@ impl fmt::Display for Counted {
             Counted::Sorts => "sorts",
             Counted::Parameters => "parameters",
             Counted::Indices => "indices",
-            Counted::GroupMembers => "recursive group members",
-            Counted::GroupBinders => "recursive group member binders",
-            Counted::BlockBinders => "let block binders",
             Counted::Arguments => "arguments",
             Counted::Components => "components",
             Counted::Payload => "constructor payload",

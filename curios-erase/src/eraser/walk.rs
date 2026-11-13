@@ -406,16 +406,16 @@ impl<'s> Eraser<'s> {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         context.scoped(|context| {
-            let mut label_terms = Vec::<curios_core::Term>::with_capacity(binding.bindings.len());
+            let mut label_terms = Vec::<curios_core::Term>::with_capacity(binding.bindings().len());
 
-            for (index, local) in binding.bindings.iter().enumerate() {
+            for (index, local) in binding.bindings().iter().enumerate() {
                 let (type_, value) = {
                     let refs = label_terms.iter().collect::<Vec<_>>();
                     (local.type_().release(&refs), local.value().release(&refs))
                 };
 
                 // The arena identity uniquifies by index, so the hint stays the clean source label; the `#`-uniquified fresh name is only the Core context key.
-                let label = binding.tail.hint_iter().nth(index).flatten();
+                let label = binding.tail().hint_iter().nth(index).flatten();
                 let hint = label.map(str::to_string);
                 let name = context.fresh(label);
                 // A binding is a kept slot: a value is erased once and bound, and a proof or a type is bound to its stand-in without being computed (see `kept_operand`). `let _ = /std/Proc/exit(3); …` is neither — an exit is an `Io`, a description, which is built here and performed only where it is bound into the program.
@@ -426,7 +426,7 @@ impl<'s> Eraser<'s> {
                 label_terms.push(curios_core::Term::free_var(&name));
             }
 
-            let tail = binding.tail.open(&label_terms.iter().collect::<Vec<_>>());
+            let tail = binding.tail().open(&label_terms.iter().collect::<Vec<_>>());
             self.walk(context, &tail, expected, hint)
         })
     }

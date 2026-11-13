@@ -81,8 +81,7 @@ impl Same {
     }
 
     fn of_member(made: &RecItem, held: &RecItem, member: usize, classified: Self) -> Self {
-        let (Some(mine), Some(theirs)) =
-            (made.definitions.get(member), held.definitions.get(member))
+        let (Some(mine), Some(theirs)) = (made.exports().get(member), held.exports().get(member))
         else {
             return Self::default();
         };
@@ -198,7 +197,7 @@ pub fn item_part_digest(
             Some(definition),
         ),
         (Item::Rec(rec), Place::Member { member, .. }) => {
-            let definition = &rec.definitions[member as usize];
+            let definition = &rec.exports()[member as usize];
 
             (
                 definition.name,
@@ -227,7 +226,7 @@ pub fn item_part_digest(
         }
         (None, Some(rec)) => {
             let members = rec
-                .group
+                .group()
                 .iter()
                 .map(|member| {
                     (
@@ -241,7 +240,7 @@ pub fn item_part_digest(
 
             sealed(curios_archive::to_bytes(&(
                 kind.clone(),
-                rec.universe_context.clone(),
+                rec.universe_context().clone(),
                 members,
             )))
         }
@@ -313,12 +312,12 @@ fn spelled_alike(this: &Term, that: &Term) -> bool {
 
 /// Whether two groups are one as a unit stores them: one declared context, and each member's type and body spelled alike.
 fn groups_alike(this: &RecItem, that: &RecItem) -> bool {
-    this.universe_context == that.universe_context
-        && this.group.iter().len() == that.group.iter().len()
+    this.universe_context() == that.universe_context()
+        && this.group().iter().len() == that.group().iter().len()
         && this
-            .group
+            .group()
             .iter()
-            .zip(that.group.iter())
+            .zip(that.group().iter())
             .all(|(this, that)| {
                 this.type_.arity() == that.type_.arity()
                     && this.body.arity() == that.body.arity()

@@ -622,7 +622,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
             body,
         };
         let rec = RecItem::try_new(vec![(own, definition)]).map_err(Error::from)?;
-        let member = Term::rec_proj(rec.group.clone(), 0);
+        let member = Term::rec_proj(rec.group().clone(), 0);
         context.define_declaring(&name, &type_, &member, &def.kind);
         context.set_universe_context(&name, universe_context.clone());
         context.update_witness_scheme(&def.name, universe_context, type_);
@@ -630,7 +630,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
         context.restore_checked_site(outer_site);
 
         // Classified as the group it now is, not assumed total the way a `let` may be: a witness that evaluates itself descends on nothing, and the erasure obligations are entitled to know.
-        let verdict = group_totality(context, &rec.group)?;
+        let verdict = group_totality(context, rec.group())?;
         for definition in rec.definitions() {
             record_definition_totality(context, &definition, verdict)?;
         }
@@ -692,7 +692,7 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     let solved_from = context.solutions_committed();
     let checked_from = context.checked_mark();
     let locals = rec
-        .definitions
+        .exports()
         .iter()
         .map(|definition| context.fresh(definition.name.qualifier().map(Qualifier::last)))
         .collect::<Vec<_>>();
@@ -906,12 +906,12 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         .collect::<Vec<_>>();
     let rec = RecItem::try_new(locals.into_iter().zip(definitions).collect())?;
 
-    for (index, definition) in rec.definitions.iter().enumerate() {
+    for (index, definition) in rec.exports().iter().enumerate() {
         let name = definition.name;
         context.define_declaring(
             &name,
-            &rec.group.member_type(index),
-            &Term::rec_proj(rec.group.clone(), index),
+            &rec.group().member_type(index),
+            &Term::rec_proj(rec.group().clone(), index),
             &definition.kind,
         );
         context.set_universe_context(&name, universe_context.clone());
@@ -919,21 +919,21 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             context.update_witness_scheme(
                 &definition.name,
                 universe_context.clone(),
-                rec.group.member_type(index),
+                rec.group().member_type(index),
             );
         }
     }
 
     // A later item may compare two instances of a family this group declares, so each one's variance is settled here, with the formers defined at their finalized bodies and the registry entries stamped.
     let declared = rec
-        .definitions
+        .exports()
         .iter()
         .map(|definition| definition.name)
         .collect::<Vec<_>>();
     record_variances(context, &declared)?;
 
     // Classify the whole group at once: its members may mention each other, so no member's verdict is settled until the group's descent is.
-    let group = group_totality(context, &rec.group)?;
+    let group = group_totality(context, rec.group())?;
     for definition in rec.definitions() {
         record_definition_totality(context, &definition, group)?;
     }
@@ -944,10 +944,10 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
 
 /// Record how each member of `rec` applies its parameters, as the certifier files it of the group it certifies. A budget that runs out leaves the group summarizing nothing, which grades a call through it as no summary does.
 fn record_applications(context: &mut Context, rec: &RecItem) {
-    let Ok(applied) = group_applications(context, &rec.group) else {
+    let Ok(applied) = group_applications(context, rec.group()) else {
         return;
     };
-    for (definition, applications) in rec.definitions.iter().zip(applied) {
+    for (definition, applications) in rec.exports().iter().zip(applied) {
         context.record_definition_applications(&definition.name, applications);
     }
 }

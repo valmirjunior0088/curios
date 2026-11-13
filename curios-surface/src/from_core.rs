@@ -396,8 +396,9 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         }
         curios_core::Subterm::Struct(literal) => written_struct(literal, frame)?,
         curios_core::Subterm::Match(elimination) => written_match(elimination, frame)?,
-        curios_core::Subterm::Let(curios_core::Let { bindings, tail, .. }) => {
-            let labels = frame.mint.scope_labels(&tail);
+        curios_core::Subterm::Let(block) => {
+            let (bindings, tail) = (block.bindings(), block.tail());
+            let labels = frame.mint.scope_labels(tail);
             let terms = labels
                 .iter()
                 .map(curios_core::Term::free_var)
@@ -425,8 +426,9 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
             .into()
         }
         // A recursive group is the `let … and …;` whose members see one another.
-        curios_core::Subterm::Rec(curios_core::Rec { group, tail }) => {
-            let labels = frame.mint.scope_labels(&tail);
+        curios_core::Subterm::Rec(block) => {
+            let (group, tail) = (block.group(), block.tail());
+            let labels = frame.mint.scope_labels(tail);
             let terms = labels
                 .iter()
                 .map(curios_core::Term::free_var)

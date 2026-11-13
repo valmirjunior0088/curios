@@ -275,7 +275,7 @@ fn cumulativity_admits_two_uses_of_a_monomorphic_local() {
     let curios_core::Subterm::Let(let_) = &*definition.body else {
         panic!("outer contains the local let");
     };
-    assert_eq!(let_.bindings.len(), 1);
+    assert_eq!(let_.bindings().len(), 1);
 }
 
 /// The same, one indirection further: `alias` has no annotation at all, so its type is inferred from `id` and then used at both levels.
@@ -299,7 +299,7 @@ fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
     let curios_core::Subterm::Let(let_) = &*definition.body else {
         panic!("outer contains the local lets");
     };
-    assert_eq!(let_.bindings.len(), 2);
+    assert_eq!(let_.bindings().len(), 2);
 }
 
 /// A level a caller supplies stays a parameter: `@A : Type` puts the level in an argument position, so each occurrence chooses it.

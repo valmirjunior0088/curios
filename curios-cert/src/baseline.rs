@@ -107,18 +107,13 @@ fn authored(kind: &DefinitionKind) -> bool {
 ///
 /// The context is the item's and not the group's, positionally the parameters of whatever declaration holds it, and `globals::held` publishes it to every reader of a member — so a group adopted under a context no walk assumed leaves its members' products quantifying where a reader's instance says rather than where the declaration's own constraints allow.
 fn group_alike(this: &RecItem, that: &RecItem) -> bool {
-    let RecItem {
-        definitions,
-        group,
-        universe_context,
-    } = this;
-
-    *universe_context == that.universe_context
-        && *group == that.group
-        && definitions.len() == that.definitions.len()
-        && definitions
+    this.universe_context() == that.universe_context()
+        && this.group() == that.group()
+        && this.exports().len() == that.exports().len()
+        && this
+            .exports()
             .iter()
-            .zip(&that.definitions)
+            .zip(that.exports())
             .all(|(this, that)| member_alike(this, that))
 }
 

@@ -1612,21 +1612,21 @@ impl Convert {
         this: Rec,
         that: Rec,
     ) -> Result<bool, ReduceError> {
-        if this.group.length() != that.group.length() {
+        if this.group().length() != that.group().length() {
             return Ok(false);
         }
 
-        let names = (0..this.group.length())
+        let names = (0..this.group().length())
             .map(|_| self.opening(context, None, None))
             .collect::<Vec<_>>();
         let labels = names.iter().map(Term::free_var).collect::<Vec<_>>();
         let labels = labels.iter().collect::<Vec<_>>();
         // Each member at the type the group states for it, which may name every member.
-        for (name, member) in names.iter().zip(this.group.iter()) {
+        for (name, member) in names.iter().zip(this.group().iter()) {
             self.binders = self.binders.opening(*name, member.type_.open(&labels));
         }
 
-        for (this_member, that_member) in this.group.iter().zip(that.group.iter()) {
+        for (this_member, that_member) in this.group().iter().zip(that.group().iter()) {
             let (this_type, this_body) = (&this_member.type_, &this_member.body);
             let (that_type, that_body) = (&that_member.type_, &that_member.body);
             self.enqueue(
@@ -1643,8 +1643,8 @@ impl Convert {
 
         self.enqueue(
             Term::type_ground(),
-            this.tail.open(&labels),
-            that.tail.open(&labels),
+            this.tail().open(&labels),
+            that.tail().open(&labels),
         );
 
         Ok(true)
@@ -3286,8 +3286,8 @@ impl Convert {
                                     self.unfolded(Some(&this_term), Some(&that_term));
                                     self.enqueue(
                                         type_,
-                                        this.group.member_body(this_index),
-                                        that.group.member_body(that_index),
+                                        this.group().member_body(this_index),
+                                        that.group().member_body(that_index),
                                     );
                                     true
                                 }
@@ -3296,21 +3296,21 @@ impl Convert {
                         _ => self.compare_rec(context, this, that)?,
                     }
                 }
-                // Opening a projection's tail is the identity on it, so the step available here is the delta one: on to the member's body. A block that is no projection and whose tail binds other than one binder per member has neither step, and a comparison with no step left to take identifies nothing.
-                (Subterm::Rec(rec), other) if rec.as_proj().is_some() || rec.opens() => {
+                // Opening a projection's tail is the identity on it, so the step available here is the delta one: on to the member's body.
+                (Subterm::Rec(rec), other) => {
                     let head: Term = Subterm::Rec(rec.clone()).into();
                     let stepped = match rec.as_proj() {
-                        Some(index) => rec.group.member_body(index),
+                        Some(index) => rec.group().member_body(index),
                         None => unfold_rec(context, rec)?,
                     };
                     self.unfolded(Some(&head), None);
                     self.enqueue(type_, stepped, other.into());
                     true
                 }
-                (other, Subterm::Rec(rec)) if rec.as_proj().is_some() || rec.opens() => {
+                (other, Subterm::Rec(rec)) => {
                     let head: Term = Subterm::Rec(rec.clone()).into();
                     let stepped = match rec.as_proj() {
-                        Some(index) => rec.group.member_body(index),
+                        Some(index) => rec.group().member_body(index),
                         None => unfold_rec(context, rec)?,
                     };
                     self.unfolded(None, Some(&head));

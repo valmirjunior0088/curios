@@ -117,7 +117,7 @@ impl FormScope {
             let held = match item {
                 Item::Let(definition) => vec![(definition.name, &definition.kind)],
                 Item::Rec(rec) => rec
-                    .definitions
+                    .exports()
                     .iter()
                     .map(|member| (member.name, &member.kind))
                     .collect(),
@@ -1961,11 +1961,11 @@ fn items_written<D: Rendered>(
                 each(CoreItem::Group(vec![member.written(&implied, spelling)]))?;
             }
             Item::Rec(rec) => {
-                let mut context = Some(&rec.universe_context);
+                let mut context = Some(rec.universe_context());
                 let definitions = rec.definitions();
                 let members = definitions
                     .iter()
-                    .zip(&rec.definitions)
+                    .zip(rec.exports())
                     .enumerate()
                     .map(|(index, (definition, held))| {
                         Member {
@@ -1973,7 +1973,7 @@ fn items_written<D: Rendered>(
                             proof: held.proof,
                             value_sort: None,
                             universe_context: context.take(),
-                            group: Some((index, rec.definitions.len())),
+                            group: Some((index, rec.exports().len())),
                         }
                         .written(&implied, spelling)
                     })

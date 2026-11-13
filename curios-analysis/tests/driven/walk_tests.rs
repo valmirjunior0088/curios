@@ -12,7 +12,7 @@ use {
     curios_core::{
         Apply, Argument, Arm, Bang, Carrier, Cases, Field, Free, Global, InductArm, InductType,
         Infix, Instance, Intrinsic, Level, Many, Match, MatchResult, Matrix, Metavar, MetavarId,
-        MetavarOrigin, MetavarSpine, Nat, Pattern, Proj, Rec, Row, Scope, Struct, StructEntry,
+        MetavarOrigin, MetavarSpine, Nat, Pattern, Proj, Row, Scope, Struct, StructEntry,
         StructType, Subterm, Term, Three, Totality, Transient, Tuple, Two, UniverseContext,
         Universes, Variant,
     },
@@ -46,9 +46,10 @@ fn a_huge_literal_call_argument_grades_without_expansion() {
         )],
         Term::free_var(&f),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+    let Subterm::Rec(block) = &*rec else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
 
     // A constant argument never decreases, so the verdict is `Partial` — promptly.
     assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
@@ -63,9 +64,10 @@ fn call_is_seen(body: Term) -> bool {
         vec![(planted(), Term::intrinsic(Intrinsic::NatType), body)],
         Term::free_var(&planted()),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+    let Subterm::Rec(block) = &*rec else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
 
     group_totality(&mut certifier, group) == Ok(Totality::Partial)
 }
@@ -551,9 +553,10 @@ fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
         )],
         Term::free_var(&count),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+    let Subterm::Rec(block) = &*rec else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
 
     let name = Global::Authored(Qualifier::from(["Boxed"]));
     let payload = Term::apply(
@@ -608,9 +611,10 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
         )],
         Term::free_var(&f),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*descending else {
+    let Subterm::Rec(block) = &*descending else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
     assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Total));
 
     let control = Term::rec(
@@ -624,9 +628,10 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
         )],
         Term::free_var(&f),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*control else {
+    let Subterm::Rec(block) = &*control else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
     assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
 }
 
@@ -673,15 +678,17 @@ fn a_lambda_applied_to_the_arm_payload_descends() {
     };
 
     let descending = group_over(Term::free_var(&t));
-    let Subterm::Rec(Rec { group, .. }) = &*descending else {
+    let Subterm::Rec(block) = &*descending else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
     assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Total));
 
     let control = group_over(Term::free_var(&b));
-    let Subterm::Rec(Rec { group, .. }) = &*control else {
+    let Subterm::Rec(block) = &*control else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
     assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
 }
 
@@ -727,15 +734,17 @@ fn a_let_alias_of_the_arm_payload_descends() {
     };
 
     let descending = group_over(Term::free_var(&t));
-    let Subterm::Rec(Rec { group, .. }) = &*descending else {
+    let Subterm::Rec(block) = &*descending else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
     assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Total));
 
     let control = group_over(Term::free_var(&b));
-    let Subterm::Rec(Rec { group, .. }) = &*control else {
+    let Subterm::Rec(block) = &*control else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
     assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
 }
 
@@ -936,9 +945,10 @@ fn a_call_argument_stuck_on_a_neutral_grades_unread() {
         )],
         Term::free_var(&f),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+    let Subterm::Rec(block) = &*rec else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
 
     for (defined, expected) in [(false, Totality::Partial), (true, Totality::Total)] {
         let mut certifier = certifier();

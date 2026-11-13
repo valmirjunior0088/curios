@@ -181,7 +181,10 @@ fn a_walk_types_again_what_a_reader_typed() {
             infer(&mut certifier, &group),
             Err(Error::NotDescending { .. })
         ));
-        assert_eq!(certifier.group_verdict(&rec.group), Some(Totality::Partial));
+        assert_eq!(
+            certifier.group_verdict(rec.group()),
+            Some(Totality::Partial)
+        );
     }
 }
 

@@ -371,14 +371,14 @@ impl<'s> Context<'s> {
                 definition.universe_context.clone(),
             )],
             Item::Rec(rec) => rec
-                .definitions
+                .exports()
                 .iter()
                 .enumerate()
                 .map(|(index, definition)| {
                     Ok((
                         definition.name,
-                        zonk(self, &rec.group.member_type(index))?,
-                        rec.universe_context.clone(),
+                        zonk(self, &rec.group().member_type(index))?,
+                        rec.universe_context().clone(),
                     ))
                 })
                 .collect::<Result<_, Error>>()?,
@@ -422,21 +422,21 @@ impl<'s> Context<'s> {
                 }
             }
             Item::Rec(rec) => {
-                for (index, definition) in rec.definitions.iter().enumerate() {
+                for (index, definition) in rec.exports().iter().enumerate() {
                     let name = definition.name;
-                    let type_ = rec.group.member_type(index);
+                    let type_ = rec.group().member_type(index);
                     self.redeclare(&name, &type_);
-                    self.set_universe_context(&name, rec.universe_context.clone());
+                    self.set_universe_context(&name, rec.universe_context().clone());
                     self.define_published(
                         &name,
-                        &Term::rec_proj(rec.group.clone(), index),
+                        &Term::rec_proj(rec.group().clone(), index),
                         &definition.kind,
                         definition.proof,
                     );
                     if self.is_witness_declaration(&definition.name) {
                         self.update_witness_scheme(
                             &definition.name,
-                            rec.universe_context.clone(),
+                            rec.universe_context().clone(),
                             type_,
                         );
                     }
@@ -471,10 +471,10 @@ impl<'s> Context<'s> {
         let types = match item {
             Item::Let(definition) => vec![(definition.name, definition.type_.clone())],
             Item::Rec(rec) => rec
-                .definitions
+                .exports()
                 .iter()
                 .enumerate()
-                .map(|(index, definition)| (definition.name, rec.group.member_type(index)))
+                .map(|(index, definition)| (definition.name, rec.group().member_type(index)))
                 .collect(),
         };
         for (name, type_) in &types {

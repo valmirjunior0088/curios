@@ -13,8 +13,7 @@ use {
     super::Certifier,
     crate::bears_proof,
     curios_core::{
-        Definition, DefinitionKind, Entrypoint, Free, InductDecl, Item, Nominal, ProofBinders,
-        RecDefinition, RecItem, Term,
+        Definition, DefinitionKind, Entrypoint, Free, InductDecl, Item, Nominal, ProofBinders, Term,
     },
     std::{convert::Infallible, rc::Rc},
 };
@@ -135,25 +134,21 @@ pub fn stated_marks(certifier: &mut Certifier, item: &Item) -> Item {
         })),
         Item::Rec(rec) => {
             let members = rec
-                .definitions
+                .exports()
                 .iter()
                 .map(|definition| {
-                    Term::instance(definition.name, rec.universe_context.identity_instance())
+                    Term::instance(definition.name, rec.universe_context().identity_instance())
                 })
                 .collect::<Vec<_>>();
             let group = rec
-                .group
+                .group()
                 .map_members(|body| stated_term(certifier, body, &members));
-            let mut definitions = rec.definitions.clone();
-            for definition in &mut definitions {
+            let mut stated = rec.with_group(group);
+            for definition in stated.exports_mut() {
                 definition.kind = stated_kind(certifier, &definition.kind);
             }
 
-            Item::Rec(RecItem {
-                definitions,
-                group,
-                universe_context: rec.universe_context.clone(),
-            })
+            Item::Rec(stated)
         }
     }
 }
@@ -173,20 +168,15 @@ pub fn carried_marks(item: &Item, stated: &Item) -> Item {
             body: definition.body.with_proofs_of(&from.body),
             ..(**definition).clone()
         })),
-        (Item::Rec(rec), Item::Rec(from)) => Item::Rec(RecItem {
-            definitions: rec
-                .definitions
-                .iter()
-                .zip(&from.definitions)
-                .map(|(member, from)| RecDefinition {
-                    kind: carried_kind(&member.kind, &from.kind),
-                    proof: from.proof,
-                    ..member.clone()
-                })
-                .collect(),
-            group: rec.group.with_proofs_of(&from.group),
-            universe_context: rec.universe_context.clone(),
-        }),
+        (Item::Rec(rec), Item::Rec(from)) => {
+            let mut carried = rec.with_group(rec.group().with_proofs_of(from.group()));
+            for (member, from) in carried.exports_mut().iter_mut().zip(from.exports()) {
+                member.kind = carried_kind(&member.kind, &from.kind);
+                member.proof = from.proof;
+            }
+
+            Item::Rec(carried)
+        }
         _ => panic!("an item the baseline holds in another's place is of its kind"),
     }
 }

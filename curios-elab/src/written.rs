@@ -547,7 +547,8 @@ impl Writing {
     }
 
     /// A `let`: each binding walked under the bindings before it and entered at its definition, and the tail walked under all of them.
-    fn let_(&mut self, context: &mut Context, term: &Term, Let { bindings, tail }: &Let) -> Term {
+    fn let_(&mut self, context: &mut Context, term: &Term, block: &Let) -> Term {
+        let (bindings, tail) = (block.bindings(), block.tail());
         let before = self.entered.len();
 
         context.with_frame(|context| {
@@ -571,20 +572,15 @@ impl Writing {
             let tail = tail.map_body(|body| self.term(context, body));
             self.entered.truncate(before);
 
-            rebuilt(
-                term,
-                Subterm::Let(Let {
-                    bindings: walked,
-                    tail,
-                }),
-            )
+            rebuilt(term, Subterm::Let(Let::new(walked, tail)))
         })
     }
 
     /// A recursive group: each member's type and body, and the tail, walked under the members, each standing for itself. A member names its group, which here still stands under the binders entered, so the members a question is put over are the group's as it stands there.
-    fn rec(&mut self, context: &mut Context, term: &Term, Rec { group, tail }: &Rec) -> Term {
+    fn rec(&mut self, context: &mut Context, term: &Term, block: &Rec) -> Term {
+        let (group, tail) = (block.group(), block.tail());
         let members = match &*self.released(term) {
-            Subterm::Rec(Rec { group, .. }) => group.members(),
+            Subterm::Rec(released) => released.group().members(),
             _ => unreachable!("a recursive group released is one"),
         };
         let before = self.entered.len();
@@ -593,7 +589,7 @@ impl Writing {
         let tail = tail.map_body(|body| self.term(context, body));
         self.entered.truncate(before);
 
-        rebuilt(term, Subterm::Rec(Rec { group, tail }))
+        rebuilt(term, Subterm::Rec(Rec::new(group, tail)))
     }
 
     /// A match: its scrutinee and result walked, and each arm walked in a frame of its own under the equations elaboration typed it under.

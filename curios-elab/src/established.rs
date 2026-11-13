@@ -133,13 +133,13 @@ impl<'a> Standing<'a> {
             }
             Place::Member { member, .. } => {
                 let rec = self.group(place.item());
-                let definition = &rec.definitions[member as usize];
+                let definition = &rec.exports()[member as usize];
                 let (type_, body) = self.places().member(name, rec, member);
 
                 Some(Defined {
                     type_,
                     body: (!definition.proof).then_some(body),
-                    universe_context: &rec.universe_context,
+                    universe_context: rec.universe_context(),
                     totality,
                     applications,
                     variances,
@@ -198,9 +198,9 @@ impl<'a> Standing<'a> {
                         .iter()
                         .all(|name| self.answers(name))
                         .then(|| DefinedGroup {
-                            group: rec.group.clone(),
+                            group: rec.group().clone(),
                             names,
-                            universe_context: rec.universe_context.clone(),
+                            universe_context: rec.universe_context().clone(),
                         })
                 }
                 Item::Let(_) => None,
@@ -216,7 +216,7 @@ impl<'a> Standing<'a> {
 
 /// The names `rec`'s members are defined under, in member order.
 fn member_names(rec: &RecItem) -> Vec<Global> {
-    rec.definitions
+    rec.exports()
         .iter()
         .map(|definition| definition.name)
         .collect()

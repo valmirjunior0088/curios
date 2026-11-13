@@ -1334,7 +1334,7 @@ fn place_in(item: &Item, name: &Global) -> Option<Place> {
     match item {
         Item::Let(definition) => (definition.name == *name).then_some(Place::Let(0)),
         Item::Rec(rec) => rec
-            .definitions
+            .exports()
             .iter()
             .position(|definition| definition.name == *name)
             .and_then(|member| u32::try_from(member).ok())

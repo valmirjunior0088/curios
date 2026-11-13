@@ -5,7 +5,7 @@
 use {
     super::*,
     curios_core::{
-        Applications, Atom, CallMatrix, Free, Global, InductDecl, Intrinsic, Polarity, Rec, Size,
+        Applications, Atom, CallMatrix, Free, Global, InductDecl, Intrinsic, Polarity, Size,
         StructDecl, Subterm, Term,
     },
     curios_num::Binary,
@@ -394,9 +394,10 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
         vec![(f, Term::intrinsic(Intrinsic::NatType), Term::free_var(&f))],
         Term::free_var(&f),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+    let Subterm::Rec(block) = &*rec else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
 
     let n = Free::local(2, Some("n"));
     let mut body = Term::apply(Term::rec_proj(group.clone(), 0), [Term::free_var(&n)]);
@@ -464,9 +465,10 @@ fn member(argument: Term) -> (RecGroup, Term) {
         vec![(f, Term::intrinsic(Intrinsic::NatType), Term::free_var(&f))],
         Term::free_var(&f),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+    let Subterm::Rec(block) = &*rec else {
         panic!("the fixture changed shape");
     };
+    let group = block.group();
 
     (
         group.clone(),

@@ -940,16 +940,16 @@ fn verdicts_within<'s>(
             }
             Item::Rec(mut rec) => {
                 let members = rec
-                    .definitions
+                    .exports()
                     .iter()
                     .map(|definition| (definition.name, &definition.kind))
                     .collect::<Vec<_>>();
-                let universes = rec.universe_context.clone();
+                let universes = rec.universe_context().clone();
 
-                let proofs = match check_rec_group(certifier, &members, &rec.group, &universes) {
+                let proofs = match check_rec_group(certifier, &members, rec.group(), &universes) {
                     Ok(proofs) => {
                         // How each member applies its parameters, read off the group as checked, within the item's judgment: what it reads is the item's. A budget that runs out leaves the group summarizing nothing, which grades a call through it as no summary does.
-                        if let Ok(applied) = group_applications(certifier, &rec.group) {
+                        if let Ok(applied) = group_applications(certifier, rec.group()) {
                             for ((name, _), applied) in members.iter().zip(applied) {
                                 if !applied.is_empty() {
                                     certifier.file_applications(name, applied.clone());
@@ -969,8 +969,8 @@ fn verdicts_within<'s>(
                             if let Err(error) = define_as_stated(
                                 certifier,
                                 name,
-                                &rec.group.member_type(member),
-                                &Term::rec_proj(rec.group.clone(), member),
+                                &rec.group().member_type(member),
+                                &Term::rec_proj(rec.group().clone(), member),
                                 false,
                                 None,
                                 &universes,
@@ -985,7 +985,7 @@ fn verdicts_within<'s>(
                         vec![false; members.len()]
                     }
                 };
-                for (definition, proof) in rec.definitions.iter_mut().zip(proofs) {
+                for (definition, proof) in rec.exports_mut().iter_mut().zip(proofs) {
                     definition.proof = proof;
                 }
 
@@ -1648,11 +1648,11 @@ fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Verdict>) {
         }
         Item::Rec(mut rec) => {
             let members = rec
-                .definitions
+                .exports()
                 .iter()
                 .map(|definition| (definition.name, &definition.kind))
                 .collect::<Vec<_>>();
-            let proofs = state_rec_group(certifier, &members, &rec.group, &rec.universe_context)
+            let proofs = state_rec_group(certifier, &members, rec.group(), rec.universe_context())
                 .unwrap_or_else(|error| {
                     refusals.push(Verdict {
                         name: members.first().map(|(name, _)| *name),
@@ -1660,7 +1660,7 @@ fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Verdict>) {
                     });
                     vec![false; members.len()]
                 });
-            for (definition, proof) in rec.definitions.iter_mut().zip(proofs) {
+            for (definition, proof) in rec.exports_mut().iter_mut().zip(proofs) {
                 definition.proof = proof;
             }
 

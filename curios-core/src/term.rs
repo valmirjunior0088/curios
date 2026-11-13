@@ -1334,7 +1334,8 @@ impl Term {
         // The tail is a term of its own, written where it was: taken apart to merge a block it is, it is put back under its extent where it is none, so a refusal at its root is placed at it and not at the block.
         let extent = tail.extent();
         match Term::unwrap_or_clone(tail) {
-            Subterm::Let(Let { bindings, tail }) => {
+            Subterm::Let(block) => {
+                let (bindings, tail) = block.into_parts();
                 let mut merged = Vec::with_capacity(bindings.len() + 1);
                 merged.push(LetBinding::new(type_, body));
 
@@ -1346,15 +1347,12 @@ impl Term {
                     ));
                 }
 
-                Self::from(Subterm::Let(Let {
-                    bindings: merged,
-                    tail: tail.prepend(&[binder]),
-                }))
+                Self::from(Subterm::Let(Let::new(merged, tail.prepend(&[binder]))))
             }
-            other => Self::from(Subterm::Let(Let {
-                bindings: vec![LetBinding::new(type_, body)],
-                tail: Scope::close(Many(1), &[binder], Term::from(other).occurring_at(extent)),
-            })),
+            other => Self::from(Subterm::Let(Let::new(
+                vec![LetBinding::new(type_, body)],
+                Scope::close(Many(1), &[binder], Term::from(other).occurring_at(extent)),
+            ))),
         }
     }
 
@@ -1394,10 +1392,8 @@ impl Term {
         // The tail keeps where it was written, as in [`Term::let_`].
         let extent = tail.extent();
         let tail = match Term::unwrap_or_clone(tail) {
-            Subterm::Let(Let {
-                bindings: inner,
-                tail,
-            }) => {
+            Subterm::Let(block) => {
+                let (inner, tail) = block.into_parts();
                 for binding in inner {
                     let (binding_type, binding_value) = binding.into_parts();
                     bindings.push(LetBinding::new(
@@ -1415,7 +1411,7 @@ impl Term {
             ),
         };
 
-        Self::from(Subterm::Let(Let { bindings, tail }))
+        Self::from(Subterm::Let(Let::new(bindings, tail)))
     }
 
     /// Build a [`Rec`] block from `(label, type, value)` items: every type, every value, and the tail are closed over the full label list, so the items may reference one another (and themselves) by name.
@@ -1435,10 +1431,10 @@ impl Term {
         let arity = Many(members.len());
         let group = RecGroup::closing(items.clone());
 
-        Self::from(Subterm::Rec(Rec {
+        Self::from(Subterm::Rec(Rec::new(
             group,
-            tail: Scope::close(arity, &members, tail.into()),
-        }))
+            Scope::close(arity, &members, tail.into()),
+        )))
     }
 
     /// Member `index` of `group`, spelled as what it is: the group bound, with a tail that selects one member. `rec f and g; f`.
@@ -1452,7 +1448,7 @@ impl Term {
 
         let tail = Scope::constant(Many(group.length()), Self::var(Var::bound(index)));
 
-        Self::from(Subterm::Rec(Rec { group, tail }))
+        Self::from(Subterm::Rec(Rec::new(group, tail)))
     }
 }
 

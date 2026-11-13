@@ -23,10 +23,10 @@ use {
 pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(Term, Term), Error> {
     curios_profile::profile!("binding::elaborate_let");
     context.with_frame(|context| {
-        let mut label_terms = Vec::<Term>::with_capacity(let_.bindings.len());
-        let mut triples = Vec::<(Free, Term, Term)>::with_capacity(let_.bindings.len());
+        let mut label_terms = Vec::<Term>::with_capacity(let_.bindings().len());
+        let mut triples = Vec::<(Free, Term, Term)>::with_capacity(let_.bindings().len());
 
-        for (index, binding) in let_.bindings.iter().enumerate() {
+        for (index, binding) in let_.bindings().iter().enumerate() {
             let (type_, body) = {
                 let refs = label_terms.iter().collect::<Vec<_>>();
                 (
@@ -48,7 +48,7 @@ pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(T
                     (type_elaborated, body_elaborated)
                 }
             };
-            let label = context.fresh_for(let_.tail.hint(index), let_.tail.written(index));
+            let label = context.fresh_for(let_.tail().hint(index), let_.tail().written(index));
 
             // Define the binding with the *rebuilt* body so the tail's type-level evaluation does not reduce through the lowered (under-applied) original, its committed solutions substituted: a solved metavariable left in it stands over a spine of every binding before it, which each reduction through the definition would read again, a chain of definitions paying its length at every link. The type stays as written, since what a tail's unification solves from it is spelled as it is.
             let body_elaborated = zonk_solved_term_metas(context, &body_elaborated);
@@ -59,7 +59,7 @@ pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(T
         }
 
         // Propagate `mode` into the tail: a `Check(expected)` turnaround happens where the bindings are in scope; `expected` comes from the outer scope and does not mention them, so comparing inside the frame is sound.
-        let tail = let_.tail.open(&label_terms.iter().collect::<Vec<_>>());
+        let tail = let_.tail().open(&label_terms.iter().collect::<Vec<_>>());
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
         let values = triples
@@ -91,9 +91,9 @@ pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(T
 /// Elaborate a local `rec` group and its tail. The group's mutually-recursive bindings are one node, so this handles them at once; the tail recurses through one ordinary `elaborate`, bounded by `let`/`rec` alternation.
 pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Term, Term), Error> {
     context.with_frame(|context| {
-        let group = &rec.group;
+        let group = rec.group();
         let labels = rec
-            .tail
+            .tail()
             .hint_iter()
             .map(|l| context.fresh(l))
             .collect::<Vec<_>>();
@@ -137,7 +137,7 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
         }
         // Named by the hints the program wrote, not by the gensyms elaboration minted for them.
         let names = rec
-            .tail
+            .tail()
             .hint_iter()
             .map(|hint| hint.unwrap_or("_").to_string())
             .collect::<Vec<_>>();
@@ -184,7 +184,7 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
             triples.clone(),
             Term::tuple(Vec::<Term>::new()),
         )) {
-            Subterm::Rec(rec) => rec.group,
+            Subterm::Rec(rec) => rec.into_parts().0,
             _ => unreachable!("let constructs a recursive block"),
         };
         for (index, (label, type_)) in labels.iter().zip(&types_elaborated).enumerate() {
@@ -192,7 +192,7 @@ pub fn elaborate_rec(context: &mut Context, rec: &Rec, mode: Mode) -> Result<(Te
             context.define(label, &Term::rec_proj(group.clone(), index), None);
         }
 
-        let tail = rec.tail.open(&label_refs);
+        let tail = rec.tail().open(&label_refs);
         let (tail_elaborated, tail_type) = elaborate(context, &tail, mode)?;
         let tail_type = reduce_with(context, &tail_type)?;
         // A member is read as its projection out of the group, which is what its label is defined as.

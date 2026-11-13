@@ -24,8 +24,8 @@ use {
     crate::bears_proof,
     curios_analysis::{blocker, known_to_terminate, yields_a_sort_where},
     curios_core::{
-        Bound, DefinitionKind, Free, Global, InductDecl, Many, Quality, RecGroup, Reducer, Scope,
-        StructDecl, Subterm, Telescope, Term, Totality, UniverseContext, instantiate_qualities,
+        Bound, DefinitionKind, Free, Global, InductDecl, Quality, RecGroup, Reducer, StructDecl,
+        Subterm, Telescope, Term, Totality, UniverseContext, instantiate_qualities,
     },
 };
 
@@ -195,26 +195,9 @@ pub fn define_as_stated(
 pub fn check_group<R>(
     certifier: &mut Certifier,
     group: &RecGroup,
-    tail: Option<&Scope<Many>>,
     within: impl FnOnce(&mut Certifier, &[Free]) -> Result<R, Error>,
 ) -> Result<R, Error> {
     // A group carries no universe context of its own, so there is nothing to decide here and nothing to assume: its members' level and quality parameters are the enclosing declaration's, whose context `certify_definitions` decided closed and satisfiable before this walk assumed it, and whose sorts `at_every_sort` judges this group at every assignment of.
-    // Every scope a `rec` states binds one binder per member: a member's two, which `member_type` and `member_body` open over the group, and the tail, which `infer`'s `Rec` arm opens over the locals the members are assumed under. Each count is a fact about a sibling field — the members the group holds — that nothing in the representation relates it to, and no typing rule reads one, so this is the boundary that checks them all and a term a caller built otherwise is refused here rather than asserted on where a scope is opened. A `rec` item passes no tail: its members are the module's own declarations, and what follows them is the rest of the module.
-    let members = group.length();
-    let stated = group
-        .iter()
-        .flat_map(|member| [member.type_.arity(), member.body.arity()])
-        .chain(tail.map(Scope::arity));
-    for binders in stated {
-        if binders != members {
-            return Err(Error::Arity {
-                counted: Counted::GroupBinders,
-                expected: members,
-                actual: binders,
-            });
-        }
-    }
-
     certifier.scoped(|certifier| {
         // Signatures first, then bodies, and neither reads a member before its turn has found it known to terminate.
         //
@@ -355,14 +338,6 @@ pub fn check_rec_group(
     group: &RecGroup,
     universes: &UniverseContext,
 ) -> Result<Vec<bool>, Error> {
-    if members.len() != group.length() {
-        return Err(Error::Arity {
-            counted: Counted::GroupMembers,
-            expected: group.length(),
-            actual: members.len(),
-        });
-    }
-
     let mut totality = Totality::Total;
     let mut enclosing = vec![false; group.length()];
     let mut proofs = members
@@ -380,7 +355,7 @@ pub fn check_rec_group(
             }
         };
 
-        check_group(certifier, group, None, |_, _| Ok(()))?;
+        check_group(certifier, group, |_, _| Ok(()))?;
 
         for (index, proof) in proofs.iter_mut().enumerate() {
             *proof = *proof && bears_proof(certifier, &group.member_type(index)).unwrap_or(false);

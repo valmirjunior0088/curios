@@ -6,9 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Qualifier, fill},
     curios_core::{
-        Definitions, Entrypoint, Free, Global, Intrinsic, Item, Let, LetBinding, Level, Many, Nat,
-        Program, Rec, RecGroup, RecItem, RecMemberScopes, Scope, Subterm, Term, Universes,
-        test_support::*,
+        Definitions, Entrypoint, Free, Global, Intrinsic, Item, Level, Nat, Program, RecGroup,
+        RecItem, Term, Universes, test_support::*,
     },
     curios_surface::Spelling,
     std::collections::BTreeMap,
@@ -137,83 +136,9 @@ fn bad_definitions(body: Term) -> Definitions {
     }
 }
 
-/// A group whose member scopes bind more than its members is refused, not aborted on.
-///
-/// `RecGroup::new` takes its members without relating their scopes' arity to their number, and `member_type` and `member_body` open each scope over one term per member, so without the boundary check `Scope::open`'s assert is the first thing that reads either count. A `rec` group is a Core term a module built by hand carries, and the board requires the implementation to fail closed.
-#[test]
-fn a_group_whose_member_scopes_bind_more_than_its_members_is_refused() {
-    let (f, g) = (member(), Free::local(905, Some("g")));
-    // No constructor builds this, which is the point: `rec_group_of_scopes` is the fixture door for the shape a restored archive could carry.
-    let group = rec_group_of_scopes(vec![RecMemberScopes {
-        type_: Scope::close(Many(2), &[&f, &g], Term::intrinsic(Intrinsic::NatType)),
-        body: Scope::close(Many(2), &[&f, &g], Term::free_var(&f)),
-    }]);
-    let definitions = bad_definitions(Term::rec_proj(group, 0));
-
-    assert!(
-        !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
-        "the walk must refuse a group whose member scopes and members disagree in number",
-    );
-}
-
-/// A group's tail binds one binder per member, and a tail that binds more is refused rather than aborted on.
-///
-/// `Rec` holds its `group` and its `tail` side by side, and the tail's arity is a fact about a sibling field — the members the group holds — that nothing in the representation relates it to. `check_group` read the member scopes' arities against the member count and nothing of the tail, and `infer`'s `Rec` arm then opens the tail over one term per member, so `Scope::open`'s assert was the first thing to read the count and the process died where the board requires a refusal. Mutation-checked: without the tail's clause in `check_group` this walk aborts in `Scope::open` instead of returning a verdict.
-#[test]
-fn a_group_whose_tail_binds_more_than_its_members_is_refused() {
-    let (f, g) = (member(), Free::local(906, Some("g")));
-    let group = RecGroup::closing(vec![(
-        f,
-        Term::intrinsic(Intrinsic::NatType),
-        Term::free_var(&f),
-    )]);
-    let tail = Scope::close(Many(2), &[&f, &g], Term::free_var(&f));
-    let definitions = bad_definitions(Term::from(Subterm::Rec(Rec { group, tail })));
-
-    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
-    assert!(
-        verdicts.iter().any(|verdict| matches!(
-            verdict.error,
-            Error::Arity {
-                counted: Counted::GroupBinders,
-                expected: 1,
-                actual: 2,
-            }
-        )),
-        "the walk must refuse a group whose tail binds more binders than the group has members: {verdicts:?}",
-    );
-}
-
-/// A `let` block's tail binds one binder per binding, and a tail that binds more is refused rather than aborted on.
-///
-/// The same unrelated pair as the group's above, in the other block form: `Let` holds its `bindings` and its `tail` side by side, and `under_bindings` opens the tail over one binder per binding. The count is a block's rather than a group's, which is what `Counted::BlockBinders` names. Mutation-checked: without the clause in `under_bindings` this walk aborts in `Scope::open`.
-#[test]
-fn a_let_whose_tail_binds_more_than_its_bindings_is_refused() {
-    let (x, y) = (Free::local(907, Some("x")), Free::local(908, Some("y")));
-    let bindings = vec![LetBinding::new(
-        Term::intrinsic(Intrinsic::NatType),
-        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-    )];
-    let tail = Scope::close(Many(2), &[&x, &y], Term::free_var(&x));
-    let definitions = bad_definitions(Term::from(Subterm::Let(Let { bindings, tail })));
-
-    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
-    assert!(
-        verdicts.iter().any(|verdict| matches!(
-            verdict.error,
-            Error::Arity {
-                counted: Counted::BlockBinders,
-                expected: 1,
-                actual: 2,
-            }
-        )),
-        "the walk must refuse a `let` whose tail binds more binders than the block has bindings: {verdicts:?}",
-    );
-}
-
 /// A projection past a tuple's components is refused, not aborted on.
 ///
-/// This is the shape the README names outright, and the count it is refused by at the boundary is `Counted::Components`. It is the control the two counts above are read against: one count of a hand-built term was checked before this commit and two were not.
+/// This is the shape the README names outright, and the count it is refused by at the boundary is `Counted::Components`.
 #[test]
 fn a_projection_past_a_tuples_components_is_refused() {
     let definitions = bad_definitions(Term::proj(

@@ -26,10 +26,8 @@ fn binding<D: Rendered>(
 }
 
 /// A block: each binding under the ones before it, then its tail. The printer writes a tail that is a block of its own between parentheses, since a run of statements reads as one block.
-pub fn let_written<D: Rendered>(
-    Let { bindings, tail }: Let,
-    frame: Frame<'_, D>,
-) -> crate::Term<D> {
+pub fn let_written<D: Rendered>(block: Let, frame: Frame<'_, D>) -> crate::Term<D> {
+    let (bindings, tail) = block.into_parts();
     let labels = frame.labels(tail.label_iter());
     let terms = label_terms(&labels);
     let terms = terms.iter().collect::<Vec<_>>();
@@ -54,7 +52,8 @@ pub fn let_written<D: Rendered>(
 }
 
 /// A group: each member under every member's name, then its tail; a group of one member under `#{node = Rec}`, which a block of that one binding would otherwise be.
-pub fn rec_written<D: Rendered>(Rec { group, tail }: Rec, frame: Frame<'_, D>) -> crate::Term<D> {
+pub fn rec_written<D: Rendered>(block: Rec, frame: Frame<'_, D>) -> crate::Term<D> {
+    let (group, tail) = block.into_parts();
     let labels = frame.labels(tail.label_iter());
     let terms = label_terms(&labels);
     let terms = terms.iter().collect::<Vec<_>>();
@@ -229,8 +228,8 @@ fn block(items: Vec<(Free, Term, Term)>, tail: Term) -> Term {
         })
         .collect();
 
-    Term::from(Subterm::Let(Let {
+    Term::from(Subterm::Let(Let::new(
         bindings,
-        tail: Scope::close(Many(binders.len()), &binders, tail),
-    }))
+        Scope::close(Many(binders.len()), &binders, tail),
+    )))
 }

@@ -152,7 +152,7 @@ impl Schemes {
                     (Place::Let(_), Item::Let(definition)) => {
                         definition.universe_context.parameter_count
                     }
-                    (_, Item::Rec(rec)) => rec.universe_context.parameter_count,
+                    (_, Item::Rec(rec)) => rec.universe_context().parameter_count,
                     (Place::Member { .. }, Item::Let(_)) => {
                         unreachable!("a member's place is a group's")
                     }
@@ -218,9 +218,9 @@ fn definition_schemes(
             &definition.universe_context,
         )],
         Item::Rec(rec) => rec
-            .definitions
+            .exports()
             .iter()
-            .map(|definition| (definition.name, &definition.kind, &rec.universe_context))
+            .map(|definition| (definition.name, &definition.kind, rec.universe_context()))
             .collect(),
     })
 }
@@ -230,10 +230,10 @@ fn scheme_in<'a>(item: &'a Item, name: &Global) -> Option<&'a UniverseContext> {
     match item {
         Item::Let(definition) => (definition.name == *name).then_some(&definition.universe_context),
         Item::Rec(rec) => rec
-            .definitions
+            .exports()
             .iter()
             .any(|definition| definition.name == *name)
-            .then_some(&rec.universe_context),
+            .then_some(rec.universe_context()),
     }
 }
 

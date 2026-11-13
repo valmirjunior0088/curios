@@ -243,10 +243,8 @@ enum Reduce {
 }
 
 /// Open a `rec` group's tail over structural folded member terms. This is a pure binder operation: it neither mints names nor mutates the context.
-///
-/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller asks before it opens one: the opening is `Scope::open`, whose assert is the only reader of that count. It says nothing of a member scope's own count, which a projection's reduct opens through `RecGroup::member_body` without passing here at all.
 pub fn unfold_rec(context: &mut Context, rec: Rec) -> Result<Term, ReduceError> {
-    let members = rec.group.members();
+    let members = rec.group().members();
     // The member vector, the ref vector over it, and the opening — one substitution pass per member.
     context.spend(
         Cost::collection(members.len() as u64)
@@ -256,7 +254,7 @@ pub fn unfold_rec(context: &mut Context, rec: Rec) -> Result<Term, ReduceError> 
 
     let refs = members.iter().collect::<Vec<_>>();
 
-    Ok(rec.tail.open(&refs))
+    Ok(rec.tail().open(&refs))
 }
 
 /// Expose only `Rec` binding syntax, without unfolding a selected member's fixed point. This strips down to the projection `rec f = ...; f` denotes, preserving the folded recursive call as the canonical neutral.
@@ -268,8 +266,7 @@ fn expose_rec_tail(context: &mut Context, mut term: Term) -> Result<Term, Reduce
         }
 
         match Term::unwrap_or_clone(term) {
-            // A block whose tail binds other than one binder per member strips to nothing, so stripping stops at it as it stops at a projection.
-            Subterm::Rec(rec) if rec.opens() => {
+            Subterm::Rec(rec) => {
                 let tail = unfold_rec(context, rec)?;
                 term = reduce(context, tail)?;
             }
@@ -376,7 +373,7 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
         }
 
         match Term::unwrap_or_clone(term) {
-            Subterm::Rec(rec) if rec.opens() => {
+            Subterm::Rec(rec) => {
                 let tail = unfold_rec(context, rec)?;
                 term = reduce(context, tail)?;
             }
@@ -424,7 +421,7 @@ fn demanded_group(context: &mut Context, folded: &Term) -> Result<Option<RecGrou
     }
 
     match &**folded {
-        Subterm::Rec(rec) => Ok(Some(rec.group.clone())),
+        Subterm::Rec(rec) => Ok(Some(rec.group().clone())),
         Subterm::Apply(Apply { head, .. }) => {
             let head = reduce(context, head.clone())?;
             let head = expose_rec_tail(context, head)?;
@@ -808,13 +805,8 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
 ///
 /// Binding each value as a fresh context definition and opening the tail over those names would copy no value into its uses, but the minted names would stand in reducts where the certifier's copy of the same reduction has the values: two unfoldings of one definition would name its `let`s differently, so every comparison by spelling — a sum's cancellation, a position's peel through a concatenation, a guard's refinement key — would miss terms conversion identifies, and the metavariable solver would have to reify minted names back out of its candidates. Substituting is the certifier's rule, so a reduct is spelled as the certifier spells it. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
 fn reduce_let(context: &mut Context, let_: Let) -> Result<Reduce, ReduceError> {
-    // A block whose tail binds other than one binder per binding has no reading that opens it, so it stands as it is and is charged nothing: the certifier's reduction and the closed machine's decline it the same way, and a reducer that opened it anyway would abort in `Scope::open` on a count no rule reads.
-    if !let_.opens() {
-        return Ok(Reduce::Break(Subterm::Let(let_).into()));
-    }
-
     // One values vector, and a fresh ref vector at every binding — triangular in the run's length, and charged as the certifier charges it.
-    let bindings = let_.bindings.len() as u64;
+    let bindings = let_.bindings().len() as u64;
     context.spend(
         Cost::collection(bindings)
             .saturating_add(Cost::buffer(
@@ -823,14 +815,14 @@ fn reduce_let(context: &mut Context, let_: Let) -> Result<Reduce, ReduceError> {
             .saturating_add(Cost::term(1).saturating_mul(bindings)),
     )?;
 
-    let mut values: Vec<Term> = Vec::with_capacity(let_.bindings.len());
-    for binding in &let_.bindings {
+    let mut values: Vec<Term> = Vec::with_capacity(let_.bindings().len());
+    for binding in let_.bindings() {
         let refs = values.iter().collect::<Vec<_>>();
         values.push(binding.value().release(&refs));
     }
 
     let refs = values.iter().collect::<Vec<_>>();
-    Ok(Reduce::Continue(let_.tail.open(&refs)))
+    Ok(Reduce::Continue(let_.tail().open(&refs)))
 }
 
 fn reduce_var(context: &Context, var: Var) -> Reduce {

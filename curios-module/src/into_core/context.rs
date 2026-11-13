@@ -232,7 +232,7 @@ impl FlatItem {
             FlatItem::Let(let_) => vec![let_.name],
             FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name).collect(),
             FlatItem::Kept(rec) => rec
-                .definitions
+                .exports()
                 .iter()
                 .map(|definition| definition.name)
                 .collect(),
@@ -262,7 +262,7 @@ impl FlatItem {
         &self,
     ) -> impl Iterator<Item = (curios_core::Global, &curios_core::DefinitionKind, Qualifier)> {
         let kept = match self {
-            FlatItem::Kept(rec) => rec.definitions.as_slice(),
+            FlatItem::Kept(rec) => rec.exports(),
             FlatItem::Let(_) | FlatItem::Rec(_) => &[],
         };
 

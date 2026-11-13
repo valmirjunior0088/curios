@@ -3,7 +3,7 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        DefinitionKind, Free, Global, Intrinsic, Nat, Rec, RecGroup, Subterm, Term, Universes,
+        DefinitionKind, Free, Global, Intrinsic, Nat, RecGroup, Subterm, Term, Universes,
     },
     std::rc::Rc,
 };
@@ -72,9 +72,10 @@ fn spin(context: &mut Context) -> RecGroup {
         )],
         Term::free_var(&spin),
     );
-    let Subterm::Rec(Rec { group, .. }) = &*written else {
+    let Subterm::Rec(block) = &*written else {
         unreachable!()
     };
+    let group = block.group();
 
     group.clone()
 }

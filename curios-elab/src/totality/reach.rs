@@ -14,7 +14,7 @@ use {
     crate::ErasedSite,
     curios_core::{
         Bound, Definition, Definitions, Enter, Entrypoint, Func, FuncType, Global, Intrinsic, Item,
-        Let, Match, Rec, Struct, Subterm, Telescope, Term, Variant,
+        Match, Struct, Subterm, Telescope, Term, Variant,
     },
     std::{
         collections::{BTreeSet, HashSet},
@@ -188,14 +188,14 @@ fn annotate_node(term: &Term, site: &Rc<ErasedSite>, positions: &mut Vec<Positio
             push(positions, site, result.body());
         }
 
-        Subterm::Let(Let { bindings, .. }) => {
-            for binding in bindings {
+        Subterm::Let(block) => {
+            for binding in block.bindings() {
                 push(positions, site, binding.type_());
             }
         }
 
-        Subterm::Rec(Rec { group, .. }) => {
-            for member in group.iter() {
+        Subterm::Rec(block) => {
+            for member in block.group().iter() {
                 push(positions, site, member.type_.body());
             }
         }

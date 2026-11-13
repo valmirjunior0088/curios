@@ -157,7 +157,8 @@ impl Eraser<'_> {
                 Ok(result.of(head, &indices))
             }
             // Each binding substituted away, which is the rule reduction uses, so the type names nothing the `let` bound.
-            curios_core::Subterm::Let(curios_core::Let { bindings, tail }) => {
+            curios_core::Subterm::Let(block) => {
+                let (bindings, tail) = (block.bindings(), block.tail());
                 let mut values = Vec::<curios_core::Term>::with_capacity(bindings.len());
                 for binding in bindings {
                     let value = binding.value().release(&values.iter().collect::<Vec<_>>());
@@ -238,7 +239,7 @@ impl Eraser<'_> {
         context: &mut Reader,
         rec: &curios_core::Rec,
     ) -> Result<curios_core::Term, Error> {
-        let curios_core::Rec { group, tail } = rec;
+        let (group, tail) = (rec.group(), rec.tail());
         let names = tail
             .hint_iter()
             .map(|label| context.fresh(label))

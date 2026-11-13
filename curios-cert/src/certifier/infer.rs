@@ -32,9 +32,9 @@ use {
     curios_common::recurse,
     curios_core::{
         Bound, CallMatrix, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType,
-        Intrinsic, Let, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Rec,
-        Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple,
-        TupleType, Variant, foreign_operands, foreign_signature,
+        Intrinsic, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Reducer,
+        Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType,
+        Variant, foreign_operands, foreign_signature,
     },
     curios_num::{Binary, Natural},
     std::convert::Infallible,
@@ -440,7 +440,8 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
         }
 
         // The tail's type may name the binders, which close with the `let`: it is stated by value, while they stand.
-        Subterm::Let(Let { bindings, tail }) => {
+        Subterm::Let(block) => {
+            let (bindings, tail) = (block.bindings(), block.tail());
             under_bindings(certifier, bindings, tail, |certifier, tail| {
                 let inferred = infer(certifier, tail)?;
 
@@ -451,8 +452,9 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
         // A recursive group, checked by the one rule that holds it — asked here rather than restated, so a `rec` in a term and a `rec` at the top level cannot come to disagree about what makes a group legal.
         //
         // **A member is bound in the tail, as a `let` binds.** The group's bodies are checked over members that are locals, which is what keeps a body from re-entering its own check — each unfolding in reduction once its turn has found it known to terminate, and standing for nothing until then (`check_group`); the tail is what the group is in scope of, and there a member is its folded selection, the term a `rec` reduces its tail over ([`unfold_rec`](super::unfold_rec)) and the one a top-level member is defined as. Held opaque there, a member computes nowhere in the function that declares it: `f(4)` is no number, and a term that spells the member by value — the elaborator defines it so, and a solution commits what it reduced — never converts with its name.
-        Subterm::Rec(Rec { group, tail }) => {
-            check_group(certifier, group, Some(tail), |certifier, names| {
+        Subterm::Rec(block) => {
+            let (group, tail) = (block.group(), block.tail());
+            check_group(certifier, group, |certifier, names| {
                 let total = certifier.group_verdict(group) == Some(Totality::Total);
                 for (index, (name, member)) in names.iter().zip(group.members()).enumerate() {
                     let partial = !total || certifier.member_encloses_partial(group, index);
@@ -946,15 +948,6 @@ fn under_bindings<T>(
     tail: &Scope<Many>,
     judge: impl FnOnce(&mut Certifier, &Term) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    // The tail binds one binder per binding, a count that is a fact about a sibling field — the bindings the block holds — which nothing in the representation relates it to and no typing rule reads, as `check_group` reads a group's. This is the boundary that checks it, so a block a caller built otherwise is refused rather than asserted on where the tail is opened below.
-    if tail.arity() != bindings.len() {
-        return Err(Error::Arity {
-            counted: Counted::BlockBinders,
-            expected: bindings.len(),
-            actual: tail.arity(),
-        });
-    }
-
     certifier.naming(|certifier| {
         certifier.scoped(|certifier| {
             let mut binders: Vec<Term> = Vec::with_capacity(bindings.len());
@@ -1005,7 +998,8 @@ fn check_rules(
     assumed: Option<Vec<CallMatrix>>,
 ) -> Result<(), Error> {
     // A `let` carries no type of its own — the tail's type is the whole term's — so the expectation descends through it: the same binding validation as inference, with only the tail's mode changed. Without this, a dependent tuple or lambda under a `let` reaches the checked rules below as an inference and manufactures the non-dependent type they exist to avoid.
-    if let Subterm::Let(Let { bindings, tail }) = &**term {
+    if let Subterm::Let(block) = &**term {
+        let (bindings, tail) = (block.bindings(), block.tail());
         return under_bindings(certifier, bindings, tail, |certifier, tail| {
             check(certifier, tail, expected)
         });

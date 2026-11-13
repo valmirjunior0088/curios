@@ -807,18 +807,56 @@ pub struct RecDefinition {
 }
 
 /// A flat top-level recursive item backed by the same structural fixed-point representation as a local [`super::Rec`]. Keeping the export metadata separate preserves the module's flat architecture without retaining a second, free-name copy of each recursive type and body.
+///
+/// One export per member of the group, held by the doors that build one: [`RecItem::new`] closes the group over the members it exports, [`RecItem::with_group`] asserts the count, and [`RecItem::exports_mut`] hands out the exports as a slice, whose length it cannot change.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub struct RecItem {
-    pub definitions: Vec<RecDefinition>,
-    pub group: RecGroup,
+    definitions: Vec<RecDefinition>,
+    group: RecGroup,
     /// The universe context every definition of this item was declared under, which is the one its group's members' level and quality parameters mean.
     ///
     /// Held by the item and not by the group, because it is the *declaration's*: a group is a term, its members' parameters are positionally the parameters of whatever declaration holds it, and an instance of that declaration substitutes them with every other level it binds. A context on the group would be a second binder over the same indices, which is the reading `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
-    pub universe_context: UniverseContext,
+    universe_context: UniverseContext,
 }
 
 impl RecItem {
+    /// Each member's export, in the group's order.
+    pub fn exports(&self) -> &[RecDefinition] {
+        &self.definitions
+    }
+
+    /// Each member's export, to restate in place.
+    pub fn exports_mut(&mut self) -> &mut [RecDefinition] {
+        &mut self.definitions
+    }
+
+    pub fn group(&self) -> &RecGroup {
+        &self.group
+    }
+
+    pub fn universe_context(&self) -> &UniverseContext {
+        &self.universe_context
+    }
+
+    /// The item's universe context, to restate in place: no count of the item reads it.
+    pub fn universe_context_mut(&mut self) -> &mut UniverseContext {
+        &mut self.universe_context
+    }
+
+    /// This item over `group`, a rewrite of its own that keeps a member for each export.
+    pub fn with_group(&self, group: RecGroup) -> Self {
+        assert_eq!(
+            group.length(),
+            self.definitions.len(),
+            "a group item exports one name per member"
+        );
+        Self {
+            group,
+            ..self.clone()
+        }
+    }
+
     /// This group with universe data projected out of every member, in place.
     ///
     /// The universe context is cleared here as it is on a [`Definition`]: the projection's whole purpose is that no universe data survives into ANF.
@@ -1930,11 +1968,6 @@ pub enum Positional {
     FreeLocal { owner: Option<Global>, index: u64 },
     /// A term metavariable. Zonking is contracted to substitute every solution and to refuse an unsolved hole, so one reaching here is that contract broken rather than a hole still to be solved.
     Metavar { owner: Option<Global> },
-    /// A `rec` group whose member scopes do not bind one binder per member, or whose members and exported definitions disagree in number. `stated` is the number of members the group holds. No constructor can build one, so a unit carrying one was restored from bytes rather than made, and every reader of a member opens a scope over one term per member.
-    MiscountedGroup {
-        owner: Option<Global>,
-        stated: usize,
-    },
     /// A bound variable no scope in the position binds, `reach` binders out. Not an identity a counter assigned but an index with no binder, which [`Mentions`] answers nothing for and the free local above therefore misses: stored, it is read at whatever depth the term it is spliced under gives it, which is a different term with an error nowhere.
     LooseIndex { owner: Option<Global>, reach: usize },
     /// A witness this module declares, scoped to a mount it does not own. Its name holds the module that declares it, so one carrying somebody else's is a name two units can both declare — the aliasing that would silently rebind a coherence-table entry.
@@ -1948,10 +1981,6 @@ impl fmt::Display for Positional {
         let (owner, carried) = match self {
             Positional::FreeLocal { owner, index } => (owner, format!("free local binder {index}")),
             Positional::Metavar { owner } => (owner, "an unsolved metavariable".to_string()),
-            Positional::MiscountedGroup { owner, stated } => (
-                owner,
-                format!("a recursive group of {stated} whose scopes bind another number"),
-            ),
             Positional::LooseIndex { owner, reach } => (
                 owner,
                 format!("a bound variable no scope binds, reaching {reach} binders out"),
@@ -1994,19 +2023,6 @@ pub fn validate_stored_identities(
     definitions: &Definitions,
     mounts: &[Mount],
 ) -> Result<(), Positional> {
-    // First, because the position walk below cannot run over a group whose counts disagree: it reads an item through `RecItem::definitions`, whose `opened` opens every member scope over one term per definition, so such a group aborts the walk that would have reported it. Every constructor makes the counts agree and a restored archive's fields do not, which is why the one door that can carry one reads it, as `check_group` reads it where a walk meets one.
-    if let Some((owner, stated)) = definitions.items.iter().find_map(|item| match item {
-        Item::Rec(rec) if !rec.group.counted() || rec.definitions.len() != rec.group.length() => {
-            Some((
-                rec.definitions.first().map(|definition| definition.name),
-                rec.group.length(),
-            ))
-        }
-        _ => None,
-    }) {
-        return Err(Positional::MiscountedGroup { owner, stated });
-    }
-
     let mut found: Option<Positional> = None;
 
     made_positions(definitions, |owner, carried| {

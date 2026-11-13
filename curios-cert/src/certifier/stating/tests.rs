@@ -57,14 +57,12 @@ fn saying(function: Term, proofs: &[bool]) -> Term {
 
 /// `term`, a `let` block, saying of its binders what `proofs` says.
 fn let_saying(term: Term, proofs: &[bool]) -> Term {
-    let Subterm::Let(Let { bindings, tail }) = Term::unwrap_or_clone(term) else {
+    let Subterm::Let(block) = Term::unwrap_or_clone(term) else {
         panic!("a `let`");
     };
+    let (bindings, tail) = block.into_parts();
 
-    Term::from(Subterm::Let(Let {
-        bindings,
-        tail: tail.with_proofs(proofs),
-    }))
+    Term::from(Subterm::Let(Let::new(bindings, tail.with_proofs(proofs))))
 }
 
 /// A function literal's binders state what the certifier reads of their types, each under the binders before it: `P` at a sort binds no proof, `h` at `P` and `lemma` at a function into `P` bind one, `n` at `Nat` and `F` at a function into a sort none — each the opposite of what the module says.
@@ -135,9 +133,10 @@ fn a_lets_binders_state_what_the_certifier_reads_of_their_types() {
     let Subterm::Func(Func { telescope }) = &**body(&stated) else {
         panic!("a function literal");
     };
-    let Subterm::Let(Let { tail, .. }) = &**telescope.terminal() else {
+    let Subterm::Let(let_) = &**telescope.terminal() else {
         panic!("a `let`");
     };
+    let tail = let_.tail();
     assert_eq!([tail.binds_proof(0), tail.binds_proof(1)], [true, false]);
 }
 

@@ -447,15 +447,15 @@ fn state(entry: &mut curios_core::Entrypoint, tail: &EntryTail, syntax: &SyntaxR
 /// The call binds nothing, so no scope is opened: each body is rewritten where it lies.
 fn executed(term: &Term, syntax: &SyntaxRegistry) -> Term {
     let rebuilt = recurse(|| match &**term {
-        Subterm::Let(block) => Term::from(Subterm::Let(Let {
-            bindings: block.bindings.clone(),
-            tail: block.tail.map_body(|tail| executed(tail, syntax)),
-        })),
+        Subterm::Let(block) => Term::from(Subterm::Let(Let::new(
+            block.bindings().to_vec(),
+            block.tail().map_body(|tail| executed(tail, syntax)),
+        ))),
         // A block whose tail selects a member is that member's occurrence: one term, and so a tail.
-        Subterm::Rec(block) if block.as_proj().is_none() => Term::from(Subterm::Rec(Rec {
-            group: block.group.clone(),
-            tail: block.tail.map_body(|tail| executed(tail, syntax)),
-        })),
+        Subterm::Rec(block) if block.as_proj().is_none() => Term::from(Subterm::Rec(Rec::new(
+            block.group().clone(),
+            block.tail().map_body(|tail| executed(tail, syntax)),
+        ))),
         Subterm::Transient(Transient::Bang(bang)) => {
             Term::bang(bang.action.clone(), closing(&bang.continuation, syntax))
         }

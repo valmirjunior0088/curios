@@ -122,14 +122,14 @@ pub fn state_proof_binders(context: &mut Context, published: &mut Published) -> 
         }
         Item::Rec(rec) => {
             let members = rec
-                .definitions
+                .exports()
                 .iter()
                 .map(|definition| {
-                    Term::instance(definition.name, rec.universe_context.identity_instance())
+                    Term::instance(definition.name, rec.universe_context().identity_instance())
                 })
                 .collect::<Vec<_>>();
             let mut refusal = None;
-            let group = rec.group.map_members(|body| {
+            let group = rec.group().map_members(|body| {
                 stated(context, body, &members).unwrap_or_else(|error| {
                     refusal.get_or_insert(error);
                     body.clone()
@@ -138,11 +138,16 @@ pub fn state_proof_binders(context: &mut Context, published: &mut Published) -> 
             if let Some(error) = refusal {
                 return Err(error);
             }
-            rec.group = group;
+            *rec = rec.with_group(group);
 
             let names = members.iter().collect::<Vec<_>>();
-            for (definition, member) in rec.definitions.iter_mut().zip(rec.group.iter()) {
-                definition.proof = proves(context, &definition.kind, &member.type_.open(&names))?;
+            let types = rec
+                .group()
+                .iter()
+                .map(|member| member.type_.open(&names))
+                .collect::<Vec<_>>();
+            for (definition, type_) in rec.exports_mut().iter_mut().zip(&types) {
+                definition.proof = proves(context, &definition.kind, type_)?;
             }
         }
     }

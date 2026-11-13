@@ -35,9 +35,9 @@
 use {
     super::{
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
-        Func, Global, Intrinsic, Layer, Let, LetBinding, Many, Match, MatchResult, Mention, Nat,
-        Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term,
-        Universes, eta_head, instantiate_universes, project_literal, reduce_intrinsic,
+        Func, Global, Intrinsic, Layer, LetBinding, Many, Match, MatchResult, Mention, Nat, Proj,
+        Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term, Universes,
+        eta_head, instantiate_universes, project_literal, reduce_intrinsic,
     },
     crate::Foreign,
     curios_common::Plicity,
@@ -611,10 +611,8 @@ impl Machine {
                 None => Ok(Step::Value(Term::from(Subterm::Proj(Proj { head, field })))),
             },
 
-            // A block whose tail binds other than one binder per binding opens over nothing: it is its own value, and nothing is charged, since nothing was built.
-            Subterm::Let(let_) if !let_.opens() => Ok(Step::Value(Term::from(Subterm::Let(let_)))),
-
-            Subterm::Let(Let { bindings, tail }) => {
+            Subterm::Let(let_) => {
+                let (bindings, tail) = let_.into_parts();
                 // The certifier's zeta charge: one values vector, a ref vector per binding (triangular), and one substitution pass per binding.
                 let count = bindings.len() as u64;
                 host.spend(
@@ -636,9 +634,8 @@ impl Machine {
             }
 
             Subterm::Rec(rec) => match demand {
-                // A `rec` block is weak-head normal; only a demand for its value opens the tail, and a tail that binds other than one binder per member opens over nothing, so the block is its own value at either demand.
+                // A `rec` block is weak-head normal; only a demand for its value opens the tail.
                 Demand::Whnf => Ok(Step::Value(Term::from(Subterm::Rec(rec)))),
-                Demand::Forced if !rec.opens() => Ok(Step::Value(Term::from(Subterm::Rec(rec)))),
                 Demand::Forced => Ok(Step::Eval(unfold_rec(rec), Demand::Forced)),
             },
 
@@ -782,8 +779,8 @@ impl Machine {
                 }
 
                 match Term::unwrap_or_clone(value) {
-                    // `expose_rec_tail`: a `rec` block at an application head strips to its tail even under plain reduction. One whose tail binds other than one binder per member strips to nothing and falls to the stuck application below, as an unsaturated function does.
-                    Subterm::Rec(rec) if rec.opens() => {
+                    // `expose_rec_tail`: a `rec` block at an application head strips to its tail even under plain reduction.
+                    Subterm::Rec(rec) => {
                         // The memo frame is already on the stack from this frame's entry, so the re-pushed head carries no key of its own — one record per application, whatever chain of heads it strips through.
                         self.push(
                             host,
@@ -1226,13 +1223,11 @@ impl Machine {
 }
 
 /// Open a `rec` group's tail over its members — a pure binder operation, shared verbatim with both hosts' spelling of the same step.
-///
-/// For a block whose tail binds one binder per member ([`Rec::opens`]), which every caller here asks before it opens one: the opening is `Scope::open`, whose assert is the only reader of that count. It says nothing of a member scope's own count, which a projection's reduct opens through `RecGroup::member_body` without passing here at all.
 fn unfold_rec(rec: Rec) -> Term {
-    let members = rec.group.members();
+    let members = rec.group().members();
     let refs = members.iter().collect::<Vec<_>>();
 
-    rec.tail.open(&refs)
+    rec.tail().open(&refs)
 }
 
 #[cfg(test)]

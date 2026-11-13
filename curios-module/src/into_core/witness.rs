@@ -31,7 +31,7 @@ pub fn keyed_of(item: &FlatItem) -> Vec<(curios_core::Global, Keyed<'_>)> {
             .map(|let_| (let_.name, (let_.kind.declared(), None)))
             .collect(),
         FlatItem::Kept(rec) => rec
-            .definitions
+            .exports()
             .iter()
             .map(|definition| (definition.name, (definition.kind.declared(), None)))
             .collect(),

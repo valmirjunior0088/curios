@@ -23,7 +23,7 @@ impl Eraser<'_> {
         expected: &curios_core::Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let curios_core::Rec { group, tail } = rec;
+        let (group, tail) = (rec.group(), rec.tail());
 
         let hints = tail
             .hint_iter()
@@ -70,29 +70,29 @@ impl Eraser<'_> {
         rec: &curios_core::RecItem,
     ) -> Result<(), Error> {
         let universes = curios_core::Universes {
-            levels: (0..rec.universe_context.parameter_count)
+            levels: (0..rec.universe_context().parameter_count)
                 .map(|param| curios_core::Level::param(curios_core::UniverseParam(param)))
                 .collect(),
             qualities: self.own.1.qualities(),
         };
         let names = rec
-            .definitions
+            .exports()
             .iter()
             .map(|definition| curios_core::Mention::Declaration(definition.name))
             .collect::<Vec<_>>();
         let occurrences = rec
-            .definitions
+            .exports()
             .iter()
             .map(|definition| curios_core::Term::instance(definition.name, universes.clone()))
             .collect::<Vec<_>>();
         let occurrences = occurrences.iter().collect::<Vec<_>>();
         let hints = rec
-            .definitions
+            .exports()
             .iter()
             .map(|definition| Some(definition.name.faithful().to_string()))
             .collect::<Vec<_>>();
         let members = rec
-            .group
+            .group()
             .iter()
             .map(|member| {
                 (

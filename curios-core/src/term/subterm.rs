@@ -51,7 +51,7 @@ impl Subterm {
             return None;
         };
 
-        rec.as_proj().map(|index| (&rec.group, index))
+        rec.as_proj().map(|index| (rec.group(), index))
     }
 
     /// The group and index at the head of this application spine: [`as_rec_proj`](Self::as_rec_proj) read through every enclosing application, or of the term itself when it is none.
@@ -299,14 +299,16 @@ impl Subterm {
                     },
                 }
             }
-            Subterm::Let(Let { bindings, tail, .. }) => {
+            Subterm::Let(block) => {
+                let (bindings, tail) = (block.bindings(), block.tail());
                 for binding in bindings {
                     binding.type_().collect_construction_names(names);
                     binding.value().collect_construction_names(names);
                 }
                 tail.body().collect_construction_names(names);
             }
-            Subterm::Rec(Rec { group, tail }) => {
+            Subterm::Rec(block) => {
+                let (group, tail) = (block.group(), block.tail());
                 for member in group.iter() {
                     member.type_.body().collect_construction_names(names);
                     member.body.body().collect_construction_names(names);
@@ -391,13 +393,15 @@ impl Subterm {
                         },
                     }
             }
-            Subterm::Let(Let { bindings, tail, .. }) => {
+            Subterm::Let(block) => {
+                let (bindings, tail) = (block.bindings(), block.tail());
                 bindings
                     .iter()
                     .any(|binding| pred(binding.type_()) || pred(binding.value()))
                     || pred(tail.body())
             }
-            Subterm::Rec(Rec { group, tail }) => {
+            Subterm::Rec(block) => {
+                let (group, tail) = (block.group(), block.tail());
                 group
                     .iter()
                     .any(|member| pred(member.type_.body()) || pred(member.body.body()))
@@ -738,7 +742,8 @@ impl Bound for Subterm {
                     },
                 },
             }),
-            Subterm::Let(Let { bindings, tail }) => {
+            Subterm::Let(block) => {
+                let (bindings, tail) = (block.bindings(), block.tail());
                 // Binding `i` sits under the `i` binders written before it, so bracket the visit at that depth; the enter/leave don't stack with `visit_scope(tail)`, which owns all the binders on its own. A forward loop over `bindings` is what a flat block buys over a nested chain — no native frame per binding.
                 let bindings = bindings
                     .iter()
@@ -754,15 +759,12 @@ impl Bound for Subterm {
                     })
                     .collect();
 
-                Subterm::Let(Let {
-                    bindings,
-                    tail: visit.visit_scope(tail),
-                })
+                Subterm::Let(Let::new(bindings, visit.visit_scope(tail)))
             }
-            Subterm::Rec(Rec { group, tail }) => Subterm::Rec(Rec {
-                group: group.traverse(visit),
-                tail: visit.visit_scope(tail),
-            }),
+            Subterm::Rec(block) => Subterm::Rec(Rec::new(
+                block.group().traverse(visit),
+                visit.visit_scope(block.tail()),
+            )),
             // A reference holds no variable for the hook: only its levels are visited.
             Subterm::Instance(Instance { name, universes }) => Subterm::Instance(Instance {
                 name: *name,
@@ -875,7 +877,8 @@ impl Bound for Subterm {
                 },
             }),
             // Binding `i` sits under `i` binders, so its reach past the block boundary is `reach - i`; `Scope::reach` handles the tail's own arity. A flat forward max — no inner-to-outer unwind — because the block is flat, not a nest of arity-subtracting scopes.
-            Subterm::Let(Let { bindings, tail, .. }) => {
+            Subterm::Let(block) => {
+                let (bindings, tail) = (block.bindings(), block.tail());
                 let mut reach = tail.reach();
 
                 for (i, binding) in bindings.iter().enumerate() {
@@ -886,7 +889,7 @@ impl Bound for Subterm {
 
                 reach
             }
-            Subterm::Rec(Rec { group, tail }) => group.reach().max(tail.reach()),
+            Subterm::Rec(block) => block.group().reach().max(block.tail().reach()),
         }
     }
 

@@ -40,9 +40,9 @@ use {
     curios_common::recurse,
     curios_core::{
         Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, Foreign, Free, Func,
-        FuncType, InductType, Intrinsic, Let, Many, Match, MatchResult, Nat, Probe, Proj, Rec,
-        RecGroup, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Totality, Tuple,
-        TupleType, Two, Variant,
+        FuncType, InductType, Intrinsic, Many, Match, MatchResult, Nat, Probe, Proj, RecGroup,
+        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType,
+        Two, Variant,
     },
     curios_num::Natural,
     std::collections::{BTreeSet, HashMap, hash_map::Entry},
@@ -726,7 +726,8 @@ impl<E: Env> Walk<'_, E> {
             }) => self.walks(args),
 
             // A binding's type and value, and then the tail, are each walked with every binder before them standing for its value, for the reason an applied lambda is: a `let` is a redex, and a binder aliasing an arm's payload is below the scrutinee exactly as the payload is. Binding `i` is stored under the `i` binders before it, so it is released against the values already in hand before it is walked, as the certifier checks it against the binders before it: a call in a binding's value reads what an earlier binding stands for as a call in the tail does.
-            Subterm::Let(Let { bindings, tail }) => {
+            Subterm::Let(block) => {
+                let (bindings, tail) = (block.bindings(), block.tail());
                 let mut values: Vec<Term> = Vec::with_capacity(bindings.len());
                 // Only a value that holds a group, or names a parameter a summarizing walk keeps a record of, is worth remembering: the rest are passed over as they stand. A copy of one names the parameter again with the same arguments, applied or used otherwise where the `let` binds it. Counted, since two `let`s may bind one term and the inner one leaves first.
                 let mut remembered: Vec<Term> = Vec::new();
@@ -764,7 +765,8 @@ impl<E: Env> Walk<'_, E> {
             // An inner group is classified on its own, but its bodies may still call *this* group, and such a call is a real edge of this group's call graph.
             //
             // `entered` is what keeps the descent finite. `RecGroup::member_body` materializes every member reference as a projection carrying the whole group, so a group reached from inside its own bodies would regenerate them without end — which is why a projection of *this* group is answered above rather than descended into, and why any other group is walked at most once per path. It is entered and left around the bodies, so a group met twice in sibling positions is still walked under each one's refinements.
-            Subterm::Rec(Rec { group, tail }) => {
+            Subterm::Rec(block) => {
+                let (group, tail) = (block.group(), block.tail());
                 if !self.entered.contains(group) {
                     self.entered.push(group.clone());
                     // One body at a time: each materializes a projection carrying the whole group, so holding them together would hold every member at once.

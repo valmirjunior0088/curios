@@ -237,9 +237,9 @@ fn a_remembered_type_does_not_outlive_what_an_arm_established() {
     let mut certifier = certifier();
     let assumed = binder(5, "rec");
     let k = binder(6, "k");
-    certifier.assume(&assumed, &rec.group.member_type(0));
+    certifier.assume(&assumed, &rec.group().member_type(0));
     certifier.assume(&k, &nat_type());
-    certifier.open_group(&rec.group, &[assumed]);
+    certifier.open_group(rec.group(), &[assumed]);
     certifier.begin_member(0);
 
     let term = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&k), nat(1)));
@@ -273,7 +273,7 @@ fn a_refused_walk_takes_back_the_calls_it_recorded() {
 
         certifier.assume(&f, &signature);
         certifier.assume(&n, &nat_type());
-        certifier.open_group(&rec.group, &[f]);
+        certifier.open_group(rec.group(), &[f]);
         certifier.begin_member(0);
         certifier.bind_parameter(&n);
         let refused = |certifier: &mut Certifier| {
@@ -286,7 +286,7 @@ fn a_refused_walk_takes_back_the_calls_it_recorded() {
         };
         assert!(outcome.is_err());
 
-        certifier.close_group(&rec.group, vec![false])
+        certifier.close_group(rec.group(), vec![false])
     };
 
     assert_eq!(closes(true), Totality::Total);
@@ -348,12 +348,12 @@ fn a_group_this_walk_never_typed_reads_as_one_that_does_not_descend() {
     };
     let mut certifier = certifier();
 
-    assert_eq!(certifier.group_verdict(&rec.group), None);
-    assert!(certifier.member_encloses_partial(&rec.group, 0));
+    assert_eq!(certifier.group_verdict(rec.group()), None);
+    assert!(certifier.member_encloses_partial(rec.group(), 0));
 
     assert!(infer(&mut certifier, &term).is_ok());
-    assert_eq!(certifier.group_verdict(&rec.group), Some(Totality::Total));
-    assert!(!certifier.member_encloses_partial(&rec.group, 0));
+    assert_eq!(certifier.group_verdict(rec.group()), Some(Totality::Total));
+    assert!(!certifier.member_encloses_partial(rec.group(), 0));
 }
 
 /// An arm that splits a lambda's binder splits what the binder stands for: in `((x) => match x | 0 => … | k + 1 => f(k) end)(n)` the lambda's body runs with `x` being `n`, so the arm's `k + 1` is `n`'s case too and `k` is below `n`. Mutation-checked: with the arm refining `x` alone, `k` is below nothing the caller's parameter reads, and this is refused.

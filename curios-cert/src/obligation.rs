@@ -110,13 +110,13 @@ impl<'g> Totals<'g> {
     ) {
         // A group that does not descend makes every member partial, whatever each body looks like on its own.
         let rejected = match item {
-            Item::Rec(rec) => !descends(certifier, &rec.group),
+            Item::Rec(rec) => !descends(certifier, rec.group()),
             Item::Let(_) => false,
         };
 
         for (index, definition) in item.definitions().into_iter().enumerate() {
             let encloses = match (typed, item) {
-                (true, Item::Rec(rec)) => certifier.member_encloses_partial(&rec.group, index),
+                (true, Item::Rec(rec)) => certifier.member_encloses_partial(rec.group(), index),
                 (true, Item::Let(_)) => certifier.definition_encloses_partial(&definition.name),
                 // A group stands in a term as a `Rec` node, and `Term::has_group` is where that relation is stated: it is a group with no verdict here, and so one that does not descend.
                 (false, _) => definition.body.has_group() || definition.type_.has_group(),

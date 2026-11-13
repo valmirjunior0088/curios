@@ -153,8 +153,8 @@ impl Places {
             let index = member as usize;
 
             (
-                rec.group.member_type(index),
-                Term::rec_proj(rec.group.clone(), index),
+                rec.group().member_type(index),
+                Term::rec_proj(rec.group().clone(), index),
             )
         })
     }
@@ -167,7 +167,7 @@ impl Places {
                 .places()
                 .filter(|place| definitions.items.is_group(*place))
                 .filter_map(|place| match &definitions.items[place] {
-                    Item::Rec(rec) => Some((Keyed::new(rec.group.clone()), place)),
+                    Item::Rec(rec) => Some((Keyed::new(rec.group().clone()), place)),
                     Item::Let(_) => None,
                 })
                 .collect()

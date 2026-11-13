@@ -208,7 +208,8 @@ impl<E: ProofBinders> Marking<'_, E> {
     }
 
     /// A `let`: each binding walked under the bindings before it, its binder asked at its type and entered, and the tail walked under all of them.
-    fn let_(&mut self, term: &Term, Let { bindings, tail }: &Let) -> Result<Term, E::Refusal> {
+    fn let_(&mut self, term: &Term, block: &Let) -> Result<Term, E::Refusal> {
+        let (bindings, tail) = (block.bindings(), block.tail());
         let before = self.entered.len();
         self.blocks.push(before..before);
         let mut walked = Vec::with_capacity(bindings.len());
@@ -259,10 +260,7 @@ impl<E: ProofBinders> Marking<'_, E> {
         }
         .with_proofs(&proofs);
 
-        Ok(term.respelled(Subterm::Let(Let {
-            bindings: walked,
-            tail,
-        })))
+        Ok(term.respelled(Subterm::Let(Let::new(walked, tail))))
     }
 
     /// Any other node: each child term walked where it stands, under a variable of no type for every binder between the node and it, and the node rebuilt over what came back where a child changed.
@@ -475,19 +473,20 @@ impl Carrying {
     }
 
     /// A `let` paired with `stated`'s: each binding carried, each binder stating what `stated`'s does, and the tail carried.
-    fn let_(&mut self, term: &Term, Let { bindings, tail }: &Let, stated: &Let) -> Term {
+    fn let_(&mut self, term: &Term, let_: &Let, stated: &Let) -> Term {
+        let (bindings, tail) = (let_.bindings(), let_.tail());
         assert_eq!(
             bindings.len(),
-            stated.bindings.len(),
+            stated.bindings().len(),
             "a `let` and the one it is equal to hold as many bindings"
         );
         let mut carried = Vec::with_capacity(bindings.len());
         let mut proofs = Vec::with_capacity(bindings.len());
         let mut changed = false;
-        for (index, (binding, from)) in bindings.iter().zip(&stated.bindings).enumerate() {
+        for (index, (binding, from)) in bindings.iter().zip(stated.bindings()).enumerate() {
             let type_ = self.term(binding.type_(), from.type_());
             let value = self.term(binding.value(), from.value());
-            let proof = stated.tail.binds_proof(index);
+            let proof = stated.tail().binds_proof(index);
             changed |= type_.identity() != binding.type_().identity()
                 || value.identity() != binding.value().identity()
                 || proof != tail.binds_proof(index);
@@ -495,7 +494,7 @@ impl Carrying {
             carried.push(LetBinding::new(type_, value));
             proofs.push(proof);
         }
-        let body = self.term(tail.body(), stated.tail.body());
+        let body = self.term(tail.body(), stated.tail().body());
         if !changed && body.identity() == tail.body().identity() {
             return term.clone();
         }
@@ -507,10 +506,7 @@ impl Carrying {
         }
         .with_proofs(&proofs);
 
-        term.respelled(Subterm::Let(Let {
-            bindings: carried,
-            tail,
-        }))
+        term.respelled(Subterm::Let(Let::new(carried, tail)))
     }
 
     /// Any other node: each child term paired with `stated`'s in traversal order and carried, and the node rebuilt over what came back where a child changed.
