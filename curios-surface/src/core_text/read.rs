@@ -8,10 +8,10 @@
 
 use {
     super::{
-        bound_read, family_read, foreign_read, function_read, function_type_read, infix_read,
-        instance_read, intrinsic_read, let_read, literal_read, match_read, metavar_read,
-        node_transient_read, packed_read, projection_read, rec_read, record_read, sort_read,
-        tuple_read, tuple_type_read, variant_read,
+        bound_read, family_read, foreign_read, free_read, function_read, function_type_read,
+        infix_read, instance_read, intrinsic_read, let_read, literal_read, match_read,
+        metavar_read, node_transient_read, packed_read, projection_read, rec_read, record_read,
+        sort_read, tuple_read, tuple_type_read, variant_read,
     },
     crate::{
         Apply, CoreForm, CoreText, CoreValue, Decorated, DecoratorField, FormScope, Literal,
@@ -107,6 +107,9 @@ impl ReadError {
     }
 }
 
+/// The first identity a reader mints a local at, above every one a text states (`#{binding = Free(k)}`), so a binder it opens is never a local the text names.
+pub const READ_MINTED: u64 = 1 << 62;
+
 /// What a read threads: the binders in scope by their words, innermost last, the free locals the text names, and what a form that implies a definition is made against.
 pub struct Reader<'s> {
     scope: Option<&'s FormScope>,
@@ -127,7 +130,7 @@ impl<'s> Reader<'s> {
             rows: scope.map(|scope| scope.rows.clone()).unwrap_or_default(),
             bound: Vec::new(),
             free: HashMap::new(),
-            minted: 0,
+            minted: READ_MINTED,
             shared: HashMap::new(),
         }
     }
@@ -500,9 +503,10 @@ fn form_read(
         Subterm::Name(name) if name.is_abs() => {
             instance_read(Global::Authored(*name.qualifier()), fields)
         }
-        Subterm::Name(name) if name.is_single() => {
-            Ok(curios_core::Term::free_var(&reader.word(name.head())))
-        }
+        Subterm::Name(name) if name.is_single() => match fields.take("binding") {
+            Some(binding) => free_read(binding, name.head()),
+            None => Ok(curios_core::Term::free_var(&reader.word(name.head()))),
+        },
         Subterm::Name(name) => Err(ReadError::at(
             Refusal::RelativeName(name.qualifier().join()),
             span,

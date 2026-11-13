@@ -875,6 +875,11 @@ impl Minting {
         }
     }
 
+    /// Whether `local` is a binder a render opened, rather than a local of the term it writes: a render labels each binder it opens past every identity a compilation mints.
+    pub fn opened(local: &Free) -> bool {
+        local.index() >= PRINTED
+    }
+
     /// The next binder's identity, rendering as `hint`.
     fn local(&self, hint: Option<Symbol>) -> Free {
         let position = self.next.get();

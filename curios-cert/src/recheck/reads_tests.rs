@@ -1,55 +1,29 @@
 //! What each judged definition's record says it read of other items.
 
-use {
-    super::test_support::*,
-    crate::*,
-    curios_analysis::test_support::*,
-    curios_core::{Definitions, Free, Intrinsic, Nat, Reads, Term, Universes},
-    std::collections::BTreeSet,
-};
+use {super::test_support::*, curios_core::Reads, std::collections::BTreeSet};
 
 /// `alias : Type = Nat`, `three : alias = 3`, `identity : (Nat) -> Nat = (x) => x`, `five : Nat = identity(5)`, and `four : Nat = 4`.
-fn reading_definitions() -> Definitions {
-    let nat = || Term::intrinsic(Intrinsic::NatType);
-    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
-    let x = Free::local(10, Some("x"));
+const READING: &str = r#"
+let /alias: Type =
+    #NatType;
 
-    Definitions {
-        items: vec![
-            authored(&global("alias"), Term::type_ground(), nat()),
-            authored(
-                &global("three"),
-                Term::instance(global("alias"), Universes::default()),
-                literal(3),
-            ),
-            authored(
-                &global("identity"),
-                Term::func_type([(x, nat())], nat()),
-                Term::func([(x, nat())], Term::free_var(&x)),
-            ),
-            authored(
-                &global("five"),
-                nat(),
-                Term::apply(
-                    Term::instance(global("identity"), Universes::default()),
-                    [literal(5)],
-                ),
-            ),
-            authored(&global("four"), nat(), literal(4)),
-        ]
-        .into(),
-    }
-}
+let /three: /alias =
+    3;
+
+let /identity: (x: #NatType) -> #NatType =
+    (x: #NatType) => x;
+
+let /five: #NatType =
+    /identity(5);
+
+let /four: #NatType =
+    4;
+"#;
 
 /// A definition's record holds what judging it read, of the kind it read, and nothing another judgment did. `five` applies `identity`, which types the head — its signature — and unfolds nothing. `three`'s declared type is `alias`, which is typed as written, so `alias`'s signature is read, and checking `3` against it unfolds it, so its body is read too. `four` names nothing, and `alias` reads nothing of its own.
 #[test]
 fn a_definition_reads_the_signature_it_types_and_the_body_it_unfolds() {
-    let rechecked = fixture_certified(
-        &reading_definitions(),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let rechecked = text_certified(READING);
     assert_eq!(rechecked.verdicts, Vec::new());
     let reads = |symbol: &str| {
         rechecked

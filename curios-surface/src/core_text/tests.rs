@@ -537,6 +537,25 @@ fn every_module_written_reads_back_as_itself() {
     }
 }
 
+/// A local no binder in the text binds is written whole by its identity and read back as that local, which a reader's own binders are minted apart from; a report names it by its word alone.
+#[test]
+fn a_local_no_binder_binds_reads_back_as_itself() {
+    let stray = Free::local(0, Some("stray"));
+    let term = Term::func(
+        [(Free::local(1, Some("x")), nat_type())],
+        Term::free_var(&stray),
+    );
+    let whole = Rc::new(Spelling::core_text().written_whole());
+    let text = term.spelled(&whole).to_string();
+    let parsed = parse_whole_term::<CoreText>(&Source::inline(&text))
+        .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
+
+    assert_eq!(text, "(x: #NatType) => #{binding = Free(0)} stray");
+    let read = term_to_core(&parsed).unwrap_or_else(|error| panic!("{text}\n{error}"));
+    assert_eq!(read, term, "{text}");
+    assert_eq!(written(&term), "(x: #NatType) => stray");
+}
+
 /// A node met again is written once under sharing and read back as that one node: a tower of sixty pairs, each over one pair below twice, is a graph of sixty-one nodes whose tree has 2⁶⁰ leaves, and it is written and read in its graph's size. A term with no node met twice is written as a whole write without sharing writes it.
 #[test]
 fn a_node_met_again_is_written_once_and_read_back_as_that_node() {

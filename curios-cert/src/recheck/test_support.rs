@@ -6,15 +6,15 @@
 
 use {
     crate::{test_support::*, *},
-    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
+    curios_abi::{ForeignFunction, WireReturn, WireSignature, WireType},
     curios_analysis::test_support::SYNTAX,
     curios_common::{Candidates, Plicity, Qualifier, SyntaxRegistry},
     curios_core::{
         Atom, Certification, Certified, Definition, DefinitionKind, Definitions, Entrypoint, Free,
-        Func, FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Level, Many, Nat,
-        Nominal, Places, Polarity, Program, Reads, RecGroup, RecItem, Scope, StructDecl,
-        StructType, Subterm, Telescope, Term, UniverseConstraint, UniverseContext, UniverseParam,
-        Universes, Variance, test_support::*,
+        Global, InductDecl, InductParam, Intrinsic, Item, Level, Many, Nat, Nominal, Places,
+        Polarity, Program, Reads, RecGroup, RecItem, Scope, StructDecl, StructType, Subterm,
+        Telescope, Term, UniverseConstraint, UniverseContext, UniverseParam, Universes, Variance,
+        test_support::*,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -1054,46 +1054,6 @@ pub fn scheme_instance_at(instance: u32, expected: u32) -> Definitions {
     }
 }
 
-/// A row no store issued, returning one `Nat`.
-pub fn forged_row() -> ForeignFunction {
-    ForeignFunction {
-        name: "/forged".to_string(),
-        signature: WireSignature {
-            params: Vec::new(),
-            returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
-        },
-    }
-}
-
-/// `let held : claimed = <a call to row with no operands>`, with `False` declared alongside.
-pub fn foreign_held_at(row: ForeignFunction, claimed: &Term, false_name: &Global) -> Definitions {
-    let row = Arc::new(row);
-
-    let definition = Definition {
-        name: Global::Authored(Qualifier::from(["held"])),
-        kind: DefinitionKind::Authored,
-        universe_context: UniverseContext::empty(),
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_: claimed.clone(),
-        body: Term::foreign(
-            row,
-            Global::Authored(Qualifier::from(["forged"])),
-            Vec::new(),
-        ),
-    };
-
-    declaring(
-        Definitions {
-            items: vec![Item::Let(Box::new(definition))].into(),
-        },
-        BTreeMap::from([(*false_name, proposition(Vec::new()))]),
-        [],
-        [],
-    )
-}
-
 /// `Foo`'s registry entry and its type-former definition, declaring `registry` and `definition` universe parameters respectively.
 pub fn disagreeing_schemes(registry: usize, definition: usize) -> Definitions {
     let family = Global::Authored(Qualifier::from(["Foo"]));
@@ -1310,465 +1270,6 @@ pub fn fold_motive(motive: FoldMotive) -> Definitions {
         [],
         [],
     )
-}
-
-/// The three ways an occurrence of a one-parameter, one-index family can disagree with it.
-pub fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
-    let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
-    vec![
-        ("no parameters", Vec::new(), vec![zero.clone()]),
-        (
-            "no indices",
-            vec![Term::intrinsic(Intrinsic::NatType)],
-            Vec::new(),
-        ),
-        (
-            "two indices",
-            vec![Term::intrinsic(Intrinsic::NatType)],
-            vec![zero.clone(), zero],
-        ),
-    ]
-}
-
-/// `let held : Type = F(params)(indices)`, where `F(A : Type) : (i : Nat) -> Type` declares one of each.
-pub fn occurrence_definitions(params: Vec<Term>, indices: Vec<Term>) -> Definitions {
-    let family = Global::Authored(Qualifier::from(["F"]));
-    let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
-
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::build(
-            [(Free::local(950, Some("A")), Term::type_ground())],
-            Telescope::build(
-                [(
-                    Free::local(951, Some("i")),
-                    Term::intrinsic(Intrinsic::NatType),
-                )],
-                (),
-            ),
-        ),
-        constructors: vec![(
-            Atom::from("mk"),
-            InductParam::new(
-                Telescope::build(
-                    [(Free::local(952, Some("A")), Term::type_ground())],
-                    vec![zero],
-                ),
-                vec![Plicity::Implicit],
-            ),
-        )]
-        .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    let held = authored(
-        &Global::Authored(Qualifier::from(["held"])),
-        Term::type_ground(),
-        Term::induct_type(family, params, indices),
-    );
-
-    declaring(
-        Definitions {
-            items: vec![held].into(),
-        },
-        BTreeMap::from([(family, declaration)]),
-        [],
-        [],
-    )
-}
-
-/// The four ways a one-parameter nominal value can disagree with its declaration.
-pub fn nominal_value_cases() -> Vec<(&'static str, Definitions)> {
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    vec![
-        (
-            "struct at no parameters",
-            struct_value_definitions(Vec::new()),
-        ),
-        (
-            "struct at two parameters",
-            struct_value_definitions(vec![nat.clone(), nat.clone()]),
-        ),
-        (
-            "variant at no parameters",
-            variant_value_definitions(Vec::new()),
-        ),
-        (
-            "variant at two parameters",
-            variant_value_definitions(vec![nat.clone(), nat]),
-        ),
-    ]
-}
-
-/// `struct S(A : Type) : Type { f : A }`, with a literal at `params`.
-pub fn struct_value_definitions(params: Vec<Term>) -> Definitions {
-    let name = Global::Authored(Qualifier::from(["S"]));
-    let a = Free::local(980, Some("A"));
-    let declaration = StructDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::build(
-            [(a, Term::type_ground())],
-            Telescope::build([(Free::local(981, Some("f")), Term::free_var(&a))], ()),
-        ),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    let declared: Term = Subterm::StructType(StructType {
-        name,
-        universes: Universes::default(),
-        params: vec![Term::intrinsic(Intrinsic::NatType)],
-    })
-    .into();
-
-    let held = authored(
-        &Global::Authored(Qualifier::from(["held"])),
-        declared,
-        Term::struct_(
-            name,
-            params,
-            [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
-        ),
-    );
-
-    declaring(
-        Definitions {
-            items: vec![held].into(),
-        },
-        [],
-        BTreeMap::from([(name, declaration)]),
-        [],
-    )
-}
-
-/// `induct F(A : Type) : Type | mk(x : A) end`, with a constructor application at `params`.
-pub fn variant_value_definitions(params: Vec<Term>) -> Definitions {
-    let family = Global::Authored(Qualifier::from(["F"]));
-    let a = Free::local(970, Some("A"));
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::build([(a, Term::type_ground())], Telescope::done(())),
-        constructors: vec![(
-            Atom::from("mk"),
-            InductParam::new(
-                Telescope::build(
-                    [
-                        (a, Term::type_ground()),
-                        (Free::local(971, Some("x")), Term::free_var(&a)),
-                    ],
-                    Vec::new(),
-                ),
-                vec![Plicity::Implicit, Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    let held = authored(
-        &Global::Authored(Qualifier::from(["held"])),
-        Term::induct_type(
-            family,
-            [Term::intrinsic(Intrinsic::NatType)],
-            Vec::<Term>::new(),
-        ),
-        Term::variant(
-            family,
-            params,
-            "mk",
-            [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
-        ),
-    );
-
-    declaring(
-        Definitions {
-            items: vec![held].into(),
-        },
-        BTreeMap::from([(family, declaration)]),
-        [],
-        [],
-    )
-}
-
-/// The two shapes: an application that under-saturates its lambda, and a neutral spine whose `plicities` are shorter than the arguments applied to it.
-pub fn unsaturated_cases() -> Vec<(&'static str, Definitions)> {
-    let a = Free::local(990, Some("a"));
-    let b = Free::local(991, Some("b"));
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
-
-    let two_binder = |result: Term| Telescope::build([(a, nat.clone()), (b, nat.clone())], result);
-    let definitions_of = |items: Vec<Item>| Definitions {
-        items: items.into(),
-    };
-
-    // `f : (a : Nat, b : Nat) -> Type`, applied to one argument in a type position.
-    let former = Global::Authored(Qualifier::from(["f"]));
-    let plicities = vec![Plicity::Explicit, Plicity::Explicit];
-    let former_def = authored(
-        &former,
-        Subterm::FuncType(FuncType::new(
-            two_binder(Term::type_ground()),
-            plicities.clone(),
-        ))
-        .into(),
-        Subterm::Func(Func::new(two_binder(nat.clone()), plicities)).into(),
-    );
-    let under_applied = authored(
-        &Global::Authored(Qualifier::from(["held"])),
-        Term::apply(
-            Term::instance(former, Universes::default()),
-            [three.clone()],
-        ),
-        three.clone(),
-    );
-
-    vec![(
-        "a lambda applied to fewer arguments than it binds",
-        definitions_of(vec![former_def, under_applied]),
-    )]
-}
-
-/// The three shapes: an arm over- and under-binding its payload, and a recursive application short of its member's binders.
-pub fn unguarded_opener_cases() -> Vec<(&'static str, Definitions)> {
-    vec![
-        (
-            "an arm binding two components of a one-component payload",
-            arm_definitions(vec![
-                (Plicity::Explicit, Free::local(996, Some("a"))),
-                (Plicity::Explicit, Free::local(997, Some("b"))),
-            ]),
-        ),
-        (
-            "an arm binding none of a one-component payload",
-            arm_definitions(Vec::new()),
-        ),
-        (
-            "a recursive application short of its binders",
-            rec_apply_definitions(),
-        ),
-    ]
-}
-
-/// `held : match F/mk(3) : (s) => Type | mk(<binders>) => Nat end`, for `induct F : Type | mk(x : Nat) end`.
-pub fn arm_definitions(binders: Vec<(Plicity, Free)>) -> Definitions {
-    let family = Global::Authored(Qualifier::from(["F"]));
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
-
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
-            Atom::from("mk"),
-            InductParam::new(
-                Telescope::build([(Free::local(995, Some("x")), nat.clone())], Vec::new()),
-                vec![Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    let declared = Term::induct_match_scoped_marked(
-        Term::variant(family, Vec::<Term>::new(), "mk", [three.clone()]),
-        Scope::close(
-            Many(1),
-            &[&Free::local(998, Some("s"))],
-            Term::type_ground(),
-        ),
-        [("mk", binders, nat)],
-        None,
-    );
-
-    declaring(
-        Definitions {
-            items: vec![authored(
-                &Global::Authored(Qualifier::from(["held"])),
-                declared,
-                three,
-            )]
-            .into(),
-        },
-        BTreeMap::from([(family, declaration)]),
-        [],
-        [],
-    )
-}
-
-/// `f : (a : Nat) -> Type = (a) => Nat` with `held : f(3)`, the argument written under `mark` where its parameter is plain.
-pub fn marked_apply_definitions(mark: Plicity) -> Definitions {
-    let a = Free::local(993, Some("a"));
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
-    let former = Global::Authored(Qualifier::from(["f"]));
-
-    Definitions {
-        items: vec![
-            authored(
-                &former,
-                Term::func_type([(a, nat.clone())], Term::type_ground()),
-                Term::func([(a, nat.clone())], nat),
-            ),
-            authored(
-                &Global::Authored(Qualifier::from(["held"])),
-                Term::apply_marked(
-                    Term::instance(former, Universes::default()),
-                    [(mark, three.clone())],
-                ),
-                three,
-            ),
-        ]
-        .into(),
-    }
-}
-
-/// The item [`eta_former_definitions`] declares.
-pub fn eta_former_held() -> Global {
-    Global::Authored(Qualifier::from(["held"]))
-}
-
-/// `struct S(A : Type) : Type { f : A }` with `held : T = S(Nat) { 3 }`, `T` an η-form of `S` applied over its whole list: `((@A : Type) => S(A))(@Nat)`, its binder under a mark `S`'s plain parameter does not take, or with `lying` `((A : Nat) => S(A))(3)`, its binder at a type `S`'s parameter does not take. Handed back beside the module is `T` as it was built.
-pub fn eta_former_definitions(lying: bool) -> (Definitions, Term) {
-    let name = Global::Authored(Qualifier::from(["S"]));
-    let a = Free::local(960, Some("A"));
-    let bound = Free::local(962, Some("A"));
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
-    let declaration = StructDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::build(
-            [(a, Term::type_ground())],
-            Telescope::build([(Free::local(961, Some("f")), Term::free_var(&a))], ()),
-        ),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    let (mark, domain, argument) = match lying {
-        false => (Plicity::Implicit, Term::type_ground(), nat.clone()),
-        true => (Plicity::Explicit, nat.clone(), three.clone()),
-    };
-    let node: Term = Subterm::StructType(StructType {
-        name,
-        universes: Universes::default(),
-        params: vec![Term::free_var(&bound)],
-    })
-    .into();
-    let declared = Term::apply_marked(
-        Term::func_marked([(mark, bound, domain)], node),
-        [(mark, argument)],
-    );
-
-    let held = authored(
-        &eta_former_held(),
-        declared.clone(),
-        Term::struct_(name, [nat], [three]),
-    );
-
-    let definitions = declaring(
-        Definitions {
-            items: vec![held].into(),
-        },
-        [],
-        BTreeMap::from([(name, declaration)]),
-        [],
-    );
-
-    (definitions, declared)
-}
-
-/// The two items [`forwarding_definitions`] judges at a plain or a hidden type.
-pub fn forwarding_items() -> [Global; 2] {
-    [
-        Global::Authored(Qualifier::from(["by_name"])),
-        Global::Authored(Qualifier::from(["by_literal"])),
-    ]
-}
-
-/// `g : (@n : Nat) -> Nat = (@n) => ((x : Nat) => x)(n)`, a function that forwards across a mark and whose η-contraction is `(x : Nat) => x`, with `by_name : T = g` and `by_literal : T` the same lambda, `T` the function type over `n : Nat` under `declared`.
-pub fn forwarding_definitions(declared: Plicity) -> Definitions {
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let g = Global::Authored(Qualifier::from(["g"]));
-    let lambda = |n: u64, x: u64| {
-        let n = Free::local(n, Some("n"));
-        let x = Free::local(x, Some("x"));
-        Term::func_marked(
-            [(Plicity::Implicit, n, nat.clone())],
-            Term::apply(
-                Term::func([(x, nat.clone())], Term::free_var(&x)),
-                [Term::free_var(&n)],
-            ),
-        )
-    };
-    let typed = |mark: Plicity, n: u64| {
-        let n = Free::local(n, Some("n"));
-        Term::func_type_marked([(mark, n, nat.clone())], nat.clone())
-    };
-    let [by_name, by_literal] = forwarding_items();
-
-    Definitions {
-        items: vec![
-            authored(&g, typed(Plicity::Implicit, 950), lambda(951, 952)),
-            authored(
-                &by_name,
-                typed(declared, 953),
-                Term::instance(g, Universes::default()),
-            ),
-            authored(&by_literal, typed(declared, 954), lambda(955, 956)),
-        ]
-        .into(),
-    }
-}
-
-/// `rec f : (a : Nat, b : Nat) -> Type = (a, b) => Nat; f(3)` as a declared type.
-pub fn rec_apply_definitions() -> Definitions {
-    let a = Free::local(990, Some("a"));
-    let b = Free::local(991, Some("b"));
-    let f = Free::local(992, Some("f"));
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
-    let plicities = vec![Plicity::Explicit, Plicity::Explicit];
-
-    let member_type: Term = Subterm::FuncType(FuncType::new(
-        Telescope::build([(a, nat.clone()), (b, nat.clone())], Term::type_ground()),
-        plicities.clone(),
-    ))
-    .into();
-    let member_body: Term = Subterm::Func(Func::new(
-        Telescope::build([(a, nat.clone()), (b, nat.clone())], nat),
-        plicities,
-    ))
-    .into();
-
-    let selection = Term::rec([(f, member_type, member_body)], Term::free_var(&f));
-
-    Definitions {
-        items: vec![authored(
-            &Global::Authored(Qualifier::from(["held"])),
-            Term::apply(selection, [three.clone()]),
-            three,
-        )]
-        .into(),
-    }
 }
 
 /// `sink : (Nat) -> Nat`, honestly stamped `Partial`: its body projects `rec f : (Nat) -> Nat = (n) => f(n)`, which does not descend.
@@ -2120,61 +1621,6 @@ pub fn proof_carrying_unit(carried: Carried) -> Definitions {
     )
 }
 
-/// `induct Held : Type | mk(n : Nat)` with one item building `Held/mk` at `payload_count` arguments, the constructor's payload under its honest mark or a lying one.
-pub fn plicity_definitions(honest: bool, payload_count: usize) -> Definitions {
-    let held_name = Global::Authored(Qualifier::from(["Held"]));
-    let held = Term::induct_type(held_name, Vec::<Term>::new(), Vec::<Term>::new());
-
-    let declaration = InductDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
-            Atom::from("mk"),
-            InductParam::new(
-                Telescope::build(
-                    [(
-                        Free::local(920, Some("n")),
-                        Term::intrinsic(Intrinsic::NatType),
-                    )],
-                    Vec::new(),
-                ),
-                // The lie is a wrong mark: a signature's marks are its entries' own, so a mark short of a binder cannot be written and the marks themselves are the only thing left that could lie.
-                match honest {
-                    true => vec![Plicity::Explicit],
-                    false => vec![Plicity::Implicit],
-                },
-            ),
-        )]
-        .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    let payload = (0..payload_count)
-        .map(|_| Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))))
-        .collect::<Vec<_>>();
-
-    let mut induct_decls = BTreeMap::new();
-    induct_decls.insert(held_name, declaration);
-
-    declaring(
-        Definitions {
-            items: vec![authored(
-                &Global::Authored(Qualifier::from(["value"])),
-                held,
-                Term::variant(held_name, Vec::<Term>::new(), "mk", payload),
-            )]
-            .into(),
-        },
-        induct_decls,
-        [],
-        [],
-    )
-}
-
 /// `Held : (n : Nat) -> Type 0 | yes() : (0)`, the family whose two instances the forged equation coerces between.
 pub fn indexed_family(index: Free, nat_type: Term, zero: Term, result_sort: Term) -> InductDecl {
     InductDecl {
@@ -2191,124 +1637,6 @@ pub fn indexed_family(index: Free, nat_type: Term, zero: Term, result_sort: Term
         polarities: Vec::new(),
         variances: Vec::new(),
     }
-}
-
-/// The module the doc comment below describes: four declarations, and the four definitions that close on `False`.
-pub fn index_forgery() -> Definitions {
-    let type_0 = Term::type_ground();
-    let nat_type = Term::intrinsic(Intrinsic::NatType);
-    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
-
-    let true_name = Global::Authored(Qualifier::from(["True"]));
-    let false_name = Global::Authored(Qualifier::from(["False"]));
-    let equality_name = Global::Authored(Qualifier::from(["Eq"]));
-    let held_name = Global::Authored(Qualifier::from(["Held"]));
-
-    let true_type = Term::induct_type(true_name, Vec::<Term>::new(), Vec::<Term>::new());
-    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
-    let qed = Term::variant(true_name, Vec::<Term>::new(), "qed", Vec::<Term>::new());
-    let held_at = |index: Term| Term::induct_type(held_name, Vec::<Term>::new(), [index]);
-    let yes = Term::variant(held_name, Vec::<Term>::new(), "yes", Vec::<Term>::new());
-    let equality = |carrier: Term, left: Term, right: Term| {
-        Term::induct_type(equality_name, [carrier], [left, right])
-    };
-    let reflexivity =
-        |carrier: Term, value: Term| Term::variant(equality_name, [carrier], "refl", [value]);
-
-    // induct True : Prop | qed() end, and the empty induct False : Prop end
-    let true_decl = proposition(vec![(
-        Atom::from("qed"),
-        InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-    )]);
-    let false_decl = proposition(Vec::new());
-
-    let equality_decl = equality_declaration();
-
-    let held_decl = indexed_family(
-        Free::local(70, Some("n")),
-        nat_type.clone(),
-        nat(0),
-        type_0.clone(),
-    );
-
-    // forged : Eq(True, 0, 1) = refl(True, qed())
-    let forged_name = Global::Authored(Qualifier::from(["forged"]));
-    let forged = authored(
-        &forged_name,
-        equality(true_type.clone(), nat(0), nat(1)),
-        reflexivity(true_type.clone(), qed),
-    );
-
-    // cast : (Held(0)) -> Held(1)
-    //   = match forged : (s, t, q) => (Held(s)) -> Held(t) | refl(z) => (w) => w end
-    let cast_name = Global::Authored(Qualifier::from(["cast"]));
-    let motive_left = Free::local(80, Some("s"));
-    let motive_right = Free::local(81, Some("t"));
-    let motive_proof = Free::local(82, Some("q"));
-    let arm_value = Free::local(83, Some("z"));
-    let carried = Free::local(84, Some("w"));
-    let identity = Free::local(85, Some("w"));
-    let cast = authored(
-        &cast_name,
-        Term::func_type([(carried, held_at(nat(0)))], held_at(nat(1))),
-        Term::induct_match_scoped_marked(
-            Term::instance(forged_name, Universes::default()),
-            Scope::close(
-                Many(3),
-                &[&motive_left, &motive_right, &motive_proof],
-                Term::func_type(
-                    [(carried, held_at(Term::free_var(&motive_left)))],
-                    held_at(Term::free_var(&motive_right)),
-                ),
-            ),
-            [(
-                "refl",
-                vec![(Plicity::Explicit, arm_value)],
-                Term::func(
-                    [(identity, held_at(Term::free_var(&arm_value)))],
-                    Term::free_var(&identity),
-                ),
-            )],
-            None,
-        ),
-    );
-
-    // held : Held(1) = cast(yes())
-    let held_value_name = Global::Authored(Qualifier::from(["held"]));
-    let held_value = authored(
-        &held_value_name,
-        held_at(nat(1)),
-        Term::apply(Term::instance(cast_name, Universes::default()), [yes]),
-    );
-
-    // boom : False = match held : (n, w) => False end
-    let boom_name = Global::Authored(Qualifier::from(["boom"]));
-    let boom_index = Free::local(90, Some("n"));
-    let boom_scrutinee = Free::local(91, Some("w"));
-    let boom = authored(
-        &boom_name,
-        false_type.clone(),
-        Term::induct_match_scoped_marked(
-            Term::instance(held_value_name, Universes::default()),
-            Scope::close(Many(2), &[&boom_index, &boom_scrutinee], false_type.clone()),
-            Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
-            None,
-        ),
-    );
-
-    declaring(
-        Definitions {
-            items: vec![forged, cast, held_value, boom].into(),
-        },
-        BTreeMap::from([
-            (true_name, true_decl),
-            (false_name, false_decl),
-            (equality_name, equality_decl),
-            (held_name, held_decl),
-        ]),
-        [],
-        [],
-    )
 }
 
 /// A stuck `match` on `scrutinee` whose motive claims `Prop` while both arms inhabit `Nat` — the one shape in Core that states its own sort instead of having one derived.
@@ -4174,6 +3502,44 @@ fn core_text_read(text: &str) -> (Definitions, Option<Entrypoint>) {
     put()
         .read(text)
         .unwrap_or_else(|unread| panic!("{unread:?}"))
+}
+
+/// A family of one case over one `Nat`, `F` with `mk(x : Nat)`, and `held : T = 3` whose type eliminates `mk(3)` through the arm `${arm}`.
+pub const ARM: &str = r#"
+#{absent = [/F/mk]}
+induct /F: pub Type
+| mk(x: #NatType)
+end
+
+let /held: match #{node = Variant} /F/mk(3): (s) => Type | ${arm} => #NatType end =
+    3;
+"#;
+
+/// What the walk says of `text`, Core text read with nothing in scope and walked as it closes: a module, or a program at the type it states.
+pub fn text_certified(text: &str) -> Rechecked {
+    let (definitions, entry) = core_text_read(text);
+
+    put().module(&definitions, entry.as_ref())
+}
+
+/// The verdicts of [`text_certified`].
+pub fn text_verdicts(text: &str) -> Vec<Verdict> {
+    text_certified(text).verdicts
+}
+
+/// Whether `verdicts` refuse the declaration named `name` at the root, or the closing term where it is `None`, by an error `refusal` admits.
+pub fn refuses(verdicts: &[Verdict], name: Option<&str>, refusal: impl Fn(&Error) -> bool) -> bool {
+    verdicts
+        .iter()
+        .any(|verdict| verdict.name == name.map(global) && refusal(&verdict.error))
+}
+
+/// A count refused as `counted`, `actual` where `expected` was.
+pub fn miscounted(counted: Counted, expected: usize, actual: usize) -> impl Fn(&Error) -> bool {
+    move |error| {
+        matches!(error, Error::Arity { counted: found, expected: e, actual: a }
+            if *found == counted && *e == expected && *a == actual)
+    }
 }
 
 /// The module `text` writes, read with nothing in scope and closing with no term: an environment another text is put over.

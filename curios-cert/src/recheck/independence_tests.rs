@@ -1,16 +1,6 @@
 //! A verdict filed for one declaration leaves every other declaration's verdict as a walk that refused nothing would have left it.
 
-use {
-    super::test_support::*,
-    crate::*,
-    curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Definitions, Entrypoint, Free, Global, InductDecl, InductParam, Program, Telescope,
-        Term, UniverseContext, Universes, test_support::*,
-    },
-    std::collections::BTreeMap,
-};
+use {super::test_support::*, crate::*};
 
 /// A declaration admitted on a refused declaration's stated definition leaves the module refused.
 ///
@@ -19,38 +9,28 @@ use {
 /// The list is asserted whole, so the test says both halves at once: the lie is reported, and nothing that rests on it is — a walk that dropped the lie's verdict would admit this module at an empty proposition.
 #[test]
 fn a_declaration_admitted_on_a_refused_declarations_definition_leaves_the_module_refused() {
-    let family = Global::Authored(Qualifier::from(["Absurd"]));
-    let absurd = || Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new());
-    let lie = Global::Authored(Qualifier::from(["lie"]));
-    let truth = Global::Authored(Qualifier::from(["truth"]));
+    let verdicts = text_verdicts(
+        r#"
+induct /Absurd: pub Prop
+end
 
-    let definitions = declaring(
-        Definitions {
-            items: vec![
-                authored(&lie, absurd(), Term::tuple(Vec::<Term>::new())),
-                authored(&truth, absurd(), Term::instance(lie, Universes::default())),
-            ]
-            .into(),
-        },
-        BTreeMap::from([(family, proposition(Vec::new()))]),
-        [],
-        [],
+let /lie: #{node = InductType} /Absurd() =
+    ();
+
+let /truth: #{node = InductType} /Absurd() =
+    /lie;
+
+/truth
+: #{node = InductType} /Absurd()
+"#,
     );
-    let program = Program {
-        definitions,
-        entrypoint: Entrypoint {
-            body: Term::instance(truth, Universes::default()),
-            type_: Some(absurd()),
-        },
-    };
 
-    let verdicts = fixture_verdicts(&program, 1_000_000, &Globals::default(), SYNTAX);
     assert_eq!(
         verdicts
             .iter()
             .map(|verdict| verdict.name)
             .collect::<Vec<_>>(),
-        vec![Some(lie)],
+        vec![Some(global("lie"))],
         "the walk must refuse the lying declaration, and nothing of what rests on it: {verdicts:?}",
     );
 }
@@ -62,86 +42,28 @@ fn a_declaration_admitted_on_a_refused_declarations_definition_leaves_the_module
 /// Mutation-checked against `Knot`'s acceptance resting on anything else: with `Shape`'s payload at `(A) -> Nat`, so that the filed vector reads the parameter `Neg`, the same module is refused twice over, `Knot` by `NotPositive { polarity: Neg }` at its `wrap` payload.
 #[test]
 fn a_family_admitted_through_a_refused_declarations_vector_leaves_the_module_refused() {
-    let shape = Global::Authored(Qualifier::from(["Shape"]));
-    let knot = Global::Authored(Qualifier::from(["Knot"]));
-    let param = Free::local(710, Some("A"));
-    let payload = Free::local(711, Some("a"));
-    let held = Free::local(712, Some("x"));
+    // `Shape` declares one tag twice, and `Knot` wraps itself in a `Shape`.
+    let verdicts = text_verdicts(
+        r#"
+#{absent = [/Shape/mk, /Shape/mk]}
+induct /Shape(A: Type): pub Type
+| mk(a: A)
+| mk(a2: A)
+end
 
-    // induct Shape(A : Type) : Type | mk(a : A) | mk(a : A) end — one tag declared twice.
-    let carried = || {
-        (
-            Atom::from("mk"),
-            InductParam::new(
-                Telescope::build(
-                    [
-                        (param, Term::type_ground()),
-                        (payload, Term::free_var(&param)),
-                    ],
-                    Vec::new(),
-                ),
-                vec![Plicity::Implicit, Plicity::Explicit],
-            ),
-        )
-    };
-    let shape_declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::build([(param, Term::type_ground())], Telescope::done(())),
-        constructors: vec![carried(), carried()].into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    // induct Knot : Type | wrap(x : Shape(Knot)) end
-    let knot_declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
-            Atom::from("wrap"),
-            InductParam::new(
-                Telescope::build(
-                    [(
-                        held,
-                        Term::induct_type(
-                            shape,
-                            [Term::induct_type(
-                                knot,
-                                Vec::<Term>::new(),
-                                Vec::<Term>::new(),
-                            )],
-                            Vec::<Term>::new(),
-                        ),
-                    )],
-                    Vec::new(),
-                ),
-                vec![Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    let definitions = declaring(
-        Definitions::default(),
-        BTreeMap::from([(shape, shape_declaration), (knot, knot_declaration)]),
-        [],
-        [],
+#{absent = [/Knot/wrap]}
+induct /Knot: pub Type
+| wrap(x: #{node = InductType} /Shape(#{node = InductType} /Knot()))
+end
+"#,
     );
 
-    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
     assert_eq!(
         verdicts
             .iter()
             .map(|verdict| (verdict.name, matches!(verdict.error, Error::RepeatedTag(_))))
             .collect::<Vec<_>>(),
-        vec![(Some(shape), true)],
+        vec![(Some(global("Shape")), true)],
         "the walk must refuse the family with the repeated tag, and nothing that composed through its vector: {verdicts:?}",
     );
 }

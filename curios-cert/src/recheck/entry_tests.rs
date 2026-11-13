@@ -3,41 +3,19 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_analysis::test_support::*,
-    curios_core::{Definitions, Entrypoint, Intrinsic, Nat, Program, Term},
+    curios_core::{Intrinsic, Term},
 };
-
-/// A program of nothing but `entry`.
-fn entry_module(entry: Entrypoint) -> Program {
-    Program {
-        definitions: Definitions {
-            items: Vec::new().into(),
-        },
-        entrypoint: entry,
-    }
-}
-
-fn zero() -> Term {
-    Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))
-}
 
 /// An entry stating no type is refused rather than inferred: elaboration writes the type it judged the body at, so an entry without one did not come through it, and inferring one would accept a program against a contract nobody checked. Mutation-checked: letting an untyped entry through accepts it.
 #[test]
 fn an_entry_stating_no_type_is_refused() {
-    let verdicts = fixture_verdicts(
-        &entry_module(Entrypoint {
-            body: zero(),
-            type_: None,
-        }),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let verdicts = text_verdicts("0");
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| verdict.name.is_none() && matches!(verdict.error, Error::UntypedEntry)),
+        refuses(&verdicts, None, |error| matches!(
+            error,
+            Error::UntypedEntry
+        )),
         "an entry with no type was certified: {verdicts:?}",
     );
 }
@@ -45,23 +23,14 @@ fn an_entry_stating_no_type_is_refused() {
 /// An entry is checked against the type it states — the program contract a compile supplies, or an embedder's own — so a body that does not inhabit it is refused. The control states the body's own type.
 #[test]
 fn an_entry_is_checked_against_the_type_it_states() {
-    let stated = |type_: Intrinsic| {
-        fixture_verdicts(
-            &entry_module(Entrypoint {
-                body: zero(),
-                type_: Some(Term::intrinsic(type_)),
-            }),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        )
-    };
-
+    let verdicts = text_verdicts("0\n: #BoolType");
     assert!(
-        stated(Intrinsic::BoolType)
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
-        "a `Nat` entry stated at `Bool` was certified",
+        refuses(&verdicts, None, |error| {
+            matches!(error, Error::Mismatch { inferred, expected }
+                if **inferred == Term::intrinsic(Intrinsic::NatType)
+                    && **expected == Term::intrinsic(Intrinsic::BoolType))
+        }),
+        "a `Nat` entry stated at `Bool` was certified: {verdicts:?}",
     );
-    assert_eq!(stated(Intrinsic::NatType), Vec::new());
+    assert_eq!(text_verdicts("0\n: #NatType"), Vec::new());
 }

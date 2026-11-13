@@ -3,10 +3,59 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_analysis::test_support::*,
-    curios_common::Plicity,
-    curios_core::{Free, Subterm},
+    curios_common::{Plicity, fill},
+    curios_core::{Item, Subterm},
 };
+
+/// A family of one case, `Held` with `mk(${mark}n : Nat)`, under the mark `${mark}` states, and `value` its case at `(${payload})`.
+const MARKED_CASE: &str = r#"
+#{absent = [/Held/mk]}
+induct /Held: pub Type
+| mk(${mark}n: #NatType)
+end
+
+let /value: #{node = InductType} /Held() =
+    #{node = Variant} /Held/mk(${payload});
+"#;
+
+/// `f : (a : Nat) -> Type`, and `held : f(${mark}3) = 3`, its argument under the mark `${mark}` states.
+const MARKED_ARGUMENT: &str = r#"
+let /f: (a: #NatType) -> Type =
+    (a: #NatType) => #NatType;
+
+let /held: /f(${mark}3) =
+    3;
+"#;
+
+/// `struct S(A : Type) : Type { f : A }` with `held : ${declared} = S(Nat) { 3 }`, `${declared}` an η-form of `S` applied over its whole list.
+const ETA_FORMED: &str = r#"
+struct /S(A: Type): pub Type {
+    f: A,
+}
+
+let /held: ${declared} =
+    /S(#NatType) { 3 };
+"#;
+
+/// `g : (@n : Nat) -> Nat`, a function forwarding across a mark, `(@n) => ((x) => x)(n)`, and the same function put at `(${mark}n : Nat) -> Nat` by its name, `by_name`, and as the literal itself, `by_literal`.
+const FORWARDING: &str = r#"
+let /g: (@n: #NatType) -> #NatType =
+    (@n: #NatType) => ((x: #NatType) => x)(n);
+
+let /by_name: (${mark}n: #NatType) -> #NatType =
+    /g;
+
+let /by_literal: (${mark}n: #NatType) -> #NatType =
+    (@n: #NatType) => ((x: #NatType) => x)(n);
+"#;
+
+/// [`MARKED_CASE`] under its honest mark or a lying one, with `payload` arguments.
+fn marked_case(honest: bool, payload: usize) -> String {
+    let mark = if honest { "" } else { "@" };
+    let payload = ["0"; 1][..payload].join(", ");
+
+    fill!(MARKED_CASE, mark, payload)
+}
 
 /// A constructor's marks are read by one certifier rule, the arm's, which holds each binder an arm writes to the payload it binds ([`an_arm_binds_under_its_payloads_marks`]). No other rule reads them, and a constructor's *value* carries none: the same declaration under its honest mark and under a lying one, with a value of it and no match over it, must produce the same verdicts. That each binder has a mark is no one's to check: a mark is its telescope entry's own, so a signature a mark short of its binders cannot be written, and the same holds of the marks a declaration's parameters stand under in its arity.
 ///
@@ -18,27 +67,12 @@ use {
 #[test]
 fn a_constructors_mark_decides_nothing_of_its_value() {
     assert_eq!(
-        fixture_verdicts(
-            &plicity_definitions(true, 1),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
-        fixture_verdicts(
-            &plicity_definitions(false, 1),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        text_verdicts(&marked_case(true, 1)),
+        text_verdicts(&marked_case(false, 1)),
         "a mark no rule reads outside an arm changed a verdict",
     );
     assert_eq!(
-        fixture_verdicts(
-            &plicity_definitions(false, 1),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        text_verdicts(&marked_case(false, 1)),
         Vec::new(),
         "both sides must be accepted, or the equality above is two refusals agreeing",
     );
@@ -47,15 +81,11 @@ fn a_constructors_mark_decides_nothing_of_its_value() {
 /// The control for the fixture above: under the same lying plicity vector, an ordinary error is still caught.
 #[test]
 fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
+    let verdicts = text_verdicts(&marked_case(false, 0));
+
     assert!(
-        !fixture_verdicts(
-            &plicity_definitions(false, 0),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        )
-        .is_empty(),
-        "the certifier accepted a constructor application at the wrong payload count",
+        refuses(&verdicts, Some("value"), miscounted(Counted::Payload, 1, 0)),
+        "the certifier accepted a constructor application at the wrong payload count: {verdicts:?}",
     );
 }
 
@@ -64,26 +94,18 @@ fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
 /// The control is the same application under the parameter's own mark: refusing every application would pass the refusal alone.
 #[test]
 fn an_argument_stands_under_its_parameters_mark() {
+    let mark = "";
     assert_eq!(
-        fixture_verdicts(
-            &marked_apply_definitions(Plicity::Explicit),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        text_verdicts(&fill!(MARKED_ARGUMENT, mark)),
         Vec::new(),
         "an argument under its parameter's own mark was refused",
     );
 
-    let refused = fixture_verdicts(
-        &marked_apply_definitions(Plicity::Implicit),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let mark = "@";
+    let refused = text_verdicts(&fill!(MARKED_ARGUMENT, mark));
     assert!(
-        refused.iter().any(|verdict| matches!(
-            verdict.error,
+        refuses(&refused, Some("held"), |error| matches!(
+            error,
             Error::Mark {
                 counted: Counted::Arguments,
                 position: 1,
@@ -100,15 +122,12 @@ fn an_argument_stands_under_its_parameters_mark() {
 /// The control is `recheck::occurrence_tests`' `an_arm_matching_its_payload_still_reduces`, the same arm under the payload's own mark.
 #[test]
 fn an_arm_binds_under_its_payloads_marks() {
-    let refused = fixture_verdicts(
-        &arm_definitions(vec![(Plicity::Implicit, Free::local(996, Some("a")))]),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let arm = "mk(@a)";
+    let refused = text_verdicts(&fill!(ARM, arm));
+
     assert!(
-        refused.iter().any(|verdict| matches!(
-            verdict.error,
+        refuses(&refused, Some("held"), |error| matches!(
+            error,
             Error::Mark {
                 counted: Counted::ArmBinders,
                 position: 1,
@@ -125,31 +144,42 @@ fn an_arm_binds_under_its_payloads_marks() {
 /// The control is the first module, accepted: refusing every type spelled as an applied η-form would pass the refusal alone.
 #[test]
 fn an_applied_eta_form_is_typed_by_its_formers_parameter_and_not_its_binder() {
-    let (honest, built) = eta_former_definitions(false);
-    assert!(
-        matches!(&*built, Subterm::StructType(_)),
-        "an η-form of `S` applied over its whole list was not built as its node: {built:?}",
-    );
+    // Its binder under a mark `S`'s plain parameter does not take, and at a type `S`'s parameter does not take.
+    let honest = "((@A: Type) => #{node = StructType} /S(A))(@#NatType)";
+    let lying = "((A: #NatType) => #{node = StructType} /S(A))(3)";
+    let built = |declared: &str| {
+        let (definitions, _) = put()
+            .read(&fill!(ETA_FORMED, declared))
+            .unwrap_or_else(|unread| panic!("{unread:?}"));
+        let held = definitions
+            .items
+            .iter()
+            .find_map(|item| match item {
+                Item::Let(definition) if definition.name == global("held") => Some(definition),
+                _ => None,
+            })
+            .expect("the module defines `held`");
+        assert!(
+            matches!(&*held.type_, Subterm::StructType(_)),
+            "an η-form of `S` applied over its whole list was not built as its node: {:?}",
+            held.type_,
+        );
+    };
+
+    built(honest);
     assert_eq!(
-        fixture_verdicts(&honest, 1_000_000, &Globals::default(), SYNTAX),
+        text_verdicts(&fill!(ETA_FORMED, declared = honest)),
         Vec::new(),
         "an η-form whose binder takes another mark than its former's was refused at the node it builds",
     );
 
-    let (lying, built) = eta_former_definitions(true);
+    built(lying);
+    let refused = text_verdicts(&fill!(ETA_FORMED, declared = lying));
     assert!(
-        matches!(&*built, Subterm::StructType(_)),
-        "an η-form of `S` applied over its whole list was not built as its node: {built:?}",
-    );
-    let refused = fixture_verdicts(&lying, 1_000_000, &Globals::default(), SYNTAX);
-    let held_to_the_parameters_sort = refused.iter().any(|verdict| match &verdict.error {
-        Error::Mismatch { expected, .. } => {
-            verdict.name == Some(eta_former_held()) && matches!(&***expected, Subterm::Sort(_))
-        }
-        _ => false,
-    });
-    assert!(
-        held_to_the_parameters_sort,
+        refuses(&refused, Some("held"), |error| matches!(
+            error,
+            Error::Mismatch { expected, .. } if matches!(&***expected, Subterm::Sort(_))
+        )),
         "an argument `S` refuses was carried through an η-form whose binder takes it: {refused:?}",
     );
 }
@@ -159,29 +189,22 @@ fn an_applied_eta_form_is_typed_by_its_formers_parameter_and_not_its_binder() {
 /// The control is the same two items at the hidden type they are, accepted.
 #[test]
 fn a_function_forwarding_across_a_mark_is_not_taken_at_the_type_it_contracts_to() {
+    let mark = "@";
     assert_eq!(
-        fixture_verdicts(
-            &forwarding_definitions(Plicity::Implicit),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        text_verdicts(&fill!(FORWARDING, mark)),
         Vec::new(),
         "a function forwarding across a mark was refused at its own hidden-headed type",
     );
 
-    let refused = fixture_verdicts(
-        &forwarding_definitions(Plicity::Explicit),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
-    for item in forwarding_items() {
+    let mark = "";
+    let refused = text_verdicts(&fill!(FORWARDING, mark));
+    for item in ["by_name", "by_literal"] {
         assert!(
-            refused.iter().any(|verdict| {
-                verdict.name == Some(item) && matches!(verdict.error, Error::Mismatch { .. })
-            }),
-            "`{item:?}` was taken at the plain type its body contracts to: {refused:?}",
+            refuses(&refused, Some(item), |error| matches!(
+                error,
+                Error::Mismatch { .. }
+            )),
+            "`{item}` was taken at the plain type its body contracts to: {refused:?}",
         );
     }
 }

@@ -1,18 +1,18 @@
 //! A global named at an instance, a variable, and a metavariable.
 //!
-//! **A path builds an instance at no universe**, and `#{universes = …}` states the one it is at. **A word an enclosing binder binds is its variable**, and a bound index no scope in the text binds is `#{binding = Bound(n)} _`. **`?` builds a goal over no binder**, and a metavariable states its id, its origin where it is no goal, and its spine where it has one: `#{id = 7, origin = Hole, spine = [x, y]} ?`. A diagnostic spells every metavariable as a bare `?`, its id being elaboration state a reader cannot decode.
+//! **A path builds an instance at no universe**, and `#{universes = …}` states the one it is at. **A word an enclosing binder binds is its variable**, a bound index no scope in the text binds is `#{binding = Bound(n)} _`, and a local no binder in the text binds is, written whole, `#{binding = Free(k)} word`, the local whose identity is `k`: a module that holds one is told from a module holding another by that identity alone, which a reader mints its own binders apart from. **`?` builds a goal over no binder**, and a metavariable states its id, its origin where it is no goal, and its spine where it has one: `#{id = 7, origin = Hole, spine = [x, y]} ?`. A diagnostic spells every metavariable as a bare `?`, its id being elaboration state a reader cannot decode.
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, bracketed, called, core_read,
+        Decoration, Fields, READ_MINTED, ReadError, Reader, Refusal, bracketed, called, core_read,
         literal_fields, literal_of, literal_variant, malformed, string, term_global, term_number,
         term_string, term_word, universe_suffix, universes_read, universes_written, value,
         value_number, value_term, value_unmarked, value_variant, verbatim, word,
     },
-    crate::{Apply, CoreText, CoreValue, Frame, Rendered, sub},
+    crate::{Apply, CoreText, CoreValue, Frame, Minting, Rendered, sub},
     curios_common::{InfixOp, Span},
     curios_core::{
-        Binding, CalleeId, Global, ImplicitOrigin, Instance, Mention, Metavar, MetavarId,
+        Binding, CalleeId, Free, Global, ImplicitOrigin, Instance, Mention, Metavar, MetavarId,
         MetavarOrigin, Subterm, Term, Universes, Var, WitnessOrigin,
     },
 };
@@ -48,6 +48,18 @@ pub fn var_written<D: Rendered>(var: Var, frame: Frame<'_, D>) -> crate::Term<D>
             )],
             super::tree(crate::Subterm::Held),
         ),
+        // A local the render did not open is the term's own, and only its identity tells it from another; a whole write states it, and a report, read about the term, names it by its word.
+        Binding::Free(free) if frame.spelling.writes_whole() && !Minting::opened(free) => frame
+            .decorated(
+                vec![(
+                    "binding",
+                    value(called(
+                        word("Free"),
+                        vec![super::numeral(free.index(), curios_common::Sign::Unmarked)],
+                    )),
+                )],
+                frame.variable(free),
+            ),
         Binding::Free(free) => frame.variable(free),
     }
 }
@@ -180,6 +192,21 @@ pub fn instance_read(name: Global, fields: &mut Fields<'_>) -> Result<Term, Read
     };
 
     Ok(Term::instance(name, universes))
+}
+
+/// A local no binder in the text binds, `#{binding = Free(k)} word`: the local whose identity is `k`, under `word`. An identity a reader mints its own binders at is refused, since the two would be one local.
+pub fn free_read(value: &CoreValue, word: &str) -> Result<Term, ReadError> {
+    let malformed = || malformed("a local's identity below a reader's own, `Free(k)`", value);
+    match value_variant(value)? {
+        ("Free", held) => match held.as_slice() {
+            [index] => term_number(index)
+                .filter(|index| *index < READ_MINTED)
+                .map(|index| Term::free_var(&Free::local(index, Some(word))))
+                .ok_or_else(malformed),
+            _ => Err(malformed()),
+        },
+        _ => Err(malformed()),
+    }
 }
 
 /// A variable no binder in the text binds, `#{binding = Bound(n)} _`: the loose index it is.

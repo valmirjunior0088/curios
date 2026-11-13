@@ -2,11 +2,43 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_common::{Qualifier, fill},
-    curios_core::{Global, Intrinsic, Term},
+    curios_common::fill,
+    curios_surface::FormScope,
 };
+
+/// `False`, and `held : ${claimed}` a call of a row answering a `Nat`: a name no store would issue, declared beside the call it carries.
+const FORGED_ROW: &str = r#"
+induct /False: pub Prop
+end
+
+foreign /forged() -> Nat;
+
+let /held: ${claimed} =
+    #{node = Foreign} /forged();
+"#;
+
+/// What the walk says of [`FORGED_ROW`] at `claimed`, read where a row's form is made: against the registry these suites judge under, with no unit in scope.
+fn forged_verdicts(claimed: &str) -> Vec<Verdict> {
+    let scope = FormScope::over(SYNTAX, []);
+    let put = Put {
+        scope: Some(&scope),
+        ..put()
+    };
+    let (definitions, entry) = put
+        .read(&fill!(FORGED_ROW, claimed))
+        .unwrap_or_else(|unread| panic!("{unread:?}"));
+
+    put.module(&definitions, entry.as_ref()).verdicts
+}
+
+/// Whether `held` was refused as a mismatch: a call's type is the one its row builds, whatever is claimed of it.
+fn held_mismatched(verdicts: &[Verdict]) -> bool {
+    refuses(verdicts, Some("held"), |error| {
+        matches!(error, Error::Mismatch { .. })
+    })
+}
 
 /// A forged ABI row cannot hand the guest an inhabitant of a proposition, because a wire signature cannot name one.
 ///
@@ -19,20 +51,11 @@ use {
 /// The control is [`a_forged_foreign_row_still_inhabits_its_wire_type`], the same call at the type its signature does denote. A fixture that refused every foreign call would pin nothing about propositions.
 #[test]
 fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
-    let false_name = Global::Authored(Qualifier::from(["False"]));
-    let false_type = Term::induct_type(false_name, Vec::<Term>::new(), Vec::<Term>::new());
-
-    let verdicts = fixture_verdicts(
-        &foreign_held_at(forged_row(), &false_type, &false_name),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let claimed = "#{node = InductType} /False()";
+    let verdicts = forged_verdicts(claimed);
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
+        held_mismatched(&verdicts),
         "the certifier let a forged host row inhabit a proposition: {verdicts:?}",
     );
 }
@@ -40,19 +63,10 @@ fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
 /// The control for the fixture above: the same forged row at the type its own signature names, wrapped in the description every host call returns. `wire_term` still reads `Nat` off the signature; `infer` wraps it, because a foreign call is an effect and an effect is an `Io`. Stating the control at the bare `Nat` would fail for a reason that has nothing to do with forgery.
 #[test]
 fn a_forged_foreign_row_still_inhabits_its_wire_type() {
-    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let claimed = "#IoType(#NatType)";
 
     assert_eq!(
-        fixture_verdicts(
-            &foreign_held_at(
-                forged_row(),
-                &Term::intrinsic(Intrinsic::io_type(Term::intrinsic(Intrinsic::NatType))),
-                &false_name
-            ),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        ),
+        forged_verdicts(claimed),
         Vec::new(),
         "the boundary refused a host call at the type its own wire signature denotes",
     );
@@ -61,22 +75,11 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
 /// A row cannot be held at another wire type than its own: the type is built from the signature the row carries, so a claim that a row answering a `Nat` yields a list of bytes is a mismatch like any other.
 #[test]
 fn a_foreign_row_cannot_be_held_at_another_wire_type() {
-    let false_name = Global::Authored(Qualifier::from(["False"]));
-    let claimed = Term::intrinsic(Intrinsic::io_type(Term::intrinsic(Intrinsic::ListType(
-        Term::intrinsic(Intrinsic::BytesType),
-    ))));
-
-    let verdicts = fixture_verdicts(
-        &foreign_held_at(forged_row(), &claimed, &false_name),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let claimed = "#IoType(#ListType(#BytesType))";
+    let verdicts = forged_verdicts(claimed);
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
+        held_mismatched(&verdicts),
         "the certifier let a row take another wire type than its own: {verdicts:?}",
     );
 }

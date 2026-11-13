@@ -4,19 +4,83 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Definition, DefinitionKind, Definitions, Free, Func, FuncType, Global, InductParam,
-        Intrinsic, Item, Nat, Nominal, StructDecl, StructType, Subterm, Telescope, Term,
-        UniverseContext, Universes, test_support::*,
-    },
+    curios_common::fill,
+    curios_core::{Intrinsic, Term},
     curios_surface::Spelling,
-    std::{
-        collections::BTreeMap,
-        panic::{AssertUnwindSafe, catch_unwind},
-        rc::Rc,
-    },
+    std::panic::{AssertUnwindSafe, catch_unwind},
 };
+
+/// A family of one parameter and one index, `F(A : Type) : (i : Nat) -> Type`, whose one case is not defined, and `held : Type` an occurrence of it at `${occurrence}`.
+const OCCURRENCE: &str = r#"
+#{absent = [/F/mk]}
+induct /F(A: Type): (i: #NatType) -> pub Type
+| mk(): (0)
+end
+
+let /held: Type =
+    #{node = InductType} /F${occurrence};
+"#;
+
+/// A record of one parameter, `S(A : Type) { f : A }`, and a family of one, `F(A : Type)` with `mk(x : A)`, whose case is not defined.
+const ONE_PARAMETER: &str = r#"
+struct /S(A: Type): pub Type {
+    f: A,
+}
+
+#{absent = [/F/mk]}
+induct /F(A: Type): pub Type
+| mk(x: A)
+end
+"#;
+
+/// [`ONE_PARAMETER`]'s declarations and `held`, a record literal of `S` at `${record}`.
+fn record_held(record: &str) -> String {
+    fill!(
+        "${ONE_PARAMETER}\nlet /held: #{node = StructType} /S(#NatType) =\n    ${record};",
+        ONE_PARAMETER,
+        record
+    )
+}
+
+/// [`ONE_PARAMETER`]'s declarations and `held`, a value of `F`'s case at `${variant}`.
+fn variant_held(variant: &str) -> String {
+    fill!(
+        "${ONE_PARAMETER}\nlet /held: #{node = InductType} /F(#NatType) =\n    #{node = Variant} /F/mk${variant};",
+        ONE_PARAMETER,
+        variant
+    )
+}
+
+/// `True`, and `Eq(A : Prop) : (x : A, y : A) -> Prop` with `refl(z : A) : (z, z)`, neither case defined: a parameter `True` inhabits, whose indices are typed at it.
+const EQUALITY: &str = r#"
+#{absent = [/True/qed]}
+induct /True: pub Prop
+| qed()
+end
+
+#{absent = [/Eq/refl]}
+induct /Eq(A: Prop): (x: A, y: A) -> pub Prop
+| refl(z: A): (z, z)
+end
+"#;
+
+/// Whether `verdicts` refuse `held` for a count, `actual` where `expected` was.
+fn held_miscounted(verdicts: &[Verdict], counted: Counted, expected: usize, actual: usize) -> bool {
+    refuses(
+        verdicts,
+        Some("held"),
+        miscounted(counted, expected, actual),
+    )
+}
+
+/// Whether `verdicts` refuse `name` for a term found at `Nat` where `True` was expected: an index the declaration types at `True`.
+fn a_nat_index_at_true(verdicts: &[Verdict], name: &str) -> bool {
+    refuses(verdicts, Some(name), |error| {
+        matches!(error, Error::Mismatch { inferred, expected }
+            if **inferred == Term::intrinsic(Intrinsic::NatType)
+                && matches!(&***expected, curios_core::Subterm::InductType(family) if family.name == global("True")))
+    })
+}
 
 /// A nominal occurrence's parameter and index counts must be the declaration's.
 ///
@@ -29,18 +93,15 @@ use {
 /// The control is [`an_occurrence_at_its_declared_arity_is_accepted`], the same family at the parameters and indices it declares, which must keep passing: every nominal type in every program is such an occurrence.
 #[test]
 fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
-    for (label, params, indices) in arity_cases() {
-        let verdicts = fixture_verdicts(
-            &occurrence_definitions(params, indices),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        );
+    for (label, occurrence, counted, actual) in [
+        ("no parameters", "()(0)", Counted::Parameters, 0),
+        ("no indices", "(#NatType)", Counted::Indices, 0),
+        ("two indices", "(#NatType)(0, 0)", Counted::Indices, 2),
+    ] {
+        let verdicts = text_verdicts(&fill!(OCCURRENCE, occurrence));
 
         assert!(
-            verdicts
-                .iter()
-                .any(|verdict| matches!(verdict.error, Error::Arity { .. })),
+            held_miscounted(&verdicts, counted, 1, actual),
             "{label}: the certifier accepted an occurrence its declaration contradicts: {verdicts:?}",
         );
     }
@@ -49,13 +110,10 @@ fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
 /// The control for the fixture above: one parameter and one index, as declared.
 #[test]
 fn an_occurrence_at_its_declared_arity_is_accepted() {
-    let definitions = occurrence_definitions(
-        vec![Term::intrinsic(Intrinsic::NatType)],
-        vec![Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
-    );
+    let occurrence = "(#NatType)(0)";
 
     assert_eq!(
-        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
+        text_verdicts(&fill!(OCCURRENCE, occurrence)),
         Vec::new(),
         "the boundary refused an occurrence at exactly the arity its declaration states",
     );
@@ -74,13 +132,24 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
 /// The control is [`a_nominal_value_at_its_declared_arity_is_accepted`], both forms at exactly the parameters they declare, which must keep passing: every constructor application and every record literal in every program is one.
 #[test]
 fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
-    for (label, definitions) in nominal_value_cases() {
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+    for (label, text, actual) in [
+        ("struct at no parameters", record_held("/S { 3 }"), 0),
+        (
+            "struct at two parameters",
+            record_held("/S(#NatType, #NatType) { 3 }"),
+            2,
+        ),
+        ("variant at no parameters", variant_held("(3)"), 0),
+        (
+            "variant at two parameters",
+            variant_held("(@#NatType, @#NatType, 3)"),
+            2,
+        ),
+    ] {
+        let verdicts = text_verdicts(&text);
 
         assert!(
-            verdicts
-                .iter()
-                .any(|verdict| matches!(verdict.error, Error::Arity { .. })),
+            held_miscounted(&verdicts, Counted::Parameters, 1, actual),
             "{label}: the value's parameter count was not held to its declaration: {verdicts:?}",
         );
     }
@@ -89,25 +158,13 @@ fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
 /// The control for the fixture above: one parameter each, as declared.
 #[test]
 fn a_nominal_value_at_its_declared_arity_is_accepted() {
-    let nat = Term::intrinsic(Intrinsic::NatType);
-
     assert_eq!(
-        fixture_verdicts(
-            &struct_value_definitions(vec![nat.clone()]),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        ),
+        text_verdicts(&record_held("/S(#NatType) { 3 }")),
         Vec::new(),
         "a record literal at exactly its declared parameters was refused",
     );
     assert_eq!(
-        fixture_verdicts(
-            &variant_value_definitions(vec![nat]),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        ),
+        text_verdicts(&variant_held("(@#NatType, 3)")),
         Vec::new(),
         "a constructor application at exactly its declared parameters was refused",
     );
@@ -118,31 +175,26 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
 /// Each value here is handed `((b : Bool) => Nat)(3)` for its one `Type`-sorted parameter — an application at an argument of the wrong type, which β takes to `Nat` without looking. So the payload checks against the telescope at it, the value's type converts with the declared `S(Nat)` and `F(Nat)`, and nothing but typing the parameter itself can refuse it. Counted and never typed, both would be certified. Mutation-checked: counting a value's parameters without typing them accepts both. The control is [`a_nominal_value_at_its_declared_arity_is_accepted`].
 #[test]
 fn a_nominal_value_types_its_parameters() {
-    let b = Free::local(990, Some("b"));
-    let ill_typed = Term::apply(
-        Term::func(
-            [(b, Term::intrinsic(Intrinsic::BoolType))],
-            Term::intrinsic(Intrinsic::NatType),
-        ),
-        [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
-    );
+    let ill_typed = "((b: #BoolType) => #NatType)(3)";
 
-    for (label, definitions) in [
+    for (label, text) in [
         (
             "a record literal",
-            struct_value_definitions(vec![ill_typed.clone()]),
+            record_held(&fill!("/S(${ill_typed}) { 3 }", ill_typed)),
         ),
         (
             "a constructor application",
-            variant_value_definitions(vec![ill_typed]),
+            variant_held(&fill!("(@${ill_typed}, 3)", ill_typed)),
         ),
     ] {
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = text_verdicts(&text);
 
         assert!(
-            verdicts
-                .iter()
-                .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
+            refuses(&verdicts, Some("held"), |error| {
+                matches!(error, Error::Mismatch { inferred, expected }
+                    if **inferred == Term::intrinsic(Intrinsic::NatType)
+                        && **expected == Term::intrinsic(Intrinsic::BoolType))
+            }),
             "{label} was certified at a parameter its declaration does not admit: {verdicts:?}",
         );
     }
@@ -163,62 +215,38 @@ fn a_nominal_value_types_its_parameters() {
 /// With the declared type typed rather than classified, `infer` refuses the lambda case as `Arity { expected: 2, actual: 1 }` — naming the defect — where reduction going stuck alone would leave a generic `Unclassified`. Both verdicts are accepted here, since which rule reaches the fault first is not what the fixture pins.
 #[test]
 fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
-    for (label, definitions) in unsaturated_cases() {
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = text_verdicts(
+        r#"
+let /f: (a: #NatType, b: #NatType) -> Type =
+    (a: #NatType, b: #NatType) => #NatType;
 
-        assert!(
-            verdicts.iter().any(|verdict| matches!(
-                verdict.error,
-                Error::Arity { .. } | Error::Unclassified(_)
-            )),
-            "{label}: the term was indexed at a count nothing checked: {verdicts:?}",
-        );
-    }
+let /held: /f(3) =
+    3;
+"#,
+    );
+
+    assert!(
+        held_miscounted(&verdicts, Counted::Arguments, 2, 1),
+        "a lambda applied to fewer arguments than it binds: the term was indexed at a count nothing checked: {verdicts:?}",
+    );
 }
 
 /// The control for the fixture above: a lambda applied to exactly its binders still reduces, so the type position it stands in is classified.
 #[test]
 fn a_saturated_application_in_a_type_position_is_accepted() {
-    let a = Free::local(990, Some("a"));
-    let b = Free::local(991, Some("b"));
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
-    let former = Global::Authored(Qualifier::from(["f"]));
-
-    let plicities = vec![Plicity::Explicit, Plicity::Explicit];
-    let former_def = authored(
-        &former,
-        Subterm::FuncType(FuncType::new(
-            Telescope::build([(a, nat.clone()), (b, nat.clone())], Term::type_ground()),
-            plicities.clone(),
-        ))
-        .into(),
-        Subterm::Func(Func::new(
-            Telescope::build([(a, nat.clone()), (b, nat.clone())], nat.clone()),
-            plicities,
-        ))
-        .into(),
-    );
-
     // `f(3, 4)` reduces to `Nat`, so `held : f(3, 4) = 3` is an ordinary well-typed item.
-    let held = authored(
-        &Global::Authored(Qualifier::from(["held"])),
-        Term::apply(
-            Term::instance(former, Universes::default()),
-            [
-                three.clone(),
-                Term::intrinsic(Intrinsic::Nat(Nat::new(4usize))),
-            ],
-        ),
-        three,
-    );
+    let verdicts = text_verdicts(
+        r#"
+let /f: (a: #NatType, b: #NatType) -> Type =
+    (a: #NatType, b: #NatType) => #NatType;
 
-    let definitions = Definitions {
-        items: vec![former_def, held].into(),
-    };
+let /held: /f(3, 4) =
+    3;
+"#,
+    );
 
     assert_eq!(
-        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
+        verdicts,
         Vec::new(),
         "a saturated application in a type position was refused",
     );
@@ -239,16 +267,44 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
 /// The control is [`a_saturated_application_in_a_type_position_is_accepted`] together with [`an_arm_matching_its_payload_still_reduces`]: a guard that merely stopped reducing would pass every witness here while breaking every program.
 #[test]
 fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
-    for (label, definitions) in unguarded_opener_cases() {
+    let (two, none) = ("mk(a, b)", "mk()");
+    for (label, text, counted, expected, actual) in [
+        (
+            "an arm binding two components of a one-component payload",
+            fill!(ARM, arm = two),
+            Counted::ArmBinders,
+            1,
+            2,
+        ),
+        (
+            "an arm binding none of a one-component payload",
+            fill!(ARM, arm = none),
+            Counted::ArmBinders,
+            1,
+            0,
+        ),
+        (
+            "a recursive application short of its binders",
+            r#"
+let /held: (
+    #{node = Rec}
+    (let f: (a: #NatType, b: #NatType) -> Type = (a2: #NatType, b2: #NatType) => #NatType;
+    f))(3) =
+    3;
+"#
+            .to_string(),
+            Counted::Arguments,
+            2,
+            1,
+        ),
+    ] {
         // The demonstrated defect is the *abort*: `certify_definitions` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
-        let verdicts = catch_unwind(AssertUnwindSafe(|| {
-            fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX)
-        }))
-        .unwrap_or_else(|_| panic!("{label}: reduction aborted the walk instead of refusing"));
+        let verdicts = catch_unwind(AssertUnwindSafe(|| text_verdicts(&text)))
+            .unwrap_or_else(|_| panic!("{label}: reduction aborted the walk instead of refusing"));
 
         assert!(
-            !verdicts.is_empty(),
-            "{label}: the module was certified rather than refused",
+            held_miscounted(&verdicts, counted, expected, actual),
+            "{label}: the module was not refused for its count: {verdicts:?}",
         );
     }
 }
@@ -256,10 +312,10 @@ fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
 /// The control for the arm half: an arm binding exactly its constructor's payload still reduces, so the type position it computes is classified.
 #[test]
 fn an_arm_matching_its_payload_still_reduces() {
-    let definitions = arm_definitions(vec![(Plicity::Explicit, Free::local(996, Some("a")))]);
+    let one = "mk(a)";
 
     assert_eq!(
-        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
+        text_verdicts(&fill!(ARM, arm = one)),
         Vec::new(),
         "an arm binding exactly its payload was refused",
     );
@@ -273,96 +329,82 @@ fn an_arm_matching_its_payload_still_reduces() {
 ///
 /// No surface program reaches it — `curios-elab` elaborates a nominal occurrence as an application against the arity's telescope and checks every argument — which is why this is built by hand.
 ///
+/// `Eq`'s parameter is at `Prop`, which `True` inhabits, so what refuses the forgery is the indices' typing and nothing about the parameter: at `Type 1`, `True` itself would be refused, and the indices never asked.
+///
 /// Its control is [`an_indexed_occurrence_at_a_well_typed_index_is_accepted`], which keeps the same family at an index that genuinely inhabits `Nat`: without it, refusing every indexed occurrence would pass this.
 #[test]
 fn a_nominal_occurrence_types_its_arguments() {
-    let verdicts = fixture_verdicts(&index_forgery(), 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = text_verdicts(&fill!(
+        r#"${EQUALITY}
+induct /False: pub Prop
+end
+
+#{absent = [/Held/yes]}
+induct /Held: (n: #NatType) -> pub Type
+| yes(): (0)
+end
+
+let /forged: #{node = InductType} /Eq(#{node = InductType} /True())(0, 1) =
+    #{node = Variant} /Eq/refl(@#{node = InductType} /True(), #{node = Variant} /True/qed());
+
+let /cast: (w: #{node = InductType} /Held()(0)) -> #{node = InductType} /Held()(1) =
+    match /forged: (s, t, q) =>
+        (w: #{node = InductType} /Held()(s)) -> #{node = InductType} /Held()(t)
+    | refl(z) => (w2: #{node = InductType} /Held()(z)) => w2
+    end;
+
+let /held: #{node = InductType} /Held()(1) =
+    /cast(#{node = Variant} /Held/yes());
+
+let /boom: #{node = InductType} /False() =
+    match /held: (n, w) => #{node = InductType} /False() end;
+"#,
+        EQUALITY
+    ));
 
     assert!(
-        !verdicts.is_empty(),
-        "the certifier accepted a closed inhabitant of `False`",
+        a_nat_index_at_true(&verdicts, "forged"),
+        "the certifier accepted an occurrence whose indices do not inhabit their domain: {verdicts:?}",
     );
 }
 
 /// The control: an index that really is a `Nat` still types, so the guard above rejects a wrong argument rather than every argument.
 #[test]
 fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
-    let held_name = Global::Authored(Qualifier::from(["Held"]));
-    let held_decl = indexed_family(
-        Free::local(70, Some("n")),
-        Term::intrinsic(Intrinsic::NatType),
-        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-        Term::type_ground(),
+    let verdicts = text_verdicts(
+        r#"
+#{absent = [/Held/yes]}
+induct /Held: (n: #NatType) -> pub Type
+| yes(): (0)
+end
+
+let /held: #{node = InductType} /Held()(0) =
+    #{node = Variant} /Held/yes();
+"#,
     );
 
-    let held = authored(
-        &Global::Authored(Qualifier::from(["held"])),
-        Term::induct_type(
-            held_name,
-            Vec::<Term>::new(),
-            [Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
-        ),
-        Term::variant(held_name, Vec::<Term>::new(), "yes", Vec::<Term>::new()),
-    );
-
-    let definitions = declaring(
-        Definitions {
-            items: vec![held].into(),
-        },
-        BTreeMap::from([(held_name, held_decl)]),
-        [],
-        [],
-    );
-
-    assert_eq!(
-        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
-        Vec::new()
-    );
+    assert_eq!(verdicts, Vec::new());
 }
 
 /// The same bogus occurrence, smuggled past [`a_nominal_occurrence_types_its_arguments`] through a Σ field.
 ///
 /// Typing an occurrence's arguments closes the route only where something *types* the occurrence, so a type former's parts must be typed too: a `FuncType` or a `TupleType` answered with `Sort::of`, which classifies each domain — consulting a declaration for its sort and checking nothing else — would be the second, weaker way to accept a type `curios-cert/README.md` says this crate does not have.
 ///
-/// Classified alone, `{Eq(@True)(0, 1)}` would be admitted, and the projection rule would hand the field's declared type straight back: `v.0` a scrutinee at the forged equation, and the rest of [`index_forgery`]'s derivation unchanged. The codomain half is the same shape — `(Nat) -> Eq(@True)(0, 1)`, with an application handing the codomain back — so both a `Proj` and an `Apply` reach it.
+/// Classified alone, `{Eq(@True)(0, 1)}` would be admitted, and the projection rule would hand the field's declared type straight back: `v.0` a scrutinee at the forged equation, and the rest of [`a_nominal_occurrence_types_its_arguments`]' derivation unchanged. The codomain half is the same shape — `(Nat) -> Eq(@True)(0, 1)`, with an application handing the codomain back — so both a `Proj` and an `Apply` reach it.
 #[test]
 fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
-    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
-
-    let true_name = Global::Authored(Qualifier::from(["True"]));
-    let equality_name = Global::Authored(Qualifier::from(["Eq"]));
-    let true_type = Term::induct_type(true_name, Vec::<Term>::new(), Vec::<Term>::new());
-    let qed = Term::variant(true_name, Vec::<Term>::new(), "qed", Vec::<Term>::new());
-
-    let true_decl = proposition(vec![(
-        Atom::from("qed"),
-        InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-    )]);
-
-    let equality_decl = equality_declaration();
-
     // v : {Eq(True, 0, 1)} = (refl(True, qed()))
-    let bogus = Term::induct_type(equality_name, [true_type.clone()], [nat(0), nat(1)]);
-    let wrapped = authored(
-        &Global::Authored(Qualifier::from(["v"])),
-        Term::tuple_type(vec![(Free::local(30, Some("b")), bogus)]),
-        Term::tuple([Term::variant(equality_name, [true_type], "refl", [qed])]),
-    );
-
-    let definitions = declaring(
-        Definitions {
-            items: vec![wrapped].into(),
-        },
-        BTreeMap::from([(true_name, true_decl), (equality_name, equality_decl)]),
-        [],
-        [],
-    );
-
-    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = text_verdicts(&fill!(
+        r#"${EQUALITY}
+let /v: {b: #{node = InductType} /Eq(#{node = InductType} /True())(0, 1)} =
+    (#{node = Variant} /Eq/refl(@#{node = InductType} /True(), #{node = Variant} /True/qed()),);
+"#,
+        EQUALITY
+    ));
 
     assert!(
-        !verdicts.is_empty(),
-        "the certifier accepted a bogus occurrence standing as a tuple field type",
+        a_nat_index_at_true(&verdicts, "v"),
+        "the certifier accepted a bogus occurrence standing as a tuple field type: {verdicts:?}",
     );
 }
 
@@ -373,48 +415,15 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
 /// Universe instances are deliberately left alone; see `Error::rendered`.
 #[test]
 fn a_refusal_shortens_names_and_marks_implicit_parameters() {
-    let name = Global::Authored(Qualifier::from(["demo", "Box", "Box"]));
-    let parameter = Free::local(0, Some("A"));
-
     // `struct Box(@A : Type)`: one implicit parameter, so a use site writes `Box(Nat)` and never supplies it positionally.
-    let constructor = Definition {
-        name,
-        // The former carries the entry it is the former of: a record of one implicit parameter and no field.
-        kind: DefinitionKind::Nominal(Rc::new(Nominal::Struct(StructDecl {
-            universe_context: UniverseContext::empty(),
-            arity: Telescope::build_marked(
-                [(Plicity::Implicit, parameter, Term::type_ground())],
-                Telescope::done(()),
-            ),
-            result_sort: Term::type_ground(),
-            module: Qualifier::default(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        }))),
-        universe_context: UniverseContext::empty(),
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_: Term::func_type_marked(
-            [(Plicity::Implicit, parameter, Term::type_ground())],
-            Term::type_ground(),
-        ),
-        body: Term::type_ground(),
-    };
-
-    let definitions = Definitions {
-        items: vec![Item::Let(Box::new(constructor))].into(),
-    };
-
-    let applied: Term = Subterm::StructType(StructType {
-        name,
-        universes: Universes::default(),
-        params: vec![Term::intrinsic(Intrinsic::NatType)],
-    })
-    .into();
+    let (definitions, _) = put()
+        .read("struct /demo/Box/Box(@A: Type): pub Type {}")
+        .unwrap_or_else(|unread| panic!("{unread:?}"));
+    let (_, entry) = put()
+        .read("#{node = StructType} /demo/Box/Box(#NatType)")
+        .unwrap_or_else(|unread| panic!("{unread:?}"));
     let refusal = Error::Mismatch {
-        inferred: Box::new(applied),
+        inferred: Box::new(entry.expect("the text closes with its term").body),
         expected: Box::new(Term::intrinsic(Intrinsic::NatType)),
     };
 

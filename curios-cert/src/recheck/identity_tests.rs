@@ -3,54 +3,35 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_analysis::test_support::*,
-    curios_common::Qualifier,
-    curios_core::{
-        Definitions, Entrypoint, Free, Global, Intrinsic, Let, LetBinding, Level, Many, Nat,
-        Program, Scope, Subterm, Term, UniverseParam, Var,
-    },
+    curios_common::{Qualifier, fill},
+    curios_core::{Free, Global, Item, Term},
 };
 
 /// The indices a stray local is tried at: every one the certifier mints first, so a walk that let the local through would open a binder carrying the same identity at one of them.
 const COLLIDING: std::ops::Range<u64> = 0..4;
 
-/// `(x : Nat) => stray`, the function a capture turns into the identity.
-fn constant_over(stray: &Free) -> Term {
-    Term::func(
-        [(Free::local(9_000, Some("x")), nat())],
-        Term::free_var(stray),
-    )
-}
-
 fn held() -> Global {
     Global::Authored(Qualifier::from(["held"]))
 }
 
-/// `0`, the value a binding is given where the binding is not what is under test.
-fn zero() -> Term {
-    Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))
+/// The stray local at `index`, as the texts below write it.
+fn stray(index: u64) -> Free {
+    Free::local(index, Some("stray"))
 }
 
-/// A module holding one definition that states `stated` as the sort its value inhabits: `held : Type = Nat`, whose value sort is the position under test.
-fn sorted(stated: Term) -> Definitions {
-    let item = match authored(&held(), Term::type_ground(), nat()) {
-        curios_core::Item::Let(definition) => {
-            curios_core::Item::Let(Box::new(curios_core::Definition {
-                value_sort: Some(stated),
-                ..*definition
-            }))
-        }
-        item => item,
-    };
-
-    holding(vec![item])
+/// Whether the walk refused `name` for the stray local at `index`.
+fn unbound(verdicts: &[Verdict], name: Option<Global>, index: u64) -> bool {
+    verdicts.iter().any(|verdict| {
+        verdict.name == name
+            && matches!(&verdict.error, Error::Unbound(found) if *found == stray(index))
+    })
 }
 
-/// A module holding `items` and nothing else.
-fn holding(items: Vec<curios_core::Item>) -> Definitions {
-    Definitions {
-        items: items.into(),
-    }
+/// Whether the walk refused `name` for a bound variable no scope binds.
+fn unclosed(verdicts: &[Verdict], name: Option<Global>) -> bool {
+    verdicts
+        .iter()
+        .any(|verdict| verdict.name == name && matches!(&verdict.error, Error::NotClosed { .. }))
 }
 
 /// A definition mentioning a local no binder of its opens is refused, at every index the certifier could mint for the binder it opens.
@@ -59,14 +40,16 @@ fn holding(items: Vec<curios_core::Item>) -> Definitions {
 #[test]
 fn a_definition_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
-        let stray = Free::local(index, Some("stray"));
-        let function = Term::func_type([(Free::local(9_001, Some("x")), nat())], nat());
-        let definitions = holding(vec![authored(&held(), function, constant_over(&stray))]);
+        let verdicts = text_verdicts(&fill!(
+            r#"
+let /held: (x: #NatType) -> #NatType =
+    (x: #NatType) => #{binding = Free(${index})} stray;
+"#,
+            index
+        ));
 
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
-            verdicts.iter().any(|verdict| verdict.name == Some(held())
-                && matches!(&verdict.error, Error::Unbound(found) if *found == stray)),
+            unbound(&verdicts, Some(held()), index),
             "a definition mentioning free local {index} was not refused for it: {verdicts:?}",
         );
     }
@@ -76,20 +59,16 @@ fn a_definition_mentioning_a_free_local_is_refused() {
 #[test]
 fn a_stated_value_sort_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
-        let stray = Free::local(index, Some("stray"));
-        let stated = Term::apply(
-            Term::func(
-                [(Free::local(9_002, Some("y")), nat())],
-                Term::type_ground(),
-            ),
-            [Term::free_var(&stray)],
-        );
-        let definitions = sorted(stated);
+        let verdicts = text_verdicts(&fill!(
+            r#"
+#{value_sort = ((y: #NatType) => Type)(#{binding = Free(${index})} stray)}
+let /held: Type = #NatType;
+"#,
+            index
+        ));
 
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
-            verdicts.iter().any(|verdict| verdict.name == Some(held())
-                && matches!(&verdict.error, Error::Unbound(found) if *found == stray)),
+            unbound(&verdicts, Some(held()), index),
             "a value sort mentioning free local {index} was not refused for it: {verdicts:?}",
         );
     }
@@ -98,32 +77,23 @@ fn a_stated_value_sort_mentioning_a_free_local_is_refused() {
 /// What a module states of a definition's value sort is read by nothing: the walk states the sort the value inhabits itself (`certifier::stating`). A statement holding a metavariable reduction discards, one carrying a universe parameter past the scheme, and one naming the wrong sort are each admitted, and `held : Type = Nat` is stated `Type 0` whatever it said.
 #[test]
 fn a_stated_value_sort_is_read_by_nothing() {
-    let discarding = |argument: Term| {
-        Term::apply(
-            Term::func(
-                [(Free::local(9_002, Some("y")), Term::type_ground())],
-                Term::type_ground(),
-            ),
-            [argument],
-        )
-    };
-    let escaping = discarding(Term::type_at(Level::param(UniverseParam(1))));
-    let with_a_hole = Term::apply(
-        Term::func(
-            [(Free::local(9_003, Some("y")), nat())],
-            Term::type_ground(),
-        ),
-        [Term::hole(7_usize)],
-    );
-
     for (said, stated) in [
-        ("a metavariable", with_a_hole),
-        ("an escaping level", escaping),
-        ("the wrong sort", Term::prop()),
+        (
+            "a metavariable",
+            "((y: #NatType) => Type)(#{id = 7, origin = Hole} ?)",
+        ),
+        (
+            "an escaping level",
+            "((y: Type) => Type)(#{level = v} Type)",
+        ),
+        ("the wrong sort", "Prop"),
     ] {
-        let rechecked = fixture_certified(&sorted(stated), 1_000_000, &Globals::default(), SYNTAX);
+        let rechecked = text_certified(&fill!(
+            "#{value_sort = ${stated}}\nlet /held: Type = #NatType;",
+            stated
+        ));
         assert_eq!(rechecked.verdicts, Vec::new(), "{said}");
-        let curios_core::Item::Let(definition) = &rechecked.definitions.items[0] else {
+        let Item::Let(definition) = &rechecked.definitions.items[0] else {
             panic!("the module holds one definition");
         };
         assert_eq!(definition.value_sort, Some(Term::type_ground()), "{said}");
@@ -134,22 +104,13 @@ fn a_stated_value_sort_is_read_by_nothing() {
 #[test]
 fn an_entry_mentioning_a_free_local_is_refused() {
     for index in COLLIDING {
-        let stray = Free::local(index, Some("stray"));
-        let program = Program {
-            definitions: holding(Vec::new()),
-            entrypoint: Entrypoint {
-                body: Term::apply(
-                    constant_over(&stray),
-                    [Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
-                ),
-                type_: Some(nat()),
-            },
-        };
+        let verdicts = text_verdicts(&fill!(
+            "((x: #NatType) => #{binding = Free(${index})} stray)(0)\n: #NatType",
+            index
+        ));
 
-        let verdicts = fixture_verdicts(&program, 1_000_000, &Globals::default(), SYNTAX);
         assert!(
-            verdicts.iter().any(|verdict| verdict.name.is_none()
-                && matches!(&verdict.error, Error::Unbound(found) if *found == stray)),
+            unbound(&verdicts, None, index),
             "an entry mentioning free local {index} was not refused for it: {verdicts:?}",
         );
     }
@@ -160,26 +121,23 @@ fn an_entry_mentioning_a_free_local_is_refused() {
 /// `Var::bound` is public, so a module built by hand carries an occurrence no binder of its own opens. No boundary saw one, because every one asks `Mentions`, which is built from `var.as_free()` and answers nothing for a bound occurrence — and a position no rule types, a stated value sort, is met by nothing at all, where [the board](../../../documentation/design/soundness/the-soundness-board.md) requires a refusal. The last case is the one no arity check sees either: the index is loose *past* a binder, so the scope it sits under is a legitimate one and only its depth is wrong. Mutation-checked: with the boundary dropped, the stated value sort is admitted, and a body and a type are refused by `infer`'s own `Var` rule instead.
 #[test]
 fn a_definition_position_holding_a_loose_bound_variable_is_refused() {
-    let loose = || Term::var(Var::bound(0));
-    // `let x : Nat = 0; <index 1>`: the block binds one binder and its tail reaches past it, which is why the tail's own arity is no answer to this.
-    let past_a_binder = Term::from(Subterm::Let(Let::new(
-        vec![LetBinding::new(nat(), zero())],
-        Scope::constant(Many(1), Term::var(Var::bound(1))),
-    )));
-
-    for (position, definitions) in [
-        ("a body", holding(vec![authored(&held(), nat(), loose())])),
-        ("a type", holding(vec![authored(&held(), loose(), nat())])),
-        ("a stated value sort", sorted(loose())),
+    for (position, text) in [
+        ("a body", "let /held: #NatType = #{binding = Bound(0)} _;"),
+        ("a type", "let /held: #{binding = Bound(0)} _ = #NatType;"),
+        (
+            "a stated value sort",
+            "#{value_sort = #{binding = Bound(0)} _}\nlet /held: Type = #NatType;",
+        ),
+        // `let x : Nat = 0; <index 1>`: the block binds one binder and its tail reaches past it, which is why the tail's own arity is no answer to this.
         (
             "a body past a binder",
-            holding(vec![authored(&held(), nat(), past_a_binder)]),
+            "let /held: #NatType =\n    let x: #NatType = 0;\n    #{binding = Bound(0)} _;",
         ),
     ] {
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = text_verdicts(text);
+
         assert!(
-            verdicts.iter().any(|verdict| verdict.name == Some(held())
-                && matches!(&verdict.error, Error::NotClosed { .. })),
+            unclosed(&verdicts, Some(held())),
             "{position} holding a loose bound variable was not refused for it: {verdicts:?}",
         );
     }
@@ -188,20 +146,10 @@ fn a_definition_position_holding_a_loose_bound_variable_is_refused() {
 /// The entry is held closed as the module's items are, since it is judged in the same walk by the same rule.
 #[test]
 fn an_entry_holding_a_loose_bound_variable_is_refused() {
-    let program = Program {
-        definitions: holding(Vec::new()),
-        entrypoint: Entrypoint {
-            body: Term::var(Var::bound(0)),
-            type_: Some(nat()),
-        },
-    };
+    let verdicts = text_verdicts("#{binding = Bound(0)} _\n: #NatType");
 
-    let verdicts = fixture_verdicts(&program, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| verdict.name.is_none()
-                && matches!(&verdict.error, Error::NotClosed { .. })),
+        unclosed(&verdicts, None),
         "an entry holding a loose bound variable was not refused for it: {verdicts:?}",
     );
 }
