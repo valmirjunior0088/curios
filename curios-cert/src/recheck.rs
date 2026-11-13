@@ -71,6 +71,8 @@ mod test_support;
 #[cfg(test)]
 mod totality_tests;
 #[cfg(test)]
+mod unfinished_tests;
+#[cfg(test)]
 mod universes_tests;
 #[cfg(test)]
 mod unjudged_tests;
