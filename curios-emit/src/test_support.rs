@@ -819,6 +819,56 @@ pub fn constant_tuple_pair() -> curios_cps::Module {
     module
 }
 
+/// A constant tuple bound in `main`'s body and read in a continuation a jump enters, so the block that continuation becomes captures the binding.
+pub fn constant_tuple_across_a_jump() -> curios_cps::Module {
+    let mut module = curios_cps::Module::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let held = module.add_value(Some("held".into()));
+    let got = module.add_value(Some("got".into()));
+    let after = module.reserve_continuation();
+    let exit = module.add_node(halt(vec![curios_cps::Atom::Value(got)]));
+    let project = module.add_node(curios_cps::Node::LetIntrinsic {
+        result: got,
+        op: curios_cps::Intrinsic::TupleGet(0),
+        args: vec![curios_cps::Atom::Value(held)],
+        next: exit,
+    });
+    module.define_continuation(
+        after,
+        curios_cps::Continuation {
+            debug_name: Some("after".into()),
+            params: vec![],
+            body: project,
+        },
+    );
+    let jump = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
+        target: after,
+        args: vec![],
+    }));
+    let scope = module.add_node(curios_cps::Node::LetCont {
+        continuations: vec![after],
+        body: jump,
+    });
+    let build = module.add_node(curios_cps::Node::LetValue {
+        result: held,
+        value: curios_cps::ValueExpr::Tuple(vec![nat(2)]),
+        next: scope,
+    });
+    module.define_function(
+        main,
+        curios_cps::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body: build,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module
+}
+
 /// A tuple over a computed element — not constant, so it must stay an inline allocation.
 pub fn runtime_tuple() -> curios_cps::Module {
     let mut module = curios_cps::Module::new();

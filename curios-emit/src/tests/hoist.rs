@@ -2,8 +2,8 @@
 
 use {
     crate::{
-        EmissionBody, EmissionModule, hoist_consts, lower, structurize, test_support::*, value_id,
-        value_name,
+        EmissionBody, EmissionModule, EmissionTail, hoist_consts, lower, structurize,
+        test_support::*, value_id, value_name,
     },
     std::collections::BTreeSet,
 };
@@ -81,6 +81,42 @@ fn every_hoisted_binding_is_constant_data() {
         asked += hoisted.iter().filter(|name| values.contains(*name)).count();
     }
     assert!(asked > 0, "no fixture hoists a value of its module");
+}
+
+/// A block that reads a constant bound before it captures the binding where the graph is structured, and hoisting renames every read of it to the interned global: the parameter goes with the binding, and with it the argument each edge hands, so no jump loads a constant into a local nothing reads.
+#[test]
+fn a_block_takes_no_parameter_for_a_hoisted_binding() {
+    let module = constant_tuple_across_a_jump();
+    let representation = curios_cps::representation(&module);
+    let mut structured = structurize(&lower(&module, &representation.results));
+    let (taken, handed) = captures(&mut structured);
+    assert!(
+        taken > 0 && taken == handed,
+        "the fixture's blocks capture its binding, which each jump hands on: {taken} taken, {handed} handed"
+    );
+    hoist_consts(&mut structured);
+    assert_eq!(captures(&mut structured), (0, 0));
+    // What is left still emits: the edge and its block agree.
+    assert_contains(&wat(&module), "global.get $const/");
+}
+
+/// How many parameters the blocks of `structured` take, and how many arguments its jumps hand.
+fn captures(structured: &mut EmissionModule) -> (usize, usize) {
+    fn count(region: &EmissionBody, taken: &mut usize, handed: &mut usize) {
+        if let EmissionTail::Jump(target) = region.tail() {
+            *handed += target.params.len();
+        }
+        for (_, block) in region.blocks() {
+            *taken += block.params.len();
+            count(&block.region, taken, handed);
+        }
+    }
+
+    let (mut taken, mut handed) = (0, 0);
+    for region in structured.regions_mut() {
+        count(region, &mut taken, &mut handed);
+    }
+    (taken, handed)
 }
 
 /// The names every region of `structured` binds.

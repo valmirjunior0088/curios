@@ -237,15 +237,51 @@ impl EmissionBody {
         &self.tail
     }
 
-    /// Read each value `renames` names under the name it maps to, here and in every region nested in this one, dropping the bindings it renames away. A value is renamed and never a block, so what the region escapes to stands.
+    /// Read each value `renames` names under the name it maps to, here and in every region nested in this one, dropping the bindings it renames away and every block parameter that captured one, with the argument each edge hands it. A value is renamed and never a block, so what the region escapes to stands.
+    ///
+    /// **A parameter that captured a renamed binding is read by nothing.** A block takes what it and the blocks after it read of its function's bindings as parameters, each under the binding's own name, and every read of a renamed binding is read under the new name. Left standing, the parameter is a move on every edge into the block: an entry that keeps hundreds of constants in scope across a few dozen blocks moves each of them at each, into a local no instruction reads.
     pub fn rename_values(&mut self, renames: &HashMap<EmissionValueName, EmissionValueName>) {
+        let mut kept = HashMap::new();
+        self.drop_captures(renames, &mut kept);
+        self.rename_within(renames, &kept);
+    }
+
+    /// Drop each block parameter `renames` names, here and in every region nested in this one, and record for each block that lost one which of its parameters it kept, by position.
+    fn drop_captures(
+        &mut self,
+        renames: &HashMap<EmissionValueName, EmissionValueName>,
+        kept: &mut HashMap<EmissionBlockName, Vec<bool>>,
+    ) {
+        for (name, block) in &mut self.blocks {
+            let keeps = block
+                .params
+                .iter()
+                .map(|param| !renames.contains_key(param))
+                .collect::<Vec<_>>();
+            if keeps.contains(&false) {
+                let mut keep = keeps.iter();
+                block
+                    .params
+                    .retain(|_| *keep.next().expect("a verdict a parameter"));
+                kept.insert(name.clone(), keeps);
+            }
+            block.region.drop_captures(renames, kept);
+        }
+    }
+
+    fn rename_within(
+        &mut self,
+        renames: &HashMap<EmissionValueName, EmissionValueName>,
+        kept: &HashMap<EmissionBlockName, Vec<bool>>,
+    ) {
         self.values.retain(|(name, _)| !renames.contains_key(name));
         for (_, value) in &mut self.values {
             value.rename(renames);
         }
+        self.tail.keep_arguments(kept);
         self.tail.rename(renames);
         for (_, block) in &mut self.blocks {
-            block.region.rename_values(renames);
+            block.region.rename_within(renames, kept);
         }
     }
 
@@ -523,6 +559,42 @@ impl EmissionValue {
 }
 
 impl EmissionTail {
+    /// Keep of each edge's arguments those its block still takes, `kept` holding the positions a block that lost a parameter kept. A block a call or an operation resumes into takes results and captures nothing, so only a jump's and a match's edges hand a capture on.
+    fn keep_arguments(&mut self, kept: &HashMap<EmissionBlockName, Vec<bool>>) {
+        let keep = |target: &mut EmissionJumpTarget| {
+            if let Some(keeps) = kept.get(&target.target) {
+                assert_eq!(
+                    keeps.len(),
+                    target.params.len(),
+                    "an edge hands its block an argument a parameter"
+                );
+                let mut keep = keeps.iter();
+                target
+                    .params
+                    .retain(|_| *keep.next().expect("a verdict an argument"));
+            }
+        };
+        match self {
+            EmissionTail::Jump(target) => keep(target),
+            EmissionTail::Match(target) => target
+                .cases
+                .values_mut()
+                .chain(target.default.iter_mut())
+                .for_each(keep),
+            EmissionTail::Call(_)
+            | EmissionTail::Host(_)
+            | EmissionTail::Cell(_)
+            | EmissionTail::Channel(_)
+            | EmissionTail::Panic(_)
+            | EmissionTail::Unreachable => assert!(
+                self.targets()
+                    .into_iter()
+                    .all(|resume| !kept.contains_key(resume)),
+                "a block a result resumes into captured a binding"
+            ),
+        }
+    }
+
     /// Read each value `renames` names under the name it maps to; the blocks it branches to stand.
     fn rename(&mut self, renames: &HashMap<EmissionValueName, EmissionValueName>) {
         match self {
