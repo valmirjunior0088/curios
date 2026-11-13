@@ -12,9 +12,9 @@ use host::*;
 
 use {
     crate::{
-        Access, Column, Failure, Reporting, Run, Served, Steps, Subject, Then, Tree, Wrote, alone,
-        answered, bound, cut, drained, framed, keep, kept, port_of, reader, relayed, serve_run,
-        total, troubled, url,
+        Access, Column, Failure, Piece, Reporting, Run, Served, Steps, Subject, Then, Tree, Wrote,
+        alone, answered, bound, cut, drained, framed, keep, kept, port_of, reader, relayed,
+        serve_run, total, troubled, url,
     },
     curios::{TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Step, Stream},
@@ -57,13 +57,13 @@ impl Totals {
     }
 
     /// The tally: `passed` and `failed` always, since that pair is what the exit code turns on, and the rarer `trapped`, `exited` and `skipped` only when they happened. A count of what went wrong is painted as trouble where it is not zero.
-    fn line(&self) -> String {
+    fn line(&self) -> Piece {
         let wrong = |count: usize, word: &str| match count {
-            0 => format!("0 {word}"),
-            count => troubled(format!("{count} {word}")),
+            0 => Piece::from(format_args!("0 {word}")),
+            count => troubled(format_args!("{count} {word}")),
         };
         let mut parts = vec![
-            format!("{} passed", self.passed),
+            Piece::from(format_args!("{} passed", self.passed)),
             wrong(self.failed, "failed"),
         ];
         for (count, word) in [(self.trapped, "trapped"), (self.exited, "exited")] {
@@ -72,10 +72,10 @@ impl Totals {
             }
         }
         if self.skipped > 0 {
-            parts.push(format!("{} skipped", self.skipped));
+            parts.push(Piece::from(format_args!("{} skipped", self.skipped)));
         }
 
-        parts.join(", ")
+        Piece::joined(parts, ", ")
     }
 }
 
@@ -307,7 +307,7 @@ impl<'a> Printer<'a> {
     /// Close the subject in hand where its last scheduled test has ended: its tally and what its tests took, as the node that closes its tree, folded into the run's.
     fn settled(&mut self) {
         if let Some(hand) = self.hand.take_if(|hand| hand.scheduled.is_empty()) {
-            hand.tree.summed(&hand.tally.line(), hand.spent);
+            hand.tree.summed(hand.tally.line(), hand.spent);
             self.totals.add(&hand.tally);
             self.spent = match (self.spent, hand.spent) {
                 (Some(run), Some(subject)) => Some(run + subject),

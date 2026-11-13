@@ -16,7 +16,7 @@
 //!
 //! **Nothing written is taken back.** There is no cursor control and no repainting: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal, colour apart. Rust's stderr is unbuffered, so a label reaches the reader before the work it names with no flushing of its own.
 //!
-//! **Colour is a layer, decided once** ([`paint`]): a subject bold, the tree and the times dim, and what went wrong red. It changes no byte beneath it, so a painted transcript stripped of its codes is the plain one, which is what is kept of one for a page.
+//! **Colour is a layer, decided once** ([`paint`]): a subject bold, the tree and the times dim, and what went wrong red. It changes no byte beneath it, and a line is made of pieces built in both forms ([`Piece`]), as whoever reads standard error sees one and plain, which is what is kept of the transcript for a page.
 //!
 //! **A run that sends pages its report keeps the transcript** ([`keep`]): every byte written here, from then on, is what a page is sent, so the page shows what the terminal showed.
 //!
@@ -74,19 +74,72 @@ pub fn answered() -> &'static Style {
     ANSWERED.get().unwrap_or(&PLAIN)
 }
 
+/// A stretch of a transcript's line in both its forms: as whoever reads standard error sees it, and plain, as it is kept for a page.
+///
+/// Built in both where it is made, and never read back out of what was painted: a line may carry an escape sequence of its own, in a path or a test's name, which a reading of the painted form would take for paint.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Piece {
+    shown: String,
+    plain: String,
+}
+
+impl Piece {
+    /// `text` as `paint` paints it for `style`'s reader, beside `text` itself.
+    fn painted(style: &Style, text: impl fmt::Display, paint: fn(&Style, &str) -> String) -> Self {
+        let plain = text.to_string();
+
+        Self {
+            shown: paint(style, &plain),
+            plain,
+        }
+    }
+
+    /// This piece and `next` after it.
+    pub fn then(mut self, next: impl Into<Piece>) -> Self {
+        let next = next.into();
+        self.shown.push_str(&next.shown);
+        self.plain.push_str(&next.plain);
+
+        self
+    }
+
+    /// `pieces` in order, with `between` between each two.
+    pub fn joined(pieces: impl IntoIterator<Item = Piece>, between: &str) -> Self {
+        pieces.into_iter().enumerate().fold(
+            Piece::default(),
+            |joined, (index, piece)| match index {
+                0 => joined.then(piece),
+                _ => joined.then(between).then(piece),
+            },
+        )
+    }
+}
+
+/// Text no one paints is the same in both forms.
+impl<T: fmt::Display> From<T> for Piece {
+    fn from(text: T) -> Self {
+        let text = text.to_string();
+
+        Self {
+            shown: text.clone(),
+            plain: text,
+        }
+    }
+}
+
 /// `text` as a subject is painted.
-fn bold(text: impl fmt::Display) -> String {
-    reader().bold(text)
+fn bold(text: impl fmt::Display) -> Piece {
+    Piece::painted(reader(), text, |style, text| style.bold(text))
 }
 
 /// `text` as the tree and a time are painted.
-fn dim(text: impl fmt::Display) -> String {
-    reader().dim(text)
+fn dim(text: impl fmt::Display) -> Piece {
+    Piece::painted(reader(), text, |style, text| style.dim(text))
 }
 
 /// `text` as what went wrong is painted: a refusal, a failure, a count of either that is not zero.
-pub fn troubled(text: impl fmt::Display) -> String {
-    reader().troubled(text)
+pub fn troubled(text: impl fmt::Display) -> Piece {
+    Piece::painted(reader(), text, |style, text| style.troubled(text))
 }
 
 /// Whether `verdict` says something went wrong: a rule refused, the machine failed, a test trapped or exited.
@@ -95,34 +148,20 @@ fn trouble(verdict: &str) -> bool {
 }
 
 /// `verdict` as it is painted: as trouble where it says something went wrong.
-fn worded(verdict: &str) -> String {
+fn worded(verdict: &str) -> Piece {
     match trouble(verdict) {
         true => troubled(verdict),
-        false => verdict.to_string(),
+        false => verdict.into(),
     }
 }
 
-/// `text` with every attribute code [`painted`] wrote taken out.
-fn plain(text: &str) -> String {
-    let mut plain = String::with_capacity(text.len());
-    let mut rest = text;
+/// The one path every byte of the transcript takes: to stderr as its reader sees it, and, plain, onto what is kept of it where a run keeps it.
+fn say(piece: impl Into<Piece>) {
+    let piece = piece.into();
 
-    while let Some((before, coded)) = rest.split_once("\x1b[") {
-        plain.push_str(before);
-        rest = coded.split_once('m').map_or("", |(_, after)| after);
-    }
-    plain.push_str(rest);
-
-    plain
-}
-
-/// The one path every byte of the transcript takes: to stderr, and, plain, onto what is kept of it where a run keeps it.
-fn say(text: impl fmt::Display) {
-    let text = text.to_string();
-
-    eprint!("{text}");
+    eprint!("{}", piece.shown);
     if let Some(kept) = held().as_mut() {
-        kept.extend_from_slice(plain(&text).as_bytes());
+        kept.extend_from_slice(piece.plain.as_bytes());
     }
 }
 
@@ -198,15 +237,17 @@ impl fmt::Display for Subject {
 }
 
 /// A step taken for no one subject, on a line of its own under none: `serve; http://127.0.0.1:8000/`, where what is served is every subject's.
-pub fn alone(label: &str, outcome: impl fmt::Display) {
-    say(format_args!("{label}; {outcome}\n"));
+pub fn alone(label: &str, outcome: impl Into<Piece>) {
+    say(Piece::from(format_args!("{label}; "))
+        .then(outcome)
+        .then("\n"));
 }
 
 /// What a whole invocation came to, as its last line, with the time `taken` by all it sums where that was measured: `3 passed, 1 failed; 0.2s`.
-pub fn total(text: impl fmt::Display, taken: Option<Duration>) {
+pub fn total(text: impl Into<Piece>, taken: Option<Duration>) {
     match taken {
-        Some(taken) => say(format_args!("{text}; {}\n", dim(seconds(taken)))),
-        None => say(format_args!("{text}\n")),
+        Some(taken) => say(text.into().then("; ").then(dim(seconds(taken))).then("\n")),
+        None => say(text.into().then("\n")),
     }
 }
 
@@ -378,7 +419,7 @@ impl Wrote {
 /// ```
 pub struct Tree {
     /// The subject's line, until the first node writes it.
-    line: Option<String>,
+    line: Option<Piece>,
     /// Whether the line names the manifest that governs the subject.
     governed: bool,
     /// When the open node's work began, where one is open.
@@ -398,7 +439,9 @@ impl Tree {
         Self {
             governed: spelled.is_some(),
             line: Some(match spelled {
-                Some(manifest) => format!("{} {}", bold(subject), dim(format!("({manifest})"))),
+                Some(manifest) => bold(subject)
+                    .then(" ")
+                    .then(dim(format_args!("({manifest})"))),
                 None => bold(subject),
             }),
             opened: None,
@@ -416,29 +459,27 @@ impl Tree {
     /// The subject's line, written ahead of its first node.
     fn headed(&mut self) {
         if let Some(line) = self.line.take() {
-            say(format_args!("{line}\n"));
+            say(line.then("\n"));
         }
     }
 
     /// Open a node for `label`, the last its tree plans or not, leaving its line unterminated.
     pub fn open(&mut self, label: &str, last: bool) {
         self.headed();
-        say(format_args!(
-            "{} {label}",
-            dim(match last {
-                true => CORNER,
-                false => BRANCH,
-            })
-        ));
+        say(dim(match last {
+            true => CORNER,
+            false => BRANCH,
+        })
+        .then(format_args!(" {label}")));
         self.opened = Some(Instant::now());
         self.last = last;
     }
 
     /// One line of what the node last closed came to, beneath it and beside the trunk where the trunk goes on: the keys a `pin` wrote, under the node that wrote them.
-    pub fn detail(&mut self, text: impl fmt::Display) {
+    pub fn detail(&mut self, text: impl Into<Piece>) {
         match self.last {
-            true => say(format_args!("     {text}\n")),
-            false => say(format_args!("{}    {text}\n", dim(TRUNK))),
+            true => say(Piece::from("     ").then(text).then("\n")),
+            false => say(dim(TRUNK).then("    ").then(text).then("\n")),
         }
     }
 
@@ -449,28 +490,28 @@ impl Tree {
 
     /// Close the open node with what its work took: `; 1.4s`.
     pub fn done(&mut self) {
-        say(format_args!("; {}\n", dim(self.taken())));
+        say(Piece::from("; ").then(dim(self.taken())).then("\n"));
     }
 
     /// Close the open node with how its work ended where it did not simply finish, and what it took: `; refused in 0.3s`.
     pub fn verdict(&mut self, verdict: &str) {
         let taken = self.taken();
 
-        say(format_args!(
-            "; {} {}\n",
-            worded(verdict),
-            dim(format_args!("in {taken}"))
-        ));
+        say(Piece::from("; ")
+            .then(worded(verdict))
+            .then(" ")
+            .then(dim(format_args!("in {taken}")))
+            .then("\n"));
     }
 
     /// Close the open node with what its work came to stand as, where that is the one fact it is read for: `; .curios/native/hello/hello`.
-    pub fn outcome(&mut self, outcome: impl fmt::Display) {
+    pub fn outcome(&mut self, outcome: impl Into<Piece>) {
         self.opened = None;
-        say(format_args!("; {outcome}\n"));
+        say(Piece::from("; ").then(outcome).then("\n"));
     }
 
     /// Close the open node with where its work came to stand, or as `failed` where it could not be done: why is `done`'s to say, handed back for whoever reports it beneath.
-    pub fn stands<E>(&mut self, done: Result<(), E>, place: impl fmt::Display) -> Result<(), E> {
+    pub fn stands<E>(&mut self, done: Result<(), E>, place: impl Into<Piece>) -> Result<(), E> {
         match &done {
             Ok(()) => self.outcome(place),
             Err(_) => {
@@ -484,16 +525,14 @@ impl Tree {
 
     /// Close the open node with how its work ended and the time `taken` whoever ran it measured, then what only they know of it, a line of `beneath` each: `; passed in 0.1s` on the node's own line, or, where the work `wrote` of its own and so ended that line, on a corner beneath what it wrote, `│  └─ passed in 0.1s`, after the end of a line it left open.
     pub fn ended(&mut self, verdict: &str, taken: Duration, wrote: Wrote, beneath: &[String]) {
-        let closing = format!(
-            "{} {}",
-            worded(verdict),
-            dim(format_args!("in {}", seconds(taken)))
-        );
+        let closing = worded(verdict)
+            .then(" ")
+            .then(dim(format_args!("in {}", seconds(taken))));
 
         self.opened = None;
         let inset = match wrote {
             Wrote::Nothing => {
-                say(format_args!("; {closing}\n"));
+                say(Piece::from("; ").then(closing).then("\n"));
 
                 "    "
             }
@@ -501,26 +540,28 @@ impl Tree {
                 if wrote == Wrote::Open {
                     say("\n");
                 }
-                say(format_args!("{}  {} {closing}\n", dim(TRUNK), dim(CORNER)));
+                say(dim(TRUNK)
+                    .then("  ")
+                    .then(dim(CORNER))
+                    .then(" ")
+                    .then(closing)
+                    .then("\n"));
 
                 "       "
             }
         };
         for line in beneath {
-            say(format_args!("{}{inset}{line}\n", dim(TRUNK)));
+            say(dim(TRUNK).then(format_args!("{inset}{line}\n")));
         }
     }
 
     /// Close the tree with the node that sums it up, and the time `taken` by all it sums where any of it ran: `└─ 2 passed, 1 failed; 0.1s`.
-    pub fn summed(mut self, sum: &str, taken: Option<Duration>) {
+    pub fn summed(mut self, sum: impl Into<Piece>, taken: Option<Duration>) {
         self.headed();
+        let summed = dim(CORNER).then(" ").then(sum);
         match taken {
-            Some(taken) => say(format_args!(
-                "{} {sum}; {}\n",
-                dim(CORNER),
-                dim(seconds(taken))
-            )),
-            None => say(format_args!("{} {sum}\n", dim(CORNER))),
+            Some(taken) => say(summed.then("; ").then(dim(seconds(taken))).then("\n")),
+            None => say(summed.then("\n")),
         }
     }
 

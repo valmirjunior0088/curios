@@ -355,14 +355,15 @@ fn dispatch() -> Result<(), Failure> {
             };
             let beside = [
                 (errors > 0).then(|| troubled(counted(errors, "error"))),
-                (goals > 0).then(|| counted(goals, "goal")),
+                (goals > 0).then(|| Piece::from(counted(goals, "goal"))),
             ];
 
             total(
-                iter::once(counted(lints, "lint"))
-                    .chain(beside.into_iter().flatten())
-                    .collect::<Vec<_>>()
-                    .join(", "),
+                Piece::joined(
+                    iter::once(Piece::from(counted(lints, "lint")))
+                        .chain(beside.into_iter().flatten()),
+                    ", ",
+                ),
                 None,
             );
             match (lints + errors, goals) {

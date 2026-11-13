@@ -1,15 +1,44 @@
-//! How the paths and the counts a report names are spelled, and what a painted line is beneath its paint.
+//! How the paths and the counts a report names are spelled, and what a piece of a line holds beside its paint.
 
 use {super::*, std::path::Path};
 
+/// A piece holds what its reader is shown and, beside it, what is kept: painted where the reader sees colour, the text itself in the kept form, and an escape sequence the text carries is the text's own in both.
 #[test]
-fn a_painted_line_stripped_of_its_codes_is_the_plain_one() {
-    assert_eq!(plain("demo"), "demo");
+fn a_piece_is_built_as_its_reader_sees_it_and_plain() {
+    let coloured = Style {
+        here: None,
+        painted: true,
+    };
+    let line = Piece::painted(&coloured, "├─", |style, text| style.dim(text))
+        .then(" check; ")
+        .then(Piece::painted(&coloured, "refused", |style, text| {
+            style.troubled(text)
+        }))
+        .then("\n");
     assert_eq!(
-        plain("\x1b[2m├─\x1b[0m check; \x1b[31mrefused\x1b[0m \x1b[2min 0.3s\x1b[0m\n"),
-        "├─ check; refused in 0.3s\n"
+        line.shown,
+        "\x1b[2m├─\x1b[0m check; \x1b[31mrefused\x1b[0m\n"
     );
-    assert_eq!(plain("\x1b[1mdemo\x1b[0m"), "demo");
+    assert_eq!(line.plain, "├─ check; refused\n");
+
+    // Where the reader sees no colour the two forms are one.
+    let unpainted = Piece::painted(&Style::plain(), "demo", |style, text| style.bold(text));
+    assert_eq!(unpainted.shown, unpainted.plain);
+
+    // A name that carries an escape sequence is kept as it was written, where stripping the painted line would take it for paint.
+    let named = Piece::painted(&coloured, "a\x1b[1mb", |style, text| style.bold(text));
+    assert_eq!(named.plain, "a\x1b[1mb");
+    assert_eq!(named.shown, "\x1b[1ma\x1b[1mb\x1b[0m");
+
+    let joined = Piece::joined(
+        [
+            Piece::from("1 passed"),
+            Piece::painted(&coloured, "1 failed", |style, text| style.troubled(text)),
+        ],
+        ", ",
+    );
+    assert_eq!(joined.plain, "1 passed, 1 failed");
+    assert_eq!(joined.shown, "1 passed, \x1b[31m1 failed\x1b[0m");
 }
 
 #[test]
