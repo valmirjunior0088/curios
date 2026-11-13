@@ -20,7 +20,11 @@ use {
     curios_abi::ForeignFunction,
     curios_common::{Plicity, Qualifier, Sign, Span, recurse},
     curios_core::{Free, Global, Intrinsic, Nat, Quality, QualityParam},
-    std::{collections::HashMap, fmt, sync::Arc},
+    std::{
+        collections::{HashMap, hash_map::Entry},
+        fmt,
+        sync::Arc,
+    },
 };
 
 /// Why a text of Core text makes no Core, and where.
@@ -111,6 +115,8 @@ pub struct Reader<'s> {
     bound: Vec<(String, Free)>,
     free: HashMap<String, Free>,
     minted: u64,
+    /// Each node the text named under `#{share = k}`, by its key: what `#{shared = k} _` reads as.
+    shared: HashMap<u64, curios_core::Term>,
 }
 
 impl<'s> Reader<'s> {
@@ -122,6 +128,7 @@ impl<'s> Reader<'s> {
             bound: Vec::new(),
             free: HashMap::new(),
             minted: 0,
+            shared: HashMap::new(),
         }
     }
 
@@ -425,15 +432,57 @@ pub fn core_read(
             term: operand,
         })) => {
             let mut fields = Fields::of(fields, term.span())?;
+            if let Some(key) = fields.take("shared") {
+                fields.finish()?;
+                return shared_read(key, operand, reader);
+            }
+            let share = fields.take("share");
             let read = match fields.take("node") {
                 Some(node) => node_read(node, operand, &mut fields, reader)?,
                 None => form_read(operand, &mut fields, reader)?,
             };
             fields.finish()?;
+            if let Some(key) = share {
+                share_read(key, &read, reader)?;
+            }
             Ok(read)
         }
         _ => form_read(term, &mut Fields::none(), reader),
     })
+}
+
+/// The node `#{shared = key} _` stands for: the one the text named `key` before it.
+fn shared_read(
+    key: &CoreValue,
+    operand: &Term<CoreText>,
+    reader: &Reader<'_>,
+) -> Result<curios_core::Term, ReadError> {
+    if !matches!(operand.as_subterm(), Subterm::Held) {
+        return Err(ReadError::at(
+            Refusal::Malformed("a shared node, `#{shared = k} _`, and no field beside its key"),
+            operand.span(),
+        ));
+    }
+    reader
+        .shared
+        .get(&value_number(key)?)
+        .cloned()
+        .ok_or_else(|| malformed("a key a `share` before it names", key))
+}
+
+/// Name `read` `key`, for each `#{shared = key} _` after it.
+fn share_read(
+    key: &CoreValue,
+    read: &curios_core::Term,
+    reader: &mut Reader<'_>,
+) -> Result<(), ReadError> {
+    match reader.shared.entry(value_number(key)?) {
+        Entry::Occupied(_) => Err(malformed("a key no `share` before it names", key)),
+        Entry::Vacant(slot) => {
+            slot.insert(read.clone());
+            Ok(())
+        }
+    }
 }
 
 /// What `term`'s form builds, each field `fields` states of it set.

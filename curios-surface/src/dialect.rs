@@ -70,6 +70,9 @@ pub trait Rendered: Dialect<Head = CoreHead<Self>, Fields = Vec<DecoratorField<S
     /// A form of Core text, as this dialect holds one.
     fn core(form: CoreForm<Self>) -> Self::Form;
 
+    /// The form of Core text `form` is, where it is one.
+    fn form_core(form: &Self::Form) -> Option<&CoreForm<Self>>;
+
     /// `…`, what a bounded print leaves out.
     fn elided(leave: Self::Leave) -> Self::Form;
 
@@ -92,6 +95,10 @@ impl Rendered for CoreText {
 
     fn core(form: CoreForm) -> CoreForm {
         form
+    }
+
+    fn form_core(form: &CoreForm) -> Option<&CoreForm> {
+        Some(form)
     }
 
     fn elided(leave: Unwritable) -> CoreForm {
@@ -120,6 +127,13 @@ impl Rendered for Shown {
 
     fn core(form: CoreForm<Shown>) -> ShownForm {
         ShownForm::Core(form)
+    }
+
+    fn form_core(form: &ShownForm) -> Option<&CoreForm<Shown>> {
+        match form {
+            ShownForm::Core(form) => Some(form),
+            _ => None,
+        }
     }
 
     fn elided((): ()) -> ShownForm {

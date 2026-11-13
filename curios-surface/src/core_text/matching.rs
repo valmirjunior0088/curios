@@ -26,6 +26,8 @@ pub fn match_written<D: Rendered>(
     }: Match,
     frame: Frame<'_, D>,
 ) -> crate::Term<D> {
+    // Each part written in the order the reader meets it, the head first, so a node a part shares with a later one is named where the reader reads it.
+    let head = sub(head, frame);
     let mut fields = Vec::<Decoration<D>>::new();
     let motive = match result {
         MatchResult::Family(motive) => Some(motive_written(motive, frame)),
@@ -55,7 +57,7 @@ pub fn match_written<D: Rendered>(
                     frame,
                 )
             })
-            .chain([arm(binder("_"), default, frame)])
+            .chain(std::iter::once_with(|| arm(binder("_"), default, frame)))
             .collect(),
         Cases::Induct {
             cases,
@@ -68,7 +70,11 @@ pub fn match_written<D: Rendered>(
             cases
                 .into_iter()
                 .map(|(tag, induct_arm)| constructor_arm(&tag.as_string(), induct_arm, frame))
-                .chain(default.map(|default| arm(binder("_"), default, frame)))
+                .chain(
+                    default
+                        .into_iter()
+                        .map(|default| arm(binder("_"), default, frame)),
+                )
                 .collect()
         }
         Cases::FreeMonoid { carrier } => match carrier {
@@ -138,11 +144,7 @@ pub fn match_written<D: Rendered>(
     if !held.is_empty() {
         fields.push(("cases", nested(held)));
     }
-    let elimination = tree(crate::Subterm::Match(crate::Match {
-        head: sub(head, frame),
-        motive,
-        arms,
-    }));
+    let elimination = tree(crate::Subterm::Match(crate::Match { head, motive, arms }));
 
     frame.decorated(fields, elimination)
 }
@@ -240,7 +242,11 @@ pub fn match_read(
     let (mut stated, mut carrier) = (None, None);
     if let Some(value) = fields.take("cases") {
         let mut held = value_fields(value)?;
-        stated = held.take("stated").map(value_term).transpose()?;
+        // Read where it is taken, before the arms, the order the writer meets it in.
+        stated = held
+            .take("stated")
+            .map(|stated| core_read(&value_term(stated)?, reader))
+            .transpose()?;
         if let Some(carried) = held.take("carrier") {
             let mut carried = value_fields(carried)?;
             carrier = carried.take("elem").map(value_term).transpose()?;
@@ -388,10 +394,7 @@ pub fn match_read(
             Cases::Induct {
                 cases,
                 default,
-                stated: stated
-                    .take()
-                    .map(|stated| core_read(&stated, reader))
-                    .transpose()?,
+                stated: stated.take(),
             }
         }
     };

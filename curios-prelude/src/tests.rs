@@ -421,40 +421,43 @@ fn written_whole(
     (scope, Rc::new(spelling))
 }
 
-/// Every unit of the prelude reads back as the unit it is, item for item and by Core's equality, each read over the units before it, from the tree of Core text it is written whole as and from the text that tree prints as: the writer is the reader's inverse, and the printer and the parser hold one another to every form the prelude's terms take.
+/// Every unit of the prelude reads back as the unit it is, item for item and by Core's equality, each read over the units before it, from the tree of Core text it is written whole as and from the text that tree prints as, and as again where each node met again is named: the writer is the reader's inverse, and the printer and the parser hold one another to every form the prelude's terms take.
 #[test]
 fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
     with_prelude(|prelude| {
         for (index, unit) in prelude.iter().enumerate() {
-            let (scope, spelling) = written_whole(prelude, index);
-            let written = unit.core();
-            let tree = written.spelled(&spelling).written();
-            let text = written.spelled(&spelling).to_string();
-            let parsed = text
-                .parse::<CoreFile>()
-                .unwrap_or_else(|error| panic!("{}", error.format()));
-            let spelled = |item: &Item| {
-                Definitions {
-                    items: vec![item.clone()].into(),
+            let (scope, whole) = written_whole(prelude, index);
+            let sharing = Rc::new((*whole).clone().with_sharing());
+            for spelling in [whole, sharing] {
+                let written = unit.core();
+                let tree = written.spelled(&spelling).written();
+                let text = written.spelled(&spelling).to_string();
+                let parsed = text
+                    .parse::<CoreFile>()
+                    .unwrap_or_else(|error| panic!("{}", error.format()));
+                let spelled = |item: &Item| {
+                    Definitions {
+                        items: vec![item.clone()].into(),
+                    }
+                    .spelled(&spelling)
+                    .to_string()
+                };
+                for (from, file) in [("tree", &tree), ("text", &parsed)] {
+                    let (read, entry) = to_core(file, Some(&scope))
+                        .unwrap_or_else(|error| panic!("from its {from}: {}", refusal(&error)));
+                    assert!(entry.is_none(), "a unit closes with no entry");
+                    for (place, (read, written)) in
+                        read.items.iter().zip(written.items.iter()).enumerate()
+                    {
+                        assert!(
+                            read == written,
+                            "item {place} reads back from its {from} otherwise:\n{}\nas\n{}",
+                            spelled(written),
+                            spelled(read)
+                        );
+                    }
+                    assert_eq!(read.items.len(), written.items.len(), "the unit's items");
                 }
-                .spelled(&spelling)
-                .to_string()
-            };
-            for (from, file) in [("tree", &tree), ("text", &parsed)] {
-                let (read, entry) = to_core(file, Some(&scope))
-                    .unwrap_or_else(|error| panic!("from its {from}: {}", refusal(&error)));
-                assert!(entry.is_none(), "a unit closes with no entry");
-                for (place, (read, written)) in
-                    read.items.iter().zip(written.items.iter()).enumerate()
-                {
-                    assert!(
-                        read == written,
-                        "item {place} reads back from its {from} otherwise:\n{}\nas\n{}",
-                        spelled(written),
-                        spelled(read)
-                    );
-                }
-                assert_eq!(read.items.len(), written.items.len(), "the unit's items");
             }
         }
     });

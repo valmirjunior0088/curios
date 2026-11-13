@@ -14,8 +14,8 @@ use {
     curios_core::{
         Arity, Atom, Bound, Cursor, Definition, DefinitionKind, Definitions, Field, Free, Func,
         Global, HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon, Marks, Members,
-        Mention, Nat, Nominal, Notation, Program, Scope, Spellings, StructDecl, Subterm, Symbols,
-        Term, UniverseContext, UniverseError, WitnessKey, inconsistent_sort, suffixes_of,
+        Mention, Nat, Nominal, Notation, Program, Scope, Sharing, Spellings, StructDecl, Subterm,
+        Symbols, Term, UniverseContext, UniverseError, WitnessKey, inconsistent_sort, suffixes_of,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_print::{Printer, run_printer, run_printer_within},
@@ -85,6 +85,12 @@ pub struct Spelling {
     whole: bool,
     /// Whether Core text is written as a text of its own — a file, a dump — rather than as a term inside a sentence: a decorated term on its line where it fits there whole, and otherwise its decorator on a line of its own above it, at the workspace's line width ([`Spelling::written_as_text`]).
     as_text: bool,
+    /// Whether a whole write names each node it meets again rather than writing it again ([`Spelling::with_sharing`]).
+    shares: bool,
+    /// The nodes the dry run of a render under [`Spelling::with_sharing`] met more than once, by where the render meets each: what the render names, set where the dry run that found them hands its words over ([`Spelling::with_words`]).
+    shared: Option<Rc<SharedNodes>>,
+    /// The key the next node met again is named by. Shared by a spelling's copies, so the terms of one print take keys of their own, and begun anew where a print begins ([`Spelling::begun`]), so a print names its nodes alike each time.
+    keys: Rc<Cell<u64>>,
     /// What a test's and a foreign row's forms are made against, where a module's printer is handed it ([`FormScope`]).
     form_scope: Option<Rc<FormScope>>,
 }
@@ -362,8 +368,10 @@ impl Spelling {
         match self.pretty {
             Some(_) => Rc::clone(self),
             None => {
-                let rename = build_rename(&display_names(term), self);
-                Rc::new((**self).clone().with_pretty_names(Rc::new(rename)))
+                let (rename, shared) = renamed(&display_names(term), self);
+                let mut words = (**self).clone().with_pretty_names(Rc::new(rename));
+                words.shared = shared.map(Rc::new);
+                Rc::new(words)
             }
         }
     }
@@ -382,6 +390,7 @@ impl Spelling {
         let mint = Minting::recording();
         mint.allow_all(terms);
         render(Frame::new(self, &mint));
+        let shared = mint.shared_nodes(&self.keys);
         let recorded = mint
             .recorded
             .expect("a recording mint records")
@@ -393,8 +402,10 @@ impl Spelling {
             .collect::<BTreeSet<_>>();
         shown.extend(recorded.names);
         let rename = assign(&shown, &recorded.tuple_labels, self);
+        let mut words = (**self).clone().with_pretty_names(Rc::new(rename));
+        words.shared = shared.map(Rc::new);
 
-        Rc::new((**self).clone().with_pretty_names(Rc::new(rename)))
+        Rc::new(words)
     }
 
     /// The certified-string declaration (axis (f)), where one is set.
@@ -453,6 +464,17 @@ impl Spelling {
         self.core_text = true;
         self.as_text = true;
         self
+    }
+
+    /// This spelling naming, in a whole write, each node with children a render meets more than once: its first occurrence under `#{share = k}` and every later one as `#{shared = k} _`, which a reader hands back as that node. A term whose tree outgrows its graph — a tower of sixty pairs over one pair below — is written in its graph's size and read back as the same graph. Nodes are met as the render meets them, after each binder it opens, and a node equal to one met before is that node, so a graph that opening a binder copies is written as the graph it was. A render under no other spelling writes nothing differently.
+    pub fn with_sharing(mut self) -> Self {
+        self.shares = true;
+        self
+    }
+
+    /// This spelling where a print begins: the first node it names is keyed `0`.
+    fn begun(&self) {
+        self.keys.set(0);
     }
 
     /// This spelling writing Core text as a text of its own — a `.crsc`, a dump — rather than a term a sentence quotes, as a certifier's refusal does: a decorated term stays on the line it is reached on where it fits there whole, and otherwise its decorator takes a line of its own and what it decorates the line beneath at its indentation, a level deeper where the decorator follows something else on its line; the text is rendered at [`LINE_WIDTH`], which decides what fits.
@@ -553,7 +575,13 @@ pub fn display_names(term: &Term) -> DisplayNames {
 ///
 /// A tuple label is the exception: it is part of its tuple type's identity, so it keeps the spelling it was written with before anything else is assigned, and a binder that would read like it is the one suffixed — a function's parameter `frame` beside a result field `frame` reads `frame2`, since a parameter's name is no part of its type. Two labels may therefore read alike, which is what their types say.
 pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> Rename {
+    renamed(names, spelling).0
+}
+
+/// [`build_rename`], with the nodes its dry run met more than once where it renders one term under [`Spelling::with_sharing`]: what the render of that term names.
+fn renamed(names: &DisplayNames, spelling: &Spelling) -> (Rename, Option<SharedNodes>) {
     let spelling = Rc::new(spelling.clone());
+    let mut shared = None;
     let mut shown = names
         .mentioned
         .iter()
@@ -563,6 +591,10 @@ pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> Rename {
     for term in &names.terms {
         let mint = Minting::recording();
         print_minting(term.clone(), &spelling, &mint);
+        // A render meets one term's children in order from its own start, so what a dry run met again is the render's to name only where the render is of that one term.
+        if let [_] = names.terms.as_slice() {
+            shared = mint.shared_nodes(&spelling.keys);
+        }
         let recorded = mint
             .recorded
             .expect("a recording mint records")
@@ -570,7 +602,8 @@ pub fn build_rename(names: &DisplayNames, spelling: &Spelling) -> Rename {
         shown.extend(recorded.names);
         tuple_labels.extend(recorded.tuple_labels);
     }
-    assign(&shown, &tuple_labels, &spelling)
+
+    (assign(&shown, &tuple_labels, &spelling), shared)
 }
 
 /// The spellings [`build_rename`] assigns, over the names a report shows and the tuple labels among them. `shown` is sorted, so the assignment is deterministic: a free variable before the binders a render minted, and those in the order a render meets them.
@@ -693,6 +726,41 @@ pub struct Minting {
     allowance: Cell<u64>,
     /// What a dry run minted, when this is one.
     recorded: Option<RefCell<Recorded>>,
+    /// How many children this render has met, in the order it meets them, which a dry run and the render it stands for share: where a render under [`Spelling::with_sharing`] meets a node is how it knows the node ([`SharedNodes`]).
+    children: Cell<usize>,
+    /// What a dry run under [`Spelling::with_sharing`] has met so far.
+    meeting: RefCell<Meeting>,
+    /// The terms this render was allowed, by identity: a render names what its own dry run met, and another render under the same words names nothing ([`SharedNodes::roots`]).
+    roots: RefCell<Vec<usize>>,
+}
+
+/// What a dry run under [`Spelling::with_sharing`] meets: each child as the node equal to it it met first, and where it met one again.
+#[derive(Default)]
+struct Meeting {
+    /// The node each child is equal to, the first met of the ones alike: a child a binder's opening copied is the node it copies, and a node is known by the one it is equal to, which this keeps alive.
+    canonical: Sharing,
+    /// Where each node was first met, by its canonical node's identity.
+    first: HashMap<usize, usize>,
+    /// Where a node was met again, with where it was first met.
+    again: Vec<(usize, usize)>,
+}
+
+/// The nodes a render under [`Spelling::with_sharing`] names, by where it meets each: its first occurrence named under its key, and each later one written as that key.
+pub struct SharedNodes {
+    /// The terms the dry run was of, by identity: the render of the same terms is the one these places are its.
+    roots: Vec<usize>,
+    named: HashMap<usize, u64>,
+    again: HashMap<usize, u64>,
+}
+
+/// How a render meets the next child it writes.
+pub enum Occurrence {
+    /// Not named: written as it stands.
+    Written,
+    /// The first occurrence of a node met again: written under its key.
+    Named(u64),
+    /// A node met before: written as its key, and not descended into.
+    Again(u64),
 }
 
 /// What a dry run met: every name it showed, and which of the labels it minted are a tuple type's.
@@ -705,14 +773,81 @@ struct Recorded {
 impl Minting {
     fn recording() -> Self {
         Self {
-            next: Cell::new(0),
-            allowance: Cell::new(0),
             recorded: Some(RefCell::new(Recorded::default())),
+            ..Self::default()
         }
+    }
+
+    /// How this render meets `term`, the next child it writes, under `spelling`: as it stands, or under the key a node it meets more than once is named by. A dry run under [`Spelling::with_sharing`] knows a child by the node it is equal to and descends into none it met before; a render names what its dry run met again. A node with no child is never named, since naming it costs what writing it does.
+    pub fn occurrence(&self, term: &Term, spelling: &Spelling) -> Occurrence {
+        if !(spelling.shares && spelling.whole) {
+            return Occurrence::Written;
+        }
+        let at = self.children.get();
+        self.children.set(at + 1);
+        if !term.as_ref().any_child_term(&mut |_| true) {
+            return Occurrence::Written;
+        }
+        if self.recorded.is_some() {
+            let mut meeting = self.meeting.borrow_mut();
+            let identity = meeting.canonical.share(term).identity();
+            return match meeting.first.get(&identity).copied() {
+                Some(first) => {
+                    meeting.again.push((at, first));
+                    Occurrence::Again(0)
+                }
+                None => {
+                    meeting.first.insert(identity, at);
+                    Occurrence::Written
+                }
+            };
+        }
+        let Some(shared) = spelling
+            .shared
+            .as_ref()
+            .filter(|shared| shared.roots == *self.roots.borrow())
+        else {
+            return Occurrence::Written;
+        };
+        match (shared.again.get(&at), shared.named.get(&at)) {
+            (Some(key), _) => Occurrence::Again(*key),
+            (None, Some(key)) => Occurrence::Named(*key),
+            (None, None) => Occurrence::Written,
+        }
+    }
+
+    /// What this dry run met more than once, each first occurrence keyed from `keys` on in the order the render meets them, `keys` left past the last; nothing where it met nothing again.
+    fn shared_nodes(&self, keys: &Cell<u64>) -> Option<SharedNodes> {
+        let meeting = self.meeting.borrow();
+        if meeting.again.is_empty() {
+            return None;
+        }
+        let firsts = meeting
+            .again
+            .iter()
+            .map(|(_, first)| *first)
+            .collect::<BTreeSet<_>>();
+        let named = firsts
+            .into_iter()
+            .zip(keys.get()..)
+            .collect::<HashMap<_, _>>();
+        keys.set(keys.get() + named.len() as u64);
+        let again = meeting
+            .again
+            .iter()
+            .map(|(at, first)| (*at, named[first]))
+            .collect();
+
+        Some(SharedNodes {
+            roots: self.roots.borrow().clone(),
+            named,
+            again,
+        })
     }
 
     /// Allow a render of `term` its child documents: its graph [`RENDER_PER_NODE`] times over, and never fewer than [`RENDER_FLOOR`].
     fn allow(&self, term: &Term) {
+        *self.roots.borrow_mut() = vec![term.identity()];
         let nodes = u64::try_from(term.distinct_nodes()).unwrap_or(u64::MAX);
         self.allowance
             .set(RENDER_FLOOR.max(RENDER_PER_NODE.saturating_mul(nodes)));
@@ -720,6 +855,7 @@ impl Minting {
 
     /// Allow a render of `terms` together their child documents, as [`Minting::allow`] allows one term's.
     pub fn allow_all(&self, terms: &[Term]) {
+        *self.roots.borrow_mut() = terms.iter().map(Term::identity).collect();
         let nodes = terms
             .iter()
             .map(|term| u64::try_from(term.distinct_nodes()).unwrap_or(u64::MAX))
@@ -793,6 +929,7 @@ impl Minting {
             next: Cell::new(self.next.get()),
             allowance: Cell::new(0),
             recorded: self.recorded.as_ref().map(|_| RefCell::default()),
+            ..Self::default()
         };
         attempt.allow(term);
         attempt
@@ -1723,6 +1860,7 @@ impl Spellable for Program {
 
 impl fmt::Display for Spelled<'_, Term> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.spelling().begun();
         let spelling = self.spelling().with_words(self.value());
         let printer = print_core(self.value().clone(), &spelling);
         match self.width() {
@@ -1816,6 +1954,7 @@ impl fmt::Display for Spelled<'_, UniverseError> {
 
 impl fmt::Display for Spelled<'_, Definitions> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.spelling().begun();
         let items = print_items(self.value(), formatter, self.spelling())?;
         if items > 0 {
             writeln!(formatter)?;
@@ -1829,6 +1968,7 @@ impl fmt::Display for Spelled<'_, Definitions> {
 impl fmt::Display for Spelled<'_, Program> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let (program, spelling) = (self.value(), self.spelling());
+        spelling.begun();
         if print_items(&program.definitions, formatter, spelling)? > 0 {
             formatter.write_str("\n\n")?;
         }
@@ -1855,6 +1995,7 @@ impl Spelled<'_, Definitions> {
     /// The tree of Core text these definitions are written whole as, which [`to_core`](crate::to_core) reads with no parse between: the print is the reader's inverse by its type, since the tree holds no form the reader does not read.
     pub fn written(&self) -> CoreFile {
         let spelling = Rc::new((**self.spelling()).clone().written_whole());
+        spelling.begun();
         let mut items = Vec::new();
         items_written(self.value(), &spelling, |item| {
             items.push(item);

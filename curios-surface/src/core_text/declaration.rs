@@ -129,6 +129,12 @@ pub fn family_declared<D: Rendered>(
         .map(|(param, read)| param.written(read, frame))
         .collect();
     let indexed = !indices.is_empty();
+    // Each part written in the order the text holds it, the head before the cases, which is the order a reader meets a node a part shares with a later one.
+    let index_types = indices
+        .iter()
+        .map(|index| (index.word(false, frame), sub(index.type_.clone(), frame)))
+        .collect();
+    let result_sort = sub(entry.result_sort.clone(), frame);
     let cases = entry
         .constructors
         .iter()
@@ -142,11 +148,8 @@ pub fn family_declared<D: Rendered>(
         rep_pub: entry.rep_public,
         label: label_of(name),
         params: written,
-        indices: indices
-            .iter()
-            .map(|index| (index.word(false, frame), sub(index.type_.clone(), frame)))
-            .collect(),
-        result_sort: sub(entry.result_sort.clone(), frame),
+        indices: index_types,
+        result_sort,
         cases,
     }
 }

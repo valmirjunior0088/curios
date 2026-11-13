@@ -3,8 +3,8 @@
 use {
     crate::{
         CoreForm, CoreValue, Decorated, DecoratorField, ELIDED_LITERAL_CHARACTERS, FuncParam,
-        FuncTypeParam, Minting, Name, Pattern, ProofLiteral, Radix, Rendered, Shown, Spelling,
-        StrLit, StructLit, StructLitEntry, TupleField, core_written,
+        FuncTypeParam, Minting, Name, Occurrence, Pattern, ProofLiteral, Radix, Rendered, Shown,
+        Spelling, StrLit, StructLit, StructLitEntry, TupleField, core_written,
     },
     curios_common::{Plicity, Qualifier, Sign, is_identifier_char, recurse},
     curios_core::{
@@ -108,6 +108,8 @@ impl<'a, D: Rendered> Frame<'a, D> {
 /// Every recursive call in this module goes through here, which is what makes this the one place the descent needs guarding: building a term's tree is a recursive function over a recursive structure, so it descends as deep as the term — and a diagnostic that cannot be printed is worse than no diagnostic, since it aborts the compiler while it is trying to *report* something else. [`recurse`] is what makes that depth affordable. Laying the tree out and running the document stay iterative in the printer, for the same reason at a different layer.
 ///
 /// **And the one place a render is bounded.** A term is a graph and its print is that graph's tree: a type sixty lines of `let` built, each naming the one before it twice, has sixty-one nodes and a print no report survives writing. So a report builds a bounded number of children, the bound its [`Minting`] sets, and shows what is left as `…`: an elided report is still a report. Core text a reader reads back is written whole, as Core text's own tree ([`Spelling::written_whole`](crate::Spelling::written_whole)), which has no `…` to write: an elided text reads back as no term. The shown tree a rename's dry run builds for it elides nothing either, so the two meet the same binders.
+///
+/// **And the one place a node met again is named**, under [`Spelling::with_sharing`]: its first occurrence under `#{share = k}` and each later one as `#{shared = k} _`, which is not descended into ([`Occurrence`]).
 pub fn sub<D: Rendered>(term: Term, frame: Frame<'_, D>) -> crate::Term<D> {
     if let Some(leave) = D::leave()
         && !frame.spelling.writes_whole()
@@ -116,7 +118,35 @@ pub fn sub<D: Rendered>(term: Term, frame: Frame<'_, D>) -> crate::Term<D> {
         return tree(crate::Subterm::Core(D::elided(leave)));
     }
 
-    recurse(|| core_written(term, frame))
+    match frame.mint.occurrence(&term, frame.spelling) {
+        Occurrence::Written => recurse(|| core_written(term, frame)),
+        Occurrence::Named(key) => named(key, recurse(|| core_written(term, frame))),
+        Occurrence::Again(key) => decorated(
+            vec![("shared", shared_key(key))],
+            tree(crate::Subterm::Held),
+        ),
+    }
+}
+
+/// `written` named `key`: the field joins the decorator `written` is under, where it is under one, since a node's fields are stated together.
+fn named<D: Rendered>(key: u64, written: crate::Term<D>) -> crate::Term<D> {
+    if let crate::Subterm::Core(form) = written.as_subterm()
+        && let Some(CoreForm::Decorated(Decorated { fields, term })) = D::form_core(form)
+    {
+        let mut fields = fields.clone();
+        fields.extend(decoration_fields(vec![("share", shared_key(key))]));
+        return core_form(CoreForm::Decorated(Decorated {
+            fields,
+            term: term.clone(),
+        }));
+    }
+
+    decorated(vec![("share", shared_key(key))], written)
+}
+
+/// A shared node's key, as a decorator writes it.
+fn shared_key<D: Rendered>(key: u64) -> CoreValue<D> {
+    value(numeral(key, Sign::Unmarked))
 }
 
 /// `node` as a tree.

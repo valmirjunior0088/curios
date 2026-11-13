@@ -7,10 +7,10 @@ use {
     },
     curios_common::{Qualifier, Source},
     curios_core::{
-        Arm, Atom, CalleeId, Cases, Definition, Definitions, Field, Free, Global, HeadKey,
-        InductDecl, InductParam, Intrinsic, Item, Level, Match, MatchResult, Matrix, MetavarId,
-        MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality, QualityParam, RecItem, Row, Sort,
-        StructDecl, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var,
+        Arm, Atom, CalleeId, Cases, Definition, DefinitionKind, Definitions, Field, Free, Global,
+        HeadKey, InductDecl, InductParam, Intrinsic, Item, Level, Match, MatchResult, Matrix,
+        MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality, QualityParam, RecItem, Row,
+        Sort, StructDecl, Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Var,
         WitnessId, WitnessKey, WitnessOrigin,
     },
     curios_num::Floating,
@@ -535,6 +535,51 @@ fn every_module_written_reads_back_as_itself() {
             definitions.faithful()
         );
     }
+}
+
+/// A node met again is written once under sharing and read back as that one node: a tower of sixty pairs, each over one pair below twice, is a graph of sixty-one nodes whose tree has 2⁶⁰ leaves, and it is written and read in its graph's size. A term with no node met twice is written as a whole write without sharing writes it.
+#[test]
+fn a_node_met_again_is_written_once_and_read_back_as_that_node() {
+    let tower = (0..60u64).fold(nat_type(), |below, level| {
+        let first = Free::local(2 * level + 100, Some("first"));
+        let second = Free::local(2 * level + 101, Some("second"));
+
+        Term::tuple_type([(first, below.clone()), (second, below)])
+    });
+    let definitions = Definitions {
+        items: vec![Item::Let(Box::new(Definition {
+            name: global(&["tower"]),
+            kind: DefinitionKind::Authored,
+            universe_context: UniverseContext::empty(),
+            island: Qualifier::empty(),
+            proof: false,
+            value_sort: None,
+            type_: Term::type_ground(),
+            body: tower,
+        }))]
+        .into(),
+    };
+    let sharing = Rc::new(Spelling::core_text().written_whole().with_sharing());
+    let text = definitions.spelled(&sharing).to_string();
+    let file = text
+        .parse::<CoreFile>()
+        .unwrap_or_else(|error| panic!("{text}\n{}", error.format()));
+    let (read, _) = to_core(&file, None).unwrap_or_else(|error| panic!("{text}\n{error}"));
+
+    assert_eq!(read, definitions, "{text}");
+    let Item::Let(definition) = &read.items[0] else {
+        panic!("a definition reads back as one: {text}");
+    };
+    // Sixty pairs, and the `Nat` beneath them at each of the two places it stands: a node with no child is written where it stands rather than named.
+    assert_eq!(definition.body.distinct_nodes(), 62, "{text}");
+    assert_eq!(text.matches("share =").count(), 59, "{text}");
+
+    let small = Term::tuple_type([(Free::local(0, Some("x")), nat_type())]);
+    let whole = Rc::new(Spelling::core_text().written_whole());
+    assert_eq!(
+        small.spelled(&sharing).to_string(),
+        small.spelled(&whole).to_string()
+    );
 }
 
 /// What reading `text` as a term refuses, and where the refusal begins in it.
