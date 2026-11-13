@@ -152,7 +152,6 @@ fn certifier_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
         .expect("the arm elaborates within the default budget")
         .program;
 
-    let module = curios_core::Zonked::project(&module).expect("the checked module is zonked");
     floor(|budget| recheck_with_prelude(&module, budget).is_empty())
 }
 
@@ -390,12 +389,10 @@ fn declaration_cost(source: &str) -> (Consumption, Consumption) {
     let checked = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .expect("the program elaborates within the default budget");
     let elaborator = checked.consumption;
-    let module =
-        curios_core::Zonked::project(&checked.program).expect("the checked module is zonked");
-    let (verdicts, heaviest) =
-        recheck_with_prelude_measured(&module, DEFAULT_BUDGET, |certifier| {
-            certifier.heaviest_declaration()
-        });
+    let module = &checked.program;
+    let (verdicts, heaviest) = recheck_with_prelude_measured(module, DEFAULT_BUDGET, |certifier| {
+        certifier.heaviest_declaration()
+    });
 
     assert!(
         verdicts.is_empty(),
@@ -495,8 +492,7 @@ fn an_items_verdict_is_the_same_compiled_alone_and_after_its_neighbours() {
     );
 
     let certified = |module: &curios_core::Program, budget: u64| {
-        let module = curios_core::Zonked::project(module).expect("the checked module is zonked");
-        let (verdicts, heaviest) = recheck_with_prelude_measured(&module, budget, |certifier| {
+        let (verdicts, heaviest) = recheck_with_prelude_measured(module, budget, |certifier| {
             certifier.heaviest_declaration()
         });
         (verdicts.is_empty(), heaviest.units())

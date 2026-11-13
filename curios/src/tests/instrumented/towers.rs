@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{Shape, Stands, tower},
-    curios_core::{Zonked, take_looks},
+    curios_core::take_looks,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::test_support::*,
@@ -51,11 +51,10 @@ fn costs(source: &str) -> (Cost, Option<Cost>) {
         looks,
     };
 
-    let module = Zonked::project(&checked.program).expect("a checked program is zonked");
-    let (verdicts, heaviest) =
-        recheck_with_prelude_measured(&module, DEFAULT_BUDGET, |certifier| {
-            certifier.heaviest_declaration()
-        });
+    let module = &checked.program;
+    let (verdicts, heaviest) = recheck_with_prelude_measured(module, DEFAULT_BUDGET, |certifier| {
+        certifier.heaviest_declaration()
+    });
     let certifier = Cost {
         verdict: match verdicts.is_empty() {
             true => "accepted",

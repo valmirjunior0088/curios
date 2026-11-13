@@ -114,11 +114,11 @@ impl ErasedProgram {
 ///
 /// What every reading reads is the certifier's: the unit's definitions as its walk defined them and the units in scope it mounted, each item read at each assignment of the sorts it leaves open, as the walk judged it. The items erase in the order the module stores them, every item after the items it reaches — so the erased form of every name an item uses is in hand when it is asked for.
 ///
-/// **A unit and a program are erased by one walk, and only a program is linked.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`](curios_core::Program)), so [`erase_program`] runs this same walk, erases the entry at the type it states, which [`Zonked`](curios_core::Zonked) holds, and links what the entry reaches.
+/// **A unit and a program are erased by one walk, and only a program is linked.** The entry is not a unit's to carry: a program is its module and the term it closes with ([`Program`](curios_core::Program)), so [`erase_program`] runs this same walk, erases the entry at the type it states, which the walk that accepted it holds it to ([`Accepted`](curios_cert::Accepted)), and links what the entry reaches.
 pub fn erase_unit(
     certifier: &mut curios_cert::Certifier<'_>,
     scope: Erasures<'_>,
-    definitions: &curios_core::Zonked<curios_core::Definitions>,
+    definitions: &curios_cert::Accepted<curios_core::Definitions>,
 ) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {
@@ -132,7 +132,7 @@ pub fn erase_unit(
 pub fn erase_unit_over(
     certifier: &mut curios_cert::Certifier<'_>,
     scope: Erasures<'_>,
-    definitions: &curios_core::Zonked<curios_core::Definitions>,
+    definitions: &curios_cert::Accepted<curios_core::Definitions>,
     baseline: ErasedBaseline<'_>,
 ) -> Result<ErasedUnit, Error> {
     curios_profile::profile!("erase_unit");
@@ -147,7 +147,7 @@ pub fn erase_unit_over(
 pub fn erase_program(
     certifier: &mut curios_cert::Certifier<'_>,
     scope: Erasures<'_>,
-    program: &curios_core::Zonked<curios_core::Program>,
+    program: &curios_cert::Accepted<curios_core::Program>,
 ) -> Result<ErasedProgram, Error> {
     curios_profile::profile!("erase_unit");
     grown(|| {

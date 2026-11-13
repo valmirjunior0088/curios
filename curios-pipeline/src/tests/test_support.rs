@@ -130,12 +130,14 @@ pub fn erase_to_anf(source: &str) -> curios_anf::Module {
         )
     })
     .unwrap();
-    let program = curios_core::Zonked::project(&program).expect("the elaborated program is zonked");
     with_prelude(|prelude| {
         let predecessors = Predecessors::over(prelude);
         let globals = crate::globals(predecessors);
-        let (_, mut certifier) =
+        let (rechecked, mut certifier) =
             curios_cert::certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
+        let program = rechecked
+            .accepted_program()
+            .expect("the elaborated program is certified");
         erase_program(
             &mut certifier,
             Erasures::of(

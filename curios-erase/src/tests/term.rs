@@ -302,16 +302,16 @@ fn an_erased_form_keeps_no_binder_its_erasure_opened() {
         )
         .definitions;
 
-        let unit = zonked(&unit);
+        let unit = unit;
         let globals = Globals::default();
         let (_, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
-        let places = curios_core::Places::of(unit.as_definitions());
+        let places = curios_core::Places::of(&unit);
         certifier.read(|reader| {
             for _ in 0..opened {
                 reader.fresh(None);
             }
 
-            erase_through(reader, unit.as_definitions(), &places).expect("the unit erases")
+            erase_through(reader, &unit, &places).expect("the unit erases")
         })
     };
     let first = erased(0);

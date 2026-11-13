@@ -1,7 +1,7 @@
 use {
     super::*,
     crate::{test_support::*, *},
-    curios_common::{RootKind, Sign},
+    curios_common::RootKind,
 };
 
 fn definition(name: &str, universe_context: UniverseContext) -> Definition {
@@ -318,110 +318,6 @@ fn a_stored_unit_may_carry_a_global_it_names() {
     ));
 
     assert_eq!(validate_stored_identities(&definitions, &[]), Ok(()));
-}
-
-#[test]
-fn a_meta_free_module_projects_as_zonked() {
-    let definitions = Definitions {
-        items: vec![Item::Let(Box::new(definition(
-            "plain",
-            UniverseContext::empty(),
-        )))]
-        .into(),
-    };
-
-    assert!(Zonked::project(&definitions).is_ok());
-}
-
-#[test]
-fn a_surviving_metavariable_refuses_the_zonked_projection() {
-    let mut holed = definition("holed", UniverseContext::empty());
-    holed.body = Term::hole(0);
-    let definitions = Definitions {
-        items: vec![Item::Let(Box::new(holed))].into(),
-    };
-
-    let refusal = Zonked::project(&definitions).expect_err("the hole must refuse the projection");
-    assert!(refusal.to_string().contains("holed"), "{refusal}");
-}
-
-/// A module is evidence of being finished only where it is closed too: a loose bound variable refuses the projection, since what the wrapper stands for at a stage boundary is a Core term a walk can be handed.
-#[test]
-fn a_loose_bound_variable_refuses_the_zonked_projection() {
-    let mut adrift = definition("adrift", UniverseContext::empty());
-    adrift.body = Term::var(Var::bound(0));
-    let definitions = Definitions {
-        items: vec![Item::Let(Box::new(adrift))].into(),
-    };
-
-    let refusal =
-        Zonked::project(&definitions).expect_err("the loose index must refuse the projection");
-    assert!(refusal.to_string().contains("adrift"), "{refusal}");
-}
-
-#[test]
-fn a_surviving_transient_refuses_the_zonked_projection() {
-    let mut infixed = definition("infixed", UniverseContext::empty());
-    infixed.body = Term::from(Subterm::Transient(Transient::NumLit(NumLit::Number {
-        magnitude: 7u32.into(),
-        sign: Sign::Unmarked,
-    })));
-    let definitions = Definitions {
-        items: vec![Item::Let(Box::new(infixed))].into(),
-    };
-
-    let refusal =
-        Zonked::project(&definitions).expect_err("the transient must refuse the projection");
-    assert!(refusal.to_string().contains("infixed"), "{refusal}");
-}
-
-/// A level that holds a universe metavariable refuses the projection, in the two places `curios-cert`'s `a_level_holding_an_unsolved_universe_metavariable_is_refused` puts one: a definition's declared type and a registry entry's result sort. The level stands in a term's node and in no metavariable a term holds, so the evidence reads a flag of its own for it; the same two places at a ground level project.
-#[test]
-fn a_surviving_universe_metavariable_refuses_the_zonked_projection() {
-    let at = |level: Level| {
-        let mut typed = definition("typed", UniverseContext::empty());
-        typed.type_ = Term::type_at(level.clone());
-
-        let mut family = definition("Levelled", UniverseContext::empty());
-        family.kind = DefinitionKind::Nominal(Rc::new(Nominal::Inductive(InductDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::done(())),
-            constructors: Vec::new().into(),
-            result_sort: Term::type_at(level),
-            module: Qualifier::default(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        })));
-
-        [("typed", typed), ("Levelled", family)]
-    };
-
-    for (name, item) in at(Level::meta(UniverseMetaId::from(0usize))) {
-        let refusal = Zonked::project(&over(vec![Item::Let(Box::new(item))]))
-            .expect_err("the level must refuse the projection");
-        assert!(refusal.to_string().contains(name), "{refusal}");
-    }
-    for (name, item) in at(Level::zero()) {
-        assert!(
-            Zonked::project(&over(vec![Item::Let(Box::new(item))])).is_ok(),
-            "{name}"
-        );
-    }
-}
-
-/// A recompile's module is held to being finished by the items it made, every other being a finished baseline's: a hole in an item made refuses it, and a module whose items made are finished projects.
-#[test]
-fn a_revised_module_is_asked_of_its_items_made() {
-    let plain = Item::Let(Box::new(definition("plain", UniverseContext::empty())));
-    let mut holed = definition("holed", UniverseContext::empty());
-    holed.body = Term::hole(0);
-    let holed = Item::Let(Box::new(holed));
-
-    let refusal = Zonked::revised(&over(vec![plain.clone(), holed.clone()]), [&holed])
-        .expect_err("the hole must refuse the projection");
-    assert!(refusal.to_string().contains("holed"), "{refusal}");
-    assert!(Zonked::revised(&over(vec![plain.clone()]), [&plain]).is_ok());
 }
 
 /// A module with no registry and no entry, over `items`.

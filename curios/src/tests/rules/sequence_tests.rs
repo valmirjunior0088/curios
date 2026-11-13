@@ -5,7 +5,7 @@ use {
     crate::tests::test_support::*,
     curios_cert::Verdict,
     curios_common::Qualifier,
-    curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term, Zonked},
+    curios_core::{Global, Intrinsic, Item, Nat, Subterm, Term},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_num::Binary,
@@ -332,9 +332,8 @@ fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_fiel
     let mut program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .expect("the subject elaborates")
         .program;
-    let control = Zonked::project(&program).expect("an elaborated program is zonked");
     assert_eq!(
-        recheck_with_prelude(&control, DEFAULT_BUDGET),
+        recheck_with_prelude(&program, DEFAULT_BUDGET),
         Vec::new(),
         "the certifier accepts `c` at `A`"
     );
@@ -357,7 +356,6 @@ fn a_surrogate_character_built_past_the_elaborator_is_refused_by_its_hidden_fiel
     }
     assert_eq!(forged, 1, "the subject declares `c` once");
 
-    let program = Zonked::project(&program).expect("a forged literal stays zonked");
     let verdicts = recheck_with_prelude(&program, DEFAULT_BUDGET);
     assert!(
         matches!(

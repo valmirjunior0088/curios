@@ -29,20 +29,18 @@ fn chain_cost(
     let function_type =
         curios_core::Term::func_type_marked([(Plicity::Explicit, x, domain)], nat.clone());
 
-    let unit = zonked(
-        &module(
-            vec![definition("reads", function_type, function)],
-            nat_lit(0),
-        )
-        .definitions,
-    );
+    let unit = module(
+        vec![definition("reads", function_type, function)],
+        nat_lit(0),
+    )
+    .definitions;
     // On a grown stack, as every entry point erases: a chain this deep is walked a frame a level.
     grown(|| {
         let globals = Globals::default();
         let (_, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
-        let places = curios_core::Places::of(unit.as_definitions());
+        let places = curios_core::Places::of(&unit);
         certifier.read(|reader| {
-            erase_through(reader, unit.as_definitions(), &places).expect("the unit erases");
+            erase_through(reader, &unit, &places).expect("the unit erases");
 
             reader.consumed().units()
         })
@@ -206,7 +204,7 @@ fn erasure_answers_a_doubling_term_in_its_own_size() {
 /// An erasure that runs out of its budget is refused in erasure's words, at the term it was reading: the program was certified, and only erasing it stopped.
 #[test]
 fn an_erasure_out_of_budget_is_refused_in_erasures_words() {
-    let unit = zonked(&module(Vec::new(), nat_lit(0)).definitions);
+    let unit = module(Vec::new(), nat_lit(0)).definitions;
     let globals = Globals::default();
     let (_, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
     let sum = curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(nat_lit(2), nat_lit(3)));
@@ -221,7 +219,7 @@ fn an_erasure_out_of_budget_is_refused_in_erasures_words() {
     });
     // Spelled as a report spells a unit's terms, the unit's own names by its lexicon.
     let spelling = curios_surface::Spelling::default()
-        .with_lexicons(&unit.as_definitions().lexicon(), &[])
+        .with_lexicons(&unit.lexicon(), &[])
         .with_erased_universes();
 
     assert_eq!(

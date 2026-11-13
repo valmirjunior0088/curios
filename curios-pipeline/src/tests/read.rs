@@ -6,7 +6,7 @@ use {
     curios_abi::ForeignStore,
     curios_cert::{Error, Verdict},
     curios_common::{Mount, Qualifier, RootKind},
-    curios_core::{Definitions, Entrypoint, Global, Program, Term, Universes, Zonked},
+    curios_core::{Definitions, Entrypoint, Global, Program, Term, Universes},
     curios_elab::DEFAULT_BUDGET,
     curios_module::SYNTAX,
     curios_prelude::with_prelude,
@@ -120,8 +120,6 @@ fn closing_over(units: &[&Unit], text: &str) -> Vec<Verdict> {
                 )),
             },
         };
-        let program = Zonked::project(&program).unwrap_or_else(|refusal| panic!("{refusal}"));
-
         recheck(&program, DEFAULT_BUDGET, predecessors, &SYNTAX)
     })
 }

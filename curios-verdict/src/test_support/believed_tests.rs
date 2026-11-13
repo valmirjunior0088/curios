@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_cert::{Error, Verdict},
     curios_common::{Qualifier, RootKind, fill},
-    curios_core::{Entrypoint, Program, Term, Universes, Zonked},
+    curios_core::{Entrypoint, Program, Term, Universes},
     curios_pipeline::{Earlier, recheck},
 };
 
@@ -32,8 +32,6 @@ fn put(history: &History, proof: &str) -> Vec<Verdict> {
                     )),
                 },
             };
-            let program =
-                Zonked::project(&program).expect("the proof holds nothing elaboration solves");
 
             recheck(&program, DEFAULT_BUDGET, predecessors, &SYNTAX)
         })

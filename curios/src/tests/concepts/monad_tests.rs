@@ -1,9 +1,8 @@
 //! `!` sequencing through a user monad witness, including a two-parameter region.
 
 use {
-    crate::tests::test_support::*, curios_common::fill, curios_core::Zonked,
-    curios_elab::DEFAULT_BUDGET, curios_module::RootSource, curios_pipeline::test_support::*,
-    curios_surface::Entrypoint,
+    crate::tests::test_support::*, curios_common::fill, curios_elab::DEFAULT_BUDGET,
+    curios_module::RootSource, curios_pipeline::test_support::*, curios_surface::Entrypoint,
 };
 
 // The List witness: bind is concat-map.
@@ -324,9 +323,9 @@ fn judged(source: &str) -> Result<Vec<String>, String> {
         checked.obligations.is_empty(),
         "a cell raises an erasure obligation: {source}"
     );
-    let program = Zonked::project(&checked.program).expect("an elaborated program is zonked");
+    let program = &checked.program;
 
-    Ok(recheck_with_prelude(&program, DEFAULT_BUDGET)
+    Ok(recheck_with_prelude(program, DEFAULT_BUDGET)
         .iter()
         .map(|verdict| format!("{verdict:?}"))
         .collect())

@@ -4060,7 +4060,7 @@ impl Walked for Program {
     }
 }
 
-/// The whole-module walk over a bare fixture, the evidence wrapper bypassed: the modules built here are adversarial by design — some deliberately carry what `Zonked` refuses — and the certifier's own refusals are the thing under test, so nothing may stand between a forged module and the walk.
+/// The whole-module walk over a fixture: the modules built here are adversarial by design, some carrying what only elaboration leaves, and the certifier's own refusals are the thing under test.
 pub fn fixture_verdicts(
     fixture: &impl Walked,
     budget: u64,

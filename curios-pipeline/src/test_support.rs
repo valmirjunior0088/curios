@@ -10,7 +10,7 @@ use {
     curios_abi::ForeignStore,
     curios_cert::{Certifier, Verdict, certify_definitions, certify_program},
     curios_common::{Mount, SyntaxRegistry},
-    curios_core::{Consumption, Definitions, Places, Program, Zonked, ZonkedRefusal},
+    curios_core::{Consumption, Definitions, Places, Program},
     curios_elab::{Context, Established},
     curios_erase::{Erasures, erase_unit},
     curios_module::RootSource,
@@ -25,7 +25,7 @@ use {
 ///
 /// A reader rather than the certifier handed back: the certifier reads its scope where the units hold it, so it lives no longer than the environment assembled here.
 pub fn recheck_measured<T>(
-    program: &curios_core::Zonked<Program>,
+    program: &Program,
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
@@ -85,10 +85,9 @@ pub fn typecheck_entrypoint(
     })
 }
 
-/// Why a unit read from Core text was not made: its module carries what elaboration would have solved, the certifier refused it, or it could not be erased. Each held by pointer, a refusal being the large case of what a compile answers.
+/// Why a unit read from Core text was not made: the certifier refused it, what elaboration would have solved among what it refuses, or it could not be erased. Each held by pointer, a refusal being the large case of what a compile answers.
 #[derive(Debug)]
 pub enum Unmade {
-    Unfinished(Box<ZonkedRefusal>),
     Certifier(Box<Verdict>),
     Erased(String),
 }
@@ -101,15 +100,14 @@ pub fn compile_read(
     (definitions, foreigns): (Definitions, ForeignStore),
     baseline: Option<&Earlier>,
 ) -> Result<Unit, Unmade> {
-    let core =
-        Zonked::project(&definitions).map_err(|refusal| Unmade::Unfinished(Box::new(refusal)))?;
+    let core = definitions;
     let moved = predecessors
         .units()
         .iter()
         .map(|unit| baseline.is_some_and(|earlier| earlier.after.moved(unit)))
         .collect::<Vec<_>>();
     let globals = globals_after(predecessors, &moved);
-    let places = Places::of(core.as_definitions());
+    let places = Places::of(&core);
     let (rechecked, mut certifier) = match baseline {
         Some(earlier) => recheck_over(
             &core,
@@ -125,12 +123,14 @@ pub fn compile_read(
         ),
         None => certify_definitions(&core, budget, &globals, SYNTAX),
     };
-    let certification = rechecked.certification;
-    if let Some(verdict) = rechecked.verdicts.into_iter().next() {
-        return Err(Unmade::Certifier(Box::new(verdict)));
-    }
     // The unit is the module the certifier stated, so every mark it carries is the walk's own.
-    let core = core.map(|_| rechecked.definitions);
+    let Some(core) = rechecked.accepted() else {
+        let verdict = rechecked.verdicts.into_iter().next();
+        return Err(Unmade::Certifier(Box::new(
+            verdict.expect("a walk that accepted nothing refused something"),
+        )));
+    };
+    let certification = rechecked.certification;
 
     let cores = predecessors.cores();
     let scope_places = predecessors.places();
@@ -193,7 +193,7 @@ pub fn examine_with_prelude(
 
 /// Put `program` to the independent certifier with the fixed prelude in scope, handing the walk's own certifier to `read` for a measurement to take what it wants of it. See [`recheck_measured`].
 pub fn recheck_with_prelude_measured<T>(
-    program: &curios_core::Zonked<curios_core::Program>,
+    program: &curios_core::Program,
     budget: u64,
     read: impl FnOnce(&curios_cert::Certifier<'_>) -> T,
 ) -> (Vec<curios_cert::Verdict>, T) {
@@ -204,7 +204,7 @@ pub fn recheck_with_prelude_measured<T>(
 
 /// Put `program` to the independent certifier with the fixed prelude in scope. See [`recheck`].
 pub fn recheck_with_prelude(
-    program: &curios_core::Zonked<curios_core::Program>,
+    program: &curios_core::Program,
     budget: u64,
 ) -> Vec<curios_cert::Verdict> {
     with_prelude(|prelude| recheck(program, budget, Predecessors::over(prelude), &SYNTAX))

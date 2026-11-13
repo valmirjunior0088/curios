@@ -15,7 +15,7 @@
 use {
     super::test_support::*,
     curios_common::Qualifier,
-    curios_core::{Definition, Free, Global, Item, Subterm, Term, Zonked},
+    curios_core::{Definition, Free, Global, Item, Subterm, Term},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_pipeline::test_support::*,
@@ -250,7 +250,6 @@ fn certifier_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios
             .map(|definition| Item::Let(Box::new(definition))),
     );
 
-    let program = Zonked::project(&program).expect("an elaborated program is zonked");
     let verdicts = recheck_with_prelude(&program, DEFAULT_BUDGET);
     // The statements are the elaborator's own, so a refusal of anything but a claim is the reader's fault and not a row's verdict.
     for verdict in &verdicts {

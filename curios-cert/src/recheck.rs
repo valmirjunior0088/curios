@@ -95,7 +95,7 @@ use {
         Abroad, Applications, Bound, Certification, Certified, Changes, Concluded, Definition,
         Definitions, Entrypoint, Global, HeldReads, InductDecl, Item, ItemRun, Level, MetavarId,
         Notation, Places, Polarity, Program, ReadRecord, ReadTable, Reads, StructDecl, Term,
-        Totality, Variance, Zonked, free_locals_of, open_positions_of, open_quality,
+        Totality, Variance, free_locals_of, open_positions_of, open_quality,
         rewrite_universe_levels, universe_metas,
     },
     std::{
@@ -146,11 +146,62 @@ pub struct Rechecked {
     pub entrypoint: Option<Entrypoint>,
 }
 
+impl Rechecked {
+    /// The module as the walk stated it, where the walk refused nothing of it: the evidence erasure reads.
+    pub fn accepted(&self) -> Option<Accepted<Definitions>> {
+        self.verdicts
+            .is_empty()
+            .then(|| Accepted(self.definitions.clone()))
+    }
+
+    /// The program as the walk stated it, where the walk refused nothing of it and checked the term it closes with against the type it states.
+    pub fn accepted_program(&self) -> Option<Accepted<Program>> {
+        let entrypoint = self.entrypoint.clone()?;
+        self.verdicts.is_empty().then(|| {
+            Accepted(Program {
+                definitions: self.definitions.clone(),
+                entrypoint,
+            })
+        })
+    }
+}
+
+/// A module the walk accepted, as the walk stated it: made by [`Rechecked::accepted`] alone, so what reads it — erasure — reads only what the certifier refused nothing of, which holds no metavariable, no node only elaboration builds, no unsolved level and no bound variable a scope does not bind, and carries every mark the walk stated. The clone is cheap: items share their terms by `Rc`.
+#[derive(Debug, Clone)]
+pub struct Accepted<T>(T);
+
+impl Accepted<Definitions> {
+    pub fn as_definitions(&self) -> &Definitions {
+        &self.0
+    }
+
+    pub fn into_definitions(self) -> Definitions {
+        self.0
+    }
+}
+
+impl Accepted<Program> {
+    pub fn as_program(&self) -> &Program {
+        &self.0
+    }
+
+    /// The term the program closes with and the type the walk checked it at.
+    pub fn entry(&self) -> (&Term, &Term) {
+        let entry = &self.0.entrypoint;
+        let type_ = entry
+            .type_
+            .as_ref()
+            .expect("the walk refuses a closing term that states no type");
+
+        (&entry.body, type_)
+    }
+}
+
 /// Re-check `definitions` with the independent certifier, with `globals` already in scope: every item it refuses, rather than only the first, with the record the walk leaves of what it concluded — see [`Rechecked`] — and the walk's own certifier, which holds the unit's definitions as the walk defined them, the units in scope it mounted and the vectors it filed: what the unit's erasure reads through ([`Certifier::read`]), and what a measurement asks a finished walk ([`Certifier::heaviest_declaration`]).
 ///
 /// `budget` is the reduction allowance each item gets, the same figure the elaborator's own `Context` is built with. [`Globals::default()`] is the whole-module walk: nothing in scope, so every item is judged.
 ///
-/// The [`Zonked`] input is interface-level evidence, not a delegation: the certifier keeps its own metavariable refusals, so nothing here trusts the wrapper's constructor.
+/// The module is handed in as it stands, whoever built it: what elaboration left unfinished is the walk's to refuse, where it reads it, and only a module the walk refused nothing of is [`Accepted`].
 ///
 /// # Why this is the intrinsic
 ///
@@ -172,19 +223,13 @@ pub struct Rechecked {
 ///
 /// Every judgment is a declaration's own: its item's typing, its classification, its erased positions, and, where it declares registry entries, their sizing, their strict positivity and their variance, each read against what the environment and the declarations judged before it hold. The entrypoint is checked last.
 pub fn certify_definitions<'s>(
-    definitions: &Zonked<Definitions>,
+    definitions: &Definitions,
     budget: u64,
     globals: &'s Globals<'s>,
     syntax: SyntaxRegistry,
 ) -> (Rechecked, Certifier<'s>) {
     let mut certifier = Certifier::new(budget, syntax);
-    let rechecked = verdicts_from(
-        &mut certifier,
-        definitions.as_definitions(),
-        None,
-        globals,
-        None,
-    );
+    let rechecked = verdicts_from(&mut certifier, definitions, None, globals, None);
 
     (rechecked, certifier)
 }
@@ -193,7 +238,7 @@ pub fn certify_definitions<'s>(
 ///
 /// **`candidates` is what a store at the unit's address holds of verdicts filed before**, by the item each judged: a declaration the walk would judge takes a verdict from a record there where every part it read digests as it did, by the certifier's own digest ([`complete`](crate::complete)).
 pub fn certify_definitions_over<'s>(
-    definitions: &Zonked<Definitions>,
+    definitions: &Definitions,
     budget: u64,
     globals: &'s Globals<'s>,
     baseline: Baseline<'s>,
@@ -203,7 +248,7 @@ pub fn certify_definitions_over<'s>(
     let mut certifier = Certifier::new(budget, syntax);
     let rechecked = verdicts_from(
         &mut certifier,
-        definitions.as_definitions(),
+        definitions,
         None,
         globals,
         Some(Over {
@@ -218,12 +263,11 @@ pub fn certify_definitions_over<'s>(
 
 /// [`certify_definitions`] for a program: its module walked as any unit's, and the term it closes with checked against the type it states.
 pub fn certify_program<'s>(
-    program: &Zonked<Program>,
+    program: &Program,
     budget: u64,
     globals: &'s Globals<'s>,
     syntax: SyntaxRegistry,
 ) -> (Rechecked, Certifier<'s>) {
-    let program = program.as_program();
     let mut certifier = Certifier::new(budget, syntax);
     let rechecked = verdicts_from(
         &mut certifier,

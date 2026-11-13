@@ -4,7 +4,7 @@ use {
     super::{test_support::*, *},
     curios_cert::certify_definitions,
     curios_common::{Qualifier, digest},
-    curios_core::{Item, Size, Zonked},
+    curios_core::{Item, Size},
     curios_elab::DEFAULT_BUDGET,
     curios_erase::{Erasures, erase_unit},
     curios_module::SYNTAX,
@@ -196,21 +196,22 @@ fn stored_prelude_measurements() {
                 .first()
                 .map(|mount| mount.prefix.join())
                 .unwrap_or_else(|| "?".to_string());
-            let zonked = Zonked::project(core).expect("a restored prelude root is zonked");
-
             // Certified, then erased through the certifier that accepted it, as the build makes the root.
             let globals = certified(&prelude[..index]);
             let start = Instant::now();
             let (rechecked, mut certifier) =
-                certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+                certify_definitions(core, DEFAULT_BUDGET, &globals, SYNTAX);
             let certification = start.elapsed();
             let heaviest = certifier.heaviest_declaration();
+            let accepted = rechecked
+                .accepted()
+                .expect("a stored prelude root is certified");
 
             let start = Instant::now();
             erase_unit(
                 &mut certifier,
                 Erasures::of(&cores, &places, &records, &units),
-                &zonked,
+                &accepted,
             )
             .expect("a stored prelude root re-erases");
             let erasure = start.elapsed();

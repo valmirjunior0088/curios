@@ -199,7 +199,7 @@ fn a_row_is_registered_by_the_item_that_declares_it() {
             .collect::<Vec<_>>()
     };
 
-    let unit = erase_alone(&zonked(&fixture.definitions)).expect("the unit erases");
+    let unit = erase_alone(&fixture.definitions.clone()).expect("the unit erases");
     let fragment = |name: &str| {
         unit.find(&nominal(name), Sorts::NONE)
             .expect("the unit declares it")

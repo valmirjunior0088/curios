@@ -34,23 +34,21 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
     ) else {
         unreachable!("a fixture's definition is a `let`")
     };
-    let unit = zonked(
-        &module(
-            vec![
-                curios_core::Item::Let(Box::new(curios_core::Definition {
-                    proof: true,
-                    ..*lemma
-                })),
-                definition(
-                    "two",
-                    curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
-                    nat_lit(2),
-                ),
-            ],
-            nat_lit(0),
-        )
-        .definitions,
-    );
+    let unit = module(
+        vec![
+            curios_core::Item::Let(Box::new(curios_core::Definition {
+                proof: true,
+                ..*lemma
+            })),
+            definition(
+                "two",
+                curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
+                nat_lit(2),
+            ),
+        ],
+        nat_lit(0),
+    )
+    .definitions;
 
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
@@ -121,17 +119,17 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
     ];
     let mut induct_decls = BTreeMap::new();
     induct_decls.insert(nominal("Top"), top_induct());
-    let unit = zonked(&curios_core::test_support::declaring(
+    let unit = curios_core::test_support::declaring(
         module(items, nat_lit(0)).definitions,
         induct_decls,
         [],
         [],
-    ));
+    );
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_definitions(&unit, DEFAULT_BUDGET, &globals, SYNTAX);
-    assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
+    let accepted = accepted(&rechecked);
 
-    erase_unit(&mut certifier, Erasures::nothing(), &unit).expect("the unit erases");
+    erase_unit(&mut certifier, Erasures::nothing(), &accepted).expect("the unit erases");
     // `head` is the last item erased, on a budget restored for it.
     let erasing = certifier.read(|reader| reader.consumed().units());
     let reducing = certifier.read(|reader| {

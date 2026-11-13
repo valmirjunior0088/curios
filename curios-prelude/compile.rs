@@ -4,11 +4,10 @@
 
 use {
     crate::{std_source, sys_source},
-    curios_cert::{Globals, Rechecked, certify_definitions},
+    curios_cert::{Globals, certify_definitions},
     curios_common::{Qualifier, Report, Source, digest},
     curios_core::{
-        Anchors, Certification, Definitions, Global, Item, Sharing, Zonked,
-        validate_stored_identities,
+        Anchors, Certification, Definitions, Global, Item, Sharing, validate_stored_identities,
     },
     curios_document::Documentation,
     curios_elab::{
@@ -215,9 +214,6 @@ fn certified(
     predecessors: &[&Unit],
     anchors: &Anchors,
 ) -> (Definitions, Certification, ErasedUnit) {
-    // Meta-free before the certifier walks it; projecting here is also what validates that claim at the boundary that certifies the root.
-    let zonked = Zonked::project(core)
-        .unwrap_or_else(|refusal| panic!("/{root} is not zonked for the certifier: {refusal}"));
     // The roots before this one rather than `Globals::default()`: `/std` names `/sys`, so judging it against an empty environment would refuse every intrinsic carrier it wraps. Each with the record its walk made, so `/std`'s walk reads the certifier's classification of `/sys` rather than classifying it again. The assembler `curios-pipeline` offers is unreachable from here — a build script that reached the compiler boundary would pull the whole pipeline into the prelude's own build — so the environment is mounted by hand.
     let mut globals = Globals::default();
     for earlier in predecessors {
@@ -228,17 +224,9 @@ fn certified(
         &vec![true; predecessors.len()],
         &vec![false; predecessors.len()],
     );
-    let (
-        Rechecked {
-            verdicts: refusals,
-            certification,
-            definitions,
-            entrypoint: _,
-        },
-        mut certifier,
-    ) = certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+    let (rechecked, mut certifier) = certify_definitions(core, DEFAULT_BUDGET, &globals, SYNTAX);
 
-    if let Some(verdict) = refusals.first() {
+    if let Some(verdict) = rechecked.verdicts.first() {
         // The name, not only the error: a `curios_cert::Error` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this build exists to produce points nowhere in a prelude of a thousand items.
         let name = match &verdict.name {
             Some(name) => name.faithful().to_string(),
@@ -248,7 +236,7 @@ fn certified(
         panic!(
             // A refusal count over a corpus size, not a subset of it: the walk pushes a verdict per *failing pass*, and its passes run over declarations and over each definition of a `rec` group, so the count can exceed the item count outright.
             "/{root} failed the certifier: {} refusals over {} items, first: {name} — {}",
-            refusals.len(),
+            rechecked.verdicts.len(),
             core.items.len(),
             verdict.error.rendered(&Spelling::default()),
         );
@@ -259,7 +247,9 @@ fn certified(
         core.items.len()
     );
     // The root is the module the certifier stated, so every mark it carries is the walk's own.
-    let stated = zonked.map(|_| definitions);
+    let stated = rechecked
+        .accepted()
+        .expect("a walk that refused nothing accepted its module");
 
     // No entrypoint, so nothing to link: each item's erased form is its own, which is what a successor reads and a program links.
     let cores = predecessors
@@ -296,7 +286,7 @@ fn certified(
         )
     });
 
-    (stated.into_definitions(), certification, anf)
+    (stated.into_definitions(), rechecked.certification, anf)
 }
 
 /// Serialize one certified unit, as the fixed prelude images one ([`Unit::imaged`]), to `<root>.rkyv`, framed as a stored unit is — its record, of `reads` and of what each root before it contained, `after`, ahead of its index — and the objects its index names to `<root>.pack`, one pack as a store keeps beside a slot, serializing the unit twice and refusing a serializer that does not agree with itself. Hands back the digest of the unit's index, which is what the next root's record names it by.

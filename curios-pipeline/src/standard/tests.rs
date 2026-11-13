@@ -7,7 +7,7 @@ use {
     curios_common::{Qualifier, RootKind, digest, test_support::*},
     curios_core::{
         Certification, Definition, DefinitionKind, Definitions, Global, Item, Nominal, Places,
-        Sharing, Term, Zonked,
+        Sharing, Term,
     },
     curios_elab::{
         Context, DEFAULT_BUDGET, Error, Established, Reading, Recompile, Recompiled, Traces,
@@ -1702,15 +1702,14 @@ fn every_let_of_the_library_reads_back_as_a_report_prints_it(part: usize) {
         }
 
         // The certifier's own walk: a declaration the source wrote stands on the verdict filed with the archive, and each one written beside it is judged.
-        let finished = Zonked::project(&recompiled.definitions)
-            .unwrap_or_else(|refusal| panic!("what elaboration finished is finished: {refusal}"));
+        let finished = &recompiled.definitions;
         let places = recompiled
             .places
             .clone()
-            .unwrap_or_else(|| Places::of(finished.as_definitions()));
+            .unwrap_or_else(|| Places::of(finished));
         let globals = crate::globals_after(predecessors, &[false]);
         let (judged, _) = recheck_over(
-            &finished,
+            finished,
             &places,
             DEFAULT_BUDGET,
             &globals,

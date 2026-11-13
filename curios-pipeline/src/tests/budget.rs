@@ -6,7 +6,6 @@ use {
     super::test_support::*,
     crate::{compile::test_support::*, *},
     curios_common::fill,
-    curios_core::Zonked,
     curios_erase::{Erasures, erase_program},
     curios_module::{RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
@@ -127,10 +126,12 @@ fn erases(source: &str, budget: u64) -> bool {
             &mut |_| {},
         )
         .expect("the program elaborates");
-        let program = Zonked::project(&program).expect("the elaborated program is zonked");
-
         let globals = crate::globals(predecessors);
-        let (_, mut certifier) = curios_cert::certify_program(&program, budget, &globals, SYNTAX);
+        let (rechecked, mut certifier) =
+            curios_cert::certify_program(&program, budget, &globals, SYNTAX);
+        let Some(program) = rechecked.accepted_program() else {
+            return false;
+        };
         erase_program(
             &mut certifier,
             Erasures::of(

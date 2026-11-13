@@ -7,13 +7,13 @@ use {
     super::{DumpScope, Over, Stage, compile_lowered_over, compile_unit_over},
     curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
-    curios_cert::{Globals, Verdict, certify_definitions, certify_program},
+    curios_cert::{Accepted, Globals, Verdict, certify_definitions, certify_program},
     curios_common::{
         About, Candidates, Kind, Qualifier, Report, Said, Style, SyntaxRegistry, recurse,
     },
     curios_core::{
         Anchors, Arm, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec, Row,
-        Subterm, Term, Transient, Zonked,
+        Subterm, Term, Transient,
     },
     curios_elab::{
         Context, Established, FinalizedProgram, Reading, Tail, elaborate_and_zonk_entry,
@@ -227,7 +227,7 @@ pub fn with_broken<T>(
 ///
 /// The [`Globals`] environment is assembled here, beside the walk that reads it, rather than in `curios-unit`, which holds what the stages produced and judges nothing. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
 pub fn recheck(
-    program: &curios_core::Zonked<Program>,
+    program: &Program,
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
@@ -865,8 +865,8 @@ type Erasure = Result<curios_anf::Module, CompileError>;
 struct Entered {
     /// The unit of the program's declarations: restored, compiled over a baseline, or compiled whole.
     unit: Unit,
-    /// The term the program closes with beside a module of nothing, zonked and accepted by the certifier, stating the type it was judged at.
-    program: Zonked<Program>,
+    /// The term the program closes with beside a module of nothing, as the certifier accepted it, stating the type it was judged at.
+    program: Accepted<Program>,
     /// The program erased and linked through the certifier that judged it, or what erasing it refused it for: every program but a test program that schedules no test, which nothing is compiled of. The erase step both the check and the compile path take, so neither can hold a verdict the other does not.
     erased: Option<Erasure>,
     /// Every test in scope, module by module, scheduled or skipped, when the entry is compiled as a test program ([`EntryTail::schedule`]).
@@ -1133,13 +1133,11 @@ fn judged(
     syntax: &SyntaxRegistry,
     entry: curios_core::Entrypoint,
     erasing: Option<&PreparedText>,
-) -> Result<(Zonked<Program>, Option<Erasure>), CompileError> {
-    // The zonk evidence the certifier and erasure consume, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
-    let program = Zonked::project(&Program {
+) -> Result<(Accepted<Program>, Option<Erasure>), CompileError> {
+    let program = Program {
         definitions: nothing(),
         entrypoint: entry,
-    })
-    .map_err(CompileError::fault)?;
+    };
 
     // The independent certifier's second opinion: each unit was walked when it was built and arrives here as environment, so only the term that closes the program is judged.
     let globals = globals(scope);
@@ -1148,7 +1146,7 @@ fn judged(
         certify_program(&program, budget, &globals, *syntax)
     };
     if let Some(verdict) = rechecked.verdicts.first() {
-        let definitions = &program.as_program().definitions;
+        let definitions = &program.definitions;
         let refusal = verdict.rendered(
             definitions,
             &Spelling::for_refusal(definitions, &scope.lexicons(), syntax),
@@ -1161,14 +1159,10 @@ fn judged(
             refusal,
         ));
     }
-    // The program as the certifier stated it, the one it is erased from.
-    let program = Zonked::project(&Program {
-        definitions: rechecked.definitions,
-        entrypoint: rechecked
-            .entrypoint
-            .expect("a program's walk checks the term it closes with"),
-    })
-    .map_err(CompileError::fault)?;
+    // The program as the certifier stated it, the one it is erased from: it refused nothing of it, so it accepted it.
+    let program = rechecked
+        .accepted_program()
+        .expect("a program's walk that refused nothing checks the term it closes with");
 
     // The program's final term erased and linked with what it reaches of the units in scope, the unit of its own declarations the last of them: the module handed back holds that and no declaration the program does not reach.
     let erased = erasing.map(|text| {
@@ -1234,11 +1228,6 @@ pub fn examine_entrypoint(
         elaborate_lowered(budget, predecessors, syntax, lowered, tail, &mut |_| {});
     let (program, obligations) = elaborated?;
 
-    // The zonk evidence the certifier consumes, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
-    let program = Zonked::project(&program).map_err(|refusal| Refused {
-        error: None,
-        reported: CompileError::fault(refusal),
-    })?;
     // The independent certifier's second opinion: each predecessor was walked when it was built and arrives here as environment, so only what it does not already answer for is judged.
     let rechecked = {
         curios_profile::profile!("recheck");
@@ -1369,23 +1358,17 @@ pub fn compile_lowered(
         elaborated(&core, entry);
     }
 
-    let core =
-        Zonked::project(&core).map_err(|refusal| refuse(&lowered, CompileError::fault(refusal)))?;
-
     // The unit is erased through the certifier that accepted it.
     let globals = globals(predecessors);
     let (rechecked, mut certifier) = certify_definitions(&core, budget, &globals, *syntax);
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = certifier_refusal(
-            verdict,
-            core.as_definitions(),
-            &predecessors.lexicons(),
-            syntax,
-        );
+        let refusal = certifier_refusal(verdict, &core, &predecessors.lexicons(), syntax);
         return Err(refuse(&lowered, refusal));
     }
     // The unit is the module the certifier stated, so every mark it carries is the walk's own.
-    let core = core.map(|_| rechecked.definitions);
+    let core = rechecked
+        .accepted()
+        .expect("a walk that refused nothing accepted its module");
 
     let places = predecessors.places();
     let certifications = predecessors.certifications();

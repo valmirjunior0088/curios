@@ -11,7 +11,7 @@ use {
     },
     curios_cert::{Baseline, Certifier, Globals, Rechecked, certify_definitions_over},
     curios_common::{Candidates, SyntaxRegistry},
-    curios_core::{Definitions, Entrypoint, Places, Zonked},
+    curios_core::{Definitions, Entrypoint, Places},
     curios_elab::{
         Context, Established, Recompile, Recompiled, elaborate_and_zonk_entry_over,
         elaborate_and_zonk_unit_over,
@@ -19,7 +19,6 @@ use {
     curios_erase::{ErasedBaseline, Erasures, erase_unit_over},
     curios_module::{PreparedText, UnitSource, into_core_unit_over},
     curios_unit::{Predecessors, Unit},
-    std::collections::BTreeSet,
 };
 
 /// Compile one unit against `predecessors` over `over`'s baseline: lower whole, then elaborate, judge and erase what does not stand, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude.
@@ -179,15 +178,6 @@ pub fn compile_lowered_over(
 
     // Where the module holds each name: its baseline's with what elaboration changed placed again, or made now where its items were put in order anew.
     let places = places.unwrap_or_else(|| Places::of(&core));
-    // Every item but the ones made is the baseline's, which was finished where it was made.
-    let made_items = made
-        .iter()
-        .filter_map(|name| places.place(name))
-        .map(|place| place.item())
-        .collect::<BTreeSet<_>>();
-    let core = Zonked::revised(&core, made_items.iter().map(|item| &core.items[*item]))
-        .map_err(|refusal| refuse(&lowered, CompileError::fault(refusal)))?;
-
     // The certifier is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped. The unit is erased through the certifier that judged it.
     let globals = globals_after(predecessors, moved);
     let (rechecked, mut certifier) = recheck_over(
@@ -203,17 +193,14 @@ pub fn compile_lowered_over(
         syntax,
     );
     if let Some(verdict) = rechecked.verdicts.first() {
-        let refusal = certifier_refusal(
-            verdict,
-            core.as_definitions(),
-            &predecessors.lexicons(),
-            syntax,
-        );
+        let refusal = certifier_refusal(verdict, &core, &predecessors.lexicons(), syntax);
         return Err(refuse(&lowered, refusal));
     }
-    let certification = rechecked.certification;
     // The unit is the module the certifier stated, so every mark it carries is the walk's own.
-    let core = core.map(|_| rechecked.definitions);
+    let core = rechecked
+        .accepted()
+        .expect("a walk that refused nothing accepted its module");
+    let certification = rechecked.certification;
 
     // Erasure decides what it keeps by its own record: an erased form stands where the elaborator kept its declaration and everything its erasure read digests as it did.
     let scope_places = predecessors.places();
@@ -262,7 +249,7 @@ pub fn compile_lowered_over(
 ///
 /// Nothing here says which declarations are kept. A declaration elaborated again that came out as the baseline holds it, reading nothing that moved, is adopted like one never touched, and one the elaborator kept is judged where what the certifier's own walk read for it has changed: the verdicts that are filed rest on the certifier's record, and on one claim of the fold's, which of these `predecessors` are the units `baseline` was compiled after, `moved` naming the others ([`Cache::baseline`](crate::Cache::baseline)).
 pub fn recheck_over<'s>(
-    definitions: &Zonked<Definitions>,
+    definitions: &Definitions,
     places: &'s Places,
     budget: u64,
     globals: &'s Globals<'s>,

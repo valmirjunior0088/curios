@@ -11,7 +11,6 @@ use {
     curios_analysis::test_support::*,
     curios_cert::{Globals, certify_definitions, certify_program},
     curios_common::Qualifier,
-    curios_core::Zonkable,
     curios_elab::DEFAULT_BUDGET,
 };
 
@@ -80,18 +79,22 @@ pub fn fresh(hint: Option<&str>) -> curios_core::Free {
 
 /// `unit` certified with nothing in scope and erased through the certifier that accepted it, as the driver erases a unit it compiles.
 #[cfg(test)]
-pub fn erase_alone(
-    unit: &curios_core::Zonked<curios_core::Definitions>,
-) -> Result<ErasedUnit, Error> {
+pub fn erase_alone(unit: &curios_core::Definitions) -> Result<ErasedUnit, Error> {
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_definitions(unit, DEFAULT_BUDGET, &globals, SYNTAX);
-    assert!(
-        rechecked.verdicts.is_empty(),
-        "the fixture is certified: {:?}",
-        rechecked.verdicts
-    );
+    let accepted = accepted(&rechecked);
 
-    erase_unit(&mut certifier, Erasures::nothing(), unit)
+    erase_unit(&mut certifier, Erasures::nothing(), &accepted)
+}
+
+/// The module `rechecked` accepted, which a fixture is: it is erased only as the walk stated it.
+#[cfg(test)]
+pub fn accepted(
+    rechecked: &curios_cert::Rechecked,
+) -> curios_cert::Accepted<curios_core::Definitions> {
+    rechecked
+        .accepted()
+        .unwrap_or_else(|| panic!("the fixture is certified: {:?}", rechecked.verdicts))
 }
 
 /// A reference to the top-level definition `path` names, at no levels: what elaboration leaves for one generalized over none. Fixture-only.
@@ -137,11 +140,6 @@ pub fn module(items: Vec<curios_core::Item>, body: curios_core::Term) -> curios_
     }
 }
 
-#[cfg(test)]
-pub fn zonked<T: Zonkable>(value: &T) -> curios_core::Zonked<T> {
-    curios_core::Zonked::project(value).expect("the fixture is zonked")
-}
-
 /// `program` with its entry stating `type_`, which is what the entry's body is sealed at.
 #[cfg(test)]
 pub fn stating(program: &curios_core::Program, type_: curios_core::Term) -> curios_core::Program {
@@ -156,14 +154,12 @@ pub fn try_erase(
     program: &curios_core::Program,
     type_: curios_core::Term,
 ) -> Result<curios_anf::Module, Error> {
-    let program = zonked(&stating(program, type_));
+    let program = stating(program, type_);
     let globals = Globals::default();
     let (rechecked, mut certifier) = certify_program(&program, DEFAULT_BUDGET, &globals, SYNTAX);
-    assert!(
-        rechecked.verdicts.is_empty(),
-        "the fixture is certified: {:?}",
-        rechecked.verdicts
-    );
+    let program = rechecked
+        .accepted_program()
+        .unwrap_or_else(|| panic!("the fixture is certified: {:?}", rechecked.verdicts));
 
     erase_program(&mut certifier, Erasures::nothing(), &program).map(ErasedProgram::into_module)
 }

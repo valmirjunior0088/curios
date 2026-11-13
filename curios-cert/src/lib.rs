@@ -27,7 +27,7 @@ pub use baseline::{Baseline, complete, part_digest};
 
 mod recheck;
 pub use recheck::{
-    Rechecked, Verdict, certify_definitions, certify_definitions_over, certify_program,
+    Accepted, Rechecked, Verdict, certify_definitions, certify_definitions_over, certify_program,
 };
 
 mod certifier;

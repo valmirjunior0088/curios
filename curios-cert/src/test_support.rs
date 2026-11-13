@@ -5,7 +5,7 @@
 use {
     crate::{Certifier, Error, Globals, Verdict, recheck::verdicts_from},
     curios_common::{SyntaxRegistry, variants},
-    curios_core::{Definitions, Zonked},
+    curios_core::Definitions,
 };
 
 variants!(Error {
@@ -50,14 +50,14 @@ variants!(Error {
 ///
 /// Exists for one purpose: asserting that memoization changes no *semantic* verdict — the property that makes a memo an evaluation strategy rather than a store. A resource verdict may differ, since a term-keyed hit is free.
 pub fn recheck_definitions_verdicts_uncached(
-    definitions: &Zonked<Definitions>,
+    definitions: &Definitions,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
     verdicts_from(
         &mut Certifier::uncached(budget, syntax),
-        definitions.as_definitions(),
+        definitions,
         None,
         globals,
         None,

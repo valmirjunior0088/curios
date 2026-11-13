@@ -5,7 +5,7 @@ use {
     curios_cert::{Error, certify_definitions, infer, test_support::*},
     curios_core::{
         Exhaustion, Free, FuncType, Global, Intrinsic, Item, Nat, Quality, Reducer, Subterm,
-        Telescope, Term, Variance, Zonked, instantiate_qualities,
+        Telescope, Term, Variance, instantiate_qualities,
     },
     curios_elab::DEFAULT_BUDGET,
     curios_module::SYNTAX,
@@ -59,9 +59,8 @@ fn certifier_disagreements() {
 
         // Each root against the roots before it, which is the environment it was elaborated in: walking `/std` from an empty one would tally a refusal per intrinsic carrier it wraps and say nothing about the certifier.
         for (index, root) in prelude.iter().enumerate() {
-            let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let globals = certified(&prelude[..index]);
-            let (rechecked, _) = certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+            let (rechecked, _) = certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX);
             verdicts.extend(rechecked.verdicts);
         }
 
@@ -97,13 +96,17 @@ fn certifier_disagreements() {
 fn certifier_memo_parity() {
     with_prelude(|prelude| {
         for (index, root) in prelude.iter().enumerate() {
-            let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let globals = certified(&prelude[..index]);
             assert_eq!(
-                certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX)
+                certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX)
                     .0
                     .verdicts,
-                recheck_definitions_verdicts_uncached(&zonked, DEFAULT_BUDGET, &globals, SYNTAX),
+                recheck_definitions_verdicts_uncached(
+                    root.core(),
+                    DEFAULT_BUDGET,
+                    &globals,
+                    SYNTAX
+                ),
             );
         }
     });
@@ -188,10 +191,9 @@ fn the_certifier_types_a_declared_type_at_each_value_of_a_parameter() {
         let mut refused = Vec::new();
 
         for (index, root) in prelude.iter().enumerate() {
-            let zonked = Zonked::project(root.core()).expect("a restored prelude root is zonked");
             let globals = certified(&prelude[..index]);
             let (rechecked, mut certifier) =
-                certify_definitions(&zonked, DEFAULT_BUDGET, &globals, SYNTAX);
+                certify_definitions(root.core(), DEFAULT_BUDGET, &globals, SYNTAX);
             assert!(rechecked.verdicts.is_empty(), "{:?}", rechecked.verdicts);
 
             for definition in root.core().items.iter().flat_map(Item::definitions) {

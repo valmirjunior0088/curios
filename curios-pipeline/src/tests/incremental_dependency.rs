@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    curios_core::{Definitions, Zonked},
+    curios_core::Definitions,
     curios_elab::DEFAULT_BUDGET,
     curios_module::SYNTAX,
     curios_prelude::with_prelude,
@@ -251,14 +251,12 @@ end
 
 /// `module`, elaborated already, put to the certifier alone with the prelude and then `units` in scope.
 fn certified_after(definitions: &Definitions, units: &[&Unit]) -> Vec<curios_cert::Verdict> {
-    let definitions = Zonked::project(definitions).expect("an elaborated module is zonked");
-
     with_prelude(|prelude| {
         let scope = prelude.iter().chain(units).copied().collect::<Vec<_>>();
 
         let globals = crate::globals(Predecessors::over(&scope));
 
-        curios_cert::certify_definitions(&definitions, DEFAULT_BUDGET, &globals, SYNTAX)
+        curios_cert::certify_definitions(definitions, DEFAULT_BUDGET, &globals, SYNTAX)
             .0
             .verdicts
     })

@@ -7,7 +7,7 @@ use {
     crate::{Proof, Step, Witness},
     curios_cert::Verdict,
     curios_common::{Report, test_support::Variants},
-    curios_core::{Definitions, Global, Program, Term, Universes, Zonked, ZonkedRefusal},
+    curios_core::{Definitions, Global, Program, Term, Universes},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
     curios_pipeline::{EntryTail, Examined, examine_entrypoint, recheck, test_support::*},
@@ -75,8 +75,6 @@ pub enum Refusal {
         error: curios_elab::Error,
         reported: String,
     },
-    /// A module carrying what elaboration should have solved, refused by the evidence the certifier's walk takes a module with. Reported, and never what a witness expects: the certifier refuses such a module itself, and that refusal is the one a fix is held by.
-    Unfinished(ZonkedRefusal),
     /// The certifier's refusal, and the item or registry entry it refused.
     Certifier(Verdict),
     /// A history stopped at the step of the unit claiming `mount` by what names no checker's error, held as it was reported: a program refused as a build reports it, a unit erasure refused, or the history's store. No expectation meets it, so a fix that refuses a unit before the proof writes that unit as Core text.
@@ -100,7 +98,7 @@ impl Refusal {
         match self {
             Refusal::Text(_) | Refusal::Elaborator { .. } => Some(Checker::Elaborator),
             Refusal::Unread(_) | Refusal::Read { .. } => Some(Checker::Reader),
-            Refusal::Unfinished(_) | Refusal::Certifier(_) => Some(Checker::Certifier),
+            Refusal::Certifier(_) => Some(Checker::Certifier),
             Refusal::Stopped { .. } => None,
         }
     }
@@ -126,7 +124,6 @@ impl Refusal {
 
                 format!("elaborator {}", variants.join(" "))
             }
-            Refusal::Unfinished(_) => "certifier, as unfinished".to_string(),
             Refusal::Certifier(verdict) => format!(
                 "certifier `{}` {}",
                 verdict.error.variant_name(),
@@ -146,7 +143,6 @@ impl fmt::Display for Refusal {
             | Refusal::Read { reported, .. }
             | Refusal::Elaborator { reported, .. }
             | Refusal::Stopped { reported, .. } => formatter.write_str(reported),
-            Refusal::Unfinished(refusal) => write!(formatter, "{refusal}"),
             Refusal::Certifier(verdict) => {
                 write!(
                     formatter,
@@ -242,14 +238,13 @@ fn put_module(
         },
     };
 
-    // The walk takes a program only with the evidence that elaboration finished it, so one carrying what elaboration should have solved is refused here, by the layer the certifier judges through.
-    Answer::Judged(match Zonked::project(&program) {
-        Err(refusal) => vec![Refusal::Unfinished(refusal)],
-        Ok(program) => recheck(&program, DEFAULT_BUDGET, predecessors, &SYNTAX)
+    // What elaboration should have solved is the walk's own to refuse, as everything else it refuses is.
+    Answer::Judged(
+        recheck(&program, DEFAULT_BUDGET, predecessors, &SYNTAX)
             .into_iter()
             .map(Refusal::Certifier)
             .collect(),
-    })
+    )
 }
 
 /// Read `text` as Core text over `predecessors`, and put the module it writes to the certifier alone, with them in scope, as a program closing with its term at `False`. The text states no type for its term: the board states it.
@@ -324,9 +319,6 @@ fn halted(Stopped { mount, why }: Stopped) -> Answer {
             reported: at(located(&error)),
             error: *error,
         }),
-        Unbuilt::Unmade(Unmade::Unfinished(refusal)) => {
-            Answer::Judged(vec![Refusal::Unfinished(*refusal)])
-        }
         Unbuilt::Unmade(Unmade::Certifier(verdict)) => {
             Answer::Judged(vec![Refusal::Certifier(*verdict)])
         }
