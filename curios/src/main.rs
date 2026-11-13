@@ -29,7 +29,7 @@ mod test_runner;
 use test_runner::*;
 
 use {
-    curios::{bindings_of, optimize},
+    curios::{bindings_of, optimize, unlinked},
     curios_common::{Kind, Report, Source, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
@@ -433,10 +433,14 @@ fn dispatch() -> Result<(), Failure> {
 
                     // Linked here as a run links, entering nothing: the executable's launcher has these modules and its host and no other answer, so what it would refuse at every start is refused before the executable is written.
                     let bindings = bindings_of(manifest.as_deref(), &foreigns)?;
-                    bindings.check(&foreigns)?;
+                    bindings
+                        .check(&foreigns)
+                        .map_err(|refusal| unlinked(refusal, manifest.as_deref()))?;
 
                     // Written out here, where Cranelift is, so the launcher only ever deserializes: that is what lets a program declaring `foreign` reach a machine with no compiler, no manifest and no sources, carrying the modules answering it inside its own image.
-                    let plugins = bindings.bundled(curios_cranelift::serialize)?;
+                    let plugins = bindings
+                        .bundled(curios_cranelift::serialize)
+                        .map_err(|refusal| unlinked(refusal, manifest.as_deref()))?;
 
                     tree.open("write", true);
 

@@ -1,7 +1,7 @@
 use {
     super::{
-        BundledPlugin, Lift, Lower, Plugin, Replied, Reply, anyref_array_type, bool_of, filled,
-        i8_array_type, longs_array_type, words_array_type,
+        BundledPlugin, Lift, Lower, Plugin, Replied, Reply, Unlinked, anyref_array_type, bool_of,
+        filled, i8_array_type, longs_array_type, words_array_type,
     },
     curios_abi::{
         Answer, Answered, Carrier, ENTRY, ForeignFunction, ForeignStore, Handle, HostOp, HostOps,
@@ -306,11 +306,11 @@ impl<T> Answers<T> {
     }
 
     /// Refuse what these answers get wrong about the program whose rows are `foreigns`, whatever it imports: a row answered twice, and an answer under a name the program declares no row for, which would otherwise never be asked and never be missed.
-    fn admit(&self, foreigns: &ForeignStore) -> Result<(), String> {
+    fn admit(&self, foreigns: &ForeignStore) -> Result<(), Unlinked> {
         if let Some(name) = self.twice.first() {
-            return Err(format!(
+            return Err(Unlinked::of("duplicate answer").stating(format_args!(
                 "`{name}` is answered twice by the bindings of this run"
-            ));
+            )));
         }
 
         match self
@@ -319,9 +319,9 @@ impl<T> Answers<T> {
             .filter(|name| foreigns.get(name).is_none())
             .min()
         {
-            Some(name) => Err(format!(
-                "a binding answers `{name}`, which the program declares no foreign row for"
-            )),
+            Some(name) => Err(Unlinked::of("unknown declaration")
+                .stating(format_args!("a binding answers `{name}`"))
+                .stating("the program declares no `foreign` of that name")),
             None => Ok(()),
         }
     }
@@ -411,7 +411,7 @@ impl ForeignBindings {
     pub fn bundled(
         &self,
         written: impl Fn(&MachineCode) -> Result<Vec<u8>, String>,
-    ) -> Result<Vec<BundledPlugin>, String> {
+    ) -> Result<Vec<BundledPlugin>, Unlinked> {
         self.modules
             .iter()
             .map(|module| module.bundled(&written))
@@ -461,7 +461,7 @@ impl ForeignBindings {
     }
 
     /// Link the program whose rows are `foreigns` as a run under this runtime's host would, entering nothing: every row is held to what stands to answer it, by the comparison a run makes, and what a run would refuse where it begins is refused here. What writes an executable asks this first, since a launcher has these bindings and this host and no other.
-    pub fn check(&self, foreigns: &ForeignStore) -> Result<(), String> {
+    pub fn check(&self, foreigns: &ForeignStore) -> Result<(), Unlinked> {
         let mut bindings = Answers::<()> {
             rows: self
                 .answers
@@ -513,9 +513,11 @@ fn answering<'a, T>(
     bindings: &'a Answers<T>,
     host: &'a Answers<T>,
     name: &str,
-) -> Result<(&'a Arc<ForeignFunction>, &'a T), String> {
+) -> Result<(&'a Arc<ForeignFunction>, &'a T), Unlinked> {
     let declared = foreigns.get(name).ok_or_else(|| {
-        format!("the program imports `{name}`, which the rows it carries do not describe")
+        Unlinked::of("compiler fault").stating(format_args!(
+            "the program imports `{name}`, which the rows it carries do not describe"
+        ))
     })?;
     let ((stated, entered), answerer) = bindings
         .rows
@@ -523,19 +525,26 @@ fn answering<'a, T>(
         .map(|answer| (answer, "a binding"))
         .or_else(|| host.rows.get(name).map(|answer| (answer, "this host")))
         .ok_or_else(|| {
-            format!("no implementation for `{name}`: no module answers it, and this host does not")
+            Unlinked::of("no implementation")
+                .stating(format_args!("`{name}` is declared `foreign`"))
+                .stating("no module answers it, and this host does not")
         })?;
 
     let signature = declared.signature();
     let returned = Returned::declared(&signature.returns);
 
     if signature.params != stated.params || returned != stated.returned {
-        return Err(format!(
-            "{answerer} answers `{name}` as ({}) -> {}, and the program declares it ({}) -> {returned}",
-            spelled(&stated.params),
-            stated.returned,
-            spelled(&signature.params),
-        ));
+        return Err(Unlinked::of("signature mismatch")
+            .stating(format_args!("{answerer} answers `{name}`"))
+            .stating(format_args!(
+                "expected: ({}) -> {returned}",
+                spelled(&signature.params)
+            ))
+            .stating(format_args!(
+                "obtained: ({}) -> {}",
+                spelled(&stated.params),
+                stated.returned
+            )));
     }
 
     Ok((declared, entered))

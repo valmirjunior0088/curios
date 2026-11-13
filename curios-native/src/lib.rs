@@ -17,6 +17,9 @@ mod plugin;
 use plugin::*;
 pub use plugin::{DeclaredModule, plugin_bindings};
 
+mod unlinked;
+pub use unlinked::Unlinked;
+
 mod host;
 use host::*;
 

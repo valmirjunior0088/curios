@@ -304,7 +304,7 @@ fn a_declaration_nothing_answers_is_refused_where_a_program_reaches_it() {
     .expect_err("a declaration nothing implements");
 
     assert!(
-        refusal.contains("no implementation for `/unclaimed`"),
+        refusal.contains("no implementation: `/unclaimed` is declared `foreign`"),
         "{refusal}"
     );
 }
@@ -345,7 +345,7 @@ fn an_export_of_another_type_is_refused_before_the_program_runs() {
 
     assert!(
         refusal.contains(
-            "exports `double` as (i64) -> (i64), and `/flip` crosses to a module as (i32) -> (i32)"
+            "exports `double` to answer `/flip`; expected: (i32) -> (i32); obtained: (i64) -> (i64)"
         ),
         "{refusal}"
     );
@@ -430,7 +430,7 @@ fn a_modules_trap_names_the_module_the_export_and_the_cause() {
     .expect_err("the export traps");
 
     assert!(
-        refusal.contains("the module \"probe\" of fixture failed in `boom`: wasm trap: wasm `unreachable` instruction executed"),
+        refusal.contains("the module `probe` of `/fixture` failed in `boom`: wasm trap: wasm `unreachable` instruction executed"),
         "{refusal}"
     );
 }
@@ -451,7 +451,7 @@ fn an_answer_past_a_modules_memory_names_the_module_and_the_export() {
     .expect_err("the answer is past the memory");
 
     assert!(
-        refusal.contains("the module \"probe\" of fixture answered `far` with 100 bytes at 65530, past the end of its memory"),
+        refusal.contains("the module `probe` of `/fixture` answered `far` with 100 bytes at 65530, past the end of its memory"),
         "{refusal}"
     );
 }
@@ -476,7 +476,7 @@ fn a_modules_recursion_from_a_deep_frame_stops_on_the_engines_trap() {
 
     assert!(
         refusal.contains(
-            "the module \"probe\" of fixture failed in `spin`: wasm trap: call stack exhausted"
+            "the module `probe` of `/fixture` failed in `spin`: wasm trap: call stack exhausted"
         ),
         "{refusal}"
     );

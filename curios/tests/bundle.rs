@@ -198,7 +198,7 @@ fn compile_refuses_a_row_nothing_answers_and_says_what_would() {
 
     assert!(
         refusal.contains(
-            "`/frobnicate` has no implementation: no `[[foreign]]` row of the package's manifests names an export that answers it"
+            "no implementation\n│  `/frobnicate` is declared `foreign`\n│  no `[[foreign]]` row of the package's manifests names an export that answers it"
         ),
         "{refusal}"
     );
@@ -273,7 +273,7 @@ fn a_row_with_no_native_table_is_refused_natively_by_name() {
 
     assert!(
         refusal.contains(
-            "`/clock/double` is answered by the foreign row \"page\" of clock, which states no `[foreign.native]`: the native target has nothing to link for it; a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link, and `test --target browser` runs its tests against the gateway"
+            "`/clock/double` is answered by the foreign row `page` of `/clock`\n│  that row states no `[foreign.native]`\n│  the native target has nothing to link for it\n│  a `.wasm` standing in for its gateway, stated as `[foreign.native]`, is what `run` and `test` link\n│  `test --target browser` runs its tests against the gateway"
         ),
         "{refusal}"
     );
@@ -286,7 +286,7 @@ fn a_loose_program_is_told_it_has_no_manifest_to_answer_its_foreign_in() {
     fs::create_dir_all(&*root).expect("create the temp directory");
     fs::write(root.join("loose.crs"), UNANSWERED).expect("write the temp source");
 
-    let expected = "`/frobnicate` has no implementation: a `foreign` is answered by a module that a `[[foreign]]` row of a manifest names, and a loose program has no manifest to write one in";
+    let expected = "no implementation\n│  `/frobnicate` is declared `foreign`\n│  a `foreign` is answered by a module that a `[[foreign]]` row of a manifest names\n│  a loose program has no manifest to write one in";
 
     let refusal = refused(&root, &root.join("loose.out"), &["loose.crs"]);
     assert!(refusal.contains(expected), "{refusal}");
@@ -329,7 +329,7 @@ fn compile_refuses_the_modules_a_run_would() {
     let mistyped = calling_double(&root, "mistyped", &[("probe", "truthy")]);
     let refusal = refused(&mistyped, &root.join("mistyped.out"), &[]);
     assert!(
-        refusal.contains("the module \"probe\" of mistyped exports `truthy` as () -> (i32), and `/mistyped/double` crosses to a module as (i64) -> (i64)"),
+        refusal.contains("the module `probe` of `/mistyped` exports `truthy` to answer `/mistyped/double`\n│  expected: (i64) -> (i64)\n│  obtained: () -> (i32)"),
         "{refusal}"
     );
 }

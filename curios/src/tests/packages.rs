@@ -645,7 +645,7 @@ fn a_test_subject_reaching_a_row_with_no_browser_table_is_refused_naming_the_tab
 
     assert!(
         refusal.contains(
-            "`/app/double` is answered by the foreign row \"native\" of app, which states no `[foreign.browser]`: the browser target has nothing to link for it"
+            "`/app/double` is answered by the foreign row `native` of `/app`\n│  that row states no `[foreign.browser]`\n│  the browser target has nothing to link for it"
         ),
         "{refusal}"
     );

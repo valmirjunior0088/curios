@@ -8,7 +8,7 @@ mod compile;
 pub use compile::{engine, optimize, to_cwasm};
 
 mod link;
-pub use link::{bindings_of, linked_of};
+pub use link::{bindings_of, linked_of, unlinked};
 
 mod testing;
 pub use testing::{TestRun, TestSubject, Tested, opened, page_name, supplied, test_subjects};

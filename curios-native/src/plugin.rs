@@ -15,7 +15,7 @@
 use {
     super::{
         Answers, BundledPlugin, Entered, ForeignBindings, Guest, Lift, Lower, MachineCode, Stated,
-        Trampoline, shared_engine,
+        Trampoline, Unlinked, shared_engine,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireReturn, WireType},
     std::{collections::BTreeMap, fmt, sync::Arc},
@@ -91,7 +91,18 @@ struct Subject {
 
 impl fmt::Display for Subject {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "the module {:?} of {}", self.name, self.package)
+        write!(
+            formatter,
+            "the module `{}` of `/{}`",
+            self.name, self.package
+        )
+    }
+}
+
+impl Subject {
+    /// A refusal under `tag`, of this module.
+    fn refused(&self, tag: &'static str) -> Unlinked {
+        Unlinked::of(tag).about(&self.package, &self.name)
     }
 }
 
@@ -109,7 +120,7 @@ impl Plugin {
     pub fn bundled(
         &self,
         written: &impl Fn(&MachineCode) -> Result<Vec<u8>, String>,
-    ) -> Result<BundledPlugin, String> {
+    ) -> Result<BundledPlugin, Unlinked> {
         Ok(BundledPlugin {
             package: self.subject.package.clone(),
             name: self.subject.name.clone(),
@@ -118,15 +129,19 @@ impl Plugin {
                 .iter()
                 .map(|row| (row.function.name().to_string(), row.export.clone()))
                 .collect(),
-            payload: written(&self.compiled)
-                .map_err(|error| format!("{} could not be written out: {error}", self.subject))?,
+            payload: written(&self.compiled).map_err(|error| {
+                self.subject
+                    .refused("compiler fault")
+                    .stating(format_args!("{} could not be written out", self.subject))
+                    .stating(error)
+            })?,
         })
     }
 
     /// Refuse a `module` that is not a plugin before it can become one.
     ///
     /// The checks are the whole of what "a plugin" means, each made of the module's own types and refused by name rather than left to a `LinkError` that would report one missing import and stop.
-    fn of(module: &DeclaredModule) -> Result<Self, String> {
+    fn of(module: &DeclaredModule) -> Result<Self, Unlinked> {
         let subject = Subject {
             package: module.package.clone(),
             name: module.name.clone(),
@@ -136,19 +151,26 @@ impl Plugin {
         // Every import at once, rather than whichever one a linker would reach first.
         let demanded = compiled
             .imports()
-            .map(|import| format!("{}.{}", import.module(), import.name()))
+            .map(|import| format!("`{}.{}`", import.module(), import.name()))
             .collect::<Vec<_>>();
         if !demanded.is_empty() {
-            return Err(format!(
-                "{subject} imports {}, and nothing is supplied to a foreign module: it reaches no environment, which is what makes it able to compute and nothing else. Build it freestanding — `wasm32-unknown-unknown` rather than a WASI target",
-                demanded.join(", ")
-            ));
+            return Err(subject
+                .refused("surplus import")
+                .stating(format_args!("{subject} imports {}", demanded.join(", ")))
+                .stating("nothing is supplied to a foreign module")
+                .stating(
+                    "it reaches no environment, which is what lets it compute and nothing else",
+                )
+                .stating(
+                    "build it freestanding, `wasm32-unknown-unknown` rather than a WASI target",
+                ));
         }
 
         if !matches!(compiled.get_export(MEMORY), Some(ExternType::Memory(_))) {
-            return Err(format!(
-                "{subject} exports no `{MEMORY}`, which is where a byte string crossing to it is written"
-            ));
+            return Err(subject
+                .refused("missing export")
+                .stating(format_args!("{subject} exports no `{MEMORY}`"))
+                .stating("a byte string crossing to it is written there"));
         }
 
         let canonical = if exported(compiled, REALLOC)
@@ -158,9 +180,12 @@ impl Plugin {
         } else if exported(compiled, ALLOC) == Some((spelled(&["i32"]), spelled(&["i32"]))) {
             false
         } else {
-            return Err(format!(
-                "{subject} exports neither `{REALLOC}` nor an `{ALLOC}` taking a size and answering an offset, which is how a byte string reaches its memory"
-            ));
+            return Err(subject
+                .refused("missing export")
+                .stating(format_args!(
+                    "{subject} exports neither `{REALLOC}` nor an `{ALLOC}` taking a size and answering an offset"
+                ))
+                .stating("that is how a byte string reaches its memory"));
         };
 
         Ok(Self {
@@ -342,7 +367,7 @@ impl Instantiated {
 /// A scalar is itself: a `Nat` or `Int` an `i64`, a `Bool` or a `Byte` an `i32`, an `Flt` an `f64`, as they cross to the host. A byte string is a `(ptr, len)` pair, which is why it costs two slots where a scalar costs one — the shape every raw-ABI toolchain already emits, rather than a convention invented here.
 ///
 /// `Handle`, `List` and `Option` are refused. A handle is a token into the *host's* resource table and means nothing inside a plugin, which holds none; a list or an option holds elements whose marshalling nothing has asked for. Each is refused where a signature is read rather than mistranslated where it is called.
-fn crossing(wire: WireType, subject: &Subject, declaration: &str) -> Result<Crossing, String> {
+fn crossing(wire: WireType, subject: &Subject, declaration: &str) -> Result<Crossing, Unlinked> {
     match wire {
         WireType::Nat => Ok(Crossing::Nat),
         WireType::Int => Ok(Crossing::Int),
@@ -350,9 +375,14 @@ fn crossing(wire: WireType, subject: &Subject, declaration: &str) -> Result<Cros
         WireType::Byte => Ok(Crossing::Byte),
         WireType::Flt => Ok(Crossing::Float),
         WireType::Bytes => Ok(Crossing::Bytes),
-        WireType::Handle | WireType::List(_) | WireType::Option(_) => Err(format!(
-            "{subject} answers `{declaration}`, whose signature names a `Handle`, a `List` or an `Option`. A foreign module takes scalars and byte strings: a handle is a token into the host's own table and names nothing inside a plugin, and a list or an option has no element marshalling yet"
-        )),
+        WireType::Handle | WireType::List(_) | WireType::Option(_) => Err(subject
+            .refused("unsupported signature")
+            .stating(format_args!(
+                "{subject} answers `{declaration}`, whose signature names a `Handle`, a `List` or an `Option`"
+            ))
+            .stating("a foreign module takes scalars and byte strings")
+            .stating("a handle is a token into the host's own table, and names nothing inside a module")
+            .stating("a list or an option has no element marshalling yet")),
     }
 }
 
@@ -451,7 +481,11 @@ fn lower_scalar(
 
 impl Row {
     /// Hold `export` of `plugin` to the declaration `function`, where the two are resolved: a module that answers another type is refused before the program runs, and not at the first call that reaches it.
-    fn of(plugin: &Plugin, export: &str, function: &Arc<ForeignFunction>) -> Result<Self, String> {
+    fn of(
+        plugin: &Plugin,
+        export: &str,
+        function: &Arc<ForeignFunction>,
+    ) -> Result<Self, Unlinked> {
         let subject = &plugin.subject;
         let declaration = function.name();
         let signature = function.signature();
@@ -464,9 +498,14 @@ impl Row {
 
         // Ending the instance is the host's to do, or an embedder's: a module reaches no environment, and its own trap is a failure of the call.
         let WireReturn::Answers(results) = &signature.returns else {
-            return Err(format!(
-                "{subject} answers `{declaration}`, which does not return. A foreign module answers a value or none, and only the host ends the program"
-            ));
+            return Err(subject
+                .refused("unsupported signature")
+                .stating(format_args!(
+                    "{subject} answers `{declaration}`, which does not return"
+                ))
+                .stating(
+                    "a foreign module answers a value or none, and only the host ends the program",
+                ));
         };
 
         let fields = results
@@ -482,14 +521,25 @@ impl Row {
             (fields, true) => Returns::Area(fields.to_vec()),
             // Several results at once have no spelling in a multi-value return a toolchain emits, which is what the canonical ABI's area is for.
             (_, false) => {
-                return Err(format!(
-                    "{subject} answers `{declaration}`, which yields several results. A module with an `{ALLOC}` of its own answers one result or none; one that follows the canonical ABI, exporting `{REALLOC}`, answers several"
-                ));
+                return Err(subject
+                    .refused("unsupported signature")
+                    .stating(format_args!(
+                        "{subject} answers `{declaration}`, which yields several results"
+                    ))
+                    .stating(format_args!(
+                        "a module with an `{ALLOC}` of its own answers one result or none"
+                    ))
+                    .stating(format_args!(
+                        "one that follows the canonical ABI, exporting `{REALLOC}`, answers several"
+                    )));
             }
         };
 
-        let found = exported(plugin.compiled.module(), export)
-            .ok_or_else(|| format!("{subject} exports `{export}`, which is no function"))?;
+        let found = exported(plugin.compiled.module(), export).ok_or_else(|| {
+            subject.refused("invalid export").stating(format_args!(
+                "{subject} exports `{export}`, which is no function"
+            ))
+        })?;
         let expected = (
             params
                 .iter()
@@ -500,13 +550,21 @@ impl Row {
         );
 
         if expected != found {
-            return Err(format!(
-                "{subject} exports `{export}` as ({}) -> ({}), and `{declaration}` crosses to a module as ({}) -> ({})",
-                found.0.join(", "),
-                found.1.join(", "),
-                expected.0.join(", "),
-                expected.1.join(", "),
-            ));
+            return Err(subject
+                .refused("signature mismatch")
+                .stating(format_args!(
+                    "{subject} exports `{export}` to answer `{declaration}`"
+                ))
+                .stating(format_args!(
+                    "expected: ({}) -> ({})",
+                    expected.0.join(", "),
+                    expected.1.join(", ")
+                ))
+                .stating(format_args!(
+                    "obtained: ({}) -> ({})",
+                    found.0.join(", "),
+                    found.1.join(", ")
+                )));
         }
 
         Ok(Self {
@@ -644,7 +702,7 @@ impl Row {
 pub fn plugin_bindings(
     foreigns: &ForeignStore,
     declared: Vec<DeclaredModule>,
-) -> Result<ForeignBindings, String> {
+) -> Result<ForeignBindings, Unlinked> {
     let mut bindings = ForeignBindings::empty();
 
     for module in &declared {
@@ -658,11 +716,22 @@ pub fn plugin_bindings(
 
             let exports = resolved.exports();
             if !exports.contains(export) {
-                return Err(format!(
-                    "{} claims `{export}` answers `{declaration}`, and exports no such name. It exports {}",
-                    resolved.subject,
-                    exports.join(", ")
-                ));
+                return Err(resolved
+                    .subject
+                    .refused("unknown export")
+                    .stating(format_args!(
+                        "{} is said to answer `{declaration}` by `{export}`",
+                        resolved.subject
+                    ))
+                    .stating("it exports no such name")
+                    .stating(format_args!(
+                        "it exports: {}",
+                        exports
+                            .iter()
+                            .map(|export| format!("`{export}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )));
             }
 
             let row = Row::of(&resolved, export, function)?;

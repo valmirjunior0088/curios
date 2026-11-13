@@ -66,7 +66,7 @@ fn an_answer_whose_operands_cross_otherwise_is_refused() {
 
     assert_eq!(
         linked(&doubling(), &bindings, "/double").unwrap_err(),
-        "a binding answers `/double` as (Int) -> (Nat), and the program declares it (Nat) -> (Nat)"
+        "signature mismatch: a binding answers `/double`; expected: (Nat) -> (Nat); obtained: (Int) -> (Nat)"
     );
 }
 
@@ -77,7 +77,7 @@ fn an_answer_whose_results_cross_otherwise_is_refused() {
 
     assert_eq!(
         linked(&doubling(), &bindings, "/double").unwrap_err(),
-        "a binding answers `/double` as (Nat) -> (Bool), and the program declares it (Nat) -> (Nat)"
+        "signature mismatch: a binding answers `/double`; expected: (Nat) -> (Nat); obtained: (Nat) -> (Bool)"
     );
 }
 
@@ -85,7 +85,7 @@ fn an_answer_whose_results_cross_otherwise_is_refused() {
 fn a_row_nothing_answers_is_refused_by_name() {
     assert_eq!(
         linked(&doubling(), &ForeignBindings::empty(), "/double").unwrap_err(),
-        "no implementation for `/double`: no module answers it, and this host does not"
+        "no implementation: `/double` is declared `foreign`; no module answers it, and this host does not"
     );
 }
 
@@ -97,8 +97,8 @@ fn a_binding_the_program_cannot_use_is_refused_by_name() {
     twice.define("/double", |x: u64| x + x);
 
     assert_eq!(
-        twice.answers.admit(&doubling()).unwrap_err(),
-        "`/double` is answered twice by the bindings of this run"
+        twice.answers.admit(&doubling()).unwrap_err().to_string(),
+        "duplicate answer: `/double` is answered twice by the bindings of this run"
     );
 
     let mut stray = ForeignBindings::empty();
@@ -106,8 +106,8 @@ fn a_binding_the_program_cannot_use_is_refused_by_name() {
     stray.define("/halve", |x: u64| x / 2);
 
     assert_eq!(
-        stray.answers.admit(&doubling()).unwrap_err(),
-        "a binding answers `/halve`, which the program declares no foreign row for"
+        stray.answers.admit(&doubling()).unwrap_err().to_string(),
+        "unknown declaration: a binding answers `/halve`; the program declares no `foreign` of that name"
     );
 }
 
@@ -132,7 +132,7 @@ fn a_row_that_does_not_return_is_answered_by_a_termination() {
 
     assert_eq!(
         linked(&store, &returning, "/abort").unwrap_err(),
-        "a binding answers `/abort` as (Byte) -> (), and the program declares it (Byte) -> Never"
+        "signature mismatch: a binding answers `/abort`; expected: (Byte) -> Never; obtained: (Byte) -> ()"
     );
 }
 
