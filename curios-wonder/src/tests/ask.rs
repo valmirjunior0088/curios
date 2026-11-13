@@ -57,16 +57,18 @@ fn a_file_subject_the_disk_does_not_hold_is_refused_before_it_is_placed() {
     let root = Temporary::new("wonder", "unheld");
 
     let missing = root.join("nothing.crs");
-    let refusal = crate::file_subject(missing.clone()).unwrap_err();
+    let refusal = crate::file_subject(missing.clone()).unwrap_err().render();
     assert!(
-        refusal.contains(&format!("reading: {}", missing.display())),
+        refusal.ends_with(&format!("╰─ [error] {}", missing.display())),
         "{refusal}"
     );
 
     fs::create_dir_all(&root).unwrap();
-    let refusal = crate::file_subject(root.to_path_buf()).unwrap_err();
+    let refusal = crate::file_subject(root.to_path_buf())
+        .unwrap_err()
+        .render();
     assert!(
-        refusal.contains(&format!("reading: {}", root.display())),
+        refusal.ends_with(&format!("╰─ [error] {}", root.display())),
         "{refusal}"
     );
 }

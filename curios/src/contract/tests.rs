@@ -387,9 +387,8 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, l
   work/app: nested/lib.crs → refused: `run` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -427,9 +426,8 @@ compile SUBJECT — Program (its own file), store Write, leaves Executable, opti
   work/app: nested/lib.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → refused: `compile` files what it builds under the package that declares it, and <root>/scratch.crs has none: say where, as in `curios compile <root>/scratch.crs --output scratch`
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -467,9 +465,8 @@ compile SUBJECT --output out — Program (its own file), store Write, leaves Exe
   work/app: nested/lib.crs → refused: `compile` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -507,9 +504,8 @@ document SUBJECT — Library, store Write, leaves Pages, options --std --output 
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → refused: `document` takes a library, and a program is not one
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -546,9 +542,8 @@ test SUBJECT — Any, store Write, leaves Nothing, options --target --port --fil
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -612,9 +607,8 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -649,9 +643,8 @@ format SUBJECT — Files, store None, leaves Rewritten, options --check --width 
   work/app: nested/lib.crs → files nested/lib.crs within 100
   work/app: <root>/scratch.crs → files <root>/scratch.crs within 100
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -686,9 +679,8 @@ wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --st
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -723,9 +715,8 @@ wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --c
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -760,9 +751,8 @@ wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests 
   work/app: nested/lib.crs → refused: `wonder --cost` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -800,9 +790,8 @@ wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, o
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -840,9 +829,8 @@ wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --t
   work/app: nested/lib.crs → refused: `wonder --stage` takes a program, and a library is not one: name an executable or a program file
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -880,9 +868,8 @@ wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, optio
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own
@@ -920,9 +907,8 @@ wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing,
   work/app: nested/lib.crs → library nested through nested/lib.crs
   work/app: <root>/scratch.crs → loose <root>/scratch.crs
   work/app: missing.crs → refused: unreadable file
-│  reading: <root>/work/app/missing.crs
 │  No such file or directory (os error 2)
-╰─ [error]
+╰─ [error] <root>/work/app/missing.crs
   work: (none) → refused: not a package
 │  this manifest declares an umbrella
 │  an umbrella compiles nothing of its own

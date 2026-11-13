@@ -23,7 +23,7 @@ pub fn lint(
     budget: u64,
     selection: Selection,
     telling: &mut dyn Telling,
-) -> Result<Linted, String> {
+) -> Result<Linted, Box<Report>> {
     let overlay = Overlay::default();
     // A dependency is a fact of the package, so only the package entire is asked which of its dependencies nothing reached.
     let dependencies = match &selection {

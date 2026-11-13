@@ -42,7 +42,14 @@ pub fn answer(text: impl Display) {
         Ok(()) => {}
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => process::exit(READER_GONE),
         Err(error) => {
-            eprintln!("failed to write to standard output: {error}");
+            eprintln!(
+                "{}",
+                Refused::of("unwritable output")
+                    .stating("standard output could not be written")
+                    .stating(error)
+                    .about_named("<stdout>")
+                    .render()
+            );
             process::exit(1);
         }
     }
@@ -337,7 +344,7 @@ pub fn wonder_diagnostics(
     files: &[PathBuf],
     width: Width,
     telling: &mut dyn Telling,
-) -> Result<(), String> {
+) -> Result<(), Box<Report>> {
     let overlay = Overlay::default();
 
     let answers = Asked::every(selection)?;
@@ -366,7 +373,7 @@ pub fn wonder_tests(
     let overlay = Overlay::default();
 
     let mut listed = Ok(());
-    for asked in Asked::every(selection).map_err(|report| CompileError::Failure(vec![*report]))? {
+    for asked in Asked::every(selection)? {
         let records = asked.tests(budget, &overlay, telling);
         match records {
             Ok(records) => {
@@ -470,8 +477,8 @@ pub fn wonder_stage(
         }
     };
 
-    let refusal = written_as_a_module(label_of(program.entry()));
-    let asked = Asked::about_program(program).map_err(CompileError::failure)?;
+    let refusal = not_a_program(program.entry());
+    let asked = Asked::about_program(program)?;
 
     // The rung is the answer and goes to stdout, where the driver emits it: once every unit the program stands on is compiled, and before anything downstream of the rung is.
     let shown = |text: &str| answer(format_args!("{text}\n"));
@@ -490,7 +497,7 @@ pub fn wonder_stage(
             Ok(())
         }
         Err(Refusal::NoSuchStage { asked }) => Err(no_such_stage(&asked)),
-        Err(Refusal::Unit) => Err(CompileError::failure(refusal)),
+        Err(Refusal::Unit) => Err(refusal.into()),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     }
 }
@@ -538,8 +545,7 @@ fn asked_through(library: &Library) -> Result<PathBuf, CompileError> {
     match &library.through {
         Some(file) => Ok(file.clone()),
         None => Ok(library
-            .declared_files()
-            .map_err(CompileError::failure)?
+            .declared_files()?
             .into_iter()
             .next()
             .unwrap_or_default()),
@@ -633,10 +639,7 @@ fn for_names(
                 (None, Entry::Stdin) => PathBuf::from(STDIN_LABEL),
             };
 
-            (
-                Asked::about_program(program).map_err(CompileError::failure)?,
-                file,
-            )
+            (Asked::about_program(program)?, file)
         }
         Staged::Library(library) => {
             let file = asked_through(&library)?;
@@ -687,10 +690,16 @@ fn placed(span: &Span) -> String {
 
 /// What asking for a rung the pipeline has none of is refused with.
 fn no_such_stage(asked: &str) -> CompileError {
-    CompileError::failure(format!(
-        "no stage named {asked:?}; the stages are {}",
-        curios_pipeline::Stage::NAMES.join(", ")
-    ))
+    Refused::of("unknown stage")
+        .stating(format_args!("no stage is named `{asked}`"))
+        .stating(format_args!(
+            "the stages: {}",
+            curios_pipeline::Stage::NAMES
+                .map(|name| format!("`{name}`"))
+                .join(", ")
+        ))
+        .about_named("--stage")
+        .into()
 }
 
 /// What the optimizer did to each of `program`'s declarations, one tab-separated row per line.
@@ -705,8 +714,8 @@ pub fn wonder_cost(
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
 
-    let refusal = written_as_a_module(label_of(program.entry()));
-    let asked = Asked::about_program(program).map_err(CompileError::failure)?;
+    let refusal = not_a_program(program.entry());
+    let asked = Asked::about_program(program)?;
 
     let fates = asked.costed(budget, &overlay, telling);
     match fates {
@@ -724,7 +733,7 @@ pub fn wonder_cost(
             }
             Ok(())
         }
-        Err(Uncosted::Unit) => Err(CompileError::failure(refusal)),
+        Err(Uncosted::Unit) => Err(refusal.into()),
         Err(Uncosted::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     }
 }
@@ -749,7 +758,7 @@ fn stopped(diagnostics: Vec<Diagnosis>) -> CompileError {
 }
 
 /// A file the question can be about: one the disk holds. A path that cannot be read is "no such subject" — the question could not be asked, and the exit says so — refused by the command line before placement reads it, in the words the read would have failed with. The engine would otherwise answer it as one diagnostic and exit 0. The server never comes through here: a document an editor holds may not be on disk yet, which is why the check is the command line's and not `Asked`'s.
-pub fn file_subject(path: PathBuf) -> Result<PathBuf, String> {
+pub fn file_subject(path: PathBuf) -> Result<PathBuf, Box<Report>> {
     let readable = fs::metadata(&path).and_then(|metadata| match metadata.is_dir() {
         true => Err(io::Error::from(io::ErrorKind::IsADirectory)),
         false => Ok(()),
@@ -757,20 +766,21 @@ pub fn file_subject(path: PathBuf) -> Result<PathBuf, String> {
 
     match readable {
         Ok(()) => Ok(path),
-        Err(error) => Err(LoadError::Read { path, error }.format()),
+        Err(error) => Err(Box::new(LoadError::Read { path, error }.report())),
     }
 }
 
-/// What a command that needs a program says of an entry written as a module, named `label`: it has no final term, so there is no program to compile.
-pub fn written_as_a_module(label: impl Display) -> String {
-    format!("{label} is written as a module, with no final term to compile a program from")
-}
+/// What a command that needs a program says of `entry` written as a module: it has no final term, so there is no program to compile.
+pub fn not_a_program(entry: &Entry) -> Box<Report> {
+    let refused = |text: &str| {
+        Refused::of("not a program")
+            .stating(format_args!("this {text} is written as a module"))
+            .stating("it has no final term to compile a program from")
+    };
 
-/// How a report names `entry`: its path, or standard input's label.
-fn label_of(entry: &Entry) -> String {
     match entry {
-        Entry::File(path) => path.display().to_string(),
-        Entry::Stdin => STDIN_LABEL.to_string(),
+        Entry::File(path) => refused("file").about_path(path),
+        Entry::Stdin => refused("text").about_named(STDIN_LABEL),
     }
 }
 

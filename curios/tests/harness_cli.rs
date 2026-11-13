@@ -464,7 +464,7 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     assert_eq!(ran.status.code(), Some(1));
     assert!(
         stderr(&ran).contains(
-            "<stdin> is written as a module, with no final term to compile a program from"
+            "not a program\n│  this text is written as a module\n│  it has no final term to compile a program from\n╰─ [error] <stdin>"
         ),
         "stderr: {}",
         stderr(&ran)

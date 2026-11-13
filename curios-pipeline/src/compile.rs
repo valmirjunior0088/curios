@@ -397,6 +397,13 @@ pub struct Refused {
     pub reported: CompileError,
 }
 
+impl From<Box<Report>> for CompileError {
+    /// A refusal that arrives as its report is the hard failure it reports.
+    fn from(report: Box<Report>) -> Self {
+        Self::Failure(vec![*report])
+    }
+}
+
 impl fmt::Display for Refused {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.reported.fmt(formatter)

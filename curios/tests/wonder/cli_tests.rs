@@ -218,7 +218,7 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     assert!(staged.stdout.is_empty());
     assert!(
         refusal.contains(
-            "<stdin> is written as a module, with no final term to compile a program from"
+            "not a program\n│  this text is written as a module\n│  it has no final term to compile a program from\n╰─ [error] <stdin>"
         ),
         "{refusal}"
     );

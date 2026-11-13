@@ -15,7 +15,7 @@ use {
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage, TestModule},
     curios_surface::{Entrypoint, Form},
     curios_verdict::{Program, Verdicts},
-    curios_wonder::{STDIN_LABEL, STDIN_MOUNT, written_as_a_module},
+    curios_wonder::{STDIN_LABEL, STDIN_MOUNT, not_a_program},
     std::{
         collections::BTreeMap,
         fs,
@@ -443,7 +443,7 @@ pub fn opened(path: &Path) -> Result<(Entrypoint, RootSource, Arc<Source>), Comp
     open_entrypoint(path).map_err(|error| match fs::read_to_string(path) {
         // A text written as a module fails the program grammar at its end, where it was never meant to hold a term: say what it is rather than what the grammar expected there.
         Ok(text) if Form::of(path, &text) == Form::Module => {
-            CompileError::failure(written_as_a_module(path.display()))
+            not_a_program(&Entry::File(path.to_path_buf())).into()
         }
         _ => CompileError::Failure(vec![error.report()]),
     })
@@ -453,7 +453,7 @@ pub fn opened(path: &Path) -> Result<(Entrypoint, RootSource, Arc<Source>), Comp
 pub fn supplied(text: &str) -> Result<(Entrypoint, RootSource, Arc<Source>), CompileError> {
     supply_entrypoint(STDIN_LABEL, text).map_err(|error| {
         match Form::of(Path::new(STDIN_LABEL), text) {
-            Form::Module => CompileError::failure(written_as_a_module(STDIN_LABEL)),
+            Form::Module => not_a_program(&Entry::Stdin).into(),
             Form::Program => CompileError::Failure(vec![error.report()]),
         }
     })

@@ -1,5 +1,5 @@
 use {
-    curios_common::{Report, Said, Span},
+    curios_common::{About, Report, Said, Span},
     curios_parse::ParserError,
     std::{fmt, io, path::PathBuf},
 };
@@ -388,15 +388,14 @@ pub enum LoadError {
 }
 
 impl LoadError {
-    /// The failure as data: the offending path plus the io error, located nowhere, or the parser's own report at the offset it stopped.
+    /// The failure as data: the io error, about the file that could not be read, or the parser's own report at the offset it stopped.
     pub fn report(&self) -> Report {
         match self {
             LoadError::Read { path, error } => {
                 let mut said = Said::line("unreadable file");
-                said.stating(format_args!("reading: {}", path.display()));
                 said.stating(error);
 
-                Report::of(None, said)
+                Report::about(About::Path(path.clone()), said)
             }
             LoadError::Parse(error) => error.report(),
         }

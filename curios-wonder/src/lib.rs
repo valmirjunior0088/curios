@@ -42,8 +42,8 @@ use cost::*;
 mod ask;
 use ask::*;
 pub use ask::{
-    Ended, Place, Staged, Telling, answer, file_subject, wonder_at, wonder_cost,
-    wonder_declarations, wonder_diagnostics, wonder_stage, wonder_tests, written_as_a_module,
+    Ended, Place, Staged, Telling, answer, file_subject, not_a_program, wonder_at, wonder_cost,
+    wonder_declarations, wonder_diagnostics, wonder_stage, wonder_tests,
 };
 
 mod server;

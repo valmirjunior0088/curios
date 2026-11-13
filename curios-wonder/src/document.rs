@@ -3,6 +3,7 @@
 use {
     curios_common::Qualifier,
     curios_document::Documentation,
+    curios_package::Refused,
     curios_pipeline::{CompileError, prelude_documentation},
 };
 
@@ -15,5 +16,10 @@ pub fn std_documentation() -> Result<Documentation, CompileError> {
     prelude_documentation()
         .into_iter()
         .find(|record| record.prefix == std)
-        .ok_or_else(|| CompileError::failure("the prelude carries no /std record".to_string()))
+        .ok_or_else(|| {
+            Refused::of("compiler fault")
+                .stating("the prelude carries no `/std` record")
+                .about_named("/std")
+                .into()
+        })
 }
