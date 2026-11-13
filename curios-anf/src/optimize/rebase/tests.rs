@@ -43,7 +43,7 @@ fn optimized_where(
         Rhs::SwitchNat {
             scrutinee: Atom::Value(n),
             cases: vec![NatCase {
-                key: 0,
+                key: Natural::zero(),
                 block: zero_arm,
             }],
             default,

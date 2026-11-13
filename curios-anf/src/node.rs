@@ -2,9 +2,12 @@
 //!
 //! Every non-atomic computation is bound by a `Let` statement, so evaluation order is exactly statement order — the operand law's home, and the reason effect ordering is a structural property rather than per-pass discipline. Branch and fold bodies are blocks referenced by [`BlockId`]; every block has exactly one structural owner and block references are acyclic. Recursion happens only through function and recursive-group identities, never by making the block graph cyclic.
 
-use super::{
-    Atom, BlockId, ConstructorId, FamilyId, ForeignId, FunctionId, Operation, ProductId,
-    RecGroupId, SequenceGrain, SequenceOp, StatementId, ValueId,
+use {
+    super::{
+        Atom, BlockId, ConstructorId, FamilyId, ForeignId, FunctionId, Operation, ProductId,
+        RecGroupId, SequenceGrain, SequenceOp, StatementId, ValueId,
+    },
+    curios_num::Natural,
 };
 
 /// The single computation a `Let` statement evaluates and binds.
@@ -145,10 +148,12 @@ pub struct VariantArm {
 }
 
 /// One case of a [`Rhs::SwitchNat`]: a literal key and the block it selects.
+///
+/// The key is the natural Core dispatches on, whole: a key is as unbounded as the value it is compared with, and which keys a branch table indexes is the lowering's to decide, where the table is built.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct NatCase {
-    pub key: u32,
+    pub key: Natural,
     pub block: BlockId,
 }
 

@@ -1,6 +1,6 @@
 //! A module's well-formedness: carriers stated where they may be, scope, arity and saturation, a match's coverage and keys, a block's owner, a projection's range, and a deep module checked without native stack.
 
-use {crate::verify::test_support::*, crate::*};
+use {crate::verify::test_support::*, crate::*, curios_num::Natural};
 
 /// An operation names its result's carrier, so a register stated on its result would state one fact twice, and could state it otherwise than the operation computes it.
 #[test]
@@ -278,11 +278,11 @@ fn duplicate_switch_keys_are_rejected() {
             scrutinee: zero,
             cases: vec![
                 NatCase {
-                    key: 3,
+                    key: Natural::from(3u32),
                     block: first,
                 },
                 NatCase {
-                    key: 3,
+                    key: Natural::from(3u32),
                     block: second,
                 },
             ],
@@ -448,7 +448,7 @@ fn deep_switch_chain(depth: usize, malformed: bool) -> Builder {
             Rhs::SwitchNat {
                 scrutinee: Atom::Value(scrutinee),
                 cases: vec![NatCase {
-                    key: 0,
+                    key: Natural::zero(),
                     block: leaf,
                 }],
                 default: chain,

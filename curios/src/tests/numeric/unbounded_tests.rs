@@ -545,53 +545,51 @@ fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
     );
 }
 
-/// A dispatch *key* narrows at erasure; a dispatch *value* does not.
+/// A dispatch key is as unbounded as the value it meets: one past every machine word takes its arm, its neighbours and the value it would wrap to take the default, and a small key beside it is taken as it was.
 ///
-/// **A value and a case key are two different things at this boundary.** The erased carriers are unbounded, so a literal crosses whole — but a **case key** is not a value: it selects an arm of a branch table, which is a slot. That narrowing is the only one at this boundary.
-///
-/// The dispatch half also guards the parser, four stages above this: a key narrowed and refused there would backtrack past every `Nat` leaf, and the arm would be reported as holding no pattern. Core keys the switch by its unbounded value and the width is chosen here alone — see [Nat and Int are an i31 until they outgrow it](../../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md).
+/// Core keys a switch by its unbounded value and so does every erased stage: a key no branch table indexes is decided by equality where the table is built (`curios-anf`'s `lower_switch`), so nothing above it narrows one. Narrowed in the parser, four stages above, a wide key would backtrack past every `Nat` leaf, and its arm would be reported as holding no pattern.
 #[test]
-fn a_dispatch_key_past_a_branch_table_refuses_where_a_value_does_not() {
-    let refusal = |source: &str| {
-        typecheck(source)
-            .expect_err("a numeral past the erased carrier is refused")
-            .to_string()
-    };
-
-    // A literal in an ordinary term is a *value*, and narrows nowhere.
-    assert!(
-        typecheck(
-            r#"
-        use /std/{Nat, Bool};
-        let f(n : Nat) -> Bool = n == 4294967296;
-        /std/print("unreachable")
-        "#
-        )
-        .is_ok(),
-        "a numeral past every machine word is a value, not an error"
-    );
-
-    // The same numeral as a dispatch case, which the parser must not read as a binder.
-    assert!(
-        refusal(
-            r#"
-        use /std/{Nat};
-        let f(n : Nat) -> Nat = match n | 0 => 1 | 4294967296 => 2 | _ => 0 end;
-        /std/print(Nat/to_str(f(0)))
-        "#
-        )
-        .contains("does not fit a branch table")
-    );
-
-    // A dispatch at the very top of the carrier still compiles and answers.
-    assert_eq!(
-        run(r#"
-        use /std/{Nat};
-        let f(n : Nat) -> Nat = match n | 4294967295 => 7 | _ => 0 end;
-        /std/print(Nat/to_str(f(4294967295)))
-        "#),
-        b"7"
-    );
+fn a_dispatch_key_past_a_machine_word_takes_its_arm() {
+    let rows = [
+        (
+            "Nat/to_str(match 5000000000 + n | 0 => 1 | 5000000000 => 2 | _ => 3 end)",
+            "2",
+        ),
+        (
+            "Nat/to_str(match 4999999999 + n | 0 => 1 | 5000000000 => 2 | _ => 3 end)",
+            "3",
+        ),
+        (
+            "Nat/to_str(match 5000000001 + n | 0 => 1 | 5000000000 => 2 | _ => 3 end)",
+            "3",
+        ),
+        // `5000000000` wraps to `705032704` in a word, which is another value.
+        (
+            "Nat/to_str(match 705032704 + n | 0 => 1 | 5000000000 => 2 | _ => 3 end)",
+            "3",
+        ),
+        (
+            "Nat/to_str(match n | 0 => 1 | 5000000000 => 2 | _ => 3 end)",
+            "1",
+        ),
+        (
+            "Nat/to_str(match 18446744073709551616 + n | 4294967296 => 5 | 18446744073709551616 => 4 | _ => 6 end)",
+            "4",
+        ),
+        (
+            "Nat/to_str(match 4294967296 + n | 4294967296 => 5 | 18446744073709551616 => 4 | _ => 6 end)",
+            "5",
+        ),
+        // A dispatch at the very top of a word still answers.
+        (
+            "Nat/to_str(match 4294967295 + n | 4294967295 => 7 | 4294967296 => 5 | _ => 0 end)",
+            "7",
+        ),
+    ];
+    let bodies = rows.iter().map(|(body, _)| *body).collect::<Vec<_>>();
+    for ((body, expected), executed) in rows.iter().zip(folded_matches_runtime(&bodies)) {
+        assert_eq!(executed, expected.as_bytes(), "wrong value for: {body}");
+    }
 }
 
 /// A key the i31 does not hold is decided by equality rather than by the branch table, so a value past the i31 meets it exactly.

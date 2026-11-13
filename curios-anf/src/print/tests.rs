@@ -97,7 +97,7 @@ fn a_recursive_module_prints_exactly() {
         Rhs::SwitchNat {
             scrutinee: Atom::Value(n),
             cases: vec![NatCase {
-                key: 0,
+                key: Natural::zero(),
                 block: zero_case,
             }],
             default,
@@ -211,7 +211,7 @@ fn a_deep_module_prints_on_a_stack_that_grows_for_it() {
             Rhs::SwitchNat {
                 scrutinee: Atom::Value(scrutinee),
                 cases: vec![NatCase {
-                    key: 0,
+                    key: Natural::zero(),
                     block: leaf,
                 }],
                 default: chain,

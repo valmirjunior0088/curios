@@ -604,7 +604,12 @@ impl Lowerer<'_> {
                 if_true,
             } => {
                 let scrutinee = self.emitter.lower_atom(*scrutinee);
-                self.lower_switch(scrutinee, vec![(0, *if_false), (1, *if_true)], None, site)
+                self.lower_switch(
+                    scrutinee,
+                    vec![(Natural::zero(), *if_false), (Natural::one(), *if_true)],
+                    None,
+                    site,
+                )
             }
             Rhs::SwitchNat {
                 scrutinee,
@@ -612,7 +617,10 @@ impl Lowerer<'_> {
                 default,
             } => {
                 let scrutinee = self.emitter.lower_atom(*scrutinee);
-                let arms = cases.iter().map(|case| (case.key, case.block)).collect();
+                let arms = cases
+                    .iter()
+                    .map(|case| (case.key.clone(), case.block))
+                    .collect();
                 self.lower_switch(scrutinee, arms, Some(*default), site)
             }
             Rhs::FoldNat {
@@ -1067,7 +1075,7 @@ impl Lowerer<'_> {
     fn lower_switch(
         &mut self,
         scrutinee: curios_cps::Atom,
-        arms: Vec<(u32, BlockId)>,
+        arms: Vec<(Natural, BlockId)>,
         default: Option<BlockId>,
         site: Site<'_>,
     ) -> curios_cps::NodeId {
@@ -1078,10 +1086,10 @@ impl Lowerer<'_> {
         for (key, block) in arms {
             let continuation = self.plain_arm(block, join);
             continuations.push(continuation);
-            match curios_cps::nat_is_small(&Natural::from(key)) {
+            match curios_cps::nat_is_small(&key) {
                 true => {
                     cases.insert(
-                        key,
+                        u32::try_from(&key).expect("a small natural is a word"),
                         curios_cps::Edge {
                             target: continuation,
                             args: Vec::new(),
@@ -1122,7 +1130,7 @@ impl Lowerer<'_> {
     fn key_test(
         &mut self,
         scrutinee: &curios_cps::Atom,
-        key: u32,
+        key: Natural,
         arm: curios_cps::ContinuationId,
         otherwise: Option<curios_cps::Edge>,
     ) -> curios_cps::ContinuationId {
@@ -1143,7 +1151,7 @@ impl Lowerer<'_> {
             op: curios_cps::Intrinsic::NatEql,
             args: vec![
                 scrutinee.clone(),
-                curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(key))),
+                curios_cps::Atom::Literal(curios_cps::Literal::Nat(key)),
             ],
             next: switch,
         });

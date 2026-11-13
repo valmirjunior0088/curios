@@ -210,7 +210,7 @@ impl Remap<'_> {
                 cases: cases
                     .iter()
                     .map(|case| NatCase {
-                        key: case.key,
+                        key: case.key.clone(),
                         block: self.block(case.block),
                     })
                     .collect(),

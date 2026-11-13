@@ -332,17 +332,15 @@ impl<'m> Evaluator<'m> {
                 scrutinee,
                 cases,
                 default,
-            } => match self
-                .eval_atom(*scrutinee, frame)
-                .and_then(|held| held.nat())
-            {
-                Ok(key) => {
+            } => match self.eval_atom(*scrutinee, frame) {
+                Ok(Value::Nat(key)) => {
                     let block = cases
                         .iter()
                         .find(|case| case.key == key)
                         .map_or(*default, |case| case.block);
                     self.eval_block(block, frame, tail)
                 }
+                Ok(_) => Outcome::Bail(Bail::Unsupported),
                 Err(bail) => Outcome::Bail(bail),
             },
             Rhs::FoldNat {

@@ -7,7 +7,6 @@
 use {
     crate::ErasedNames,
     curios_common::{Note, Report, Said},
-    curios_num::Natural,
     curios_surface::Spellable,
     std::{collections::BTreeMap, rc::Rc},
 };
@@ -54,8 +53,6 @@ pub enum Error {
         member: ErasedName,
         through: Option<ErasedName>,
     },
-    /// A natural-dispatch case key that does not fit `curios-anf`'s `NatCase`. A `Nat` value is unbounded through every erased stage; a branch table's key is not.
-    NatCaseKeyOverflow { value: Natural },
     /// An error of erasure's own, at the term erasure was erasing.
     Located {
         extent: curios_core::Extent,
@@ -91,10 +88,6 @@ impl Error {
     /// [`Error::reading`] for a refusal of the certifier's reduction.
     pub fn reducing(term: &curios_core::Term, refusal: curios_core::ReduceError) -> Self {
         Self::reading(term, refusal.into())
-    }
-
-    pub fn nat_case_key_overflow(value: Natural) -> Self {
-        Self::NatCaseKeyOverflow { value }
     }
 
     /// The refusal of a read of `member` from another item, where `member`'s own initializer reads it: the one-step cycle the verifier would name had the two been erased together.
@@ -229,14 +222,6 @@ impl Error {
                 said.stating(format_args!(
                     "the certifier refused it: {}",
                     refusal.rendered(&curios_surface::Spelling::default())
-                ));
-
-                said
-            }
-            Self::NatCaseKeyOverflow { value } => {
-                let mut said = Said::line("key out of range");
-                said.stating(format_args!(
-                    "the `Nat` case {value} does not fit a branch table"
                 ));
 
                 said

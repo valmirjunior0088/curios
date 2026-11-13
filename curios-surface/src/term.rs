@@ -393,7 +393,7 @@ pub enum NatPattern {
     },
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, lowered to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
     ///
-    /// Carries the numeral, not the erased carrier's `u32`. Narrowing here would choose `curios-anf`'s width in the parser, four stages above the erase boundary that owns it, and a numeral it refused there would backtrack past every leaf, so the arm would be reported as holding no pattern where its key is one. The width is `curios-elab`'s alone, and it refuses rather than wraps — see [Nat and Int are an i31 until they outgrow it](../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md).
+    /// Carries the numeral whole, as every stage down to the lowering that builds a branch table does: a key is as unbounded as the value it is compared with, and one no table indexes is decided by equality there (`curios-anf`'s `lower_switch`). Narrowed here, a numeral past a machine word would backtrack past every leaf, so the arm would be reported as holding no pattern where its key is one.
     ///
     /// The radix it was written in rides along, as a term's numeral keeps it, so `| 0x10 =>` prints back as written; dispatch reads the value alone.
     Lit(NatLiteral),

@@ -65,24 +65,9 @@ fn a_refused_type_is_one_error_at_the_term_refused() {
 
 /// A refusal from *below* the certifier is still a diagnostic: this query answers what `run` would say, and erasure is the last stage that says anything.
 ///
-/// The stages under the certifier do more than build the program: erasure narrows a dispatch key into the branch table `curios-anf` carries, refusing one that does not fit, and it hands the module to the erased verifier, which rejects the recursion classes the language does not admit. A check path that stopped at the certifier would report both programs below clean where `run` refuses them.
+/// The stages under the certifier do more than build the program: erasure hands the module to the erased verifier, which rejects the recursion classes the language does not admit. A check path that stopped at the certifier would report the program below clean where `run` refuses it.
 #[test]
 fn a_refusal_below_the_certifier_is_still_reported() {
-    let overflowing = of(
-        "let _f(n : /std/Nat) -> /std/Nat = match n | 0 => 1 | 4294967296 => 2 | _ => 0 end;\n/std/print(\"\")",
-    );
-    let [report] = overflowing.as_slice() else {
-        panic!("one diagnostic, got {overflowing:?}");
-    };
-    assert_eq!(report.severity, Severity::Error);
-    assert!(
-        report
-            .rendered(&Style::plain())
-            .contains("does not fit a branch table"),
-        "{}",
-        report.rendered(&Style::plain())
-    );
-
     // A mutual value group with no lambda between its members: no forcing order satisfies it, and the erased verifier is what says so.
     let knotted = of("let _a : /std/Nat = _b\nand _b : /std/Nat = _a;\n/std/print(\"\")");
     let [report] = knotted.as_slice() else {

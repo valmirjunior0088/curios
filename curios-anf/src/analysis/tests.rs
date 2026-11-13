@@ -191,7 +191,7 @@ fn a_deep_module_analyzes_without_native_stack() {
             Rhs::SwitchNat {
                 scrutinee: Atom::Value(scrutinee),
                 cases: vec![NatCase {
-                    key: 0,
+                    key: Natural::zero(),
                     block: leaf,
                 }],
                 default: chain,

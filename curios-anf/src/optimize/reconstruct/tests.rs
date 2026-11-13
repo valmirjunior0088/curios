@@ -1,6 +1,6 @@
 //! Reconstruction preserves full layouts and evaluation while exposing existing values.
 
-use {super::*, crate::*};
+use {super::*, crate::*, curios_num::Natural};
 
 fn finish(module: &mut Module) {
     let analysis = Analysis::analyze(module);
@@ -301,7 +301,7 @@ fn recursive_unit_fixture(mixed: bool) -> Module {
         Rhs::SwitchNat {
             scrutinee: Atom::Value(n),
             cases: vec![NatCase {
-                key: 0,
+                key: Natural::zero(),
                 block: base,
             }],
             default: recursive,
@@ -508,7 +508,7 @@ fn many_returns(count: usize) -> Module {
                 .into_iter()
                 .enumerate()
                 .map(|(i, block)| NatCase {
-                    key: i as u32,
+                    key: Natural::from(i),
                     block,
                 })
                 .collect(),

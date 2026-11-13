@@ -56,7 +56,7 @@ fn a_recursive_function_builds_through_reserve_and_define() {
         Rhs::SwitchNat {
             scrutinee: Atom::Value(n),
             cases: vec![NatCase {
-                key: 0,
+                key: Natural::zero(),
                 block: zero_case,
             }],
             default,

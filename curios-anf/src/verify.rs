@@ -637,7 +637,7 @@ impl<'m> Verifier<'m> {
                 self.check_atom(id, scrutinee)?;
                 let mut keys = HashSet::new();
                 for case in &cases {
-                    if !keys.insert(case.key) {
+                    if !keys.insert(&case.key) {
                         return Err(fault(
                             StructuralRule::DuplicateCaseKey,
                             format!("statement {id} has two cases for key {}", case.key),

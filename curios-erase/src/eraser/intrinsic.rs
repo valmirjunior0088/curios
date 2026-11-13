@@ -1,6 +1,6 @@
 //! The intrinsic transcription: each Core intrinsic to its arena identity, shape for shape.
 //!
-//! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is a `Byte` — every collapse onto a runtime carrier belongs to the lowering out of the representation. Type-level numerals cross whole, the erased carriers being unbounded too; the one narrowing here is a dispatch key's, refused rather than wrapped (`narrow_case_key`).
+//! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is a `Byte` — every collapse onto a runtime carrier belongs to the lowering out of the representation. Type-level numerals cross whole, the erased carriers being unbounded too, and so does a dispatch key: nothing is narrowed here.
 
 use {
     super::{Eraser, Outcome},
@@ -9,17 +9,6 @@ use {
     curios_common::SyntaxName,
     curios_num::Natural,
 };
-
-/// A natural-dispatch case key as `curios-anf`'s `NatCase` carries it, refusing one no branch table indexes.
-///
-/// The one narrowing at the `Nat` half of the Core border. A `Nat` *value* crosses whole — the erased carriers are unbounded too, and only materialization in `curios-emit` refuses one the envelope cannot box — but a dispatch *key* is not a value: it selects an arm, and an arm is a slot in a table the backend builds.
-///
-/// Shared across erasure because `eliminate`'s switch narrows its case keys through it: Core keys a `Cases::Switch` by `Natural`, so the width is chosen here, at the one boundary that owns it.
-pub fn narrow_case_key(value: &Natural) -> Result<u32, Error> {
-    u32::try_from(value)
-        .ok()
-        .ok_or_else(|| Error::nat_case_key_overflow(value.clone()))
-}
 
 /// One operand an operation computes with, beside what the roster demands of it.
 pub type Demanded<'a> = (&'a curios_core::Term, curios_core::Operand);

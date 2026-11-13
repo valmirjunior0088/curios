@@ -5,7 +5,7 @@
 //! The scrutinee is erased exactly once, and every arm is erased under the refinement it was elaborated under, keyed on the *original* head term: arm bodies were elaborated against reductions keyed on that term, and erasure re-types what it walks, so refining an alias in its place loses them. No elimination therefore re-derives a Core term from its head — the `Nat` case split computes its predecessor from the erased operand, and the sequence forms bind their element and suffix as values the peel fills. `List/fold`'s loop is the one form whose step does re-derive, reading `get(l, i)`, so it aliases its compound operands on the Core side first — a fresh variable defined as the operand, its label mapped to the once-erased atom — and has no arm to refine. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
 
 use {
-    super::{Demanded, Eraser, Outcome, demanded_type, narrow_case_key},
+    super::{Demanded, Eraser, Outcome, demanded_type},
     crate::{Error, Sorts, emitted, is_erasable, reduced, refine},
     curios_analysis::{case_target_indices, pinned_by_targets},
     curios_cert::Reader,
@@ -303,20 +303,17 @@ impl Eraser<'_> {
         let head_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
+        // A key crosses whole, as the value it is compared with does: Core dispatches on a `Natural` and so does `curios-anf`'s `NatCase`, and which keys a branch table indexes is decided where the table is built.
         let mut nat_cases = Vec::with_capacity(cases.len());
         for (value, body) in cases {
-            // Where the case key stops being unbounded. Core dispatches on a `Natural`; `curios-anf`'s `NatCase` is a `u32`, and a key past it is refused here rather than wrapped — the discipline of [Nat and Int are an i31 until they outgrow it](../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md), where a narrowing refuses rather than change a value.
-            //
-            // Located at the arm's body, which is the only position the arm has: `walk` would otherwise attach the enclosing `Match`'s, and a synthesized match has none at all.
-            let key = narrow_case_key(value).map_err(|error| match body.extent() {
-                Some(extent) => error.at(extent),
-                None => error,
-            })?;
             let literal = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
                 curios_core::Nat::new(value.clone()),
             ));
             let block = self.refined_arm(context, head, &literal, result, body)?;
-            nat_cases.push(curios_anf::NatCase { key, block });
+            nat_cases.push(curios_anf::NatCase {
+                key: value.clone(),
+                block,
+            });
         }
 
         let default_expected = result.of(head, &[]);
@@ -405,7 +402,7 @@ impl Eraser<'_> {
                 curios_anf::Rhs::SwitchNat {
                     scrutinee,
                     cases: vec![curios_anf::NatCase {
-                        key: 0,
+                        key: Natural::zero(),
                         block: zero,
                     }],
                     default,
