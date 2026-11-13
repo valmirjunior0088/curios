@@ -32,7 +32,8 @@ pub use interner::{Table, intern};
 
 mod qualifier;
 pub use qualifier::{
-    ArchivedQualifier, Interning, Qualifier, is_identifier, is_identifier_char, is_keyword,
+    ArchivedQualifier, Interning, Qualifier, is_identifier, is_identifier_char,
+    is_identifier_start, is_keyword,
 };
 
 mod symbol;

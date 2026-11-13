@@ -88,3 +88,13 @@ fn a_qualifier_read_from_an_archive_is_the_one_interned() {
     let read = curios_archive::from_bytes::<Qualifier>(&fresh).expect("a path reads back");
     assert_eq!(read, Qualifier::from(["archived", "read", "fresh"]));
 }
+
+#[test]
+fn an_identifier_begins_with_no_digit() {
+    for word in ["x", "x1", "_", "_1", "é2", "Shapes"] {
+        assert!(is_identifier(word), "{word}");
+    }
+    for word in ["", "1", "1x", "0x10", "٣d", "a-b"] {
+        assert!(!is_identifier(word), "{word:?}");
+    }
+}

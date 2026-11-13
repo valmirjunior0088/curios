@@ -34,9 +34,14 @@ pub fn is_identifier_char(character: char) -> bool {
     CHARACTERS.contains(&character) || character.is_alphanumeric()
 }
 
-/// Whether `word` spells an identifier: a non-empty run of [`is_identifier_char`].
+/// Whether `character` may begin an identifier: a digit may not, since a word that begins with one is read as a number wherever a term stands, and a name no term can read names nothing.
+pub fn is_identifier_start(character: char) -> bool {
+    CHARACTERS.contains(&character) || character.is_alphabetic()
+}
+
+/// Whether `word` spells an identifier: a non-empty run of [`is_identifier_char`] whose first is an [`is_identifier_start`].
 pub fn is_identifier(word: &str) -> bool {
-    !word.is_empty() && word.chars().all(is_identifier_char)
+    word.chars().next().is_some_and(is_identifier_start) && word.chars().all(is_identifier_char)
 }
 
 /// Whether `word` is a keyword, and so cannot spell a segment.

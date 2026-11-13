@@ -1,4 +1,4 @@
-//! The words a declaration may not take as its name, the ones the grammar spells itself, and the contextual and retired words that stay identifiers.
+//! The words a declaration may not take as its name, a keyword or one that begins with a digit, the ones the grammar spells itself, and the contextual and retired words that stay identifiers.
 
 use crate::*;
 
@@ -39,6 +39,95 @@ fn a_reserved_keyword_cannot_name_an_induct_a_struct_or_a_module() {
             "{source}: {}",
             error.format()
         );
+    }
+}
+
+// A word that begins with a digit is read as a number wherever a term stands, so a declaration of one binds what no reference can spell, as a keyword's would.
+#[test]
+fn a_word_that_begins_with_a_digit_cannot_name_a_declaration() {
+    for (source, word) in [
+        ("let 5 = 3;", "5"),
+        ("let 2x : Nat = 4;", "2x"),
+        ("let 0x10 = 1;", "0x10"),
+        ("induct 3d : Type\nend", "3d"),
+        ("struct 1st : Type { n : Type }", "1st"),
+        ("mod 2d\nend", "2d"),
+        ("use /std/{5};", "5"),
+    ] {
+        let error = source.parse::<Module>().unwrap_err();
+        assert!(
+            error.format().contains(&format!(
+                "`{word}` begins with a digit, so it cannot be a name"
+            )),
+            "{source}: {}",
+            error.format()
+        );
+    }
+}
+
+// A binder is a name too, and so are a field's label and a constructor's: the refusal stands where each is read, a lambda's parameter held until its arrow says the list is one.
+#[test]
+fn a_word_that_begins_with_a_digit_cannot_be_a_binder_or_a_label() {
+    for (source, word) in [
+        ("let f : (Nat) -> Nat = (7) => 7 + 1;", "7"),
+        ("let f : (Nat) -> Nat = (7: Nat) => 7 + 1;", "7"),
+        ("let f : (Nat, Nat) -> Nat = (a, 2b) => a;", "2b"),
+        ("let f(9: Nat) -> Nat = 9;", "9"),
+        ("struct P : Type { 1st : Nat }", "1st"),
+        ("induct T : Type | 2nd(Nat) end", "2nd"),
+        ("let g : Nat = (let 3 = 1; 2);", "3"),
+    ] {
+        let error = source.parse::<Module>().unwrap_err();
+        assert!(
+            error.format().contains(&format!(
+                "`{word}` begins with a digit, so it cannot be a name"
+            )),
+            "{source}: {}",
+            error.format()
+        );
+    }
+}
+
+// A parenthesized number is a term where no arrow follows it, which the held refusal of a lambda's parameter leaves alone.
+#[test]
+fn a_parenthesized_number_is_a_term_where_no_arrow_follows() {
+    for source in ["let n : Nat = (7);", "let p : {Nat, Nat} = (7, 8);"] {
+        if let Err(error) = source.parse::<Module>() {
+            panic!("{source}\n{}", error.format());
+        }
+    }
+}
+
+#[test]
+fn a_path_takes_no_segment_that_begins_with_a_digit() {
+    for (source, path) in [
+        ("let x : Nat = Shapes/2d/area;", "Shapes/2d/area"),
+        ("use /std/2d/{x};", "std/2d"),
+    ] {
+        let error = source.parse::<Module>().unwrap_err();
+        assert!(
+            error.format().contains(&format!(
+                "the path `{path}` contains a segment that begins with a digit"
+            )),
+            "{source}: {}",
+            error.format()
+        );
+    }
+}
+
+// A digit inside a name, a number where a term or a dispatch pattern stands and a projection by index are what they were.
+#[test]
+fn a_digit_past_a_names_first_character_and_a_number_still_parse() {
+    for source in [
+        "let x1 : Nat = 5;",
+        "let _1 : Nat = 0x10;",
+        "let f : (Nat) -> Nat = (n2) => match n2 | 5 => 1 | _ => 0 end;",
+        "let g : ({Nat, Nat}) -> Nat = (p) => p.0;",
+        "let h : Nat = Shapes/d2/area;",
+    ] {
+        if let Err(error) = source.parse::<Module>() {
+            panic!("{source}\n{}", error.format());
+        }
     }
 }
 

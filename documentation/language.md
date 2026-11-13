@@ -57,7 +57,7 @@ Every comma-separated list — parameters, arguments, tuple and structure fields
 
 ### Identifiers
 
-An identifier is a non-empty run of Unicode alphanumeric characters and `_`.
+An identifier is a non-empty run of Unicode alphanumeric characters and `_` whose first is alphabetic or `_`. A word that begins with a digit is a number wherever a term stands, so it is no name: `let 5 = 3;` is refused.
 
 A declaration whose name begins with `_` is kept unused on purpose: [`curios lint`](usage.md#lint) never reports it, and what it reads counts as used. `_` alone is a binder that names nothing, and `@_` is its implicit form, for a slot nothing reads. A binder has no kept form: a binder with any other name is reported where nothing reads it, whatever it begins with.
 

@@ -1,10 +1,10 @@
 use {
     super::{
         BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PATTERN_TAKES_NO_USE,
-        Read, STRUCT_PATTERN_TAKES_NO_MARK, member_ends, members, parse_char_value, parse_cons_ih,
-        parse_identifier, parse_keyword, parse_label, parse_literal, parse_mark, parse_name,
-        parse_named_premise, parse_nat_digits, parse_place, parse_qualified_name, refused,
-        require_space,
+        Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led, member_ends, members,
+        parse_char_value, parse_cons_ih, parse_identifier, parse_keyword, parse_label,
+        parse_literal, parse_mark, parse_name, parse_named_premise, parse_nat_digits, parse_place,
+        parse_qualified_name, parse_word_raw, refused, require_space,
     },
     crate::{
         BytesPattern, FieldSugarParam, FuncParam, FuncType, FuncTypeParam, Label, ListPattern,
@@ -14,7 +14,8 @@ use {
     curios_common::{Plicity, recurse},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, mark, memoize,
-        not_ahead, preceded_by_space, pure, sep_by0_trailing, take_exact, take_while, uncommit,
+        not_ahead, preceded_by_space, pure, refusal, sep_by0_trailing, take_exact, take_while,
+        uncommit,
     },
     std::iter,
 };
@@ -545,10 +546,25 @@ fn parse_bound_member<'a, B: 'a, D: Grammar>(
                 Plicity::Explicit => bound
                     .and(parse_annotation)
                     .map(|(binder, annotation)| Ok((Plicity::Explicit, binder, annotation)))
+                    .or(parse_numbered_binder::<_, D>)
                     .boxed(),
             })
             .parse(state)
     }
+}
+
+// A word that begins with a digit where a member binds, read with the annotation after it and reported: no name begins with one. A parenthesized number is a term until an arrow follows it, so the report is held as every refused member's is.
+pub fn parse_numbered_binder<'a, T: 'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Read<T>> {
+    mark()
+        .and(parse_word_raw)
+        .flat_map(|(start, word)| match begins_a_name(word) {
+            true => fail("expected: a word that begins with a digit").boxed(),
+            false => refusal(&start, digit_led(word)).boxed(),
+        })
+        .and_drop(parse_whitespace)
+        .and_drop(parse_annotation::<D>)
+        .map(Err)
+        .parse(state)
 }
 
 // One parameter of the definition sugar `label(params) = value` (tuple, struct, and witness fields). Like a lambda binder it retains its mark — `@name`, or `use _` — which is copied onto the generated function value's slot, so a hidden-binder field type (`pure : (@A, x) -> M(A)`) can be implemented as `pure(@A, x) = …` rather than losing the mark.

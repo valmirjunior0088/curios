@@ -3,9 +3,9 @@ use {
         DEFINITION_NAMES_ITS_MEMBERS, Grammar, MEMO_ATOMIC_TERM, MEMO_TERM, MEMO_TERM_BEFORE_ARROW,
         Read, comment_ending_at, members, parse_caller_sort, parse_choose, parse_func,
         parse_func_type, parse_intrinsic, parse_keyword, parse_let_binder, parse_literal,
-        parse_mark, parse_match, parse_name, parse_parens, parse_pattern, parse_premise,
-        parse_prop, parse_qualified_name, parse_struct_lit, parse_tuple, parse_tuple_type,
-        parse_type, parse_usize_raw, refused,
+        parse_mark, parse_match, parse_name, parse_numbered_binder, parse_parens, parse_pattern,
+        parse_premise, parse_prop, parse_qualified_name, parse_struct_lit, parse_tuple,
+        parse_tuple_type, parse_type, parse_usize_raw, refused,
     },
     crate::{
         Apply, Argument, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding, LetGroup,
@@ -108,6 +108,7 @@ pub fn parse_func_sugar_param<'a, D: Grammar>(
                         type_,
                     })
                 })
+                .or(parse_numbered_binder::<_, D>)
                 // Its type alone, or its binder alone where that is `_`, which no type is.
                 .or(parse_term::<D>
                     .map(|_| ())

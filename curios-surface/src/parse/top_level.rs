@@ -1,10 +1,11 @@
 use {
     super::{
         CONCEPT_FIELD_TAKES_NO_IMPLICIT, Grammar, INDEX_TAKES_NO_MARK, LAMBDA_TAKES_PARENTHESES,
-        PAYLOAD_TAKES_NO_USE, STRUCT_FIELD_TAKES_NO_USE, members, parse_apply_argument,
-        parse_field_member, parse_func_sugar_param, parse_func_type_param, parse_identifier,
-        parse_keyword, parse_let_signature, parse_literal, parse_mark, parse_name,
-        parse_named_premise, parse_prop, parse_tuple_field_prefix, parse_type, raised, refusing,
+        PAYLOAD_TAKES_NO_USE, STRUCT_FIELD_TAKES_NO_USE, members, name_from_segments,
+        parse_apply_argument, parse_field_member, parse_func_sugar_param, parse_func_type_param,
+        parse_identifier, parse_keyword, parse_let_signature, parse_literal, parse_mark,
+        parse_name, parse_named_premise, parse_prop, parse_tuple_field_prefix, parse_type,
+        parse_word_raw, raised, refusing,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem, Label,
@@ -14,7 +15,7 @@ use {
         reserved_keyword, text_after, word_after,
     },
     curios_abi::{WireLeaf, WireResults, WireReturn, WireSignature, WireType},
-    curios_common::{Plicity, Qualifier, is_keyword},
+    curios_common::{Plicity, is_keyword},
     curios_parse::{
         Boxed, Mark, Parsed, Parser, ParserError, ParserState, commit, fail, fail_from, look_ahead,
         many0, mark, not_ahead, pure, raise, refusal, sep_by0_trailing, sep_by1_trailing, spanned,
@@ -469,47 +470,24 @@ pub fn parse_top_mod<'a>(doc: Option<Doc>, vis_pub: bool, start: Mark) -> impl P
 
 // Like `parse_name`, but additionally accepts an empty absolute path. The leading `/` is only consumed when followed by an identifier — so for `use /{X};` the path is empty-abs (consumes nothing) and `/` is left for `parse_use_group` to consume as its separator. Raw segments, and no trailing-whitespace consumption at all: the group separator follows the path tightly, so `use /std /{X};` is refused like any other whitespace inside a path.
 pub fn parse_use_path<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
+    let segments = || {
+        parse_word_raw
+            .and(many0(|| take_exact("/").and_keep(parse_word_raw)))
+            .map(|(first, rest)| {
+                iter::once(first)
+                    .chain(rest)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+    };
+
     spanned(
         take_exact("/")
-            .and_keep(parse_identifier_raw)
-            .and(many0(|| take_exact("/").and_keep(parse_identifier_raw)))
-            .map(|(first, rest)| {
-                Name::new(
-                    true,
-                    Qualifier::from(
-                        iter::once(first)
-                            .chain(rest)
-                            .map(str::to_string)
-                            .collect::<Vec<_>>(),
-                    ),
-                )
-            })
-            .or(parse_identifier_raw
-                .and(many0(|| take_exact("/").and_keep(parse_identifier_raw)))
-                .map(|(first, rest)| {
-                    Name::new(
-                        false,
-                        Qualifier::from(
-                            iter::once(first)
-                                .chain(rest)
-                                .map(str::to_string)
-                                .collect::<Vec<_>>(),
-                        ),
-                    )
-                }))
-            .or(pure(Name::new(true, Qualifier::empty())))
-            .flat_map(|name| {
-                let segments = name.qualifier().segments();
-
-                match segments.iter().any(|segment| is_keyword(segment)) {
-                    true => fail(format!(
-                        "the path `{}` contains a reserved keyword",
-                        name.qualifier().join()
-                    ))
-                    .boxed(),
-                    false => pure(name).boxed(),
-                }
-            }),
+            .and_keep(segments())
+            .map(|segments| (true, segments))
+            .or(segments().map(|segments| (false, segments)))
+            .or(pure((true, Vec::new())))
+            .flat_map(|(is_abs, segments)| name_from_segments(is_abs, segments)),
     )
     .map(|(span, name)| name.with_span(span))
     .parse(state)

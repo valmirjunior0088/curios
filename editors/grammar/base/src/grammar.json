@@ -3138,7 +3138,7 @@
                     },
                     {
                       "type": "PATTERN",
-                      "value": "[\\p{Alphabetic}\\p{N}_]+",
+                      "value": "[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*",
                       "flags": "u"
                     }
                   ]
@@ -3298,7 +3298,7 @@
                     "type": "IMMEDIATE_TOKEN",
                     "content": {
                       "type": "PATTERN",
-                      "value": "[\\p{Alphabetic}\\p{N}_]+",
+                      "value": "[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*",
                       "flags": "u"
                     }
                   },
@@ -3331,7 +3331,7 @@
                   "type": "IMMEDIATE_TOKEN",
                   "content": {
                     "type": "PATTERN",
-                    "value": "[\\p{Alphabetic}\\p{N}_]+",
+                    "value": "[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*",
                     "flags": "u"
                   }
                 },
@@ -4949,7 +4949,7 @@
     },
     "identifier": {
       "type": "PATTERN",
-      "value": "[\\p{Alphabetic}\\p{N}_]+",
+      "value": "[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*",
       "flags": "u"
     }
   },

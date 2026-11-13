@@ -1,10 +1,10 @@
 use {
     super::{
-        Grammar, TUPLE_FIELD_TAKES_NO_MARK, members, parse_apply_argument,
-        parse_block_string_literal, parse_bool_intrinsic, parse_bytes_literal, parse_char_lit,
-        parse_func_param, parse_func_type_param, parse_held, parse_identifier, parse_label,
-        parse_list_literal, parse_literal, parse_mark, parse_name, parse_number,
-        parse_string_literal, refuse_dangling_dot,
+        Grammar, TUPLE_FIELD_TAKES_NO_MARK, begins_a_name, digit_led, members,
+        parse_apply_argument, parse_block_string_literal, parse_bool_intrinsic,
+        parse_bytes_literal, parse_char_lit, parse_func_param, parse_func_type_param, parse_held,
+        parse_identifier, parse_label, parse_list_literal, parse_literal, parse_mark, parse_name,
+        parse_number, parse_string_literal, parse_word_raw, refuse_dangling_dot,
     },
     crate::{
         FieldSugarParam, FuncTypeParam, Label, StructLit, StructLitEntry, Subterm, Term, Tuple,
@@ -14,7 +14,7 @@ use {
     curios_common::{Plicity, is_keyword},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, look_ahead, mark, not_ahead, pure,
-        sep_by0_trailing, take_exact,
+        raise, refusal, sep_by0_trailing, take_exact,
     },
     std::iter,
 };
@@ -77,12 +77,29 @@ pub fn parse_field_member<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
                 func_params: None,
                 type_,
             }))
+        .or(refuse_numbered_field_label)
         .or(parse_term::<D>.map(|type_| TupleTypeParam {
             label: None,
             func_params: None,
             type_,
         }))
         .or(refuse_keyword_field_label)
+        .parse(state)
+}
+
+// A word that begins with a digit written where a field is labelled. Tried ahead of the positional field, which would read a number and leave the `:` to answer for a mistake about a name: no type is a number and then a colon, so the refusal is exact, and commits.
+fn refuse_numbered_field_label<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, TupleTypeParam<D>> {
+    mark()
+        .and(parse_word_raw)
+        .flat_map(|(start, word)| match begins_a_name(word) {
+            true => fail("not a number written as a field label").boxed(),
+            false => refusal(&start, digit_led(word)).boxed(),
+        })
+        .and_drop(parse_whitespace)
+        .and_drop(look_ahead(parse_literal(":")))
+        .flat_map(|report| commit(raise(report)))
         .parse(state)
 }
 

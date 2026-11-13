@@ -456,7 +456,7 @@ fn a_choose_condition_arm_still_calls_a_qualified_name() {
 
 /// A dispatch case keeps its numeral whole, however wide it is: the width the erased carrier has is chosen at the erase boundary, not here.
 ///
-/// Narrowing to `u32` in the parser did not merely refuse a wide case early — the failure backtracked, and a digit run *is* an identifier, so the arm fell past every `Nat` leaf to a plain `Binder`. The match then dispatched on nothing and took its one arm for every input.
+/// Narrowed to `u32` in the parser, a wide case would not be refused as one: the failure backtracks past every `Nat` leaf, and the arm is reported as holding no pattern.
 #[test]
 fn a_dispatch_case_keeps_a_numeral_wider_than_the_erased_carrier() {
     let term = "match n | 4294967296 => 1 | _ => 0 end"

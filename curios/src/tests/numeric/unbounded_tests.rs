@@ -549,7 +549,7 @@ fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
 ///
 /// **A value and a case key are two different things at this boundary.** The erased carriers are unbounded, so a literal crosses whole — but a **case key** is not a value: it selects an arm of a branch table, which is a slot. That narrowing is the only one at this boundary.
 ///
-/// The dispatch half also guards the parser, four stages above this: a digit run is an identifier too, so a key narrowed and refused there would backtrack, and an oversized case would fall past every `Nat` leaf to a plain `Binder` — `match n | 4294967296 => 7 end` would compile to `let 4294967296 = n; 7`, a match that dispatches on nothing and answers `7` for every input. Core keys the switch by its unbounded value and the width is chosen here alone — see [Nat and Int are an i31 until they outgrow it](../../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md).
+/// The dispatch half also guards the parser, four stages above this: a key narrowed and refused there would backtrack past every `Nat` leaf, and the arm would be reported as holding no pattern. Core keys the switch by its unbounded value and the width is chosen here alone — see [Nat and Int are an i31 until they outgrow it](../../../../documentation/design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md).
 #[test]
 fn a_dispatch_key_past_a_branch_table_refuses_where_a_value_does_not() {
     let refusal = |source: &str| {

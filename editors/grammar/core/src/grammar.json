@@ -3310,7 +3310,7 @@
                     },
                     {
                       "type": "PATTERN",
-                      "value": "[\\p{Alphabetic}\\p{N}_]+",
+                      "value": "[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*",
                       "flags": "u"
                     }
                   ]
@@ -3483,7 +3483,7 @@
                     "type": "IMMEDIATE_TOKEN",
                     "content": {
                       "type": "PATTERN",
-                      "value": "[\\p{Alphabetic}\\p{N}_]+",
+                      "value": "[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*",
                       "flags": "u"
                     }
                   },
@@ -3516,7 +3516,7 @@
                   "type": "IMMEDIATE_TOKEN",
                   "content": {
                     "type": "PATTERN",
-                    "value": "[\\p{Alphabetic}\\p{N}_]+",
+                    "value": "[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*",
                     "flags": "u"
                   }
                 },
@@ -5169,7 +5169,7 @@
     },
     "identifier": {
       "type": "PATTERN",
-      "value": "[\\p{Alphabetic}\\p{N}_]+",
+      "value": "[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*",
       "flags": "u"
     },
     "entry": {
@@ -5592,7 +5592,7 @@
           },
           {
             "type": "PATTERN",
-            "value": "[\\p{Alphabetic}\\p{N}_]+",
+            "value": "[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*",
             "flags": "u"
           }
         ]
@@ -5600,7 +5600,7 @@
     },
     "witness_name": {
       "type": "PATTERN",
-      "value": "\\/([\\p{Alphabetic}\\p{N}_]+\\/)*witness~([0-9]+|\\/[\\p{Alphabetic}\\p{N}_]+(\\/[\\p{Alphabetic}\\p{N}_]+)*\\([^)]*\\)(#[0-9]+)?)",
+      "value": "\\/([\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*\\/)*witness~([0-9]+|\\/[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*(\\/[\\p{Alphabetic}_][\\p{Alphabetic}\\p{N}_]*)*\\([^)]*\\)(#[0-9]+)?)",
       "flags": "u"
     }
   },

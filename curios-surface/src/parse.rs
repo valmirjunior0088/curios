@@ -31,7 +31,7 @@ mod tests;
 
 use {
     super::{Dialect, Doc, Label, Name, Program, Term},
-    curios_common::{Qualifier, Source, Span, is_identifier_char, is_keyword},
+    curios_common::{Qualifier, Source, Span, is_identifier_char, is_identifier_start, is_keyword},
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, ahead, commit, fail, fail_from, is_blank,
         look_ahead, many0, mark, not_ahead, obtained, pure, run_parser, spanned, tagging, take_eof,
@@ -322,14 +322,29 @@ fn parse_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
     move |state: ParserState<'a>| take_exact(expected).and_drop(parse_whitespace).parse(state)
 }
 
-// The identifier characters alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bytes` literal's `\..` spread operand.
-pub fn parse_identifier_raw<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
+// A word: a non-empty run of the identifier characters, consuming no whitespace. An identifier is one, and so are a keyword and a word that begins with a digit, which whoever reads a name refuses by its own rule.
+fn parse_word_raw<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
     take_while(is_identifier_char)
-        .flat_map(|identifier| match identifier.is_empty() {
+        .flat_map(|word| match word.is_empty() {
             true => fail("expected: an identifier").boxed(),
-            false => pure(identifier).boxed(),
+            false => pure(word).boxed(),
         })
         .parse(state)
+}
+
+// An identifier alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bytes` literal's `\..` spread operand. A word that begins with a digit is none: wherever a term stands it is read as a number, so a name spelled by one could be declared and never read.
+pub fn parse_identifier_raw<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
+    parse_word_raw
+        .flat_map(|word| match begins_a_name(word) {
+            true => pure(word).boxed(),
+            false => fail(digit_led(word)).boxed(),
+        })
+        .parse(state)
+}
+
+// Whether `word`, a non-empty run of the identifier characters, begins as an identifier does.
+fn begins_a_name(word: &str) -> bool {
+    word.chars().next().is_some_and(is_identifier_start)
 }
 
 fn parse_identifier<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
@@ -339,6 +354,8 @@ fn parse_identifier<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
 // An identifier at a declaring position, carrying the span of the word alone: the trailing whitespace is consumed after the span closes, so a report about the declaration underlines the name and nothing after it.
 //
 // A keyword is refused here for the reason `parse_name` refuses one in a path (`name_from_segments`): the declaring and the referring side have to agree on what a name is, or a declaration binds a word no reference can spell. Accepted, `let match : Nat = 1;` would be unreachable — every later `match` is the keyword, so the binding would report only as unused, and in expression position the tail would read as a match with no scrutinee.
+//
+// A word that begins with a digit is refused for the same reason: every later `5` is the number, so `let 5 = 3;` would bind what nothing reads, and `[5, ..tail]` would bind the head where its writer meant to test it.
 //
 // Safe as the last alternative of a choice because every keyword-valued spelling the grammar does admit is parsed by an earlier one: `parse_bool_match_pattern` precedes `parse_binder` in `parse_match_pattern_inner`, exactly as it already precedes `parse_name`'s identical refusal.
 fn parse_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
@@ -366,13 +383,13 @@ pub fn declared<'a, T: 'a>(rest: impl Parser<'a, T>) -> impl Parser<'a, (Label, 
 fn parse_label_owning<'a>(owns_the_fault: bool) -> impl Parser<'a, Label> {
     move |state: ParserState<'a>| {
         mark()
-            .and(spanned(parse_identifier_raw))
+            .and(spanned(parse_word_raw))
             .flat_map(move |(start, (span, text))| {
-                match (is_keyword(text), owns_the_fault) {
-                    (false, _) => pure(Label::spanned(text, span)).boxed(),
+                match (unnameable(text), owns_the_fault) {
+                    (None, _) => pure(Label::spanned(text, span)).boxed(),
                     // Reported where the word begins, as `parse_keyword` reports a misspelled one, so the caret stands on the name rather than after it. Only the committed side may rewind: an uncommitted error that gives back the offset it read loses `Parser::or`'s tie-break to every sibling, which is how this refusal reached no reader at all.
-                    (true, true) => commit(fail_from(&start, reserved_keyword(text))).boxed(),
-                    (true, false) => fail(reserved_keyword(text)).boxed(),
+                    (Some(refusal), true) => commit(fail_from(&start, refusal)).boxed(),
+                    (Some(refusal), false) => fail(refusal).boxed(),
                 }
             })
             .and_drop(parse_whitespace)
@@ -384,15 +401,37 @@ pub fn reserved_keyword(word: &str) -> String {
     format!("`{word}` is a reserved keyword, so it cannot be a name")
 }
 
+/// What refuses a word that begins with a digit where a name stands.
+pub fn digit_led(word: &str) -> String {
+    format!("`{word}` begins with a digit, so it cannot be a name")
+}
+
+// Why `word` cannot be a name, where it cannot: a keyword is the grammar's own, and a word that begins with a digit is read as a number wherever a term stands.
+fn unnameable(word: &str) -> Option<String> {
+    match (is_keyword(word), begins_a_name(word)) {
+        (true, _) => Some(reserved_keyword(word)),
+        (false, false) => Some(digit_led(word)),
+        (false, true) => None,
+    }
+}
+
 fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> impl Parser<'a, Name> {
     move |state: ParserState<'a>| {
-        (match segments.iter().any(|segment| is_keyword(segment)) {
-            true => fail(format!(
+        let keyword = segments.iter().any(|segment| is_keyword(segment));
+        let numbered = segments.iter().find(|segment| !begins_a_name(segment));
+        (match (keyword, numbered, segments.len()) {
+            (true, _, _) => fail(format!(
                 "the path `{}` contains a reserved keyword",
                 segments.join("/")
             ))
             .boxed(),
-            false => pure(Name::new(is_abs, Qualifier::from(segments))).boxed(),
+            (false, Some(segment), 1) => fail(digit_led(segment)).boxed(),
+            (false, Some(_), _) => fail(format!(
+                "the path `{}` contains a segment that begins with a digit",
+                segments.join("/")
+            ))
+            .boxed(),
+            (false, None, _) => pure(Name::new(is_abs, Qualifier::from(segments))).boxed(),
         })
         .parse(state)
     }
@@ -404,7 +443,7 @@ fn parse_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
         take_exact("/")
             .map(|()| true)
             .or(pure(false))
-            .and(parse_identifier_raw.and(many0(|| take_exact("/").and_keep(parse_identifier_raw))))
+            .and(parse_word_raw.and(many0(|| take_exact("/").and_keep(parse_word_raw))))
             .flat_map(|(is_abs, (first, rest))| {
                 let segments = iter::once(first)
                     .chain(rest)
