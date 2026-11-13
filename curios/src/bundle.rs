@@ -1,36 +1,41 @@
 //! Emitting a self-contained native executable: the embedded slim launcher with the program's payload, the modules answering its `foreign` declarations, and the record naming them appended. The trailing tail layout lives in `curios_native::bundle` (shared with the launcher that recovers it); this module only embeds the launcher image and writes the result to disk.
 
 use {
+    curios::fault,
+    curios_common::Report,
     curios_native::{Bundle, append_bundle},
-    std::{fs, os::unix::fs::PermissionsExt, path::Path},
+    curios_package::Refused,
+    std::{fs, io, os::unix::fs::PermissionsExt, path::Path},
 };
 
 /// The slim `curios-native` launcher stub, embedded at build time. Produced by `cargo xtask launcher build` (an isolated `--package curios-native` build, kept Cranelift/Binaryen-free) into `curios/.artifacts/<triple>`, which is outside Cargo's target tree so `cargo clean` cannot remove it. Absence is caught before this line: `build.rs` emits a `cargo::error` naming the command to run. So `compile` needs no launcher lookup at runtime.
 const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_NATIVE_BIN"));
 
 /// Build a self-contained executable: the embedded launcher stub with `bundle` and its footer appended to the tail (see [`curios_native::append_bundle`]).
-pub fn emit_exe(bundle: &Bundle, output: &Path) -> Result<(), String> {
+pub fn emit_exe(bundle: &Bundle, output: &Path) -> Result<(), Box<Report>> {
     let mut bytes = LAUNCHER.to_vec();
+    let unwritable =
+        |tag: &str, path: &Path, error: io::Error| Refused::of(tag).stating(error).about_path(path);
 
-    append_bundle(&mut bytes, bundle)?;
+    append_bundle(&mut bytes, bundle)
+        .map_err(|error| fault("the executable's bundle could not be archived", error))?;
 
     // A declared executable lands inside the store, nested under its package, so the directories below it are this write's to create — nothing else has had reason to.
     if let Some(directory) = output.parent()
         && !directory.as_os_str().is_empty()
     {
         fs::create_dir_all(directory)
-            .map_err(|error| format!("failed to create {}: {error}", directory.display()))?;
+            .map_err(|error| unwritable("unwritable directory", directory, error))?;
     }
 
-    fs::write(output, &bytes)
-        .map_err(|error| format!("failed to write {}: {error}", output.display()))?;
+    fs::write(output, &bytes).map_err(|error| unwritable("unwritable file", output, error))?;
 
     let mut perms = fs::metadata(output)
-        .map_err(|error| format!("failed to stat {}: {error}", output.display()))?
+        .map_err(|error| unwritable("unwritable file", output, error))?
         .permissions();
     perms.set_mode(0o755);
     fs::set_permissions(output, perms)
-        .map_err(|error| format!("failed to chmod {}: {error}", output.display()))?;
+        .map_err(|error| unwritable("unwritable file", output, error))?;
 
     // On macOS we do NOT re-sign. The embedded launcher image carries an ad-hoc signature from the linker whose code-limit covers the original image; our payload is appended *past* that limit, so the signature stays valid and the loader ignores the trailing bytes (the launcher reads them via `current_exe`). `codesign --force` would in fact reject the result ("data after signature"), so leaving the original signature in place is both correct and necessary.
 

@@ -37,7 +37,8 @@ fn a_leading_byte_order_mark_is_not_written_back() {
 #[test]
 fn a_garbled_tail_is_refused_where_the_compiler_refuses_it() {
     let refusal = Formatted::from_source(&Source::inline("let x = (\n"), Width::default())
-        .expect_err("garbled tail");
+        .expect_err("garbled tail")
+        .render();
     assert!(
         refusal.starts_with("syntax error\n│  expected: `)`\n│  obtained: the end of the file"),
         "{refusal}"
@@ -182,7 +183,7 @@ fn every_source_in_the_tree_formats_without_refusal() {
         .filter_map(|(path, text)| {
             Formatted::from_source(&Source::held(path.clone(), text), Width::default())
                 .err()
-                .map(|refusal| format!("{}: {refusal}", path.display()))
+                .map(|refusal| format!("{}: {refusal}", path.display(), refusal = refusal.render()))
         })
         .collect::<Vec<_>>();
     assert!(refused.is_empty(), "{}", refused.join("\n"));

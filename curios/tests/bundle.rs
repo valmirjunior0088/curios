@@ -365,7 +365,7 @@ fn a_claim_written_after_a_run_is_refused_by_the_next() {
     assert_eq!(refused.status.code(), Some(1));
     assert!(
         String::from_utf8_lossy(&refused.stderr).contains(
-            "the foreign row \"probe\" says an export answers `/claimed/nowhere`, and /claimed declares no such `foreign`"
+            "the foreign row `probe` says an export answers `/claimed/nowhere`\n│  `/claimed` declares no such `foreign`"
         ),
         "{}",
         String::from_utf8_lossy(&refused.stderr)

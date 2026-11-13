@@ -137,7 +137,9 @@ fn run_module(module: &Qualifier) {
         .unwrap_or_else(|error| panic!("`{}` failed to compile:\n{error}", module.join()));
     let run = tested
         .loaded(&subject)
-        .unwrap_or_else(|refusal| panic!("`{}` failed to load: {refusal}", module.join()))
+        .unwrap_or_else(|refusal| {
+            panic!("`{}` failed to load: {}", module.join(), refusal.render())
+        })
         .unwrap_or_else(|| panic!("`{}` declares no tests", module.join()));
 
     let mut passed = 0usize;
@@ -239,7 +241,11 @@ fn every_source_is_canonically_formatted() {
         match Formatted::from_path(&path, Width::default()) {
             Ok(Formatted::Unchanged(_)) => {}
             Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),
-            Err(refusal) => wrong.push(format!("{}: {refusal}", path.display())),
+            Err(refusal) => wrong.push(format!(
+                "{}: {refusal}",
+                path.display(),
+                refusal = refusal.render()
+            )),
         }
     }
 

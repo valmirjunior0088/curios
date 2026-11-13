@@ -641,7 +641,7 @@ fn a_test_subject_reaching_a_row_with_no_browser_table_is_refused_naming_the_tab
             |_| {},
         )
         .expect("the subject compiles");
-    let refusal = tested.page(&subject).unwrap_err();
+    let refusal = tested.page(&subject).unwrap_err().render();
 
     assert!(
         refusal.contains(

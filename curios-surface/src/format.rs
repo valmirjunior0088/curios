@@ -15,7 +15,7 @@ use {
         CoreFormatInput, FormatInput, TopItem, between_items, parse_core_for_format,
         parse_for_format, print_core_entry, print_core_item, print_term, print_top_item,
     },
-    curios_common::{LINE_WIDTH, Source, Span},
+    curios_common::{About, LINE_WIDTH, Report, Said, Source, Span},
     curios_parse::is_blank,
     curios_print::{Original, Owed, Printer, flat, hard_line, reached, run_printer_placing},
     std::{cell::RefCell, fmt, path::Path, str::FromStr, sync::Arc},
@@ -72,8 +72,8 @@ pub enum Formatted {
 }
 
 impl Formatted {
-    /// Format `source` canonically within `width`: as Core text where it was read from a `.crsc`, and as a program or a module otherwise. `Err` is a human-readable refusal: a parse failure, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
-    pub fn from_source(source: &Arc<Source>, width: Width) -> Result<Self, String> {
+    /// Format `source` canonically within `width`: as Core text where it was read from a `.crsc`, and as a program or a module otherwise. `Err` is the report of a refusal: a parse failure, where the text stops being one, or a verification failure — the output failing to reparse to the same file with the same comments — in which case nothing should be written.
+    pub fn from_source(source: &Arc<Source>, width: Width) -> Result<Self, Box<Report>> {
         let output = match written_as_core_text(source) {
             true => core_text_formatted(source, width)?,
             false => program_formatted(source, width)?,
@@ -85,11 +85,16 @@ impl Formatted {
         })
     }
 
-    /// [`Formatted::from_source`] for the file at `path`, errors located by it. Writing a `Changed` result back is the caller's policy.
-    pub fn from_path(path: &Path, width: Width) -> Result<Self, String> {
-        let located = |error: String| format!("{}: {error}", path.display());
-        let source = Source::read(path).map_err(|error| located(error.to_string()))?;
-        Self::from_source(&source, width).map_err(located)
+    /// [`Formatted::from_source`] for the file at `path`, which a refusal is about. Writing a `Changed` result back is the caller's policy.
+    pub fn from_path(path: &Path, width: Width) -> Result<Self, Box<Report>> {
+        let source = Source::read(path).map_err(|error| {
+            let mut said = Said::line("unreadable file");
+            said.stating(error);
+
+            Report::about(About::Path(path.to_path_buf()), said)
+        })?;
+
+        Self::from_source(&source, width)
     }
 }
 
@@ -116,26 +121,40 @@ fn original<'a>(source: &'a Source, comments: &[Span]) -> Original<'a> {
 }
 
 /// A program or a module, formatted within `width` and verified.
-fn program_formatted(source: &Arc<Source>, width: Width) -> Result<String, String> {
-    let input = parse_for_format(source).map_err(|error| error.format())?;
+fn program_formatted(source: &Arc<Source>, width: Width) -> Result<String, Box<Report>> {
+    let input = parse_for_format(source).map_err(|error| error.report())?;
     // Every comment goes to the renderer with the text it was written in, which is all that decides its place — see `Original`.
     let original = original(source, &input.comments);
     let expected_comments = original.comments.len();
     let output = emit(&input, &original, width);
 
-    verify(&input, expected_comments, &output)?;
+    verify(&input, expected_comments, &output).map_err(|words| unverified(source, &words))?;
     Ok(output)
 }
 
 /// A file of Core text, formatted within `width` and verified as a program is. It is read and not checked: a file its reader would refuse — a field its node does not hold, a form Core text refuses — is formatted all the same.
-fn core_text_formatted(source: &Arc<Source>, width: Width) -> Result<String, String> {
-    let input = parse_core_for_format(source).map_err(|error| error.format())?;
+fn core_text_formatted(source: &Arc<Source>, width: Width) -> Result<String, Box<Report>> {
+    let input = parse_core_for_format(source).map_err(|error| error.report())?;
     let original = original(source, &input.comments);
     let expected_comments = original.comments.len();
     let output = emit_core_text(&input, &original, width);
 
-    verify_core_text(&input, expected_comments, &output)?;
+    verify_core_text(&input, expected_comments, &output)
+        .map_err(|words| unverified(source, &words))?;
     Ok(output)
+}
+
+/// The refusal of an output that failed its verification, which is the formatter's own fault and no fault of `source`: about the file it was read from, where it was read from one.
+fn unverified(source: &Source, words: &str) -> Box<Report> {
+    let mut said = Said::line("compiler fault");
+    said.stating("the formatter's output does not read back as the text it formatted");
+    said.stating(words);
+    said.stating("nothing was written");
+
+    Box::new(match source.path() {
+        Some(path) => Report::about(About::Path(path.to_path_buf()), said),
+        None => Report::of(None, said),
+    })
 }
 
 /// The one character the printer writes where the source may hold none: the comma closing a broken list.

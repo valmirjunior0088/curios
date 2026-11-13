@@ -491,7 +491,10 @@ fn every_unit_of_the_prelude_is_written_as_curios_format_writes_it() {
                             .join("\n"),
                     );
                 }
-                Err(refusal) => panic!("unit {index} is refused by the formatter: {refusal}"),
+                Err(refusal) => panic!(
+                    "unit {index} is refused by the formatter: {refusal}",
+                    refusal = refusal.render()
+                ),
             }
         }
     });

@@ -22,9 +22,10 @@ fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
 
 /// The prefixes `directory`'s order mounts, in fold order.
 fn mounts(directory: &Path) -> Result<Vec<String>, String> {
-    let governing = Governing::of(directory)?;
+    let governing = Governing::of(directory).map_err(|report| report.render())?;
 
-    Ok(order(&governing)?
+    Ok(order(&governing)
+        .map_err(|report| report.render())?
         .iter()
         .flat_map(|source| source.mounts())
         .map(|mount| mount.prefix.join())

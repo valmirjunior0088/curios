@@ -74,7 +74,8 @@ impl GuestInstance {
                 .instantiate(&mut store, code.module())
                 .map(|instance| (store, instance))
                 .map_err(|error| error.to_string())
-        })??;
+        })
+        .map_err(|stop| stop.to_string())??;
 
         Ok(Self { store, instance })
     }
@@ -97,7 +98,8 @@ impl GuestInstance {
             function
                 .call(store, &args, &mut results)
                 .map_err(|error| format!("calling `{export}`: {error}"))
-        })??;
+        })
+        .map_err(|stop| stop.to_string())??;
 
         Ok(results.into_iter().map(GuestValue).collect())
     }

@@ -302,9 +302,13 @@ impl Server {
             None => std::fs::read_to_string(&path).map_err(|error| error.to_string())?,
         };
         // An editor states no width the protocol carries, so the document's is its package's, as `curios format` reads it.
-        let width = FormatSettings::default().width_of_file(&path, self.manifest.as_deref())?;
+        let width = FormatSettings::default()
+            .width_of_file(&path, self.manifest.as_deref())
+            .map_err(|report| report.listed())?;
 
-        match Formatted::from_source(&Source::held(&path, text.as_str()), width)? {
+        match Formatted::from_source(&Source::held(&path, text.as_str()), width)
+            .map_err(|report| report.listed())?
+        {
             Formatted::Unchanged(_) => Ok(Vec::new()),
             Formatted::Changed(formatted) => Ok(vec![TextEdit {
                 range: Range {

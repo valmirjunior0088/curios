@@ -27,6 +27,11 @@ fn linked(package: &str, row: &str, gateway: &str, statics: &[(&str, &str)]) -> 
 
 /// The page of the program `app`, declared by the package `app`, linking `rows`.
 fn page_of(rows: Vec<Linked>) -> Result<BTreeMap<String, Vec<u8>>, String> {
+    page_text(rows).map_err(|report| report.render())
+}
+
+/// [`page_of`], its refusal as the report it is.
+fn page_text(rows: Vec<Linked>) -> Result<BTreeMap<String, Vec<u8>>, Box<Report>> {
     page(
         Program {
             name: "app",
@@ -80,7 +85,7 @@ fn a_path_claimed_twice_is_refused_naming_both_claimants() {
 
     assert_eq!(
         refusal,
-        "the page path `shared/a.js` is claimed by the static entry \"shared\" of the foreign row \"dom\" of app and by the gateway of the foreign row \"draw\" of app; a page holds one file at a path"
+        "path claimed twice\n│  the page path `shared/a.js` is claimed by the static entry `shared` of the foreign row `dom` of `/app` and by the gateway of the foreign row `draw` of `/app`\n│  a page holds one file at a path\n╰─ [error] shared/a.js"
     );
 }
 

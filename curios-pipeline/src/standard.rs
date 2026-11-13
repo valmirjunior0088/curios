@@ -238,9 +238,9 @@ impl<'a> Fold<'a> {
         P: FnMut(Progress<'_>),
     {
         self.scoped_before(1, None, progress, |prelude, sources, produced, _| {
-            let (source, offered) = sources
-                .last()
-                .ok_or_else(|| CompileError::failure("nothing to read: the scope holds no unit"))?;
+            let (source, offered) = sources.last().ok_or_else(|| {
+                CompileError::fault("there is nothing to read: the scope holds no unit")
+            })?;
             let scope = prelude
                 .iter()
                 .copied()
@@ -267,8 +267,8 @@ impl<'a> Fold<'a> {
     {
         self.scoped(progress, |roots, sources, produced, _| {
             let undocumented = || {
-                CompileError::failure(
-                    "nothing to document: the scope's last unit carries no interface",
+                CompileError::fault(
+                    "there is nothing to document: the scope's last unit carries no interface",
                 )
             };
             let ((source, _), (unit, earlier)) = sources

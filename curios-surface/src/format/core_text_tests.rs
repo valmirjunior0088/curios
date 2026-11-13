@@ -105,7 +105,8 @@ fn a_file_its_reader_refuses_is_formatted_all_the_same() {
 #[test]
 fn core_text_is_read_where_the_path_says_so() {
     let refusal = Formatted::from_source(&Source::held("a.crs", "#{a = 1} x\n"), Width::default())
-        .expect_err("a program writes no decorator");
+        .expect_err("a program writes no decorator")
+        .render();
 
     assert!(refusal.contains("obtained: `#`"), "{refusal}");
 }
@@ -147,7 +148,11 @@ fn every_file_of_core_text_the_tree_holds_is_canonically_formatted() {
         .filter_map(|path| match Formatted::from_path(path, Width::default()) {
             Ok(Formatted::Unchanged(_)) => None,
             Ok(Formatted::Changed(_)) => Some(format!("{}: not canonical", path.display())),
-            Err(refusal) => Some(format!("{}: {refusal}", path.display())),
+            Err(refusal) => Some(format!(
+                "{}: {refusal}",
+                path.display(),
+                refusal = refusal.render()
+            )),
         })
         .collect::<Vec<_>>();
 

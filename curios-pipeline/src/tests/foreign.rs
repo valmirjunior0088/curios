@@ -42,7 +42,7 @@ fn a_claim_is_held_to_a_declaration_of_its_own_unit() {
 
     assert!(
         refusal.contains(
-            "the foreign row \"sha2\" says an export answers `/crypto/sha265`, and /crypto declares no such `foreign`: it declares `/crypto/sha256`"
+            "the foreign row `sha2` says an export answers `/crypto/sha265`\n│  `/crypto` declares no such `foreign`\n│  it declares: `/crypto/sha256`"
         ),
         "{refusal}"
     );

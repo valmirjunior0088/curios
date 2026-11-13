@@ -107,7 +107,7 @@ pub fn payload_of(
         Steps::program(&subject, manifest.as_deref(), then),
         cache.as_ref(),
         |module| match target {
-            Target::Native => to_cwasm(module).map_err(CompileError::failure),
+            Target::Native => to_cwasm(module).map_err(CompileError::from),
             Target::Browser => Ok(optimize(module, false, |_| {})),
         },
     );

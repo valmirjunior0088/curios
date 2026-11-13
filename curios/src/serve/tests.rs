@@ -244,7 +244,7 @@ impl Reporting for Kept {
 }
 
 /// A run of two pages, the first scheduling two tests and the second one, served on a port of its own, its report kept by [`Kept`]; the thread serving the run ends once every step is taken.
-fn running() -> (u16, thread::JoinHandle<Result<(), String>>) {
+fn running() -> (u16, thread::JoinHandle<Result<(), Box<Report>>>) {
     let listener = bound(0).expect("a port of loopback's own");
     let port = listener.local_addr().unwrap().port();
     let served = thread::spawn(move || {

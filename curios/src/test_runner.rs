@@ -119,7 +119,7 @@ pub fn run_tests(
         )?;
         printer.took(&tested);
 
-        let run = tested.loaded(&subject).map_err(CompileError::failure)?;
+        let run = tested.loaded(&subject)?;
         printer.opened(tree, tested.modules());
         // A subject that schedules nothing has no program to run, and closed as it opened.
         let Some(run) = run else {

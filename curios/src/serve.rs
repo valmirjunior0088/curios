@@ -261,18 +261,18 @@ pub fn port_of(listener: &TcpListener) -> Result<u16, Box<Report>> {
 }
 
 /// Answer every connection `listener` accepts with `served`, each on a thread of its own, until the process is stopped.
-pub fn serve_page(listener: &TcpListener, served: Served) -> Result<(), String> {
+pub fn serve_page(listener: &TcpListener, served: Served) -> Result<(), Box<Report>> {
     serve(listener, &Site::Page(served))
 }
 
 /// Answer every connection `listener` accepts with `run`, each on a thread of its own, until every step of the run is taken and its last reply sent.
-pub fn serve_run(listener: &TcpListener, run: Run<'_>) -> Result<(), String> {
+pub fn serve_run(listener: &TcpListener, run: Run<'_>) -> Result<(), Box<Report>> {
     serve(listener, &Site::Run(run))
 }
 
 /// Answer every connection `listener` accepts with `site`, each on a thread of its own, until the site is complete: the socket that takes a run's last step connects back once its reply is sent, so the accept ends.
-fn serve(listener: &TcpListener, site: &Site<'_>) -> Result<(), String> {
-    let port = port_of(listener).map_err(|report| report.render())?;
+fn serve(listener: &TcpListener, site: &Site<'_>) -> Result<(), Box<Report>> {
+    let port = port_of(listener)?;
 
     thread::scope(|scope| {
         // A connection that fails before it is accepted is its client's, and ends nothing else.

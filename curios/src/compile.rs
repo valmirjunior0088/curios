@@ -4,7 +4,11 @@
 //!
 //! No wasmtime operation below is spelled here. `curios_native::validate`, `curios_cranelift::precompile` and `curios_cranelift::compile` are, because they belong with the engine whose configuration decides what a valid module is and what a `.cwasm` is compatible with; this crate names no wasmtime type at all.
 
-use {curios_common::Fingerprint, std::sync::LazyLock};
+use {
+    curios_common::{Fingerprint, Report},
+    curios_package::Refused,
+    std::{fmt, sync::LazyLock},
+};
 
 /// What decides whether a payload compiled on this machine runs on another, as a key part — computed once, since it is a property of the process, and handed to `curios-verdict`'s payload family beside every program it files.
 ///
@@ -53,8 +57,23 @@ pub fn optimized(module: &curios_wasm::Module) -> Vec<u8> {
 }
 
 /// Optimize (Binaryen) and AOT-compile (Cranelift) a module to the `.cwasm` payload a bundled executable carries and a store files, which leaves this process and is read back by [`Compiled::deserialize`](curios_native::Compiled::deserialize). Uses `curios-native`'s shared engine so the precompiled artifact matches the configuration it is deserialized against.
-pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
+pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, Box<Report>> {
     let bytes = optimized(module);
 
-    curios_profile::profile!("precompile" => curios_cranelift::precompile(&bytes))
+    curios_profile::profile!("precompile" => curios_cranelift::precompile(&bytes)).map_err(
+        |error| {
+            fault(
+                "the emitted module could not be compiled to machine code",
+                error,
+            )
+        },
+    )
+}
+
+/// A fault of the compiler's own, about the program it was building: `what` failed, in the `words` of whatever refused it. Nothing a program wrote earns one, which is why it names no place in the program.
+pub fn fault(what: &str, words: impl fmt::Display) -> Box<Report> {
+    Refused::of("compiler fault")
+        .stating(what)
+        .stating(words)
+        .about_named("the program")
 }

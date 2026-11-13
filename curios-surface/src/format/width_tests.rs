@@ -56,7 +56,11 @@ fn every_source_in_the_tree_formats_at_the_narrowest_width_and_holds_there() {
         let once = match Formatted::from_source(&Source::held(path.clone(), text), narrowest) {
             Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
             Err(refusal) => {
-                faults.push(format!("{}: {refusal}", path.display()));
+                faults.push(format!(
+                    "{}: {refusal}",
+                    path.display(),
+                    refusal = refusal.render()
+                ));
                 continue;
             }
         };
@@ -67,7 +71,8 @@ fn every_source_in_the_tree_formats_at_the_narrowest_width_and_holds_there() {
             }
             Err(refusal) => faults.push(format!(
                 "{}: its own output was refused: {refusal}",
-                path.display()
+                path.display(),
+                refusal = refusal.render()
             )),
         }
     }

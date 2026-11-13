@@ -5,7 +5,7 @@
 //! **What `curios test` compiles and runs is here too** (`testing`), with what answers a program's `foreign` rows (`link`), so a caller running a package's tests in process — `curios-prelude`'s own suite — goes through the pipeline the command line does, and the binary keeps only what it shows.
 
 mod compile;
-pub use compile::{engine, optimize, to_cwasm};
+pub use compile::{engine, fault, optimize, to_cwasm};
 
 mod link;
 pub use link::{bindings_of, linked_of, unlinked};

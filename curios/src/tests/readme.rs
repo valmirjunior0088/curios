@@ -30,7 +30,10 @@ fn every_crs_block_is_written_as_format_writes_it() {
             Ok(Formatted::Changed(text)) => {
                 unformatted.push(format!("README.md:{line} is formatted as\n\n{text}"));
             }
-            Err(refusal) => unformatted.push(format!("README.md:{line}: {refusal}")),
+            Err(refusal) => unformatted.push(format!(
+                "README.md:{line}: {refusal}",
+                refusal = refusal.render()
+            )),
         }
     }
 

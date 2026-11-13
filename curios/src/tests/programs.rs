@@ -77,7 +77,11 @@ fn every_program_source_is_canonically_formatted() {
         match Formatted::from_path(&path, Width::default()) {
             Ok(Formatted::Unchanged(_)) => {}
             Ok(Formatted::Changed(_)) => wrong.push(format!("{}: not canonical", path.display())),
-            Err(refusal) => wrong.push(format!("{}: {refusal}", path.display())),
+            Err(refusal) => wrong.push(format!(
+                "{}: {refusal}",
+                path.display(),
+                refusal = refusal.render()
+            )),
         }
     }
 

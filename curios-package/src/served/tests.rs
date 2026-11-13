@@ -36,7 +36,8 @@ fn gateway(statics: &[(&str, &str)]) -> Gateway {
 /// What `gateway` serves from `root`, as `(entry, page path, file under root)`.
 fn served(gateway: &Gateway, root: &Path) -> Result<Vec<(String, String, PathBuf)>, String> {
     Ok(gateway
-        .served("page", root)?
+        .served("page", root)
+        .map_err(|report| report.render())?
         .into_iter()
         .map(|served| {
             (

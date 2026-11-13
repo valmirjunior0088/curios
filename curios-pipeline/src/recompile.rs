@@ -186,7 +186,7 @@ pub fn compile_lowered_over(
         .map(|place| place.item())
         .collect::<BTreeSet<_>>();
     let core = Zonked::revised(&core, made_items.iter().map(|item| &core.items[*item]))
-        .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
+        .map_err(|refusal| refuse(&lowered, CompileError::fault(refusal)))?;
 
     // The certifier is told nothing of what was kept: it is handed the baseline whole and decides which of its verdicts stand, so its record covers every declaration of the new text and none it dropped. The unit is erased through the certifier that judged it.
     let globals = globals_after(predecessors, moved);

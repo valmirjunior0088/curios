@@ -24,19 +24,14 @@ fn selection(argument: Option<&str>, directory: &Path) -> Result<Selection, Stri
         spelling => spelling,
     };
 
-    Ok(Selection::of(
-        spelling,
-        None,
-        directory,
-        &Overlay::default(),
-    )?)
+    Selection::of(spelling, None, directory, &Overlay::default()).map_err(|report| report.render())
 }
 
 /// The program `argument` means to a command that needs one, standing in `directory`, or the refusal it earns.
 fn selected(argument: Option<&str>, directory: &Path) -> Result<Program, String> {
     match selection(argument, directory)? {
         Selection::Program(program) => Ok(program),
-        Selection::Entire(entire) => Ok(entire.default_program()?),
+        Selection::Entire(entire) => entire.default_program().map_err(|report| report.render()),
         Selection::Library(_) => panic!("{argument:?} selects a library"),
     }
 }

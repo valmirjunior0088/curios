@@ -16,7 +16,7 @@ use {
     askama::Template,
     base64::{Engine, engine::general_purpose::STANDARD},
     curios_abi::ForeignStore,
-    curios_common::Digest,
+    curios_common::{About, Digest, Report, Said},
     serde::Serialize,
     std::collections::{BTreeMap, btree_map::Entry},
 };
@@ -74,7 +74,7 @@ pub struct Program<'a> {
 pub fn page(
     program: Program<'_>,
     linked: Vec<Linked>,
-) -> Result<BTreeMap<String, Vec<u8>>, String> {
+) -> Result<BTreeMap<String, Vec<u8>>, Box<Report>> {
     let mut claimed = Claims::default();
     for file in PAGE_FILES {
         claimed.reserve(file);
@@ -93,7 +93,7 @@ pub fn page(
             true => path.to_string(),
             false => format!("{package}/{path}"),
         };
-        let of = format!("the foreign row {row:?} of {package}");
+        let of = format!("the foreign row `{row}` of `/{package}`");
 
         let path = owned(&gateway.path);
         claimed.claim(&path, format!("the gateway of {of}"), gateway.bytes)?;
@@ -110,7 +110,7 @@ pub fn page(
         for (entry, file) in statics {
             claimed.claim(
                 &owned(&file.path),
-                format!("the static entry {entry:?} of {of}"),
+                format!("the static entry `{entry}` of {of}"),
                 file.bytes,
             )?;
         }
@@ -167,17 +167,26 @@ impl Claims {
             .insert(path.to_string(), ("the page itself".to_string(), None));
     }
 
-    fn claim(&mut self, path: &str, claimant: String, bytes: Vec<u8>) -> Result<(), String> {
+    fn claim(&mut self, path: &str, claimant: String, bytes: Vec<u8>) -> Result<(), Box<Report>> {
         match self.0.entry(path.to_string()) {
             Entry::Vacant(vacant) => {
                 vacant.insert((claimant, Some(bytes)));
 
                 Ok(())
             }
-            Entry::Occupied(occupied) => Err(format!(
-                "the page path `{path}` is claimed by {} and by {claimant}; a page holds one file at a path",
-                occupied.get().0
-            )),
+            Entry::Occupied(occupied) => {
+                let mut said = Said::line("path claimed twice");
+                said.stating(format_args!(
+                    "the page path `{path}` is claimed by {} and by {claimant}",
+                    occupied.get().0
+                ));
+                said.stating("a page holds one file at a path");
+
+                Err(Box::new(Report::about(
+                    About::Named(path.to_string()),
+                    said,
+                )))
+            }
         }
     }
 

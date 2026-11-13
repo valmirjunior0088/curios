@@ -4,9 +4,10 @@ use {
     crate::{Built, Failure, Then, Tree, payload_of},
     curios::{linked_of, page_name},
     curios_browser::page,
-    curios_package::{Program, Target},
+    curios_common::Report,
+    curios_package::{Program, Refused, Target},
     curios_verdict::Verdicts,
-    std::{collections::BTreeMap, fs, path::Path},
+    std::{collections::BTreeMap, fs, io, path::Path},
 };
 
 /// What `program` is built into for a browser: every file of its page by its page path — the module through Binaryen alone, filed in `store` as `payload_of` files it, the rows it reaches linked to the gateways its packages declare, and the page laid out by `curios-browser`, naming the program as its first argument and its title. Every file the page holds is read here, once, and what the page refuses is refused before anything is written or served.
@@ -46,10 +47,12 @@ pub fn emit_page(
     directory: &Path,
     files: &BTreeMap<String, Vec<u8>>,
     owned: bool,
-) -> Result<(), String> {
+) -> Result<(), Box<Report>> {
+    let unwritable =
+        |tag: &str, path: &Path, error: io::Error| Refused::of(tag).stating(error).about_path(path);
     if owned && directory.exists() {
         fs::remove_dir_all(directory)
-            .map_err(|error| format!("failed to empty {}: {error}", directory.display()))?;
+            .map_err(|error| unwritable("unwritable directory", directory, error))?;
     }
 
     for (path, bytes) in files {
@@ -59,11 +62,10 @@ pub fn emit_page(
 
         if let Some(parent) = file.parent() {
             fs::create_dir_all(parent)
-                .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+                .map_err(|error| unwritable("unwritable directory", parent, error))?;
         }
 
-        fs::write(&file, bytes)
-            .map_err(|error| format!("failed to write {}: {error}", file.display()))?;
+        fs::write(&file, bytes).map_err(|error| unwritable("unwritable file", &file, error))?;
     }
 
     Ok(())

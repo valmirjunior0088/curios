@@ -43,13 +43,6 @@ impl From<Unlinked> for Stop {
     }
 }
 
-// Scaffolding while callers that run a program still hold its failure as text: it goes with the last of them.
-impl From<Stop> for String {
-    fn from(stop: Stop) -> Self {
-        stop.to_string()
-    }
-}
-
 /// A stop a host operation raises while the program runs, carried out of the wasm call as a trap and read back where the run ends.
 #[derive(Debug)]
 pub struct Raised(pub Stop);

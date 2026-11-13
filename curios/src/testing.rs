@@ -5,10 +5,10 @@
 //! **The store is consulted exactly as `run` consults it**: one payload per declared subject and target, filed under a reserved executable name no identifier can spell (it contains `/`), holding every test the subject declares, module by module, beside the target's payload, so a warm run recompiles nothing and still reports everything. The prefixes a payload's tests were selected under are part of what it is verified against, so a run under other prefixes replaces the subject's one payload. A loose subject has no store, so its tests are compiled every time.
 
 use {
-    crate::{bindings_of, engine, linked_of, optimize, to_cwasm},
+    crate::{bindings_of, engine, fault, linked_of, optimize, to_cwasm},
     curios_abi::{ForeignStore, HostOps},
     curios_browser::page,
-    curios_common::{Qualifier, Source},
+    curios_common::{Qualifier, Report, Source},
     curios_module::{Overlay, RootSource, UnitSource, open_entrypoint, supply_entrypoint},
     curios_native::{Compiled, Stop, TestEnd},
     curios_package::{Entry, LIBRARY, Named, Runs, Selection, Spelling, Target, order},
@@ -285,8 +285,7 @@ impl TestSubject {
                     Ok((Payload::Module(optimize(&module, false, |_| {})), foreigns))
                 }
             })
-            .transpose()
-            .map_err(CompileError::failure)?;
+            .transpose()?;
         let tested = Tested {
             modules: compiled.modules,
             unmatched: compiled.unmatched,
@@ -371,7 +370,7 @@ impl Tested {
     }
 
     /// The program, compiled for the native target, loaded to run the tests of `subject` it schedules, with what answers each `foreign` row it reaches: `None` where it schedules none, and so was built no further than its judgment.
-    pub fn loaded(&self, subject: &TestSubject) -> Result<Option<TestRun>, String> {
+    pub fn loaded(&self, subject: &TestSubject) -> Result<Option<TestRun>, Box<Report>> {
         let Some((payload, foreigns)) = &self.built else {
             return Ok(None);
         };
@@ -379,7 +378,8 @@ impl Tested {
             unreachable!("a test program is loaded for the target it was compiled for");
         };
         // SAFETY: a `Tested` is made by `TestSubject::compile` alone, from machine code this process precompiled or read back from the project's own store, where a compilation of this compiler filed it.
-        let compiled = unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }?;
+        let compiled = unsafe { Compiled::deserialize(cwasm, foreigns.clone()) }
+            .map_err(|error| fault("the program's machine code could not be read back", error))?;
         // Resolved once for the subject: its manifests are walked and its modules compiled here, and each test is handed the resolution. A run instantiates a module in its own store, so every test still meets an instance of its own, which keeps one test's marks in a module's memory out of the next one's. A loose subject has no package, so nothing declares what would answer a `foreign` of its own, and `bindings_of` refuses one it reaches, saying so.
         let bindings = bindings_of(subject.manifest(), foreigns)?;
 
@@ -392,7 +392,10 @@ impl Tested {
     }
 
     /// The program, compiled for a browser, laid out as the page that runs the tests of `subject` it schedules, every file by its page path, its rows linked to the gateways `subject`'s packages declare: `None` where it schedules none. A reached row no gateway answers is refused as `compile` refuses it, naming the row and the table.
-    pub fn page(&self, subject: &TestSubject) -> Result<Option<BTreeMap<String, Vec<u8>>>, String> {
+    pub fn page(
+        &self,
+        subject: &TestSubject,
+    ) -> Result<Option<BTreeMap<String, Vec<u8>>>, Box<Report>> {
         let Some((payload, foreigns)) = &self.built else {
             return Ok(None);
         };

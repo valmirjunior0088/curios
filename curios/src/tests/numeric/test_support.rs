@@ -50,7 +50,9 @@ pub fn table(rows: &[&str], taint: bool) -> String {
 pub fn run_row(compiled: &Compiled, index: usize) -> Result<Vec<u8>, String> {
     let row = u8::try_from(index).expect("a table of under 95 rows") + b' ';
     let (system, io) = MockHost::builder().stdin_lines([[b'A', row]]).build();
-    compiled.run(system, ForeignBindings::empty())?;
+    compiled
+        .run(system, ForeignBindings::empty())
+        .map_err(|stop| stop.to_string())?;
     Ok(io.output())
 }
 

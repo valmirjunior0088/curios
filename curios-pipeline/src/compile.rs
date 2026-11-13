@@ -8,7 +8,9 @@ use {
     curios_abi::ForeignStore,
     curios_anf::lower_to_cps,
     curios_cert::{Globals, Verdict, certify_definitions, certify_program},
-    curios_common::{Candidates, Kind, Qualifier, Report, Said, Style, SyntaxRegistry, recurse},
+    curios_common::{
+        About, Candidates, Kind, Qualifier, Report, Said, Style, SyntaxRegistry, recurse,
+    },
     curios_core::{
         Anchors, Arm, Func, Global, Intrinsic, Let, Matrix, MetavarOrigin, Program, Rec, Row,
         Subterm, Term, Transient, Zonked,
@@ -148,9 +150,12 @@ impl CompileError {
         }
     }
 
-    /// A hard failure about nothing in particular — a store, a manifest, a backend — which is what every message that arrives as plain text is.
-    pub fn failure(message: impl Into<String>) -> Self {
-        Self::Failure(vec![Report::unlocated(message)])
+    /// A fault of the compiler's own, which nothing a program wrote earns: `what` failed, said under the tag every such fault takes and about no place in the program.
+    pub fn fault(what: impl fmt::Display) -> Self {
+        let mut said = Said::line("compiler fault");
+        said.stating(what);
+
+        Self::Failure(vec![Report::of(None, said)])
     }
 
     /// What was said, located, whichever way it was classified.
@@ -1134,7 +1139,7 @@ fn judged(
         definitions: nothing(),
         entrypoint: entry,
     })
-    .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
+    .map_err(CompileError::fault)?;
 
     // The independent certifier's second opinion: each unit was walked when it was built and arrives here as environment, so only the term that closes the program is judged.
     let globals = globals(scope);
@@ -1163,7 +1168,7 @@ fn judged(
             .entrypoint
             .expect("a program's walk checks the term it closes with"),
     })
-    .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
+    .map_err(CompileError::fault)?;
 
     // The program's final term erased and linked with what it reaches of the units in scope, the unit of its own declarations the last of them: the module handed back holds that and no declaration the program does not reach.
     let erased = erasing.map(|text| {
@@ -1232,7 +1237,7 @@ pub fn examine_entrypoint(
     // The zonk evidence the certifier consumes, established where the program is final. A refusal here is a compiler invariant — zonk just enforced the same claim — surfacing as a failure rather than a panic.
     let program = Zonked::project(&program).map_err(|refusal| Refused {
         error: None,
-        reported: CompileError::failure(refusal.to_string()),
+        reported: CompileError::fault(refusal),
     })?;
     // The independent certifier's second opinion: each predecessor was walked when it was built and arrives here as environment, so only what it does not already answer for is judged.
     let rechecked = {
@@ -1364,8 +1369,8 @@ pub fn compile_lowered(
         elaborated(&core, entry);
     }
 
-    let core = Zonked::project(&core)
-        .map_err(|refusal| refuse(&lowered, CompileError::failure(refusal.to_string())))?;
+    let core =
+        Zonked::project(&core).map_err(|refusal| refuse(&lowered, CompileError::fault(refusal)))?;
 
     // The unit is erased through the certifier that accepted it.
     let globals = globals(predecessors);
@@ -1670,14 +1675,23 @@ fn answered(source: &UnitSource<'_>, unit: &Unit) -> Result<(), CompileError> {
                 .map(|function| format!("`{}`", function.name()))
                 .collect::<Vec<_>>();
 
-            return Err(CompileError::failure(format!(
-                "the foreign row {row:?} says an export answers `{declaration}`, and {} declares no such `foreign`: {}",
-                source.prefix().join(),
-                match declared.is_empty() {
-                    true => "it declares none".to_string(),
-                    false => format!("it declares {}", declared.join(", ")),
-                },
-            )));
+            let mut said = Said::line("unknown declaration");
+            said.stating(format_args!(
+                "the foreign row `{row}` says an export answers `{declaration}`"
+            ));
+            said.stating(format_args!(
+                "`{}` declares no such `foreign`",
+                source.prefix().join()
+            ));
+            said.stating(match declared.is_empty() {
+                true => "it declares none".to_string(),
+                false => format!("it declares: {}", declared.join(", ")),
+            });
+
+            return Err(CompileError::Failure(vec![Report::about(
+                About::Named(row.clone()),
+                said,
+            )]));
         }
     }
 

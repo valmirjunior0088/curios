@@ -144,7 +144,12 @@ fn misplaced(
 
     let once = match Formatted::from_source(&Source::held(file, perturbed.as_str()), width) {
         Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
-        Err(refusal) => return Some(format!("refused: {refusal}\n--- written ---\n{perturbed}")),
+        Err(refusal) => {
+            return Some(format!(
+                "refused: {refusal}\n--- written ---\n{perturbed}",
+                refusal = refusal.render()
+            ));
+        }
     };
 
     let (written, placed) = (ahead_of_marker(perturbed), ahead_of_marker(&once));
@@ -168,7 +173,8 @@ fn misplaced(
             "moved again\n--- once ---\n{once}--- twice ---\n{twice}"
         )),
         Err(refusal) => Some(format!(
-            "its own output was refused: {refusal}\n--- once ---\n{once}"
+            "its own output was refused: {refusal}\n--- once ---\n{once}",
+            refusal = refusal.render()
         )),
     }
 }
@@ -317,7 +323,7 @@ fn a_comment_keeps_its_place_in_the_sources_of_the_tree_at_the_narrowest_width()
             let held = Source::held(path.clone(), source.as_str());
             match Formatted::from_source(&held, narrowest) {
                 Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => (path, text),
-                Err(refusal) => panic!("{}: {refusal}", path.display()),
+                Err(refusal) => panic!("{}: {refusal}", path.display(), refusal = refusal.render()),
             }
         })
         .collect::<Vec<_>>();

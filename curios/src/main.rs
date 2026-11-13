@@ -29,7 +29,7 @@ mod test_runner;
 use test_runner::*;
 
 use {
-    curios::{bindings_of, optimize, unlinked},
+    curios::{bindings_of, fault, optimize, unlinked},
     curios_common::{Kind, Report, Source, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
@@ -83,7 +83,6 @@ enum Failure {
     Refused(Box<Report>),
     /// A program that could not go on, with how it stopped: said on one line, as the program built into an executable says it of itself.
     Halted(Stop),
-    Error(String),
     Concluded(Concluded),
 }
 
@@ -95,12 +94,6 @@ enum Concluded {
     Failed,
     /// The program's own exit code.
     Exited(u8),
-}
-
-impl From<String> for Failure {
-    fn from(message: String) -> Self {
-        Failure::Error(message)
-    }
 }
 
 impl From<Stop> for Failure {
@@ -290,7 +283,9 @@ fn dispatch() -> Result<(), Failure> {
             tree.close();
 
             // SAFETY: `payload_of` precompiled the payload in this process or read it back from the project's own store, where a compilation of this compiler filed it.
-            let compiled = unsafe { Compiled::deserialize(&cwasm, foreigns) }?;
+            let compiled = unsafe { Compiled::deserialize(&cwasm, foreigns) }.map_err(|error| {
+                fault("the program's machine code could not be read back", error)
+            })?;
             let code = compiled.run(
                 OsHost::with_args(
                     iter::once(entry)
@@ -517,8 +512,11 @@ fn dispatch() -> Result<(), Failure> {
 
             // Where the pages landed, as `compile` ends on where its executable did: by default that is under the store, where nobody would look, and the landing page is the one file a reader opens.
             tree.stands(
-                write_documentation(&record, &directory)
-                    .map_err(|error| format!("{}: {error}", directory.display())),
+                write_documentation(&record, &directory).map_err(|error| {
+                    Refused::of("unwritable directory")
+                        .stating(error)
+                        .about_path(&directory)
+                }),
                 from_here(&directory.join("index.html")),
             )?;
         }
@@ -745,7 +743,9 @@ fn dispatch() -> Result<(), Failure> {
                                     let written = match check {
                                         true => Ok(()),
                                         false => fs::write(&path, text).map_err(|error| {
-                                            format!("{}: {error}", path.display())
+                                            Refused::of("unwritable file")
+                                                .stating(error)
+                                                .about_path(&path)
                                         }),
                                     };
                                     tree.stands(written, becomes)?;
@@ -826,13 +826,20 @@ fn dispatch() -> Result<(), Failure> {
                 contract.admit_staged(subject, manifest, &here()?)?,
                 &mut Asking::reading(answered.clone()),
             )?,
-            Query::Server => serve(elaboration.budget, manifest)?,
+            Query::Server => serve(elaboration.budget, manifest).map_err(|words| {
+                Refused::of("server failure")
+                    .stating(words)
+                    .about_named("--server")
+            })?,
         },
         // The path is taken as it was given: `--profile` spells no default, so the only path that exists is the one a caller chose, and reading it back means naming that one rather than deriving a second.
         #[cfg(feature = "profile")]
         Mode::Profile { stream } => {
-            let report =
-                fold_at(&stream).map_err(|error| format!("{}: {error}", stream.display()))?;
+            let report = fold_at(&stream).map_err(|error| {
+                Refused::of("unreadable file")
+                    .stating(error)
+                    .about_path(&stream)
+            })?;
 
             answer(report.render());
         }
@@ -861,11 +868,6 @@ fn main() -> ExitCode {
         }
         Err(Failure::Halted(stop)) => {
             eprintln!("{stop}");
-
-            ExitCode::FAILURE
-        }
-        Err(Failure::Error(report)) => {
-            eprintln!("{report}");
 
             ExitCode::FAILURE
         }
