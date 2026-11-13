@@ -1,18 +1,27 @@
 //! Index targets the walk checks rather than believes, and the scheme a registry may declare apart from its type former.
 
-use {
-    super::test_support::*,
-    crate::*,
-    curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Definition, DefinitionKind, Definitions, Free, Global, InductDecl, InductParam,
-        Intrinsic, Item, Level, Nat, Telescope, Term, UniverseContext, UniverseParam, Universes,
-        test_support::*,
-    },
-    curios_surface::Spelling,
-    std::collections::BTreeMap,
-};
+use {super::test_support::*, crate::*, curios_common::fill, curios_surface::Spelling};
+
+/// `Indexed(i : Nat) : Type`, whose one case, not defined, targets `${target}`.
+const INDEXED: &str = r#"
+#{absent = [/Indexed/mk]}
+induct /Indexed: (i: #NatType) -> pub Type
+| mk(): (${target})
+end
+"#;
+
+/// `Held`, a proposition, and `Indexed(i : Held) : Type`, whose one case targets the proof `${target}`; neither family's cases are defined.
+const INDEXED_BY_PROOF: &str = r#"
+#{absent = [/Held/qed]}
+induct /Held: pub Prop
+| qed()
+end
+
+#{absent = [/Indexed/mk]}
+induct /Indexed: (i: #{node = InductType} /Held()) -> pub Type
+| mk(): (${target})
+end
+"#;
 
 /// A constructor's *index target* is registry data, which the walk checks rather than believes.
 ///
@@ -25,17 +34,14 @@ use {
 /// The control is [`a_registry_index_target_of_a_real_term_is_accepted`], which is the same module with the metavariable replaced by a literal: the pass must refuse an elaboration-only node, not every registry entry.
 #[test]
 fn a_registry_index_target_is_checked_rather_than_believed() {
-    let verdicts = fixture_verdicts(
-        &indexed_definitions(Term::hole(7_usize)),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let target = "#{id = 7, origin = Hole} ?";
+    let verdicts = text_verdicts(&fill!(INDEXED, target));
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::NotCore(_))),
+        refuses(&verdicts, Some("Indexed"), |error| matches!(
+            error,
+            Error::NotCore(_)
+        )),
         "the certifier accepted a module carrying an unsolved metavariable: {verdicts:?}",
     );
 }
@@ -43,15 +49,10 @@ fn a_registry_index_target_is_checked_rather_than_believed() {
 /// The control for the fixture above: a registry entry whose index target is a real term stays accepted.
 #[test]
 fn a_registry_index_target_of_a_real_term_is_accepted() {
-    let target = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+    let target = "0";
 
     assert_eq!(
-        fixture_verdicts(
-            &indexed_definitions(target),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        text_verdicts(&fill!(INDEXED, target)),
         Vec::new(),
         "the boundary pass refused a registry entry that carries nothing elaboration-only",
     );
@@ -70,21 +71,14 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
 /// The control is [`a_real_proof_in_a_registry_index_target_is_accepted`], the same declaration aimed at a genuine `qed()`: what establishes the target must refuse a diverging proof without refusing an ordinary one. The assertion pins the refusing item as well as the diagnostic, because this module declares two families and "does not descend" reaching the verdict list from either would otherwise read as a pass.
 #[test]
 fn a_partial_proof_in_a_registry_index_target_is_refused() {
-    let family = Global::Authored(Qualifier::from(["Indexed"]));
-    let verdicts = fixture_verdicts(
-        &indexed_by_proof(true),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let target = "#{node = Rec}\n    (let p: #{node = InductType} /Held() = p;\n    p)";
+    let verdicts = text_verdicts(&fill!(INDEXED_BY_PROOF, target));
 
     assert!(
-        verdicts.iter().any(|verdict| {
-            verdict.name.as_ref() == Some(&family)
-                && verdict
-                    .error
-                    .rendered(&Spelling::default())
-                    .contains("does not descend")
+        refuses(&verdicts, Some("Indexed"), |error| {
+            error
+                .rendered(&Spelling::default())
+                .contains("does not descend")
         }),
         "the certifier accepted a non-descending proof standing as a constructor's index target: {verdicts:?}",
     );
@@ -93,13 +87,10 @@ fn a_partial_proof_in_a_registry_index_target_is_refused() {
 /// The control for the fixture above: an ordinary proof in the same position stays accepted.
 #[test]
 fn a_real_proof_in_a_registry_index_target_is_accepted() {
+    let target = "#{node = Variant} /Held/qed()";
+
     assert_eq!(
-        fixture_verdicts(
-            &indexed_by_proof(false),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        text_verdicts(&fill!(INDEXED_BY_PROOF, target)),
         Vec::new(),
         "a constructor aimed at a genuine proof was refused",
     );
@@ -118,16 +109,33 @@ fn a_real_proof_in_a_registry_index_target_is_accepted() {
 /// Both routes by which a disagreement *could* have mattered are closed already, and by this same file: an ill-scoped level (`a_level_naming_an_undeclared_universe_parameter_is_refused`) and an instance of the wrong width (`a_universe_instance_narrower_than_its_scheme_is_refused`).
 #[test]
 fn a_registry_and_its_type_former_may_declare_different_schemes() {
-    for (label, registry, definition) in
-        [("registry narrower", 1, 2), ("definition narrower", 2, 1)]
-    {
+    for (label, text) in [
+        (
+            "registry narrower",
+            r#"
+#{
+    node = Let,
+    universe_context = {parameter_count = 2},
+    entry = {universe_context = {parameter_count = 1}}}
+induct /Foo: pub #{level = u} Type
+end
+"#,
+        ),
+        (
+            "definition narrower",
+            r#"
+#{
+    node = Let,
+    universe_context = {parameter_count = 1},
+    body = #{node = InductType, universes = {levels = [u, u]}} /Foo(),
+    entry = {universe_context = {parameter_count = 2}}}
+induct /Foo: pub #{level = u} Type
+end
+"#,
+        ),
+    ] {
         assert_eq!(
-            fixture_verdicts(
-                &disagreeing_schemes(registry, definition),
-                1_000_000,
-                &Globals::default(),
-                SYNTAX,
-            ),
+            text_verdicts(text),
             Vec::new(),
             "{label}: the certifier refused a disagreement it never consults",
         );
@@ -137,59 +145,24 @@ fn a_registry_and_its_type_former_may_declare_different_schemes() {
 /// The demonstration that each scheme is nonetheless applied where it is authoritative: a claim about the family's sort that the *registry's* `result_sort` refutes.
 #[test]
 fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
-    let family = Global::Authored(Qualifier::from(["Foo"]));
-    let declaration = InductDecl {
-        universe_context: UniverseContext {
-            parameter_count: 2,
-            quality_count: 0,
-            constraints: Vec::new(),
-        },
-        arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new().into(),
-        // The sort is the *second* parameter, so an occurrence's second level decides it.
-        result_sort: Term::type_at(Level::param(UniverseParam(1))),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+    // The sort is the *second* parameter, so an occurrence's second level decides it: `Foo.{u, u}` claimed at `Type v`, whose sort is `Type u`, and nothing may conflate the two.
+    let verdicts = text_verdicts(
+        r#"
+#{universe_context = {parameter_count = 2}}
+induct /Foo: pub #{level = v} Type
+end
 
-    // `Foo.{u, u}` claimed at `Type v`: its sort is `Type u`, and nothing may conflate the two.
-    let definition = Definition {
-        name: Global::Authored(Qualifier::from(["held"])),
-        kind: DefinitionKind::Authored,
-        universe_context: UniverseContext {
-            parameter_count: 2,
-            quality_count: 0,
-            constraints: Vec::new(),
-        },
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_: Term::type_at(Level::param(UniverseParam(1))),
-        body: Term::induct_type_at(
-            family,
-            vec![Level::param(UniverseParam(0)); 2],
-            Vec::<Term>::new(),
-            Vec::<Term>::new(),
-        ),
-    };
-
-    let definitions = declaring(
-        Definitions {
-            items: vec![Item::Let(Box::new(definition))].into(),
-        },
-        BTreeMap::from([(family, declaration)]),
-        [],
-        [],
+#{universe_context = {parameter_count = 2}}
+let /held: #{level = v} Type =
+    #{node = InductType, universes = {levels = [u, u]}} /Foo();
+"#,
     );
 
-    let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
-
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
+        refuses(&verdicts, Some("held"), |error| matches!(
+            error,
+            Error::Mismatch { .. }
+        )),
         "the registry's result sort was not applied to the levels the occurrence supplied: {verdicts:?}",
     );
 }
@@ -199,63 +172,30 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
 /// Mutation-checked: with an item's positions drained before its entries are accepted, the refusal names the definition after `Carrier`, and no name where `Carrier` is last.
 #[test]
 fn an_entrys_obligation_is_reported_under_the_item_that_declares_it() {
-    let family = Global::Authored(Qualifier::from(["Carrier"]));
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let payload = Term::apply(
-        Term::func(
-            [(
-                Free::local(930, Some("g")),
-                Term::func_type([(Free::local(931, Some("n")), nat.clone())], nat.clone()),
-            )],
-            nat.clone(),
-        ),
-        [Term::instance(
-            Global::Authored(Qualifier::from(["reaches"])),
-            Universes::default(),
-        )],
-    );
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
-            Atom::from("mk"),
-            InductParam::new(
-                Telescope::build([(Free::local(932, Some("x")), payload)], Vec::new()),
-                vec![Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-    let module = |followed: bool| {
-        let mut items = vec![diverging_sink(), reaching_definition()];
-        if followed {
-            items.push(authored(
-                &Global::Authored(Qualifier::from(["after"])),
-                nat.clone(),
-                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            ));
-        }
-        declaring(
-            Definitions {
-                items: items.into(),
-            },
-            [(family, declaration.clone())],
-            [],
-            [],
-        )
-    };
+    for (followed, after) in [(true, "\nlet /after: #NatType = 0;"), (false, "")] {
+        let verdicts = text_verdicts(&fill!(
+            r#"
+let /sink: (n: #NatType) -> #NatType =
+    #{node = Rec}
+    (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
+    x);
 
-    for followed in [true, false] {
-        let verdicts = fixture_verdicts(&module(followed), 1_000_000, &Globals::default(), SYNTAX);
+let /reaches: (m: #NatType) -> #NatType =
+    (m: #NatType) => /sink(m);
+
+#{absent = [/Carrier/mk]}
+induct /Carrier: pub Type
+| mk(x: ((g: (n: #NatType) -> #NatType) => #NatType)(/reaches))
+end
+${after}"#,
+            after
+        ));
 
         assert!(
-            verdicts.iter().any(|verdict| verdict.name == Some(family)
-                && matches!(verdict.error, Error::NotTotal { .. })),
+            refuses(&verdicts, Some("Carrier"), |error| matches!(
+                error,
+                Error::NotTotal { .. }
+            )),
             "followed by a definition: {followed}; {verdicts:?}",
         );
     }

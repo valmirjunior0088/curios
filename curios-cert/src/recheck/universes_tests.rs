@@ -3,52 +3,107 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_analysis::test_support::*,
-    curios_common::{Qualifier, fill},
-    curios_core::{
-        Definition, DefinitionKind, Definitions, Entrypoint, Free, Global, InductDecl, Intrinsic,
-        Item, Level, Nat, Program, Quality, QualityMetaId, QualityParam, RecGroup, RecItem,
-        ReduceError, StructDecl, Telescope, Term, UniverseConstraint, UniverseContext,
-        UniverseError, UniverseMetaId, UniverseParam, Universes, test_support::*,
-    },
+    curios_common::fill,
+    curios_core::{Item, Level, ReduceError, Term, UniverseError},
     curios_surface::Spelling,
 };
+
+/// The largest offset a level holds.
+const TOP: u32 = u32::MAX;
+
+/// `A.{u, v | u + 1 ≤ v} : Type v = Type u`, a universe scheme.
+const SCHEME: &str = r#"
+#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}}
+let /A: #{level = v} Type =
+    #{level = u} Type;
+"#;
+
+/// `E : Type 3 | wrap(T : Type 2)`, `Q(e : E) : Type`, and `f.{u | u + 1 ≤ 2} : (x : Nat) -> E` wrapping `Type u` at `0` and `Type` elsewhere.
+const WRAPPED: &str = r#"
+#{absent = [/E/wrap]}
+induct /E: pub #{level = 3} Type
+| wrap(T: #{level = 2} Type)
+end
+
+induct /Q: (e: #{node = InductType} /E()) -> pub Type
+end
+
+#{universe_context = {parameter_count = 1, constraints = [u + 1 <= 2]}}
+let /f: (x: #NatType) -> #{node = InductType} /E() =
+    (x: #NatType) =>
+        match x: (s) => #{node = InductType} /E()
+        | 0 => #{node = Variant} /E/wrap(#{level = u} Type)
+        | _ => #{node = Variant} /E/wrap(Type)
+        end;
+"#;
+
+/// `carrier.{u} : Type (u + 2)`, the member selection of a group whose member is `Type (u + 1)` behind a `let`, and `reads : ${declared} = ${value}`, declared at `u ≤ 0`, reading `carrier` at the instance `5`.
+const STORED: &str = r#"
+#{universe_context = {parameter_count = 1}}
+let /carrier: #{level = u + 2} Type =
+    let w: #NatType = 0;
+    #{node = Rec}
+    (let x: #{level = u + 2} Type = #{level = u + 1} Type;
+    x);
+
+#{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
+let /reads: ${declared} =
+    ${value};
+"#;
+
+/// `Levelled.{u, v} : Type v`, and `held.{u} : Type u` an occurrence of it at `${levels}`.
+const LEVELLED_AT: &str = r#"
+#{universe_context = {parameter_count = 2}}
+induct /Levelled: pub #{level = v} Type
+end
+
+#{universe_context = {parameter_count = 1}}
+let /held: #{level = u} Type =
+    #{node = InductType, universes = {levels = [${levels}]}} /Levelled();
+"#;
+
+/// `Levelled.{u} : Type (u + 1)`, and `held : ${claimed}` its occurrence at the instance `${instance}`.
+const FAMILY_AT: &str = r#"
+#{universe_context = {parameter_count = 1}}
+induct /Levelled: pub #{level = u + 1} Type
+end
+
+let /held: ${claimed} =
+    #{node = InductType, universes = {levels = [${instance}]}} /Levelled();
+"#;
+
+/// `lift.{u} : Type (u + 1) = Type u`, and `held : ${claimed}` its occurrence at the instance `${instance}`.
+const LIFTED_AT: &str = r#"
+#{universe_context = {parameter_count = 1}}
+let /lift: #{level = u + 1} Type =
+    #{level = u} Type;
+
+let /held: ${claimed} =
+    #{universes = {levels = [${instance}]}} /lift;
+"#;
+
+/// Whether `verdicts` refuse `reads` as a mismatch.
+fn reads_mismatched(verdicts: &[Verdict]) -> bool {
+    refuses(verdicts, Some("reads"), |error| {
+        matches!(error, Error::Mismatch { .. })
+    })
+}
 
 /// A declaration's universe context is *assumed* while checking it, so an unsatisfiable one is a hypothesis set that proves anything.
 ///
 /// `Certifier::assume_universes` takes the item's own constraints as given, and `entails` answers `≤` questions under them — so a context containing `u + 1 ≤ u` lets every level relation through, and `check_instance` stops discharging anything. Deciding satisfiability is `satisfiable`'s, a second implementation beside the elaborator's solver; this asks whether the walk refuses such a context before assuming it.
 #[test]
 fn an_unsatisfiable_universe_context_is_refused() {
-    let contradiction = UniverseConstraint {
-        lower: Level::param(UniverseParam(0))
-            .succ()
-            .expect("level has a successor"),
-        upper: Level::param(UniverseParam(0)),
-    };
-    let universe_context = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: vec![contradiction],
-    };
-
-    let definition = Definition {
-        name: Global::Authored(Qualifier::from(["held"])),
-        kind: DefinitionKind::Authored,
-        universe_context,
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_: Term::intrinsic(Intrinsic::NatType),
-        body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-    };
-
-    let definitions = Definitions {
-        items: vec![Item::Let(Box::new(definition))].into(),
-    };
+    let verdicts = text_verdicts(
+        "#{universe_context = {parameter_count = 1, constraints = [u + 1 <= u]}}\nlet /held: #NatType = 0;",
+    );
 
     assert!(
-        !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
-        "the certifier assumed a contradiction as a hypothesis without noticing",
+        refuses(&verdicts, Some("held"), |error| matches!(
+            error,
+            Error::UnsatisfiableUniverses
+        )),
+        "the certifier assumed a contradiction as a hypothesis without noticing: {verdicts:?}",
     );
 }
 
@@ -57,34 +112,17 @@ fn an_unsatisfiable_universe_context_is_refused() {
 /// A context is closed: universe polymorphism belongs to declarations, so there is no enclosing scheme whose parameters a constraint could still reference. One that names `P3` while declaring a single parameter is not a stricter hypothesis but a meaningless one — instantiation substitutes an argument vector of the declared length, and a reference past its end has nothing to become. The elaborator refuses this as an escaping level; the certifier assumes the context, so it must refuse it too.
 #[test]
 fn a_constraint_naming_an_undeclared_parameter_is_refused() {
-    let escaping = UniverseConstraint {
-        lower: Level::param(UniverseParam(3)),
-        upper: Level::param(UniverseParam(0)),
-    };
-    let universe_context = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: vec![escaping],
-    };
-
-    let definition = Definition {
-        name: Global::Authored(Qualifier::from(["held"])),
-        kind: DefinitionKind::Authored,
-        universe_context,
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_: Term::intrinsic(Intrinsic::NatType),
-        body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-    };
-
-    let definitions = Definitions {
-        items: vec![Item::Let(Box::new(definition))].into(),
-    };
+    // `x` is the fourth parameter, of a declaration that declares one.
+    let verdicts = text_verdicts(
+        "#{universe_context = {parameter_count = 1, constraints = [x <= u]}}\nlet /held: #NatType = 0;",
+    );
 
     assert!(
-        !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
-        "the certifier assumed a constraint about a parameter the declaration does not have",
+        refuses(&verdicts, Some("held"), |error| matches!(
+            error,
+            Error::UnclosedUniverses
+        )),
+        "the certifier assumed a constraint about a parameter the declaration does not have: {verdicts:?}",
     );
 }
 
@@ -99,30 +137,31 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
 /// The control is [`a_ground_level_in_the_same_positions_is_accepted`], the same two modules at `Type 0`: the pass must refuse residue, not every level.
 #[test]
 fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
-    let residue = Level::meta(UniverseMetaId::from(0usize));
-
-    for (label, definitions) in [
-        ("a definition's declared type", level_definition(&residue)),
-        ("a registry entry's result sort", level_registry(&residue)),
+    for (label, refused, text) in [
+        (
+            "a definition's declared type",
+            "held",
+            "let /held: #{level = #{id = 0} ?} Type = #NatType;",
+        ),
+        (
+            "a registry entry's result sort",
+            "Levelled",
+            "induct /Levelled: pub #{level = #{id = 0} ?} Type\nend",
+        ),
     ] {
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = text_verdicts(text);
 
         assert!(
-            verdicts
-                .iter()
-                .any(|verdict| matches!(verdict.error, Error::NotCore(_))),
+            refuses(&verdicts, Some(refused), |error| matches!(
+                error,
+                Error::NotCore(_)
+            )),
             "{label}: the certifier accepted a module carrying an unsolved universe metavariable: {verdicts:?}",
         );
     }
 }
 
 /// One position a universe context is assumed from: what to call it, the declaration a refusal there is named against, and how to build the program that carries the context.
-type AssumedFrom<'a> = (
-    &'a str,
-    Option<Global>,
-    &'a dyn Fn(Vec<UniverseConstraint>) -> Program,
-);
-
 /// Every position a universe context is assumed from refuses a set with no instance in the naturals.
 ///
 /// `curios-cert/src/satisfy.rs` states what an unsatisfiable set buys once assumed: `entails` starts proving whatever it is asked, `check_instance` stops discharging anything, and the universe discipline that keeps the paradox out stops applying. So the clause has to cover every position, not the one it was written for. [`an_unsatisfiable_universe_context_is_refused`] above covers a definition's; these are the rest, each carrying the loop `param 0 + 1 ≤ param 0` and nothing else wrong, and each refused by name:
@@ -135,126 +174,43 @@ type AssumedFrom<'a> = (
 /// The control is each fixture with an empty constraint set, which stands.
 #[test]
 fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
-    let loop_ = || {
-        vec![UniverseConstraint {
-            lower: Level::param(UniverseParam(0))
-                .succ()
-                .expect("a parameter has a successor"),
-            upper: Level::param(UniverseParam(0)),
-        }]
-    };
-    let context = |constraints: Vec<UniverseConstraint>, qualities: usize| UniverseContext {
-        parameter_count: 1,
-        quality_count: qualities,
-        constraints,
-    };
-    let family = Global::Authored(Qualifier::from(["Levelled"]));
-    let record = Global::Authored(Qualifier::from(["Record"]));
-    let held = Global::Authored(Qualifier::from(["held"]));
-    let definition = |universe_context: UniverseContext, type_: Term, body: Term| Definition {
-        name: held,
-        kind: DefinitionKind::Authored,
-        universe_context,
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_,
-        body,
-    };
-    let nat = || Term::intrinsic(Intrinsic::NatType);
-    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
-    let program = |items: Vec<Item>, body: Term| Program {
-        definitions: Definitions {
-            items: items.into(),
-        },
-        entrypoint: Entrypoint {
-            body,
-            type_: Some(nat()),
-        },
-    };
-    let declared = |items: Vec<Item>,
-                    inducts: Vec<(Global, InductDecl)>,
-                    structs: Vec<(Global, StructDecl)>| Program {
-        definitions: declaring(program(items, zero()).definitions, inducts, structs, []),
-        entrypoint: Entrypoint {
-            body: zero(),
-            type_: Some(nat()),
-        },
-    };
-
-    let entry_sites: [AssumedFrom<'_>; 4] = [
-        ("an `induct` registry entry", Some(family), &|constraints| {
-            declared(
-                Vec::new(),
-                vec![(
-                    family,
-                    InductDecl {
-                        universe_context: context(constraints, 0),
-                        arity: Telescope::done(Telescope::done(())),
-                        constructors: Vec::new().into(),
-                        result_sort: Term::type_ground(),
-                        module: Qualifier::default(),
-                        rep_public: true,
-                        polarities: Vec::new(),
-                        variances: Vec::new(),
-                    },
-                )],
-                Vec::new(),
-            )
-        }),
-        ("a `struct` registry entry", Some(record), &|constraints| {
-            declared(
-                Vec::new(),
-                Vec::new(),
-                vec![(
-                    record,
-                    StructDecl {
-                        universe_context: context(constraints, 0),
-                        arity: Telescope::done(Telescope::done(())),
-                        result_sort: Term::type_ground(),
-                        module: Qualifier::default(),
-                        rep_public: true,
-                        polarities: Vec::new(),
-                        variances: Vec::new(),
-                    },
-                )],
-            )
-        }),
-        ("a top-level `rec` group", Some(held), &|constraints| {
-            program(
-                vec![Item::Rec(RecItem::new(vec![(
-                    fresh(None),
-                    definition(context(constraints, 0), nat(), zero()),
-                )]))],
-                zero(),
-            )
-        }),
+    let sites = [
+        (
+            "an `induct` registry entry",
+            "Levelled",
+            "#{universe_context = {parameter_count = 1${constraints}}}\ninduct /Levelled: pub Type\nend",
+        ),
+        (
+            "a `struct` registry entry",
+            "Record",
+            "#{universe_context = {parameter_count = 1${constraints}}}\nstruct /Record: pub Type {}",
+        ),
+        (
+            "a top-level `rec` group",
+            "held",
+            "#{node = Rec, universe_context = {parameter_count = 1${constraints}}}\nlet /held: #NatType = 0;",
+        ),
         (
             "a definition leaving a sort open",
-            Some(held),
-            &|constraints| {
-                program(
-                    vec![Item::Let(Box::new(definition(
-                        context(constraints, 1),
-                        nat(),
-                        zero(),
-                    )))],
-                    zero(),
-                )
-            },
+            "held",
+            "#{universe_context = {parameter_count = 1, quality_count = 1${constraints}}}\nlet /held: #NatType = 0;",
         ),
     ];
-
-    for (label, refused, build) in entry_sites {
-        let verdicts = fixture_verdicts(&build(loop_()), 1_000_000, &Globals::default(), SYNTAX);
+    let program = |site: &str, constraints: &str| {
+        fill!("${site}\n0\n: #NatType", site = fill!(site, constraints))
+    };
+    for (label, refused, site) in sites {
+        let looping = ", constraints = [u + 1 <= u]";
+        let verdicts = text_verdicts(&program(site, looping));
         assert!(
-            verdicts.iter().any(|verdict| verdict.name == refused
-                && matches!(verdict.error, Error::UnsatisfiableUniverses)),
+            refuses(&verdicts, Some(refused), |error| matches!(
+                error,
+                Error::UnsatisfiableUniverses
+            )),
             "{label}: the walk assumed a set with no instance in the naturals: {verdicts:?}",
         );
-
         assert_eq!(
-            fixture_verdicts(&build(Vec::new()), 1_000_000, &Globals::default(), SYNTAX),
+            text_verdicts(&program(site, "")),
             Vec::new(),
             "{label}: the same fixture stating no constraint was refused",
         );
@@ -266,22 +222,29 @@ fn every_position_a_universe_context_is_assumed_from_refuses_a_loop() {
 /// Every rule that reads a sort reads which of `Prop` and `Type` it is: irrelevance, the large-elimination guard, the totality an erased position owes. One that states neither has no answer any of them may take, so the certifier judges a term only once each of its sorts states one. Neither module is reachable from a surface program, so only these fixtures put the refusal to the test; the control is [`a_ground_level_in_the_same_positions_is_accepted`].
 #[test]
 fn a_sort_stating_neither_prop_nor_type_is_refused() {
-    for (quality, open) in [
-        ("a quality metavariable", Quality::Meta(QualityMetaId(0))),
-        ("a quality parameter", Quality::Param(QualityParam(0))),
+    for (quality, sort) in [
+        ("a quality metavariable", "#{quality = Meta(0)} Sort"),
+        ("a quality parameter", "Sort"),
     ] {
-        let sort = || Term::sort_at(open, Level::zero());
-
-        for (label, definitions) in [
-            ("a definition's declared type", sorted_definition(sort())),
-            ("a registry entry's result sort", sorted_registry(sort())),
+        for (label, refused, text) in [
+            (
+                "a definition's declared type",
+                "held",
+                fill!("let /held: ${sort} = #NatType;", sort),
+            ),
+            (
+                "a registry entry's result sort",
+                "Levelled",
+                fill!("induct /Levelled: pub (${sort})\nend", sort),
+            ),
         ] {
-            let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+            let verdicts = text_verdicts(&text);
 
             assert!(
-                verdicts
-                    .iter()
-                    .any(|verdict| matches!(verdict.error, Error::OpenSort(_))),
+                refuses(&verdicts, Some(refused), |error| matches!(
+                    error,
+                    Error::OpenSort(_)
+                )),
                 "{label}: the certifier accepted a module carrying {quality}: {verdicts:?}",
             );
         }
@@ -291,14 +254,18 @@ fn a_sort_stating_neither_prop_nor_type_is_refused() {
 /// The control for the fixture above: the same two positions at a ground level stay accepted.
 #[test]
 fn a_ground_level_in_the_same_positions_is_accepted() {
-    let ground = Level::zero();
-
-    for (label, definitions) in [
-        ("a definition's declared type", level_definition(&ground)),
-        ("a registry entry's result sort", level_registry(&ground)),
+    for (label, text) in [
+        (
+            "a definition's declared type",
+            "let /held: Type = #NatType;",
+        ),
+        (
+            "a registry entry's result sort",
+            "induct /Levelled: pub Type\nend",
+        ),
     ] {
         assert_eq!(
-            fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
+            text_verdicts(text),
             Vec::new(),
             "{label}: the boundary pass refused a level that holds no residue",
         );
@@ -316,25 +283,26 @@ fn a_ground_level_in_the_same_positions_is_accepted() {
 /// The control is [`a_level_naming_a_declared_universe_parameter_is_accepted`], the same two positions with the parameter actually declared. It is not decoration: the prelude is universe-polymorphic throughout, so a check that refused every parameter-naming level would reject the standard library rather than this.
 #[test]
 fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
-    let escaping = Level::param(UniverseParam(0));
-
-    for (label, definitions) in [
+    for (label, refused, text) in [
         (
             "a definition's declared type",
-            scheme_definition(&escaping, 0),
+            "held",
+            "let /held: #{level = u} Type = #NatType;",
         ),
         (
             "a registry entry's result sort",
-            scheme_registry(&escaping, 0),
+            "Levelled",
+            "induct /Levelled: pub #{level = u} Type\nend",
         ),
     ] {
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = text_verdicts(text);
 
         assert!(
-            verdicts
-                .iter()
-                .any(|verdict| matches!(verdict.error, Error::UnclosedUniverses)),
-            "{label}: the certifier accepted a level naming a parameter the declaration does not have: {verdicts:?}",
+            refuses(&verdicts, Some(refused), |error| matches!(
+                error,
+                Error::UnclosedUniverses
+            )),
+            "{label}: the certifier accepted a level naming a parameter the declaration does not declare: {verdicts:?}",
         );
     }
 }
@@ -342,20 +310,18 @@ fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
 /// The control for the fixture above: the same level in the same positions, with the declaration declaring the parameter it names.
 #[test]
 fn a_level_naming_a_declared_universe_parameter_is_accepted() {
-    let declared = Level::param(UniverseParam(0));
-
-    for (label, definitions) in [
+    for (label, text) in [
         (
             "a definition's declared type",
-            scheme_definition(&declared, 1),
+            "#{universe_context = {parameter_count = 1}}\nlet /held: #{level = u} Type = #NatType;",
         ),
         (
             "a registry entry's result sort",
-            scheme_registry(&declared, 1),
+            "#{universe_context = {parameter_count = 1}}\ninduct /Levelled: pub #{level = u} Type\nend",
         ),
     ] {
         assert_eq!(
-            fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
+            text_verdicts(text),
             Vec::new(),
             "{label}: the boundary pass refused a parameter the declaration declares",
         );
@@ -373,31 +339,26 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
 /// The control is [`a_universe_instance_of_the_declared_width_is_accepted`], the same occurrence supplying both levels. It is load-bearing: every occurrence of a universe-polymorphic declaration in the prelude carries an instance, so a width check that got the bound wrong would reject the standard library rather than this.
 #[test]
 fn a_universe_instance_narrower_than_its_scheme_is_refused() {
-    let verdicts = fixture_verdicts(
-        &instance_of_width(1),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let levels = "u";
+    let verdicts = text_verdicts(&fill!(LEVELLED_AT, levels));
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::Arity { .. })),
-        "the certifier accepted an occurrence that leaves a declared universe parameter unsupplied: {verdicts:?}",
+        refuses(
+            &verdicts,
+            Some("held"),
+            miscounted(Counted::UniverseLevels, 2, 1)
+        ),
+        "the certifier read an occurrence at fewer levels than its scheme declares: {verdicts:?}",
     );
 }
 
 /// The control for the fixture above: the same occurrence, supplying one level per declared parameter.
 #[test]
 fn a_universe_instance_of_the_declared_width_is_accepted() {
+    let levels = "u, u";
+
     assert_eq!(
-        fixture_verdicts(
-            &instance_of_width(2),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        text_verdicts(&fill!(LEVELLED_AT, levels)),
         Vec::new(),
         "the boundary refused an occurrence that supplies exactly the levels its scheme declares",
     );
@@ -410,11 +371,12 @@ fn a_universe_instance_of_the_declared_width_is_accepted() {
 /// The control is [`an_instance_below_the_top_of_the_offset_range_is_accepted`], the same two occurrences two below the top, where the definition's own type still has a sort.
 #[test]
 fn an_instance_at_the_top_of_the_offset_range_is_refused_as_an_overflow() {
-    for (label, definitions) in [
-        ("a family's sort", family_instance_at(u32::MAX, 0)),
-        ("a definition's type", scheme_instance_at(u32::MAX, 0)),
+    let (instance, claimed) = (TOP.to_string(), "Type".to_string());
+    for (label, text) in [
+        ("a family's sort", fill!(FAMILY_AT, instance, claimed)),
+        ("a definition's type", fill!(LIFTED_AT, instance, claimed)),
     ] {
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = text_verdicts(&text);
 
         assert!(
             matches!(
@@ -422,7 +384,7 @@ fn an_instance_at_the_top_of_the_offset_range_is_refused_as_an_overflow() {
                 [Verdict {
                     name: Some(name),
                     error: Error::Reduce(ReduceError::Universe(UniverseError::OffsetOverflow)),
-                }] if *name == Global::Authored(Qualifier::from(["held"]))
+                }] if *name == global("held")
             ),
             "{label}: the certifier read a successor past the top of the offset range: {verdicts:?}",
         );
@@ -432,18 +394,14 @@ fn an_instance_at_the_top_of_the_offset_range_is_refused_as_an_overflow() {
 /// The control for the fixture above: the same occurrences two below the top, where every successor the walk takes has an offset to land on.
 #[test]
 fn an_instance_below_the_top_of_the_offset_range_is_accepted() {
-    for (label, definitions) in [
-        (
-            "a family's sort",
-            family_instance_at(u32::MAX - 2, u32::MAX - 1),
-        ),
-        (
-            "a definition's type",
-            scheme_instance_at(u32::MAX - 2, u32::MAX - 1),
-        ),
+    let instance = (TOP - 2).to_string();
+    let claimed = fill!("#{level = ${level}} Type", level = TOP - 1);
+    for (label, text) in [
+        ("a family's sort", fill!(FAMILY_AT, instance, claimed)),
+        ("a definition's type", fill!(LIFTED_AT, instance, claimed)),
     ] {
         assert_eq!(
-            fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
+            text_verdicts(&text),
             Vec::new(),
             "{label}: the certifier refused an instance whose successors all fit",
         );
@@ -461,26 +419,26 @@ fn an_instance_below_the_top_of_the_offset_range_is_accepted() {
 /// The control is [`an_occurrence_stating_its_universe_instance_is_still_accepted`], and it holds the two spellings the rule must keep: an instance that does discharge the constraint, and a bare occurrence of a *monomorphic* definition, which is how every definition with no universe parameters is written.
 #[test]
 fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
-    let (bare, instance) = scheme_occurrences();
-
     for (label, body, refusal) in [
         (
             "the bare occurrence",
-            bare,
+            "/A",
             "universe levels: expected 2, found 0",
         ),
         (
             "the same occurrence with its instance stated",
-            instance,
+            "#{universes = {levels = [u, v]}} /A",
             "does not satisfy its scheme",
         ),
     ] {
-        let definitions = universe_scheme_definitions(Some((open_context(), body)));
-        let verdicts = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+        let verdicts = text_verdicts(&fill!(
+            "${SCHEME}\n#{universe_context = {parameter_count = 2}}\nlet /user: #{level = v} Type =\n    ${body};",
+            SCHEME,
+            body
+        ));
 
         assert!(
-            verdicts.iter().any(|verdict| verdict
-                .error
+            refuses(&verdicts, Some("user"), |error| error
                 .rendered(&Spelling::default())
                 .contains(refusal)),
             "{label}: the certifier read a universe scheme at the ambient item's parameters: {verdicts:?}",
@@ -493,49 +451,21 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
 /// The first half is what stops the witness above being closed by over-refusal — a rule refusing every occurrence of a universe scheme would pass it and take universe polymorphism with it. The second half is the larger one, and it is why the rule reads the scheme's *width* rather than the occurrence's shape: an occurrence at no levels is how every definition with no universe parameters is written, so refusing bare occurrences as a class would refuse the standard library rather than this fixture. The scheme is also checked standing alone, since `A` must remain well formed for the witness's refusals to be about its use.
 #[test]
 fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
-    let (_, instance) = scheme_occurrences();
-
     assert_eq!(
-        fixture_verdicts(
-            &universe_scheme_definitions(None),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        ),
+        text_verdicts(SCHEME),
         Vec::new(),
         "the universe scheme was refused standing alone",
     );
-
     assert_eq!(
-        fixture_verdicts(
-            &universe_scheme_definitions(Some((scheme_context(), instance))),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        ),
+        text_verdicts(&fill!(
+            "${SCHEME}\n#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}}\nlet /user: #{level = v} Type =\n    #{universes = {levels = [u, v]}} /A;",
+            SCHEME
+        )),
         Vec::new(),
         "an occurrence discharging its scheme's constraint was refused",
     );
-
-    let zero = Global::Authored(Qualifier::from(["zero"]));
-    let monomorphic = Definitions {
-        items: vec![
-            authored(
-                &zero,
-                Term::intrinsic(Intrinsic::NatType),
-                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            ),
-            authored(
-                &Global::Authored(Qualifier::from(["echo"])),
-                Term::intrinsic(Intrinsic::NatType),
-                Term::instance(zero, Universes::default()),
-            ),
-        ]
-        .into(),
-    };
-
     assert_eq!(
-        fixture_verdicts(&monomorphic, 1_000_000, &Globals::default(), SYNTAX),
+        text_verdicts("let /zero: #NatType = 0;\nlet /echo: #NatType = /zero;"),
         Vec::new(),
         "a bare occurrence of a monomorphic definition was refused",
     );
@@ -552,21 +482,38 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
 /// The control is [`a_case_equation_still_refines_the_occurrence_it_scrutinized`], and it is what proves the rule is not shut by disabling refinement outright.
 #[test]
 fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() {
-    let one = Level::zero().succ().expect("level zero has a successor");
-
-    for (label, route) in [
-        ("through the arm", Route::ConstantMotive),
-        ("with no arm open", Route::Direct),
+    let (at_zero, at_one) = (
+        "#{node = InductType} /Q()((#{universes = {levels = [0]}} /f)(x))",
+        "#{node = InductType} /Q()((#{universes = {levels = [1]}} /f)(x))",
+    );
+    for (label, body) in [
+        (
+            "through the arm",
+            fill!(
+                "match (#{universes = {levels = [0]}} /f)(x): (s) =>\n            ${at_one}\n        | wrap(T) => q\n        end",
+                at_one
+            ),
+        ),
+        ("with no arm open", "q".to_string()),
     ] {
-        let definitions = universe_refinement_definitions(one.clone(), route);
-        let verdicts = fixture_verdicts(&definitions, 10_000_000, &Globals::default(), SYNTAX);
+        let verdicts = text_certified_within(
+            &fill!(
+                "${WRAPPED}\nlet /coerce: (x: #NatType, q: ${at_zero}) -> ${at_one} =\n    (x: #NatType, q: ${at_zero}) =>\n        ${body};",
+                WRAPPED,
+                at_zero,
+                at_one,
+                body
+            ),
+            10_000_000,
+        )
+        .verdicts;
 
         assert!(
-            verdicts.iter().any(|verdict| {
-                verdict.name == Some(Global::Authored(Qualifier::from(["coerce"])))
-                    && matches!(verdict.error, Error::Mismatch { .. })
-            }),
-            "{label}: the certifier accepted a coercion between two types it calls distinct: {verdicts:?}",
+            refuses(&verdicts, Some("coerce"), |error| matches!(
+                error,
+                Error::Mismatch { .. }
+            )),
+            "{label}: a case equation refined an occurrence at another universe instance: {verdicts:?}",
         );
     }
 }
@@ -578,12 +525,20 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
 /// Mutation-checked: emptying `Scope::refinement_of` to `None` leaves the witness above passing and fails this, so the two are not testing one thing twice.
 #[test]
 fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
-    let definitions = universe_refinement_definitions(Level::zero(), Route::DependentMotive);
+    let at_zero = "#{node = InductType} /Q()((#{universes = {levels = [0]}} /f)(x))";
 
     assert_eq!(
-        fixture_verdicts(&definitions, 10_000_000, &Globals::default(), SYNTAX),
+        text_certified_within(
+            &fill!(
+                "${WRAPPED}\nlet /coerce: (x: #NatType, q: ${at_zero}) -> ${at_zero} =\n    (x: #NatType, q: ${at_zero}) =>\n        match (#{universes = {levels = [0]}} /f)(x): (s) => #{node = InductType} /Q()(s) | wrap(T) => q end;",
+                WRAPPED,
+                at_zero
+            ),
+            10_000_000,
+        )
+        .verdicts,
         Vec::new(),
-        "the arm's own case equation stopped refining its scrutinee",
+        "a case equation stopped refining the occurrence it scrutinized",
     );
 }
 
@@ -594,78 +549,31 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
 /// This is site one of the four `xboard/tickets/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers/` was admitted through. While a group bound universe parameters of its own, `p` inside the member scopes was the *group's* parameter, an instance of the declaration substituted nothing there, and the projection reduced under the reader's own `p` — `p ≤ 0`, stated below — so `Type 1` was admitted with no verdict. That half is unrepresentable here: it needed a universe context on the group, which [`RecGroup`] no longer carries. What stands is the refusal, with the honest claim as its control.
 #[test]
 fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
-    let p = Level::param(UniverseParam(0));
-    let plus_one = p.clone().succ().expect("a parameter has a successor");
-    let plus_two = plus_one.clone().succ().expect("a level has a successor");
-    let carrier = Global::Authored(Qualifier::from(["carrier"]));
-    let reads = Global::Authored(Qualifier::from(["reads"]));
-    let m = Free::local(760, Some("m"));
-    let projection = Term::rec_proj(
-        RecGroup::closing(vec![(m, Term::type_at(plus_two), Term::type_at(plus_one))]),
-        0,
-    );
-    let definition = |name: Global, universe_context: UniverseContext, type_: Term, body: Term| {
-        Item::Let(Box::new(Definition {
-            name,
-            kind: DefinitionKind::Authored,
-            universe_context,
-            island: Qualifier::default(),
-            proof: false,
-            value_sort: None,
-            type_,
-            body,
-        }))
-    };
-    // The reader's own parameter 0 is pinned at zero: the level the shadowed reading handed the projection, and the one the instance's `5` must now override.
-    let readers_context = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: p.clone(),
-            upper: Level::zero(),
-        }],
-    };
-    let definitions = |claimed: Level| Definitions {
-        items: vec![
-            definition(
-                carrier,
-                UniverseContext {
-                    parameter_count: 1,
-                    quality_count: 0,
-                    constraints: Vec::new(),
-                },
-                projection.clone(),
-                Term::type_at(p.clone()),
-            ),
-            definition(
-                reads,
-                readers_context.clone(),
-                Term::type_at(claimed),
-                Term::instance(carrier, vec![Level::constant(5)]),
-            ),
-        ]
-        .into(),
+    let module = |claimed: &str| {
+        text_verdicts(&fill!(
+            r#"
+#{universe_context = {parameter_count = 1}}
+let /carrier:
+    #{node = Rec}
+    (let x: #{level = u + 2} Type = #{level = u + 1} Type;
+    x) =
+    #{level = u} Type;
+
+#{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
+let /reads: #{level = ${claimed}} Type =
+    #{universes = {levels = [5]}} /carrier;
+"#,
+            claimed
+        ))
     };
 
-    let verdicts = fixture_verdicts(
-        &definitions(Level::constant(1)),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let verdicts = module("1");
     assert!(
-        verdicts.iter().any(|verdict| verdict.name == Some(reads)
-            && matches!(verdict.error, Error::Mismatch { .. })),
-        "a member's type was read at the reader's levels rather than at the instance's: {verdicts:?}",
+        reads_mismatched(&verdicts),
+        "a declared type was read at the reader's levels: {verdicts:?}"
     );
-
     assert_eq!(
-        fixture_verdicts(
-            &definitions(Level::constant(6)),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        module("6"),
         Vec::new(),
         "the same reader claiming the level the instance states was refused",
     );
@@ -678,74 +586,28 @@ fn a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels() {
 /// This is the certifier's half of site two of `xboard/tickets/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers/`, and unlike the three fixtures beside it this one discriminates nothing: `infer`'s `Rec` arm binds each member at `member_type` positionally, under the item's own constraints, which is the reading the fix keeps — the module below is refused the same way before the group stopped binding universes and after. What carried the cause at this site was the *elaborator's* export, `Places::member`, which paired `group.member_type(index)` with a term carrying the group and so handed an occurrence a type with the group's binder still over it; no surface syntax states a universe argument, so that spelling was reachable only from inside elaboration. It is closed by the group carrying no context to open. This fixture is here to hold the certifier's positional reading still, since the fix's correctness rests on it being the only one.
 #[test]
 fn an_exported_member_type_is_read_at_the_occurrences_instance() {
-    let p = Level::param(UniverseParam(0));
-    let plus_one = p.clone().succ().expect("a parameter has a successor");
-    let carrier = Global::Authored(Qualifier::from(["carrier"]));
-    let reads = Global::Authored(Qualifier::from(["reads"]));
-    let carriers_context = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: Vec::new(),
-    };
-    let readers_context = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: p.clone(),
-            upper: Level::zero(),
-        }],
-    };
-    let definition =
-        |name: Global, universe_context: UniverseContext, type_: Term, body: Term| Definition {
-            name,
-            kind: DefinitionKind::Authored,
-            universe_context,
-            island: Qualifier::default(),
-            proof: false,
-            value_sort: None,
-            type_,
-            body,
-        };
-    let definitions = |claimed: Level| Definitions {
-        items: vec![
-            Item::Rec(RecItem::new(vec![(
-                fresh(None),
-                definition(
-                    carrier,
-                    carriers_context.clone(),
-                    Term::type_at(plus_one.clone()),
-                    Term::type_at(p.clone()),
-                ),
-            )])),
-            Item::Let(Box::new(definition(
-                reads,
-                readers_context.clone(),
-                Term::type_at(claimed),
-                Term::instance(carrier, vec![Level::constant(5)]),
-            ))),
-        ]
-        .into(),
+    let module = |claimed: &str| {
+        text_verdicts(&fill!(
+            r#"
+#{node = Rec, universe_context = {parameter_count = 1}}
+let /carrier: #{level = u + 1} Type =
+    #{level = u} Type;
+
+#{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
+let /reads: #{level = ${claimed}} Type =
+    #{universes = {levels = [5]}} /carrier;
+"#,
+            claimed
+        ))
     };
 
-    let verdicts = fixture_verdicts(
-        &definitions(Level::constant(1)),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let verdicts = module("1");
     assert!(
-        verdicts.iter().any(|verdict| verdict.name == Some(reads)
-            && matches!(verdict.error, Error::Mismatch { .. })),
-        "an exported member type was read at the reader's levels: {verdicts:?}",
+        reads_mismatched(&verdicts),
+        "a member's type was read at the reader's levels: {verdicts:?}"
     );
-
     assert_eq!(
-        fixture_verdicts(
-            &definitions(Level::constant(6)),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        module("6"),
         Vec::new(),
         "the same occurrence claiming the level its instance states was refused",
     );
@@ -758,88 +620,16 @@ fn an_exported_member_type_is_read_at_the_occurrences_instance() {
 /// This is site four. The findings entry this fixture replaces held that the route stopped here, on the ground that shadowing leaves the group's levels free in the reading item; that is the attack rather than the stopper, because the reader's own constraints are the reader's to choose. While the group bound its own, this body reduced to `Type (p + 1)` at the reader's `p ≤ 0` — `Type 1` — so `Type 0` inhabited it and `Type 5` did not: both of the assertions below stood the other way round.
 #[test]
 fn a_stored_body_is_forced_at_its_instances_levels() {
-    let p = Level::param(UniverseParam(0));
-    let plus_one = p.clone().succ().expect("a parameter has a successor");
-    let plus_two = plus_one.clone().succ().expect("a level has a successor");
-    let carrier = Global::Authored(Qualifier::from(["carrier"]));
-    let reads = Global::Authored(Qualifier::from(["reads"]));
-    let m = Free::local(770, Some("m"));
-    let projection = Term::rec_proj(
-        RecGroup::closing(vec![(
-            m,
-            Term::type_at(plus_two.clone()),
-            Term::type_at(plus_one),
-        )]),
-        0,
-    );
-    let definition = |name: Global, universe_context: UniverseContext, type_: Term, body: Term| {
-        Item::Let(Box::new(Definition {
-            name,
-            kind: DefinitionKind::Authored,
-            universe_context,
-            island: Qualifier::default(),
-            proof: false,
-            value_sort: None,
-            type_,
-            body,
-        }))
-    };
-    // A `let` around the projection, so unfolding takes the general substitution rather than the branch `step_instance` keeps for a stored value that *is* a projection, which hands the group the instance whole.
-    let stored = Term::let_(
-        &Free::local(771, Some("w")),
-        Term::intrinsic(Intrinsic::NatType),
-        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-        projection.clone(),
-    );
-    let readers_context = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: p.clone(),
-            upper: Level::zero(),
-        }],
-    };
-    let definitions = |inhabitant: Level| Definitions {
-        items: vec![
-            definition(
-                carrier,
-                UniverseContext {
-                    parameter_count: 1,
-                    quality_count: 0,
-                    constraints: Vec::new(),
-                },
-                Term::type_at(plus_two.clone()),
-                stored.clone(),
-            ),
-            definition(
-                reads,
-                readers_context.clone(),
-                Term::instance(carrier, vec![Level::constant(5)]),
-                Term::type_at(inhabitant),
-            ),
-        ]
-        .into(),
-    };
+    let type_ = "#{universes = {levels = [5]}} /carrier";
+    let module = |value: &str| text_verdicts(&fill!(STORED, declared = type_, value));
 
-    let verdicts = fixture_verdicts(
-        &definitions(Level::constant(6)),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let verdicts = module("#{level = 6} Type");
     assert!(
-        verdicts.iter().any(|verdict| verdict.name == Some(reads)
-            && matches!(verdict.error, Error::Mismatch { .. })),
-        "a stored body was forced at the reader's levels rather than at the instance's: {verdicts:?}",
+        reads_mismatched(&verdicts),
+        "a stored body was forced at the reader's levels: {verdicts:?}"
     );
-
     assert_eq!(
-        fixture_verdicts(
-            &definitions(Level::constant(5)),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        module("#{level = 5} Type"),
         Vec::new(),
         "the inhabitant the instance's levels admit was refused",
     );
@@ -854,91 +644,32 @@ fn a_stored_body_is_forced_at_its_instances_levels() {
 /// Beside this, `Judge::sort_below` through `curios-analysis`'s `fits_its_variable` is the cause's other consumer of a level, which a hand-written indexed family, match and inversion would reach; a `False` through it is another witness of the same ticket rather than a second one, and no fixture is built for it here.
 #[test]
 fn a_published_value_sort_is_the_sort_its_instance_reaches() {
-    let p = Level::param(UniverseParam(0));
-    let plus_one = p.clone().succ().expect("a parameter has a successor");
-    let plus_two = plus_one.clone().succ().expect("a level has a successor");
-    let carrier = Global::Authored(Qualifier::from(["carrier"]));
-    let published = Global::Authored(Qualifier::from(["published"]));
-    let m = Free::local(780, Some("m"));
-    let projection = Term::rec_proj(
-        RecGroup::closing(vec![(
-            m,
-            Term::type_at(plus_two.clone()),
-            Term::type_at(plus_one),
-        )]),
-        0,
-    );
-    // A `let` around the projection, so unfolding takes the general substitution rather than the branch `step_instance` keeps for a stored value that *is* a projection, which hands the group the instance whole.
-    let stored = Term::let_(
-        &Free::local(781, Some("w")),
-        Term::intrinsic(Intrinsic::NatType),
-        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-        projection,
-    );
-    let definition = |name: Global,
-                      universe_context: UniverseContext,
-                      type_: Term,
-                      body: Term,
-                      value_sort: Option<Term>| {
-        Item::Let(Box::new(Definition {
-            name,
-            kind: DefinitionKind::Authored,
-            universe_context,
-            island: Qualifier::default(),
-            proof: false,
-            value_sort,
-            type_,
-            body,
-        }))
-    };
-    let readers_context = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: p.clone(),
-            upper: Level::zero(),
-        }],
-    };
-    let definitions = |stated: Level| Definitions {
-        items: vec![
-            definition(
-                carrier,
-                UniverseContext {
-                    parameter_count: 1,
-                    quality_count: 0,
-                    constraints: Vec::new(),
-                },
-                Term::type_at(plus_two.clone()),
-                stored.clone(),
-                None,
-            ),
-            definition(
-                published,
-                readers_context.clone(),
-                Term::type_at(Level::constant(7)),
-                Term::instance(carrier, vec![Level::constant(5)]),
-                Some(Term::type_at(stated)),
-            ),
-        ]
-        .into(),
-    };
+    for said in [2, 7] {
+        let rechecked = text_certified(&fill!(
+            r#"
+#{universe_context = {parameter_count = 1}}
+let /carrier: #{level = u + 2} Type =
+    let w: #NatType = 0;
+    #{node = Rec}
+    (let x: #{level = u + 2} Type = #{level = u + 1} Type;
+    x);
 
-    for said in [Level::constant(2), Level::constant(7)] {
-        let rechecked = fixture_certified(
-            &definitions(said.clone()),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        );
+#{universe_context = {parameter_count = 1, constraints = [u <= 0]}, value_sort = #{level = ${said}} Type}
+let /published: #{level = 7} Type =
+    #{universes = {levels = [5]}} /carrier;
+"#,
+            said
+        ));
+
         assert_eq!(rechecked.verdicts, Vec::new(), "{said:?}");
         let Item::Let(definition) = &rechecked.definitions.items[1] else {
-            panic!("the module's second item is `published`");
+            panic!("`published` is the module's second item");
         };
-        assert_eq!(definition.name, published);
+        assert_eq!(definition.name, global("published"));
         assert_eq!(
             definition.value_sort,
             Some(Term::type_at(Level::constant(7))),
-            "the walk stated the sort the shadowed reading gave the value, where the module said {said:?}",
+            "{said:?}",
         );
     }
 }
@@ -950,93 +681,32 @@ fn a_published_value_sort_is_the_sort_its_instance_reaches() {
 /// This is site three, and by the same code path it stands for the entry's arity, its result sort, its parameter telescope, its constructor telescopes and its index targets, each of which `check_signature` types the same way. The field's value is `Type 0`, which inhabits the field type under either reading, so the reader's claim is all that moves: while the group bound its own levels the field type arrived as `Type (q + 1)` under the reader's `q ≤ 0`, and `Type 1` was what the projection answered.
 #[test]
 fn a_registry_field_type_is_read_at_the_occurrences_instance() {
-    let p = Level::param(UniverseParam(0));
-    let plus_one = p.clone().succ().expect("a parameter has a successor");
-    let plus_two = plus_one.clone().succ().expect("a level has a successor");
-    let record = Global::Authored(Qualifier::from(["R"]));
-    let reads = Global::Authored(Qualifier::from(["reads"]));
-    let m = Free::local(790, Some("m"));
-    let projection = Term::rec_proj(
-        RecGroup::closing(vec![(
-            m,
-            Term::type_at(plus_two.clone()),
-            Term::type_at(plus_one),
-        )]),
-        0,
-    );
-    let declaration = StructDecl {
-        universe_context: UniverseContext {
-            parameter_count: 1,
-            quality_count: 0,
-            constraints: Vec::new(),
-        },
-        arity: Telescope::done(Telescope::build(
-            [(Free::local(791, Some("f")), projection)],
-            (),
-        )),
-        result_sort: Term::type_at(plus_two),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-    let readers_context = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: p.clone(),
-            upper: Level::zero(),
-        }],
-    };
-    let definitions = |claimed: Level| {
-        declaring(
-            Definitions {
-                items: vec![Item::Let(Box::new(Definition {
-                    name: reads,
-                    kind: DefinitionKind::Authored,
-                    universe_context: readers_context.clone(),
-                    island: Qualifier::default(),
-                    proof: false,
-                    value_sort: None,
-                    type_: Term::type_at(claimed),
-                    body: Term::proj_struct(
-                        Term::struct_at(
-                            record,
-                            vec![Level::constant(5)],
-                            Vec::<Term>::new(),
-                            [Term::type_at(Level::zero())],
-                        ),
-                        record,
-                        0,
-                    ),
-                }))]
-                .into(),
-            },
-            [],
-            [(record, declaration.clone())],
-            [],
-        )
+    let module = |claimed: &str| {
+        text_verdicts(&fill!(
+            r#"
+#{universe_context = {parameter_count = 1}}
+struct /R: pub #{level = u + 2} Type {
+    f:
+        #{node = Rec}
+        (let x: #{level = u + 2} Type = #{level = u + 1} Type;
+        x),
+}
+
+#{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
+let /reads: #{level = ${claimed}} Type =
+    #{field = Struct(/R, 0)} (#{universes = {levels = [5]}} /R { Type }).0;
+"#,
+            claimed
+        ))
     };
 
-    let verdicts = fixture_verdicts(
-        &definitions(Level::constant(1)),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let verdicts = module("1");
     assert!(
-        verdicts.iter().any(|verdict| verdict.name == Some(reads)
-            && matches!(verdict.error, Error::Mismatch { .. })),
-        "a registry field type was read at the reader's levels: {verdicts:?}",
+        reads_mismatched(&verdicts),
+        "a field's type was read at the reader's levels: {verdicts:?}"
     );
-
     assert_eq!(
-        fixture_verdicts(
-            &definitions(Level::constant(6)),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        module("6"),
         Vec::new(),
         "the field type at the occurrence's instance was refused",
     );
@@ -1055,73 +725,36 @@ fn a_registry_field_type_is_read_at_the_occurrences_instance() {
 /// The control is the same group with the item declaring the parameter its member names, read at an instance that states both.
 #[test]
 fn a_group_members_level_names_only_its_items_universe_parameters() {
-    let second = Level::param(UniverseParam(1));
-    let plus_one = second.clone().succ().expect("a parameter has a successor");
-    let plus_two = plus_one.clone().succ().expect("a level has a successor");
-    let held = Global::Authored(Qualifier::from(["held"]));
-    let reads = Global::Authored(Qualifier::from(["reads"]));
-    let member = |parameters: usize| Definition {
-        name: held,
-        kind: DefinitionKind::Authored,
-        universe_context: UniverseContext {
-            parameter_count: parameters,
-            quality_count: 0,
-            constraints: Vec::new(),
-        },
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_: Term::type_at(plus_two.clone()),
-        body: Term::type_at(plus_one.clone()),
-    };
     // The reader pins its own second parameter at zero: the level a captured `param 1` would be read at, and the one the member's own instance must answer instead.
-    let readers_context = |parameters: usize| UniverseContext {
-        parameter_count: parameters,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint {
-            lower: second.clone(),
-            upper: Level::zero(),
-        }],
-    };
-    let definitions = |parameters: usize, instance: Vec<Level>, claimed: Level| Definitions {
-        items: vec![
-            Item::Rec(RecItem::new(vec![(fresh(None), member(parameters))])),
-            Item::Let(Box::new(Definition {
-                name: reads,
-                kind: DefinitionKind::Authored,
-                universe_context: readers_context(2),
-                island: Qualifier::default(),
-                proof: false,
-                value_sort: None,
-                type_: Term::instance(held, instance),
-                body: Term::type_at(claimed),
-            })),
-        ]
-        .into(),
+    let module = |parameters: usize, instance: &str, claimed: &str| {
+        text_verdicts(&fill!(
+            r#"
+#{node = Rec, universe_context = {parameter_count = ${parameters}}}
+let /held: #{level = v + 2} Type =
+    #{level = v + 1} Type;
+
+#{universe_context = {parameter_count = 2, constraints = [v <= 0]}}
+let /reads: #{universes = {levels = [${instance}]}} /held =
+    ${claimed};
+"#,
+            parameters,
+            instance,
+            claimed
+        ))
     };
 
-    let verdicts = fixture_verdicts(
-        &definitions(1, vec![Level::constant(5)], Level::zero()),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let verdicts = module(1, "5", "Type");
     assert!(
-        verdicts.iter().any(|verdict| verdict.name == Some(held)
-            && matches!(verdict.error, Error::UnclosedUniverses)),
+        refuses(&verdicts, Some("held"), |error| matches!(
+            error,
+            Error::UnclosedUniverses
+        )),
         "the certifier accepted a group member naming a level its item does not bind: {verdicts:?}",
     );
-
-    let stated = vec![Level::constant(5), Level::constant(6)];
     assert_eq!(
-        fixture_verdicts(
-            &definitions(2, stated, Level::constant(6)),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        module(2, "5, 6", "#{level = 6} Type"),
         Vec::new(),
-        "the same member, at an item declaring the parameter it names, was refused",
+        "a member naming its item's own second parameter was refused",
     );
 }
 
@@ -1134,91 +767,52 @@ fn a_group_members_level_names_only_its_items_universe_parameters() {
 /// The controls are the two sets with the same offsets the other way round, where the hypothesis does state the bound: both must stand, since a decision that refused every large offset would shut this with a brick.
 #[test]
 fn a_universe_context_at_the_top_of_the_offset_range_is_decided_rather_than_saturated() {
-    let first = Level::param(UniverseParam(0));
-    let second = Level::param(UniverseParam(1));
-    let raised = |level: &Level, offset: u32| {
-        level
-            .checked_add(offset)
-            .expect("an offset below the top of the range")
+    let (top, below) = (TOP, TOP - 1);
+    let module = |parameters: usize, constraint: &str, type_: &str, value: &str| {
+        text_verdicts(&fill!(
+            "#{universe_context = {parameter_count = ${parameters}, constraints = [${constraint}]}}\nlet /held: ${declared} =\n    ${value};",
+            parameters,
+            constraint,
+            declared = type_,
+            value
+        ))
     };
-    let bounded = |lower: Level, upper: Level| UniverseConstraint { lower, upper };
-    let held = Global::Authored(Qualifier::from(["held"]));
-    let definitions =
-        |parameters: usize, constraints: Vec<UniverseConstraint>, type_, body| Definitions {
-            items: vec![Item::Let(Box::new(Definition {
-                name: held,
-                kind: DefinitionKind::Authored,
-                universe_context: UniverseContext {
-                    parameter_count: parameters,
-                    quality_count: 0,
-                    constraints,
-                },
-                island: Qualifier::default(),
-                proof: false,
-                value_sort: None,
-                type_,
-                body,
-            }))]
-            .into(),
-        };
-    let nat = || Term::intrinsic(Intrinsic::NatType);
-    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+    let raised = fill!("#{level = u + ${below}} Type", below);
 
-    let looping = definitions(
-        1,
-        vec![bounded(raised(&first, u32::MAX), first.clone())],
-        nat(),
-        zero(),
-    );
-    let verdicts = fixture_verdicts(&looping, 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = module(1, &fill!("u + ${top} <= u", top), "#NatType", "0");
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::UnsatisfiableUniverses)),
+        refuses(&verdicts, Some("held"), |error| matches!(
+            error,
+            Error::UnsatisfiableUniverses
+        )),
         "a loop through the largest offset a level holds was called satisfiable: {verdicts:?}",
     );
 
-    let short = definitions(
+    let verdicts = module(
         2,
-        vec![bounded(raised(&first, u32::MAX - 1), second.clone())],
-        Term::type_at(second.clone()),
-        Term::type_at(raised(&first, u32::MAX - 1)),
+        &fill!("u + ${below} <= v", below),
+        "#{level = v} Type",
+        &raised,
     );
-    let verdicts = fixture_verdicts(&short, 1_000_000, &Globals::default(), SYNTAX);
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::Mismatch { .. })),
+        refuses(&verdicts, Some("held"), |error| matches!(
+            error,
+            Error::Mismatch { .. }
+        )),
         "a bound one rung above the hypothesis was derived at the top of the offset range: {verdicts:?}",
     );
 
     assert_eq!(
-        fixture_verdicts(
-            &definitions(
-                1,
-                vec![bounded(first.clone(), raised(&first, u32::MAX))],
-                nat(),
-                zero(),
-            ),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        ),
+        module(1, &fill!("u <= u + ${top}", top), "#NatType", "0"),
         Vec::new(),
         "a set with a model at every assignment was refused for its offsets",
     );
-
     assert_eq!(
-        fixture_verdicts(
-            &definitions(
-                2,
-                vec![bounded(raised(&first, u32::MAX), second.clone())],
-                Term::type_at(second),
-                Term::type_at(raised(&first, u32::MAX - 1)),
-            ),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
+        module(
+            2,
+            &fill!("u + ${top} <= v", top),
+            "#{level = v} Type",
+            &raised
         ),
         Vec::new(),
         "a bound the hypothesis states at the top of the offset range was not derived",
