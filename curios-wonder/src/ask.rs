@@ -574,7 +574,7 @@ impl FromStr for Place {
                 })
             })
             .ok_or_else(|| {
-                format!("{written:?} is no place: write a line and a column, each from one, as in `12:5`")
+                "a place is a line and a column, each from one, as in `12:5`".to_string()
             })
     }
 }

@@ -266,3 +266,52 @@ fn profiling_is_global_until_the_program_tail_starts() {
         assert_eq!(args, ["--profile", "guest"]);
     }
 }
+
+/// A line that does not parse is refused as a report: its tag, what was written and what would have been taken, read off what the parser kept of its own refusal, then the command whose help says what it takes, down to the innermost the line names, and the word the refusal is about.
+#[test]
+fn a_line_that_does_not_parse_is_refused_as_a_report() {
+    for (words, expected) in [
+        (
+            vec!["curios", "rnu"],
+            "unknown command\n│  `rnu` is no command of `curios`\n├─ try; curios --help\n╰─ [error] rnu",
+        ),
+        (
+            vec!["curios", "run", "--colour", "x"],
+            "unknown flag\n│  `--colour` is no flag of `curios run`\n│  the nearest: `--color`\n├─ try; curios run --help\n╰─ [error] --colour",
+        ),
+        (
+            vec!["curios", "run", "--color", "sometimes"],
+            "invalid value\n│  written: `sometimes`\n│  `--color` takes one of: `auto`, `always`, `never`\n├─ try; curios run --help\n╰─ [error] --color",
+        ),
+        (
+            vec!["curios", "compile", "--output"],
+            "missing argument\n│  `--output` takes a value\n├─ try; curios compile --help\n╰─ [error] --output",
+        ),
+        (
+            vec!["curios", "wonder", "--at", "12"],
+            "invalid value\n│  written: `12`\n│  a place is a line and a column, each from one, as in `12:5`\n├─ try; curios wonder --help\n╰─ [error] --at",
+        ),
+        (
+            vec!["curios", "curate", "extra"],
+            "surplus argument\n│  `extra` is no argument `curios curate` takes\n├─ try; curios curate --help\n╰─ [error] extra",
+        ),
+        (
+            vec!["curios", "wonder", "--tests", "--cost"],
+            "conflicting flags\n│  `--tests` and `--cost` cannot stand together\n├─ try; curios wonder --help\n╰─ [error] --tests",
+        ),
+    ] {
+        let words = words.into_iter().map(OsString::from).collect::<Vec<_>>();
+        let error = Cli::try_parse_from(words.clone()).unwrap_err();
+
+        assert_eq!(refused(&error, &words).render(), expected, "{words:?}");
+    }
+
+    // A command below a command is named whole, so the help it is sent to is the one that says what it takes.
+    let words = ["curios", "pin", "dependency"].map(OsString::from);
+    let error = Cli::try_parse_from(words.clone()).unwrap_err();
+    assert!(
+        refused(&error, &words)
+            .render()
+            .contains("├─ try; curios pin dependency --help\n╰─ [error] curios pin dependency"),
+    );
+}

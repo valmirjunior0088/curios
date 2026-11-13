@@ -9,14 +9,15 @@ fn curios(args: &[&str]) -> Output {
         .unwrap()
 }
 
-/// A line that does not parse exits 1, as a command that could not run does, with clap's message on standard error: 2 is the tri-state's own, saying written goals stopped a program.
+/// A line that does not parse exits 1, as a command that could not run does, with its refusal as a report on standard error: 2 is the tri-state's own, saying written goals stopped a program.
 #[test]
 fn a_line_that_does_not_parse_exits_one() {
     let refused = curios(&["--no-such-option"]);
 
     assert_eq!(refused.status.code(), Some(1), "{refused:?}");
     assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("--no-such-option"),
+        String::from_utf8_lossy(&refused.stderr)
+            .starts_with("unknown flag\n│  `--no-such-option` is no flag of `curios`\n"),
         "{refused:?}"
     );
     assert!(refused.stdout.is_empty(), "{refused:?}");

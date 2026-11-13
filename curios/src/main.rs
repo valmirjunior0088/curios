@@ -165,10 +165,13 @@ fn dispatch() -> Result<(), Failure> {
         Ok(cli) => cli,
         // Help and the version are answers, printed to standard output; anything else is a line that does not parse, printed to standard error and failed as a command that could not run is.
         Err(error) => {
-            let _ = error.print();
             return match error.use_stderr() {
-                true => Err(Failure::Concluded(Concluded::Failed)),
-                false => Ok(()),
+                true => Err(refused(&error, &env::args_os().collect::<Vec<_>>()).into()),
+                false => {
+                    let _ = error.print();
+
+                    Ok(())
+                }
             };
         }
     };

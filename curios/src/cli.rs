@@ -12,14 +12,15 @@ use {
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
         Id, Parser, Subcommand, ValueEnum,
         builder::{PossibleValue, PossibleValuesParser},
-        error::ErrorKind,
+        error::{ContextKind, ContextValue, ErrorKind},
         value_parser,
     },
+    curios_common::Report,
     curios_elab::DEFAULT_BUDGET,
-    curios_package::{FormatSettings, Target},
+    curios_package::{FormatSettings, Refused, Target},
     curios_pipeline::Stage,
     curios_wonder::Place,
-    std::{env, ffi::OsString, mem, path::PathBuf, sync::LazyLock},
+    std::{env, error::Error as _, ffi::OsString, mem, path::PathBuf, sync::LazyLock},
 };
 
 /// A target as `--target` takes it: the manifest's own spelling of each, read off [`Target::ALL`] and [`Target::spelled`], so the flag and the `[foreign.<target>]` tables cannot spell one target two ways.
@@ -589,6 +590,127 @@ impl CommandFactory for Cli {
     fn command_for_update() -> Command {
         ParsedCli::command_for_update()
     }
+}
+
+/// What a line that does not parse is refused for, as a report: the tag of the refusal, what was written and what would have been taken, read off what clap kept of its own refusal, and the command whose help says what it takes. `words` are the line's, which is where the command it names is read from.
+///
+/// **Read off the refusal's parts, never its text.** Clap keeps what a refusal is of as data — the argument, the value, the nearest it knows — and words it for a reader of its own; the parts are what a report is built from, so a release that rewords its message changes nothing here.
+pub fn refused(error: &Error, words: &[OsString]) -> Box<Report> {
+    // The command the line names, as far down as its words name one: `curios pin dependency`.
+    let root = Cli::command();
+    let (named, _) = words.iter().skip(1).filter_map(|word| word.to_str()).fold(
+        ("curios".to_string(), &root),
+        |(named, command), word| match command.find_subcommand(word) {
+            Some(below) => (format!("{named} {word}"), below),
+            None => (named, command),
+        },
+    );
+    let texts = |kind| match error.get(kind) {
+        Some(ContextValue::String(text)) => vec![text.clone()],
+        Some(ContextValue::Strings(texts)) => texts.clone(),
+        Some(ContextValue::StyledStr(text)) => vec![text.to_string()],
+        _ => Vec::new(),
+    };
+    let text = |kind| texts(kind).into_iter().next().unwrap_or_default();
+    let quoted = |texts: Vec<String>| {
+        texts
+            .iter()
+            .map(|text| format!("`{text}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    // An argument as clap names it carries the placeholder of its value, `--output <PATH>`: the flag is its first word.
+    let flag = |argument: &str| argument.split(' ').next().unwrap_or_default().to_string();
+    let nearest = |refused: Refused, kind| match texts(kind) {
+        near if near.is_empty() => refused,
+        near => refused.stating(format_args!("the nearest: {}", quoted(near))),
+    };
+
+    let argument = text(ContextKind::InvalidArg);
+    let (refused, about) = match error.kind() {
+        ErrorKind::InvalidSubcommand => {
+            let word = text(ContextKind::InvalidSubcommand);
+
+            (
+                nearest(
+                    Refused::of("unknown command")
+                        .stating(format_args!("`{word}` is no command of `{named}`")),
+                    ContextKind::SuggestedSubcommand,
+                ),
+                word,
+            )
+        }
+        ErrorKind::UnknownArgument if argument.starts_with('-') => (
+            nearest(
+                Refused::of("unknown flag")
+                    .stating(format_args!("`{argument}` is no flag of `{named}`")),
+                ContextKind::SuggestedArg,
+            ),
+            argument,
+        ),
+        ErrorKind::UnknownArgument => (
+            Refused::of("surplus argument")
+                .stating(format_args!("`{argument}` is no argument `{named}` takes")),
+            argument,
+        ),
+        ErrorKind::MissingRequiredArgument => (
+            Refused::of("missing argument").stating(format_args!(
+                "`{named}` takes {}",
+                quoted(texts(ContextKind::InvalidArg))
+            )),
+            named.clone(),
+        ),
+        ErrorKind::MissingSubcommand => (
+            Refused::of("missing argument").stating(format_args!("`{named}` takes a command")),
+            named.clone(),
+        ),
+        ErrorKind::InvalidValue | ErrorKind::ValueValidation => {
+            let written = text(ContextKind::InvalidValue);
+            let valid = texts(ContextKind::ValidValue);
+            let refused = match written.is_empty() {
+                true => Refused::of("missing argument")
+                    .stating(format_args!("`{}` takes a value", flag(&argument))),
+                false => Refused::of("invalid value").stating(format_args!("written: `{written}`")),
+            };
+            let refused = match valid.is_empty() {
+                true => refused,
+                false => refused.stating(format_args!(
+                    "`{}` takes one of: {}",
+                    flag(&argument),
+                    quoted(valid)
+                )),
+            };
+            // What a value's own reader says of it, where the value was read by one.
+            let refused = match error.source() {
+                Some(source) => refused.stating(source),
+                None => refused,
+            };
+
+            (refused, flag(&argument))
+        }
+        ErrorKind::ArgumentConflict => (
+            Refused::of("conflicting flags").stating(format_args!(
+                "`{}` and {} cannot stand together",
+                flag(&argument),
+                quoted(
+                    texts(ContextKind::PriorArg)
+                        .iter()
+                        .map(|prior| flag(prior))
+                        .collect()
+                )
+            )),
+            flag(&argument),
+        ),
+        kind => (
+            Refused::of("invalid command line").stating(
+                kind.as_str()
+                    .unwrap_or("the line is no command this compiler takes"),
+            ),
+            named.clone(),
+        ),
+    };
+
+    refused.trying(format!("{named} --help")).about_named(about)
 }
 
 impl Cli {
