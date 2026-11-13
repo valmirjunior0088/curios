@@ -114,6 +114,16 @@ const TWO_WALKS: &str = r#"
     let sum(m: Map(Nat, Nat)) -> Nat = Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003);
 "#;
 
+/// The two walks of [`TWO_WALKS`] unioned, the union summed.
+const TWO_WALKS_UNION: &str = "sum(Map/union(walk(n, 0, (n + 1) % 65537, Map/empty()), walk(n, 0, (n + 7) % 65537, Map/empty())))";
+
+/// One walk of [`TWO_WALKS`] filtered, what is left summed.
+const WALK_FILTERED: &str =
+    "sum(Map/filter(walk(n, 0, (n + 1) % 65537, Map/empty()), (k, v) => (k + v) % 3 == 0))";
+
+/// A map built from a list of pairs, summed.
+const PAIRS_AS_A_MAP: &str = "sum(Map/of_list([(n, 1), (n + 1, 2), (n + 2, 3)]))";
+
 /// What the two walks of [`TWO_WALKS`] hold, summed.
 const TWO_WALKS_SUM: &str =
     "sum(walk(n, 0, (n + 1) % 65537, Map/empty())) + sum(walk(n, 0, (n + 7) % 65537, Map/empty()))";
@@ -228,6 +238,37 @@ fn map_insert_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
 fn map_insert_rebuilds_its_node_in_each_of_two_loops_threading_a_map_of_its_own() {
     let (_, module) = modules(&program(TWO_WALKS, TWO_WALKS_SUM));
     assert!(rebuilds_of(&module, NODE) >= 8, "{module}");
+}
+
+/// A payload read back out of a map or a list shares the slot it is stored in and nothing above it: a map nothing else holds is rebuilt at every level where its program unions it with another, filters it, or builds it from a list of pairs, and the walks beside those keep their rebuilds.
+#[test]
+fn map_insert_rebuilds_its_node_over_a_payload_read_back_out_of_a_map_or_a_list() {
+    for result in [TWO_WALKS_UNION, WALK_FILTERED, PAIRS_AS_A_MAP] {
+        let (_, module) = modules(&program(TWO_WALKS, result));
+        assert!(rebuilds_of(&module, NODE) >= 8, "{result}: {module}");
+    }
+}
+
+/// A program that inserts into a map it reads again, beside two walks it unions: the insert into what something else holds shares the children it copies around, each with the fork that holds them, so it says nothing of the forks the walks and the union build, which keep their rebuilds.
+#[test]
+fn an_insert_into_a_map_read_again_leaves_the_maps_held_once_their_rebuilds() {
+    let source = program(
+        &[
+            TWO_WALKS,
+            r#"
+            let held(n: Nat) -> Nat =
+                let m = walk(3, 0, n % 65537, Map/empty());
+                Map/len(Map/insert(m, 70000, 1)) + Map/len(m);
+            "#,
+        ]
+        .concat(),
+        &[TWO_WALKS_UNION, " + held(n)"].concat(),
+    );
+    let (lowered, module) = modules(&source);
+    assert!(rebuilds_of(&module, NODE) >= 8, "{module}");
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    assert_eq!(run(&module, "300"), run(&kept, "300"));
 }
 
 /// A map whose keys are removed one by one, each removal's map used once: every fork `/std/Map/internal/Node/remove` makes keeping a slot of the node it took apart rebuilds that node, the key found or absent.
@@ -534,6 +575,66 @@ fn a_constant_fork_two_loops_start_on_is_never_rebuilt() {
     }
 }
 
+/// A map of maps holding one inner map under two keys: an insert into the inner map read out under one key copies, and the map under the other key is the size it was, as when every insert copies.
+#[test]
+fn a_map_two_keys_of_a_map_hold_is_inserted_into_by_a_copy() {
+    let source = program(
+        &[
+            TWO_WALKS,
+            r#"
+            let nest(n: Nat) -> Nat =
+                let inner = walk(n, 0, (n + 1) % 65537, Map/empty());
+                let outer: Map(Nat, Map(Nat, Nat)) =
+                    Map/insert(Map/insert(Map/empty(), 1, inner), 2, inner);
+                let grown =
+                    match Map/try_get(outer, 1)
+                    | some(m) => Map/len(Map/insert(m, 70000, 1))
+                    | none() => 0
+                    end;
+                let kept = match Map/try_get(outer, 2) | some(m) => Map/len(m) | none() => 0 end;
+                grown * 100000 + kept;
+            "#,
+        ]
+        .concat(),
+        "nest(n)",
+    );
+    let (lowered, module) = modules(&source);
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    for n in ["0", "5", "300"] {
+        assert_eq!(run(&module, n), run(&kept, n), "{n}");
+    }
+}
+
+/// A map whose payloads are constant trees, each read out and inserted into on every round of a loop: a payload is a tree a reader takes apart, so its slot is no payload's and the tree read out is what the map still holds, a constant besides, and every round's size is the one it is when every insert copies.
+#[test]
+fn a_constant_tree_a_map_holds_is_inserted_into_by_a_copy() {
+    let source = program(
+        &[
+            SEARCH_TREE,
+            r#"
+            let visit(n: Nat, m: Map(Nat, Tree), acc: Nat) -> Nat =
+                match n
+                | 0 => acc
+                | k + 1; _ =>
+                    match Map/try_get(m, k % 3)
+                    | none() => acc
+                    | some(t) => visit(k, m, acc + size(insert(t, 70000 + k)))
+                    end
+                end;
+            "#,
+        ]
+        .concat(),
+        "visit(n, Map/of_list([(0, Tree/node(Tree/leaf(), 5, Tree/leaf())), (1, Tree/node(Tree/leaf(), 7, Tree/leaf())), (2, Tree/node(Tree/leaf(), 9, Tree/leaf()))]), 0)",
+    );
+    let (lowered, module) = modules(&source);
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    for n in ["0", "7", "300"] {
+        assert_eq!(run(&module, n), run(&kept, n), "{n}");
+    }
+}
+
 /// A search tree's insert that hands back the node it was handed where the key is found: the child it hands on is held by a node it may return, so what the insert of a child is handed is shared, as what it hands back then is, no unique value enters the loop and nothing is rebuilt.
 #[test]
 fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
@@ -728,6 +829,9 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
     );
     let two_walks = program(TWO_WALKS, TWO_WALKS_SUM);
     let rope = program(ROPE, ROPE_FLIPPED_TWICE);
+    let union = program(TWO_WALKS, TWO_WALKS_UNION);
+    let filtered = program(TWO_WALKS, WALK_FILTERED);
+    let pairs = program(TWO_WALKS, PAIRS_AS_A_MAP);
     for (source, n) in corpus.into_iter().chain([
         (heap, "300"),
         (spines, "300"),
@@ -735,6 +839,9 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
         (tree, "300"),
         (two_walks, "300"),
         (rope, "300"),
+        (union, "300"),
+        (filtered, "300"),
+        (pairs, "300"),
     ]) {
         let (lowered, rebuilt) = modules(&source);
         let mut kept = lowered;

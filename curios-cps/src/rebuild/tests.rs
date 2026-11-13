@@ -350,6 +350,131 @@ fn a_read_a_loop_comes_back_to_names_one_object_on_every_round() {
     assert_eq!(rebuilds(&read_beside_a_construction(true)).len(), 0);
 }
 
+/// `main` builds a `Pair` nothing else holds over a `Pair` it reads again afterwards, and hands the first to `bump`, which reads its slot and builds a `Pair` of what it read beside its parameter dying. Where `taken_apart`, `bump` also reads a slot of what it read.
+fn built_over_a_value_read_again(taken_apart: bool) -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let bump = module.reserve_function();
+    let bump_return = module.reserve_continuation();
+    let [t, tag, x, n, v, s, p, a, z] = ["t", "tag", "x", "n", "v", "s", "p", "a", "z"]
+        .map(|name| module.add_value(Some(name.into())));
+
+    let handed = module.add_node(Node::ApplyCont(Edge {
+        target: bump_return,
+        args: vec![Atom::Value(n)],
+    }));
+    let build = module.add_node(Node::LetValue {
+        result: n,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(x)]),
+        next: handed,
+    });
+    let after_read = match taken_apart {
+        true => {
+            let result = module.add_value(Some("w".into()));
+            module.add_node(Node::LetIntrinsic {
+                result,
+                op: Intrinsic::RowGet(pair, 1),
+                args: vec![Atom::Value(x)],
+                next: build,
+            })
+        }
+        false => build,
+    };
+    let read_x = module.add_node(Node::LetIntrinsic {
+        result: x,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(t)],
+        next: after_read,
+    });
+    let read_tag = module.add_node(Node::LetIntrinsic {
+        result: tag,
+        op: Intrinsic::RowGet(pair, 0),
+        args: vec![Atom::Value(t)],
+        next: read_x,
+    });
+    module.define_function(
+        bump,
+        Function {
+            debug_name: Some("bump".into()),
+            params: vec![t],
+            return_cont: bump_return,
+            body: read_tag,
+            droppable: false,
+        },
+    );
+
+    let exit = module.add_node(halt(vec![Atom::Value(a)]));
+    let read_again = module.add_node(Node::LetIntrinsic {
+        result: z,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(s)],
+        next: exit,
+    });
+    let answered = module.reserve_continuation();
+    module.define_continuation(
+        answered,
+        Continuation {
+            debug_name: None,
+            params: vec![a],
+            body: read_again,
+        },
+    );
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(bump),
+        args: vec![Atom::Value(p)],
+        return_to: answered,
+    });
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![answered],
+        body: call,
+    });
+    let holder = module.add_node(Node::LetValue {
+        result: p,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(s)]),
+        next: scope,
+    });
+    let held = module.add_node(Node::LetValue {
+        result: s,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+        next: holder,
+    });
+    let computed = module.add_node(Node::LetIntrinsic {
+        result: v,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: held,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![bump],
+        body: computed,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// A value something else holds, stored in a slot whose reads nothing takes apart, shares that slot and leaves the construction over it one nothing else holds, which is rebuilt where it dies. Stored in a slot some reader takes apart, it is a child, and the construction is shared with it.
+#[test]
+fn a_shared_payload_shares_its_slot_and_a_shared_child_its_construction() {
+    assert_eq!(rebuilds(&built_over_a_value_read_again(false)).len(), 1);
+    assert_eq!(rebuilds(&built_over_a_value_read_again(true)).len(), 0);
+}
+
 /// What a switch's edge hands a function's return is handed back as what a jump hands is: a constant a function returns that way is no value to write into where it is answered, and a value nothing else holds is rebuilt there by either route.
 #[test]
 fn a_switchs_edge_to_a_return_hands_back_what_a_jump_does() {

@@ -2,14 +2,16 @@
 //!
 //! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value before a run binds it again, which is Perceus's rule and what lets a path copy qualify, and where no run comes back to the read with that value still bound, each round's read naming the one object. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
 //!
-//! **Constants by tag.** A constant is one global every use shares, and it reaches every parameter it is handed to and every read of a slot it is stored in, so the constructor tags of the constant data that may reach each value flow through slots, calls and returns; a value some constant may be is rebuilt only within the arms of a test of its tag that rule every such tag out.
+//! **Payloads by slot.** A construction holding what something else holds is shared with it, since a read of the construction hands that out; only a row or a tuple counts, a number or a list holding nothing a rebuild writes. A slot whose reads nothing takes apart, wherever what they hand out flows, is a payload's and carries the fact itself: a shared value stored in it shares the slot and leaves the construction one nothing else holds, and a read of a slot so shared is shared. So a leaf built over a payload read back out of another map is a leaf nothing else holds, and every fork over it is rebuilt; a child's slot stays shared with the construction that holds it, so one tree something else holds says nothing of another. Which slots are payloads decides what the facts prove and never whether they hold, a slot's fact covering every store into it.
+//!
+//! **Constants by tag.** A constant is one global every use shares, and it reaches every parameter it is handed to and every read of a slot it is stored in, so the constructor tags of the constant data that may reach each value flow through slots, calls and returns; a value some constant may be is rebuilt only within the arms of a test of its tag that rule every such tag out. A row's constructors share its slots, a leaf's payload a fork's child, so a slot is followed under the constructor that writes it and read under the one a test around the read decides.
 //!
 //! **Borrowing.** A parameter a function only reads is borrowed, so its caller keeps the value it handed, unless the function rebuilds it, captures it, or must own a field of it, as Lean's inference owns what it resets. Which parameters are rebuilt is the candidates' own answer, so the facts are found twice: owning every parameter, then borrowing what the first answer leaves.
 
 use {
     super::{
         Atom, Callee, ContinuationId, FunctionId, Intrinsic, Lattice, Literal, Module, Node,
-        NodeId, RowId, Slot, Solver, ValueExpr, ValueId, analyze_calls, return_edges,
+        NodeId, RowId, Rules, Slot, Solver, ValueExpr, ValueId, analyze_calls, return_edges,
     },
     std::{
         cell::RefCell,
@@ -131,8 +133,15 @@ pub fn routes(module: &Module) -> Routes {
                             .consumed(of, &borrowed)
                             .iter()
                             .any(|point| shape.reaches_holding(of, read, point.node));
+                        let slot = slot_read(module, shape, of, read);
                         rules.add(move |solver| {
-                            if consumed_after || shared(solver, world, &Atom::Value(of)) {
+                            // A slot's fact is one for both versions: an object either builds may reach a read in either.
+                            let marked = slot.is_some_and(|slot| {
+                                solver
+                                    .fact(&(World::Base, Key::Slot(slot)))
+                                    .is_some_and(|fact| fact.0)
+                            });
+                            if consumed_after || marked || shared(solver, world, &Atom::Value(of)) {
                                 solver.join((world, Key::Value(value)), Shared(true));
                             }
                         });
@@ -194,12 +203,20 @@ pub fn routes(module: &Module) -> Routes {
                             }
                         });
                     }
-                    // A construction holding what something else holds is shared: what a read of it hands out is. A constant is never written into, so it spoils nothing.
+                    // A construction holding what something else holds is shared, since a read of it hands that out, but where it holds it in a payload slot, which is shared in its place. A constant is never written into, so it spoils nothing.
                     Def::Construction => {
                         let stored = stored_values(module, shape, value, aggregates);
                         rules.add(move |solver| {
-                            if stored.iter().any(|atom| shared(solver, world, atom)) {
-                                solver.join((world, Key::Value(value)), Shared(true));
+                            for (atom, slot) in &stored {
+                                if shared(solver, world, atom) {
+                                    for key in shared_by(value, *slot) {
+                                        let world = match key {
+                                            Key::Slot(_) => World::Base,
+                                            _ => world,
+                                        };
+                                        solver.join((world, key), Shared(true));
+                                    }
+                                }
                             }
                         });
                     }
@@ -584,30 +601,269 @@ fn aggregates(module: &Module, shape: &Shape) -> BTreeSet<ValueId> {
         .collect()
 }
 
-/// What the construction binding `value` stores that a read could take apart and a rebuild write into: the values it holds that may be a row or a tuple, a constant among them left out.
+/// A slot of a row as its sharing is followed: the row, its constructor's tag where a construction writes one and a test around a read decides it, and the slot. No tag stands for any constructor, which is a row's one where it holds no tag.
+type SlotKey = (RowId, Option<u32>, usize);
+
+/// What the construction binding `value` stores that a read could take apart and a rebuild write into: the values it holds that may be a row or a tuple, a constant among them left out, each with the slot it is stored at where that slot is a payload's.
 fn stored_values(
     module: &Module,
     shape: &Shape,
     value: ValueId,
     aggregates: &BTreeSet<ValueId>,
-) -> Vec<Atom> {
-    match shape
+) -> Vec<(Atom, Option<SlotKey>)> {
+    let Some(Node::LetValue { value: built, .. }) = shape
         .binder
         .get(&value)
         .and_then(|binder| module.node(*binder))
-    {
-        Some(Node::LetValue {
-            value: ValueExpr::List(atoms) | ValueExpr::Tuple(atoms) | ValueExpr::Row(_, atoms),
-            ..
-        }) => atoms
-            .iter()
-            .filter(|atom| {
-                matches!(atom, Atom::Value(stored) if !shape.constant.contains(stored) && aggregates.contains(stored))
-            })
-            .cloned()
-            .collect(),
-        _ => Vec::new(),
+    else {
+        return Vec::new();
+    };
+    let (atoms, written) = match built {
+        ValueExpr::Row(row, atoms) => (
+            atoms,
+            written_tag(module, *row, atoms).map(|tag| (*row, tag)),
+        ),
+        ValueExpr::List(atoms) | ValueExpr::Tuple(atoms) => (atoms, None),
+        ValueExpr::Literal(_) | ValueExpr::Rebuilt { .. } => return Vec::new(),
+    };
+    atoms
+        .iter()
+        .enumerate()
+        .filter(|(_, atom)| {
+            matches!(atom, Atom::Value(stored) if !shape.constant.contains(stored) && aggregates.contains(stored))
+        })
+        .map(|(index, atom)| {
+            let slot = written
+                .map(|(row, tag)| (row, tag, index))
+                .filter(|slot| shape.payload.contains(slot));
+            (atom.clone(), slot)
+        })
+        .collect()
+}
+
+/// What a shared value stored at `slot` of the construction binding `value` shares: the slot where it is a payload's, under its constructor and under any, and the construction anywhere else.
+fn shared_by(value: ValueId, slot: Option<SlotKey>) -> Vec<Key> {
+    match slot {
+        Some(slot) => vec![Key::Slot(slot), Key::Slot((slot.0, None, slot.2))],
+        None => vec![Key::Value(value)],
     }
+}
+
+/// The constructor a construction of `row` writes, where one is stated: its literal tag, or none where the row holds no tag. A tag that is no literal states none, and such a construction's slots are judged with the construction.
+fn written_tag(module: &Module, row: RowId, atoms: &[Atom]) -> Option<Option<u32>> {
+    match module.defined_row(row)?.slots.first() {
+        Some(Slot::Tag) => match atoms.first() {
+            Some(Atom::Literal(Literal::Nat(tag))) => u32::try_from(tag).ok().map(Some),
+            _ => None,
+        },
+        _ => Some(None),
+    }
+}
+
+/// The slot the row read binding a field of `of` at `read` reads: under the tag a test around the read decides, or under any. A tuple's field is no slot.
+fn slot_read(module: &Module, shape: &Shape, of: ValueId, read: NodeId) -> Option<SlotKey> {
+    let Some(Node::LetIntrinsic {
+        op: Intrinsic::RowGet(row, index),
+        ..
+    }) = module.node(read)
+    else {
+        return None;
+    };
+    let tag = match module.defined_row(*row)?.slots.first() {
+        Some(Slot::Tag) => guard(module, shape, of, read),
+        _ => None,
+    };
+    Some((*row, tag, *index))
+}
+
+/// Whether something takes a value apart, wherever the value flows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct Taken(bool);
+
+impl Lattice for Taken {
+    fn bottom() -> Self {
+        Taken(false)
+    }
+
+    fn join(&mut self, incoming: Self) {
+        self.0 |= incoming.0;
+    }
+}
+
+/// What is asked whether something takes it apart: a value, a function's result at one position, a row's slot, a tuple's field, or a list's element.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Ask {
+    Value(ValueId),
+    Returned(FunctionId, usize),
+    Slot(SlotKey),
+    Field(usize),
+    Element,
+}
+
+/// The payload slots: each slot a construction writes whose reads nothing takes apart, wherever what they hand out flows — through calls, jumps and returns, and through the slots, the tuples and the lists it is stored in again. A slot some reader takes apart is a child's, shared with the construction that holds it, so one tree something else holds says nothing of another; a payload's carries its own fact, so a leaf over a payload something else holds is still a leaf nothing else holds. Which slots are payloads decides what the facts can prove and never whether they hold: a slot's fact covers every store into it.
+fn payload_slots(module: &Module, shape: &Shape) -> BTreeSet<SlotKey> {
+    let arities = module.return_arities();
+    let arities = &arities;
+    let keys = shape
+        .defs
+        .keys()
+        .map(|value| Ask::Value(*value))
+        .collect::<Vec<_>>();
+    let taken =
+        |solver: &Solver<Taken, Ask>, key: Ask| solver.fact(&key).is_some_and(|fact| fact.0);
+    let facts = Solver::solve(keys, |rules| {
+        rules.add(move |solver| {
+            for value in shape.fields.keys().chain(shape.read_at.keys()) {
+                solver.join(Ask::Value(*value), Taken(true));
+            }
+        });
+        // What a taken parameter, result, slot, field or element is handed or holds is taken.
+        let hand = move |rules: &mut Rules<'_, Taken, Ask>, atom: &Atom, asked: Vec<Ask>| {
+            if let Atom::Value(handed) = atom {
+                let handed = *handed;
+                rules.add(move |solver| {
+                    if asked.iter().any(|key| taken(solver, *key)) {
+                        solver.join(Ask::Value(handed), Taken(true));
+                    }
+                });
+            }
+        };
+        for (node_id, (block, _)) in &shape.place {
+            let node_id = *node_id;
+            let Some(node) = module.node(node_id) else {
+                continue;
+            };
+            let function = shape.owner[block];
+            let own_return = module
+                .function(function)
+                .map(|function| function.return_cont);
+            let handed_to = |target: ContinuationId, index: usize| match Some(target) == own_return
+            {
+                true => Some(Ask::Returned(function, index)),
+                false => module
+                    .continuation(target)
+                    .and_then(|target| target.params.get(index))
+                    .map(|param| Ask::Value(*param)),
+            };
+            match node {
+                Node::LetValue { value, .. } => match value {
+                    ValueExpr::Row(row, atoms) => {
+                        if let Some(tag) = written_tag(module, *row, atoms) {
+                            for (index, atom) in atoms.iter().enumerate() {
+                                let asked = vec![
+                                    Ask::Slot((*row, tag, index)),
+                                    Ask::Slot((*row, None, index)),
+                                ];
+                                hand(rules, atom, asked);
+                            }
+                        }
+                    }
+                    ValueExpr::Tuple(atoms) => {
+                        for (index, atom) in atoms.iter().enumerate() {
+                            hand(rules, atom, vec![Ask::Field(index)]);
+                        }
+                    }
+                    ValueExpr::List(atoms) => {
+                        for atom in atoms {
+                            hand(rules, atom, vec![Ask::Element]);
+                        }
+                    }
+                    ValueExpr::Literal(_) | ValueExpr::Rebuilt { .. } => {}
+                },
+                Node::LetIntrinsic {
+                    result, op, args, ..
+                } => {
+                    let result = *result;
+                    let read = match (op, args.first()) {
+                        (Intrinsic::RowGet(..), Some(Atom::Value(of))) => {
+                            slot_read(module, shape, *of, node_id).map(Ask::Slot)
+                        }
+                        (Intrinsic::TupleGet(index), _) => Some(Ask::Field(*index)),
+                        (Intrinsic::ListGet, _) => Some(Ask::Element),
+                        _ => None,
+                    };
+                    if let Some(read) = read {
+                        rules.add(move |solver| {
+                            if taken(solver, Ask::Value(result)) {
+                                solver.join(read, Taken(true));
+                            }
+                        });
+                    }
+                }
+                Node::ApplyFun {
+                    callee: Callee::Known(callee),
+                    args,
+                    return_to,
+                } => {
+                    let callee = *callee;
+                    if let Some(definition) = module.function(callee) {
+                        for (param, atom) in definition.params.iter().zip(args) {
+                            hand(rules, atom, vec![Ask::Value(*param)]);
+                        }
+                    }
+                    // What a call's result is handed to asks of what the callee hands back, a tail call's of what its own function's callers ask.
+                    let resumed = match Some(*return_to) == own_return {
+                        true => (0..arities.get(&function).copied().unwrap_or(0))
+                            .map(|index| (index, Ask::Returned(function, index)))
+                            .collect::<Vec<_>>(),
+                        false => module
+                            .continuation(*return_to)
+                            .into_iter()
+                            .flat_map(|resume| resume.params.iter().enumerate())
+                            .map(|(index, param)| (index, Ask::Value(*param)))
+                            .collect(),
+                    };
+                    rules.add(move |solver| {
+                        for (index, asked) in &resumed {
+                            if taken(solver, *asked) {
+                                solver.join(Ask::Returned(callee, *index), Taken(true));
+                            }
+                        }
+                    });
+                }
+                Node::ApplyCont(edge) => {
+                    for (index, atom) in edge.args.iter().enumerate() {
+                        hand(
+                            rules,
+                            atom,
+                            handed_to(edge.target, index).into_iter().collect(),
+                        );
+                    }
+                }
+                Node::Switch { cases, default, .. } => {
+                    for edge in cases.values().chain(default.as_ref()) {
+                        for (index, atom) in edge.args.iter().enumerate() {
+                            hand(
+                                rules,
+                                atom,
+                                handed_to(edge.target, index).into_iter().collect(),
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
+    let taken = |key: Ask| facts.get(&key).is_some_and(|fact| fact.0);
+    let mut payload = BTreeSet::new();
+    for node_id in shape.place.keys() {
+        if let Some(Node::LetValue {
+            value: ValueExpr::Row(row, atoms),
+            ..
+        }) = module.node(*node_id)
+            && let Some(tag) = written_tag(module, *row, atoms)
+        {
+            payload.extend(
+                (0..atoms.len())
+                    .map(|index| (*row, tag, index))
+                    .filter(|slot| {
+                        !taken(Ask::Slot(*slot)) && !taken(Ask::Slot((slot.0, None, slot.2)))
+                    }),
+            );
+        }
+    }
+    payload
 }
 
 /// The version of its callee `call` reaches, where `shared` judges its arguments: the reuse version where each parameter that version assumes is handed a unique value dead after the call, and no constant itself, of which a rebuild writes nothing.
@@ -735,6 +991,8 @@ struct Shape {
     open: BTreeSet<FunctionId>,
     /// The values that may be constant data, each a global every use of it shares.
     constant: BTreeSet<ValueId>,
+    /// The slots whose reads nothing takes apart, each carrying its own sharing.
+    payload: BTreeSet<SlotKey>,
     /// The blocks reachable from each block's successors, as asked.
     reach: RefCell<BTreeMap<Block, BTreeSet<Block>>>,
     /// The blocks reachable from a block's successors without entering another, the first of each key, as asked.
@@ -765,6 +1023,7 @@ impl Shape {
             returns: BTreeMap::new(),
             open: analyze_calls(module).escaping,
             constant: module.constant_data(),
+            payload: BTreeSet::new(),
             reach: RefCell::new(BTreeMap::new()),
             reach_outside: RefCell::new(BTreeMap::new()),
         };
@@ -1004,6 +1263,7 @@ impl Shape {
             }
         }
         shape.live_in = live_in(module, &shape, &blocks);
+        shape.payload = payload_slots(module, &shape);
         shape
     }
 
@@ -1371,11 +1631,12 @@ impl Lattice for Shared {
     }
 }
 
-/// A value's fact, or a function's result's at one position.
+/// A value's fact, a function's result's at one position, or a payload slot's: that some construction stores a shared value in it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Key {
     Value(ValueId),
     Returned(FunctionId, usize),
+    Slot(SlotKey),
 }
 
 /// The uniqueness the module proves, under one choice of borrowed parameters.
@@ -1425,8 +1686,12 @@ impl<'s> Facts<'s> {
                             .consumed(of, borrowed)
                             .iter()
                             .any(|point| shape.reaches_holding(of, read, point.node));
+                        let slot = slot_read(module, shape, of, read);
                         rules.add(move |solver| {
-                            if consumed_after || shared(solver, &Atom::Value(of)) {
+                            let marked = slot.is_some_and(|slot| {
+                                solver.fact(&Key::Slot(slot)).is_some_and(|fact| fact.0)
+                            });
+                            if consumed_after || marked || shared(solver, &Atom::Value(of)) {
                                 solver.join(Key::Value(value), Shared(true));
                             }
                         });
@@ -1475,12 +1740,16 @@ impl<'s> Facts<'s> {
                             }
                         });
                     }
-                    // A construction holding what something else holds is shared: what a read of it hands out is. A constant is never written into, so it spoils nothing.
+                    // A construction holding what something else holds is shared, since a read of it hands that out, but where it holds it in a payload slot, which is shared in its place. A constant is never written into, so it spoils nothing.
                     Def::Construction => {
                         let stored = stored_values(module, shape, value, aggregates);
                         rules.add(move |solver| {
-                            if stored.iter().any(|atom| shared(solver, atom)) {
-                                solver.join(Key::Value(value), Shared(true));
+                            for (atom, slot) in &stored {
+                                if shared(solver, atom) {
+                                    for key in shared_by(value, *slot) {
+                                        solver.join(key, Shared(true));
+                                    }
+                                }
                             }
                         });
                     }
@@ -1863,14 +2132,17 @@ impl Lattice for Possible {
     }
 }
 
+/// What a flow through slots is followed at: a value, a function's result at one position, a row's slot under any constructor or a tuple's field, a row's slot under one constructor, and a row's slot as a construction whose tag is no literal writes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum TagKey {
     Value(ValueId),
     Slot(Option<RowId>, usize),
+    Under(RowId, u32, usize),
+    Unstated(RowId, usize),
     Returned(FunctionId, usize),
 }
 
-/// The tags of the constant data that may reach each value, through the slots it is stored in, the calls and jumps that hand it on and the returns that hand it back.
+/// The tags of the constant data that may reach each value, through the slots it is stored in, the calls and jumps that hand it on and the returns that hand it back. A slot is followed under the constructor a construction writes, so a read a test of its value's tag stands around is reached by what that constructor stores and by nothing a sibling stores in the slot: a leaf's payload is no fork's child.
 fn constant_tags(module: &Module, shape: &Shape) -> BTreeMap<ValueId, Tags> {
     let arities = module.return_arities();
     let keys = shape
@@ -1911,23 +2183,48 @@ fn constant_tags(module: &Module, shape: &Shape) -> BTreeMap<ValueId, Tags> {
                             solver.join(TagKey::Value(result), Possible(Tags::from([tag])))
                         });
                     }
+                    let written = row.map(|row| (row, written_tag(module, row, &atoms)));
                     rules.add(move |solver| {
                         for (index, atom) in atoms.iter().enumerate() {
                             let stored = possible(solver, atom);
+                            match written {
+                                Some((row, Some(Some(tag)))) => {
+                                    solver.join(TagKey::Under(row, tag, index), stored.clone());
+                                }
+                                Some((row, None)) => {
+                                    solver.join(TagKey::Unstated(row, index), stored.clone());
+                                }
+                                Some((_, Some(None))) | None => {}
+                            }
                             solver.join(TagKey::Slot(row, index), stored);
                         }
                     });
                 }
-                Node::LetIntrinsic { result, op, .. } => {
+                Node::LetIntrinsic {
+                    result, op, args, ..
+                } => {
                     let result = *result;
-                    let slot = match op {
-                        Intrinsic::RowGet(row, index) => TagKey::Slot(Some(*row), *index),
-                        Intrinsic::TupleGet(index) => TagKey::Slot(None, *index),
+                    let slots = match (op, args.first()) {
+                        (Intrinsic::RowGet(row, index), Some(Atom::Value(of))) => {
+                            match slot_read(module, shape, *of, node_id) {
+                                Some((row, Some(tag), index)) => vec![
+                                    TagKey::Under(row, tag, index),
+                                    TagKey::Unstated(row, index),
+                                ],
+                                _ => vec![TagKey::Slot(Some(*row), *index)],
+                            }
+                        }
+                        (Intrinsic::RowGet(row, index), _) => {
+                            vec![TagKey::Slot(Some(*row), *index)]
+                        }
+                        (Intrinsic::TupleGet(index), _) => vec![TagKey::Slot(None, *index)],
                         _ => continue,
                     };
                     rules.add(move |solver| {
-                        let read = solver.fact(&slot).cloned().unwrap_or(Possible::bottom());
-                        solver.join(TagKey::Value(result), read);
+                        for slot in &slots {
+                            let read = solver.fact(slot).cloned().unwrap_or(Possible::bottom());
+                            solver.join(TagKey::Value(result), read);
+                        }
                     });
                 }
                 Node::ApplyFun {
