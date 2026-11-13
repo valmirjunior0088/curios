@@ -78,12 +78,12 @@ impl Environment {
     /// This environment as an item's erasure hands it on: the bindings of the names the item declares, and its schema maps.
     ///
     /// A binder is bound while the walk that opened it reads it and by nothing after, and a name another item declares is bound here only to the import it is read through, which is this fragment's affair. Kept, either would be an identity the next reader could mistake for a declaration of this item.
-    pub fn exporting(mut self, declared: &[&curios_core::Global]) -> Self {
+    pub fn exporting(mut self, declared: &[curios_core::Global]) -> Self {
         self.values.retain(|(name, sorts), _| {
             sorts.is_none()
                 && name
                     .as_declaration()
-                    .is_some_and(|global| declared.contains(&global))
+                    .is_some_and(|global| declared.contains(global))
         });
 
         self

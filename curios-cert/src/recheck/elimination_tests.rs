@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_common::fill,
-    curios_core::{Atom, Quality, Subterm},
+    curios_common::{Qualifier, fill},
+    curios_core::{Atom, Global, Quality, Subterm},
     curios_surface::Spellable,
 };
 
@@ -13,13 +13,11 @@ const TWO_HELD: &str = r#"
 induct /False: pub Prop
 end
 
-#{absent = [/Two/a, /Two/b]}
 induct /Two: pub ${sort}
 | a()
 | b()
 end
 
-#{absent = [/Held/mk]}
 induct /Held: (t: #{node = InductType} /Two()) -> pub Type
 | mk(): (#{node = Variant} /Two/a())
 end
@@ -42,13 +40,11 @@ const SHADOWED: &str = r#"
 induct /False: pub Prop
 end
 
-#{absent = [/Two/a, /Two/b]}
 induct /Two: pub Type
 | a()
 | b()
 end
 
-#{absent = [${absent}]}
 induct /Held: (t: #{node = InductType} /Two()) -> pub Type
 ${cases}
 end
@@ -65,12 +61,10 @@ const PIN: &str = r#"
 induct /False: pub Prop
 end
 
-#{absent = [/Held/qed]}
 induct /Held: pub Prop
 | qed()
 end
 
-#{absent = [/Pin/yes, /Pin/no]}
 induct /Pin: (n: #NatType) -> pub Prop
 | yes(): (0)
 | no(): (1)
@@ -79,7 +73,6 @@ end
 
 /// `P(i : Nat) : Prop` with two cases at `0`, and `extract : (p : P(0)) -> Nat` eliminating it into `Nat` under a motive that states `${sort}` as its sort, `match i: (k) => ${sort} | 0 => Nat | _ => Nat end`.
 const EXTRACTED: &str = r#"
-#{absent = [/P/mk, /P/mk2]}
 induct /P: (i: #NatType) -> pub Prop
 | mk(): (0)
 | mk2(): (0)
@@ -95,7 +88,7 @@ let /extract: (p: #{node = InductType} /P()(0)) -> #NatType =
 
 /// [`EXTRACTED`]'s honest motive over `P` declared at one universe parameter it is irrelevant in, with the cases `${cases}`, eliminated at the instance `${level}`.
 const LEVELLED: &str = r#"
-#{universe_context = {parameter_count = 1}, variances = [Irrelevant], absent = [${absent}]}
+#{universe_context = {parameter_count = 1}, variances = [Irrelevant]}
 induct /P: (i: #NatType) -> pub Prop
 ${cases}
 end
@@ -109,7 +102,6 @@ let /extract: (p: #{node = InductType, universes = {levels = [${level}]}} /P()(0
 
 /// `Eq(A : Type 1) : (x : A, y : A) -> Prop` with `refl`, and `all_zero : (n : Nat) -> Eq(Nat)(${goal})` a fold of `n` under `${motive}` whose zero arm is `refl(0)` and whose successor arm is `${step}`.
 const FOLDED: &str = r#"
-#{absent = [/Eq/refl]}
 induct /Eq(A: #{level = 1} Type): (x: A, y: A) -> pub #{level = 1} Prop
 | refl(z: A): (z, z)
 end
@@ -127,7 +119,6 @@ const PINNED: &str = r#"
 induct /False: pub Prop
 end
 
-#{absent = [/Pinned/mk]}
 induct /Pinned: (n: #NatType, m: #NatType) -> pub Prop
 | mk(x: #NatType): (x, x)
 end
@@ -143,7 +134,6 @@ let /bad: (p: #{node = InductType} /Pinned()(0, 1)) -> #{node = InductType} /Fal
 
 /// `Fixed(i : Type 7) : Type 8` whose one case targets `Type 3`, and `read : (V : ${variable}, h : Fixed(V)) -> V` whose arm is at `Type 2`: a refinement of `V` to `Type 3` fits where `V`'s type holds it.
 const REFINED: &str = r#"
-#{absent = [/Fixed/mk]}
 induct /Fixed: (i: #{level = 7} Type) -> pub #{level = 8} Type
 | mk(): (#{level = 3} Type)
 end
@@ -155,7 +145,6 @@ let /read: (V: ${variable}, h: #{node = InductType} /Fixed()(V)) -> V =
 
 /// [`REFINED`] with `Fixed` at `Type 10`, `Universe.{u} : Type (u + 2) = Type (u + 1)`, and `read` declared at `u = 8`, its variable at `${variable}`.
 const REFINED_AT: &str = r#"
-#{absent = [/Fixed/mk]}
 induct /Fixed: (i: #{level = 10} Type) -> pub #{level = 11} Type
 | mk(): (#{level = 3} Type)
 end
@@ -300,31 +289,29 @@ let /cast: (p: #{node = InductType} /Pin()(0), h: #{node = InductType} /Held()) 
 ///
 /// No `.crs` file reaches it: `curios-module` refuses both spellings with ``` `mk` is already declared in this module ```, whether or not the representation is public. The elaborator is the stricter of the two, so the certifier's copy of the rule is unreachable from the corpus, and that is why this belongs here rather than in `curios/src/tests`.
 ///
+/// A tag names a constructor, which the family declares beside its former, so a repeat is a name declared twice, and the walk refuses the module whole for it before judging anything (`redeclarations`); `check_distinct_tags` holds an entry declared outside a walk to the same rule.
+///
 /// The control is the same shape at two *distinct* tags, both targeting `Two/a()`. It must stay accepted: ruling impossible cases out is what an indexed family's vacuous elimination is for, and a clause that refused every multi-constructor declaration, or every empty elimination over one, would shut this hole with a brick.
 #[test]
 fn a_family_that_declares_one_tag_twice_is_refused() {
-    let (absent, cases) = (
-        "/Held/mk, /Held/mk",
-        "| mk(): (#{node = Variant} /Two/a())\n| mk(): (#{node = Variant} /Two/a())",
-    );
-    let verdicts = text_verdicts(&fill!(SHADOWED, absent, cases));
+    let cases = "| mk(): (#{node = Variant} /Two/a())\n| mk(): (#{node = Variant} /Two/a())";
+    let verdicts = text_verdicts(&fill!(SHADOWED, cases));
 
-    assert!(
-        refuses(&verdicts, Some("Held"), |error| matches!(
-            error,
-            Error::RepeatedTag(_)
-        )),
-        "the certifier accepted a refutation of a constructor the declaration states: {verdicts:?}",
+    let mk = Global::Authored(Qualifier::from(["Held", "mk"]));
+    assert_eq!(
+        verdicts,
+        [Verdict {
+            name: Some(mk),
+            error: Error::Redeclared(mk),
+        }],
+        "the certifier accepted a refutation of a constructor the declaration states",
     );
 }
 
 #[test]
 fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
-    let (absent, cases) = (
-        "/Held/mk, /Held/mk2",
-        "| mk(): (#{node = Variant} /Two/a())\n| mk2(): (#{node = Variant} /Two/a())",
-    );
-    let verdicts = text_verdicts(&fill!(SHADOWED, absent, cases));
+    let cases = "| mk(): (#{node = Variant} /Two/a())\n| mk2(): (#{node = Variant} /Two/a())";
+    let verdicts = text_verdicts(&fill!(SHADOWED, cases));
 
     assert!(
         verdicts.is_empty(),
@@ -384,13 +371,11 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
     // `Two : Type 0`, so `a` and `b` genuinely clash and the elimination really is vacuous; `Held : (t : Two) -> Prop | mk() : (Two/a())`, a proposition, so the guard would be in play. The codomain is honest, and the ordering is what keeps this about the motive: `check` reaches `infer` before it can subsume, and `infer` runs `check_cases` — hence the motive clause — before the result is compared.
     let verdicts = text_verdicts(
         r#"
-#{absent = [/Two/a, /Two/b]}
 induct /Two: pub Type
 | a()
 | b()
 end
 
-#{absent = [/Held/mk]}
 induct /Held: (t: #{node = InductType} /Two()) -> pub Prop
 | mk(): (#{node = Variant} /Two/a())
 end
@@ -519,27 +504,20 @@ fn a_fold_motive_that_binds_its_scrutinee_is_accepted_at_an_inhabited_goal() {
 // The guard reads a family's declared sort and its constructors, never the instance eliminated: a two-constructor proposition is refused into `Nat` at either instance of a level it is irrelevant in, and a one-constructor one is admitted at either.
 #[test]
 fn an_irrelevant_level_changes_no_elimination() {
-    let (absent, cases, arms) = (
-        "/P/mk, /P/mk2",
+    let (cases, arms) = (
         "| mk(): (0)\n| mk2(): (0)",
         "| mk() => 7\n        | mk2() => 9",
     );
-    let (absent_one, case, arm) = ("/P/mk", "| mk(): (0)", "| mk() => 7");
+    let (case, arm) = ("| mk(): (0)", "| mk() => 7");
     for level in [0, 1] {
-        let two = text_verdicts(&fill!(LEVELLED, absent, cases, arms, level));
+        let two = text_verdicts(&fill!(LEVELLED, cases, arms, level));
         assert!(
             refuses(&two, Some("extract"), |error| *error
                 == Error::LargeElimination(global("P"))),
             "{two:?}"
         );
 
-        let one = text_verdicts(&fill!(
-            LEVELLED,
-            absent = absent_one,
-            cases = case,
-            arms = arm,
-            level
-        ));
+        let one = text_verdicts(&fill!(LEVELLED, cases = case, arms = arm, level));
         assert_eq!(one, Vec::new());
     }
 }
@@ -550,12 +528,12 @@ fn an_arm_is_not_excused_by_an_irrelevant_level() {
     let excused = |arms: &str| {
         text_verdicts(&fill!(
             r#"
-#{universe_context = {parameter_count = 1}, variances = [Irrelevant], absent = [/Wrap/wrap]}
+#{universe_context = {parameter_count = 1}, variances = [Irrelevant]}
 induct /Wrap(A: #{level = u} Type): pub #{level = u} Type
 | wrap(a: A)
 end
 
-#{universe_context = {parameter_count = 1}, variances = [Irrelevant], absent = [/Ixd/mk]}
+#{universe_context = {parameter_count = 1}, variances = [Irrelevant]}
 induct /Ixd(A: #{level = u} Type): (
     w: #{node = InductType, universes = {levels = [u]}} /Wrap(A)) -> pub #{level = u} Type
 | mk(a: A): (#{node = Variant, universes = {levels = [u]}} /Wrap/wrap(@A, a))

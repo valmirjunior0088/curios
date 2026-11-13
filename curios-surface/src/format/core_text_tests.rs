@@ -19,7 +19,6 @@ fn core_formatted(text: &str) -> String {
 #[test]
 fn every_form_of_core_text_is_laid_out_by_the_programs_printer() {
     let written = "\
-#{absent = [/Box/mk]}
 induct /Box(A: Type): pub Type
 | #{params = [@Prop]} mk(x: A)
 end
@@ -61,7 +60,6 @@ fn a_decorators_operand_keeps_the_parentheses_that_bound_it() {
 fn a_comment_keeps_its_place_in_core_text() {
     let written = "\
 -- Before the first item.
-#{absent = [/Box/mk]}
 induct /Box(A: Type): pub Type
 | #{params = [@Prop]} mk(x: A) -- riding a case
 end
@@ -74,7 +72,6 @@ let /p : Prop = /q; -- riding a definition
         core_formatted(written),
         "\
 -- Before the first item.
-#{absent = [/Box/mk]}
 induct /Box(A: Type): pub Type
 | #{params = [@Prop]} mk(x: A) -- riding a case
 end

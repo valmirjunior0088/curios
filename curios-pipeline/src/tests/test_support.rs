@@ -668,7 +668,7 @@ pub fn keeps_lowered(baseline: &Unit, unit: &Unit, name: &str) -> bool {
         match unit
             .text()
             .expect("a program's unit holds its lowering")
-            .lowered(declared)
+            .lowered(&declared)
         {
             Some(Item::Let(definition)) => definition.body.clone(),
             _ => panic!("{name} is a let item of the unit"),

@@ -29,9 +29,9 @@ use {
     curios_core::{
         Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Definitions,
         Entrypoint, Free, FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Items, Level,
-        Minted, Names, Nominal, Order, Places, Quality, RecItem, Revised, Sort, StructDecl,
-        Subterm, Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
-        Universes, Visit, stamp_declaration_instance,
+        Minted, Names, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm,
+        Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, Universes,
+        Visit, stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -334,7 +334,7 @@ fn elaborate_struct(
         return Ok(());
     };
 
-    // Obligation (T)'s early net, on the one written type position that rides on no definition's type. Every other declaration position reaches it through some `Definition`: a parameter through the type former's own type, an `induct` payload through its constructor wrapper's, a `concept` method through the method wrapper's. A field is projected rather than constructed, so no wrapper names it, so without this the field type below would be elaborated with nothing having looked at it — a productive `Shape(inf)` would unfold without end.
+    // Obligation (T)'s early net, on the one written type position that rides on no definition's type and that elaboration forces: a field, a concept's method among them as its record's. A parameter rides on the type former's own type, and a family's payload is typed without being forced, which leaves it to the gate over the registry entry (`totality::reach`). Without this the field type below would be elaborated with nothing having looked at it — a productive `Shape(inf)` would unfold without end.
     //
     // Read off the *lowered* telescope, before `check_telescope_entries` touches it, which is the whole point of an early net. Entries stay closed under the binders before them; only globals matter here, so nothing needs opening.
     let mut written = &struct_decl.arity;
@@ -528,8 +528,6 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
 
 /// Type-check a single non-recursive top-level definition, define it among the declarations, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item, Vectors), Error> {
-    let made = generated_constructor(context, def);
-    let def = made.as_ref().unwrap_or(def);
     let name = def.name;
     let outer_site = context.set_checked_site(def.name);
     check_written_type_totality(context, &def.type_, ErasedSite::TypeOf(def.name))?;
@@ -594,8 +592,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
         context.drain_parked()?;
     }
 
-    let (universe_context, type_, body) =
-        finalize_definition(context, &def.name, &def.kind, type_, body)?;
+    let (universe_context, type_, body) = finalize_definition(context, &def.name, type_, body)?;
     // What the witness recorded while its own name was its local names it by its declaration from here on, as what a group stores outside itself does.
     if let Some(own) = own {
         let instance = universe_context.identity_instance();
@@ -672,18 +669,6 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
     // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
     record_definition_totality(context, &definition, Totality::Total)?;
     Ok((Item::Let(Box::new(definition)), vectors))
-}
-
-/// A value constructor as its family's entry spells it, elaboration having left the entry as it is stored: the one spelling of a constructor from its declaration ([`Definition::constructors`]), which a reader of Core text makes it by too. Elaborating the lowering's own copy instead would read the family's parameters at levels of their own, apart from the ones the entry's case reads them at. `None` for any other definition.
-fn generated_constructor(context: &Context, def: &Definition) -> Option<Definition> {
-    let DefinitionKind::InductiveConstructor { owner, .. } = &def.kind else {
-        return None;
-    };
-    let declaration = context.induct_decl(&Global::Authored(*owner))?;
-
-    Definition::constructors(*owner, def.island, declaration)
-        .into_iter()
-        .find(|constructor| constructor.name == def.name)
 }
 
 /// Type-check a flat top-level `rec` item and return its rebuilt structural group. The group is opened at one fresh local a member, which the members name one another by while they elaborate ([`Context::within_group`]): the group's own binder, over which the output closes them into one [`RecItem`], publishing each export as its folded structural member. A term the group stores outside itself — a registry entry, a solution — names a member by its declaration instead, at the group's own instance.
@@ -1271,11 +1256,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     };
     context.set_island(item_module);
 
-    let declared = item
-        .declared_names()
-        .into_iter()
-        .copied()
-        .collect::<Vec<_>>();
+    let declared = item.declared_names();
     let owner = declared.first();
     // One span per top-level item, aggregated per item rather than across all of them: the fixed prelude is over a thousand declarations whose costs differ by three orders of magnitude, and a single averaged row cannot say which one a pass is actually spending on.
     curios_profile::profile!("declaration", group = %item.describe());
@@ -1308,10 +1289,10 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
             context.truncate_checked(recorded);
             // A type former, a concept and a witness are read by more than their types — a registry entry, a table entry — so one that holds a goal is taken out, and what reads it is withheld.
             let plain = item.declared_names().into_iter().all(|name| {
-                context.induct_decl(name).is_none()
-                    && context.struct_decl(name).is_none()
-                    && context.concept(name).is_none()
-                    && !context.is_witness_declaration(name)
+                context.induct_decl(&name).is_none()
+                    && context.struct_decl(&name).is_none()
+                    && context.concept(&name).is_none()
+                    && !context.is_witness_declaration(&name)
             });
             let published = plain && context.publish_held(&elaborated).is_ok();
 
@@ -1379,7 +1360,7 @@ fn settle_published(
 
     context.restore_budget();
     let alone = Definitions {
-        items: vec![carrying(context, published.item.clone())].into(),
+        items: vec![context.carrying(published.item.clone())].into(),
     };
     // One cache across both: they are seeded from the same recorded entries, so a cache each zonks every distinct recorded type twice.
     let mut zonked = Zonked::default();
@@ -1408,22 +1389,8 @@ enum Elaborated {
 /// `item` as a module of its own, with the registry entries its names declare as the context holds them: what its goals are found in.
 fn alone(context: &Context, item: &Item) -> Definitions {
     Definitions {
-        items: vec![carrying(context, item.clone())].into(),
+        items: vec![context.carrying(item.clone())].into(),
     }
-}
-
-/// `item` with each of its formers carrying the registry entries the context holds under its name: what a finished item is read and assembled as. An entry is elaborated in the context's tables, beside its former and after it, so the one the lowering wrote into the former is replaced here, where the item leaves the elaboration that made it; a former whose name the context holds nothing under keeps the one it has.
-fn carrying(context: &Context, item: Item) -> Item {
-    item.with_nominals(|name, lowered| {
-        Some(match lowered {
-            Nominal::Inductive(_) => Nominal::Inductive(context.induct_decl(name)?.clone()),
-            Nominal::Struct(_) => Nominal::Struct(context.struct_decl(name)?.clone()),
-            Nominal::Concept { .. } => Nominal::Concept {
-                concept: context.concept(name)?.clone(),
-                record: context.struct_decl(name)?.clone(),
-            },
-        })
-    })
 }
 
 /// Each witness declared among `items`, under the concept and the key its name states ([`WitnessId`](curios_core::WitnessId)), at the place `declarations` gives its name. The lowering read both off how the signature is spelled, over every item of the unit, so a whole compile and a recompile hold one key.
@@ -1540,7 +1507,7 @@ fn elaborate_definitions_suffix<'s>(
     for item in &held_items {
         for (name, declared) in item.declared_names().into_iter().zip(item.declared()) {
             if declared == curios_core::Declared::Witness {
-                context.mark_witness_declaration(name);
+                context.mark_witness_declaration(&name);
             }
         }
     }
@@ -1636,7 +1603,7 @@ fn elaborate_definitions_suffix<'s>(
     // Each former leaves with the entry the context rebuilt for it: elaborated telescopes, zonked, with the vectors its settling wrote.
     let items = items
         .into_iter()
-        .map(|item| carrying(context, item))
+        .map(|item| context.carrying(item))
         .collect::<Vec<_>>();
     let definitions = Definitions {
         items: items.into(),
@@ -2182,7 +2149,7 @@ impl Recompile<'_> {
                 .iter()
                 .filter(|item| {
                     item.declared_names().first().is_some_and(|name| {
-                        !made_names.contains(*name) && !self.dropped.contains(*name)
+                        !made_names.contains(name) && !self.dropped.contains(name)
                     })
                 })
                 .cloned(),

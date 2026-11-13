@@ -88,7 +88,7 @@ impl<'u> Items<'u> {
             .zip(self.items.declared(place))
             .enumerate()
             .filter(|(_, (_, declared))| is_reportable(*declared))
-            .map(|(index, (name, _))| (index, *name))
+            .map(|(index, (name, _))| (index, name))
             .collect()
     }
 }
@@ -292,7 +292,7 @@ impl Reachability {
         let root = |place: usize, state: &Self| {
             now.rooted(place)
                 || now.items.names(place).iter().any(|name| {
-                    state.entry.contains(*name)
+                    state.entry.contains(name)
                         || name.qualifier().is_some_and(|path| {
                             audiences(path)
                                 .iter()
@@ -354,7 +354,7 @@ impl Reachability {
                 return (true, vec![start]);
             }
             for name in items.items.names(at) {
-                for reader in self.readers.get(name).into_iter().flatten() {
+                for reader in self.readers.get(&name).into_iter().flatten() {
                     if decided.get(reader) == Some(&false) || !seen.insert(*reader) {
                         continue;
                     }

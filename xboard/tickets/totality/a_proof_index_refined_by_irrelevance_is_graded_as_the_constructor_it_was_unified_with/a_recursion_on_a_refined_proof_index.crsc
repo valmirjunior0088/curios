@@ -1,11 +1,9 @@
 -- The arm's inversion refines `w0` to `Wit/w(v)`, so the size context reads `v` below `w0`; but at a proposition `Wit/w(v)` is every proof of `Wit`, `q` is at `Q(v)` by irrelevance, and the call hands `f` the very `q` it matched, whose payload is `v` again.
-#{absent = [/Wit/base, /Wit/w]}
 induct /Wit: pub Prop
 | base()
 | w(inner: #{node = InductType} /Wit())
 end
 
-#{absent = [/Q/c]}
 induct /Q: (i: #{node = InductType} /Wit()) -> pub Prop
 | c(v: #{node = InductType} /Wit()): (#{node = Variant} /Wit/w(v))
 end

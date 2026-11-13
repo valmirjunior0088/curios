@@ -334,7 +334,7 @@ fn a_forged_total_verdict_mounted_in_scope_admits_a_looping_proof() {
                 .flat_map(Item::declared_names)
                 .map(|name| {
                     (
-                        *name,
+                        name,
                         Certified {
                             totality,
                             applications: Applications::default(),

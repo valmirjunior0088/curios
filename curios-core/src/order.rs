@@ -120,9 +120,9 @@ impl Order {
         let mut made_owner = BTreeMap::<Global, Global>::new();
         for (index, item) in made.iter().enumerate() {
             let names = item.declared_names();
-            let first = **names.first()?;
+            let first = *names.first()?;
             made_first.insert(first, index);
-            made_owner.extend(names.into_iter().map(|name| (*name, first)));
+            made_owner.extend(names.into_iter().map(|name| (name, first)));
         }
         // The baseline's items taken out, by their first names: each declaring a name made or dropped.
         let mut taken = BTreeMap::<Global, usize>::new();
@@ -134,7 +134,7 @@ impl Order {
         if taken.values().any(|place| {
             held.names(*place)
                 .into_iter()
-                .any(|name| !made_owner.contains_key(name) && !dropped.contains(name))
+                .any(|name| !made_owner.contains_key(&name) && !dropped.contains(&name))
         }) {
             return None;
         }
@@ -150,10 +150,10 @@ impl Order {
         };
         let names_of = |first: &Global| -> Vec<Global> {
             match made_first.get(first) {
-                Some(index) => made[*index].declared_names().into_iter().copied().collect(),
+                Some(index) => made[*index].declared_names(),
                 None => places
                     .place(first)
-                    .map(|place| held.names(place.item()).into_iter().copied().collect())
+                    .map(|place| held.names(place.item()))
                     .unwrap_or_default(),
             }
         };
@@ -182,7 +182,7 @@ impl Order {
             for name in held.names(*place) {
                 asked.extend(
                     readers
-                        .get(name)
+                        .get(&name)
                         .into_iter()
                         .flat_map(|reading| reading.iter()),
                 );
@@ -198,7 +198,7 @@ impl Order {
             let names = baseline
                 .reaches(item)
                 .into_iter()
-                .filter(|name| holds(name) && !own.contains(&name))
+                .filter(|name| holds(name) && !own.contains(name))
                 .collect::<Vec<_>>();
             read(&mut readers, first, &names);
             items.insert(*first, Rc::new(Reach { depth: 0, names }));
@@ -299,13 +299,13 @@ impl Order {
         if let Some(placing) = &mut placing {
             for place in taken.values() {
                 for name in held.names(*place) {
-                    placing.forget(name);
+                    placing.forget(&name);
                 }
             }
             for first in moved {
                 if let Some(place) = places.place(first) {
                     for name in held.names(place.item()) {
-                        placing.forget(name);
+                        placing.forget(&name);
                     }
                 }
             }
@@ -521,41 +521,6 @@ impl Definitions {
         self.in_order().0
     }
 
-    /// `written` in the order it stands, with each of `implied` put where the order's key — its depth, then its first name — places it among the written items: ahead of the first written item whose key is past its own, and after every one where none is. Over written items that stand in the order this is the order ([`Definitions::ordered`]); over others it keeps theirs, and places the implied ones by the same key.
-    ///
-    /// **Where a declaration's implied items stand**, for a reader of Core text, which writes an item its declaration implies only where it stands elsewhere, and its reader, which puts the ones it is not given here.
-    pub fn placed_among(written: Vec<Item>, implied: Vec<Item>) -> Vec<Item> {
-        let every = written.iter().chain(&implied).cloned().collect::<Vec<_>>();
-        let (_, order) = Definitions {
-            items: every.into(),
-        }
-        .in_order();
-        let key = |item: &Item| {
-            item.declared_names().first().map(|name| {
-                let depth = order.reach(name).map_or(0, |reach| reach.depth);
-                (depth, **name)
-            })
-        };
-        let mut implied = implied
-            .into_iter()
-            .map(|item| (key(&item), item))
-            .collect::<Vec<_>>();
-        implied.sort_by_key(|(key, _)| *key);
-        let mut implied = implied.into_iter().peekable();
-
-        let mut placed = Vec::with_capacity(written.len() + implied.len());
-        for item in written {
-            let here = key(&item);
-            while let Some((_, next)) = implied.next_if(|(key, _)| *key < here) {
-                placed.push(next);
-            }
-            placed.push(item);
-        }
-        placed.extend(implied.map(|(_, item)| item));
-
-        placed
-    }
-
     /// [`Definitions::ordered`], with the order it puts the items in: what each reaches and its depth.
     pub fn in_order(mut self) -> (Self, Order) {
         let items = mem::take(&mut self.items).into_iter().collect::<Vec<_>>();
@@ -566,7 +531,7 @@ impl Definitions {
             .flat_map(|(index, item)| {
                 item.declared_names()
                     .into_iter()
-                    .map(move |name| (*name, index))
+                    .map(move |name| (name, index))
             })
             .collect::<BTreeMap<_, _>>();
         let reached = items
@@ -593,12 +558,7 @@ impl Definitions {
         }
 
         // By first name, then by place for items that declare none or share one, which no stored unit holds.
-        let rank = |index: usize| {
-            (
-                items[index].declared_names().first().map(|name| **name),
-                index,
-            )
-        };
+        let rank = |index: usize| (items[index].declared_names().first().copied(), index);
         // Each item's depth, found once everything it reaches has one: where nothing is ready with items left, a cycle is broken at the least-named of them.
         let mut depth = vec![None::<u32>; count];
         let mut left = (0..count).map(rank).collect::<BTreeSet<_>>();

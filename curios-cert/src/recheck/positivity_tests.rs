@@ -4,7 +4,6 @@ use {super::test_support::*, crate::*, curios_common::fill};
 
 /// `induct Bad : (n: Nat) -> Type | c(fs: List((p: {m: Nat, x: Bad(m), h: Holds(0 < m)}) -> False)) : Bad(len(fs)) end`, closed with `w(1, c([w]), qed)`, where `w` reads the head of the list its argument was built from, the head there because the index says so: Curry's paradox through a list.
 const CURRY_THROUGH_A_LIST: &str = r#"
-#{absent = [/Bad/c]}
 induct /Bad: (n: #NatType) -> pub Type
 | c(
     fs: #ListType(

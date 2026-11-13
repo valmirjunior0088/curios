@@ -80,7 +80,7 @@ pub fn revise(
             continue;
         }
         let Some(first) = step.kept else {
-            anew.extend(made.iter().flat_map(|item| item.declared_names()).copied());
+            anew.extend(made.iter().flat_map(|item| item.declared_names()));
             continue;
         };
         for (index, (place, item)) in run(earlier, place_of(first), made.len())
@@ -91,12 +91,8 @@ pub fn revise(
             let now = item.declared_names();
             let then = earlier.names(place);
             if now != then {
-                renamed.extend(
-                    then.iter()
-                        .map(|name| **name)
-                        .zip(now.iter().map(|name| **name)),
-                );
-                anew.extend(now.into_iter().copied());
+                renamed.extend(then.iter().copied().zip(now.iter().copied()));
+                anew.extend(now);
                 named.insert(step.from + index);
             }
         }
@@ -307,10 +303,12 @@ impl Bodies {
     ) -> ForeignStore {
         let mut rows = ForeignStore::new();
         for (first, ()) in self.foreign.iter() {
-            let named = usize::try_from(first)
-                .ok()
-                .and_then(|at| items.names(at).first().and_then(|name| name.qualifier()))
-                .map(|path| path.join());
+            let named = usize::try_from(first).ok().and_then(|at| {
+                items
+                    .names(at)
+                    .first()
+                    .and_then(|name| name.qualifier().map(|path| path.join()))
+            });
             let row = named.and_then(|name| made.get(&name).or_else(|| kept.get(&name)));
             if let Some(row) = row {
                 rows.register((**row).clone());
@@ -611,7 +609,7 @@ fn run(items: &curios_core::Items, first: usize, count: usize) -> Vec<usize> {
 
 /// The names the item at `place` declares.
 fn names_at(items: &curios_core::Items, place: usize) -> Vec<curios_core::Global> {
-    items.names(place).into_iter().copied().collect()
+    items.names(place)
 }
 
 /// A place as a record's key.

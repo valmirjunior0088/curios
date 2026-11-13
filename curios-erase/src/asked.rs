@@ -13,7 +13,7 @@ mod by;
 pub use by::{AskedBy, Parts};
 
 use {
-    crate::{ErasedUnit, declared},
+    crate::{ErasedUnit, constructor},
     curios_common::{Digest, Facet, InKeyOrder, Object, Records, Sorted, candidate_name, digest},
     std::{
         cell::OnceCell,
@@ -31,7 +31,7 @@ pub enum Part {
     Signature,
     /// What it unfolds to, as the certifier reads it.
     Body,
-    /// What it is declared as and what it was generated from, read off its item.
+    /// Whether it is a constructor and of which family, read off where it is held.
     Kind,
     /// How it is bound in the erased forms of the item declaring it, with the row it declares there.
     Binding,
@@ -261,7 +261,7 @@ impl Records for AskedItems {
     }
 }
 
-/// The digest of `part` of `name`, a declaration of the unit `module` is, held where `places` says and concluded as `certification` records: a signature or a body by the certifier's own digest ([`curios_cert::part_digest`]), and a kind by erasure's, what the definition is declared as and what it was generated from, nothing of an entry. `Ok(None)` where the unit declares no such part, a binding and forms whole being read off its erased forms instead.
+/// The digest of `part` of `name`, a declaration of the unit `module` is, held where `places` says and concluded as `certification` records: a signature or a body by the certifier's own digest ([`curios_cert::part_digest`]), and a kind by erasure's, that a constructor is one and of which family, nothing of an entry. `Ok(None)` where the unit declares no such part, a binding and forms whole being read off its erased forms instead.
 pub fn declared_digest(
     definitions: &curios_core::Definitions,
     places: &curios_core::Places,
@@ -273,7 +273,7 @@ pub fn declared_digest(
             curios_cert::part_digest(definitions, places, certification, &name, false)
         }
         Part::Body => curios_cert::part_digest(definitions, places, certification, &name, true),
-        Part::Kind => declared(definitions, places, &name)
+        Part::Kind => constructor(definitions, places, &name)
             .map(|definition| {
                 let kind = (definition.kind.declared(), definition.kind.generated_from());
 

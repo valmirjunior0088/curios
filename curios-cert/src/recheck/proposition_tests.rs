@@ -11,12 +11,10 @@ use {
 
 /// The derivation a `Prop` carrying a type made possible, as a whole module: `Box : Prop 1 | mk(a : Type 0)`, `unbox` taking a `Box` apart into its type, and `forged : False` cast along the equality of any two types `unbox` carries `mk(A) = mk(B)` to.
 const TYPE_CARRYING_PROPOSITION: &str = r#"
-#{absent = [/Box/mk]}
 induct /Box: pub #{level = 1} Prop
 | mk(a: Type)
 end
 
-#{absent = [/Eq/refl]}
 induct /Eq(A: #{level = 1} Type): (x: A, y: A) -> pub #{level = 1} Prop
 | refl(z: A): (z, z)
 end
@@ -68,7 +66,6 @@ fn a_derivation_through_a_type_carrying_proposition_is_refused() {
 
 /// `Held : Prop | qed(u : Io({}))`, the host row `exit` that does not return, and `bad : Held = qed(${carried})`.
 const A_PROOF_CARRYING: &str = r#"
-#{absent = [/Held/qed]}
 induct /Held: pub Prop
 | qed(u: #IoType({}))
 end
@@ -148,7 +145,6 @@ fn a_proof_carrying_the_unit_value_is_accepted() {
 
 /// `Wrap(b : Bool) : Prop` holding one field whose type is a `match` on `b` that states each arm a `Prop` and computes `Nat` in both, and the derivation of `False` that transport along `refl` at `Wrap(true)` makes from it.
 const A_COMPUTED_RELEVANT_FIELD: &str = r#"
-#{absent = [/Eq/refl]}
 induct /Eq(A: #{level = 1} Type): (x: A, y: A) -> pub #{level = 1} Prop
 | refl(z: A): (z, z)
 end
@@ -156,7 +152,6 @@ end
 induct /False: pub Prop
 end
 
-#{absent = [/Held/yes]}
 induct /Held: (n: #NatType) -> pub Type
 | yes(): (0)
 end
@@ -213,7 +208,6 @@ fn a_proposition_may_not_carry_a_computed_relevant_field() {
 
 /// `Wrap(b : Bool) : Prop` holding one field whose type is a `match` on `b` computing `True` in both arms, and one value of it at `true`.
 const A_COMPUTED_PROOF: &str = r#"
-#{absent = [/True/qed]}
 induct /True: pub Prop
 | qed()
 end
@@ -237,7 +231,6 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
 
 /// `Vouched : Prop | qed(u : {})`, the group of one member `lemma : Vouched = qed(())` marked no proof, and `corollary : Vouched = lemma`.
 const A_PROOF_GROUP: &str = r#"
-#{absent = [/Vouched/qed]}
 induct /Vouched: pub Prop
 | qed(u: {})
 end
@@ -738,7 +731,6 @@ fn a_group_that_does_not_descend_is_enclosed_by_every_proof_or_type_naming_a_mem
 
 /// `h` names the loop `f`, a member of its own group, in a parameter's type; `${parameter}` is that type, and the control's names no member.
 const A_SIGNATURE_NAMING_A_LOOP: &str = r#"
-#{absent = [/E/refl]}
 induct /E(a: #NatType): (#NatType) -> pub Prop
 | refl(): (a)
 end

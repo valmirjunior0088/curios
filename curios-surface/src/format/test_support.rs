@@ -65,7 +65,6 @@ pub fn collect_sources(directory: &Path, sources: &mut Vec<PathBuf>) {
 
 /// Every form Core text writes beyond a program's, in the layout the program's printer gives it: a decorator beside its operand where the two fit their line and above it otherwise, a declaration under its absolute name, a group of any kinds joined by `and`, items a blank line apart, and the entry's type on the line beneath it.
 pub const EVERY_FORM: &str = "\
-#{absent = [/Box/mk]}
 induct /Box(A: Type): pub Type
 | #{params = [@Prop]} mk(x: A)
 end

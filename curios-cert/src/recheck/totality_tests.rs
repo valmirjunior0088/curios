@@ -10,7 +10,6 @@ use {
 
 /// `Vouched`, a proposition of one case holding a unit, which is not defined.
 const VOUCHED: &str = r#"
-#{absent = [/Vouched/qed]}
 induct /Vouched: pub Prop
 | qed(u: {})
 end

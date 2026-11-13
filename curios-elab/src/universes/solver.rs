@@ -1244,7 +1244,7 @@ impl UniverseSolver {
     ///
     /// Deciding it at every insertion — push, run a full consistency check, pop on refusal — would pay an incremental cycle detection over the difference graph, one relaxation pass per constraint, at each of the prelude's many insertions, and nothing would buy it. The rendered diagnostic is `lower ≤ upper` plus a step count, both read off the *graph* by `inconsistency_from_path`, so a check taken later names the same cycle; the declaring item comes from `Error::in_declaration` at the item boundary, not from the insertion site; and every caller outside this module propagates the refusal with `?` rather than recovering from it, so no decision depended on learning it early.
     ///
-    /// What decides consistency is what needs a *verdict* rather than a diagnostic: the speculative commit in `close_stalled_components`, and the declaration-boundary checks in `finalize`, `finalize_at_instance`, and `solve_flexible_in`. An inconsistent set can therefore exist between an insertion and the next of those, which is the price — the boundary refuses the declaration either way, and `curios-cert` decides every context it assumes independently.
+    /// What decides consistency is what needs a *verdict* rather than a diagnostic: the speculative commit in `close_stalled_components`, and the declaration-boundary checks in `finalize` and `solve_flexible_in`. An inconsistent set can therefore exist between an insertion and the next of those, which is the price — the boundary refuses the declaration either way, and `curios-cert` decides every context it assumes independently.
     pub fn add_constraint(
         &mut self,
         mut constraint: UniverseConstraint,
@@ -2062,54 +2062,6 @@ impl UniverseSolver {
         Ok(context)
     }
 
-    /// Issue a declaration into an *inherited* context, binding `instance` to that context's parameters by position.
-    ///
-    /// A value constructor is not independently polymorphic. It is issued in its family's context, and the levels of the family it constructs are that context's parameters in declaration order, so solving position `i` to `Param(i)` is the identity substitution. Every level the instance does not name directly is related to one that it does by the constraints unification already recorded, and minimizing from those lower bounds settles it at the parameter that forced it.
-    ///
-    /// This is deliberately not [`Self::finalize`]: finalization mints parameters for the metas it finds in ascending meta-id order, and a constructor's own binder metas are minted before its instance metas, so that order need not agree with the family's.
-    pub fn finalize_at_instance(
-        &mut self,
-        metas: impl IntoIterator<Item = UniverseMetaId>,
-        instance: &Universes,
-        parameter_count: usize,
-    ) -> Result<(), UniverseError> {
-        curios_profile::profile!("universe::finalize_at_instance");
-        // The sorts the instance states are the owner's parameters as its levels are.
-        self.pin_qualities(&instance.qualities)?;
-        let instance = &instance.levels;
-        // The instance's levels are the owner's parameters, each its own: a join that made two of them one would leave the second no parameter to be.
-        let held = self.representatives(instance.iter().flat_map(Level::metas));
-        self.join_weak_equations(&held);
-        if instance.len() != parameter_count {
-            return Err(UniverseError::InstanceArity {
-                expected: parameter_count,
-                got: instance.len(),
-            });
-        }
-        let relevant = self.connected_metas(metas);
-        for (index, level) in instance.iter().enumerate() {
-            let parameter = Level::param(UniverseParam(index));
-            let level = self.zonk(level)?;
-            if level == parameter {
-                continue;
-            }
-            let mut atoms = level.atoms();
-            match (level.constant_part(), atoms.next(), atoms.next()) {
-                (0, Some((LevelHead::Meta(meta), 0)), None) => self.assign(meta, parameter)?,
-                // An argument that is neither the parameter itself nor an open meta was already forced elsewhere, and nothing in the declaration can denote the concept's parameter in its place.
-                _ => return Err(UniverseError::EscapingLevel),
-            }
-        }
-        let open = self.relevant_open_metas(&relevant).collect::<BTreeSet<_>>();
-        self.minimize(&open, &relevant)?;
-        if self.relevant_open_metas(&relevant).next().is_some() {
-            return Err(UniverseError::EscapingLevel);
-        }
-        self.check_consistent()?;
-        self.discard_constraints(&relevant);
-        Ok(())
-    }
-
     /// [`Self::pin_instance`], then every level of `minted` the pin left open minimized from its lower bounds: what a goal resolved after its consuming declaration finalized is closed by.
     ///
     /// The goal fixes only the levels its own application mentions. A witness scheme may carry more — the levels its *body* needs, which no goal could determine — so `minted` names the whole instance. Minimizing what is left is how [`Self::finalize`] treats a level reachable only through a body, applied here because the declaration that would have done it has already closed. A goal resolved while that declaration is open is pinned alone, and its finalization settles the rest with everything else the declaration said.
@@ -2169,16 +2121,6 @@ impl UniverseSolver {
             self.assign(meta, target)?;
         }
         Ok(())
-    }
-
-    fn relevant_open_metas<'a>(
-        &'a self,
-        relevant: &'a BTreeSet<UniverseMetaId>,
-    ) -> impl Iterator<Item = UniverseMetaId> + 'a {
-        relevant
-            .iter()
-            .copied()
-            .filter(|meta| self.solution(*meta).is_none())
     }
 
     /// Close a non-reusable result (the module entrypoint) at its least universe solution instead of introducing a scheme.

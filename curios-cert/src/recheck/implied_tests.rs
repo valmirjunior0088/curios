@@ -1,4 +1,4 @@
-//! What a declaration's form implies, as the certifier takes it, written as Core text and put with nothing in scope: a family's former and constructors are definitions it checks as any other, under names declared once, typed by what the module holds under each name and never by what the form would have made, and a concept's method is no definition at all.
+//! What a declaration's form implies, as the certifier takes it, written as Core text and put with nothing in scope: a family's former is a definition it checks as any other, typed by what the module holds under its name and never by what the form would have made; its constructors are names the form declares, made as its entry makes them, so no definition stands under one; and a concept's method is no definition at all.
 
 use {
     super::test_support::*,
@@ -48,7 +48,7 @@ fn a_method_named_as_a_declaration_names_nothing() {
     );
 }
 
-/// A family's one case, and a definition the text writes under the name its constructor would take, stating that it builds `False`: it stands in the implied constructor's place, its body the case's injection.
+/// A family's one case, and a definition the text writes under its constructor's name, stating that it builds `False`, its body the case's injection.
 const CONSTRUCTOR_STATED_AT_FALSE: &str = r#"
 induct /T: pub Prop
 | mk()
@@ -59,9 +59,9 @@ let /T/mk : /std/Bool/False =
 /T/mk
 "#;
 
-/// A definition under a constructor's name is checked as any definition is, and refused at the type it states: the closing term, which reads it at that type, is refused for nothing of its own, and the module for the definition alone.
+/// A definition under a constructor's name declares the name a second time, the family's form declaring it already, and the walk refuses the module whole for it before judging anything.
 #[test]
-fn a_definition_under_a_constructors_name_is_checked_at_the_type_it_states() {
+fn a_definition_under_a_constructors_name_is_a_second_declaration_of_it() {
     let verdicts = core_text_verdicts(&fill!(
         "${PROPOSITIONS}\n${CONSTRUCTOR_STATED_AT_FALSE}",
         PROPOSITIONS,
@@ -69,12 +69,12 @@ fn a_definition_under_a_constructors_name_is_checked_at_the_type_it_states() {
     ));
     let constructor = Global::Authored(Qualifier::from(["T", "mk"]));
 
-    assert!(
-        matches!(
-            &verdicts[..],
-            [Verdict { name: Some(name), error: Error::Mismatch { .. } }] if *name == constructor
-        ),
-        "{verdicts:?}"
+    assert_eq!(
+        verdicts,
+        [Verdict {
+            name: Some(constructor),
+            error: Error::Redeclared(constructor),
+        }]
     );
 }
 

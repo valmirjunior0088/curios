@@ -9,7 +9,6 @@ use {
 
 /// `Box`'s case states its family's parameter as a proposition where the family declares a type, so read off the case as written its payload is a proof and `mk(true)` is `mk(false)`: `cast` carries `Code`'s `True` at the one to its `False` at the other, and the term the module closes with is `False`.
 const A_CASE_STATING_ITS_PARAMETER_AS_A_PROPOSITION: &str = r#"
-#{absent = [/Box/mk]}
 induct /Box(A: Type): pub Type
 | #{params = [@Prop]} mk(x: A)
 end
@@ -83,7 +82,6 @@ fn a_case_whose_parameter_is_stated_a_proposition_is_refused_where_its_family_is
 
 /// `Pair`'s case states one of its family's two parameters and names the other in its payload by the head's word, so its telescope binds `A` and `C` and leaves `B` a local nothing in it binds.
 const A_CASE_NAMING_A_PARAMETER_IT_DOES_NOT_STATE: &str = r#"
-#{absent = [/Pair/mk]}
 induct /Pair(A: Type, B: Type): pub Type
 | #{params = [@Type]} mk(C: Type, y: B)
 end
@@ -110,7 +108,6 @@ fn a_case_that_names_a_parameter_it_does_not_state_is_refused_at_the_boundary() 
 
 /// `A` and `B` are one group, each with a parameter named `n`, a `Nat` in one and a `Bool` in the other. `mkA`'s payload states `n == 1` of its own family's `n`, so an `A(0)` holds a `Holds(0 == 1)`; read at the sibling's parameter, or at another instance's, the `qed` it is built with would fit, and the match would hand it on at `False`.
 const A_CASE_OF_A_FAMILY_IN_A_GROUP: &str = r#"
-#{absent = [/A/mkA]}
 induct /A(n: #NatType): pub Type
 | mkA(
     h: /std/Bool/Holds(#NatEql(n, 1)),
@@ -119,7 +116,6 @@ induct /A(n: #NatType): pub Type
         /B(true)
 )
 end
-#{absent = [/B/mkB, /B/base]}
 and induct /B(n: #BoolType): pub Type
 | mkB(
     h: /std/Bool/Holds(n),
@@ -171,7 +167,7 @@ fn a_case_reads_its_own_familys_parameter_in_a_group() {
 
 /// `Lift`'s case holds a `Type u` its index pins, so its level is one two instances are told apart by. The match on `p : Lift.{0}(X)` states `Lift.{<level>}(X)`, the instance its sole arm's payload is read off where it reduces: at `1`, a type of `Type 0` read as one of `Type 1`.
 const A_MATCH_STATING_AN_INSTANCE_OF_LIFT: &str = r#"
-#{universe_context = {parameter_count = 1}, absent = [/Lift/mk]}
+#{universe_context = {parameter_count = 1}}
 induct /Lift: (
     T: #{level = u} Type
 ) -> pub #{level = u + 1} Prop
@@ -226,12 +222,10 @@ fn a_match_stating_its_scrutinee_at_another_level_is_refused() {
 
 /// `T` is indexed by a proposition, so `T(Two/a())` and `T(Two/b())` are one type and `tb()` is a `T(Two/a())`. The match on it writes `ta`'s arm alone: excused as clashing at the index, `tb`'s absence would leave a closed match whose sole arm names no payload, which reduction takes without reading its scrutinee, so `tb()` would take `ta`'s arm and its `qed` would stand at `Code(Two/a(), tb())`, which is `False`.
 const AN_ARM_OMITTED_AT_A_PROPOSITION_VALUED_INDEX: &str = r#"
-#{absent = [/Two/a, /Two/b]}
 induct /Two: pub Prop
 | a()
 | b()
 end
-#{absent = [/T/ta, /T/tb]}
 induct /T: (
     x:
         #{node = InductType}
@@ -309,12 +303,10 @@ fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
 
 /// An arm whose scrutinee already is a value of another case is not typed, since reduction never takes it. `prop`'s scrutinee is `Two/a()`, a proposition's, whose cases irrelevance makes one value, and its `b` arm holds `true`, no proof of `True`; `data`'s is `Pick/l()`, a relevant family's, and its `r` arm holds the same.
 const ARMS_AT_ANOTHER_CASE: &str = r#"
-#{absent = [/Two/a, /Two/b]}
 induct /Two: pub Prop
 | a()
 | b()
 end
-#{absent = [/Pick/l, /Pick/r]}
 induct /Pick: pub Type
 | l()
 | r()
@@ -374,7 +366,6 @@ fn an_arm_at_another_case_of_a_proposition_is_typed() {
 
 /// `Code`'s case targets `Type`, a term of `Type 1`, and `c2`'s index is `Y`, a `let` whose value is `X : ${sort}`: the index reads by value as `X`, which inversion refines to `Type` where that fits `X`'s own sort, and the arm's `(A: X) => A` inhabits `(a: Type) -> Type` only there.
 const A_REFINEMENT_THROUGH_A_LET: &str = r#"
-#{absent = [/Code/big]}
 induct /Code: (
     T: #{level = 1} Type
 ) -> pub Type
@@ -436,7 +427,6 @@ fn a_refinement_read_through_a_let_is_kept_only_where_its_target_fits_its_variab
 
 /// `Box` has a parameter and no index, so its motive binds the scrutinee alone; this one also binds the parameter, as a motive abstracting it would, and opened at the arm's one case value it has a binder no term stands for.
 const A_MOTIVE_BINDING_A_PARAMETER: &str = r#"
-#{absent = [/Box/mk]}
 induct /Box(A: Type): pub Type
 | mk(x: A)
 end

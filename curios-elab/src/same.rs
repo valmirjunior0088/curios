@@ -186,7 +186,8 @@ pub fn item_part_digest(
 ) -> Result<Option<String>, String> {
     let sharing = Sharing::new();
     let totality = classified.totality;
-    // A definition of its own, or a group's member with the group it is read through.
+    let made;
+    // A definition of its own, a group's member with the group it is read through, or a constructor as its family's entry makes it.
     let (name, held, island, proof, group, plain) = match (item, place) {
         (Item::Let(definition), Place::Let(_)) => (
             definition.name,
@@ -194,7 +195,7 @@ pub fn item_part_digest(
             definition.island,
             definition.proof,
             None,
-            Some(definition),
+            Some(&**definition),
         ),
         (Item::Rec(rec), Place::Member { member, .. }) => {
             let definition = &rec.exports()[member as usize];
@@ -206,6 +207,21 @@ pub fn item_part_digest(
                 definition.proof,
                 Some(rec),
                 None,
+            )
+        }
+        (_, Place::Constructor { .. }) => {
+            made = question
+                .subject()
+                .and_then(|name| item.constructor(name))
+                .expect("a constructor's place is its family's item");
+
+            (
+                made.name,
+                &made.kind,
+                made.island,
+                made.proof,
+                None,
+                Some(&made),
             )
         }
         _ => unreachable!("a name's place is its item's"),

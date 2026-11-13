@@ -42,7 +42,7 @@ fn removing_a_witness_hands_back_every_key_it_held() {
 fn a_read_of_a_declaration_that_has_not_elaborated_is_a_need() {
     let mut context = context();
     let [a, b] = unit_of_two(&mut context);
-    context.attempt(&[&b]);
+    context.attempt(&[b]);
 
     assert!(context.declared_type(&a).is_none());
 
@@ -110,15 +110,15 @@ fn a_registry_entry_read_before_its_declaration_has_finished_is_a_need() {
     let mut context = context();
     let [family, record, concept, reader] = unit_of_entries(&mut context);
 
-    context.attempt(&[&reader]);
+    context.attempt(&[reader]);
     assert!(context.induct_decl(&family).is_some());
     assert_eq!(context.take_needs(), BTreeSet::from([family]));
 
-    context.attempt(&[&reader]);
+    context.attempt(&[reader]);
     assert!(context.struct_decl(&record).is_some());
     assert_eq!(context.take_needs(), BTreeSet::from([record]));
 
-    context.attempt(&[&reader]);
+    context.attempt(&[reader]);
     assert!(context.concept(&concept).is_some());
     assert_eq!(context.take_needs(), BTreeSet::from([concept]));
 }
@@ -134,12 +134,12 @@ fn a_declarations_own_entry_and_a_finished_one_are_read_without_a_need() {
         assert!(context.concept(&concept).is_some());
     };
 
-    context.attempt(&[&family, &record, &concept]);
+    context.attempt(&[family, record, concept]);
     read(&context);
     assert!(context.take_needs().is_empty());
 
-    context.finish(&[&family, &record, &concept]);
-    context.attempt(&[&reader]);
+    context.finish(&[family, record, concept]);
+    context.attempt(&[reader]);
     read(&context);
     assert!(context.take_needs().is_empty());
 }
@@ -152,20 +152,20 @@ fn a_body_read_of_a_declaration_that_has_not_elaborated_is_a_need() {
     let mut context = context();
     let [a, b] = unit_of_two(&mut context);
 
-    context.attempt(&[&b]);
+    context.attempt(&[b]);
     assert!(context.declaration_body(&a).is_none());
     assert_eq!(context.take_needs(), BTreeSet::from([a]));
 
-    context.attempt(&[&b]);
+    context.attempt(&[b]);
     assert!(context.value_at(&a, &Universes::default()).is_none());
     assert_eq!(context.take_needs(), BTreeSet::from([a]));
 
     // Its own body, and one that is missing for good once its declaration has finished, are no read of another.
-    context.attempt(&[&a]);
+    context.attempt(&[a]);
     assert!(context.declaration_body(&a).is_none());
     assert!(context.take_needs().is_empty());
-    context.finish(&[&a]);
-    context.attempt(&[&b]);
+    context.finish(&[a]);
+    context.attempt(&[b]);
     assert!(context.declaration_body(&a).is_none());
     assert!(context.value_at(&a, &Universes::default()).is_none());
     assert!(context.take_needs().is_empty());
@@ -176,7 +176,7 @@ fn a_body_read_of_a_declaration_that_has_not_elaborated_is_a_need() {
 fn a_declaration_reads_its_own_name_without_a_need() {
     let mut context = context();
     let [_, b] = unit_of_two(&mut context);
-    context.attempt(&[&b]);
+    context.attempt(&[b]);
 
     assert!(context.declared_type(&b).is_none());
 
@@ -187,8 +187,8 @@ fn a_declaration_reads_its_own_name_without_a_need() {
 fn a_finished_declaration_is_no_need_whatever_became_of_it() {
     let mut context = context();
     let [a, b] = unit_of_two(&mut context);
-    context.finish(&[&a]);
-    context.attempt(&[&b]);
+    context.finish(&[a]);
+    context.attempt(&[b]);
 
     assert!(context.declared_type(&a).is_none());
 
@@ -200,10 +200,10 @@ fn a_finished_declaration_is_no_need_whatever_became_of_it() {
 fn an_attempt_begins_with_nothing_needed() {
     let mut context = context();
     let [a, b] = unit_of_two(&mut context);
-    context.attempt(&[&b]);
+    context.attempt(&[b]);
     context.need(a);
 
-    context.attempt(&[&b]);
+    context.attempt(&[b]);
 
     assert!(context.take_needs().is_empty());
 }
@@ -221,7 +221,7 @@ fn a_proof_applies_a_name_of_its_unit_once_the_walk_offers_them() {
             &DefinitionKind::Authored,
         );
     }
-    context.finish(&[&a, &b]);
+    context.finish(&[a, b]);
 
     for declaration in [a, b] {
         context.enter_item(Some(declaration));
@@ -242,7 +242,7 @@ fn a_proof_applies_a_name_of_its_unit_once_the_walk_offers_them() {
 fn a_proof_needs_no_name_of_its_unit() {
     let mut context = context();
     let [a, b] = unit_of_two(&mut context);
-    context.attempt(&[&b]);
+    context.attempt(&[b]);
     context.enter_item(Some(b));
 
     assert!(!context.proof_may_apply(&a));
@@ -274,7 +274,7 @@ fn a_goal_at_the_key_of_a_witness_that_has_not_elaborated_needs_it() {
     let show = named("Show");
     let key = WitnessKey::from([HeadKey::Nat]);
     let witness = declare(&mut context, "w", 0);
-    context.attempt(&[&named("user")]);
+    context.attempt(&[named("user")]);
 
     assert!(context.witness_unfinished(&show, &key));
     assert_eq!(context.take_needs(), BTreeSet::from([witness]));
@@ -287,7 +287,7 @@ fn a_goal_at_the_key_of_a_witness_that_has_not_elaborated_needs_it() {
 fn a_witness_does_not_need_itself() {
     let mut context = context();
     let witness = declare(&mut context, "w", 0);
-    context.attempt(&[&witness]);
+    context.attempt(&[witness]);
 
     assert!(!context.witness_unfinished(&named("Show"), &WitnessKey::from([HeadKey::Nat])));
     assert!(context.take_needs().is_empty());
@@ -299,7 +299,7 @@ fn of_two_witnesses_spelled_alike_a_goal_needs_the_first_as_written() {
     let mut context = context();
     declare(&mut context, "a", 7);
     let first = declare(&mut context, "b", 2);
-    context.attempt(&[&named("user")]);
+    context.attempt(&[named("user")]);
 
     assert!(context.witness_unfinished(&named("Show"), &WitnessKey::from([HeadKey::Nat])));
     assert_eq!(context.take_needs(), BTreeSet::from([first]));
@@ -320,7 +320,7 @@ fn a_withdrawn_witness_poisons_the_key_it_is_spelled_at() {
 
     let mut context = self::context();
     let kept = declare(&mut context, "w", 0);
-    context.finish(&[&kept]);
+    context.finish(&[kept]);
 
     assert!(!context.is_poisoned_witness(&show, &key));
     assert!(!context.witness_declared(&show, &key));

@@ -1,6 +1,6 @@
 //! A file of Core text read back into the module it writes, and the entry a program closes with.
 //!
-//! **Each item stands where it is written, and an item a form implies where a reader puts it.** A group's members, a test and a foreign row's definition each make the item the text writes at its place; a family's constructors, which its form implies, are made by [`Definition::constructors`] and placed among the written items by the order's key ([`Definitions::placed_among`]), except one the text writes under its name, which stands in its place, and one its family states `#{absent = …}`, which is made nowhere.
+//! **Each item stands where it is written.** A group's members, a test and a foreign row's definition each make the item the text writes at its place. A family's constructors are no item: its form declares them, and they are what its entry makes of them ([`Item::constructors`]), so a module neither lacks one nor holds one apart from its family, and a definition is never declared one.
 //!
 //! **A group's members name one another by their paths at the group's own instance**, as a group opened to be written names them ([`RecItem::definitions`]); each such reference is the group's own binder again where the group is made.
 
@@ -21,7 +21,7 @@ use {
         Atom, ConceptDecl, Definition, DefinitionKind, Definitions, Entrypoint, Global, Item,
         Nominal, RecItem, Term, UniverseContext,
     },
-    std::{collections::HashSet, sync::Arc},
+    std::sync::Arc,
 };
 
 /// The module `file` writes, and the entry it closes with where it is a program's: read over `scope` where it is handed one, which a test's and a foreign row's forms are made against and a call across the wire is made through.
@@ -37,15 +37,10 @@ pub fn to_core(
         }
     }
     let mut written = Vec::new();
-    let mut implied = Vec::new();
     let mut items = file.items.iter().peekable();
     while let Some(item) = items.next() {
         match item {
-            CoreItem::Group(members) => {
-                let (item, constructors) = group_read(members, &mut reader)?;
-                written.push(item);
-                implied.extend(constructors);
-            }
+            CoreItem::Group(members) => written.push(group_read(members, &mut reader)?),
             CoreItem::Test(test) => {
                 written.push(Item::Let(Box::new(test_read(test, &mut reader)?)))
             }
@@ -62,17 +57,8 @@ pub fn to_core(
             }
         }
     }
-    let declared = written
-        .iter()
-        .flat_map(|item: &Item| item.declared_names().into_iter().copied())
-        .collect::<HashSet<_>>();
-    let implied = implied
-        .into_iter()
-        .filter(|constructor| !declared.contains(&constructor.name))
-        .map(|constructor| Item::Let(Box::new(constructor)))
-        .collect();
     let definitions = Definitions {
-        items: Definitions::placed_among(written, implied).into(),
+        items: written.into(),
     };
     let entry = file
         .entry
@@ -184,18 +170,14 @@ fn island_read(
     }
 }
 
-/// What a group's member makes: its definition, the node its item is where the decorator states one, and, for a family, the constructors its form implies.
+/// What a group's member makes: its definition, and the node its item is where the decorator states one.
 struct Member {
     definition: Definition,
     node: Option<String>,
-    constructors: Vec<Definition>,
 }
 
 /// A group of members as the item it writes: a lone definition a `let`, a lone family a group, a lone record or concept a `let`, each unless its decorator's `node` says otherwise, and several members a group.
-fn group_read(
-    members: &[CoreMember],
-    reader: &mut Reader<'_>,
-) -> Result<(Item, Vec<Definition>), ReadError> {
+fn group_read(members: &[CoreMember], reader: &mut Reader<'_>) -> Result<Item, ReadError> {
     let mut scheme = None;
     let (mut read, held) = reader.grouped(|reader| {
         members
@@ -210,10 +192,6 @@ fn group_read(
             term.replace_term(&Term::free_var(local), instance)
         })
     };
-    let constructors = read
-        .iter_mut()
-        .flat_map(|member| std::mem::take(&mut member.constructors))
-        .collect();
     let grouped = match read.as_slice() {
         [lone] => {
             let family = matches!(lone.definition.kind.nominal(), Some(Nominal::Inductive(_)));
@@ -229,7 +207,7 @@ fn group_read(
         let mut lone = read.pop().expect("a group has a member").definition;
         lone.type_ = instances(&lone.type_);
         lone.body = instances(&lone.body);
-        return Ok((Item::Let(Box::new(lone)), constructors));
+        return Ok(Item::Let(Box::new(lone)));
     }
     let context = scheme.unwrap_or_default();
     let instance = context.identity_instance();
@@ -269,7 +247,7 @@ fn group_read(
         )
     })?;
 
-    Ok((Item::Rec(item), constructors))
+    Ok(Item::Rec(item))
 }
 
 /// Where a member's name is written.
@@ -331,7 +309,7 @@ fn member_read(
         .take("value_sort")
         .map(|value| core_read(&value_term(value)?, reader))
         .transpose()?;
-    let (definition, constructors) = match member {
+    let definition = match member {
         CoreMember::Let(member) => {
             let LetSignature::Name {
                 type_: Some(type_),
@@ -343,7 +321,7 @@ fn member_read(
                     span,
                 ));
             };
-            let definition = Definition {
+            Definition {
                 name,
                 kind: kind.unwrap_or(DefinitionKind::Authored),
                 universe_context: context,
@@ -352,8 +330,7 @@ fn member_read(
                 value_sort,
                 type_: core_read(type_, reader)?,
                 body: core_read(body, reader)?,
-            };
-            (definition, Vec::new())
+            }
         }
         nominal => {
             if kind.is_some() {
@@ -362,7 +339,7 @@ fn member_read(
                     span,
                 ));
             }
-            let (entry, absent) = nominal_read(nominal, &name, &context, &mut fields, reader)?;
+            let entry = nominal_read(nominal, &name, &context, &mut fields, reader)?;
             let mut definition = Definition::former(name, island, entry);
             definition.universe_context = context;
             definition.proof = proof;
@@ -373,51 +350,29 @@ fn member_read(
             if let Some(value) = fields.take("body") {
                 definition.body = core_read(&value_term(value)?, reader)?;
             }
-            let constructors = match (definition.kind.nominal(), name) {
-                (Some(Nominal::Inductive(declaration)), Global::Authored(owner)) => {
-                    Definition::constructors(owner, definition.island, declaration)
-                        .into_iter()
-                        .filter(|constructor| !absent.contains(&constructor.name))
-                        .collect()
-                }
-                _ => Vec::new(),
-            };
-            (definition, constructors)
+            definition
         }
     };
     fields.finish()?;
 
-    Ok(Member {
-        definition,
-        node,
-        constructors,
-    })
+    Ok(Member { definition, node })
 }
 
-/// A nominal declaration's entry from its form, and the constructors its family states absent.
+/// A nominal declaration's entry from its form.
 fn nominal_read(
     member: &CoreMember,
     name: &Global,
     scheme: &UniverseContext,
     fields: &mut Fields<'_>,
     reader: &mut Reader<'_>,
-) -> Result<(Nominal, Vec<Global>), ReadError> {
+) -> Result<Nominal, ReadError> {
     match member {
-        CoreMember::Induct(family) => {
-            let entry = family_entry_read(family, name, scheme, fields, reader)?;
-            let absent = match fields.take("absent") {
-                Some(value) => value_unmarked(value)?
-                    .into_iter()
-                    .map(value_global)
-                    .collect::<Result<_, _>>()?,
-                None => Vec::new(),
-            };
-            Ok((Nominal::Inductive(entry), absent))
-        }
-        CoreMember::Struct(record) => Ok((
-            Nominal::Struct(record_entry_read(record, name, scheme, fields, reader)?),
-            Vec::new(),
-        )),
+        CoreMember::Induct(family) => Ok(Nominal::Inductive(family_entry_read(
+            family, name, scheme, fields, reader,
+        )?)),
+        CoreMember::Struct(record) => Ok(Nominal::Struct(record_entry_read(
+            record, name, scheme, fields, reader,
+        )?)),
         CoreMember::Concept(concept) => {
             let (record, words) = concept_entry_read(concept, name, scheme, fields, reader)?;
             let mut declaration = ConceptDecl {
@@ -444,19 +399,16 @@ fn nominal_read(
                 }
                 own.finish()?;
             }
-            Ok((
-                Nominal::Concept {
-                    concept: declaration,
-                    record,
-                },
-                Vec::new(),
-            ))
+            Ok(Nominal::Concept {
+                concept: declaration,
+                record,
+            })
         }
         CoreMember::Let(_) => unreachable!("a definition is read by its name, type and body"),
     }
 }
 
-/// What a definition is declared as, where it is not what its keyword declares: `Witness`, `Test`, or a constructor of its family, `InductiveConstructor {owner = /F, tag = t}`.
+/// What a definition is declared as, where it is not what its keyword declares: `Witness`, `Test`, or a constructor of a family, `InductiveConstructor {owner = /F, tag = t}`, which a definition the module holds states and no reader takes it at: a constructor is its family's, which the family's form declares.
 fn kind_read(value: &CoreValue) -> Result<DefinitionKind, ReadError> {
     let term = value_term(value)?;
     if let crate::Subterm::StructLit(literal) = term.as_subterm()

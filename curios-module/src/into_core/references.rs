@@ -17,7 +17,7 @@ pub struct LoweredItem {
     pub reaches: Vec<curios_core::Global>,
     /// What each of its definitions declares, in the item's order.
     pub definitions: Vec<Declared>,
-    /// The names it declares beside its definitions, each with where it was written in the text of its declaration: a concept's methods, which no definition holds.
+    /// The names it declares beside its definitions, each with where it was written in the text of its declaration: a concept's methods and a family's constructors, which no definition holds.
     pub members: Vec<(curios_core::Global, Option<curios_core::Extent>)>,
 }
 

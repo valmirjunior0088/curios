@@ -149,6 +149,25 @@ impl<'a> Standing<'a> {
                     island: definition.island,
                 })
             }
+            // A family's constructor, as its family's entry makes it: its injection, total by construction.
+            Place::Constructor { .. } => {
+                let definition = self
+                    .places()
+                    .constructor(name, &self.definitions.items[place.item()]);
+
+                Some(Defined {
+                    type_: &definition.type_,
+                    body: Some(&definition.body),
+                    universe_context: &definition.universe_context,
+                    totality: Totality::Total,
+                    applications: None,
+                    variances,
+                    field_variances,
+                    parameter_field,
+                    value_sort: None,
+                    island: definition.island,
+                })
+            }
         }
     }
 
@@ -352,7 +371,7 @@ impl<'a> Established<'a> {
     }
 
     /// Keep the baseline's declaration declaring `names`: the baseline answers for them from here on. Asked by the walk, where it finds that everything the declaration read stands.
-    pub fn keep(&self, names: &[&Global]) {
+    pub fn keep(&self, names: &[Global]) {
         for unit in &self.units {
             for name in names {
                 unit.keep(name);

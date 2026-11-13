@@ -58,7 +58,6 @@ fn a_body_read_falls_with_an_edit_to_the_body() {
 
 /// `Vouched : Prop | qed(u : {})`, `lemma : Vouched = ${proof}` after `${mark}`, `spare : Vouched = qed(())`, and `corollary : Vouched = lemma`.
 const PROVING: &str = r#"
-#{absent = [/Vouched/qed]}
 induct /Vouched: pub Prop
 | qed(u: {})
 end

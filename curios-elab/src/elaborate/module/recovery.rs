@@ -30,8 +30,7 @@ impl Poison {
 
     /// Poison every name `item` declares.
     pub fn declare(&mut self, item: &Item) {
-        self.names
-            .extend(item.declared_names().into_iter().cloned());
+        self.names.extend(item.declared_names());
     }
 
     fn any(&self, names: &BTreeSet<Global>) -> bool {
@@ -46,7 +45,7 @@ impl Poison {
 
         item.declared_names()
             .into_iter()
-            .any(|name| self.names.contains(name))
+            .any(|name| self.names.contains(&name))
             || self.any(&definitions.reaches(item))
     }
 
@@ -69,7 +68,7 @@ pub fn withhold(context: &mut Context, item: &Item) {
 }
 
 /// Take `declared` out of every store another item could read: the witness table, poisoning each key a witness held; the witnesses the unit declares and has not elaborated, poisoning the key each was spelled at; the registries; and the declarations. Asked for a refused item and for a withheld one, whose registry entries were seeded before any item elaborated.
-pub fn withdraw(context: &mut Context, declared: &[&Global]) {
+pub fn withdraw(context: &mut Context, declared: &[Global]) {
     for name in declared {
         for (concept, key) in context.remove_witness(name) {
             context.poison_witness_key(concept, key);
@@ -113,14 +112,14 @@ impl ItemMark {
     }
 
     /// Undo what a refused item wrote since [`ItemMark::begin`] and take its declarations out — see the module documentation for what is undone and what is left.
-    pub fn undo(self, context: &mut Context, declared: &[&Global]) {
+    pub fn undo(self, context: &mut Context, declared: &[Global]) {
         self.unwind(context);
         withdraw(context, declared);
         Self::close(context);
     }
 
     /// Undo an attempt that read something unfinished: what [`ItemMark::undo`] takes back, with nothing poisoned and the declarations left as `module` seeded them, for the attempt to be made again.
-    pub fn void(self, context: &mut Context, definitions: &Definitions, declared: &[&Global]) {
+    pub fn void(self, context: &mut Context, definitions: &Definitions, declared: &[Global]) {
         self.unwind(context);
         for name in declared {
             context.remove_witness(name);
@@ -183,7 +182,7 @@ impl Survivors {
     /// Keep an item that elaborated, with the erasure obligations it breaks: reported, and no refusal, since the item stands for the certifier to judge.
     pub fn keep(&mut self, stamp: ItemStamp, item: Item, obligations: Vec<Error>) {
         for name in item.declared_names() {
-            self.declaring.insert(*name, self.kept.len());
+            self.declaring.insert(name, self.kept.len());
         }
         self.kept.push((stamp, item));
         self.obligations

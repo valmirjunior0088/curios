@@ -256,8 +256,8 @@ fn bit() -> InductDecl {
     }
 }
 
-/// A module of `/Bit`'s former, a group of its own as a family's is, beside `constructors`, in the order a module is stored in.
-fn module(declaration: InductDecl, constructors: Vec<Definition>) -> Definitions {
+/// A module of `/Bit`'s former, a group of its own as a family's is, beside the `let`s of `beside`, in the order a module is stored in.
+fn module(declaration: InductDecl, beside: Vec<Definition>) -> Definitions {
     let former = Definition::former(
         global(&["Bit"]),
         Qualifier::empty(),
@@ -269,9 +269,9 @@ fn module(declaration: InductDecl, constructors: Vec<Definition>) -> Definitions
     )]))]
     .into_iter()
     .chain(
-        constructors
+        beside
             .into_iter()
-            .map(|constructor| Item::Let(Box::new(constructor))),
+            .map(|definition| Item::Let(Box::new(definition))),
     )
     .collect::<Vec<_>>();
 
@@ -281,24 +281,19 @@ fn module(declaration: InductDecl, constructors: Vec<Definition>) -> Definitions
     .ordered()
 }
 
-/// A family is written in its form, which builds its former and its constructors, so no item of either is written.
+/// A family is written in its form, which builds its former and declares its constructors, so no item of either is written.
 #[test]
-fn a_family_is_written_in_its_form_and_its_constructors_are_left_to_it() {
-    let constructors =
-        Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
-
+fn a_family_is_written_in_its_form() {
     assert_eq!(
-        module(bit(), constructors).faithful().to_string(),
+        module(bit(), Vec::new()).faithful().to_string(),
         "induct /Bit: Type\n| zero()\n| one()\nend\n"
     );
 }
 
-/// A version's items stand at places spaced apart, which no count of them names, and are written as the module they hold: a family's form, its constructors left to it.
+/// A version's items stand at places spaced apart, which no count of them names, and are written as the module they hold: a family's form.
 #[test]
 fn a_version_is_written_as_the_module_it_holds() {
-    let constructors =
-        Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
-    let made = module(bit(), constructors);
+    let made = module(bit(), Vec::new());
     let version = Definitions {
         items: made.items.version(),
     };
@@ -307,31 +302,30 @@ fn a_version_is_written_as_the_module_it_holds() {
     assert_eq!(version.faithful().to_string(), made.faithful().to_string());
 }
 
-/// A constructor its family's form would not make is written out, under the kind that says whose it is.
-#[test]
-fn a_constructor_its_family_does_not_make_is_written_out() {
-    let mut constructors =
-        Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
-    constructors[1].body = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+/// `/Bit/two`, a `let` stating it is a constructor of `/Bit`, whose form declares none of that name, and defined as `1`.
+fn stated_constructor() -> Definition {
+    let mut stated = Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit())
+        .swap_remove(1);
+    stated.name = global(&["Bit", "two"]);
+    stated.kind = DefinitionKind::InductiveConstructor {
+        owner: Qualifier::from(["Bit"]),
+        tag: Atom::from("two"),
+    };
+    stated.body = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
 
-    let written = module(bit(), constructors).faithful().to_string();
-    assert!(
-        written.contains("#{kind = InductiveConstructor { owner = /Bit, tag = one }} let /Bit/one"),
-        "{written}"
-    );
-    assert!(!written.contains("let /Bit/zero"), "{written}");
+    stated
 }
 
-/// A constructor its family's form implies and the module lacks is stated absent.
+/// A `let` stating a constructor's kind is written out under the kind it states: Core holds it, though only a family's form declares a constructor.
 #[test]
-fn a_constructor_the_module_lacks_is_stated_absent() {
-    let mut constructors =
-        Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
-    constructors.truncate(1);
+fn a_definition_stating_a_constructors_kind_is_written_out_under_it() {
+    let written = module(bit(), vec![stated_constructor()])
+        .faithful()
+        .to_string();
 
-    assert_eq!(
-        module(bit(), constructors).faithful().to_string(),
-        "#{absent = [/Bit/one]} induct /Bit: Type\n| zero()\n| one()\nend\n"
+    assert!(
+        written.contains("#{kind = InductiveConstructor { owner = /Bit, tag = two }} let /Bit/two"),
+        "{written}"
     );
 }
 
@@ -492,14 +486,9 @@ fn every_node_written_reads_back_as_itself() {
     }
 }
 
-/// Every module a test above writes reads back as itself: a family's constructors made where its form implies them, one it does not make standing in its place, one it lacks made nowhere, and a record from its form.
+/// Every module a test above writes reads back as itself: a family from its form, a `let` stating a constructor's kind beside it, and a record from its form.
 #[test]
 fn every_module_written_reads_back_as_itself() {
-    let made = Definition::constructors(Qualifier::from(["Bit"]), Qualifier::empty(), &bit());
-    let mut rewritten = made.clone();
-    rewritten[1].body = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
-    let mut lacking = made.clone();
-    lacking.truncate(1);
     let (a, b) = (Free::local(0, Some("A")), Free::local(1, Some("B")));
     let (fst, snd) = (Free::local(2, Some("fst")), Free::local(3, Some("snd")));
     let record = Definition::former(
@@ -519,9 +508,8 @@ fn every_module_written_reads_back_as_itself() {
         }),
     );
     let modules = [
-        module(bit(), made),
-        module(bit(), rewritten),
-        module(bit(), lacking),
+        module(bit(), Vec::new()),
+        module(bit(), vec![stated_constructor()]),
         Definitions {
             items: vec![Item::Let(Box::new(record))].into(),
         },

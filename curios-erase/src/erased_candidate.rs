@@ -17,7 +17,7 @@ impl ErasedOver<'_> {
     /// Whether every part `asked`, the erasure of the item declaring `names` where `made` was filed, read digests now as it did: `unit` holding the erased forms of the items before it.
     pub fn stands(
         &self,
-        names: &[&curios_core::Global],
+        names: &[curios_core::Global],
         made: &Made,
         asked: &AskedRecord,
         unit: &ErasedUnit,
@@ -57,7 +57,7 @@ impl ErasedUnit {
 
             let reads = held
                 .reads()
-                .map(|read| match names.contains(&&read.0) {
+                .map(|read| match names.contains(&read.0) {
                     true => Some(None),
                     false => *digests.entry(read).or_insert_with(|| {
                         self.read_then((definitions, places, certification), read)

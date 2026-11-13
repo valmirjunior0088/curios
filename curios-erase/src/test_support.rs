@@ -27,7 +27,7 @@ pub fn part_digests(
     definitions
         .items
         .places()
-        .flat_map(|place| definitions.items.names(place).into_iter().copied())
+        .flat_map(|place| definitions.items.names(place))
         .flat_map(|name| Part::ALL.map(|part| (name, part)))
         .map(|read| {
             let digest = match (read.1, erased.place(&read.0)) {

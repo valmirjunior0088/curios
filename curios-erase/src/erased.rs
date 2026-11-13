@@ -471,7 +471,7 @@ impl ErasedUnit {
     pub(super) fn keep(&mut self, place: usize, item: &curios_core::Item, held: Held) {
         let at = position(place);
         for name in item.declared_names() {
-            self.index.declared.insert(*name, at);
+            self.index.declared.insert(name, at);
         }
         match held.computes {
             true => self.index.computing.insert(at, ()),
@@ -483,7 +483,7 @@ impl ErasedUnit {
     }
 
     /// Take out the erased form held at `place`, and each of `names` declared there: an item the unit no longer holds.
-    pub(super) fn forget(&mut self, place: usize, names: &[&curios_core::Global]) {
+    pub(super) fn forget(&mut self, place: usize, names: &[curios_core::Global]) {
         let at = position(place);
         self.index.items.remove(at);
         self.index.computing.remove(at);
@@ -813,15 +813,15 @@ impl<'a> Erasures<'a> {
         }
     }
 
-    /// The definition a unit in scope declares under `name`, as the unit holds it: what kind of definition it is, and its body.
-    pub(super) fn definition(
+    /// The constructor `name` of a family a unit in scope declares, as its family's entry makes it.
+    pub(super) fn constructor(
         &self,
         name: &curios_core::Global,
     ) -> Option<&'a curios_core::Definition> {
         self.cores
             .iter()
             .zip(self.places)
-            .find_map(|(core, places)| declared(core, places, name))
+            .find_map(|(core, places)| constructor(core, places, name))
     }
 
     /// The units' erased forms, in dependency order.
@@ -845,14 +845,16 @@ impl<'a> Erasures<'a> {
     }
 }
 
-/// The definition `module` declares under `name` by a `let`, where `places` says it holds one: what kind of definition it is and its body, which erasure reads of a constructor and of a concept method's wrapper, each a `let` of its own.
-pub fn declared<'a>(
-    definitions: &'a curios_core::Definitions,
-    places: &curios_core::Places,
+/// The constructor `name` of a family `definitions` declares, where `places` holds it at a constructor's place: the definition its family's entry makes, which erasure reads for the family a call constructs a value of and for its body. A name an item defines, whatever kind its definition states, is no constructor.
+pub fn constructor<'a>(
+    definitions: &curios_core::Definitions,
+    places: &'a curios_core::Places,
     name: &curios_core::Global,
 ) -> Option<&'a curios_core::Definition> {
-    match &definitions.items[places.place(name)?.item()] {
-        curios_core::Item::Let(definition) if definition.name == *name => Some(definition),
-        _ => None,
+    match places.place(name)? {
+        place @ curios_core::Place::Constructor { .. } => {
+            Some(places.constructor(name, &definitions.items[place.item()]))
+        }
+        curios_core::Place::Let(_) | curios_core::Place::Member { .. } => None,
     }
 }

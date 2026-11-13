@@ -83,7 +83,6 @@ fn a_version_keeps_the_places_of_what_it_did_not_change() {
             .items
             .iter()
             .flat_map(Item::declared_names)
-            .copied()
             .collect::<Vec<_>>()
     };
     let named = |names: &[&str]| names.iter().map(|each| name(each)).collect::<Vec<_>>();

@@ -367,7 +367,7 @@ fn indexed_by_its_cycle(
             .into_iter()
             .flat_map(Term::reaches)
             .find(|reached| {
-                own.contains(&reached)
+                own.contains(reached)
                     || places
                         .get_or_init(|| place_of(definitions))
                         .get(reached)
@@ -391,7 +391,7 @@ fn place_of(definitions: &Definitions) -> HashMap<Global, usize> {
                 .items
                 .names(place)
                 .into_iter()
-                .map(move |name| (*name, place))
+                .map(move |name| (name, place))
         })
         .collect()
 }
@@ -477,18 +477,18 @@ fn redeclarations(definitions: &Definitions, globals: &Globals) -> Vec<Verdict> 
         }
     };
 
-    let mut declared: HashSet<&Global> = HashSet::new();
+    let mut declared: HashSet<Global> = HashSet::new();
     for item in &definitions.items {
         let names = item.declared_names();
         let Some(first) = names.first().copied() else {
             continue;
         };
         if let Some(name) = names.iter().copied().find(|name| !declared.insert(*name)) {
-            refuse(name);
+            refuse(&name);
             continue;
         }
         if names.iter().any(|name| globals.in_scope(name)) {
-            refuse(first);
+            refuse(&first);
         }
     }
 
@@ -787,7 +787,7 @@ fn verdicts_within<'s>(
     // The items as the module stores them, which is every item after the items it reaches where the module was made by the elaborator (`Definitions::ordered`). The walk sorts nothing: an item that names one stored after it finds the name unbound, and a family it stores in one accepted after it finds no vector filed, each of which refuses.
     for place in &walk {
         let item = &definitions.items[*place];
-        let item_name = item.declared_names().first().map(|&name| *name);
+        let item_name = item.declared_names().first().copied();
         certifier.at(*place);
 
         // A declaration whose terms are the baseline's and whose every recorded read stands takes the baseline's verdict, and stands as the walk leaves any item it does not judge. A read of a declaration the walk does not visit stands where the walk has passed it.
@@ -811,9 +811,9 @@ fn verdicts_within<'s>(
                 variances.insert(name, vector);
             }
             for name in item.declared_names() {
-                if let Some(applied) = adopting.baseline().certification.applications(name) {
-                    certifier.file_applications(name, applied.clone());
-                    applications.insert(*name, applied.clone());
+                if let Some(applied) = adopting.baseline().certification.applications(&name) {
+                    certifier.file_applications(&name, applied.clone());
+                    applications.insert(name, applied.clone());
                 }
             }
             adopting.adopted(item);
@@ -821,7 +821,7 @@ fn verdicts_within<'s>(
             for (name, declaration) in carried(&stated.items[*place]).0 {
                 certifier.restate_induct(&name, &declaration);
             }
-            settled.extend(item.declared_names().into_iter().copied());
+            settled.extend(item.declared_names());
             continue;
         }
 
@@ -875,7 +875,7 @@ fn verdicts_within<'s>(
                     &applications,
                 );
             }
-            settled.extend(item.declared_names().into_iter().copied());
+            settled.extend(item.declared_names());
             continue;
         }
 
@@ -1000,8 +1000,8 @@ fn verdicts_within<'s>(
         // A group is judged as one item, so each of its members read what the group did; and what the classification read of what it mentions is the item's too.
         let item_reads = certifier.take_reads();
         for name in item.declared_names() {
-            reads.insert(*name, item_reads.clone());
-            judged.push(*name);
+            reads.insert(name, item_reads.clone());
+            judged.push(name);
         }
 
         // The registry entries the item's formers carry, accepted with it: an item follows every name its entries' telescopes mention, so each is defined by now.
@@ -1015,6 +1015,24 @@ fn verdicts_within<'s>(
             &mut polarities,
             &mut variances,
         );
+
+        // A family's constructors are names the item declares beside its definitions, each defined as its family's entry makes it, once the entry it is made of is accepted: nothing judges one apart from that entry.
+        for constructor in item.constructors() {
+            if let Err(error) = define_as_stated(
+                certifier,
+                &constructor.name,
+                &constructor.type_,
+                &constructor.body,
+                false,
+                None,
+                &constructor.universe_context,
+            ) {
+                verdicts.push(Verdict {
+                    name: item_name,
+                    error,
+                });
+            }
+        }
 
         // Obligations (T) and (V) over every position the item's judgment recorded, its entries' typings among them, so each is refused under the item that declares it rather than under the next one judged. An entry's positions reach only names declared before it, each classified by now.
         let (drained, failure) = certifier.take_checked();
@@ -1043,7 +1061,7 @@ fn verdicts_within<'s>(
                 &applications,
             );
         }
-        settled.extend(item.declared_names().into_iter().copied());
+        settled.extend(item.declared_names());
     }
     // Past every item: the entry reads them all.
     certifier.at(usize::MAX);
@@ -1118,12 +1136,12 @@ fn verdicts_within<'s>(
                     .iter()
                     .flat_map(Item::declared_names)
                     .map(|name| {
-                        let reads = reads.remove(name).unwrap_or_default();
+                        let reads = reads.remove(&name).unwrap_or_default();
                         (
-                            *name,
+                            name,
                             Certified {
-                                totality: totality(name),
-                                applications: applications.get(name).cloned().unwrap_or_default(),
+                                totality: totality(&name),
+                                applications: applications.get(&name).cloned().unwrap_or_default(),
                                 reads,
                             },
                         )
@@ -1283,7 +1301,6 @@ impl Changed {
                         .iter()
                         .chain(&changes.removed)
                         .flat_map(|place| baseline.definitions.items.names(*place))
-                        .copied()
                         .collect::<Vec<_>>();
                     let touched = changes
                         .replaced
@@ -1302,7 +1319,6 @@ impl Changed {
                         .items
                         .places()
                         .flat_map(|place| baseline.definitions.items.names(place))
-                        .copied()
                         .collect(),
                     true,
                 ),
@@ -1332,7 +1348,7 @@ impl Changed {
         // A declaration the baseline holds, now stored ahead of one it read, is no adoption a walk in the module's order makes: in its turn what it read is not settled yet, so it is asked, as that walk would ask it.
         for place in changed.touched.clone() {
             let reads_ahead = definitions.items.names(place).into_iter().any(|name| {
-                baseline.certification.reads(name).is_some_and(|reads| {
+                baseline.certification.reads(&name).is_some_and(|reads| {
                     reads
                         .signatures
                         .iter()
@@ -1384,8 +1400,8 @@ impl Changed {
             return;
         }
         for name in definitions.items.names(place) {
-            self.visited_names.insert(*name);
-            frontier.push(*name);
+            self.visited_names.insert(name);
+            frontier.push(name);
         }
     }
 }
@@ -1408,11 +1424,11 @@ fn declares_a_held_name(
 
     touched.iter().any(|place| {
         definitions.items.names(*place).into_iter().any(|name| {
-            !declared.insert(*name)
-                || globals.in_scope(name)
+            !declared.insert(name)
+                || globals.in_scope(&name)
                 || baseline
                     .places
-                    .place(name)
+                    .place(&name)
                     .is_some_and(|held| !changed.contains(&held.item()))
         })
     })
@@ -1527,7 +1543,7 @@ fn stored(
             found
                 .iter()
                 .find(|(found, record)| {
-                    found == *name && stands(globals, certifier, now, &names, &own, record)
+                    found == name && stands(globals, certifier, now, &names, &own, record)
                 })
                 .map(|(name, record)| (*name, Rc::clone(record)))
         })
@@ -1539,7 +1555,7 @@ fn stands(
     globals: &Globals,
     certifier: &Certifier,
     now: &Settled<'_>,
-    names: &[&Global],
+    names: &[Global],
     own: &HashMap<Global, &Concluded>,
     record: &ReadRecord,
 ) -> bool {
@@ -1548,7 +1564,7 @@ fn stands(
     };
     let digest = |read: &Global, body: bool| -> Option<Option<Option<[u8; 32]>>> {
         let unit = now.places.place(read).is_some();
-        if unit && names.contains(&read) {
+        if unit && names.contains(read) {
             let concluded = own.get(read)?;
             let verdict = (
                 concluded.totality != Totality::Total,
@@ -1674,7 +1690,7 @@ fn take(certifier: &mut Certifier, item: &Item) -> (Item, Vec<Verdict>) {
 /// The item `baseline` holds where it holds the first name `item` declares: the one whose statements an item the walk does not judge takes.
 fn held_item<'b>(baseline: Baseline<'b>, item: &Item) -> Option<&'b Item> {
     let name = item.declared_names().into_iter().next()?;
-    let place = baseline.places.place(name)?;
+    let place = baseline.places.place(&name)?;
 
     Some(&baseline.definitions.items[place.item()])
 }
@@ -1711,7 +1727,7 @@ fn adopt(
             .iter()
             .filter_map(|name| certifier.adopt(name).err())
             .map(|error| Verdict {
-                name: names.first().map(|name| **name),
+                name: names.first().copied(),
                 error,
             })
             .collect(),
@@ -1722,25 +1738,25 @@ fn adopt(
     };
 
     for (name, (totality, reads)) in names.into_iter().zip(certified) {
-        adopted.reads.push((*name, (*reads).clone()));
+        adopted.reads.push((name, (*reads).clone()));
         if *totality != Totality::Total {
-            adopted.partial.push(*name);
+            adopted.partial.push(name);
         }
-        if item.nominal(name).is_some() {
+        if item.nominal(&name).is_some() {
             let vector = baseline
                 .certification
-                .polarities(name)
+                .polarities(&name)
                 .expect("an adopted declaration's registry entries were filed vectors")
                 .to_vec();
-            certifier.file_polarities(name, vector.clone());
-            adopted.vectors.push((*name, vector));
+            certifier.file_polarities(&name, vector.clone());
+            adopted.vectors.push((name, vector));
             let vector = baseline
                 .certification
-                .variances(name)
+                .variances(&name)
                 .expect("an adopted declaration's registry entries were filed vectors")
                 .to_vec();
-            certifier.file_variances(name, vector.clone());
-            adopted.variances.push((*name, vector));
+            certifier.file_variances(&name, vector.clone());
+            adopted.variances.push((name, vector));
         }
     }
 

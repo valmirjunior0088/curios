@@ -216,10 +216,10 @@ fn a_declaration_of_a_pure_module_reaches_no_foreign_declaration() {
             let reached = definitions.reaches(item);
             for name in item.declared_names() {
                 for target in &reached {
-                    reached_by.entry(*target).or_default().push(*name);
+                    reached_by.entry(*target).or_default().push(name);
                 }
-                if host && performing.insert(*name, None).is_none() {
-                    queue.push(*name);
+                if host && performing.insert(name, None).is_none() {
+                    queue.push(name);
                 }
             }
         }
@@ -247,12 +247,12 @@ fn a_declaration_of_a_pure_module_reaches_no_foreign_declaration() {
         }
         for name in item.declared_names() {
             let mut chain = vec![name.faithful().to_string()];
-            let mut at = performing.get(name);
+            let mut at = performing.get(&name);
             while let Some(Some(next)) = at {
                 chain.push(next.faithful().to_string());
                 at = performing.get(next);
             }
-            if performing.contains_key(name) {
+            if performing.contains_key(&name) {
                 crossings.push(chain.join(" -> "));
             }
         }
@@ -303,7 +303,6 @@ fn every_syntax_target_is_present_after_restore() {
     with_prelude(|prelude| {
         let names = items(prelude)
             .flat_map(Item::declared_names)
-            .cloned()
             .collect::<BTreeSet<_>>();
         for target in SYNTAX.targets() {
             assert!(

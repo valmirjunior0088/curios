@@ -78,16 +78,17 @@ impl PreparedText {
                     let Some(at) = place else {
                         break;
                     };
-                    names.extend(items.names(at).into_iter().copied());
+                    names.extend(items.names(at));
                     place = items.place_after(Some(at));
                 }
-                // A concept's methods are names its declaration writes, which no item declares.
-                names.extend(
-                    record
-                        .facts()
-                        .iter()
-                        .flat_map(|fact| fact.members.iter().map(|(name, _)| *name)),
-                );
+                // A concept's methods are names its declaration writes, which no item declares; a family's constructors, the other members a former writes, its item declares already.
+                let methods = record
+                    .facts()
+                    .iter()
+                    .flat_map(|fact| fact.members.iter().map(|(name, _)| *name))
+                    .filter(|name| !names.contains(name))
+                    .collect::<Vec<_>>();
+                names.extend(methods);
                 keys.push((key, names));
             }
         }

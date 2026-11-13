@@ -546,7 +546,7 @@ impl<'a> Baseline<'a> {
             let mut place = usize::try_from(first).ok();
             for _ in 0..record.facts().len() {
                 let at = place?;
-                names.extend(items.names(at).into_iter().copied());
+                names.extend(items.names(at));
                 place = items.place_after(Some(at));
             }
             Some(record.body())

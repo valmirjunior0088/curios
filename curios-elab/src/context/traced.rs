@@ -146,7 +146,7 @@ pub struct Traced {
 
 impl Traced {
     /// Begin the trace of a judgment of the declaration declaring `own`: the next question is its first.
-    pub fn begin(&mut self, own: &[&Global]) {
+    pub fn begin(&mut self, own: &[Global]) {
         self.own.clear();
         self.own.extend(own.iter().copied());
         self.take();

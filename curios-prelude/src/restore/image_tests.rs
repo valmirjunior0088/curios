@@ -116,7 +116,7 @@ fn the_std_record_files_that_any_applies_its_predicate_below_its_list() {
                     .iter()
                     .flat_map(Item::declared_names)
                     .find(|name| name.faithful().to_string() == "/std/List/any")?;
-                Some((root, *name))
+                Some((root, name))
             })
             .expect("the prelude declares /std/List/any");
         let applied = root

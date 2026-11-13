@@ -56,7 +56,6 @@ fn a_definition_differing_from_the_environments_is_refused() {
 
 /// `Shadowed : Type 0 | mk(a : ${domain})`.
 const SHADOWING_FAMILY: &str = r#"
-#{absent = [/Shadowed/mk]}
 induct /Shadowed: pub Type
 | mk(a: ${domain})
 end
@@ -89,7 +88,7 @@ fn a_registry_entry_differing_from_the_environments_is_refused() {
 
 /// `Wrapper(A) : Type 0 | wrap(held : ${held})`, its entry stamped `Strict` in `A` whatever `held` makes of it: elaboration's vector where `held` holds `A` strictly, and a lie where it does not.
 const WRAPPER: &str = r#"
-#{polarities = [Strict], absent = [/Wrapper/wrap]}
+#{polarities = [Strict]}
 induct /Wrapper(A: Type): pub Type
 | wrap(held: ${held})
 end
@@ -97,7 +96,6 @@ end
 
 /// `Outer : Type 0 | c(held : Wrapper(Outer))`, over a unit declaring `Wrapper`.
 const STORED_IN_THE_WRAPPER: &str = r#"
-#{absent = [/Outer/c]}
 induct /Outer: pub Type
 | c(held: #{node = InductType} /Wrapper(#{node = InductType} /Outer()))
 end
@@ -284,7 +282,6 @@ const A_STATEMENT: &str = r#"
 induct /Absurd: pub Prop
 end
 
-#{absent = [/Holds/qed]}
 induct /Holds: pub Prop
 | qed()
 end

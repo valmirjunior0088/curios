@@ -149,7 +149,7 @@ fn the_prelude_reads_along_the_graph_its_definitions_reach() {
             for item in &unit.core().items {
                 let reaches = unit.core().reaches(item);
                 for name in item.declared_names() {
-                    graph.insert(*name, reaches.clone());
+                    graph.insert(name, reaches.clone());
                 }
             }
         }
@@ -170,11 +170,7 @@ fn the_prelude_reads_along_the_graph_its_definitions_reach() {
         let mut unreached = Vec::new();
         for unit in prelude {
             for item in &unit.core().items {
-                let own = item
-                    .declared_names()
-                    .into_iter()
-                    .cloned()
-                    .collect::<BTreeSet<_>>();
+                let own = item.declared_names().into_iter().collect::<BTreeSet<_>>();
                 for definition in item.definitions() {
                     let reads = unit
                         .certification()

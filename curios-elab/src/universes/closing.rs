@@ -1,7 +1,4 @@
-//! How a declaration's levels close into its scheme: by its kind, a constructor inheriting its family's, and the levels a family's instances hold sorted from those it leaves to its callers.
-
-#[cfg(test)]
-mod tests;
+//! How a declaration's levels close into its scheme, and the levels a family's instances hold sorted from those it leaves to its callers.
 
 use {
     crate::{
@@ -9,50 +6,11 @@ use {
         zonk_solved_term_metas,
     },
     curios_core::{
-        Bound, ConceptDecl, DefinitionKind, FuncType, Global, StructDecl, Subterm, Telescope, Term,
-        UniverseContext, UniverseMetaId, Universes, Visit, stamp_declaration_instance,
-        universe_metas,
+        ConceptDecl, FuncType, Global, StructDecl, Subterm, Telescope, Term, UniverseContext,
+        UniverseMetaId, stamp_declaration_instance, universe_metas,
     },
-    std::{cell::RefCell, collections::BTreeSet, rc::Rc},
+    std::collections::BTreeSet,
 };
-
-/// The universe arguments `value` applies to `name`'s declaration, at the first occurrence that carries them.
-///
-/// An application reaches finalization in either of two forms: the nominal normal form, which carries its instance in [`StructType`](curios_core::StructType)'s or [`InductType`](curios_core::InductType)'s own universe vector, or an explicit instance on an unreduced occurrence of the type-former. Both name the same levels in the same order, so either answers the question.
-///
-/// The two nominal cases are separate arms rather than one, because the node a declaration normalizes to is what distinguishes a concept from an inductive here. Nothing about the *name* does — deciding by inspecting `name` would be guessing at a fact the term already states.
-///
-/// Memoized on node identity: the hook only latches the first occurrence, which a memoized walk still reaches first, and a finalized value can hold a solution stored as a reduct, whose tree can be exponential in its depth.
-pub fn declaration_instance(value: &Term, name: &Global) -> Option<Universes> {
-    let found = Rc::new(RefCell::new(None));
-    let sink = Rc::clone(&found);
-    let name = *name;
-    let mut visit = Visit::rewriting_shared(
-        |_, _| None,
-        Box::new(move |_, term: &Term| {
-            let stated = match &**term {
-                Subterm::StructType(struct_type) if struct_type.name == name => {
-                    Some(struct_type.universes.clone())
-                }
-                Subterm::InductType(induct_type) if induct_type.name == name => {
-                    Some(induct_type.universes.clone())
-                }
-                Subterm::Instance(instance) if instance.name == name => {
-                    Some(instance.universes.clone())
-                }
-                _ => None,
-            };
-            if let Some(stated) = stated
-                && sink.borrow().is_none()
-            {
-                *sink.borrow_mut() = Some(stated);
-            }
-            None
-        }),
-    );
-    let _: Term = value.traverse(&mut visit);
-    found.borrow_mut().take()
-}
 
 /// The levels of a declaration's result sort that occur nowhere a use site can reach — the levels no occurrence could ever choose.
 ///
@@ -157,7 +115,6 @@ pub fn sort_family_levels(
 pub fn finalize_definition(
     context: &mut Context,
     name: &Global,
-    kind: &DefinitionKind,
     type_: Term,
     body: Term,
 ) -> Result<(UniverseContext, Term, Term), Error> {
@@ -165,36 +122,6 @@ pub fn finalize_definition(
     let type_ = zonk_solved_term_metas(context, &type_);
     let body = zonk_solved_term_metas(context, &body);
 
-    // A value constructor is not independently polymorphic. `Result(F, S)` has two universe parameters; `success` mentions only `S` in its payload, so generalizing it alone mints its own `Param(0..1)` in meta-id order and displaces the inductive's — which `generalize` then shifts up past the declared count, leaving `Param(2)`/`Param(3)` with nothing to name them. Its universes *are* the inductive's, so it inherits that context and binds its instance to those parameters positionally.
-    //
-    // The owner is a field the lowering records where the constructor is generated, not something recovered from `name`.
-    if let DefinitionKind::InductiveConstructor { owner, .. } = kind {
-        let owner = Global::Authored(*owner);
-        let universe_context = context
-            .induct_decl(&owner)
-            .ok_or_else(|| {
-                Error::UniverseInvariant(format!(
-                    "{}: constructor names an unregistered inductive '{}'",
-                    name.faithful(),
-                    owner.faithful()
-                ))
-            })?
-            .universe_context
-            .clone();
-        // A constructor of a *parameterless* inductive results in a bare self-reference: an occurrence inside the group is monomorphic in the group's own universes, and `stamp_declaration_instance` only gives it an explicit instance after this finalization runs. So a missing instance is not a malformed constructor — it denotes the identity instance, which is what the stamp would write.
-        let instance = declaration_instance(&type_, &owner)
-            .unwrap_or_else(|| universe_context.identity_instance());
-        let mut metas = context.universe_metas_in(&type_);
-        metas.extend(context.universe_metas_in(&body));
-        context.finalize_universe_metas_at_instance(
-            metas,
-            &instance,
-            universe_context.parameter_count,
-        )?;
-        let type_ = context.zonk_universe_levels(&type_)?;
-        let body = context.zonk_universe_levels(&body)?;
-        return Ok((universe_context, type_, body));
-    }
     if let Some(struct_decl) = context.struct_decl(name).cloned() {
         let arity = zonk_arity(context, &struct_decl.arity)?;
         let result_sort = zonk(context, &struct_decl.result_sort)?;

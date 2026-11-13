@@ -20,7 +20,6 @@ let /Spin: Type =
 let /spent: /Spin =
     0;
 
-#{absent = [/Good/c]}
 induct /Good: pub Type
 | c(x: /Alias)
 end
@@ -32,7 +31,7 @@ const HELD_AT_A_COUNTED_INDEX: &str = r#"
 let /Count: (X: #{level = u} Type) -> #NatType =
     (X: #{level = u} Type) => match ${unfolding}: (m) => #NatType | 0 => 0 | pred + 1; ih => ih end;
 
-#{universe_context = {parameter_count = 1}, absent = [/Held/hold]}
+#{universe_context = {parameter_count = 1}}
 induct /Held: (i: #NatType) -> pub #{level = u} Type
 | hold(): ((#{universes = {levels = [u]}} /Count)(#NatType))
 end
@@ -40,7 +39,6 @@ end
 
 /// `Vouched`, a proposition, and `bad : Vouched` a group of one that names itself.
 const PROOF_TYPED_NULLARY_GROUP: &str = r#"
-#{absent = [/Vouched/qed]}
 induct /Vouched: pub Prop
 | qed(u: {})
 end

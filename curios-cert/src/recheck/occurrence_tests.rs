@@ -12,7 +12,6 @@ use {
 
 /// A family of one parameter and one index, `F(A : Type) : (i : Nat) -> Type`, whose one case is not defined, and `held : Type` an occurrence of it at `${occurrence}`.
 const OCCURRENCE: &str = r#"
-#{absent = [/F/mk]}
 induct /F(A: Type): (i: #NatType) -> pub Type
 | mk(): (0)
 end
@@ -27,7 +26,6 @@ struct /S(A: Type): pub Type {
     f: A,
 }
 
-#{absent = [/F/mk]}
 induct /F(A: Type): pub Type
 | mk(x: A)
 end
@@ -53,12 +51,10 @@ fn variant_held(variant: &str) -> String {
 
 /// `True`, and `Eq(A : Prop) : (x : A, y : A) -> Prop` with `refl(z : A) : (z, z)`, neither case defined: a parameter `True` inhabits, whose indices are typed at it.
 const EQUALITY: &str = r#"
-#{absent = [/True/qed]}
 induct /True: pub Prop
 | qed()
 end
 
-#{absent = [/Eq/refl]}
 induct /Eq(A: Prop): (x: A, y: A) -> pub Prop
 | refl(z: A): (z, z)
 end
@@ -339,7 +335,6 @@ fn a_nominal_occurrence_types_its_arguments() {
 induct /False: pub Prop
 end
 
-#{absent = [/Held/yes]}
 induct /Held: (n: #NatType) -> pub Type
 | yes(): (0)
 end
@@ -373,7 +368,6 @@ let /boom: #{node = InductType} /False() =
 fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     let verdicts = text_verdicts(
         r#"
-#{absent = [/Held/yes]}
 induct /Held: (n: #NatType) -> pub Type
 | yes(): (0)
 end

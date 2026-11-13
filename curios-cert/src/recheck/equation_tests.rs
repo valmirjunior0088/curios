@@ -136,7 +136,6 @@ fn a_guard_settled_under_an_inner_arms_equation_answers_nothing_after_that_arm()
 
 /// `Two(n)` has two cases, both at `0`. The scrutinee `w(())` is no variable, so the `a` arm records `w(()) = a`; its index inversion solves `n := 0`, which `w`'s type names, so the equation just assumed is restated at the solution in the same arm, and `inside` reads it. After the match `after` asks the same proposition, `n` open and `w(())` no case.
 const AN_ARMS_OWN_EQUATION_RESTATED: &str = r#"
-#{absent = [/Two/a, /Two/b]}
 induct /Two: (n: #NatType) -> pub Type
 | a(): (0)
 | b(): (0)

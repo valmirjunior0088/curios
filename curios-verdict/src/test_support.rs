@@ -255,7 +255,7 @@ fn rows(definitions: &Definitions) -> ForeignStore {
     let mut rows = ForeignStore::new();
     for item in definitions.items.iter() {
         for name in item.declared_names() {
-            if let Some(row) = scope.rows.get(name) {
+            if let Some(row) = scope.rows.get(&name) {
                 rows.register((**row).clone());
             }
         }

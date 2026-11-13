@@ -392,21 +392,6 @@ impl<'s> Context<'s> {
         Ok(count)
     }
 
-    pub(crate) fn finalize_universe_metas_at_instance(
-        &mut self,
-        metas: BTreeSet<UniverseMetaId>,
-        instance: &Universes,
-        parameter_count: usize,
-    ) -> Result<(), Error> {
-        self.closing_universes(|solver| {
-            solver.finalize_at_instance(metas, instance, parameter_count)
-        })
-        .map_err(Error::from)?;
-        self.underway.attempt.universe_solver.close_scheme();
-        self.typing.caches.invalidate_for_universe_rewrite();
-        Ok(())
-    }
-
     /// Settle the levels a witness's scheme minted at one use: pinned to what its goal fixes, and closed there only once the declaration that raised the goal has finalized.
     pub(crate) fn close_universe_instance(
         &mut self,

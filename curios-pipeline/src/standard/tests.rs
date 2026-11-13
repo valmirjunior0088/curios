@@ -105,7 +105,6 @@ fn elaborated_over(
             .places()
             .flat_map(|place| items.names(place))
             .filter(|name| lowered.declared_as(name).is_none())
-            .copied()
             .collect()
     });
 
@@ -851,39 +850,13 @@ fn std_vocabulary_reach_reproduction() {
     });
 }
 
-/// The kind an item was introduced as: a group's is its first member's.
-fn introduced(item: &Item) -> &DefinitionKind {
-    match item {
-        Item::Let(definition) => &definition.kind,
-        Item::Rec(rec) => &rec.exports()[0].kind,
-    }
-}
-
-/// The names of each declaration of `module`, in item order: an item's, with those of every item generated from it — a family's constructors — which no elaboration takes apart from it.
+/// The names of each declaration of `module`, in item order: each item's, a family's constructors among its own.
 fn declarations(definitions: &Definitions) -> Vec<BTreeSet<Global>> {
-    let mut generated: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
-    let mut declarations = Vec::new();
-    for item in &definitions.items {
-        let names = item.declared_names().into_iter().copied();
-        match introduced(item) {
-            DefinitionKind::InductiveConstructor { owner, .. } => generated
-                .entry(Global::Authored(*owner))
-                .or_default()
-                .extend(names),
-            _ => declarations.push(names.collect::<BTreeSet<_>>()),
-        }
-    }
-    for declaration in &mut declarations {
-        let members = declaration
-            .iter()
-            .filter_map(|name| generated.get(name))
-            .flatten()
-            .copied()
-            .collect::<Vec<_>>();
-        declaration.extend(members);
-    }
-
-    declarations
+    definitions
+        .items
+        .iter()
+        .map(|item| item.declared_names().into_iter().collect())
+        .collect()
 }
 
 /// What differs between the items of `whole` declaring `names` and `replayed`'s, each beside the traces its elaboration filed, each as the definition and the part that differs.
@@ -892,7 +865,7 @@ fn differences(
     (replayed, replayed_traces): (&Definitions, &Traces),
     names: &BTreeSet<Global>,
 ) -> Vec<String> {
-    let first = |item: &Item| item.declared_names().first().map(|name| **name);
+    let first = |item: &Item| item.declared_names().first().copied();
     let mut differences = Vec::new();
     for item in &whole.items {
         if !item
@@ -975,7 +948,7 @@ fn std_replay_census() {
             .flat_map(|(index, item)| {
                 item.declared_names()
                     .into_iter()
-                    .map(move |name| (*name, index))
+                    .map(move |name| (name, index))
             })
             .collect::<BTreeMap<_, _>>();
 
@@ -990,19 +963,8 @@ fn std_replay_census() {
                     .min()
                     .copied()
                     .expect("a declaration declares a lowered name");
-                // The item the declaration is written as, wherever the lowering puts the items generated from it.
-                let own = names
-                    .iter()
-                    .filter_map(|name| position.get(name))
-                    .map(|place| &lowered_core.items[*place])
-                    .find(|item| {
-                        !matches!(
-                            introduced(item),
-                            DefinitionKind::InductiveConstructor { .. }
-                        )
-                    })
-                    .expect("a declaration holds the item it is written as");
-                let written = *own.declared_names()[0];
+                let own = &lowered_core.items[first];
+                let written = own.declared_names()[0];
                 let mut again = names.clone();
                 let reach = lowered_core.reaches(own);
                 again.extend(

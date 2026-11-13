@@ -364,7 +364,6 @@ fn validate_syntax_targets(modules: &[&curios_core::Definitions]) {
         .iter()
         .flat_map(|definitions| definitions.items.iter())
         .flat_map(Item::declared_names)
-        .cloned()
         .collect::<BTreeSet<_>>();
     for target in SYNTAX.targets() {
         let symbol = target.symbol();

@@ -83,19 +83,19 @@ fn an_attempt_mints_above_what_its_own_declaration_lowered() {
     seeded.declare(&Rc::new(lowered(2)), [a]);
     seeded.declare(&Rc::new(lowered(5)), [b]);
     context.seed(&Rc::new(seeded));
-    let minted = |context: &mut Context, names: &[&Global]| {
+    let minted = |context: &mut Context, names: &[Global]| {
         context.attempt(names);
         [context.fresh(None), context.fresh(None)]
     };
 
-    let alone = minted(&mut context, &[&b]);
-    let [in_a, _] = minted(&mut context, &[&a]);
+    let alone = minted(&mut context, &[b]);
+    let [in_a, _] = minted(&mut context, &[a]);
     let [in_entry, _] = minted(&mut context, &[]);
 
     assert_eq!(alone, [Free::local(5, None), Free::local(6, None)]);
     assert_eq!(in_a, Free::local(2, None));
     assert_eq!(in_entry, Free::local(9, None));
-    assert_eq!(minted(&mut context, &[&b]), alone);
+    assert_eq!(minted(&mut context, &[b]), alone);
 }
 
 /// A state set aside takes what its attempt solved with it, and holds it wherever it is put back: the next attempt mints the same identity and reads nothing of it.

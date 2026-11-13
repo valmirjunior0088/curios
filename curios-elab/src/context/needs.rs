@@ -27,8 +27,8 @@ impl Needs {
     }
 
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet.
-    pub fn attempt(&mut self, names: &[&Global]) {
-        self.attempting = names.iter().map(|name| **name).collect();
+    pub fn attempt(&mut self, names: &[Global]) {
+        self.attempting = names.iter().copied().collect();
         self.needed.get_mut().clear();
     }
 
@@ -43,7 +43,7 @@ impl Needs {
     }
 
     /// The declaration declaring `names` has finished — kept, refused or withheld — and nothing waits on it any more.
-    pub fn finish(&mut self, names: &[&Global]) {
+    pub fn finish(&mut self, names: &[Global]) {
         for name in names {
             self.unfinished.remove(name);
         }

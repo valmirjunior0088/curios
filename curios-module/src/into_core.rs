@@ -781,6 +781,7 @@ impl PreparedText {
         let member = match place {
             curios_core::Place::Let(_) => 0,
             curios_core::Place::Member { member, .. } => member as usize,
+            curios_core::Place::Constructor { .. } => return curios_core::Declared::Constructor,
         };
 
         self.core.items.declared(place.item())[member]
@@ -1033,9 +1034,7 @@ impl PreparedText {
     fn aliases(&self) -> &Rc<Aliases> {
         self.aliases.get_or_init(|| {
             let items = &self.core.items;
-            let names = items
-                .places()
-                .map(|place| items.names(place).into_iter().copied().collect::<Vec<_>>());
+            let names = items.places().map(|place| items.names(place));
             let facts = self
                 .lowerings()
                 .iter()
@@ -1861,8 +1860,20 @@ fn process_items(
                                     curios_core::Term::func_marked(group, body),
                                 )
                             });
+                        // Its constructors are names its former declares beside itself, each written at its tag, which the family's entry makes and no definition holds.
+                        let owner = context.prefixed(&u.label);
+                        let members = u
+                            .cases
+                            .iter()
+                            .map(|case| {
+                                (
+                                    curios_core::Global::Authored(owner.with(case.label.as_str())),
+                                    case.label.span().cloned(),
+                                )
+                            })
+                            .collect();
                         Ok(FlatLet {
-                            members: Vec::new(),
+                            members,
                             kind: curios_core::DefinitionKind::Nominal(Rc::new(
                                 curios_core::Nominal::Inductive(
                                     lowered.induct_decls[&name].clone(),
@@ -1883,28 +1894,6 @@ fn process_items(
                 //
                 // So the wrapper does double duty, and dropping it needs `elaborate_module_let` to do both jobs. Nothing depends on that — a folded spelling reduces correctly, `curios-elab`'s `unfold_rec_apply` applying a group that dissolved to its member's value — which leaves this an optimization with no measurement behind it.
                 lowered.items.push(FlatItem::Rec(type_flat_items));
-
-                // Step 2: constructor bindings, each its family's case as the entry just lowered spells it ([`curios_core::Definition::constructors`]), which elaboration makes again from the entry it elaborates.
-                for u in group {
-                    let owner = context.prefixed(&u.label);
-                    let constructors = curios_core::Definition::constructors(
-                        owner,
-                        context.island(),
-                        &lowered.induct_decls[&curios_core::Global::Authored(owner)],
-                    );
-                    for (c, constructor) in u.cases.iter().zip(constructors) {
-                        context.record_import_scope(Some(&constructor.name));
-                        lowered.items.push(FlatItem::Let(FlatLet {
-                            members: Vec::new(),
-                            span: c.label.span().cloned(),
-                            kind: constructor.kind,
-                            name: constructor.name,
-                            island: constructor.island,
-                            type_: constructor.type_,
-                            body: constructor.body,
-                        }));
-                    }
-                }
             }
             // A struct lowers to a single type-former `let` plus a registry entry — no value-constructor binding (the literal elaborates directly) and no indices.
             // A group of structures lowers its formers into one `rec` item, as an `induct` group does, so each member's fields may name the others; a lone structure stays a `let`, its own name reached through its registry telescope.
@@ -3321,19 +3310,17 @@ fn into_core_unit_within(
                 .flat_map(move |place| {
                     held.names(place)
                         .into_iter()
-                        .copied()
                         .zip(&view.facts(place).definitions)
                 })
                 .collect::<Vec<_>>()
         };
         let aliases = whole_aliases.clone().unwrap_or_else(|| {
             let view = view.expect("a unit made over a baseline holds where it places each name");
-            Rc::new(aliases(items.places().map(|place| {
-                (
-                    items.names(place).into_iter().copied().collect(),
-                    view.facts(place),
-                )
-            })))
+            Rc::new(aliases(
+                items
+                    .places()
+                    .map(|place| (items.names(place), view.facts(place))),
+            ))
         });
         let definitions = audited.clone().unwrap_or_else(every);
         audit_public_exposures(
@@ -3365,12 +3352,11 @@ fn into_core_unit_within(
                     .expect("a unit made over a baseline holds where it places each name"),
                 records: &records,
             };
-            Rc::new(aliases(items.places().map(|place| {
-                (
-                    items.names(place).into_iter().copied().collect(),
-                    view.facts(place),
-                )
-            })))
+            Rc::new(aliases(
+                items
+                    .places()
+                    .map(|place| (items.names(place), view.facts(place))),
+            ))
         }
     };
 

@@ -795,7 +795,6 @@ fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
 
 /// `f` splits `x`, a lambda's binder applied on the spot to `w2`, inside the arm that refined `w2` to `up(u)`: the split refines `w2` again through what `x` stands for, and its `base` case is the dead `base` of a value known to be `up(u)`. `${dead}` is that case's body and `${live}` the `up(j)` case's.
 const A_GROUP_SPLITTING_AN_APPLIED_LAMBDAS_BINDER: &str = r#"
-#{absent = [/W/base, /W/up]}
 induct /W: pub Prop
 | base()
 | up(w: #{node = InductType} /W())

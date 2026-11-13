@@ -11,7 +11,8 @@ mod tests;
 
 use {
     super::{
-        Declared, Definitions, Global, Item, Items, RecGroup, RecItem, Term, WitnessId, WitnessKey,
+        Declared, Definition, Definitions, Global, Item, Items, RecGroup, RecItem, Term, WitnessId,
+        WitnessKey,
     },
     curios_common::{Keyed, Persistent, Qualifier, Sorted},
     std::{cell::OnceCell, collections::HashMap, rc::Rc},
@@ -21,25 +22,33 @@ use {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Place {
     Let(u64),
-    Member { item: u64, member: u32 },
+    Member {
+        item: u64,
+        member: u32,
+    },
+    /// A constructor of a family the item declares: a name the item declares and none of its definitions holds, made from the family's entry where it is read ([`Places::constructor`]).
+    Constructor {
+        item: u64,
+    },
 }
 
 impl Place {
     /// The item that declares the name, as its place among the module's items.
     pub fn item(&self) -> usize {
         match self {
-            Place::Let(item) | Place::Member { item, .. } => {
+            Place::Let(item) | Place::Member { item, .. } | Place::Constructor { item } => {
                 usize::try_from(*item).expect("a place is counted in a usize")
             }
         }
     }
 }
 
-/// Where a module holds a name, and, for a group's member, what it is read by: its type and its projection out of the group, terms the group does not hold as such, each made the first time the member is read.
+/// Where a module holds a name, and what it is read by where the item holds it as no definition of its own: a group's member by its type and its projection out of the group, and a family's constructor by the definition its family's entry makes, each made the first time the name is read.
 #[derive(Debug, Clone)]
 struct Held {
     place: Place,
     member: Option<Rc<OnceCell<(Term, Term)>>>,
+    constructor: Option<Rc<OnceCell<Definition>>>,
 }
 
 /// Where a module holds each name it defines.
@@ -69,29 +78,38 @@ impl Places {
         const TWICE: &str = "a module declares one name twice";
         let item = u64::try_from(place).expect("a place is counted in a u64");
         let group = items.is_group(place);
-        for (name, declared) in items.names(place).into_iter().zip(items.declared(place)) {
-            if declared == Declared::Witness {
+        let (names, declared) = (items.names(place), items.declared(place));
+        for (name, declared) in names.iter().zip(&declared) {
+            if *declared == Declared::Witness {
                 self.witnesses.insert(*name, ());
             }
         }
-        for (member, name) in items.names(place).into_iter().enumerate() {
-            let held = match group {
-                false => Held {
+        // An item's definitions' names come first, so a member's place among them is its place among the group's members.
+        for (member, (name, declared)) in names.into_iter().zip(declared).enumerate() {
+            let held = match (declared, group) {
+                (Declared::Constructor, _) => Held {
+                    place: Place::Constructor { item },
+                    member: None,
+                    constructor: Some(Rc::new(OnceCell::new())),
+                },
+                (_, false) => Held {
                     place: Place::Let(item),
                     member: None,
+                    constructor: None,
                 },
-                true => Held {
+                (_, true) => Held {
                     place: Place::Member {
                         item,
                         member: u32::try_from(member)
                             .expect("a group's members are counted in a u32"),
                     },
                     member: Some(Rc::new(OnceCell::new())),
+                    constructor: None,
                 },
             };
-            let earlier = self.places.get(name).map(|earlier| earlier.place.item());
+            let earlier = self.places.get(&name).map(|earlier| earlier.place.item());
             assert!(earlier.is_none_or(|earlier| earlier == place), "{TWICE}");
-            self.places.insert(*name, held);
+            self.places.insert(name, held);
         }
         self.groups = OnceCell::new();
     }
@@ -156,6 +174,20 @@ impl Places {
                 rec.group().member_type(index),
                 Term::rec_proj(rec.group().clone(), index),
             )
+        })
+    }
+
+    /// The definition the constructor `name`, which `item` declares, is read as: the one its family's entry makes ([`Item::constructor`]), kept from the first time it is asked for.
+    pub fn constructor(&self, name: &Global, item: &Item) -> &Definition {
+        let cell = self
+            .places
+            .get(name)
+            .and_then(|held| held.constructor.as_deref())
+            .expect("a constructor of a family the module holds");
+
+        cell.get_or_init(|| {
+            item.constructor(name)
+                .expect("a constructor's item declares its family")
         })
     }
 

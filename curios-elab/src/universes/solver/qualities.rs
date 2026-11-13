@@ -9,8 +9,7 @@
 use {
     super::UniverseSolver,
     curios_core::{
-        Extent, Quality, QualityMetaId, QualityParam, UniverseConstraintOrigin, UniverseError,
-        WrittenSort,
+        Extent, Quality, QualityMetaId, QualityParam, UniverseConstraintOrigin, WrittenSort,
     },
 };
 
@@ -192,24 +191,6 @@ impl UniverseSolver {
         let decided = matches!(entry.solution, Some(Quality::Prop | Quality::Type));
 
         (entry.written && decided).then_some(entry.solved_at)
-    }
-
-    /// Hold the qualities an occurrence of a declaration states to be that declaration's own parameters, in order: what a constructor or a method wrapper, issued in its owner's context, makes of the instance its type names the owner at.
-    pub fn pin_qualities(&mut self, instance: &[Quality]) -> Result<(), UniverseError> {
-        for (index, quality) in instance.iter().enumerate() {
-            let parameter = Quality::Param(QualityParam(index));
-            match self.quality(*quality) {
-                Quality::Meta(open) => {
-                    self.qualities[open.0].solution = Some(parameter);
-                    self.quality_log.push(open);
-                }
-                held if held == parameter => {}
-                // One already `Prop`, `Type` or another parameter was forced elsewhere, and nothing in the declaration can stand for the owner's parameter in its place.
-                _ => return Err(UniverseError::EscapingLevel),
-            }
-        }
-
-        Ok(())
     }
 
     /// Record that a record type was formed over fields at `this` and at `that`, two open qualities apart, and taken for a type: where `site` is the record type's own extent.

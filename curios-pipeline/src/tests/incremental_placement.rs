@@ -46,7 +46,7 @@ fn a_recompile_over_a_recompile_holds_each_name_where_its_module_does() {
     let fresh = curios_core::Places::of(definitions);
     for place in definitions.items.places() {
         for name in definitions.items.names(place) {
-            assert_eq!(second.places().place(name), fresh.place(name), "{name:?}");
+            assert_eq!(second.places().place(&name), fresh.place(&name), "{name:?}");
         }
     }
     assert_stored_alike(&unit_of(&edited), &first);
@@ -89,7 +89,7 @@ fn assert_placed(unit: &Unit) {
     let fresh = curios_core::Places::of(definitions);
     for place in definitions.items.places() {
         for name in definitions.items.names(place) {
-            assert_eq!(unit.places().place(name), fresh.place(name), "{name:?}");
+            assert_eq!(unit.places().place(&name), fresh.place(&name), "{name:?}");
         }
     }
 }

@@ -26,8 +26,8 @@ pub enum Outcome {
 /// How one item's erasure reads the erased form of another: by a name the other declares, at the sorts it is read at.
 pub type Externals<'s> = &'s dyn Fn(&curios_core::Global, Sorts) -> Option<&'s ErasedItem>;
 
-/// How one item's erasure reads a `let` definition off the item that declares it, its own unit's or a unit in scope's: what kind of definition a name is, and its body, which the certifier's environment does not say.
-pub type Declared<'s> = &'s dyn Fn(&curios_core::Global) -> Option<&'s curios_core::Definition>;
+/// How one item's erasure reads a constructor off the family that declares it, its own unit's or a unit in scope's: the family a name constructs a value of, which the certifier's environment does not say.
+pub type Constructors<'s> = &'s dyn Fn(&curios_core::Global) -> Option<&'s curios_core::Definition>;
 
 /// The names a fragment's identities were minted for, by identity: what a refusal of the erased verifier, which holds identities and debug names alone, names a member and a callee by.
 #[derive(Debug, Default)]
@@ -37,18 +37,18 @@ pub struct ErasedNames {
 }
 
 impl<'s> Eraser<'s> {
-    /// A fresh erasure of the form at `sorts` of the item declaring `own`, reading other items' erased forms through `externals` and their `let` definitions through `declared`.
+    /// A fresh erasure of the form at `sorts` of the item declaring `own`, reading other items' erased forms through `externals` and constructors through `constructors`.
     pub fn over(
         externals: Externals<'s>,
-        declared: Declared<'s>,
-        (own, sorts): (&[&curios_core::Global], Sorts),
+        constructors: Constructors<'s>,
+        (own, sorts): (&[curios_core::Global], Sorts),
     ) -> Self {
         Self {
             builder: curios_anf::Builder::new(),
             environment: Environment::default(),
             externals,
-            declared,
-            own: (own.iter().map(|name| **name).collect(), sorts),
+            constructors,
+            own: (own.to_vec(), sorts),
             values: Vec::new(),
             functions: Vec::new(),
             owners: Vec::new(),
@@ -61,7 +61,7 @@ impl<'s> Eraser<'s> {
     }
 
     /// Close the fragment and hand the item's erased form over: the fragment verified with no entry, its recursion rules included, and of the environment the bindings of `declared`, the names the item declares.
-    pub fn into_erased(self, declared: &[&curios_core::Global]) -> Result<ErasedItem, Error> {
+    pub fn into_erased(self, declared: &[curios_core::Global]) -> Result<ErasedItem, Error> {
         let Self {
             builder,
             environment,
@@ -88,9 +88,9 @@ impl<'s> Eraser<'s> {
         (self.externals)(&name, sorts)
     }
 
-    /// The `let` definition `name` as its item declares it, where a `let` declares it.
-    pub fn declared(&self, name: &curios_core::Global) -> Option<&'s curios_core::Definition> {
-        (self.declared)(name)
+    /// The constructor `name`, as its family's entry makes it, where it is one.
+    pub fn constructor(&self, name: &curios_core::Global) -> Option<&'s curios_core::Definition> {
+        (self.constructors)(name)
     }
 
     /// `name` at `sorts` as this fragment names it: one the item declares, at the sorts this form is read at, is the item's own, at none.

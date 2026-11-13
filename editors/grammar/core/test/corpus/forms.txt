@@ -60,11 +60,9 @@ A decorator above the node it decorates, and an intrinsic over its operands
 Declarations by their absolute names, a group joined by `and`, and the entry's type
 ================================================================================
 
-#{absent = [/Wit/base]}
 induct /Wit: pub Prop
 | base()
 end
-#{absent = [/Box/box]}
 and induct /Box: pub Type
 | box(x: #{node = InductType} /Wit())
 end
@@ -80,26 +78,12 @@ test /held = 1;
 
 (source_file
   (group
-    (decorator
-      (decorator_field
-        (identifier)
-        (list_literal
-          (path
-            (identifier)
-            (identifier)))))
     (induct_body
       (path
         (identifier))
       (sort)
       (constructor
         (identifier)))
-    (decorator
-      (decorator_field
-        (identifier)
-        (list_literal
-          (path
-            (identifier)
-            (identifier)))))
     (induct_body
       (path
         (identifier))

@@ -4,7 +4,6 @@ use {super::test_support::*, crate::*, curios_common::fill, curios_surface::Spel
 
 /// `Indexed(i : Nat) : Type`, whose one case, not defined, targets `${target}`.
 const INDEXED: &str = r#"
-#{absent = [/Indexed/mk]}
 induct /Indexed: (i: #NatType) -> pub Type
 | mk(): (${target})
 end
@@ -12,12 +11,10 @@ end
 
 /// `Held`, a proposition, and `Indexed(i : Held) : Type`, whose one case targets the proof `${target}`; neither family's cases are defined.
 const INDEXED_BY_PROOF: &str = r#"
-#{absent = [/Held/qed]}
 induct /Held: pub Prop
 | qed()
 end
 
-#{absent = [/Indexed/mk]}
 induct /Indexed: (i: #{node = InductType} /Held()) -> pub Type
 | mk(): (${target})
 end
@@ -183,7 +180,6 @@ let /sink: (n: #NatType) -> #NatType =
 let /reaches: (m: #NatType) -> #NatType =
     (m: #NatType) => /sink(m);
 
-#{absent = [/Carrier/mk]}
 induct /Carrier: pub Type
 | mk(x: ((g: (n: #NatType) -> #NatType) => #NatType)(/reaches))
 end

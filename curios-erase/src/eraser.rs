@@ -7,7 +7,7 @@ use {
 
 mod walk;
 use walk::*;
-pub use walk::{Declared, ErasedNames, Outcome};
+pub use walk::{Constructors, ErasedNames, Outcome};
 
 mod unit;
 pub use unit::{ErasedProgram, erase_program, erase_unit, erase_unit_over};
@@ -41,8 +41,8 @@ pub struct Eraser<'s> {
     environment: Environment,
     /// The erased forms of the items this one may name.
     externals: Externals<'s>,
-    /// The `let` definitions this one may name, as their items declare them.
-    declared: Declared<'s>,
+    /// The constructors this one may name, as their families' entries make them.
+    constructors: Constructors<'s>,
     /// The names the item declares, and the sorts this form of it is read at: an occurrence of one at those sorts is the item's own, bound in this fragment at none.
     own: (Vec<curios_core::Global>, Sorts),
     /// The name and sorts each value the fragment imports stands for, in the order the builder minted them.

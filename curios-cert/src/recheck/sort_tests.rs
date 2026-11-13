@@ -19,7 +19,6 @@ fn at_sorts(verdict: &Verdict) -> Option<(&[Quality], &Error)> {
 
 /// `Held`, a proposition whose one case is not defined.
 const HELD: &str = r#"
-#{absent = [/Held/qed]}
 induct /Held: pub Prop
 | qed()
 end
@@ -83,7 +82,7 @@ fn a_declaration_ill_typed_at_one_sort_alone_is_refused_at_it() {
 let /only: (X: ${sort}) -> ${sort} =
     (X: ${sort}) => X;
 
-#{universe_context = {quality_count = 1}, absent = [/Through/through]}
+#{universe_context = {quality_count = 1}}
 induct /Through(A: Sort): pub Type
 | through(x: /only(A))
 end
@@ -221,7 +220,7 @@ let /past: (A: #{quality = Param(1)} Sort) -> #{quality = Param(1)} Sort =
 fn a_family_over_a_sort_holds_data_and_proofs() {
     let verdicts = text_verdicts(&fill!(
         r#"
-#{universe_context = {quality_count = 1}, absent = [/Box/box]}
+#{universe_context = {quality_count = 1}}
 induct /Box(A: Sort): pub Type
 | box(a: A)
 end
@@ -246,7 +245,7 @@ let /a_proof:
 fn a_family_whose_own_sort_is_left_to_its_caller_is_refused() {
     let verdicts = text_verdicts(
         r#"
-#{universe_context = {quality_count = 1}, absent = [/Box/box]}
+#{universe_context = {quality_count = 1}}
 induct /Box(A: Sort): pub (Sort)
 | box(a: A)
 end
@@ -268,7 +267,7 @@ fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
     let coercion = |to: &str| {
         text_verdicts(&fill!(
             r#"
-#{universe_context = {quality_count = 1}, absent = [/Tagged/tag]}
+#{universe_context = {quality_count = 1}}
 induct /Tagged: pub Type
 | tag()
 end
@@ -330,7 +329,6 @@ fn a_declaration_leaves_no_more_sorts_than_the_limit() {
 fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
     let verdicts = text_verdicts(
         r#"
-#{absent = [/Two/a, /Two/b]}
 induct /Two: pub Prop
 | a()
 | b()
@@ -436,7 +434,7 @@ let /T: Type =
 fn an_occurrence_a_sort_left_to_a_caller_would_uncover_is_refused() {
     let verdicts = text_verdicts(
         r#"
-#{universe_context = {quality_count = 1}, absent = [/Eq/refl]}
+#{universe_context = {quality_count = 1}}
 induct /Eq(A: Sort): (x: A, y: A) -> pub Prop
 | refl(@z: A): (z, z)
 end
@@ -444,7 +442,7 @@ end
 induct /False: pub Prop
 end
 
-#{universe_context = {quality_count = 1}, absent = [/Bad/c]}
+#{universe_context = {quality_count = 1}}
 induct /Bad(
     A: Sort,
     x: A,
@@ -481,12 +479,12 @@ end
 fn a_level_a_standing_match_carries_is_held_by_its_family() {
     let verdicts = text_verdicts(
         r#"
-#{universe_context = {quality_count = 1}, absent = [/Eq/refl]}
+#{universe_context = {quality_count = 1}}
 induct /Eq(A: Sort): (x: A, y: A) -> pub Prop
 | refl(@z: A): (z, z)
 end
 
-#{universe_context = {parameter_count = 1, quality_count = 1}, absent = [/Lv/mk]}
+#{universe_context = {parameter_count = 1, quality_count = 1}}
 induct /Lv(
     A: Sort,
     x: A,

@@ -1,18 +1,5 @@
 >-- A witness's reasoning, at its head: `#{` and `#Name` in a comment are text.
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ source.curios.core comment.line.double-dash.curios
->#{absent = [/Wit/base]}
-#^^ source.curios.core meta.decorator.curios punctuation.definition.decorator.begin.curios
-#  ^^^^^^ source.curios.core meta.decorator.curios entity.other.attribute-name.curios
-#        ^ source.curios.core meta.decorator.curios
-#         ^ source.curios.core meta.decorator.curios keyword.operator.assignment.curios
-#          ^ source.curios.core meta.decorator.curios
-#           ^ source.curios.core meta.decorator.curios punctuation.bracket.curios
-#            ^ source.curios.core meta.decorator.curios punctuation.separator.path.curios
-#             ^^^ source.curios.core meta.decorator.curios support.module.curios
-#                ^ source.curios.core meta.decorator.curios punctuation.separator.path.curios
-#                 ^^^^ source.curios.core meta.decorator.curios variable.other.curios
-#                     ^ source.curios.core meta.decorator.curios punctuation.bracket.curios
-#                      ^ source.curios.core meta.decorator.curios punctuation.definition.decorator.end.curios
 >induct /Wit: pub Prop
 #^^^^^^ source.curios.core keyword.control.curios
 #      ^ source.curios.core
@@ -31,19 +18,6 @@
 #       ^ source.curios.core punctuation.bracket.curios
 >end
 #^^^ source.curios.core keyword.control.curios
->#{absent = [/Box/box]}
-#^^ source.curios.core meta.decorator.curios punctuation.definition.decorator.begin.curios
-#  ^^^^^^ source.curios.core meta.decorator.curios entity.other.attribute-name.curios
-#        ^ source.curios.core meta.decorator.curios
-#         ^ source.curios.core meta.decorator.curios keyword.operator.assignment.curios
-#          ^ source.curios.core meta.decorator.curios
-#           ^ source.curios.core meta.decorator.curios punctuation.bracket.curios
-#            ^ source.curios.core meta.decorator.curios punctuation.separator.path.curios
-#             ^^^ source.curios.core meta.decorator.curios support.module.curios
-#                ^ source.curios.core meta.decorator.curios punctuation.separator.path.curios
-#                 ^^^ source.curios.core meta.decorator.curios variable.other.curios
-#                    ^ source.curios.core meta.decorator.curios punctuation.bracket.curios
-#                     ^ source.curios.core meta.decorator.curios punctuation.definition.decorator.end.curios
 >and induct /Box: pub Type
 #^^^^^^^^^^ source.curios.core keyword.control.curios
 #          ^ source.curios.core

@@ -18,7 +18,7 @@ fn wrap(variances: &[&str]) -> String {
     let carried = carried(variances);
 
     fill!(
-        "#{universe_context = {parameter_count = 1}${carried}, absent = [/Wrap/wrap]}\ninduct /Wrap(A: #{level = u} Type): pub #{level = u} Type\n| wrap(a: A)\nend\n",
+        "#{universe_context = {parameter_count = 1}${carried}}\ninduct /Wrap(A: #{level = u} Type): pub #{level = u} Type\n| wrap(a: A)\nend\n",
         carried
     )
 }
@@ -28,7 +28,7 @@ fn boxed(variances: &[&str], payload: &str) -> String {
     let carried = carried(variances);
 
     fill!(
-        "#{universe_context = {parameter_count = 1}${carried}, absent = [/Box/box]}\ninduct /Box: pub #{level = u + 1} Type\n| box(T: ${payload})\nend\n",
+        "#{universe_context = {parameter_count = 1}${carried}}\ninduct /Box: pub #{level = u + 1} Type\n| box(T: ${payload})\nend\n",
         carried,
         payload
     )
@@ -62,7 +62,7 @@ fn russell(variances: &[&str]) -> String {
 
     fill!(
         r#"
-#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}${carried}, absent = [/Fam/mk]}
+#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}${carried}}
 induct /Fam: pub #{level = v} Type
 | mk(A: #{level = u} Type, f: (x: A) -> #{node = InductType, universes = {levels = [u, v]}} /Fam())
 end
@@ -182,7 +182,7 @@ fn a_level_only_an_index_target_mentions_is_invariant() {
         holding(&["Invariant"])
             + &fill!(
                 r#"
-#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}${carried}, absent = [/Fam/mk]}
+#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}${carried}}
 induct /Fam: (D: #{level = v} Type) -> pub Type
 | mk(): (#{node = InductType, universes = {levels = [u]}} /Box())
 end
@@ -256,7 +256,7 @@ fn a_family_of_a_unit_in_scope_answers_from_what_the_certifier_filed() {
     let held = |result_sort: &str, payload: &str| {
         fill!(
             r#"
-#{universe_context = {parameter_count = 1}, variances = [Irrelevant], absent = [/Held/c]}
+#{universe_context = {parameter_count = 1}, variances = [Irrelevant]}
 induct /Held: pub ${result_sort}
 | c(x: ${payload})
 end
@@ -299,7 +299,7 @@ fn a_level_a_reduction_removes_is_carried_as_irrelevant() {
 let /Alias: (A: #{level = u} Type) -> #{level = u} Type =
     (A: #{level = u} Type) => A;
 
-#{universe_context = {parameter_count = 1}, variances = [Irrelevant], absent = [/Uses/c]}
+#{universe_context = {parameter_count = 1}, variances = [Irrelevant]}
 induct /Uses(A: #{level = u} Type): pub #{level = u} Type
 | c(x: (#{universes = {levels = [u]}} /Alias)(A))
 end
@@ -325,7 +325,7 @@ fn a_level_one_arm_of_a_stuck_match_states_is_invariant() {
         let carried = carried(variances);
         fill!(
             r#"
-#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}${carried}, absent = [/Arm/c]}
+#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}${carried}}
 induct /Arm(b: #BoolType): pub #{level = v} Type
 | c(T: match b: (x) => #{level = v} Type | false => #NatType | true => #{level = u} Type end)
 end
@@ -357,7 +357,7 @@ fn a_level_reached_through_a_definition_the_walk_unfolds_is_invariant() {
 let /Pick: #{level = u + 1} Type =
     #{node = InductType, universes = {levels = [u]}} /Box();
 
-#{universe_context = {parameter_count = 2}${carried}, absent = [/Held/c]}
+#{universe_context = {parameter_count = 2}${carried}}
 induct /Held: pub #{level = u + 1} Type
 | c(x: #{universes = {levels = [u, v]}} /Pick)
 end

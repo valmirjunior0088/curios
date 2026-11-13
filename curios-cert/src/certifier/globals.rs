@@ -41,7 +41,7 @@ pub struct Held<'a> {
     pub universes: &'a UniverseContext,
 }
 
-/// What `module` holds `name` at, where it defines it, by the place its unit keeps for the name: a `let` at its declared type with its body, a group's member at its opened type with its folded selection, and either with nothing to unfold to where it is marked a proof.
+/// What `module` holds `name` at, where it defines it, by the place its unit keeps for the name: a `let` at its declared type with its body, a group's member at its opened type with its folded selection, either with nothing to unfold to where it is marked a proof, and a family's constructor as its family's entry makes it.
 ///
 /// One function, read wherever a finished module answers for a name — a unit in scope, a baseline — so no two readers can hold an item two ways.
 pub fn held<'a>(
@@ -78,6 +78,17 @@ pub fn held<'a>(
             }
             Item::Let(_) => unreachable!("a member's place is a group's"),
         },
+        // A family's constructor, as its family's entry makes it: its type and its injection, at its family's universes.
+        Place::Constructor { .. } => {
+            let definition = places.constructor(name, &definitions.items[place.item()]);
+
+            Some(Held {
+                type_: &definition.type_,
+                value: Some(&definition.body),
+                value_sort: None,
+                universes: &definition.universe_context,
+            })
+        }
     }
 }
 
@@ -161,7 +172,7 @@ impl<'s> Mounted<'s> {
             items
                 .names(place)
                 .into_iter()
-                .any(|name| larger.holds(name))
+                .any(|name| larger.holds(&name))
         })
     }
 

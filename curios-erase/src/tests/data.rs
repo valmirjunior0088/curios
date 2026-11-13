@@ -108,9 +108,17 @@ items
   Rec
     value ~v0$/Opt
       Return Unit
+  Functions
+    function ~f0$/Opt/none()
+      Let ~v1 = Construct ~t0 []
+      Return ~v1
+  Functions
+    function ~f1$/Opt/some(~v2$x)
+      Let ~v3 = Construct ~t1 [~v2$x]
+      Return ~v3
 entry
-  Let ~v1 = Construct ~t1 [Nat(6)]
-  Return ~v1
+  Let ~v4 = Construct ~t1 [Nat(6)]
+  Return ~v4
 "
     );
     // The family the construction registered against, asked of the arena the header renders from: a nullary `none` and a `some` carrying one `Nat`, with `~t1` — the constructed one — the second.
@@ -511,14 +519,22 @@ items
   Rec
     value ~v0$/Opt
       Return Unit
+  Functions
+    function ~f0$/Opt/none()
+      Let ~v1 = Construct ~t0 []
+      Return ~v1
+  Functions
+    function ~f1$/Opt/some(~v2$x)
+      Let ~v3 = Construct ~t1 [~v2$x]
+      Return ~v3
 entry
-  Let ~v1$scrutinee = Construct ~t1 [Nat(6)]
-  Let ~v3 = MatchVariant ~d0 ~v1$scrutinee
+  Let ~v4$scrutinee = Construct ~t1 [Nat(6)]
+  Let ~v6 = MatchVariant ~d0 ~v4$scrutinee
     arm ~t0()
       Return Nat(0)
-    arm ~t1(~v2$x)
-      Return ~v2$x
-  Return ~v3
+    arm ~t1(~v5$x)
+      Return ~v5$x
+  Return ~v6
 "
     );
 }

@@ -176,21 +176,6 @@ fn a_written_sort_its_declaration_decides_is_refused_with_what_it_is() {
 }
 
 #[test]
-fn the_sorts_an_occurrence_states_are_pinned_to_its_owners_parameters() {
-    let mut solver = UniverseSolver::new(0);
-    let (first, second) = (solver.fresh_quality(None), solver.fresh_quality(None));
-
-    assert!(solver.pin_qualities(&[first, second]).is_ok());
-    assert_eq!(solver.quality(first), Quality::Param(QualityParam(0)));
-    assert_eq!(solver.quality(second), Quality::Param(QualityParam(1)));
-
-    // One already decided stands for no parameter of the owner.
-    let decided = solver.fresh_quality(None);
-    assert!(solver.unify_qualities(decided, Quality::Type, None));
-    assert!(solver.pin_qualities(&[decided]).is_err());
-}
-
-#[test]
 fn a_record_over_two_written_sorts_is_found_where_both_close_as_parameters() {
     let (mut solver, written) = writing(2);
     solver.note_quality_join(written[0], written[1], None);

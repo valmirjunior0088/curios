@@ -96,7 +96,7 @@ pub fn declaring(
             .rposition(|item| {
                 item.declared_names()
                     .into_iter()
-                    .any(|declared| reach.contains(declared))
+                    .any(|declared| reach.contains(&declared))
             })
             .map_or(0, |last| last + 1);
         let grouped = matches!(nominal, Nominal::Inductive(_));

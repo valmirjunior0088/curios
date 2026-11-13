@@ -14,8 +14,8 @@
 
 use {
     super::{
-        Elaborated, Holding, ItemMark, ItemStamp, Poison, Survivors, carrying,
-        elaborate_module_item, withhold,
+        Elaborated, Holding, ItemMark, ItemStamp, Poison, Survivors, elaborate_module_item,
+        withhold,
     },
     crate::{
         Answered, Classified, Context, Error, Established, Foreign, GoalSite, HeldTrace, Made,
@@ -207,10 +207,7 @@ impl<'a> Demand<'a> {
 
     /// Every name of a declaration the walk holds: the ones not finished when the walk begins.
     pub fn held_names(&self) -> BTreeSet<Global> {
-        self.held_items()
-            .flat_map(Item::declared_names)
-            .copied()
-            .collect()
+        self.held_items().flat_map(Item::declared_names).collect()
     }
 
     /// Every name of a declaration elaborated again over a baseline: each one the walk holds and did not keep. Empty for a unit compiled whole.
@@ -223,7 +220,6 @@ impl<'a> Demand<'a> {
             .iter()
             .filter(|(_, held)| !held.kept)
             .flat_map(|(declaration, _)| self.names(*declaration))
-            .copied()
             .collect()
     }
 
@@ -265,7 +261,7 @@ impl<'a> Demand<'a> {
                     dropped.extend(self.foreign_parts(earlier, scope));
                 }
             }
-            if let Some(trace) = self.traces.of(names[0]) {
+            if let Some(trace) = self.traces.of(&names[0]) {
                 read.extend(self.foreign_parts(trace, scope));
             }
         }
@@ -416,7 +412,7 @@ impl<'a> Demand<'a> {
         self.held
             .iter()
             .filter(|(_, held)| held.standing == Standing::Finished)
-            .map(|(declaration, _)| *self.names(*declaration)[0])
+            .map(|(declaration, _)| self.names(*declaration)[0])
             .collect()
     }
 
@@ -629,7 +625,7 @@ impl<'a> Demand<'a> {
         while let Some(declaration) = reached.frontier.pop() {
             marked.push(declaration);
             for name in self.names(declaration) {
-                for (reader, _) in over.readers.of_name(name) {
+                for (reader, _) in over.readers.of_name(&name) {
                     // A declaration does not wait on itself: what a group asks of its own members is decided with it.
                     let Some(read) = self.owner(reader) else {
                         continue;
@@ -667,8 +663,8 @@ impl<'a> Demand<'a> {
         };
         let counted = self.held[&declaration].marked;
         for name in self.names(declaration) {
-            let moved = self.moved(name, declaration);
-            for (reader, read) in over.readers.of_name(name) {
+            let moved = self.moved(&name, declaration);
+            for (reader, read) in over.readers.of_name(&name) {
                 let Some(read_by) = self.owner(reader) else {
                     continue;
                 };
@@ -734,7 +730,7 @@ impl<'a> Demand<'a> {
     }
 
     /// The names every item of `declaration` declares.
-    fn names(&self, declaration: usize) -> Vec<&'a Global> {
+    fn names(&self, declaration: usize) -> Vec<Global> {
         let definitions = self.definitions;
         self.declarations
             .items(declaration)
@@ -786,8 +782,8 @@ impl<'a> Demand<'a> {
                         .collect::<Vec<_>>();
                     let item = &definitions.items[declaration];
                     // Placed at the first member's name, as any report with no position of its own is.
-                    let error = Error::declaration_cycle(&members)
-                        .in_declaration(item.declared_names().into_iter().copied());
+                    let error =
+                        Error::declaration_cycle(&members).in_declaration(item.declared_names());
                     self.survivors.refuse(ItemStamp(declaration), error);
                 }
                 // The cycle is closed by the member asked for first: what asked for that one reads a refusal, as it would any other.
@@ -865,8 +861,8 @@ impl<'a> Demand<'a> {
         self.over.is_some_and(|over| {
             let names = self.names(declaration);
 
-            names.iter().all(|name| !over.relowered.contains(*name))
-                && over.traces.held(names[0]).is_some()
+            names.iter().all(|name| !over.relowered.contains(name))
+                && over.traces.held(&names[0]).is_some()
         })
     }
 
@@ -879,7 +875,7 @@ impl<'a> Demand<'a> {
         let names = self.names(declaration);
         let kept = names
             .iter()
-            .all(|name| !over.relowered.contains(*name) && over.places.place(name).is_some());
+            .all(|name| !over.relowered.contains(name) && over.places.place(name).is_some());
         let poisoned = self
             .declarations
             .items(declaration)
@@ -889,7 +885,7 @@ impl<'a> Demand<'a> {
             .iter()
             .all(|name| match context.spelled_witness(name) {
                 Some(Some((concept, key))) => {
-                    context.witness_pending(concept, key) == Some(**name)
+                    context.witness_pending(concept, key) == Some(*name)
                         && context.witness_standing(concept, key).is_none()
                 }
                 Some(None) => false,
@@ -899,7 +895,7 @@ impl<'a> Demand<'a> {
             return None;
         }
 
-        over.traces.held(names[0]).cloned()
+        over.traces.held(&names[0]).cloned()
     }
 
     /// Whether every question of `trace`, `declaration`'s where the baseline elaborated it, is answered as it was, each asked after the declaration it is about: the first that is not ends the asking.
@@ -990,26 +986,26 @@ impl<'a> Demand<'a> {
     }
 
     /// File `record` as the declaration declaring `names`'s, under the first: in place of the baseline's record of it, and of any record the baseline held under another of its names, which was a declaration this one now holds the name of. A record made now, or one a store held, which the declaration was taken from.
-    fn file(&mut self, names: &[&Global], record: HeldTrace) {
+    fn file(&mut self, names: &[Global], record: HeldTrace) {
         let (first, others) = names.split_first().expect("a declaration declares a name");
         if let Some(over) = self.over {
             for name in others {
                 if let (Some(readers), Some(held)) = (&mut self.readers, over.traces.of(name)) {
-                    readers.replace(**name, Some(held), None);
+                    readers.replace(*name, Some(held), None);
                 }
                 self.traces.forget(name);
             }
             if let Some(readers) = &mut self.readers {
-                readers.replace(**first, over.traces.of(first), Some(&**record));
+                readers.replace(*first, over.traces.of(first), Some(&**record));
             }
         }
-        self.traces.share(**first, record);
+        self.traces.share(*first, record);
     }
 
     /// File what elaboration concluded of each definition of `made`, an item that stands, in place of what the baseline filed of it.
     fn classify(&mut self, context: &Context, made: &Item) {
         for name in made.declared_names() {
-            self.traces.classify(*name, context.classified(name));
+            self.traces.classify(name, context.classified(&name));
         }
     }
 
@@ -1018,37 +1014,42 @@ impl<'a> Demand<'a> {
         let Some(over) = self.over else {
             return;
         };
-        for (member, name) in made.declared_names().into_iter().enumerate() {
-            let Some(place) = over.places.place(name) else {
+        // A constructor is no definition of the item's, and stands as its family's entry does: none is noted, so each counts as moved wherever its family is made again.
+        let own = made.declared_names().into_iter().zip(made.declared());
+        for (member, (name, _)) in own
+            .filter(|(_, declared)| *declared != curios_core::Declared::Constructor)
+            .enumerate()
+        {
+            let Some(place) = over.places.place(&name) else {
                 continue;
             };
             let held = &over.baseline.items[place.item()];
             // The baseline's entry rides in the former that declares it.
-            let entry = held.nominal(name);
+            let entry = held.nominal(&name);
             let unclassified = Classified::default();
             let same = Same::of(
-                (made, &context.classified(name)),
-                (held, over.traces.classified(name).unwrap_or(&unclassified)),
+                (made, &context.classified(&name)),
+                (held, over.traces.classified(&name).unwrap_or(&unclassified)),
                 member,
             )
             .keying(
                 entries_alike(
-                    context.induct_decl(name),
+                    context.induct_decl(&name),
                     entry.and_then(Nominal::inductive),
                     inducts_alike,
                 ),
                 entries_alike(
-                    context.struct_decl(name),
+                    context.struct_decl(&name),
                     entry.and_then(Nominal::record),
                     structs_alike,
                 ),
                 entries_alike(
-                    context.concept(name),
+                    context.concept(&name),
                     entry.and_then(Nominal::concept),
                     concepts_alike,
                 ),
             );
-            self.same.insert(*name, same);
+            self.same.insert(name, same);
         }
     }
 
@@ -1064,7 +1065,7 @@ impl<'a> Demand<'a> {
         let definitions = self.definitions;
         let positions = Rc::clone(self.declarations.items(declaration));
         let names = self.names(declaration);
-        if names.iter().any(|name| self.witnesses.contains(*name))
+        if names.iter().any(|name| self.witnesses.contains(name))
             || positions.iter().any(|position| {
                 self.poison
                     .reaches(definitions, &definitions.items[*position])
@@ -1082,7 +1083,7 @@ impl<'a> Demand<'a> {
         };
         let input = declaration_input(inputs);
 
-        for record in found(candidates, Facet::Elaboration, &input, names[0]) {
+        for record in found(candidates, Facet::Elaboration, &input, &names[0]) {
             let Some(made) = record.made() else {
                 continue;
             };
@@ -1120,7 +1121,7 @@ impl<'a> Demand<'a> {
     fn reads_stand(
         &self,
         context: &Context,
-        names: &[&Global],
+        names: &[Global],
         made: &Made,
         asked: &Trace<Question, Answered>,
     ) -> bool {
@@ -1157,10 +1158,10 @@ impl<'a> Demand<'a> {
     /// What the part `question` asks reads now, as a completed record of the declaration declaring `names` holds it ([`Read`]): `None` where it cannot be told — of a declaration not finished, refused or withheld, or a part that will not digest.
     ///
     /// A part of a declaration kept is the baseline's, one made or taken now is the item the walk keeps for it, and one of another unit is the record the baseline holds of it where that unit did not move, and digested again otherwise.
-    fn read_now(&self, context: &Context, names: &[&Global], question: &Question) -> Option<Read> {
+    fn read_now(&self, context: &Context, names: &[Global], question: &Question) -> Option<Read> {
         let over = self.over?;
         let subject = question.subject()?;
-        if names.contains(&subject) {
+        if names.contains(subject) {
             return Some(None);
         }
         if let Some(read) = self.now.borrow().get(question) {
@@ -1175,7 +1176,7 @@ impl<'a> Demand<'a> {
                 match self.held.get(&owner).is_none_or(|held| held.kept) {
                     true => part_digest(over.baseline, over.places, over.traces, question),
                     false => {
-                        let item = carrying(context, self.survivors.item(subject)?.clone());
+                        let item = context.carrying(self.survivors.item(subject)?.clone());
                         let place = place_in(&item, subject)?;
                         item_part_digest(&item, place, &context.classified(subject), question)
                     }
@@ -1329,9 +1330,9 @@ impl<'a> Demand<'a> {
     }
 }
 
-/// Where `item` holds `name` among its definitions, as a module holding it alone would place it.
+/// Where `item` holds `name`, as a module holding it alone would place it: among its definitions, or as a constructor of a family it declares.
 fn place_in(item: &Item, name: &Global) -> Option<Place> {
-    match item {
+    let own = match item {
         Item::Let(definition) => (definition.name == *name).then_some(Place::Let(0)),
         Item::Rec(rec) => rec
             .exports()
@@ -1339,5 +1340,11 @@ fn place_in(item: &Item, name: &Global) -> Option<Place> {
             .position(|definition| definition.name == *name)
             .and_then(|member| u32::try_from(member).ok())
             .map(|member| Place::Member { item: 0, member }),
-    }
+    };
+
+    own.or_else(|| {
+        item.declared_names()
+            .contains(name)
+            .then_some(Place::Constructor { item: 0 })
+    })
 }

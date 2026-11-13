@@ -424,7 +424,6 @@ fn core_text_read(text: &str) -> (Definitions, Option<Entrypoint>) {
 
 /// A family of one case over one `Nat`, `F` with `mk(x : Nat)`, and `held : T = 3` whose type eliminates `mk(3)` through the arm `${arm}`.
 pub const ARM: &str = r#"
-#{absent = [/F/mk]}
 induct /F: pub Type
 | mk(x: #NatType)
 end
@@ -627,7 +626,7 @@ pub fn declared_item(text: &str, symbol: &str) -> Item {
     core_text_module(text)
         .items
         .iter()
-        .find(|item| item.declared_names().contains(&&global(symbol)))
+        .find(|item| item.declared_names().contains(&global(symbol)))
         .cloned()
         .unwrap_or_else(|| panic!("the text declares `{symbol}`"))
 }

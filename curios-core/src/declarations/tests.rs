@@ -4,12 +4,12 @@ fn name(path: &[&str]) -> Global {
     Global::Authored(Qualifier::from(path.iter().copied()))
 }
 
-fn item(path: &[&str], kind: DefinitionKind) -> Item {
+fn written(path: &[&str]) -> Item {
     let name = name(path);
 
     Item::Let(Box::new(Definition {
         name,
-        kind,
+        kind: DefinitionKind::Authored,
         universe_context: UniverseContext::empty(),
         island: Qualifier::empty(),
         proof: false,
@@ -19,18 +19,36 @@ fn item(path: &[&str], kind: DefinitionKind) -> Item {
     }))
 }
 
-fn written(path: &[&str]) -> Item {
-    item(path, DefinitionKind::Authored)
-}
+/// The former of `owner`, a family in the root with a case of no payload for each of `tags`.
+fn family(owner: &str, tags: &[&str]) -> Item {
+    let case = |tag: &&str| {
+        (
+            Atom::from(*tag),
+            InductParam::new(
+                Telescope::build(Vec::<(Free, Term)>::new(), Vec::new()),
+                Vec::new(),
+            ),
+        )
+    };
+    let declaration = InductDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::build(
+            Vec::<(Free, Term)>::new(),
+            Telescope::build(Vec::<(Free, Term)>::new(), ()),
+        ),
+        constructors: tags.iter().map(case).collect(),
+        result_sort: Term::type_ground(),
+        module: Qualifier::empty(),
+        rep_public: false,
+        polarities: Vec::new(),
+        variances: Vec::new(),
+    };
 
-fn constructor(owner: &str, tag: &str) -> Item {
-    item(
-        &[owner, tag],
-        DefinitionKind::InductiveConstructor {
-            owner: Qualifier::from([owner]),
-            tag: Atom::from(tag),
-        },
-    )
+    Item::Let(Box::new(Definition::former(
+        name(&[owner]),
+        Qualifier::empty(),
+        Nominal::Inductive(declaration),
+    )))
 }
 
 fn definitions(items: Vec<Item>) -> Definitions {
@@ -39,29 +57,24 @@ fn definitions(items: Vec<Item>) -> Definitions {
     }
 }
 
-/// A declaration is its written item with every item generated from it, wherever each stands: a constructor written ahead of its family, and a family's constructors with another declaration between them. A name is found at its own item and in its declaration, and the declarations are read back in the order their written items stand.
+/// A declaration is one item with every name it declares: a family's former and its constructors, which no item of their own holds. A name is found at its item, which is its declaration, and the declarations are read back in the order their items stand.
 #[test]
-fn a_declaration_holds_its_written_item_and_what_was_generated_from_it() {
+fn a_declaration_is_its_item_with_every_name_it_declares() {
     let declarations = Declarations::of(&definitions(vec![
-        constructor("Bit", "one"),
-        written(&["Bit"]),
-        written(&["List"]),
-        constructor("List", "empty"),
+        family("Bit", &["zero", "one"]),
         written(&["length"]),
-        constructor("List", "cons"),
     ]));
 
-    assert_eq!(declarations.each().collect::<Vec<_>>(), [1, 2, 4]);
-    assert_eq!(**declarations.items(1), [1, 0]);
-    assert_eq!(**declarations.items(2), [2, 3, 5]);
-    assert_eq!(**declarations.items(4), [4]);
+    assert_eq!(declarations.each().collect::<Vec<_>>(), [0, 1]);
+    assert_eq!(**declarations.items(0), [0]);
+    assert_eq!(**declarations.items(1), [1]);
     assert_eq!(declarations.item(&name(&["Bit", "one"])), Some(0));
-    assert_eq!(declarations.declaration(&name(&["Bit", "one"])), Some(1));
-    assert_eq!(declarations.declaration(&name(&["List", "cons"])), Some(2));
+    assert_eq!(declarations.declaration(&name(&["Bit", "zero"])), Some(0));
+    assert_eq!(declarations.declaration(&name(&["length"])), Some(1));
     assert_eq!(declarations.declaration(&name(&["absent"])), None);
 }
 
-/// Every declaration of `module`, by its written item's place, with its items and the names each declares: what two tables are compared by.
+/// Every declaration of `module`, by its item's place, with its items and the declaration each name they declare is found in: what two tables are compared by.
 fn read(
     declarations: &Declarations,
     definitions: &Definitions,
@@ -73,21 +86,20 @@ fn read(
             let found = items
                 .iter()
                 .flat_map(|item| definitions.items.names(*item))
-                .map(|name| declarations.declaration(name))
+                .map(|name| declarations.declaration(&name))
                 .collect();
             (declaration, items, found)
         })
         .collect()
 }
 
-/// Declarations revised by what a version of their module changed are those the version makes: a former replaced in place keeps its constructors, a constructor added joins its former, a declaration taken out takes its names with it.
+/// Declarations revised by what a version of their module changed are those the version makes: a family made again with a case more declares it, and one with a case fewer no longer does; a declaration taken out takes its names with it.
 #[test]
 fn a_revised_table_is_the_one_its_version_makes() {
     let earlier = definitions(vec![
-        written(&["List"]),
-        constructor("List", "empty"),
+        family("List", &["empty", "cons"]),
         written(&["length"]),
-        constructor("List", "cons"),
+        family("Bit", &["zero", "one"]),
         written(&["gone"]),
     ]);
     let mut version = earlier.clone();
@@ -97,19 +109,19 @@ fn a_revised_table_is_the_one_its_version_makes() {
 
     let mut removed = Vec::new();
     let mut placed = Vec::new();
-    // The former written again, at its place.
-    version.items.replace(places[0], written(&["List"]));
-    removed.push((places[0], vec![name(&["List"])]));
-    placed.push(places[0]);
-    // A constructor added after `length`.
-    let added = version
+    // A family made again with a case more, at its place.
+    removed.push((places[0], version.items.names(places[0])));
+    version
         .items
-        .insert_after(Some(places[2]), constructor("List", "snoc"))
-        .expect("room after a place");
-    placed.push(added);
+        .replace(places[0], family("List", &["empty", "cons", "snoc"]));
+    placed.push(places[0]);
+    // A family made again with a case fewer.
+    removed.push((places[2], version.items.names(places[2])));
+    version.items.replace(places[2], family("Bit", &["zero"]));
+    placed.push(places[2]);
     // A declaration taken out.
-    version.items.remove(places[4]);
-    removed.push((places[4], vec![name(&["gone"])]));
+    removed.push((places[3], version.items.names(places[3])));
+    version.items.remove(places[3]);
 
     let mut revised = declarations.clone();
     revised.revise(&version.items, &removed, &placed);
@@ -117,20 +129,9 @@ fn a_revised_table_is_the_one_its_version_makes() {
 
     assert_eq!(read(&revised, &version), read(&made, &version));
     assert_eq!(revised.declaration(&name(&["gone"])), None);
+    assert_eq!(revised.declaration(&name(&["Bit", "one"])), None);
     assert_eq!(
         revised.declaration(&name(&["List", "snoc"])),
         Some(places[0])
-    );
-}
-
-/// An item generated from a declaration the module does not hold is a declaration of its own.
-#[test]
-fn an_item_generated_from_a_declaration_the_module_does_not_hold_is_its_own() {
-    let declarations = Declarations::of(&definitions(vec![constructor("Elsewhere", "case")]));
-
-    assert_eq!(declarations.each().collect::<Vec<_>>(), [0]);
-    assert_eq!(
-        declarations.declaration(&name(&["Elsewhere", "case"])),
-        Some(0)
     );
 }

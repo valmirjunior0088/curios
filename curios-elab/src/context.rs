@@ -82,7 +82,7 @@ use {
     curios_common::SyntaxRegistry,
     curios_core::{
         Declarations, DefinitionKind, Extent, Free, Global, Imports, Item, MetavarSpine, Mints,
-        Subterm, Term,
+        Nominal, Subterm, Term,
     },
     std::{
         collections::{BTreeSet, HashMap},
@@ -302,7 +302,7 @@ impl<'s> Context<'s> {
     }
 
     /// Begin an attempt at the declaration declaring `names`, with nothing needed yet and in a state of its own ([`Context::begin_state`]).
-    pub(crate) fn attempt(&mut self, names: &[&Global]) {
+    pub(crate) fn attempt(&mut self, names: &[Global]) {
         self.underway.needs.attempt(names);
         self.typing.traced.begin(names);
         self.begin_state();
@@ -383,7 +383,20 @@ impl<'s> Context<'s> {
                 })
                 .collect::<Result<_, Error>>()?,
         };
-        for (name, type_, universe_context) in types {
+        // A family's constructors are made of its elaborated entry, which holds no goal: each is declared at its type.
+        let constructors = self
+            .carrying(item.clone())
+            .constructors()
+            .into_iter()
+            .map(|constructor| {
+                Ok((
+                    constructor.name,
+                    zonk(self, &constructor.type_)?,
+                    constructor.universe_context,
+                ))
+            })
+            .collect::<Result<Vec<_>, Error>>()?;
+        for (name, type_, universe_context) in types.into_iter().chain(constructors) {
             self.forget(&name);
             self.declare(&name, &type_);
             self.set_universe_context(&name, universe_context);
@@ -443,6 +456,29 @@ impl<'s> Context<'s> {
                 }
             }
         }
+        // A family's constructors are names its item declares beside its definitions, which no elaboration assumed: each declared here and bound to the injection the entry just published makes, at its family's universes, and total by construction.
+        for constructor in self.carrying(published.item.clone()).constructors() {
+            let name = constructor.name;
+            self.forget(&name);
+            self.declare(&name, &constructor.type_);
+            self.define_published(&name, &constructor.body, &constructor.kind, false);
+            self.set_universe_context(&name, constructor.universe_context.clone());
+            self.record_definition_totality(&name, curios_core::Totality::Total);
+        }
+    }
+
+    /// `item` with each of its formers carrying the registry entries this context holds under its name: what a finished item is read and assembled as. An entry is elaborated in the context's tables, beside its former and after it, so the one the lowering wrote into the former is replaced here, where the item leaves the elaboration that made it; a former whose name the context holds nothing under keeps the one it has.
+    pub(crate) fn carrying(&self, item: Item) -> Item {
+        item.with_nominals(|name, lowered| {
+            Some(match lowered {
+                Nominal::Inductive(_) => Nominal::Inductive(self.induct_decl(name)?.clone()),
+                Nominal::Struct(_) => Nominal::Struct(self.struct_decl(name)?.clone()),
+                Nominal::Concept { .. } => Nominal::Concept {
+                    concept: self.concept(name)?.clone(),
+                    record: self.struct_decl(name)?.clone(),
+                },
+            })
+        })
     }
 
     /// Publish `item`, an item a candidate made, as its elaboration published it ([`Context::publish`]), the registry entries its formers carry being the ones its elaboration rebuilt, with what that elaboration concluded of each of its definitions, as `classified` holds it by name: what the declarations that read it read of it.
@@ -527,7 +563,7 @@ impl<'s> Context<'s> {
     }
 
     /// The declaration declaring `names` has finished — kept, refused or withheld — and nothing waits on it any more: a witness among them is the table's to answer for, or no one's.
-    pub(crate) fn finish(&mut self, names: &[&Global]) {
+    pub(crate) fn finish(&mut self, names: &[Global]) {
         for name in names {
             self.underway.witnesses.settle(name);
         }

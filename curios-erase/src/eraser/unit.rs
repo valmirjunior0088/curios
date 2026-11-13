@@ -4,7 +4,7 @@ use {
     super::{Eraser, Outcome},
     crate::{
         Asked, AskedBy, AskedItems, AskedRecord, AtSorts, ErasedBaseline, ErasedForms, ErasedItem,
-        ErasedOver, ErasedUnit, Erasures, Error, Part, Sorts, declared, emitted, evaluate, link,
+        ErasedOver, ErasedUnit, Erasures, Error, Part, Sorts, constructor, emitted, evaluate, link,
         reduced,
     },
     curios_cert::Reader,
@@ -160,12 +160,12 @@ pub fn erase_program(
                 let externals = |name: &curios_core::Global, sorts: Sorts| {
                     own.find(name, sorts).or_else(|| scope.find(name, sorts))
                 };
-                let declared = |name: &curios_core::Global| {
-                    declared(definitions, &places, name).or_else(|| scope.definition(name))
+                let constructors = |name: &curios_core::Global| {
+                    constructor(definitions, &places, name).or_else(|| scope.constructor(name))
                 };
                 reader.restore_budget();
                 seal_entry(
-                    Eraser::over(&externals, &declared, (&[], Sorts::NONE)),
+                    Eraser::over(&externals, &constructors, (&[], Sorts::NONE)),
                     reader,
                     body,
                     type_,
@@ -229,7 +229,7 @@ pub fn erase_items(
             (Some((held, trace)), _) => {
                 unit.keep(place, item, held);
                 if let Some(name) = names.first() {
-                    asked.share(**name, trace);
+                    asked.share(*name, trace);
                 }
                 continue;
             }
@@ -249,14 +249,14 @@ pub fn erase_items(
                 Rc::new(AskedRecord::new(read))
             }
         };
-        made.extend(names.first().map(|name| **name));
+        made.extend(names.first().copied());
         // A record is filed under the first name, so one the baseline filed under another is an item this one now holds the name of.
         for name in names.iter().skip(1) {
             asked.forget(name);
-            others.push(**name);
+            others.push(*name);
         }
         if let Some(name) = names.first() {
-            asked.share(**name, record);
+            asked.share(*name, record);
         }
     }
     // Who read what of the unit's records: the baseline's, with the edges of every item erased again, or no longer held, replaced.
@@ -377,23 +377,23 @@ fn erase_forms(
     let mut asked = Asking::of(&names);
     let mut forms = Vec::new();
     for sorts in Sorts::every(left_open(item)) {
-        let (erased_read, declared_read) = (RefCell::new(Vec::new()), RefCell::new(Vec::new()));
+        let (erased_read, constructors_read) = (RefCell::new(Vec::new()), RefCell::new(Vec::new()));
         let externals = |name: &curios_core::Global, sorts: Sorts| {
             erased_read.borrow_mut().push(*name);
             unit.find(name, sorts).or_else(|| scope.find(name, sorts))
         };
-        let declared = |name: &curios_core::Global| {
-            declared_read.borrow_mut().push(*name);
-            declared(definitions, places, name).or_else(|| scope.definition(name))
+        let constructors = |name: &curios_core::Global| {
+            constructors_read.borrow_mut().push(*name);
+            constructor(definitions, places, name).or_else(|| scope.constructor(name))
         };
         reader.restore_budget();
         reader.take_reads();
         let erased = erase_item(
             reader,
-            Eraser::over(&externals, &declared, (&names, sorts)),
-            &at_sorts(item, sorts),
+            Eraser::over(&externals, &constructors, (&names, sorts)),
+            (item, sorts),
         )?;
-        asked.read(reader.take_reads(), declared_read.take());
+        asked.read(reader.take_reads(), constructors_read.take());
         for name in erased_read.take() {
             asked.note(name, Part::Binding);
         }
@@ -445,17 +445,9 @@ fn at_sorts(item: &curios_core::Item, sorts: Sorts) -> Cow<'_, curios_core::Item
     let qualities = sorts.qualities();
 
     Cow::Owned(match item {
-        curios_core::Item::Let(definition) => {
-            let mut at = curios_core::Definition::clone(definition);
-            at.type_ = curios_core::instantiate_qualities(&at.type_, &qualities);
-            at.body = curios_core::instantiate_qualities(&at.body, &qualities);
-            at.value_sort = at
-                .value_sort
-                .map(|sort| curios_core::instantiate_qualities(&sort, &qualities));
-            at.universe_context.quality_count = 0;
-
-            curios_core::Item::Let(Box::new(at))
-        }
+        curios_core::Item::Let(definition) => curios_core::Item::Let(Box::new(
+            definition_at_sorts(curios_core::Definition::clone(definition), sorts),
+        )),
         curios_core::Item::Rec(rec) => {
             let mut at = rec.with_group(
                 rec.group()
@@ -468,14 +460,33 @@ fn at_sorts(item: &curios_core::Item, sorts: Sorts) -> Cow<'_, curios_core::Item
     })
 }
 
+/// `definition` at the assignment `sorts` of the sorts its item leaves open, as [`at_sorts`] reads its item.
+fn definition_at_sorts(
+    mut definition: curios_core::Definition,
+    sorts: Sorts,
+) -> curios_core::Definition {
+    if sorts.is_none() {
+        return definition;
+    }
+    let qualities = sorts.qualities();
+    definition.type_ = curios_core::instantiate_qualities(&definition.type_, &qualities);
+    definition.body = curios_core::instantiate_qualities(&definition.body, &qualities);
+    definition.value_sort = definition
+        .value_sort
+        .map(|sort| curios_core::instantiate_qualities(&sort, &qualities));
+    definition.universe_context.quality_count = 0;
+
+    definition
+}
+
 /// What erasing an item's forms asked, as it is asked: the certifier's reads of the declarations around it, read as the parts they are, the kinds and bodies erasure read off their items, and the erased forms it read. Nothing asked of a name the item declares is kept, as the item's own.
 struct Asking<'a> {
-    own: &'a [&'a curios_core::Global],
+    own: &'a [curios_core::Global],
     asked: Asked,
 }
 
 impl<'a> Asking<'a> {
-    fn of(own: &'a [&'a curios_core::Global]) -> Self {
+    fn of(own: &'a [curios_core::Global]) -> Self {
         Self {
             own,
             asked: Asked::default(),
@@ -483,7 +494,7 @@ impl<'a> Asking<'a> {
     }
 
     fn note(&mut self, name: curios_core::Global, part: Part) {
-        if !self.own.contains(&&name) {
+        if !self.own.contains(&name) {
             self.asked.note(name, part);
         }
     }
@@ -507,15 +518,21 @@ impl<'a> Asking<'a> {
 fn erase_item(
     reader: &mut Reader,
     mut lowering: Eraser<'_>,
-    item: &curios_core::Item,
+    (item, sorts): (&curios_core::Item, Sorts),
 ) -> Result<ErasedItem, Error> {
-    reader.assume_universes(universe_context(item));
-    match item {
+    let at = at_sorts(item, sorts);
+    reader.assume_universes(universe_context(&at));
+    match &*at {
         curios_core::Item::Let(definition) => lowering.erase_definition(reader, definition)?,
         curios_core::Item::Rec(rec) => lowering.erase_rec_item(reader, rec)?,
     }
+    // A family's constructors are its item's: it declares them beside its former, and each is the definition the family's entry makes.
+    for constructor in item.constructors() {
+        lowering.erase_definition(reader, &definition_at_sorts(constructor, sorts))?;
+    }
+    let names = item.declared_names();
     // The row of each registry entry the item declares is registered here, whether or not anything of the item constructs or matches it: every other item holds the row as an import of this one.
-    for name in item.declared_names() {
+    for name in &names {
         if reader.struct_decl(name).is_some() {
             lowering.struct_row(reader, (*name, Sorts::NONE))?;
         }
@@ -524,5 +541,5 @@ fn erase_item(
         }
     }
 
-    lowering.into_erased(&item.declared_names())
+    lowering.into_erased(&names)
 }

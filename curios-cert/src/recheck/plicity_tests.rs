@@ -9,7 +9,6 @@ use {
 
 /// A family of one case, `Held` with `mk(${mark}n : Nat)`, under the mark `${mark}` states, and `value` its case at `(${payload})`.
 const MARKED_CASE: &str = r#"
-#{absent = [/Held/mk]}
 induct /Held: pub Type
 | mk(${mark}n: #NatType)
 end

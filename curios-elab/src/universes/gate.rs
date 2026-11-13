@@ -149,7 +149,7 @@ impl Schemes {
         for name in items.iter().flat_map(|item| definitions.reaches(item)) {
             if let Some(place) = places.place(&name) {
                 let count = match (place, &definitions.items[place.item()]) {
-                    (Place::Let(_), Item::Let(definition)) => {
+                    (Place::Let(_) | Place::Constructor { .. }, Item::Let(definition)) => {
                         definition.universe_context.parameter_count
                     }
                     (_, Item::Rec(rec)) => rec.universe_context().parameter_count,
@@ -306,31 +306,6 @@ fn validate_definitions_instance_arities(
             return Err(Error::UniverseInvariant(format!(
                 "concept {shown} and its structure registry have different universe contexts"
             )));
-        }
-    }
-    // The generated-member correspondence, read off the definition's own recorded origin. A constructor names the inductive it belongs to *and* which case it is, so this checks the registry entry exists and actually declares that case — without joining an owner and a tag back into a name to look up.
-    for definition in items.iter().flat_map(|item| item.definitions()) {
-        let shown = definition.name.faithful();
-        match &definition.kind {
-            DefinitionKind::InductiveConstructor { owner, tag } => {
-                let owner = Global::Authored(*owner);
-                let Some(declaration) = definitions.induct_decl(places, &owner) else {
-                    return Err(Error::UniverseInvariant(format!(
-                        "constructor definition {shown} names missing owner {}",
-                        owner.faithful()
-                    )));
-                };
-                if !declaration.declares(tag) {
-                    return Err(Error::UniverseInvariant(format!(
-                        "constructor definition {shown} names owner {}, which declares no case '{tag}'",
-                        owner.faithful()
-                    )));
-                }
-            }
-            DefinitionKind::Authored
-            | DefinitionKind::Nominal(_)
-            | DefinitionKind::Witness
-            | DefinitionKind::Test => {}
         }
     }
     Ok(())

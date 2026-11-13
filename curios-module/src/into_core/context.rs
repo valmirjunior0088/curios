@@ -187,9 +187,9 @@ impl Anchoring {
 pub struct FlatLet {
     pub name: curios_core::Global,
     pub kind: curios_core::DefinitionKind,
-    /// Where the definition's name was written: what the `unused-declaration` lint underlines, and where a report about the definition is placed when it holds no position of its own. A constructor's is its tag, a test's its name, and a witness's the concept application its `satisfy` states. `None` for one that was built rather than written, a `foreign` row the prelude synthesized among them, and for one a later lowering keeps, whose place was taken where it was lowered.
+    /// Where the definition's name was written: what the `unused-declaration` lint underlines, and where a report about the definition is placed when it holds no position of its own. A test's is its name, and a witness's the concept application its `satisfy` states. `None` for one that was built rather than written, a `foreign` row the prelude synthesized among them, and for one a later lowering keeps, whose place was taken where it was lowered.
     pub span: Option<Span>,
-    /// The names it declares beside itself, each with where it was written: a concept's methods, which its former declares and no definition holds. Empty for every other definition, and for one a later lowering keeps.
+    /// The names it declares beside itself, each with where it was written: a concept's methods and a family's constructors, which its former declares and no definition holds. Empty for every other definition, and for one a later lowering keeps.
     pub members: Vec<(curios_core::Global, Option<Span>)>,
     pub island: Qualifier,
     pub type_: curios_core::Term,
@@ -227,16 +227,22 @@ pub enum FlatItem {
 }
 
 impl FlatItem {
+    /// Every name the item declares, as its Core item will ([`curios_core::Item::declared_names`]): each definition's, then each family's constructors, which its former declares.
     pub fn names(&self) -> Vec<curios_core::Global> {
-        match self {
-            FlatItem::Let(let_) => vec![let_.name],
-            FlatItem::Rec(lets) => lets.iter().map(|let_| let_.name).collect(),
-            FlatItem::Kept(rec) => rec
-                .exports()
-                .iter()
-                .map(|definition| definition.name)
-                .collect(),
-        }
+        let declared = self
+            .declared()
+            .map(|(name, kind, _)| (name, kind))
+            .collect::<Vec<_>>();
+        let constructors = declared
+            .iter()
+            .flat_map(|(name, kind)| kind.constructor_names(name))
+            .collect::<Vec<_>>();
+
+        declared
+            .into_iter()
+            .map(|(name, _)| name)
+            .chain(constructors)
+            .collect()
     }
 
     /// The item's members as the walk lowered them: one for a `let`, every one of a group, and none of a group kept closed.

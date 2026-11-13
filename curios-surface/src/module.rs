@@ -156,7 +156,7 @@ pub struct TopCase<D: Dialect = Program> {
     pub target: Option<Vec<Term<D>>>,
 }
 
-/// An `induct` declaration: one inductive family — a parameter telescope, an index telescope with its result sort, and the value-constructor cases. Lowering registers the family and derives both the type-constructor function and one value-constructor function per case; see the field docs for the plicity and dependency rules each part obeys.
+/// An `induct` declaration: one inductive family — a parameter telescope, an index telescope with its result sort, and the value-constructor cases. Lowering registers the family and derives its type-constructor function, which declares one value-constructor function per case, made of the family's entry where it is read; see the field docs for the plicity and dependency rules each part obeys.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopInduct<D: Dialect = Program> {
     pub doc: Option<Doc>,

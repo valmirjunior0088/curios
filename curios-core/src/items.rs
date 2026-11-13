@@ -29,7 +29,7 @@ use {
 /// How far apart a version first places the items of a module that placed them at their indices: room for an item new to a later version between any two, many times over.
 const SPACING: usize = 1 << 20;
 
-/// What each of a module's items declares, flat: every name in the order of the items and of each item's own, what each is declared as — a former by which kind of declaration it is the former of, with nothing of its entry — where each item's names end, which items are groups, and the declaration each item generated from one was generated from. What is known of the places of a stored module without its items.
+/// What each of a module's items declares, flat: every name in the order of the items and of each item's own, what each is declared as — a former by which kind of declaration it is the former of, with nothing of its entry — where each item's names end, and which items are groups. What is known of the places of a stored module without its items.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Outlines {
@@ -38,8 +38,6 @@ pub struct Outlines {
     /// The end of each item's names in `names`.
     ends: Vec<u32>,
     groups: Vec<bool>,
-    /// The declaration each item was generated from, by the name its first definition says it was ([`Items::generated_from`]).
-    generated: Vec<Option<Global>>,
 }
 
 impl Outlines {
@@ -48,23 +46,21 @@ impl Outlines {
         let mut outlines = Self::default();
         for place in items.places() {
             outlines.push(
-                items.names(place).into_iter().copied(),
+                items.names(place),
                 items.declared(place),
                 items.is_group(place),
-                items.generated_from(place),
             );
         }
 
         outlines
     }
 
-    /// The outline of an item after the others: the names it declares, what each is declared as, in their order, whether it is a group, and the declaration it was generated from.
+    /// The outline of an item after the others: the names it declares, what each is declared as, in their order, and whether it is a group.
     pub fn push(
         &mut self,
         names: impl IntoIterator<Item = Global>,
         declared: impl IntoIterator<Item = Declared>,
         group: bool,
-        generated: Option<Global>,
     ) {
         self.names.extend(names);
         self.declared.extend(declared);
@@ -72,7 +68,6 @@ impl Outlines {
         self.ends
             .push(u32::try_from(self.names.len()).expect("a module's names are counted in a u32"));
         self.groups.push(group);
-        self.generated.push(generated);
     }
 
     /// How many items are outlined.
@@ -105,10 +100,6 @@ impl Outlines {
     fn group(&self, index: usize) -> bool {
         self.groups[index]
     }
-
-    fn generated(&self, index: usize) -> Option<Global> {
-        self.generated[index]
-    }
 }
 
 /// The first name `item` declares.
@@ -117,16 +108,6 @@ fn first_name(item: &Item) -> Option<&Global> {
         Item::Let(definition) => Some(&definition.name),
         Item::Rec(rec) => rec.exports().first().map(|definition| &definition.name),
     }
-}
-
-/// The declaration `item` was generated from, by the name it declares: a constructor's former, a method wrapper's concept. `None` for a written item.
-fn generated_by(item: &Item) -> Option<Global> {
-    let kind = match item {
-        Item::Let(definition) => &definition.kind,
-        Item::Rec(rec) => &rec.exports()[0].kind,
-    };
-
-    kind.generated_from().map(Global::Authored)
 }
 
 /// A stored module's items: a cell for each, what each declares, and the object each was stored as.
@@ -237,10 +218,10 @@ impl Entry {
         }
     }
 
-    fn names(&self) -> Vec<&Global> {
+    fn names(&self) -> Vec<Global> {
         match self {
             Entry::Made(item) => item.declared_names(),
-            Entry::Stored(stored, index) => stored.outlines.names(*index).iter().collect(),
+            Entry::Stored(stored, index) => stored.outlines.names(*index).to_vec(),
         }
     }
 
@@ -262,13 +243,6 @@ impl Entry {
         match self {
             Entry::Made(_) => None,
             Entry::Stored(stored, index) => stored.part(*index),
-        }
-    }
-
-    fn generated_from(&self) -> Option<Global> {
-        match self {
-            Entry::Made(item) => generated_by(item),
-            Entry::Stored(stored, index) => stored.outlines.generated(*index),
         }
     }
 }
@@ -593,10 +567,10 @@ impl Items {
     }
 
     /// The names the item at `place` declares, in the order it declares them, with nothing restored.
-    pub fn names(&self, place: usize) -> Vec<&Global> {
+    pub fn names(&self, place: usize) -> Vec<Global> {
         match &self.0 {
             Held::Made(items) => items[place].declared_names(),
-            Held::Stored(stored) => stored.outlines.names(place).iter().collect(),
+            Held::Stored(stored) => stored.outlines.names(place).to_vec(),
             Held::Placed(placed) => entry(placed, place).names(),
         }
     }
@@ -607,15 +581,6 @@ impl Items {
             Held::Made(items) => items[place].declared(),
             Held::Stored(stored) => stored.outlines.declared(place).to_vec(),
             Held::Placed(placed) => entry(placed, place).declared(),
-        }
-    }
-
-    /// The declaration the item at `place` was generated from, by the name it declares, with nothing restored: a constructor's former, a method wrapper's concept, and `None` for a written item.
-    pub fn generated_from(&self, place: usize) -> Option<Global> {
-        match &self.0 {
-            Held::Made(items) => generated_by(&items[place]),
-            Held::Stored(stored) => stored.outlines.generated(place),
-            Held::Placed(placed) => entry(placed, place).generated_from(),
         }
     }
 

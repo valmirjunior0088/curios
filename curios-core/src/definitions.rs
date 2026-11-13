@@ -8,9 +8,9 @@
 
 use {
     super::{
-        Applications, Atom, Bound, ConceptDecl, Cursor, Enter, Free, FuncType, Global, InductDecl,
-        Items, Level, Lexicon, Marks, Members, Mentions, Place, Places, Polarity, Quality,
-        ReadEntry, ReadTable, RecGroup, Sharing, StructDecl, StructType, Subterm, Symbols,
+        Applications, Atom, Bound, ConceptDecl, Cursor, Enter, Free, Func, FuncType, Global,
+        InductDecl, Items, Level, Lexicon, Marks, Members, Mentions, Place, Places, Polarity,
+        Quality, ReadEntry, ReadTable, RecGroup, Sharing, StructDecl, StructType, Subterm, Symbols,
         Telescope, Term, UniverseContext, UniverseError, UniverseParam, Universes, Variance,
         WitnessId, foreign_produced, wire_term,
     },
@@ -507,10 +507,13 @@ impl Certification {
     pub fn covers(&self, definitions: &Definitions) -> bool {
         let classified = |name: &Global| self.totalities.contains_key(name);
 
-        definitions
-            .items
-            .places()
-            .all(|place| definitions.items.names(place).into_iter().all(classified))
+        definitions.items.places().all(|place| {
+            definitions
+                .items
+                .names(place)
+                .into_iter()
+                .all(|name| classified(&name))
+        })
     }
 
     /// Every classification this record holds.
@@ -653,6 +656,21 @@ impl DefinitionKind {
             DefinitionKind::InductiveConstructor { owner, .. } => Some(*owner),
             _ => None,
         }
+    }
+
+    /// The names of the constructors a definition of this kind, `name`, declares beside itself: a family's former's, its path with each case's tag in declaration order, and none of any other.
+    pub fn constructor_names(&self, name: &Global) -> Vec<Global> {
+        let (Global::Authored(owner), Some(declaration)) =
+            (name, self.nominal().and_then(Nominal::inductive))
+        else {
+            return Vec::new();
+        };
+
+        declaration
+            .constructors
+            .iter()
+            .map(|(tag, _)| Global::Authored(owner.with(tag.as_str())))
+            .collect()
     }
 
     /// What the definition is declared as, with nothing of its entry in it.
@@ -1076,7 +1094,7 @@ impl Definition {
         }
     }
 
-    /// The value constructors of the family `owner` whose entry is `declaration`, one to a case in declaration order, each spelled from its case's signature: declared over the signature's binders under their marks, the family's parameters hidden ahead of the payload, ending in the family at the case's indices, and unfolding to the case's injection over them, both at the family's own levels.
+    /// The value constructors of the family `owner` whose entry is `declaration`, one to a case in declaration order, each spelled from its case's signature: declared over the signature's binders under their marks, each binding a proof where the signature's does, the family's parameters hidden ahead of the payload, ending in the family at the case's indices, and unfolding to the case's injection over them, both at the family's own levels.
     ///
     /// **The one spelling of a constructor from its family's entry.** A constructor says nothing its family's entry does not, so a family's declaration states its constructors: elaboration makes each one by this, from the entry as elaborated, and a reader of Core text makes it by this too.
     pub fn constructors(
@@ -1091,6 +1109,7 @@ impl Definition {
             .constructors
             .iter()
             .map(|(tag, signature)| {
+                let proofs = signature.telescope.proofs();
                 let (binders, indices) = opened(signature.telescope.cursor());
                 let variables = variables(&binders);
                 let (leading, payload) = variables.split_at(params.min(variables.len()));
@@ -1114,8 +1133,13 @@ impl Definition {
                     island,
                     value_sort: None,
                     proof: false,
-                    type_: Term::func_type_marked(binders.clone(), type_),
-                    body: Term::func_marked(binders, injection),
+                    type_: Term::from(Subterm::FuncType(FuncType {
+                        telescope: Telescope::build_marked(binders.clone(), type_)
+                            .with_proofs(&proofs),
+                    })),
+                    body: Term::from(Subterm::Func(Func {
+                        telescope: Telescope::build_marked(binders, injection).with_proofs(&proofs),
+                    })),
                 }
             })
             .collect()
@@ -1299,28 +1323,101 @@ impl Item {
         }
     }
 
-    /// The names exported by this top-level item, in declaration order.
-    pub fn declared_names(&self) -> Vec<&Global> {
-        match self {
-            Item::Let(definition) => vec![&definition.name],
+    /// The names this top-level item declares, in declaration order: each of its definitions', then each constructor of each family it declares, which the family's entry names and no definition of the item holds ([`Item::constructors`]).
+    pub fn declared_names(&self) -> Vec<Global> {
+        let own = match self {
+            Item::Let(definition) => vec![definition.name],
             Item::Rec(rec) => rec
                 .definitions
                 .iter()
-                .map(|definition| &definition.name)
+                .map(|definition| definition.name)
+                .collect(),
+        };
+
+        own.into_iter().chain(self.constructor_names()).collect()
+    }
+
+    /// What this item declares each of its names as, in the order of [`Item::declared_names`]. A definition the item holds is no constructor whatever its kind states: a constructor is its family's, which the item declares beside its definitions.
+    pub fn declared(&self) -> Vec<Declared> {
+        let held = |kind: &DefinitionKind| match kind.declared() {
+            Declared::Constructor => Declared::Authored,
+            declared => declared,
+        };
+        let own = match self {
+            Item::Let(definition) => vec![held(&definition.kind)],
+            Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .map(|definition| held(&definition.kind))
+                .collect(),
+        };
+        let constructors = self.constructor_names().len();
+
+        own.into_iter()
+            .chain(std::iter::repeat_n(Declared::Constructor, constructors))
+            .collect()
+    }
+
+    /// Each family this item declares: the path its former is named by, the module it sits in, and its entry.
+    fn families(&self) -> Vec<(Qualifier, Qualifier, &InductDecl)> {
+        fn family<'a>(
+            name: &Global,
+            island: Qualifier,
+            kind: &'a DefinitionKind,
+        ) -> Option<(Qualifier, Qualifier, &'a InductDecl)> {
+            let Global::Authored(owner) = name else {
+                return None;
+            };
+            Some((*owner, island, kind.nominal()?.inductive()?))
+        }
+        match self {
+            Item::Let(definition) => family(&definition.name, definition.island, &definition.kind)
+                .into_iter()
+                .collect(),
+            Item::Rec(rec) => rec
+                .definitions
+                .iter()
+                .filter_map(|member| family(&member.name, member.island, &member.kind))
                 .collect(),
         }
     }
 
-    /// What this item declares each of its names as, in the order of [`Item::declared_names`].
-    pub fn declared(&self) -> Vec<Declared> {
+    /// The names of the constructors of each family this item declares, one to a case in declaration order.
+    fn constructor_names(&self) -> Vec<Global> {
         match self {
-            Item::Let(definition) => vec![definition.kind.declared()],
+            Item::Let(definition) => definition.kind.constructor_names(&definition.name),
             Item::Rec(rec) => rec
                 .definitions
                 .iter()
-                .map(|definition| definition.kind.declared())
+                .flat_map(|member| member.kind.constructor_names(&member.name))
                 .collect(),
         }
+    }
+
+    /// The value constructors of each family this item declares, as each family's entry makes them ([`Definition::constructors`]): what the item declares beside its definitions and holds in none of them, so a constructor is its family's by construction.
+    pub fn constructors(&self) -> Vec<Definition> {
+        self.families()
+            .into_iter()
+            .flat_map(|(owner, island, declaration)| {
+                Definition::constructors(owner, island, declaration)
+            })
+            .collect()
+    }
+
+    /// The constructor `name` of a family this item declares, as its family's entry makes it.
+    pub fn constructor(&self, name: &Global) -> Option<Definition> {
+        let Global::Authored(path) = name else {
+            return None;
+        };
+        let owner = path.without_last();
+        let (_, island, declaration) = self
+            .families()
+            .into_iter()
+            .find(|(family, _, _)| *family == owner)?;
+
+        Definition::constructors(owner, island, declaration)
+            .into_iter()
+            .find(|constructor| constructor.name == *name)
     }
 
     /// The entries this item's formers carry, each under the name that declares it, in declaration order.
@@ -1431,6 +1528,7 @@ impl Definitions {
                 Item::Rec(rec) => rec.definitions[member as usize].kind.nominal(),
                 Item::Let(_) => None,
             },
+            Place::Constructor { .. } => None,
         }
     }
 
@@ -1454,7 +1552,7 @@ impl Definitions {
         self.items
             .places()
             .flat_map(|place| {
-                let names = self.items.names(place).into_iter().copied();
+                let names = self.items.names(place).into_iter();
 
                 names.zip(self.items.declared(place))
             })
@@ -1542,7 +1640,7 @@ impl Definitions {
         let mut located = HashMap::new();
         for place in self.items.places() {
             for (member, name) in self.items.names(place).into_iter().enumerate() {
-                located.insert(*name, (place, member));
+                located.insert(name, (place, member));
             }
         }
 
@@ -1559,17 +1657,15 @@ impl Definitions {
                 names.zip(self.items.declared(place))
             })
             .filter(|(_, declared)| wanted(*declared))
-            .map(|(name, _)| *name)
+            .map(|(name, _)| name)
             .collect()
     }
 
     /// The definition `name` names, read where `located` holds it, a group's member as [`RecItem::definitions`] materializes it: the one item is read, and where the module was stored the one item is restored.
     fn definition_at(&self, located: &Located, name: &Global) -> Option<Definition> {
         let &(place, member) = located.get(name)?;
-        match &self.items[place] {
-            Item::Let(definition) => Some(Definition::clone(definition)),
-            Item::Rec(rec) => rec.definitions().into_iter().nth(member),
-        }
+
+        item_definition(&self.items[place], name, member)
     }
 
     /// What a report spells this unit's names by — see [`Lexicon`].
@@ -1629,12 +1725,9 @@ impl Definitions {
             .items
             .names(place.item())
             .into_iter()
-            .position(|held| held == name)?;
+            .position(|held| held == *name)?;
         let declared = *self.items.declared(place.item()).get(at)?;
-        let definition = match &self.items[place.item()] {
-            Item::Let(definition) => Definition::clone(definition),
-            Item::Rec(rec) => rec.definitions().into_iter().nth(at)?,
-        };
+        let definition = item_definition(&self.items[place.item()], name, at)?;
 
         Some((definition, declared))
     }
@@ -1643,10 +1736,12 @@ impl Definitions {
     pub fn island_of(&self, places: &Places, name: &Global) -> Option<Qualifier> {
         let place = places.place(name)?;
 
-        self.items[place.item()]
-            .definitions()
+        let item = &self.items[place.item()];
+
+        item.definitions()
             .into_iter()
             .find(|definition| definition.name == *name)
+            .or_else(|| item.constructor(name))
             .map(|definition| definition.island)
     }
 
@@ -1678,7 +1773,7 @@ impl Definitions {
         let mut symbols = Vec::new();
         // Asked of what each place declares, which a stored module knows without its item.
         for place in self.items.places() {
-            symbols.extend(self.items.names(place).into_iter().copied());
+            symbols.extend(self.items.names(place));
         }
         symbols
     }
@@ -1716,6 +1811,15 @@ impl Entrypoint {
         let mut names = term_reaches(&self.body);
         names.extend(self.type_.iter().flat_map(term_reaches));
         names
+    }
+}
+
+/// The definition `name` names among those `item` declares, at `at` among its names: one of its own, a group's member as [`RecItem::definitions`] materializes it, or a constructor of a family it declares as the family's entry makes it.
+fn item_definition(item: &Item, name: &Global, at: usize) -> Option<Definition> {
+    match item {
+        Item::Let(definition) if definition.name == *name => Some(Definition::clone(definition)),
+        Item::Rec(rec) if at < rec.exports().len() => rec.definitions().into_iter().nth(at),
+        _ => item.constructor(name),
     }
 }
 
@@ -1924,7 +2028,7 @@ fn item_positions(
     visit: &mut impl FnMut(Option<&Global>, &dyn Carried),
 ) {
     let names = item.declared_names();
-    if names.is_empty() || !names.into_iter().all(in_scope) {
+    if names.is_empty() || !names.iter().all(in_scope) {
         for definition in item.definitions() {
             visit(Some(&definition.name), &definition.type_);
             visit(Some(&definition.name), &definition.body);

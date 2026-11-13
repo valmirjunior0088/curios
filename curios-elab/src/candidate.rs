@@ -84,7 +84,7 @@ impl<'a> Candidating<'a> {
             let Some(first) = self.lowered.items.names(declaration).first().copied() else {
                 continue;
             };
-            let Some(held) = self.traces.held(first) else {
+            let Some(held) = self.traces.held(&first) else {
                 continue;
             };
             if held.completed() {
@@ -107,7 +107,6 @@ impl<'a> Candidating<'a> {
         let names = positions
             .iter()
             .flat_map(|position| self.lowered.items.names(*position))
-            .copied()
             .collect::<Vec<_>>();
         if positions.iter().any(|position| {
             self.lowered

@@ -2061,7 +2061,7 @@ impl Notation for Spelling {
     }
 }
 
-/// The items, one per declaration, each as Core text declares it and a blank line apart, answering how many it wrote — built and printed one item at a time by *iterating* the flat items (never re-folding into a nested term), so `wonder --stage core` stays O(N) and never builds the nested term a deep module overflows on. An item a declaration implies is written nowhere, where it is the one the declaration makes and stands where a reader puts it ([`Implied`]).
+/// The items, one per declaration, each as Core text declares it and a blank line apart, answering how many it wrote — built and printed one item at a time by *iterating* the flat items (never re-folding into a nested term), so `wonder --stage core` stays O(N) and never builds the nested term a deep module overflows on. A definition a `foreign` row implies is written nowhere where it is the one the row makes, which a reader makes again where it reads the row.
 fn print_items(
     definitions: &Definitions,
     formatter: &mut fmt::Formatter<'_>,
@@ -2094,11 +2094,7 @@ fn items_written<D: Rendered>(
     spelling: &Rc<Spelling>,
     mut each: impl FnMut(CoreItem<D>) -> fmt::Result,
 ) -> fmt::Result {
-    let implied = Implied::of(definitions);
-    for (place, item) in definitions.items.places().zip(definitions.items.iter()) {
-        if implied.omitted.contains(&place) {
-            continue;
-        }
+    for item in definitions.items.iter() {
         match item {
             Item::Let(definition) => {
                 // A foreign row is stated by its form, which implies the definition that calls it: one written beside it where it is not that one.
@@ -2130,7 +2126,7 @@ fn items_written<D: Rendered>(
                     universe_context: Some(&definition.universe_context),
                     group: None,
                 };
-                each(CoreItem::Group(vec![member.written(&implied, spelling)]))?;
+                each(CoreItem::Group(vec![member.written(spelling)]))?;
             }
             Item::Rec(rec) => {
                 let mut context = Some(rec.universe_context());
@@ -2159,7 +2155,7 @@ fn items_written<D: Rendered>(
                             universe_context: context.take(),
                             group: Some((index, rec.exports().len())),
                         }
-                        .written(&implied, spelling)
+                        .written(spelling)
                     })
                     .collect();
                 each(CoreItem::Group(members))?;
@@ -2281,80 +2277,6 @@ fn island_field<D: Rendered>(
         .then(|| ("island", module_written(&definition.island, spelling)))
 }
 
-/// What the declarations of a module imply of its items: the items left to the declaration that implies them, by their places — a version's spaced apart, so no count of the items names one — and the names a declaration implies that no item of the module declares, by the declaration.
-///
-/// **An implied item is written nowhere where it is the one its declaration makes and stands where a reader puts it.** A family's constructors are made by [`Definition::constructors`]; a constructor that differs from what it makes is written out, and so is every one a declaration implies where the reader's placement ([`Definitions::placed_among`]) would not stand them where the module does.
-struct Implied {
-    omitted: BTreeSet<usize>,
-    absent: HashMap<Global, Vec<Global>>,
-}
-
-impl Implied {
-    fn of(definitions: &Definitions) -> Self {
-        let items = &definitions.items;
-        let place = items
-            .places()
-            .zip(items.iter())
-            .flat_map(|(at, item)| {
-                item.declared_names()
-                    .into_iter()
-                    .map(move |name| (*name, at))
-            })
-            .collect::<HashMap<_, _>>();
-        let mut candidates = BTreeSet::new();
-        let mut absent = HashMap::<Global, Vec<Global>>::new();
-        for definition in items.iter().flat_map(Item::definitions) {
-            let (Some(declaration), Global::Authored(owner)) = (
-                definition
-                    .kind
-                    .nominal()
-                    .and_then(|nominal| nominal.inductive()),
-                definition.name,
-            ) else {
-                continue;
-            };
-            for constructor in Definition::constructors(owner, definition.island, declaration) {
-                match place.get(&constructor.name) {
-                    None => absent
-                        .entry(definition.name)
-                        .or_default()
-                        .push(constructor.name),
-                    Some(&at) => {
-                        if let Item::Let(stored) = &items[at]
-                            && **stored == constructor
-                        {
-                            candidates.insert(at);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Where a reader puts them is where they stand, or each is written out.
-        let written = items
-            .places()
-            .zip(items.iter())
-            .filter(|(at, _)| !candidates.contains(at))
-            .map(|(_, item)| item.clone())
-            .collect::<Vec<_>>();
-        let implied = candidates
-            .iter()
-            .map(|at| items[*at].clone())
-            .collect::<Vec<_>>();
-        let first = |item: &Item| item.declared_names().first().map(|name| **name);
-        let placed = Definitions::placed_among(written, implied);
-        let stands = placed.iter().map(first).eq(items.iter().map(first));
-
-        Self {
-            omitted: match stands {
-                true => candidates,
-                false => BTreeSet::new(),
-            },
-            absent,
-        }
-    }
-}
-
 /// One definition of an item, as Core text declares it: with what its item holds beside it, and its place in a group where it is a member of one, with the group's size.
 struct Member<'a> {
     definition: &'a Definition,
@@ -2367,18 +2289,17 @@ struct Member<'a> {
 
 impl Member<'_> {
     /// This member under its decorator: a nominal declaration in its form, any other definition as a `let`.
-    fn written<D: Rendered>(self, implied: &Implied, spelling: &Rc<Spelling>) -> CoreMember<D> {
+    fn written<D: Rendered>(self, spelling: &Rc<Spelling>) -> CoreMember<D> {
         match self.definition.kind.nominal() {
             Some(nominal) => {
                 let nominal = nominal.clone();
                 let terms = declaration_terms(self.definition, &nominal);
-                let words = spelling.with_words_of(&terms, |frame| {
-                    self.declared::<Shown>(&nominal, implied, frame)
-                });
+                let words =
+                    spelling.with_words_of(&terms, |frame| self.declared::<Shown>(&nominal, frame));
                 let mint = Minting::default();
                 mint.allow_all(&terms);
 
-                self.declared(&nominal, implied, Frame::new(&words, &mint))
+                self.declared(&nominal, Frame::new(&words, &mint))
             }
             None => {
                 let definition = self.definition;
@@ -2414,13 +2335,8 @@ impl Member<'_> {
         }
     }
 
-    /// A nominal declaration in its form under `frame`, its decorator stating what differs from what the form builds: the node it is where its item is not the one its keyword makes, its former's parts and its entry's beside the ones the form spells, and the items it implies that its module lacks.
-    fn declared<D: Rendered>(
-        &self,
-        nominal: &Nominal,
-        implied: &Implied,
-        frame: Frame<'_, D>,
-    ) -> CoreMember<D> {
+    /// A nominal declaration in its form under `frame`, its decorator stating what differs from what the form builds: the node it is where its item is not the one its keyword makes, and its former's parts and its entry's beside the ones the form spells.
+    fn declared<D: Rendered>(&self, nominal: &Nominal, frame: Frame<'_, D>) -> CoreMember<D> {
         let definition = self.definition;
         let (member, words) = match nominal {
             Nominal::Inductive(declaration) => (
@@ -2469,17 +2385,6 @@ impl Member<'_> {
             fields.push(("body", value(sub(definition.body.clone(), frame))));
         }
         fields.extend(entry_fields(definition, nominal, &words, frame));
-        if let Some(absent) = implied.absent.get(&definition.name) {
-            fields.push((
-                "absent",
-                bracketed(
-                    absent
-                        .iter()
-                        .map(|name| word_value(frame.spelling.symbol(name)))
-                        .collect(),
-                ),
-            ));
-        }
 
         let fields = decorated_fields(frame.spelling, fields);
         match member {

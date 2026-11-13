@@ -152,7 +152,7 @@ impl<'a> ErasedOver<'a> {
     /// Mark the item at `place`, and hand each of its names on to `frontier`, where it is not marked yet.
     fn mark(&mut self, place: usize, frontier: &mut Vec<curios_core::Global>) {
         if self.visited.insert(place) {
-            frontier.extend(self.module.items.names(place).into_iter().copied());
+            frontier.extend(self.module.items.names(place));
         }
     }
 
@@ -223,7 +223,7 @@ impl<'a> ErasedOver<'a> {
     ) -> Option<Kept> {
         let names = item.declared_names();
         let first = names.first()?;
-        if names.iter().any(|name| self.baseline.made.contains(*name)) {
+        if names.iter().any(|name| self.baseline.made.contains(name)) {
             return None;
         }
         let erased = self.baseline.erased.held(first)?;
@@ -277,11 +277,11 @@ impl<'a> ErasedOver<'a> {
     /// A binding or forms of an item of the unit are read off what `unit` holds, and a part of a declaration of the unit off the module being erased under the record its walk filed, which are final; one of another unit is the record the baseline holds of it where that unit did not move, and digested again otherwise; and a fixed unit's is recorded nowhere.
     pub fn read_now(
         &self,
-        names: &[&curios_core::Global],
+        names: &[curios_core::Global],
         (name, part): (curios_core::Global, Part),
         unit: &ErasedUnit,
     ) -> Option<Read> {
-        if names.contains(&&name) {
+        if names.contains(&name) {
             return Some(None);
         }
         let digest = match (part, self.baseline.now.place(&name)) {

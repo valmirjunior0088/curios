@@ -412,11 +412,11 @@ impl<'a> Adopting<'a> {
                 reads
                     .signatures
                     .iter()
-                    .all(|read| names.contains(&read) || stands(read, false))
+                    .all(|read| names.contains(read) || stands(read, false))
                     && reads
                         .bodies
                         .iter()
-                        .all(|read| names.contains(&read) || stands(read, true))
+                        .all(|read| names.contains(read) || stands(read, true))
             })
             .then_some(recorded)
     }
@@ -443,7 +443,7 @@ impl<'a> Adopting<'a> {
     pub fn adopted(&mut self, item: &Item) {
         for name in item.declared_names() {
             self.stood.insert(
-                *name,
+                name,
                 Stood {
                     signature: true,
                     body: true,
@@ -469,23 +469,23 @@ impl<'a> Adopting<'a> {
         for name in item.declared_names() {
             let now = |body| {
                 let verdict = (
-                    partial(name),
-                    polarities.get(name).map(Vec::as_slice),
-                    variances.get(name).map(Vec::as_slice),
-                    applications.get(name),
+                    partial(&name),
+                    polarities.get(&name).map(Vec::as_slice),
+                    variances.get(&name).map(Vec::as_slice),
+                    applications.get(&name),
                 );
-                held_digest(definitions, places, name, verdict, body)
+                held_digest(definitions, places, &name, verdict, body)
                     .ok()
                     .flatten()
             };
             let then = |body| {
                 let verdict = (
-                    certification.totality(name) != Some(Totality::Total),
-                    certification.polarities(name),
-                    certification.variances(name),
-                    certification.applications(name),
+                    certification.totality(&name) != Some(Totality::Total),
+                    certification.polarities(&name),
+                    certification.variances(&name),
+                    certification.applications(&name),
                 );
-                held_digest(baseline.definitions, baseline.places, name, verdict, body)
+                held_digest(baseline.definitions, baseline.places, &name, verdict, body)
                     .ok()
                     .flatten()
             };
@@ -494,7 +494,7 @@ impl<'a> Adopting<'a> {
                 signature: alike(false),
                 body: alike(true),
             };
-            self.stood.insert(*name, stood);
+            self.stood.insert(name, stood);
         }
     }
 }

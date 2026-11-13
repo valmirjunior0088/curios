@@ -20,7 +20,6 @@ let /A: #{level = v} Type =
 
 /// `E : Type 3 | wrap(T : Type 2)`, `Q(e : E) : Type`, and `f.{u | u + 1 ≤ 2} : (x : Nat) -> E` wrapping `Type u` at `0` and `Type` elsewhere.
 const WRAPPED: &str = r#"
-#{absent = [/E/wrap]}
 induct /E: pub #{level = 3} Type
 | wrap(T: #{level = 2} Type)
 end

@@ -796,15 +796,15 @@ pub fn zonk_published(context: &Context, item: &Item) -> Result<Published, Error
     let mut struct_decls = Vec::new();
     let mut concepts = Vec::new();
     for name in item.declared_names() {
-        if let Some(declaration) = context.induct_decl(name) {
-            induct_decls.push((*name, zonk.zonk_induct_decl(declaration)?));
+        if let Some(declaration) = context.induct_decl(&name) {
+            induct_decls.push((name, zonk.zonk_induct_decl(declaration)?));
         }
-        if let Some(declaration) = context.struct_decl(name) {
-            struct_decls.push((*name, zonk.zonk_struct_decl(declaration)?));
+        if let Some(declaration) = context.struct_decl(&name) {
+            struct_decls.push((name, zonk.zonk_struct_decl(declaration)?));
         }
         // A concept holds no term: its parameters and its fields are its record's.
-        if let Some(concept) = context.concept(name) {
-            concepts.push((*name, concept.clone()));
+        if let Some(concept) = context.concept(&name) {
+            concepts.push((name, concept.clone()));
         }
     }
 
