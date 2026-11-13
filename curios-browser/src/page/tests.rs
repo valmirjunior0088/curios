@@ -85,7 +85,7 @@ fn a_path_claimed_twice_is_refused_naming_both_claimants() {
 
     assert_eq!(
         refusal,
-        "path claimed twice\n│  the page path `shared/a.js` is claimed by the static entry `shared` of the foreign row `dom` of `/app` and by the gateway of the foreign row `draw` of `/app`\n│  a page holds one file at a path\n╰─ [error] shared/a.js"
+        "path claimed twice\n│  the page path `shared/a.js` is claimed by the static entry `shared` of the foreign row `dom` of `/app` and by the gateway of the foreign row `draw` of `/app`\n│  a page holds one file at a path\n└─ [error] shared/a.js"
     );
 }
 

@@ -118,7 +118,7 @@ fn a_directory_no_manifest_is_above_is_governed_by_nothing() {
         "{refusal}"
     );
     assert!(
-        refusal.ends_with(&format!("╰─ [error] {}", root.display())),
+        refusal.ends_with(&format!("└─ [error] {}", root.display())),
         "{refusal}"
     );
 }

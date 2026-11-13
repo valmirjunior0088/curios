@@ -143,7 +143,7 @@ fn asking_for_a_stage_files_its_units_and_no_payload() {
     // A rung reprints the program, so what is narrated is the unit it stands on and never the program.
     let narrated = String::from_utf8_lossy(&shown.stderr);
     assert!(
-        narrated.contains("/app\n├─ check; ") && narrated.contains("╰─ store; "),
+        narrated.contains("/app\n├─ check; ") && narrated.contains("└─ store; "),
         "{narrated}"
     );
     assert!(
@@ -198,7 +198,7 @@ fn a_loose_file_compiles_only_where_output_says() {
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(
         stderr.contains(
-            "├─ try; curios compile scratch.crs --output scratch\n╰─ [error] scratch.crs"
+            "├─ try; curios compile scratch.crs --output scratch\n└─ [error] scratch.crs"
         ),
         "{stderr}"
     );

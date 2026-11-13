@@ -269,7 +269,7 @@ fn a_painted_report_stripped_of_its_codes_is_the_plain_one() {
 
     let plain = reported(&["--color", "never"]);
     assert!(
-        plain.starts_with("loose.crs\n╰─ format; would change\nbroken.crs\n╰─ format; refused\n\n"),
+        plain.starts_with("loose.crs\n└─ format; would change\nbroken.crs\n└─ format; refused\n\n"),
         "{plain}"
     );
     assert_eq!(reported(&[]), plain, "a pipe is written no code");
@@ -277,7 +277,7 @@ fn a_painted_report_stripped_of_its_codes_is_the_plain_one() {
     let painted = reported(&["--color", "always"]);
     assert!(
         painted.starts_with(
-            "\x1b[1mloose.crs\x1b[0m\n\x1b[2m╰─\x1b[0m format; would change\n\x1b[1mbroken.crs\x1b[0m\n\x1b[2m╰─\x1b[0m format; \x1b[31mrefused\x1b[0m\n\n"
+            "\x1b[1mloose.crs\x1b[0m\n\x1b[2m└─\x1b[0m format; would change\n\x1b[1mbroken.crs\x1b[0m\n\x1b[2m└─\x1b[0m format; \x1b[31mrefused\x1b[0m\n\n"
         ),
         "{painted:?}"
     );

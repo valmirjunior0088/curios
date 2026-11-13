@@ -55,11 +55,11 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
         String::from_utf8_lossy(&answered.stderr)
     );
     let text = stdout(&answered);
-    assert!(text.contains("╰─ [goal] <stdin>:1:20"), "{text}");
+    assert!(text.contains("└─ [goal] <stdin>:1:20"), "{text}");
     // The check is narrated beside the answer, closed by what stopped it.
     let narrated = String::from_utf8_lossy(&answered.stderr);
     assert!(
-        narrated.starts_with("<stdin>\n╰─ check; 1 goal in "),
+        narrated.starts_with("<stdin>\n└─ check; 1 goal in "),
         "{narrated}"
     );
 }
@@ -80,12 +80,12 @@ fn a_text_the_formatter_would_rewrite_is_said_once_with_the_way_out() {
     let text = stdout(&answered);
     assert!(
         text.ends_with(concat!(
-            "╰─ [lint] <stdin>:1:7\n",
+            "└─ [lint] <stdin>:1:7\n",
             "\n",
             "not canonical\n",
             "│  the formatter would rewrite this text\n",
             "├─ try; curios format -\n",
-            "╰─ [format] <stdin>\n",
+            "└─ [format] <stdin>\n",
         )),
         "{text}"
     );
@@ -109,12 +109,12 @@ fn each_file_the_formatter_would_rewrite_is_a_report_of_its_own() {
             "not canonical\n",
             "│  the formatter would rewrite this file\n",
             "├─ try; curios format lib.crs\n",
-            "╰─ [format] lib.crs\n",
+            "└─ [format] lib.crs\n",
             "\n",
             "not canonical\n",
             "│  the formatter would rewrite this file\n",
             "├─ try; curios format app.crs\n",
-            "╰─ [format] app.crs\n",
+            "└─ [format] app.crs\n",
         )
     );
 
@@ -125,7 +125,7 @@ fn each_file_the_formatter_would_rewrite_is_a_report_of_its_own() {
             "not canonical\n",
             "│  the formatter would rewrite this file\n",
             "├─ try; curios format app.crs\n",
-            "╰─ [format] app.crs\n",
+            "└─ [format] app.crs\n",
         )
     );
 
@@ -210,7 +210,7 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     let answered = curios(&root, &["wonder", "-"], module);
     assert!(answered.status.success());
     let text = stdout(&answered);
-    assert!(text.contains("╰─ [error] <stdin>:1:24"), "{text}");
+    assert!(text.contains("└─ [error] <stdin>:1:24"), "{text}");
 
     let staged = curios(&root, &["wonder", "--stage", "core", "-"], module);
     let refusal = String::from_utf8_lossy(&staged.stderr);
@@ -218,7 +218,7 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
     assert!(staged.stdout.is_empty());
     assert!(
         refusal.contains(
-            "not a program\n│  this text is written as a module\n│  it has no final term to compile a program from\n╰─ [error] <stdin>"
+            "not a program\n│  this text is written as a module\n│  it has no final term to compile a program from\n└─ [error] <stdin>"
         ),
         "{refusal}"
     );

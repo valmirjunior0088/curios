@@ -102,16 +102,16 @@ A command narrates on standard error, in one form: a subject alone on a line, an
 ```text
 /geometry
 ├─ check; 1.6s
-╰─ store; 0.1s
+└─ store; 0.1s
 hello
 ├─ check; 0.1s
 ├─ build; 0.2s
-╰─ emit; 0.4s
+└─ emit; 0.4s
 ```
 
 A subject is a unit by the prefix it mounts, an executable by its name, a file as it was written, or `<stdin>`, and the manifest that governs it is named beside it, `hello (../curios.toml)`, where the invocation does not stand in the manifest's directory. A unit is checked, `check`, and filed where a store keeps it, `store`. A program is checked, `check`, its own declarations elaborated, certified, erased and linked with the units it stands on; built, `build`, lowered and optimized; and emitted, `emit`, written as WebAssembly, optimized by Binaryen and, natively, compiled to machine code. What the store already held is not narrated: a subject nothing was done for says nothing, save one named beside its manifest, whose line says which package the invocation reached.
 
-A node that finished closes with what it took, `; 0.3s`. One that did not closes with how it ended and what it took — `; refused in 0.3s` where the compiler refuses the program, `; 1 goal in 0.3s` where written goals alone stopped it, `; failed in 0.3s` where the machine did — and what stopped it follows the tree, a blank line between. One whose point is where its work came to stand closes with that, spelled from where the invocation stands: `write; .curios/native/hello/hello`. `├─` is written where more nodes are planned and `╰─` at the last, each before its node's work, so a tree a refusal cuts short ends on `├─`.
+A node that finished closes with what it took, `; 0.3s`. One that did not closes with how it ended and what it took — `; refused in 0.3s` where the compiler refuses the program, `; 1 goal in 0.3s` where written goals alone stopped it, `; failed in 0.3s` where the machine did — and what stopped it follows the tree, a blank line between. One whose point is where its work came to stand closes with that, spelled from where the invocation stands: `write; .curios/native/hello/hello`. `├─` is written where more nodes are planned and `└─` at the last, each before its node's work, so a tree a refusal cuts short ends on `├─`.
 
 Nothing is rewritten or erased, and the bytes are the same in a pipe, a log file and a CI transcript as on a terminal, colour apart.
 
@@ -125,7 +125,7 @@ type mismatch
 │  3 │ let label: Str = double(21);
 │    │                  ^^^^^^^^^^
 │
-╰─ [error] demo.crs:3:18
+└─ [error] demo.crs:3:18
 ```
 
 The first line is a tag: a few words that name the kind of thing reported, the same wherever it is met and whichever stage reports it, with nothing of the program in them. What is reported of this program follows on a trunk, a fact a line and in one order: what stands here, the terms at issue each behind a label, the rule it is held to, and the way out, said as what to write. Then comes the program's own text, an empty line of the trunk above and below it, with marks under what the report is about. The last line says what the report is, in brackets, and where it stands: `[error]` for what a rule refuses, `[goal]` for a [written goal](language.md#written-goals), `[lint]` for a [lint](#lint), then the file, the line and the column, the file spelled from where the invocation stands, as one word a terminal opens. A report about a file as a whole shows no code and closes on the file alone, as `[format]` does for a text the formatter would rewrite ([`wonder`](#wonder)), and a way out that is a command stands above the last line, behind `try`. A report about a second place shows that place first, closed by what stands there and a `;`, as a step of the tree is by what it came to, so the report's own place is always its last line, the one line in brackets; and every pane of one report shares a gutter, so the code of each begins in one column:
@@ -149,7 +149,7 @@ declaration cycle
 │   9 │ let a: Nat = b;
 │     │     ^
 │
-╰─ [error] demo.crs:9:5
+└─ [error] demo.crs:9:5
 ```
 
 A goal's first line is its answer in place of a tag: what the compiler knows is wanted where it stands, `` `Nat` expected ``, or what it worked out stands there, `` `Nat` inferred ``; beneath it are the names in scope, each with its type, and each term the compiler found that fits, `? ≈ seed`. A text that is no form of the grammar is a `syntax error`, whose facts are what was `expected:` there and what was `obtained:` in its place, or the rule the text breaks and what to write. A build writes its reports on standard error after the tree, a blank line between; `wonder` and `lint` write them on standard output, as their answer.
@@ -169,7 +169,7 @@ hash mismatch
 │    │ ^^^^
 │
 ├─ try; curios pin dependency json --refresh
-╰─ [error] curios.toml:7:1
+└─ [error] curios.toml:7:1
 ```
 
 A tag is the same wherever the refusal is met, so a tool or a reader may know one by it: `unknown …` for what was named and is not there, `missing …` for what was not written, `duplicate …` and `conflicting …` for what was written twice, `invalid …` for what was written and cannot be read as what it should be, `not a …` for a thing of the wrong kind, `surplus …` for what a command takes none of, `compiler fault` for what no program or manifest earns. What follows the tag is this refusal's own: what stands there, `expected:` and `obtained:` where two values disagree, the rule, and the way out.
@@ -197,7 +197,7 @@ A running program's own exit code passes through untouched. A program that close
 
 ### Serving a page
 
-`--target browser` builds the program's [page](#the-page) as `compile --target browser` does, reads every file of it once, and serves it from memory on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until the command is stopped. It closes the program's tree with where a browser opens it — `╰─ serve; http://127.0.0.1:8000/?arg=--help` — and opens no browser.
+`--target browser` builds the program's [page](#the-page) as `compile --target browser` does, reads every file of it once, and serves it from memory on `127.0.0.1` — at port 8000 unless `--port <PORT>` names another, and at a free one under `--port 0` — until the command is stopped. It closes the program's tree with where a browser opens it — `└─ serve; http://127.0.0.1:8000/?arg=--help` — and opens no browser.
 
 The page stands at the root: `/` and `/index.html` are its document, every other file stands at its page path, and the program's arguments are the address's query, each an `arg=` percent-encoded, so the printed address runs it with the words after the subject. Nothing reloads: a changed program is served by running the command again, and every reply says `Cache-Control: no-store`, so the browser asks for the new page rather than keeping the old.
 
@@ -299,7 +299,7 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 ```text
 /demo
 ├─ check; 0.3s
-╰─ store; 0.0s
+└─ store; 0.0s
 /demo
 ├─ check; 0.0s
 ├─ build; 0.2s
@@ -307,17 +307,17 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 ├─ /demo/shapes/a_square_has_four_sides; passed in 0.0s
 ├─ /demo/two_is_three
 │  ╎ the condition was false
-│  ╰─ failed in 0.0s
+│  └─ failed in 0.0s
 ├─ /demo/render/draws_a_square
 │  ╎ ■■■■
-│  ╰─ passed in 0.1s
-╰─ 2 passed, 1 failed; 0.1s
+│  └─ passed in 0.1s
+└─ 2 passed, 1 failed; 0.1s
 2 passed, 1 failed; 0.1s
 ```
 
 Each selected test is a node, opened by its path before the test runs, so a test that never ends is the one whose line stands open, and closed by how it ended and what it took: `passed`, `failed`, `trapped`, `exited N`. A test that exits on its own has answered nothing, so it is `exited N` whatever `N`, `0` included. The tests run module by module, the modules in the order each declares its first test.
 
-What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written, each line behind a frame, the tree's trunk and a dashed one of its own, `│  ╎`, so what stands there reads as the test's. Its first byte ends the line its node opened on, and the node closes beneath what was written, on a curve that closes the dashed trunk, whichever stream that was and wherever either stream goes: a stream sent elsewhere carries its lines behind the frame too. A failing test says what went wrong itself, on its standard error, so its verdict always stands beneath. A test that trapped wrote nothing of why, so its trap's text stands beneath its verdict, which is the one thing the runner adds. Two things write past the frame and stand unframed: a child process a test starts with a stream of its own inherited, and a test that takes the terminal.
+What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written, each line behind a frame, the tree's trunk and a dashed one of its own, `│  ╎`, so what stands there reads as the test's. Its first byte ends the line its node opened on, and the node closes beneath what was written, on a corner that closes the dashed trunk, whichever stream that was and wherever either stream goes: a stream sent elsewhere carries its lines behind the frame too. A failing test says what went wrong itself, on its standard error, so its verdict always stands beneath. A test that trapped wrote nothing of why, so its trap's text stands beneath its verdict, which is the one thing the runner adds. Two things write past the frame and stand unframed: a child process a test starts with a stream of its own inherited, and a test that takes the terminal.
 
 A subject's tally closes its tree and the run's is the last line, each with what its tests took together where any ran: `N passed, N failed` always, since that pair is what the exit code turns on, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened. A subject that declares no test, or that the filter selects nothing from, closes with its tally at once.
 
@@ -355,9 +355,9 @@ Each fetch is a subject of its own — a package by the prefix it mounts, a modu
 
 ```text
 /json
-╰─ fetch; 1.4s
+└─ fetch; 1.4s
 sha2
-╰─ fetch; 0.3s
+└─ fetch; 0.3s
 2 fetched
 ```
 
@@ -408,7 +408,7 @@ sha2
 ├─ deliver; 12,484 bytes, a WebAssembly module
 │    exports: alloc, memory, SHA256_Digest
 │    nothing verified this download — the hash below is derived from it, not checked against it
-╰─ pin; recorded
+└─ pin; recorded
      url: https://example.org/libsha2.wasm
      hash: f1:93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476
 ```
@@ -437,7 +437,7 @@ hello/
 ├─ write; lib.crs
 ├─ write; exe.crs
 ├─ write; .gitignore
-╰─ try; cd hello && curios run
+└─ try; cd hello && curios run
 ```
 
 ## `lint`
@@ -464,9 +464,9 @@ Standard error narrates what had to be compiled, as [`wonder`](#wonder) does, an
 ```text
 /demo
 ├─ check; 0.3s
-╰─ store; 0.0s
+└─ store; 0.0s
 demo
-╰─ check; 0.1s
+└─ check; 0.1s
 
 2 lints
 ```
@@ -494,9 +494,9 @@ A file that changes is a subject, spelled from where the invocation stands, with
 
 ```text
 lib.crs
-╰─ format; rewritten
+└─ format; rewritten
 shapes.crs
-╰─ format; rewritten
+└─ format; rewritten
 2 rewritten, 5 unchanged
 ```
 
@@ -524,7 +524,7 @@ The check also asks the formatter about every text its subject is written in —
 not canonical
 │  the formatter would rewrite this file
 ├─ try; curios format shapes.crs
-╰─ [format] shapes.crs
+└─ [format] shapes.crs
 ```
 
 It is no lint, since no compilation finds it, so [`lint`](#lint) says nothing of it and no exit code turns on it: `format --check` is the question whose answer is a code. A text the formatter refuses is not reported here, since the check's own report says why.
@@ -735,7 +735,7 @@ Text written as a module — items with no final term — is checked as one, as 
 Diagnostics name it `<stdin>` where they would name a file, keeping line and column:
 
 ```text
-╰─ [error] <stdin>:1:19
+└─ [error] <stdin>:1:19
 ```
 
 The program's own standard input is spent on reading the source, so a read of it reports the end of the input. A program that reads its input wants a file, or a path the shell mints for it — `curios run <(your_generator)` is an ordinary file argument, and leaves standard input alone.

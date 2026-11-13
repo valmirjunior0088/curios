@@ -210,7 +210,7 @@ fn run_serves_the_page_at_the_root_until_stopped() {
     let stderr = String::from_utf8_lossy(&stderr);
     assert!(stdout.is_empty(), "{stdout:?}");
     assert!(
-        stderr.contains(&format!("╰─ serve; http://127.0.0.1:{port}/\n")),
+        stderr.contains(&format!("└─ serve; http://127.0.0.1:{port}/\n")),
         "{stderr}"
     );
 }
@@ -339,12 +339,12 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
         &shown,
         &[
             "/app\n",
-            "╰─ emit; ",
+            "└─ emit; ",
             "app\n",
-            "╰─ emit; ",
+            "└─ emit; ",
             "quiet\n",
             "├─ check; ",
-            "╰─ 0 passed, 0 failed\n",
+            "└─ 0 passed, 0 failed\n",
         ],
     );
     // The step handed over is the test in hand, its node open: the one whose line stands open while its page runs.
@@ -386,14 +386,14 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
                 "├─ /app/holds; passed in _\n",
                 "├─ /app/fails\n",
                 "│  ╎ expected 2 but got 1\n",
-                "│  ╰─ failed in _\n",
+                "│  └─ failed in _\n",
                 "├─ /app/exits; exited 7 in _\n",
-                "╰─ 1 passed, 1 failed, 1 exited; _\n",
+                "└─ 1 passed, 1 failed, 1 exited; _\n",
                 "app\n",
                 "├─ /own\n",
                 "{drawn}",
-                "│  ╰─ passed in _\n",
-                "╰─ 1 passed, 0 failed; _\n",
+                "│  └─ passed in _\n",
+                "└─ 1 passed, 0 failed; _\n",
                 "2 passed, 1 failed, 1 exited; _\n",
             ),
             port = port,
@@ -431,11 +431,11 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
         &[
             "/app\n",
             "├─ check; ",
-            "╰─ 0 passed, 0 failed, 3 skipped\n",
+            "└─ 0 passed, 0 failed, 3 skipped\n",
             "app\n",
-            "╰─ emit; ",
+            "└─ emit; ",
             "quiet\n",
-            "╰─ 0 passed, 0 failed\n",
+            "└─ 0 passed, 0 failed\n",
         ],
     );
     assert!(
@@ -449,7 +449,7 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
         untimed(&closing),
         concat!(
             "; passed in _\n",
-            "╰─ 1 passed, 0 failed; _\n",
+            "└─ 1 passed, 0 failed; _\n",
             "1 passed, 0 failed, 3 skipped; _\n",
         )
     );
@@ -478,7 +478,7 @@ fn a_port_beside_the_native_target_is_refused() {
     assert_eq!(output.status.code(), Some(1));
     assert!(
         String::from_utf8_lossy(&output.stderr).contains(
-            "surplus flag\n│  `--port` is where a page is served\n│  `--target native` runs the tests here\n│  write `--target browser` to serve their pages\n╰─ [error] --port"
+            "surplus flag\n│  `--port` is where a page is served\n│  `--target native` runs the tests here\n│  write `--target browser` to serve their pages\n└─ [error] --port"
         ),
         "{}",
         String::from_utf8_lossy(&output.stderr)

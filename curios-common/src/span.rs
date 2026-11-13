@@ -449,7 +449,7 @@ impl Report {
     /// │  2 │ let a = 2;
     /// │    │     ^
     /// │
-    /// ╰─ [error] lib.crs:2:5
+    /// └─ [error] lib.crs:2:5
     /// ```
     ///
     /// **The report's own place is its last line**, so the line a reader's eye ends on, and a terminal opens, is where the report stands; every further place stands before it.
@@ -523,7 +523,7 @@ impl Report {
                 .iter()
                 .map(|command| format!("{} try; {command}", style.dim("├─"))),
         );
-        let closing = style.dim("╰─");
+        let closing = style.dim("└─");
         lines.push(match &self.about {
             Some(About::Place(span)) => format!("{closing} {badge} {}", span.place(style)),
             Some(About::Path(path)) => format!("{closing} {badge} {}", style.spelled(path)),

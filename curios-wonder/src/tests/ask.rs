@@ -59,7 +59,7 @@ fn a_file_subject_the_disk_does_not_hold_is_refused_before_it_is_placed() {
     let missing = root.join("nothing.crs");
     let refusal = crate::file_subject(missing.clone()).unwrap_err().render();
     assert!(
-        refusal.ends_with(&format!("╰─ [error] {}", missing.display())),
+        refusal.ends_with(&format!("└─ [error] {}", missing.display())),
         "{refusal}"
     );
 
@@ -68,7 +68,7 @@ fn a_file_subject_the_disk_does_not_hold_is_refused_before_it_is_placed() {
         .unwrap_err()
         .render();
     assert!(
-        refusal.ends_with(&format!("╰─ [error] {}", root.display())),
+        refusal.ends_with(&format!("└─ [error] {}", root.display())),
         "{refusal}"
     );
 }

@@ -83,17 +83,17 @@ fn a_lint_is_reported_on_stdout_with_exit_one_and_a_clean_program_exits_zero() {
         text.starts_with("unused import\n│  `Bool` is never used\n│  delete it"),
         "{text}"
     );
-    assert!(text.contains("╰─ [lint] <stdin>:1:11"), "{text}");
+    assert!(text.contains("└─ [lint] <stdin>:1:11"), "{text}");
     // The program is checked under its own name, a blank line parts the tree from the report, and the count closes.
     let narrated = String::from_utf8_lossy(&linted.stderr);
-    assert!(narrated.starts_with("<stdin>\n╰─ check; "), "{narrated}");
+    assert!(narrated.starts_with("<stdin>\n└─ check; "), "{narrated}");
     assert!(narrated.ends_with("s\n\n1 lint\n"), "{narrated}");
 
     let clean = curios(&root, &["lint", "-"], "/std/print(\"\")\n");
     assert!(clean.status.success());
     assert!(clean.stdout.is_empty());
     let narrated = String::from_utf8_lossy(&clean.stderr);
-    assert!(narrated.starts_with("<stdin>\n╰─ check; "), "{narrated}");
+    assert!(narrated.starts_with("<stdin>\n└─ check; "), "{narrated}");
     assert!(narrated.ends_with("s\n0 lints\n"), "{narrated}");
 }
 
@@ -204,7 +204,7 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
     assert_eq!(stored.status.code(), Some(0), "{}", stdout(&stored));
     let filed = String::from_utf8_lossy(&stored.stderr);
     assert!(
-        filed.contains("╰─ store; ") && !filed.contains("refused"),
+        filed.contains("└─ store; ") && !filed.contains("refused"),
         "a store that took the units says nothing of itself: {filed}"
     );
 

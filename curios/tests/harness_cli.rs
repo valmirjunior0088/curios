@@ -126,24 +126,24 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
         &[
             "/app\n",
             "├─ check; ",
-            "╰─ store; ",
+            "└─ store; ",
             "/app\n",
             "├─ check; ",
             "├─ build; ",
             "├─ emit; ",
             "├─ /app/doubling_passes; passed in ",
             "├─ /app/addition_passes; passed in ",
-            "├─ /app/equality_fails\n│  ╎ expected 5 but got 4\n│  ╰─ failed in ",
+            "├─ /app/equality_fails\n│  ╎ expected 5 but got 4\n│  └─ failed in ",
             "├─ /app/overflow_traps; trapped in ",
             "├─ /app/exits_seven; exited 7 in ",
             "├─ /app/effect_passes; passed in ",
-            "╰─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
+            "└─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
             "/app\n",
             "├─ check; ",
-            "╰─ store; ",
+            "└─ store; ",
             "app\n",
             "├─ check; ",
-            "╰─ 0 passed, 0 failed\n",
+            "└─ 0 passed, 0 failed\n",
         ],
     );
     assert!(
@@ -196,7 +196,7 @@ test fails_quietly =
         &[
             "├─ /app/quits_early; exited 0 in ",
             "├─ /app/fails_quietly; exited 1 in ",
-            "╰─ 0 passed, 0 failed, 2 exited; ",
+            "└─ 0 passed, 0 failed, 2 exited; ",
         ],
     );
     assert_eq!(output.status.code(), Some(1));
@@ -237,9 +237,9 @@ test mutters =
         &stderr(&apart),
         &[
             "├─ /app/quiet; passed in ",
-            "├─ /app/draws\n│  ╰─ passed in ",
-            "├─ /app/mutters\n│  ╎ half\n│  ╰─ passed in ",
-            "╰─ 3 passed, 0 failed; ",
+            "├─ /app/draws\n│  └─ passed in ",
+            "├─ /app/mutters\n│  ╎ half\n│  └─ passed in ",
+            "└─ 3 passed, 0 failed; ",
         ],
     );
 
@@ -261,8 +261,8 @@ test mutters =
         &together,
         &[
             "├─ /app/quiet; passed in ",
-            "├─ /app/draws\n│  ╎ drawn\n│  ╰─ passed in ",
-            "├─ /app/mutters\n│  ╎ half\n│  ╰─ passed in ",
+            "├─ /app/draws\n│  ╎ drawn\n│  └─ passed in ",
+            "├─ /app/mutters\n│  ╎ half\n│  └─ passed in ",
         ],
     );
 }
@@ -277,7 +277,7 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
         &[
             "├─ emit; ",
             "├─ /app/addition_passes; passed in ",
-            "╰─ 1 passed, 0 failed, 5 skipped; ",
+            "└─ 1 passed, 0 failed, 5 skipped; ",
         ],
     );
     assert_eq!(cold.status.code(), Some(0));
@@ -288,8 +288,8 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
         &stderr(&warm),
         &[
             "/app\n├─ /app/addition_passes; passed in ",
-            "╰─ 1 passed, 0 failed, 5 skipped; ",
-            "app\n╰─ 0 passed, 0 failed\n",
+            "└─ 1 passed, 0 failed, 5 skipped; ",
+            "app\n└─ 0 passed, 0 failed\n",
             "1 passed, 0 failed, 5 skipped; ",
         ],
     );
@@ -362,7 +362,7 @@ end
             "├─ /app/first; passed in ",
             "├─ /app/second; passed in ",
             "├─ /app/Inner/kept; passed in ",
-            "╰─ 3 passed, 0 failed, 2 skipped; ",
+            "└─ 3 passed, 0 failed, 2 skipped; ",
             "\n3 passed, 0 failed, 2 skipped; ",
         ],
     );
@@ -423,7 +423,7 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     let executable = curios(&root, &["test", "app"]);
     in_order(
         &stderr(&executable),
-        &["app\n", "├─ /in_app; passed in ", "╰─ 1 passed, 0 failed; "],
+        &["app\n", "├─ /in_app; passed in ", "└─ 1 passed, 0 failed; "],
     );
     assert!(
         !stderr(&executable).contains("in_library"),
@@ -437,7 +437,7 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
         &[
             "scratch/loose.crs\n",
             "├─ /loose/in_loose; passed in ",
-            "╰─ 1 passed, 0 failed; ",
+            "└─ 1 passed, 0 failed; ",
         ],
     );
 }
@@ -455,7 +455,7 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
         &[
             "<stdin>\n",
             "├─ /stdin/in_piped; passed in ",
-            "╰─ 1 passed, 0 failed; ",
+            "└─ 1 passed, 0 failed; ",
         ],
     );
     assert_eq!(tested.status.code(), Some(0));
@@ -464,7 +464,7 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     assert_eq!(ran.status.code(), Some(1));
     assert!(
         stderr(&ran).contains(
-            "not a program\n│  this text is written as a module\n│  it has no final term to compile a program from\n╰─ [error] <stdin>"
+            "not a program\n│  this text is written as a module\n│  it has no final term to compile a program from\n└─ [error] <stdin>"
         ),
         "stderr: {}",
         stderr(&ran)
@@ -542,11 +542,11 @@ fn run_neither_runs_nor_reports_a_test() {
         &[
             "/app\n",
             "├─ check; ",
-            "╰─ store; ",
+            "└─ store; ",
             "app\n",
             "├─ check; ",
             "├─ build; ",
-            "╰─ emit; ",
+            "└─ emit; ",
         ],
     );
     assert!(
@@ -690,5 +690,5 @@ fn a_goal_beside_a_refusal_exits_one_with_both_reported() {
     assert_eq!(output.status.code(), Some(1));
     let report = stderr(&output);
     assert!(report.contains("pub let broken : Nat = true;"), "{report}");
-    assert!(report.contains("╰─ [goal]"), "{report}");
+    assert!(report.contains("└─ [goal]"), "{report}");
 }

@@ -5,11 +5,11 @@
 //! ```text
 //! /geometry
 //! ├─ check; 1.6s
-//! ╰─ store; 0.1s
+//! └─ store; 0.1s
 //! hello
 //! ├─ check; 0.1s
 //! ├─ build; 0.2s
-//! ╰─ emit; 0.4s
+//! └─ emit; 0.4s
 //! ```
 //!
 //! **Everything here goes to stderr.** `curios run` hands stdout to the program it executes, so a line of the transcript written there would corrupt `curios run report.crs > report.json`.
@@ -247,7 +247,7 @@ pub fn from_here(path: &Path) -> String {
 const BRANCH: &str = "├─";
 
 /// The connector of the last node a tree plans.
-const CORNER: &str = "╰─";
+const CORNER: &str = "└─";
 
 /// The trunk, beside what stands beneath a node more are planned after.
 const TRUNK: &str = "│";
@@ -360,21 +360,21 @@ impl Wrote {
 /// ```text
 /// /geometry
 /// ├─ check; 1.6s
-/// ╰─ store; 0.1s
+/// └─ store; 0.1s
 /// ```
 ///
 /// **The subject's line is written with its first node**, so a subject nothing had to be done for says nothing: what the store already held is not narrated.
 ///
 /// **A node's line is built by unterminated writes.** The label reaches the reader before the work it names, and what closes the line is what the work came to. A compiler that dies mid-step leaves the line open, so the last thing written is how far it got.
 ///
-/// **The connector is the plan's.** `├─` is written where more nodes are planned and `╰─` at the last, before either's work is done, so a tree a refusal cuts short ends on `├─`: the steps it planned and never reached are the ones missing.
+/// **The connector is the plan's.** `├─` is written where more nodes are planned and `└─` at the last, before either's work is done, so a tree a refusal cuts short ends on `├─`: the steps it planned and never reached are the ones missing.
 ///
-/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), each line of it stands behind a dashed trunk as it is written ([`framed_run`]), and the outcome closes the node beneath it, on a curve off the trunk that closes the dashed one:
+/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), each line of it stands behind a dashed trunk as it is written ([`framed_run`]), and the outcome closes the node beneath it, on a corner off the trunk that closes the dashed one:
 ///
 /// ```text
 /// ├─ /geometry/draws_a_square
 /// │  ╎ ■■■■
-/// │  ╰─ passed in 0.1s
+/// │  └─ passed in 0.1s
 /// ```
 pub struct Tree {
     /// The subject's line, until the first node writes it.
@@ -482,7 +482,7 @@ impl Tree {
         done
     }
 
-    /// Close the open node with how its work ended and the time `taken` whoever ran it measured, then what only they know of it, a line of `beneath` each: `; passed in 0.1s` on the node's own line, or, where the work `wrote` of its own and so ended that line, on a curve beneath what it wrote, `│  ╰─ passed in 0.1s`, after the end of a line it left open.
+    /// Close the open node with how its work ended and the time `taken` whoever ran it measured, then what only they know of it, a line of `beneath` each: `; passed in 0.1s` on the node's own line, or, where the work `wrote` of its own and so ended that line, on a corner beneath what it wrote, `│  └─ passed in 0.1s`, after the end of a line it left open.
     pub fn ended(&mut self, verdict: &str, taken: Duration, wrote: Wrote, beneath: &[String]) {
         let closing = format!(
             "{} {}",
@@ -511,7 +511,7 @@ impl Tree {
         }
     }
 
-    /// Close the tree with the node that sums it up, and the time `taken` by all it sums where any of it ran: `╰─ 2 passed, 1 failed; 0.1s`.
+    /// Close the tree with the node that sums it up, and the time `taken` by all it sums where any of it ran: `└─ 2 passed, 1 failed; 0.1s`.
     pub fn summed(mut self, sum: &str, taken: Option<Duration>) {
         self.headed();
         match taken {

@@ -685,7 +685,7 @@ fn a_catalog_row_pointing_nowhere_is_refused_against_the_umbrella() {
         "{refusal}"
     );
     assert!(
-        refusal.ends_with(&format!("╰─ [error] {}:5:1", root.join(MANIFEST).display())),
+        refusal.ends_with(&format!("└─ [error] {}:5:1", root.join(MANIFEST).display())),
         "the catalog row, in the umbrella's manifest: {refusal}"
     );
 }
@@ -714,7 +714,7 @@ fn a_dependency_with_no_manifest_is_refused_against_the_row() {
     assert!(refusal.contains("no `curios.toml` sits there"), "{refusal}");
     assert!(
         refusal.ends_with(&format!(
-            "╰─ [error] {}:5:1",
+            "└─ [error] {}:5:1",
             root.join("app").join(MANIFEST).display()
         )),
         "the row, in its dependent's manifest: {refusal}"
