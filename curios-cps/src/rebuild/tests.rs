@@ -243,6 +243,113 @@ fn handed_back_by(switch: bool, fresh: bool) -> Module {
     module
 }
 
+/// `main` builds a `Pair` holding a `Pair` nothing else holds, and a continuation reads the inner one out of it, reads that one's slot and builds a `Pair` of it beside the inner one dying: once, or, where `looped`, on every round of a loop that binds the outer `Pair` once.
+fn read_beside_a_construction(looped: bool) -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let [v, inner, outer, k, x, y, n, d] = ["v", "inner", "outer", "k", "x", "y", "n", "d"]
+        .map(|name| module.add_value(Some(name.into())));
+
+    let round = module.reserve_continuation();
+    let done = module.reserve_continuation();
+    let exit = module.add_node(halt(vec![Atom::Value(d)]));
+    module.define_continuation(
+        done,
+        Continuation {
+            debug_name: None,
+            params: vec![d],
+            body: exit,
+        },
+    );
+    let onward = |target| Edge {
+        target,
+        args: vec![Atom::Value(n)],
+    };
+    let next = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(y),
+        cases: std::collections::BTreeMap::from([(0, onward(done))]),
+        default: Some(onward(match looped {
+            true => round,
+            false => done,
+        })),
+    });
+    let build = module.add_node(Node::LetValue {
+        result: n,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(y)]),
+        next,
+    });
+    let read_slot = module.add_node(Node::LetIntrinsic {
+        result: y,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(x)],
+        next: build,
+    });
+    let read_inner = module.add_node(Node::LetIntrinsic {
+        result: x,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(outer)],
+        next: read_slot,
+    });
+    module.define_continuation(
+        round,
+        Continuation {
+            debug_name: None,
+            params: vec![k],
+            body: read_inner,
+        },
+    );
+
+    let enter = module.add_node(Node::ApplyCont(Edge {
+        target: round,
+        args: vec![nat(0)],
+    }));
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![round, done],
+        body: enter,
+    });
+    let holder = module.add_node(Node::LetValue {
+        result: outer,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(inner)]),
+        next: scope,
+    });
+    let held = module.add_node(Node::LetValue {
+        result: inner,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+        next: holder,
+    });
+    let body = module.add_node(Node::LetIntrinsic {
+        result: v,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: held,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// A read a run comes back to with its value still bound names one object on every round, so what a round read is written into by no rebuild: the next round reads it again. Read once, it is rebuilt.
+#[test]
+fn a_read_a_loop_comes_back_to_names_one_object_on_every_round() {
+    assert_eq!(rebuilds(&read_beside_a_construction(false)).len(), 1);
+    assert_eq!(rebuilds(&read_beside_a_construction(true)).len(), 0);
+}
+
 /// What a switch's edge hands a function's return is handed back as what a jump hands is: a constant a function returns that way is no value to write into where it is answered, and a value nothing else holds is rebuilt there by either route.
 #[test]
 fn a_switchs_edge_to_a_return_hands_back_what_a_jump_does() {

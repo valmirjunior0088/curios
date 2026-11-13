@@ -1,6 +1,6 @@
 //! Which constructions of a row may write into a value of that row dying beside them: the proof [`rebuild_in_place`](super::rebuild_in_place) spends ([A value costs when it is kept, not when it is named](../../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)).
 //!
-//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures, a literal and constant data; a filler is null, which nothing shares. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value, which is Perceus's rule and what lets a path copy qualify.
+//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures, a literal and constant data; a filler is null, which nothing shares. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value, which is Perceus's rule and what lets a path copy qualify, and where no run comes back to the read with that value still bound, each round's read naming the one object.
 //!
 //! **Constants by tag.** A constant is one global every use shares, and it reaches every read of a slot it is stored in, so the constructor tags of the constant data that may reach each value flow through slots, calls and returns; a value some constant may be is rebuilt only within the arms of a test of its tag that rule every such tag out.
 //!
@@ -1104,7 +1104,7 @@ impl Shape {
             .any(|(read, result)| *read == row && self.in_scope(*result, node))
     }
 
-    /// Whether a run can come back to `node` without binding `value` again: a rebuild there would write the memory the last round's rebuild handed on.
+    /// Whether a run can come back to `node` without binding `value` again: a rebuild there would write the memory the last round's rebuild handed on, and a read of it there names what the last round's read named.
     fn returns_without_rebinding(&self, value: ValueId, node: NodeId) -> bool {
         let (block, _) = self.place[&node];
         let home = match self.defs.get(&value) {
@@ -1580,7 +1580,7 @@ impl<'s> Facts<'s> {
     }
 }
 
-/// The facts that hold whatever the others say: a value's own sharing — a literal, constant data, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, a captured one — and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it.
+/// The facts that hold whatever the others say: a value's own sharing — a literal, constant data, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, a captured one, a field another read on its path reads or its own read reads again on a later round — and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it.
 fn sources(
     module: &Module,
     shape: &Shape,
@@ -1645,13 +1645,16 @@ fn sources(
                             )
                         })
             }
-            // Two reads of one slot on one path name one object.
-            Def::Field(of) => shape.fields.get(of).into_iter().flatten().any(|other| {
-                *other != *value
-                    && shape.slot_of.get(other) == shape.slot_of.get(value)
-                    && (shape.reaches(shape.binder[value], shape.binder[other])
-                        || shape.reaches(shape.binder[other], shape.binder[value]))
-            }),
+            // Two reads of one slot on one path name one object, and so does one read on two rounds of a loop that binds what it reads once.
+            Def::Field(of) => {
+                shape.returns_without_rebinding(*of, shape.binder[value])
+                    || shape.fields.get(of).into_iter().flatten().any(|other| {
+                        *other != *value
+                            && shape.slot_of.get(other) == shape.slot_of.get(value)
+                            && (shape.reaches(shape.binder[value], shape.binder[other])
+                                || shape.reaches(shape.binder[other], shape.binder[value]))
+                    })
+            }
         };
         if source || twice || not_last || shape.captured.contains(value) {
             sources.insert(Key::Value(*value));

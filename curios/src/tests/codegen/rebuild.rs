@@ -377,6 +377,35 @@ fn a_path_copy_keeps_the_branches_it_shares_out_of_a_rebuild() {
     assert_eq!(run(&module, "50"), run(&kept, "50"));
 }
 
+/// A tree a loop binds once and reads a branch of on every round: each round's read names the one branch, so an insert into what a round read copies, and every round's size is the one it is when every insert copies.
+#[test]
+fn a_branch_read_on_every_round_of_a_loop_is_inserted_into_by_a_copy() {
+    let source = program(
+        &[
+            SEARCH_TREE,
+            r#"
+            let drip(n: Nat, t: Tree) -> Nat =
+                let go(k: Nat, acc: Nat) -> Nat =
+                    match k
+                    | 0 => acc
+                    | j + 1; _ =>
+                        match t
+                        | leaf() => acc
+                        | node(l, _, _) => go(j, acc + size(insert(l, 70000 + j)))
+                        end
+                    end;
+                go(n, 0);
+            "#,
+        ]
+        .concat(),
+        "drip(n, walk(n, (n + 1) % 65537, Tree/node(Tree/leaf(), n + 100000, Tree/leaf())))",
+    );
+    let (lowered, module) = modules(&source);
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    assert_eq!(run(&module, "5"), run(&kept, "5"));
+}
+
 /// A search tree's insert that hands back the node it was handed where the key is found, first handed the constant empty tree: the child it hands on is held by a node it may return, and what the insert of a constant hands back may be that constant, so no unique value enters the loop and nothing is rebuilt.
 #[test]
 fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
