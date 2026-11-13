@@ -3,7 +3,7 @@
 use {
     super::*,
     crate::*,
-    curios_core::{Intrinsic, Nat},
+    curios_core::{Definitions, Entrypoint, Intrinsic, Nat, Term},
 };
 
 /// The `Nat` literal zero: a term with a type, and no proof of anything.
@@ -31,11 +31,19 @@ fn a_program_whose_tail_proves_something_else_is_refused_at_false() {
 fn a_module_is_admitted_at_a_type_its_term_has() {
     let nat_type = Term::intrinsic(Intrinsic::NatType);
 
-    let answer = History::new()
-        .built(|scope| put_module(scope, Definitions::default(), zero(), nat_type))
+    let entry = Entrypoint {
+        body: zero(),
+        type_: Some(nat_type),
+    };
+    let rechecked = History::new()
+        .built(|scope| {
+            put_over(scope, |put| {
+                put.module(&Definitions::default(), Some(&entry))
+            })
+        })
         .expect("a history of no step builds");
 
-    assert!(answer.admitted());
+    assert_eq!(rechecked.verdicts, Vec::new());
 }
 
 #[test]

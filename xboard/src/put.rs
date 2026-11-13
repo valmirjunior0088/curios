@@ -5,13 +5,16 @@ mod tests;
 
 use {
     crate::{Proof, Step, Witness},
-    curios_cert::Verdict,
+    curios_cert::{
+        Verdict,
+        test_support::{Put, Unread},
+    },
     curios_common::{Report, test_support::Variants},
-    curios_core::{Definitions, Global, Program, Term, Universes},
+    curios_core::Global,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{RootSource, SYNTAX},
-    curios_pipeline::{EntryTail, Examined, examine_entrypoint, recheck, test_support::*},
-    curios_surface::{CoreEntry, CoreFile, FormScope, ReadError, Spelling, to_core},
+    curios_pipeline::{EntryTail, Examined, examine_entrypoint, globals, test_support::*},
+    curios_surface::{FormScope, ReadError, Spelling},
     curios_unit::Predecessors,
     curios_verdict::test_support::*,
     serde::Deserialize,
@@ -21,11 +24,6 @@ use {
 /// The name the compiler's own registry holds `/std/Bool/False` under: its type former's, and the key its registry entry stands at.
 pub fn false_name() -> Global {
     Global::Authored(SYNTAX.proof.false_type.qualifier())
-}
-
-/// `/std/Bool/False` as an elaborated program mentions it, by [`false_name`]: what a module built by hand is put at, what its terms name `False` by, and the type the pipeline states for a program put as a proof.
-pub fn false_type() -> Term {
-    Term::instance(false_name(), Universes::default())
 }
 
 /// What a witness is put to: the checkers, and the reader that builds a module written as Core text in the elaborator's place. A record names one by the word it is displayed as.
@@ -223,57 +221,34 @@ fn put_program(predecessors: Predecessors<'_>, source: &str) -> Answer {
     }
 }
 
-/// Put a module built by hand to the certifier alone, with `predecessors` in scope, as a program closing with `body` stated at `type_`.
-fn put_module(
-    predecessors: Predecessors<'_>,
-    definitions: Definitions,
-    body: Term,
-    type_: Term,
-) -> Answer {
-    let program = Program {
-        definitions,
-        entrypoint: curios_core::Entrypoint {
-            body,
-            type_: Some(type_),
-        },
-    };
+/// The door a module is put to the certifier through over `predecessors`, as this crate's suites put theirs: the forms its text is read against are theirs, and the units in scope are them.
+fn put_over<R>(predecessors: Predecessors<'_>, put: impl FnOnce(&Put) -> R) -> R {
+    let scope = FormScope::over(SYNTAX, predecessors.cores());
+    let globals = globals(predecessors);
 
-    // What elaboration should have solved is the walk's own to refuse, as everything else it refuses is.
-    Answer::Judged(
-        recheck(&program, DEFAULT_BUDGET, predecessors, &SYNTAX)
-            .into_iter()
-            .map(Refusal::Certifier)
-            .collect(),
-    )
+    put(&Put {
+        scope: Some(&scope),
+        globals: Some(&globals),
+        syntax: SYNTAX,
+        budget: DEFAULT_BUDGET,
+    })
 }
 
-/// Read `text` as Core text over `predecessors`, and put the module it writes to the certifier alone, with them in scope, as a program closing with its term at `False`. The text states no type for its term: the board states it.
+/// Read `text` as Core text over `predecessors`, and put the module it writes to the certifier alone, with them in scope, as a program closing with its term at `False`. The text states no type for its term: the board states it, and what elaboration should have solved is the walk's own to refuse, as everything else it refuses is.
 fn put_core_text(predecessors: Predecessors<'_>, text: &str) -> Answer {
-    let unread = |reported: String| Answer::Unbuilt(Refusal::Unread(reported));
-    let file = match text.parse::<CoreFile>() {
-        Ok(file) => file,
-        Err(error) => return unread(error.format()),
-    };
-    match &file.entry {
-        Some(CoreEntry { type_: None, .. }) => {}
-        Some(CoreEntry { type_: Some(_), .. }) => {
-            return unread(
-                "the text states the type its term is put at, which the board states".to_string(),
-            );
-        }
-        None => return unread("the text closes with no term to put".to_string()),
-    }
-
-    match to_core(&file, Some(&FormScope::over(SYNTAX, predecessors.cores()))) {
-        Err(error) => Answer::Unbuilt(Refusal::Read {
+    match put_over(predecessors, |put| put.core_text(text)) {
+        Err(Unread::Text(reported)) => Answer::Unbuilt(Refusal::Unread(reported)),
+        Err(Unread::Read(error)) => Answer::Unbuilt(Refusal::Read {
             reported: located(&error),
             error,
         }),
-        Ok((definitions, entry)) => {
-            let body = entry.expect("an entry the text writes is read").body;
-
-            put_module(predecessors, definitions, body, false_type())
-        }
+        Ok(rechecked) => Answer::Judged(
+            rechecked
+                .verdicts
+                .into_iter()
+                .map(Refusal::Certifier)
+                .collect(),
+        ),
     }
 }
 

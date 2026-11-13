@@ -5,7 +5,7 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across `recheck`, and nothing outside it.
 
 use {
-    crate::*,
+    crate::{test_support::*, *},
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_analysis::test_support::SYNTAX,
     curios_common::{Candidates, Plicity, Qualifier, SyntaxRegistry},
@@ -4079,13 +4079,23 @@ pub fn fixture_certified(
 ) -> Rechecked {
     let (definitions, entry) = fixture.parts();
 
-    super::verdicts_from(
-        &mut Certifier::new(budget, syntax),
-        definitions,
-        entry,
-        globals,
-        None,
-    )
+    Put {
+        scope: None,
+        globals: Some(globals),
+        syntax,
+        budget,
+    }
+    .module(definitions, entry)
+}
+
+/// The door this crate's suites put a candidate through, as the soundness board puts its tickets: nothing in scope, the registry they judge under, and their budget.
+pub fn put() -> Put<'static> {
+    Put {
+        scope: None,
+        globals: None,
+        syntax: SYNTAX,
+        budget: BUDGET,
+    }
 }
 
 pub const BUDGET: u64 = 1_000_000;
@@ -4161,11 +4171,9 @@ let /std/Bool/Holds : (b: #BoolType) -> Prop =
 
 /// What `text` writes, Core text read with nothing in scope: the module, and the term it closes with where it closes with one.
 fn core_text_read(text: &str) -> (Definitions, Option<Entrypoint>) {
-    let file = text
-        .parse::<curios_surface::CoreFile>()
-        .unwrap_or_else(|error| panic!("{}", error.format()));
-
-    curios_surface::to_core(&file, None).unwrap_or_else(|error| panic!("{error}"))
+    put()
+        .read(text)
+        .unwrap_or_else(|unread| panic!("{unread:?}"))
 }
 
 /// The module `text` writes, read with nothing in scope and closing with no term: an environment another text is put over.
@@ -4178,19 +4186,13 @@ pub fn core_text_module(text: &str) -> Definitions {
 
 /// What the certifier says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it, over `globals`.
 pub fn core_text_verdicts_over(text: &str, globals: &Globals) -> Vec<Verdict> {
-    let (definitions, entry) = core_text_read(text);
-    let program = Program {
-        definitions,
-        entrypoint: Entrypoint {
-            body: entry.expect("the text closes with its term").body,
-            type_: Some(Term::instance(
-                Global::Authored(SYNTAX.proof.false_type.qualifier()),
-                Universes::default(),
-            )),
-        },
-    };
-
-    fixture_verdicts(&program, BUDGET, globals, SYNTAX)
+    Put {
+        globals: Some(globals),
+        ..put()
+    }
+    .core_text(text)
+    .unwrap_or_else(|unread| panic!("{unread:?}"))
+    .verdicts
 }
 
 /// What the certifier says of `text`, Core text read with nothing in scope and closing with a term it states no type for, put at `False` as the registry this crate's suites judge under names it: how a module built by hand is written, declaring every name it uses.
@@ -4222,24 +4224,7 @@ pub fn walked_among(
     certification: &Certification,
     store: Option<&dyn Candidates>,
 ) -> Rechecked {
-    let (places, now) = (Places::of(baseline), Places::of(definitions));
-    let globals = Globals::default();
-
-    super::verdicts_from(
-        &mut Certifier::new(BUDGET, SYNTAX),
-        definitions,
-        None,
-        &globals,
-        Some(super::Over {
-            baseline: Baseline {
-                definitions: baseline,
-                places: &places,
-                certification,
-            },
-            places: &now,
-            candidates: store,
-        }),
-    )
+    put().over(definitions, baseline, certification, store)
 }
 
 /// `certification` with `symbol`'s entry replaced by `entry`'s answer for it.
