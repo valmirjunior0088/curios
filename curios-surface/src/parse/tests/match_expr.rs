@@ -454,6 +454,66 @@ fn a_choose_condition_arm_still_calls_a_qualified_name() {
     );
 }
 
+/// The operands of a `List` or a `Bytes` leaf are binders, so a pattern or a number written in one's place is refused by that rule, where it stands, rather than as the token the fall-through reached.
+#[test]
+fn a_leaf_operand_that_is_no_binder_is_refused_by_name() {
+    for (source, leaf, carets, place) in [
+        (
+            "match v | some([some(x), ..tail]) => 0 | _ => 1 end",
+            "a `[head, ..tail]`",
+            "^^^^^^^",
+            "1:17",
+        ),
+        (
+            "match v | [5, ..tail] => 0 | _ => 1 end",
+            "a `[head, ..tail]`",
+            "^",
+            "1:12",
+        ),
+        (
+            "match v | [head, ..some(t)] => 0 | _ => 1 end",
+            "a `[head, ..tail]`",
+            "^^^^^^^",
+            "1:20",
+        ),
+        (
+            "match v | x[0x01, ..tail] => 0 | _ => 1 end",
+            "an `x[head, ..tail]`",
+            "^^^^",
+            "1:13",
+        ),
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            report.contains(&format!(
+                "the head and the tail of {leaf} pattern are binders, never patterns"
+            )),
+            "{source:?} reported {report}"
+        );
+        assert!(
+            report.contains(&format!(" {carets}\n"))
+                && report.contains(&format!("[error] {place}")),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
+/// Every leaf a `List` or a `Bytes` match writes still parses: the empty ones, the cons ones over binders and `_`, and a hypothesis after either.
+#[test]
+fn the_list_and_bytes_leaves_still_parse() {
+    for source in [
+        "match v | [] => 0 | [head, ..tail] => 1 end",
+        "match v | x[] => 0 | x[head, ..tail] => 1 end",
+        "match v | [] => 0 | [_, .._]; ih => ih end",
+        "match v | x[] => 0 | x[ head , ..tail ]; (a, b) => a end",
+        "match v | some([head, ..tail]) => 1 | _ => 0 end",
+    ] {
+        if let Err(error) = source.parse::<Term>() {
+            panic!("{source}\n{}", error.format());
+        }
+    }
+}
+
 /// A scrutinee that is a structure literal holds terms in its braces, so one beginning with a qualified call is no pattern that went wrong: the probe for a `match` written with braces keeps a pattern's refusal to itself.
 #[test]
 fn a_structure_literal_scrutinee_still_calls_a_qualified_name() {
