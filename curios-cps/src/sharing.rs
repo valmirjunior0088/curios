@@ -1,8 +1,8 @@
 //! Which constructions of a row may write into a value of that row dying beside them: the proof [`rebuild_in_place`](super::rebuild_in_place) spends ([A value costs when it is kept, not when it is named](../../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)).
 //!
-//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures, a literal and constant data; a filler is null, which nothing shares. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value before a run binds it again, which is Perceus's rule and what lets a path copy qualify, and where no run comes back to the read with that value still bound, each round's read naming the one object. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
+//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures. A filler is null and a literal a number or bytes, neither a row a rebuild writes into, and constant data is kept from one by its tag, below, so none of the three makes what it is handed to shared: a parameter one call hands a constant and another a value nothing else holds is unique wherever it is no constant. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value before a run binds it again, which is Perceus's rule and what lets a path copy qualify, and where no run comes back to the read with that value still bound, each round's read naming the one object. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
 //!
-//! **Constants by tag.** A constant is one global every use shares, and it reaches every read of a slot it is stored in, so the constructor tags of the constant data that may reach each value flow through slots, calls and returns; a value some constant may be is rebuilt only within the arms of a test of its tag that rule every such tag out.
+//! **Constants by tag.** A constant is one global every use shares, and it reaches every parameter it is handed to and every read of a slot it is stored in, so the constructor tags of the constant data that may reach each value flow through slots, calls and returns; a value some constant may be is rebuilt only within the arms of a test of its tag that rule every such tag out.
 //!
 //! **Borrowing.** A parameter a function only reads is borrowed, so its caller keeps the value it handed, unless the function rebuilds it, captures it, or must own a field of it, as Lean's inference owns what it resets. Which parameters are rebuilt is the candidates' own answer, so the facts are found twice: owning every parameter, then borrowing what the first answer leaves.
 
@@ -72,19 +72,11 @@ pub fn routes(module: &Module) -> Routes {
         }
     }
     let arities = module.return_arities();
-    let constant = module.constant_data();
     let base = sources(module, &shape, &borrowed, &BTreeMap::new());
     let reuse = sources(module, &shape, &borrowed, &assumed);
     let aggregates = aggregates(module, &shape);
-    let (shape, assumed, arities, base, reuse, constant, aggregates) = (
-        &shape,
-        &assumed,
-        &arities,
-        &base,
-        &reuse,
-        &constant,
-        &aggregates,
-    );
+    let (shape, assumed, arities, base, reuse, aggregates) =
+        (&shape, &assumed, &arities, &base, &reuse, &aggregates);
     let world_of = move |value: ValueId, world: World| match shape.home.get(&value) {
         Some(function) if assumed.contains_key(function) => world,
         _ => World::Base,
@@ -118,8 +110,8 @@ pub fn routes(module: &Module) -> Routes {
                 Atom::Value(value) => solver
                     .fact(&(world_of(*value, world), Key::Value(*value)))
                     .is_none_or(|fact| fact.0),
-                Atom::Filler => false,
-                Atom::Literal(_) | Atom::Fun(_) => true,
+                Atom::Filler | Atom::Literal(_) => false,
+                Atom::Fun(_) => true,
             };
         let route = move |solver: &Solver<Shared, (World, Key)>, call: NodeId, world: World| {
             route(module, shape, assumed, call, &|atom| {
@@ -204,7 +196,7 @@ pub fn routes(module: &Module) -> Routes {
                     }
                     // A construction holding what something else holds is shared: what a read of it hands out is. A constant is never written into, so it spoils nothing.
                     Def::Construction => {
-                        let stored = stored_values(module, shape, value, constant, aggregates);
+                        let stored = stored_values(module, shape, value, aggregates);
                         rules.add(move |solver| {
                             if stored.iter().any(|atom| shared(solver, world, atom)) {
                                 solver.join((world, Key::Value(value)), Shared(true));
@@ -259,8 +251,8 @@ pub fn routes(module: &Module) -> Routes {
         Atom::Value(value) => facts
             .get(&(world_of(*value, world), Key::Value(*value)))
             .is_none_or(|fact| fact.0),
-        Atom::Filler => false,
-        Atom::Literal(_) | Atom::Fun(_) => true,
+        Atom::Filler | Atom::Literal(_) => false,
+        Atom::Fun(_) => true,
     };
     // The versions some call reaches: every function's base version, and a reuse version a call from a reached version reaches.
     let mut calls = BTreeMap::<FunctionId, Vec<(NodeId, FunctionId)>>::new();
@@ -597,7 +589,6 @@ fn stored_values(
     module: &Module,
     shape: &Shape,
     value: ValueId,
-    constant: &BTreeSet<ValueId>,
     aggregates: &BTreeSet<ValueId>,
 ) -> Vec<Atom> {
     match shape
@@ -611,7 +602,7 @@ fn stored_values(
         }) => atoms
             .iter()
             .filter(|atom| {
-                matches!(atom, Atom::Value(stored) if !constant.contains(stored) && aggregates.contains(stored))
+                matches!(atom, Atom::Value(stored) if !shape.constant.contains(stored) && aggregates.contains(stored))
             })
             .cloned()
             .collect(),
@@ -619,7 +610,7 @@ fn stored_values(
     }
 }
 
-/// The version of its callee `call` reaches, where `shared` judges its arguments.
+/// The version of its callee `call` reaches, where `shared` judges its arguments: the reuse version where each parameter that version assumes is handed a unique value dead after the call, and no constant itself, of which a rebuild writes nothing.
 fn route(
     module: &Module,
     shape: &Shape,
@@ -638,9 +629,10 @@ fn route(
     match assumed.get(callee) {
         Some(params)
             if params.iter().all(|index| {
-                args.get(*index)
-                    .is_some_and(|atom| matches!(atom, Atom::Value(_)) && !shared(atom))
-                    && handed_dead(module, shape, call, *index)
+                args.get(*index).is_some_and(|atom| {
+                    matches!(atom, Atom::Value(value) if !shape.constant.contains(value))
+                        && !shared(atom)
+                }) && handed_dead(module, shape, call, *index)
             }) =>
         {
             World::Reuse
@@ -741,6 +733,8 @@ struct Shape {
     returns: BTreeMap<FunctionId, Vec<NodeId>>,
     /// The functions whose parameters callers outside the module's sight hand values to: the escaping ones and the entry.
     open: BTreeSet<FunctionId>,
+    /// The values that may be constant data, each a global every use of it shares.
+    constant: BTreeSet<ValueId>,
     /// The blocks reachable from each block's successors, as asked.
     reach: RefCell<BTreeMap<Block, BTreeSet<Block>>>,
     /// The blocks reachable from a block's successors without entering another, the first of each key, as asked.
@@ -770,6 +764,7 @@ impl Shape {
             entries: BTreeMap::new(),
             returns: BTreeMap::new(),
             open: analyze_calls(module).escaping,
+            constant: module.constant_data(),
             reach: RefCell::new(BTreeMap::new()),
             reach_outside: RefCell::new(BTreeMap::new()),
         };
@@ -1398,7 +1393,6 @@ impl<'s> Facts<'s> {
         borrowed: &'s BTreeSet<(FunctionId, usize)>,
     ) -> Self {
         let sources = sources(module, shape, borrowed, &BTreeMap::new());
-        let constant = &module.constant_data();
         let aggregates = &aggregates(module, shape);
         let arities = module.return_arities();
         let keys =
@@ -1418,9 +1412,9 @@ impl<'s> Facts<'s> {
             });
             let shared = |solver: &Solver<Shared, Key>, atom: &Atom| match atom {
                 Atom::Value(value) => solver.fact(&Key::Value(*value)).is_none_or(|fact| fact.0),
-                // A filler is null, which nothing shares; a literal or a function may be a constant.
-                Atom::Filler => false,
-                Atom::Literal(_) | Atom::Fun(_) => true,
+                // A filler is null and a literal no row, so nothing shares what a rebuild could write; a function is a closure the module does not see into.
+                Atom::Filler | Atom::Literal(_) => false,
+                Atom::Fun(_) => true,
             };
             for (value, def) in &shape.defs {
                 let value = *value;
@@ -1483,7 +1477,7 @@ impl<'s> Facts<'s> {
                     }
                     // A construction holding what something else holds is shared: what a read of it hands out is. A constant is never written into, so it spoils nothing.
                     Def::Construction => {
-                        let stored = stored_values(module, shape, value, constant, aggregates);
+                        let stored = stored_values(module, shape, value, aggregates);
                         rules.add(move |solver| {
                             if stored.iter().any(|atom| shared(solver, atom)) {
                                 solver.join(Key::Value(value), Shared(true));
@@ -1541,7 +1535,6 @@ impl<'s> Facts<'s> {
     /// The constructions of a row beside a unique value of that row, dead there and consumed on no path to them, rebuilt at most once on a path, and never where a constant may be the value and no tag test rules it out.
     fn rebuilds(&self, tags: &BTreeMap<ValueId, Tags>) -> Vec<Rebuild> {
         let (module, shape) = (self.module, self.shape);
-        let constant = module.constant_data();
         let mut by_row = BTreeMap::<(FunctionId, RowId), Vec<ValueId>>::new();
         for (value, row) in &shape.read_at {
             if let (Some(row), Some(function)) = (row, shape.home.get(value))
@@ -1561,7 +1554,7 @@ impl<'s> Facts<'s> {
             else {
                 continue;
             };
-            if constant.contains(result) {
+            if shape.constant.contains(result) {
                 continue;
             }
             let function = shape.owner[block];
@@ -1604,17 +1597,20 @@ impl<'s> Facts<'s> {
     }
 }
 
-/// The facts that hold whatever the others say: a value's own sharing — a literal, constant data, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, a captured one, a field another read on its path reads or its own read reads again on a later round — and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it.
+/// The facts that hold whatever the others say: a value's own sharing — an operation's result, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, a captured one, a field another read on its path reads or its own read reads again on a later round — and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it.
 fn sources(
     module: &Module,
     shape: &Shape,
     borrowed: &BTreeSet<(FunctionId, usize)>,
     assumed: &BTreeMap<FunctionId, BTreeSet<usize>>,
 ) -> BTreeSet<Key> {
-    let constant = module.constant_data();
     let arities = module.return_arities();
     let mut sources = BTreeSet::new();
     for (value, def) in &shape.defs {
+        // Constant data is one object wherever it is named, and its tag keeps it from a rebuild.
+        if shape.constant.contains(value) {
+            continue;
+        }
         let consumed = shape.consumed(*value, borrowed);
         let mut seen = BTreeSet::new();
         let twice = consumed.iter().any(|point| !seen.insert(*point));
@@ -1623,7 +1619,7 @@ fn sources(
             .any(|point| shape.live_after(module, *point, *value));
         let source = match def {
             Def::Other => true,
-            Def::Construction => constant.contains(value),
+            Def::Construction => false,
             Def::Param(function, index)
                 if assumed
                     .get(function)
@@ -1690,7 +1686,7 @@ fn sources(
                 Some(Node::ApplyCont(_) | Node::Switch { .. }) => {
                     handed_back(module, *function, *node)
                         .into_iter()
-                        .filter(|(_, atom)| matches!(atom, Atom::Literal(_) | Atom::Fun(_)))
+                        .filter(|(_, atom)| matches!(atom, Atom::Fun(_)))
                         .map(|(index, _)| index)
                         .collect()
                 }
@@ -1736,33 +1732,35 @@ fn handed_back(module: &Module, function: FunctionId, node: NodeId) -> Vec<(usiz
         .collect()
 }
 
-/// Whether a call hands its parameter `index` a value dead after it, and no other parameter of the call that same value, or a filler, the null no one holds.
+/// Whether a call hands its parameter `index` what nothing else holds as a row to write into: a value dead after it that no other parameter of the call is handed, constant data, a literal, or a filler, the null no one holds.
 fn handed_dead(module: &Module, shape: &Shape, call: NodeId, index: usize) -> bool {
     let Some(Node::ApplyFun { args, .. }) = module.node(call) else {
         return false;
     };
     match args.get(index) {
         Some(atom @ Atom::Value(value)) => {
-            args.iter().filter(|other| *other == atom).count() == 1
-                && !shape.live_past(call, *value)
+            shape.constant.contains(value)
+                || (args.iter().filter(|other| *other == atom).count() == 1
+                    && !shape.live_past(call, *value))
         }
-        Some(Atom::Filler) => true,
+        Some(Atom::Filler | Atom::Literal(_)) => true,
         _ => false,
     }
 }
 
-/// Whether an argument a jump or an edge hands `block` is a value dead on entry to it and handed once on the edge, or a filler.
+/// Whether an argument a jump or an edge hands `block` is a value dead on entry to it and handed once on the edge, constant data, a literal, or a filler.
 fn arg_dead(shape: &Shape, atom: &Atom, args: &[Atom], block: Block) -> bool {
     match atom {
         Atom::Value(value) => {
-            args.iter().filter(|other| *other == atom).count() == 1
-                && !shape
-                    .live_in
-                    .get(&block)
-                    .is_some_and(|live| live.contains(value))
+            shape.constant.contains(value)
+                || (args.iter().filter(|other| *other == atom).count() == 1
+                    && !shape
+                        .live_in
+                        .get(&block)
+                        .is_some_and(|live| live.contains(value)))
         }
-        Atom::Filler => true,
-        _ => false,
+        Atom::Filler | Atom::Literal(_) => true,
+        Atom::Fun(_) => false,
     }
 }
 
@@ -1874,14 +1872,13 @@ enum TagKey {
 
 /// The tags of the constant data that may reach each value, through the slots it is stored in, the calls and jumps that hand it on and the returns that hand it back.
 fn constant_tags(module: &Module, shape: &Shape) -> BTreeMap<ValueId, Tags> {
-    let constant = module.constant_data();
     let arities = module.return_arities();
     let keys = shape
         .defs
         .keys()
         .map(|value| TagKey::Value(*value))
         .collect::<Vec<_>>();
-    let (constant, arities) = (&constant, &arities);
+    let (constant, arities) = (&shape.constant, &arities);
     let facts = Solver::solve(keys, |rules| {
         let possible = |solver: &Solver<Possible, TagKey>, atom: &Atom| match atom {
             Atom::Value(value) => solver

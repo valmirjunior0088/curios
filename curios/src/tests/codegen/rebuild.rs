@@ -140,6 +140,33 @@ const SEARCH_TREE: &str = r#"
     let shared(n: Nat) -> Tree = Tree/node(Tree/leaf(), n + 1, Tree/leaf());
 "#;
 
+/// A rope whose `tip` rides as its bare number, reversed onto an accumulator by a loop that recolors each link it takes apart.
+const ROPE: &str = r#"
+    induct Rope: Type
+    | tip(value: Nat)
+    | red(value: Nat, rest: Rope)
+    | blue(value: Nat, rest: Rope)
+    end
+    let make(n: Nat, acc: Rope) -> Rope =
+        match n | 0 => acc | k + 1; _ => make(k, Rope/red(k, acc)) end;
+    let flip(r: Rope, acc: Rope) -> Rope =
+        match r
+        | tip(_) => acc
+        | red(v, rest) => flip(rest, Rope/blue(v, acc))
+        | blue(v, rest) => flip(rest, Rope/red(v + 1, acc))
+        end;
+    let total(r: Rope, sum: Nat) -> Nat =
+        match r
+        | tip(v) => (sum + v) % 1000003
+        | red(v, rest) => total(rest, (sum + v) % 1000003)
+        | blue(v, rest) => total(rest, (sum + 2 * v) % 1000003)
+        end;
+"#;
+
+/// A rope of [`ROPE`] reversed twice, each reversal started on a tip that is a literal.
+const ROPE_FLIPPED_TWICE: &str =
+    "total(flip(flip(make(n, Rope/tip(n)), Rope/tip(1)), Rope/tip(2)), 0)";
+
 /// A map filled with `n` keys, then drained of every other one and of keys it never held.
 const REMOVALS: &str = r#"
     let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
@@ -456,7 +483,58 @@ fn a_branch_of_a_tree_a_loop_hands_on_as_it_took_it_is_inserted_into_by_a_copy()
     assert_eq!(run(&module, "5"), run(&kept, "5"));
 }
 
-/// A search tree's insert that hands back the node it was handed where the key is found, first handed the constant empty tree: the child it hands on is held by a node it may return, and what the insert of a constant hands back may be that constant, so no unique value enters the loop and nothing is rebuilt.
+/// A loop whose accumulator starts as a literal, the bare number a tip is, and whose result a second loop takes apart: a literal is no row, so the accumulator a link is built on is no less unique for having been one, and each loop rebuilds the link it takes apart, in the arms a link is in.
+#[test]
+fn a_loop_started_on_a_literal_rebuilds_the_links_it_takes_apart() {
+    let (lowered, module) = modules(&program(ROPE, ROPE_FLIPPED_TWICE));
+    assert!(rebuilds_of(&module, "/Rope") >= 2, "{module}");
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    for n in ["0", "1", "300"] {
+        assert_eq!(run(&module, n), run(&kept, n), "{n}");
+    }
+}
+
+/// A loop of inserts started on the constant empty tree: the tree it threads is that constant on its first round and a tree nothing else holds on every other, so each insert rebuilds the fork it takes apart, and never the leaf, which only its tag tells from a fork.
+#[test]
+fn a_loop_started_on_a_constant_rebuilds_the_forks_it_takes_apart() {
+    let (lowered, module) = modules(&program(
+        SEARCH_TREE,
+        "size(walk(n, (n + 1) % 65537, Tree/leaf()))",
+    ));
+    let rebuilt = rebuilt(&module);
+    let trees = rebuilt
+        .iter()
+        .filter(|(name, _)| name.ends_with("/Tree"))
+        .collect::<Vec<_>>();
+    assert!(!trees.is_empty(), "{module}");
+    assert!(
+        trees.iter().all(|(_, slots)| !slots.contains(&0)),
+        "{module}"
+    );
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    for n in ["0", "1", "300"] {
+        assert_eq!(run(&module, n), run(&kept, n), "{n}");
+    }
+}
+
+/// One constant fork two loops of inserts each start on: the fork is one global both name, which a test of its tag does not tell from a fork a loop built, so no insert writes into what it is handed and the second loop starts on the fork the first did, each tree the size it is when every insert copies.
+#[test]
+fn a_constant_fork_two_loops_start_on_is_never_rebuilt() {
+    let source = program(
+        SEARCH_TREE,
+        "size(walk(n, (n + 1) % 65537, Tree/node(Tree/leaf(), 500, Tree/leaf()))) * 100000 + size(walk(3, (n + 7) % 65537, Tree/node(Tree/leaf(), 500, Tree/leaf())))",
+    );
+    let (lowered, module) = modules(&source);
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    for n in ["0", "5", "300"] {
+        assert_eq!(run(&module, n), run(&kept, n), "{n}");
+    }
+}
+
+/// A search tree's insert that hands back the node it was handed where the key is found: the child it hands on is held by a node it may return, so what the insert of a child is handed is shared, as what it hands back then is, no unique value enters the loop and nothing is rebuilt.
 #[test]
 fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
     let tree = r#"
@@ -649,12 +727,14 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
         "Map/fold(drain(n, fill(n, Map/empty())), 0, (_, v, acc) => (acc + v) % 1000003)",
     );
     let two_walks = program(TWO_WALKS, TWO_WALKS_SUM);
+    let rope = program(ROPE, ROPE_FLIPPED_TWICE);
     for (source, n) in corpus.into_iter().chain([
         (heap, "300"),
         (spines, "300"),
         (removals, "300"),
         (tree, "300"),
         (two_walks, "300"),
+        (rope, "300"),
     ]) {
         let (lowered, rebuilt) = modules(&source);
         let mut kept = lowered;
