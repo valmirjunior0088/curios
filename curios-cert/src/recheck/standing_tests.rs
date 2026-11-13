@@ -3,20 +3,20 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_analysis::test_support::*,
+    curios_common::fill,
     curios_common::{Candidates, Digest, Facet, Member, Object, candidate_prefix},
     curios_core::{
-        Applications, Certification, Certified, Definition, DefinitionKind, Definitions, Free,
-        Item, ItemRun, Places, ReadTable, Reads, Term, Totality, Universes,
+        Applications, Certification, Certified, Definitions, Item, ItemRun, Places, ReadTable,
+        Reads, Term, Totality,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
 /// A signature read stands through an edit to the body behind it: `identity` returns `7` where it returned its argument, at the type it had, so it is judged and `five`, which typed it and unfolded nothing, is adopted.
 #[test]
 fn a_signature_read_stands_through_an_edit_to_the_body_behind_it() {
     let baseline = written();
     let certification = marked();
-    let edited = reading_definitions(nat(), |_| literal(7));
+    let edited = reading_definitions("#NatType", "7");
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -33,14 +33,7 @@ fn a_signature_read_stands_through_an_edit_to_the_body_behind_it() {
 }
 
 /// `alias` respelled: an application that reduces to `Nat`.
-fn applied_nat() -> Term {
-    let t = Free::local(11, Some("t"));
-
-    Term::apply(
-        Term::func([(t, Term::type_ground())], Term::free_var(&t)),
-        [nat()],
-    )
-}
+const APPLIED_NAT: &str = "((t: Type) => t)(#NatType)";
 
 /// A body read falls with the body: `three` unfolded `alias`, so an `alias` respelled as an application that reduces to `Nat` has `three` judged again. The baseline's record calls `three` partial, which an adopted `three` would keep; judged, it is total and the record says so.
 #[test]
@@ -52,7 +45,7 @@ fn a_body_read_falls_with_an_edit_to_the_body() {
             ..certified
         }
     });
-    let edited = reading_definitions(applied_nat(), Term::free_var);
+    let edited = reading_definitions(APPLIED_NAT, "x");
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -63,56 +56,39 @@ fn a_body_read_falls_with_an_edit_to_the_body() {
     );
 }
 
-/// `Vouched`, the proposition the lemma below states.
-fn vouched() -> Term {
-    Term::induct_type(
-        vouched_declaration().0,
-        Vec::<Term>::new(),
-        Vec::<Term>::new(),
-    )
-}
+/// `Vouched : Prop | qed(u : {})`, `lemma : Vouched = ${proof}` after `${mark}`, `spare : Vouched = qed(())`, and `corollary : Vouched = lemma`.
+const PROVING: &str = r#"
+#{absent = [/Vouched/qed]}
+induct /Vouched: pub Prop
+| qed(u: {})
+end
 
-/// `Vouched/qed(())`, its proof.
-fn qed() -> Term {
-    Term::variant(
-        vouched_declaration().0,
-        Vec::<Term>::new(),
-        "qed",
-        [Term::tuple(Vec::<Term>::new())],
-    )
-}
+${mark}
+let /lemma: #{node = InductType} /Vouched() =
+    ${proof};
 
-/// `lemma : Vouched = <proof>`, `spare : Vouched = qed(())`, and `corollary : Vouched = lemma`, with `lemma` written by its declaration where `written` and generated as a witness is otherwise: the certifier states it a proof in the first case alone, and it is marked as the module a walk hands back marks it.
-fn proving_definitions(proof: Term, written: bool) -> Definitions {
-    let (vouched_name, declaration) = vouched_declaration();
-    let lemma = match authored_proof(&global("lemma"), vouched(), proof) {
-        Item::Let(definition) if !written => Item::Let(Box::new(Definition {
-            kind: DefinitionKind::Witness,
-            proof: false,
-            ..*definition
-        })),
-        lemma => lemma,
-    };
+let /spare: #{node = InductType} /Vouched() =
+    #{node = Variant} /Vouched/qed(());
 
-    collision_definitions(
-        vec![
-            lemma,
-            authored(&global("spare"), vouched(), qed()),
-            authored(
-                &global("corollary"),
-                vouched(),
-                Term::instance(global("lemma"), Universes::default()),
-            ),
-        ],
-        BTreeMap::from([(vouched_name, declaration)]),
-    )
-}
+let /corollary: #{node = InductType} /Vouched() =
+    /lemma;
+"#;
+
+/// `Vouched/qed(())`, the proof of `Vouched`.
+const QED: &str = "#{node = Variant} /Vouched/qed(())";
 
 /// `qed(())` reached through a redex: another proof of the same statement.
-fn proved_otherwise() -> Term {
-    let u = Free::local(12, Some("u"));
+const PROVED_OTHERWISE: &str =
+    "((u: #{node = InductType} /Vouched()) => u)(#{node = Variant} /Vouched/qed(()))";
 
-    Term::apply(Term::func([(u, vouched())], Term::free_var(&u)), [qed()])
+/// [`PROVING`] at `proof`, with `lemma` written by its declaration where `written` and generated as a witness is otherwise: the certifier states it a proof in the first case alone, and it is marked as the module a walk hands back marks it.
+fn proving_definitions(proof: &str, written: bool) -> Definitions {
+    let mark = match written {
+        true => "#{proof = true}",
+        false => "#{kind = Witness}",
+    };
+
+    core_text_module(&fill!(PROVING, mark, proof))
 }
 
 /// A record of `definitions` in which `corollary` asked for `lemma`'s body: its reads hold `spare`'s signature, which no judgment of `corollary` reads, so a walk that hands the entry back adopted it.
@@ -133,9 +109,9 @@ fn asking(definitions: &Definitions) -> Certification {
 /// A proof unfolds to nothing whatever its body, so an edit to one moves no read of it: `lemma` proved another way is judged, and `corollary`, whose record says it asked for `lemma`'s body, takes the baseline's verdict.
 #[test]
 fn a_read_of_a_proofs_body_stands_through_an_edit_to_it() {
-    let baseline = proving_definitions(qed(), true);
+    let baseline = proving_definitions(QED, true);
     let certification = asking(&baseline);
-    let edited = proving_definitions(proved_otherwise(), true);
+    let edited = proving_definitions(PROVED_OTHERWISE, true);
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -149,9 +125,9 @@ fn a_read_of_a_proofs_body_stands_through_an_edit_to_it() {
 /// The control: generated as a witness is, the same statement is stated no proof and unfolds to its body, and the same edit has `corollary` judged again.
 #[test]
 fn a_read_of_a_generated_definitions_body_falls_with_an_edit_to_it() {
-    let baseline = proving_definitions(qed(), false);
+    let baseline = proving_definitions(QED, false);
     let certification = asking(&baseline);
-    let edited = proving_definitions(proved_otherwise(), false);
+    let edited = proving_definitions(PROVED_OTHERWISE, false);
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -166,9 +142,9 @@ fn a_read_of_a_generated_definitions_body_falls_with_an_edit_to_it() {
 #[test]
 fn a_read_of_a_body_falls_where_its_definition_starts_or_stops_being_a_proof() {
     for written in [true, false] {
-        let baseline = proving_definitions(qed(), written);
+        let baseline = proving_definitions(QED, written);
         let certification = asking(&baseline);
-        let edited = proving_definitions(qed(), !written);
+        let edited = proving_definitions(QED, !written);
 
         let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -233,14 +209,7 @@ impl Candidates for Shelf {
 
 /// `written` with `five : Nat = identity(6)`: the edit both walks below are over.
 fn edited_five() -> Definitions {
-    let five = authored(
-        &global("five"),
-        nat(),
-        Term::apply(
-            Term::instance(global("identity"), Universes::default()),
-            [literal(6)],
-        ),
-    );
+    let five = declared_item("let /five: #NatType = /identity(6);", "five");
 
     replaced(&versioned(written()), "five", five)
 }
@@ -274,7 +243,7 @@ fn a_stores_verdict_that_read_a_part_since_moved_is_passed_over() {
     let store = Shelf::filed(&written(), &unfolding);
     let baseline = edited_five();
     let certification = walked(&baseline).certification;
-    let respelled = reading_definitions(applied_nat(), Term::free_var);
+    let respelled = reading_definitions(APPLIED_NAT, "x");
 
     let rechecked = walked_among(&respelled, &baseline, &certification, Some(&store));
 
@@ -292,31 +261,47 @@ fn a_stores_verdict_that_read_a_part_since_moved_is_passed_over() {
     assert_eq!(rechecked.certification, walked(&respelled).certification);
 }
 
-/// Three declarations: `H : Type 5 = h_body` stating its value sort `h_value_sort`, `G : Type 5 = H` stating `g_value_sort`, and `D : (G) -> G = (x) => x`, which reads `G`'s value sort through `Sort::of` when it checks its binder.
+/// Three declarations: `H : Type 5 = ${h_body}` stating its value sort `${h}`, `G : Type 5 = H` stating `${g}`, and `D : (G) -> G = (x) => x`, which reads `G`'s value sort through `Sort::of` when it checks its binder.
 ///
 /// `G`'s declared type is `Type 5` in every version, so cumulativity admits an `H` body at any level up to 5; what moves between versions is the *value* sort `H`'s body reaches, which `G` republishes.
-fn value_sort_definitions(h_body: Term, h_value_sort: Term, g_value_sort: Term) -> Definitions {
-    let x = Free::local(10, Some("x"));
-    let g = Term::instance(global("G"), Universes::default());
+const VALUE_SORTS: &str = r#"
+#{value_sort = ${h}}
+let /H: #{level = 5} Type =
+    ${h_body};
 
-    Definitions {
-        items: vec![
-            aliased(&global("H"), type_at(5), h_body, h_value_sort),
-            aliased(
-                &global("G"),
-                type_at(5),
-                Term::instance(global("H"), Universes::default()),
-                g_value_sort,
-            ),
-            authored(
-                &global("D"),
-                Term::func_type([(x, g.clone())], g.clone()),
-                Term::func([(x, g.clone())], Term::free_var(&x)),
-            ),
-        ]
-        .into(),
-    }
+#{value_sort = ${g}}
+let /G: #{level = 5} Type =
+    /H;
+
+let /D: (x: /G) -> /G =
+    (x: /G) => x;
+"#;
+
+/// [`VALUE_SORTS`]' module at `h_body`, `h` and `g`.
+fn value_sort_definitions(h_body: &str, h: &str, g: &str) -> Definitions {
+    core_text_module(&fill!(VALUE_SORTS, h_body, h, g))
 }
+
+/// `${name} : Type 5 = ${body}`, stating the sort `${sort}` its value inhabits.
+const AN_ALIAS: &str = r#"
+#{value_sort = ${sort}}
+let /${name}: #{level = 5} Type =
+    ${body};
+"#;
+
+/// [`AN_ALIAS`] at `name`, `body` and `sort`, as an edit puts it in a version.
+fn alias(name: &str, body: &str, sort: &str) -> Item {
+    declared_item(&fill!(AN_ALIAS, name, body, sort), name)
+}
+
+/// `Type 0`, as Core text writes it.
+const TYPE_0: &str = "Type";
+
+/// `Type 4`.
+const TYPE_4: &str = "#{level = 4} Type";
+
+/// `Type 5`.
+const TYPE_5: &str = "#{level = 5} Type";
 
 /// A reader of a moved `value_sort` is judged again rather than adopted, because the certifier's read-digest ([`held_digest`]) holds the sort a definition states for its value beside its type.
 ///
@@ -328,8 +313,8 @@ fn value_sort_definitions(h_body: Term, h_value_sort: Term, g_value_sort: Term) 
 #[test]
 fn a_reader_of_a_moved_value_sort_is_judged_again() {
     // The field, read off the digest: `G`'s part digests apart where its value sort is `Type 0` and where it is `Type 5`.
-    let low = value_sort_definitions(type_at(4), type_at(5), type_at(0));
-    let high = value_sort_definitions(type_at(4), type_at(5), type_at(5));
+    let low = value_sort_definitions(TYPE_4, TYPE_5, TYPE_0);
+    let high = value_sort_definitions(TYPE_4, TYPE_5, TYPE_5);
     let (low_places, high_places) = (Places::of(&low), Places::of(&high));
     for body in [false, true] {
         assert_ne!(
@@ -354,24 +339,15 @@ fn a_reader_of_a_moved_value_sort_is_judged_again() {
     }
 
     // The walk: `G`'s republished value sort moves `Type 0` → `Type 5`, `D` reads it, and the edited module is compiled over the baseline.
-    let baseline = versioned(value_sort_definitions(nat(), type_at(0), type_at(0)));
+    let baseline = versioned(value_sort_definitions("#NatType", TYPE_0, TYPE_0));
     let certification = walked(&baseline).certification;
     let edited = replaced(
-        &replaced(
-            &baseline,
-            "H",
-            aliased(&global("H"), type_at(5), type_at(4), type_at(5)),
-        ),
+        &replaced(&baseline, "H", alias("H", TYPE_4, TYPE_5)),
         "G",
-        aliased(
-            &global("G"),
-            type_at(5),
-            Term::instance(global("H"), Universes::default()),
-            type_at(5),
-        ),
+        alias("G", "/H", TYPE_5),
     );
 
-    let whole = walked(&value_sort_definitions(type_at(4), type_at(5), type_at(5)));
+    let whole = walked(&value_sort_definitions(TYPE_4, TYPE_5, TYPE_5));
     let over = walked_over(&edited, &baseline, &certification);
 
     assert_eq!(
@@ -405,27 +381,13 @@ fn stated_value_sort(rechecked: &Rechecked, name: &str) -> Option<Term> {
 /// A walk over a baseline states a reader of a moved value sort what a whole compile states it: `L`'s value sort is read off `K`'s published one, which reads `H`'s, so moving `H`'s body to a higher universe moves the sort the walk states of `L` though `L`'s terms stand. What each version said of its sorts is nothing the walk reads.
 #[test]
 fn a_reader_of_a_moved_value_sort_is_stated_the_sort_a_whole_compile_states() {
-    let baseline = versioned(chained_sort_definitions(
-        nat(),
-        type_at(0),
-        type_at(0),
-        type_at(0),
-    ));
+    let baseline = versioned(chained_sort_definitions("#NatType", TYPE_0, TYPE_0, TYPE_0));
     let certification = walked(&baseline).certification;
     // `H`'s body moves `Nat` -> `Type 4`, so its value sort moves `Type 0` -> `Type 5`, and `K` republishes it. `L` is untouched: its terms, `K`'s type and `K`'s body term all stand.
     let edited = replaced(
-        &replaced(
-            &baseline,
-            "H",
-            aliased(&global("H"), type_at(5), type_at(4), type_at(0)),
-        ),
+        &replaced(&baseline, "H", alias("H", TYPE_4, TYPE_0)),
         "K",
-        aliased(
-            &global("K"),
-            type_at(5),
-            Term::instance(global("H"), Universes::default()),
-            type_at(0),
-        ),
+        alias("K", "/H", TYPE_0),
     );
 
     let whole = walked(&edited);
@@ -439,27 +401,21 @@ fn a_reader_of_a_moved_value_sort_is_stated_the_sort_a_whole_compile_states() {
     );
 }
 
-/// `M : Type 5 = L` stating `sort`: an alias of the warm unit's lying publication, judged by a whole walk with that unit in scope.
-fn later_alias(sort: Term) -> Definitions {
-    Definitions {
-        items: vec![aliased(
-            &global("M"),
-            type_at(5),
-            Term::instance(global("L"), Universes::default()),
-            sort,
-        )]
-        .into(),
-    }
-}
+/// `M : Type 5 = L` stating `Type 0`: an alias of the warm unit's lying publication, judged by a whole walk with that unit in scope.
+const A_LATER_ALIAS: &str = r#"
+#{value_sort = Type}
+let /M: #{level = 5} Type =
+    /L;
+"#;
 
 /// A later walk states an alias the sort its value inhabits, whatever the alias says of it: `M : Type 5 = L` saying `Type 0`, where `L` unfolds to a type at `Type 5`, is admitted and stated `Type 5`, read off what the walk over `L`'s unit stated with nothing run.
 #[test]
 fn a_later_walk_states_an_alias_the_sort_its_value_inhabits() {
-    let honest = chained_sort_definitions(type_at(4), type_at(5), type_at(5), type_at(5));
+    let honest = chained_sort_definitions(TYPE_4, TYPE_5, TYPE_5, TYPE_5);
     let record = walked(&honest).certification;
     let stated = walked(&honest).definitions;
     let scope = AlreadyJudged::with(&stated, &record);
-    let later = fixture_certified(&later_alias(type_at(0)), BUDGET, &scope.globals(), SYNTAX);
+    let later = text_certified_over(A_LATER_ALIAS, &scope.globals());
 
     assert_eq!(later.verdicts, Vec::new());
     assert_eq!(stated_value_sort(&later, "M"), Some(type_at(5)));

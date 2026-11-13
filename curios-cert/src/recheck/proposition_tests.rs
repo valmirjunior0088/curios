@@ -2,31 +2,108 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::{Erased, test_support::*},
-    curios_common::{Qualifier, fill},
-    curios_core::{
-        Atom, Definitions, Global, InductParam, Intrinsic, Item, Nat, Telescope, Term, Universes,
-        test_support::*,
-    },
-    std::collections::BTreeMap,
+    curios_common::fill,
+    curios_core::{Definitions, Global, Item, Term},
+    curios_surface::FormScope,
 };
 
-/// The derivation a `Prop` carrying a type made possible, as a whole module.
-///
+/// The derivation a `Prop` carrying a type made possible, as a whole module: `Box : Prop 1 | mk(a : Type 0)`, `unbox` taking a `Box` apart into its type, and `forged : False` cast along the equality of any two types `unbox` carries `mk(A) = mk(B)` to.
+const TYPE_CARRYING_PROPOSITION: &str = r#"
+#{absent = [/Box/mk]}
+induct /Box: pub #{level = 1} Prop
+| mk(a: Type)
+end
+
+#{absent = [/Eq/refl]}
+induct /Eq(A: #{level = 1} Type): (x: A, y: A) -> pub #{level = 1} Prop
+| refl(z: A): (z, z)
+end
+
+induct /False: pub Prop
+end
+
+let /unbox: (b: #{node = InductType} /Box()) -> Type =
+    (b: #{node = InductType} /Box()) => match b: (s) => Type | mk(a) => a end;
+
+let /boxes_equal: (A: Type, B: Type) ->
+    #{node = InductType}
+    /Eq(#{node = InductType} /Box())(#{node = Variant} /Box/mk(A), #{node = Variant} /Box/mk(B)) =
+    (A: Type, B: Type) =>
+        #{node = Variant} /Eq/refl(@#{node = InductType} /Box(), #{node = Variant} /Box/mk(A));
+
+let /types_equal: (A: Type, B: Type) -> #{node = InductType} /Eq(Type)(A, B) =
+    (A: Type, B: Type) =>
+        match /boxes_equal(A, B): (x, y, q) => #{node = InductType} /Eq(Type)(/unbox(x), /unbox(y))
+        | refl(z) => #{node = Variant} /Eq/refl(@Type, /unbox(z))
+        end;
+
+let /cast: (A: Type, B: Type, v: A) -> B =
+    (A: Type, B: Type, v: A) =>
+        match /types_equal(A, B): (x, y, q) => (w: x) -> y | refl(z) => (w2: z) => w2 end(v);
+
+let /forged: #{node = InductType} /False() =
+    /cast({}, #{node = InductType} /False(), ());
+
+/forged
+: #{node = InductType} /False()
+"#;
+
 /// `Box : Prop 1 | mk(a : Type 0)` is a legal declaration — a proposition at the level its payload fits under — and the large-elimination guard is what keeps a proposition holding a type from handing it back. Were the guard to admit `unbox` — `carries_information` reporting a universe-typed payload as carrying nothing, on the reasoning that erasure deletes a type either way — every step after that is ordinary: irrelevance makes `mk(A)` and `mk(B)` convertible at `Box`, so `refl` inhabits `Eq(@Box)(mk(A), mk(B))`; congruence through `unbox` carries that to `Eq(@Type 0)(A, B)` for *any* two types; and transport — the licensed singleton case, `refl`'s payload being pinned by its own targets — turns `()` into a proof of `False`.
 ///
 /// No surface program reaches it: `curios-elab`'s `singleton_eliminable` refuses `unbox` at every surface spelling. The fixtures in `crate::certifier::infer::eliminate::large_elimination_tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
 #[test]
 fn a_derivation_through_a_type_carrying_proposition_is_refused() {
-    let verdicts = fixture_verdicts(&forgery(), 1_000_000, &Globals::default(), SYNTAX);
+    let verdicts = text_verdicts(TYPE_CARRYING_PROPOSITION);
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::LargeElimination(_))),
+        refuses(&verdicts, Some("unbox"), |error| matches!(
+            error,
+            Error::LargeElimination(family) if *family == global("Box")
+        )),
         "the certifier accepted a closed inhabitant of `False`: {verdicts:?}",
     );
+}
+
+/// `Held : Prop | qed(u : Io({}))`, the host row `exit` that does not return, and `bad : Held = qed(${carried})`.
+const A_PROOF_CARRYING: &str = r#"
+#{absent = [/Held/qed]}
+induct /Held: pub Prop
+| qed(u: #IoType({}))
+end
+
+foreign /exit(Byte) -> Never;
+
+let /bad: #{node = InductType} /Held() =
+    #{node = Variant} /Held/qed(${carried});
+"#;
+
+/// What the walk says of [`A_PROOF_CARRYING`] at `carried`, read where a row's form is made: against the registry these suites judge under, with no unit in scope.
+fn carried_verdicts(carried: &str) -> Vec<Verdict> {
+    let scope = FormScope::over(SYNTAX, []);
+    let put = Put {
+        scope: Some(&scope),
+        ..put()
+    };
+    let (definitions, entry) = put
+        .read(&fill!(A_PROOF_CARRYING, carried))
+        .unwrap_or_else(|unread| panic!("{unread:?}"));
+
+    put.module(&definitions, entry.as_ref()).verdicts
+}
+
+/// Whether `bad` was refused as a proof not known to terminate that reaches no definition.
+fn bad_refused_with_no_definition_to_blame(verdicts: &[Verdict]) -> bool {
+    refuses(verdicts, Some("bad"), |error| {
+        matches!(
+            error,
+            Error::NotTotal {
+                erased: Erased::Proof,
+                reached: None,
+            }
+        )
+    })
 }
 
 /// (V) has two routes to a refusal, and no program reaches the second. `check_positions` first asks whether a recorded position *reaches a definition known partial* — the named route, which blames a global — and failing that asks whether the position is partial in itself, which blames nothing: whether it encloses a `rec` group the walk typed and found not to descend, or calls a host row that diverges.
@@ -38,21 +115,10 @@ fn a_derivation_through_a_type_carrying_proposition_is_refused() {
 /// The control is the same module with `Io/pure(())` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
 #[test]
 fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
-    let verdicts = fixture_verdicts(
-        &proof_carrying_unit(Carried::Exit),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let verdicts = carried_verdicts("#{node = Foreign} /exit(@{}, #Byte(0))");
 
     assert!(
-        verdicts.iter().any(|verdict| matches!(
-            verdict.error,
-            Error::NotTotal {
-                erased: Erased::Proof,
-                reached: None,
-            }
-        )),
+        bad_refused_with_no_definition_to_blame(&verdicts),
         "the certifier accepted a proof carrying an exit: {verdicts:?}",
     );
 }
@@ -62,21 +128,10 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
 /// The walk types the group with the binders around it opened, and notes the verdict against every position and definition it was typed within — the only place the two can be joined, since the term holding the group spells it closed. Mutation-checked: a group closing without that note leaves the proof accepted.
 #[test]
 fn a_wait_inside_a_proof_is_refused_with_no_definition_to_blame() {
-    let verdicts = fixture_verdicts(
-        &proof_carrying_unit(Carried::Wait),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let verdicts = carried_verdicts("#{node = Rec} (let wait: #IoType({}) = wait; wait)");
 
     assert!(
-        verdicts.iter().any(|verdict| matches!(
-            verdict.error,
-            Error::NotTotal {
-                erased: Erased::Proof,
-                reached: None,
-            }
-        )),
+        bad_refused_with_no_definition_to_blame(&verdicts),
         "the certifier accepted a proof enclosing a group that never descends: {verdicts:?}",
     );
 }
@@ -85,16 +140,50 @@ fn a_wait_inside_a_proof_is_refused_with_no_definition_to_blame() {
 #[test]
 fn a_proof_carrying_the_unit_value_is_accepted() {
     assert_eq!(
-        fixture_verdicts(
-            &proof_carrying_unit(Carried::Pure),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX
-        ),
+        carried_verdicts("#IoPure({}, ())"),
         Vec::new(),
         "an ordinary proof at a unit-carrying proposition was refused",
     );
 }
+
+/// `Wrap(b : Bool) : Prop` holding one field whose type is a `match` on `b` that states each arm a `Prop` and computes `Nat` in both, and the derivation of `False` that transport along `refl` at `Wrap(true)` makes from it.
+const A_COMPUTED_RELEVANT_FIELD: &str = r#"
+#{absent = [/Eq/refl]}
+induct /Eq(A: #{level = 1} Type): (x: A, y: A) -> pub #{level = 1} Prop
+| refl(z: A): (z, z)
+end
+
+induct /False: pub Prop
+end
+
+#{absent = [/Held/yes]}
+induct /Held: (n: #NatType) -> pub Type
+| yes(): (0)
+end
+
+struct /Wrap(b: #BoolType): pub Prop {
+    held: match b: (x) => Prop | false => #NatType | true => #NatType end,
+}
+
+let /forged:
+    #{node = InductType}
+    /Eq(#{node = StructType} /Wrap(true))(/Wrap(true) { 0 }, /Wrap(true) { 1 }) =
+    #{node = Variant} /Eq/refl(@#{node = StructType} /Wrap(true), /Wrap(true) { 0 });
+
+let /cast: (w: #{node = InductType} /Held()(0)) -> #{node = InductType} /Held()(1) =
+    match /forged: (s, t, q) =>
+        (w: #{node = InductType} /Held()(#{field = Struct(/Wrap, 0)} s.0)) ->
+            #{node = InductType}
+            /Held()(#{field = Struct(/Wrap, 0)} t.0)
+    | refl(z) => (w2: #{node = InductType} /Held()(#{field = Struct(/Wrap, 0)} z.0)) => w2
+    end;
+
+let /held: #{node = InductType} /Held()(1) =
+    /cast(#{node = Variant} /Held/yes());
+
+let /boom: #{node = InductType} /False() =
+    match /held: (n, w) => #{node = InductType} /False() end;
+"#;
 
 /// A declaration's domains are typed whatever sort the declaration lands in, a `Prop`-sorted one included.
 ///
@@ -104,108 +193,94 @@ fn a_proof_carrying_the_unit_value_is_accepted() {
 ///
 /// From there the derivation is the one `check_non_informative`'s own documentation predicts. `Wrap(true)` is `Prop`-sorted, so irrelevance identifies `Wrap(true){0}` with `Wrap(true){1}`, and `refl(Wrap(true), Wrap(true){0})` therefore inhabits `Eq(@Wrap(true))(Wrap(true){0}, Wrap(true){1})` — the indices being compared at a `Prop`-sorted domain, which is the rule working correctly. Transporting along it under the *honest* motive `(s, t, q) => (Held(s.0)) -> Held(t.0)` yields `(Held(0)) -> Held(1)`, and `Held`'s only constructor targets `0`, so the vacuous elimination coverage licenses proves `False`.
 ///
-/// No surface program reaches it, because `curios-elab` keeps the two clauses apart: `check_telescope_entries` types every declaration domain through `check_is_sort`, and `size_domains` is a separate walk, which returns early only where the result is no sort. So this is constructed by hand.
+/// No surface program reaches it, because `curios-elab` keeps the two clauses apart: `check_telescope_entries` types every declaration domain through `check_is_sort`, and `size_domains` is a separate walk, which returns early only where the result is no sort. So this is written as Core text.
 ///
 /// Its control is [`a_proposition_carrying_a_computed_proof_is_still_accepted`], the same computed field type with arms that really are propositions: a fix refusing every `Prop`-sorted declaration, or every field type it could not read off syntactically, would fail it.
 ///
 /// The refusal is required to name `Wrap` and not merely to exist, because every later item in the derivation is built on the forged field and would mismatch for a downstream reason once anything at all went wrong. What has to be refused is the *declaration*, at the arm the motive lied about: a `Nat` at `Type 0` checked against the `Prop` the motive claims.
 #[test]
 fn a_proposition_may_not_carry_a_computed_relevant_field() {
-    let verdicts = fixture_verdicts(
-        &computed_field_forgery(),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
-    let wrap = Global::Authored(Qualifier::from(["Wrap"]));
+    let verdicts = text_verdicts(A_COMPUTED_RELEVANT_FIELD);
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| verdict.name.as_ref() == Some(&wrap)
-                && matches!(verdict.error, Error::Mismatch { .. })),
+        refuses(&verdicts, Some("Wrap"), |error| matches!(
+            error,
+            Error::Mismatch { .. }
+        )),
         "the certifier accepted a closed inhabitant of `False`: {verdicts:?}",
     );
 }
 
+/// `Wrap(b : Bool) : Prop` holding one field whose type is a `match` on `b` computing `True` in both arms, and one value of it at `true`.
+const A_COMPUTED_PROOF: &str = r#"
+#{absent = [/True/qed]}
+induct /True: pub Prop
+| qed()
+end
+
+struct /Wrap(b: #BoolType): pub Prop {
+    held: match b: (x) => Prop
+    | false => #{node = InductType} /True()
+    | true => #{node = InductType} /True()
+    end,
+}
+
+let /wrapped: #{node = StructType} /Wrap(true) =
+    /Wrap(true) { #{node = Variant} /True/qed() };
+"#;
+
 /// The control: the same computed field type with `Prop`-sorted arms still declares, so the guard above refuses a motive that lies rather than every field a declaration has to reduce to read.
 #[test]
 fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
-    let true_name = Global::Authored(Qualifier::from(["True"]));
-    let true_type = Term::induct_type(true_name, Vec::<Term>::new(), Vec::<Term>::new());
-    let qed = Term::variant(true_name, Vec::<Term>::new(), "qed", Vec::<Term>::new());
-    let true_decl = proposition(vec![(
-        Atom::from("qed"),
-        InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-    )]);
-
-    let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));
-    let definitions = declaring(
-        Definitions {
-            items: vec![wrapped_at_true(&wrap_name, qed)].into(),
-        },
-        BTreeMap::from([(true_name, true_decl)]),
-        BTreeMap::from([(
-            wrap_name,
-            computed_field_wrapper(true_type.clone(), true_type),
-        )]),
-        [],
-    );
-
-    assert_eq!(
-        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
-        Vec::new()
-    );
+    assert_eq!(text_verdicts(A_COMPUTED_PROOF), Vec::new());
 }
 
-/// The walk states a group's member a proof as it states a definition one, whatever the module says: one at a proposition is stated a proof and read, by its type, by the declaration after it, and one at `Nat` is stated none, its module's mark notwithstanding.
+/// `Vouched : Prop | qed(u : {})`, the group of one member `lemma : Vouched = qed(())` marked no proof, and `corollary : Vouched = lemma`.
+const A_PROOF_GROUP: &str = r#"
+#{absent = [/Vouched/qed]}
+induct /Vouched: pub Prop
+| qed(u: {})
+end
+
+#{node = Rec}
+let /lemma: #{node = InductType} /Vouched() =
+    #{node = Variant} /Vouched/qed(());
+
+let /corollary: #{node = InductType} /Vouched() =
+    /lemma;
+"#;
+
+/// The group of one member `lemma : Nat = 2`, marked a proof.
+const A_GROUP_MARKED_A_PROOF_AT_NAT: &str = r#"
+#{node = Rec, proof = true}
+let /lemma: #NatType =
+    2;
+"#;
+
+/// The walk states a group's member a proof as it states a definition one, whatever the module says: one at a proposition is stated a proof though its module marks it none, and read, by its type, by the declaration after it, and one at `Nat` is stated none though its module marks it one.
 #[test]
 fn a_groups_member_is_stated_a_proof_where_its_type_is_a_proposition() {
-    let (vouched_name, declaration) = vouched_declaration();
-    let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
-    let qed = Term::variant(
-        vouched_name,
-        Vec::<Term>::new(),
-        "qed",
-        [Term::tuple(Vec::<Term>::new())],
-    );
-    let lemma = Global::Authored(Qualifier::from(["lemma"]));
-
-    let honest = collision_definitions(
-        vec![
-            proof_group(&lemma, vouched.clone(), qed),
-            authored(
-                &Global::Authored(Qualifier::from(["corollary"])),
-                vouched,
-                Term::instance(lemma, Universes::default()),
-            ),
-        ],
-        BTreeMap::from([(vouched_name, declaration)]),
-    );
-    let stated = fixture_certified(&honest, 1_000_000, &Globals::default(), SYNTAX);
+    let stated = text_certified(A_PROOF_GROUP);
     assert_eq!(stated.verdicts, Vec::new());
-    assert_eq!(member_proofs(&stated.definitions, &lemma), [true]);
+    assert_eq!(member_proofs(&stated.definitions, "lemma"), [true]);
 
-    let lying = collision_definitions(
-        vec![proof_group(
-            &lemma,
-            Term::intrinsic(Intrinsic::NatType),
-            Term::intrinsic(Intrinsic::Nat(Nat::new(2usize))),
-        )],
-        BTreeMap::new(),
-    );
-    let stated = fixture_certified(&lying, 1_000_000, &Globals::default(), SYNTAX);
+    let stated = text_certified(A_GROUP_MARKED_A_PROOF_AT_NAT);
     assert_eq!(stated.verdicts, Vec::new());
-    assert_eq!(member_proofs(&stated.definitions, &lemma), [false]);
+    assert_eq!(member_proofs(&stated.definitions, "lemma"), [false]);
 }
 
-/// Whether each member of the group `definitions` holds `name` in is a proof, as its walk stated it.
-fn member_proofs(definitions: &Definitions, name: &Global) -> Vec<bool> {
+/// Whether each member of the group `definitions` holds `symbol` in is a proof, as its walk stated it.
+fn member_proofs(definitions: &Definitions, symbol: &str) -> Vec<bool> {
     definitions
         .items
         .iter()
         .find_map(|item| match item {
-            Item::Rec(rec) if rec.exports().iter().any(|member| member.name == *name) => {
+            Item::Rec(rec)
+                if rec
+                    .exports()
+                    .iter()
+                    .any(|member| member.name == global(symbol)) =>
+            {
                 Some(rec.exports().iter().map(|member| member.proof).collect())
             }
             _ => None,

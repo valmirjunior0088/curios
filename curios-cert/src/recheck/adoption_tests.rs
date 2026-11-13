@@ -7,8 +7,8 @@ use {
     curios_common::Qualifier,
     curios_core::{
         Applications, Certification, Certified, Definition, Definitions, Entrypoint, Free, Func,
-        Intrinsic, Item, Level, Places, Program, Reads, Subterm, Term, Totality, UniverseParam,
-        Universes, Variance,
+        Item, Level, Places, Program, Reads, Subterm, Term, Totality, UniverseParam, Universes,
+        Variance,
     },
     std::collections::BTreeMap,
 };
@@ -17,7 +17,7 @@ use {
 fn a_declaration_presented_unchanged_is_judged_again_where_what_it_read_has_changed() {
     let baseline = written();
     let certification = walked(&baseline).certification;
-    let edited = reading_definitions(Term::intrinsic(Intrinsic::BoolType), Term::free_var);
+    let edited = reading_definitions("#BoolType", "x");
 
     let rechecked = walked_over(&edited, &baseline, &certification);
 
@@ -52,7 +52,7 @@ fn a_walk_over_a_version_files_what_a_walk_over_every_declaration_files() {
     assert_eq!(rechecked.verdicts, Vec::new());
     assert_eq!(
         rechecked.certification,
-        walked(&reading_definitions(nat(), |_| literal(7))).certification
+        walked(&reading_definitions("#NatType", "7")).certification
     );
 }
 
@@ -445,7 +445,12 @@ fn refining_definitions_assumed(target: Term, assumed: Term, body: Term) -> Defi
 /// The one gate that reads a published level and could admit a term — an index refinement the published sort makes `fits_its_variable` keep — reaches no closed term: the arm is behind a hypothesis the sort the variable is assumed at leaves uninhabited, and the arm's goal, which the publication cannot move, is the case's own target.
 #[test]
 fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
-    let honest = chained_sort_definitions(type_at(4), type_at(5), type_at(5), type_at(5));
+    let honest = chained_sort_definitions(
+        "#{level = 4} Type",
+        "#{level = 5} Type",
+        "#{level = 5} Type",
+        "#{level = 5} Type",
+    );
     let record = walked(&honest).certification;
     let scope = AlreadyJudged::with(&honest, &record);
     let verdicts = |definitions: Definitions| {

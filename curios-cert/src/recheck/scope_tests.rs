@@ -4,12 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
-    curios_core::{
-        Certification, Definition, DefinitionKind, Free, Global, InductDecl, Intrinsic, Item,
-        Level, Nat, Places, Telescope, Term, UniverseContext, Universes,
-    },
-    std::collections::BTreeMap,
+    curios_common::fill,
+    curios_core::{Certification, Global, Places},
 };
 
 /// Whether `verdicts` is the one refusal a module redeclaring `name` meets: a redeclaration is refused before anything is judged, so no other verdict stands beside it.
@@ -21,6 +17,20 @@ fn redeclares(verdicts: &[Verdict], name: &Global) -> bool {
     )
 }
 
+/// What the walk says of `text` over [`JUDGED_ENVIRONMENT`], in scope as a unit no walk filed a record for.
+fn over_the_environment(text: &str) -> Rechecked {
+    text_certified_over(text, &already_judged(&judged_environment()).globals())
+}
+
+/// `shadowed : Bool = true`, and `reader : Nat = shadowed`.
+const SHADOWING: &str = r#"
+let /shadowed: #BoolType =
+    true;
+
+let /reader: #NatType =
+    /shadowed;
+"#;
+
 /// A definition under a name the environment holds, differing from the environment's, is refused for the name.
 ///
 /// `shadowed` is `Nat` in the environment and `Bool` in the module, and `reader : Nat = shadowed` reads it. Standing alone the module is refused, `reader` inferring `Bool` where `Nat` was declared. Passed over by name it would be certified, `reader` typed against the environment's `shadowed` while every stage below compiles the body the module holds; so the module is refused for `shadowed`, and `reader` is not judged at all.
@@ -28,28 +38,29 @@ fn redeclares(verdicts: &[Verdict], name: &Global) -> bool {
 /// Mutation-checked against the environment's question: with an item's held name never asked after, the module is judged, and `shadowed` is refused where the walk writes it and no sooner.
 #[test]
 fn a_definition_differing_from_the_environments_is_refused() {
-    let definitions = shadowing_items();
-
-    let alone = fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX);
+    let alone = text_verdicts(SHADOWING);
     assert!(
-        alone
-            .iter()
-            .any(|verdict| verdict.name == Some(reader_name())
-                && matches!(verdict.error, Error::Mismatch { .. })),
+        refuses(&alone, Some("reader"), |error| matches!(
+            error,
+            Error::Mismatch { .. }
+        )),
         "the control stopped refusing: `reader : Nat` must not accept a `Bool`-typed `shadowed`: {alone:?}",
     );
 
-    let verdicts = fixture_verdicts(
-        &definitions,
-        1_000_000,
-        &already_judged(&judged_environment()).globals(),
-        SYNTAX,
-    );
+    let verdicts = over_the_environment(SHADOWING).verdicts;
     assert!(
-        redeclares(&verdicts, &shadowed_name()),
+        redeclares(&verdicts, &global("shadowed")),
         "a definition differing from the environment's under its name was not refused for the name: {verdicts:?}",
     );
 }
+
+/// `Shadowed : Type 0 | mk(a : ${domain})`.
+const SHADOWING_FAMILY: &str = r#"
+#{absent = [/Shadowed/mk]}
+induct /Shadowed: pub Type
+| mk(a: ${domain})
+end
+"#;
 
 /// A registry entry under a name the environment holds, differing from the environment's, is refused for the name.
 ///
@@ -58,26 +69,70 @@ fn a_definition_differing_from_the_environments_is_refused() {
 /// Mutation-checked against the environment's question: with a held name never asked after, the entry is refused where the walk writes it and judged all the same, `Oversized` beside the name's refusal.
 #[test]
 fn a_registry_entry_differing_from_the_environments_is_refused() {
-    let oversized = shadowing_registry(Term::type_at(Level::constant(5)));
+    let oversized = fill!(SHADOWING_FAMILY, domain = "#{level = 5} Type");
 
-    let alone = fixture_verdicts(&oversized, 1_000_000, &Globals::default(), SYNTAX);
+    let alone = text_verdicts(&oversized);
     assert!(
-        alone
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::Oversized { .. })),
+        refuses(&alone, Some("Shadowed"), |error| matches!(
+            error,
+            Error::Oversized { .. }
+        )),
         "the control stopped refusing: a `Type 5` payload exceeds a family declared at `Type 0`: {alone:?}",
     );
 
-    let verdicts = fixture_verdicts(
-        &oversized,
-        1_000_000,
-        &already_judged(&judged_environment()).globals(),
-        SYNTAX,
-    );
+    let verdicts = over_the_environment(&oversized).verdicts;
     assert!(
-        redeclares(&verdicts, &shadowed_family()),
+        redeclares(&verdicts, &global("Shadowed")),
         "a registry entry differing from the environment's under its name was not refused for the name: {verdicts:?}",
     );
+}
+
+/// `Wrapper(A) : Type 0 | wrap(held : ${held})`, its entry stamped `Strict` in `A` whatever `held` makes of it: elaboration's vector where `held` holds `A` strictly, and a lie where it does not.
+const WRAPPER: &str = r#"
+#{polarities = [Strict], absent = [/Wrapper/wrap]}
+induct /Wrapper(A: Type): pub Type
+| wrap(held: ${held})
+end
+"#;
+
+/// `Outer : Type 0 | c(held : Wrapper(Outer))`, over a unit declaring `Wrapper`.
+const STORED_IN_THE_WRAPPER: &str = r#"
+#{absent = [/Outer/c]}
+induct /Outer: pub Type
+| c(held: #{node = InductType} /Wrapper(#{node = InductType} /Outer()))
+end
+"#;
+
+/// What the walk says of [`STORED_IN_THE_WRAPPER`] over [`WRAPPER`] at `held`, a unit well formed on its own, each beside what it is in scope under: the record the walk over that unit left, and no record.
+fn stored_verdicts(held: &str) -> [(&'static str, Vec<Verdict>); 2] {
+    let unit = core_text_module(&fill!(WRAPPER, held));
+    let certified = put().module(&unit, None);
+    assert_eq!(
+        certified.verdicts,
+        Vec::new(),
+        "`Wrapper` is well formed on its own holding `{held}`",
+    );
+
+    [
+        (
+            "the record its walk left",
+            AlreadyJudged::with(&unit, &certified.certification),
+        ),
+        ("no record", already_judged(&unit)),
+    ]
+    .map(|(under, environment)| {
+        (
+            under,
+            text_verdicts_over(STORED_IN_THE_WRAPPER, &environment.globals()),
+        )
+    })
+}
+
+/// Whether `Outer` was refused as negative in itself.
+fn outer_not_positive(verdicts: &[Verdict]) -> bool {
+    refuses(verdicts, Some("Outer"), |error| {
+        matches!(error, Error::NotPositive { .. })
+    })
 }
 
 /// The polarity vector a walk composes through is the one the certifier filed for the family, never the one its entry carries.
@@ -89,46 +144,19 @@ fn a_registry_entry_differing_from_the_environments_is_refused() {
 /// Mutation-checked against the environment's construction: keeping the vector each entry carries accepts `Outer`.
 #[test]
 fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
-    for negatively in [true, false] {
-        let unit = wrapper_of_its_parameter(negatively);
-        let certified = fixture_certified(&unit, 1_000_000, &Globals::default(), SYNTAX);
-        assert_eq!(
-            certified.verdicts,
-            Vec::new(),
-            "`Wrapper` is well formed on its own, whichever way it holds `A`",
+    for (under, verdicts) in stored_verdicts("(taken: A) -> #NatType") {
+        assert!(
+            outer_not_positive(&verdicts),
+            "`Outer` was accepted on a `Strict` its entry's stamp claims, under {under}: {verdicts:?}",
         );
+    }
 
-        let environments = [
-            (
-                "the record its walk left",
-                AlreadyJudged::with(&unit, &certified.certification),
-            ),
-            ("no record", already_judged(&unit)),
-        ];
-        for (under, environment) in environments {
-            let verdicts = fixture_verdicts(
-                &stored_in_the_wrapper(),
-                1_000_000,
-                &environment.globals(),
-                SYNTAX,
-            );
-            let refused = verdicts.iter().any(|verdict| {
-                verdict.name == Some(stored_family())
-                    && matches!(verdict.error, Error::NotPositive { .. })
-            });
-
-            match negatively {
-                true => assert!(
-                    refused,
-                    "`Outer` was accepted on a `Strict` its entry's stamp claims, under {under}: {verdicts:?}",
-                ),
-                false => assert_eq!(
-                    verdicts,
-                    Vec::new(),
-                    "the control stopped holding: `Outer` stores itself strictly, under {under}",
-                ),
-            }
-        }
+    for (under, verdicts) in stored_verdicts("A") {
+        assert_eq!(
+            verdicts,
+            Vec::new(),
+            "the control stopped holding: `Outer` stores itself strictly, under {under}",
+        );
     }
 }
 
@@ -137,70 +165,47 @@ fn a_mounted_familys_vector_is_the_certifiers_and_not_its_entrys() {
 /// Mutation-checked at `curios-analysis`'s positivity walk: reading a cell's element at the polarity it stands at accepts `Outer`.
 #[test]
 fn a_mounted_familys_carrier_is_read_by_the_certifier_and_not_by_its_entry() {
-    // A carrier by what it holds, and how it holds `A`.
-    type Carrier = (&'static str, fn(Term) -> Term);
-
-    let carriers: [Carrier; 4] = [
-        ("a cell", |a| Term::intrinsic(Intrinsic::CellType(a))),
-        ("a channel", |a| Term::intrinsic(Intrinsic::ChannelType(a))),
-        ("a list of functions out of it", |a| {
-            Term::intrinsic(Intrinsic::ListType(taken(a)))
-        }),
-        ("a description of a function out of it", |a| {
-            Term::intrinsic(Intrinsic::io_type(taken(a)))
-        }),
+    let carriers = [
+        ("a cell", "#CellType(A)"),
+        ("a channel", "#ChannelType(A)"),
+        (
+            "a list of functions out of it",
+            "#ListType((taken: A) -> #NatType)",
+        ),
+        (
+            "a description of a function out of it",
+            "#IoType((taken: A) -> #NatType)",
+        ),
     ];
 
     for (carrier, held) in carriers {
-        let unit = wrapper_holding(held);
-        let certified = fixture_certified(&unit, 1_000_000, &Globals::default(), SYNTAX);
-        assert_eq!(
-            certified.verdicts,
-            Vec::new(),
-            "`Wrapper` is well formed on its own holding {carrier}",
-        );
-
-        let environments = [
-            (
-                "the record its walk left",
-                AlreadyJudged::with(&unit, &certified.certification),
-            ),
-            ("no record", already_judged(&unit)),
-        ];
-        for (under, environment) in environments {
-            let verdicts = fixture_verdicts(
-                &stored_in_the_wrapper(),
-                1_000_000,
-                &environment.globals(),
-                SYNTAX,
-            );
+        for (under, verdicts) in stored_verdicts(held) {
             assert!(
-                verdicts
-                    .iter()
-                    .any(|verdict| verdict.name == Some(stored_family())
-                        && matches!(verdict.error, Error::NotPositive { .. })),
+                outer_not_positive(&verdicts),
                 "`Outer` was accepted through a `Wrapper` holding {carrier} on the `Strict` its stamp claims, under {under}: {verdicts:?}",
             );
         }
     }
 }
 
+/// `reader : Nat = shadowed`.
+const READER: &str = r#"
+let /reader: #NatType =
+    /shadowed;
+"#;
+
 /// A declaration under a name the environment holds is refused for the name though it is the environment's, term for term: what an environment holds is read where it stands, and no comparison decides that two declarations under one name are one.
 ///
-/// The module carries the environment's `shadowed` and `Shadowed`, rebuilt so that neither is the environment's allocation, beside `reader : Nat = shadowed`. Each held name is refused once and nothing is judged, `reader` with the rest: the walk's record is empty.
+/// The module carries the environment's `shadowed` and `Shadowed`, read again so that neither is the environment's allocation, beside `reader : Nat = shadowed`. Each held name is refused once and nothing is judged, `reader` with the rest: the walk's record is empty.
 ///
 /// Mutation-checked against the environment's question: with a held name never asked after, the module is judged, and each name is refused where the walk writes it, once for each write.
 #[test]
 fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
-    let mut definitions = judged_environment();
-    definitions.items.push(reader());
-
-    let rechecked = fixture_certified(
-        &definitions,
-        1_000_000,
-        &already_judged(&judged_environment()).globals(),
-        SYNTAX,
-    );
+    let rechecked = over_the_environment(&fill!(
+        "${JUDGED_ENVIRONMENT}\n${READER}",
+        JUDGED_ENVIRONMENT,
+        READER
+    ));
 
     let refused = rechecked
         .verdicts
@@ -212,15 +217,21 @@ fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
         .collect::<Vec<_>>();
     assert_eq!(
         refused,
-        [shadowed_family(), shadowed_name()].map(|name| (Some(name), Some(name))),
+        ["Shadowed", "shadowed"].map(|symbol| (Some(global(symbol)), Some(global(symbol)))),
         "a module carrying its environment's own declarations was not refused once for each name",
     );
     assert_eq!(
-        rechecked.certification.totality(&reader_name()),
+        rechecked.certification.totality(&global("reader")),
         None,
         "a module refused for a name was judged all the same",
     );
 }
+
+/// `Shadowed : Nat = 0`, a definition under the name [`JUDGED_ENVIRONMENT`] declares a family by.
+const DEFINITION_UNDER_THE_FAMILY: &str = r#"
+let /Shadowed: #NatType =
+    0;
+"#;
 
 /// A name is one declaration whatever it declares: a definition under a name the environment declares a family by is refused for it.
 ///
@@ -229,50 +240,78 @@ fn a_declaration_equal_to_the_environments_is_refused_for_its_name() {
 /// Mutation-checked against the environment's question: with a held name never asked after, the definition is judged and refused where the walk writes it.
 #[test]
 fn a_definition_under_a_name_the_environment_declares_a_family_by_is_refused() {
-    let definitions = definition_under_the_family();
-
     assert_eq!(
-        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
+        text_verdicts(DEFINITION_UNDER_THE_FAMILY),
         Vec::new(),
         "the control stopped certifying: the definition is well typed standing alone",
     );
 
-    let verdicts = fixture_verdicts(
-        &definitions,
-        1_000_000,
-        &already_judged(&judged_environment()).globals(),
-        SYNTAX,
-    );
+    let verdicts = over_the_environment(DEFINITION_UNDER_THE_FAMILY).verdicts;
     assert!(
-        redeclares(&verdicts, &shadowed_family()),
+        redeclares(&verdicts, &global("Shadowed")),
         "a definition under a family's name was not refused for the name: {verdicts:?}",
     );
 }
+
+/// One group of two constants, `shadowed` and `fresh`: the first under a name [`JUDGED_ENVIRONMENT`] holds, the second under none.
+const GROUP_HELD_IN_PART: &str = r#"
+let /shadowed: #NatType =
+    0
+and /fresh: #NatType =
+    0;
+"#;
 
 /// A group one of whose names the environment holds is refused, named by its first member as a group is.
 ///
 /// Mutation-checked against the environment's question: with an item's held name never asked after, the group is judged and refused where the walk writes its members, and no sooner.
 #[test]
 fn a_group_the_environment_holds_in_part_is_refused() {
-    let definitions = group_held_in_part();
-
     assert_eq!(
-        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
+        text_verdicts(GROUP_HELD_IN_PART),
         Vec::new(),
         "the control stopped certifying: the group is well formed standing alone",
     );
 
-    let verdicts = fixture_verdicts(
-        &definitions,
-        1_000_000,
-        &already_judged(&judged_environment()).globals(),
-        SYNTAX,
-    );
+    let verdicts = over_the_environment(GROUP_HELD_IN_PART).verdicts;
     assert!(
-        redeclares(&verdicts, &shadowed_name()),
+        redeclares(&verdicts, &global("shadowed")),
         "a group held in part was not refused for the name the environment holds: {verdicts:?}",
     );
 }
+
+/// `p : Prop = Holds` and `thm : p = Holds/qed()`, then `${again}`, closed with `thm` stated at `Absurd`.
+const A_STATEMENT: &str = r#"
+induct /Absurd: pub Prop
+end
+
+#{absent = [/Holds/qed]}
+induct /Holds: pub Prop
+| qed()
+end
+
+let /p: Prop =
+    #{node = InductType} /Holds();
+
+let /thm: /p =
+    #{node = Variant} /Holds/qed();
+${again}
+/thm
+: #{node = InductType} /Absurd()
+"#;
+
+/// A second `p : Prop = ((x : Holds) => Absurd)(thm)`.
+const THE_STATEMENT_AGAIN: &str = r#"
+let /p: Prop =
+    ((x: #{node = InductType} /Holds()) => #{node = InductType} /Absurd())(/thm);
+"#;
+
+/// One group of two constants, both named `shadowed`.
+const A_GROUP_NAMING_A_MEMBER_TWICE: &str = r#"
+let /shadowed: #NatType =
+    0
+and /shadowed: #NatType =
+    0;
+"#;
 
 /// A name is declared by one item of a module: a second item under it is refused, and so is a group naming one member twice.
 ///
@@ -281,41 +320,38 @@ fn a_group_the_environment_holds_in_part_is_refused() {
 /// Mutation-checked against the set of names already declared: with it never consulted the module is judged, and `p` is refused where the walk writes it again and no sooner.
 #[test]
 fn a_name_declared_by_two_items_is_refused() {
-    let once = fixture_verdicts(
-        &statement_declared(false),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let once = text_verdicts(&fill!(A_STATEMENT, again = ""));
     assert!(
-        once.iter().any(
-            |verdict| verdict.name.is_none() && matches!(verdict.error, Error::Mismatch { .. })
-        ),
+        refuses(&once, None, |error| matches!(error, Error::Mismatch { .. })),
         "the control stopped refusing: `thm : Holds` does not close a program at `Absurd`: {once:?}",
     );
 
-    let twice = fixture_verdicts(
-        &statement_declared(true),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let twice = text_verdicts(&fill!(A_STATEMENT, again = THE_STATEMENT_AGAIN));
     assert!(
-        redeclares(&twice, &statement_name()),
+        redeclares(&twice, &global("p")),
         "a name declared by two items was not refused: {twice:?}",
     );
 
-    let repeated = fixture_verdicts(
-        &group_naming_a_member_twice(),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let repeated = text_verdicts(A_GROUP_NAMING_A_MEMBER_TWICE);
     assert!(
-        redeclares(&repeated, &shadowed_name()),
+        redeclares(&repeated, &global("shadowed")),
         "a group naming one member twice was not refused: {repeated:?}",
     );
 }
+
+/// `struct Bad { f : (Bad) -> Absurd }`, after `${family}`, closed with `w(Bad { w })` for `w = (b) => b.0(b)` stated at `Absurd`.
+const A_RECORD_NEGATIVE_IN_ITSELF: &str = r#"
+induct /Absurd: pub Prop
+end
+${family}
+struct /Bad: pub Type {
+    f: (devoured: #{node = StructType} /Bad()) -> #{node = InductType} /Absurd(),
+}
+
+((b: #{node = StructType} /Bad()) => (#{field = Struct(/Bad, 0)} b.0)(b))(
+    /Bad { (b: #{node = StructType} /Bad()) => (#{field = Struct(/Bad, 0)} b.0)(b) })
+: #{node = InductType} /Absurd()
+"#;
 
 /// A name declares one nominal: a `struct` and an `induct` under one name are refused.
 ///
@@ -324,27 +360,21 @@ fn a_name_declared_by_two_items_is_refused() {
 /// Mutation-checked against the set of names already declared: with it never consulted the module is judged, `Bad` is refused where the walk writes it again, and the record is analysed with the item that declares it, `NotPositive` beside the name's refusal.
 #[test]
 fn a_name_under_a_family_and_a_record_is_refused() {
-    let alone = fixture_verdicts(
-        &record_negative_in_itself(false),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let alone = text_verdicts(&fill!(A_RECORD_NEGATIVE_IN_ITSELF, family = ""));
     assert!(
-        alone
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::NotPositive { .. })),
+        refuses(&alone, Some("Bad"), |error| matches!(
+            error,
+            Error::NotPositive { .. }
+        )),
         "the control stopped refusing: the record names itself to the left of an arrow: {alone:?}",
     );
 
-    let both = fixture_verdicts(
-        &record_negative_in_itself(true),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let both = text_verdicts(&fill!(
+        A_RECORD_NEGATIVE_IN_ITSELF,
+        family = "\ninduct /Bad: pub Type\nend\n"
+    ));
     assert!(
-        redeclares(&both, &negative_record_name()),
+        redeclares(&both, &global("Bad")),
         "a name under a family and a record was not refused: {both:?}",
     );
 }
@@ -355,7 +385,7 @@ fn a_name_under_a_family_and_a_record_is_refused() {
 #[test]
 #[should_panic(expected = "a mounted unit redeclared a name already in scope")]
 fn a_registry_entry_mounted_twice_is_a_construction_bug() {
-    let unit = shadowing_registry(Term::type_ground());
+    let unit = core_text_module(&fill!(SHADOWING_FAMILY, domain = "Type"));
     let judged = already_judged(&unit);
     let places = Places::of(&unit);
     let certification = Certification::default();
@@ -364,129 +394,70 @@ fn a_registry_entry_mounted_twice_is_a_construction_bug() {
     globals.mount(&unit, &places, &certification);
 }
 
+/// `alias : Type = Nat`, as a unit in scope holds it, with `${decorator}` stating its mark and the sort its value inhabits.
+const ALIAS: &str = r#"
+${decorator}
+let /alias: Type =
+    #NatType;
+"#;
+
+/// What the walk says of `text` over [`ALIAS`] at `decorator`, in scope as a unit no walk filed a record for.
+fn over_the_alias(text: &str, decorator: &str) -> Vec<Verdict> {
+    let unit = core_text_module(&fill!(ALIAS, decorator));
+
+    text_verdicts_over(text, &already_judged(&unit).globals())
+}
+
+/// Whether `verdicts` is `symbol`'s refusal as a mismatch, and nothing else.
+fn only_mismatched(verdicts: &[Verdict], symbol: &str) -> bool {
+    matches!(
+        verdicts,
+        [Verdict { name: Some(refused), error: Error::Mismatch { .. } }] if *refused == global(symbol)
+    )
+}
+
+/// `three : alias = 3`.
+const THREE: &str = r#"
+let /three: /alias =
+    3;
+"#;
+
 /// A definition's mark is read where its unit is mounted, as it is where a walk brings the definition into scope. `alias : Type = Nat` is no proof, and a walk over its unit refuses the mark; mounted by hand with the mark on, it is a constant, and `three : alias = 3` is refused where the unmarked unit has it accepted. The lie is what makes the reading visible: of a real proof no judgment asks anything its body would answer.
 #[test]
 fn a_mounted_definition_marked_a_proof_unfolds_to_nothing() {
-    let alias = Global::Authored(Qualifier::from(["alias"]));
-    let three = Global::Authored(Qualifier::from(["three"]));
-    let definitions = collision_definitions(
-        vec![authored(
-            &three,
-            Term::instance(alias, Universes::default()),
-            Term::intrinsic(Intrinsic::Nat(Nat::new(3usize))),
-        )],
-        BTreeMap::new(),
-    );
-    let mounted = |unit: Vec<_>| {
-        let unit = collision_definitions(unit, BTreeMap::new());
+    assert_eq!(over_the_alias(THREE, ""), Vec::new());
 
-        fixture_verdicts(
-            &definitions,
-            1_000_000,
-            &already_judged(&unit).globals(),
-            SYNTAX,
-        )
-    };
-    let nat = || Term::intrinsic(Intrinsic::NatType);
-
-    assert_eq!(
-        mounted(vec![authored(&alias, Term::type_ground(), nat())]),
-        Vec::new(),
-    );
-
-    let verdicts = mounted(vec![authored_proof(&alias, Term::type_ground(), nat())]);
+    let verdicts = over_the_alias(THREE, "#{proof = true}");
     assert!(
-        matches!(
-            verdicts.as_slice(),
-            [Verdict { name: Some(refused), error: Error::Mismatch { .. } }] if *refused == three
-        ),
+        only_mismatched(&verdicts, "three"),
         "a mounted definition marked a proof was unfolded: {verdicts:?}",
     );
 }
 
-/// `alias : Type = Nat`, as a unit in scope holds it, with `sort` as the sort its value inhabits and `proof` as its mark.
-fn alias_holding(alias: &Global, proof: bool, sort: Option<Term>) -> Item {
-    Item::Let(Box::new(Definition {
-        name: *alias,
-        kind: DefinitionKind::Authored,
-        universe_context: UniverseContext::empty(),
-        island: Qualifier::default(),
-        proof,
-        value_sort: sort,
-        type_: Term::type_ground(),
-        body: Term::intrinsic(Intrinsic::NatType),
-    }))
-}
+/// `Idx : (i : alias) -> Type 0` with no constructor, since the coercion needs the comparison of two indices and no inhabitant, and `coerce : (x : alias, y : alias, v : Idx(y)) -> Idx(x) = (x, y, v) => v`.
+const COERCE: &str = r#"
+induct /Idx: (i: /alias) -> pub Type
+end
+
+let /coerce: (x: /alias, y: /alias, v: #{node = InductType} /Idx()(y)) ->
+    #{node = InductType}
+    /Idx()(x) =
+    (x: /alias, y: /alias, v: #{node = InductType} /Idx()(y)) => v;
+"#;
 
 /// A definition's mark withholds the sort its value inhabits with its body, as `define_as_stated` writes the two together: a reader that took one and not the other would hold a definition in scope otherwise than the walk that judged it.
 ///
-/// `alias : Type = Nat` carries `Prop 0` as the sort its value inhabits, which no walk over its unit states, the walk stating the sort its own reading of the value finds — the forgery that makes the reading visible, since of an honest statement the published sort is the one reduction reaches anyway. Published, it makes `alias` a proposition to the irrelevance gate (`declared_into_prop`), and `coerce : (x : alias, y : alias, v : Idx(y)) -> Idx(x) = (x, y, v) => v` is admitted, two inhabitants of `Nat` being one. Marked a proof, the definition publishes no sort, so `alias` reads at `Type 0` and the coercion is the `Mismatch` it should be — as it is where the unit states no sort at all.
+/// `alias : Type = Nat` carries `Prop 0` as the sort its value inhabits, which no walk over its unit states, the walk stating the sort its own reading of the value finds — the forgery that makes the reading visible, since of an honest statement the published sort is the one reduction reaches anyway. Published, it makes `alias` a proposition to the irrelevance gate (`declared_into_prop`), and `coerce` is admitted, two inhabitants of `Nat` being one. Marked a proof, the definition publishes no sort, so `alias` reads at `Type 0` and the coercion is the `Mismatch` it should be — as it is where the unit states no sort at all.
 ///
 /// Mutation-checked: with `held` publishing a marked definition's `value_sort` all the same, the marked arm is admitted and this test fails.
 #[test]
 fn a_mounted_definition_marked_a_proof_publishes_no_value_sort() {
-    let alias = Global::Authored(Qualifier::from(["alias"]));
-    let indexed = Global::Authored(Qualifier::from(["Idx"]));
-    let coerce = Global::Authored(Qualifier::from(["coerce"]));
-    let alias_type = || Term::instance(alias, Universes::default());
-    let (left, right) = (Free::local(70, Some("x")), Free::local(71, Some("y")));
-    let carried = Free::local(72, Some("v"));
-    let at = |index: &Free| Term::induct_type(indexed, Vec::<Term>::new(), [Term::free_var(index)]);
+    assert_eq!(over_the_alias(COERCE, "#{value_sort = Prop}"), Vec::new());
 
-    // `induct Idx : (i : alias) -> Type 0 end` — no constructor, since the coercion needs the comparison of two indices and no inhabitant.
-    let declaration = InductDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::done(Telescope::build(
-            [(Free::local(73, Some("i")), alias_type())],
-            (),
-        )),
-        constructors: Vec::new().into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-    let parameters = [
-        (left, alias_type()),
-        (right, alias_type()),
-        (carried, at(&right)),
-    ];
-    let definitions = collision_definitions(
-        vec![authored(
-            &coerce,
-            Term::func_type(parameters.clone(), at(&left)),
-            Term::func(parameters, Term::free_var(&carried)),
-        )],
-        BTreeMap::from([(indexed, declaration)]),
-    );
-    let mounted = |item: Item| {
-        let unit = collision_definitions(vec![item], BTreeMap::new());
-
-        fixture_verdicts(
-            &definitions,
-            1_000_000,
-            &already_judged(&unit).globals(),
-            SYNTAX,
-        )
-    };
-
-    assert_eq!(
-        mounted(alias_holding(&alias, false, Some(Term::prop()))),
-        Vec::new(),
-    );
-
-    for withheld in [
-        alias_holding(&alias, true, Some(Term::prop())),
-        alias_holding(&alias, false, None),
-    ] {
-        let verdicts = mounted(withheld);
+    for withheld in ["#{proof = true, value_sort = Prop}", ""] {
+        let verdicts = over_the_alias(COERCE, withheld);
         assert!(
-            matches!(
-                verdicts.as_slice(),
-                [Verdict { name: Some(refused), error: Error::Mismatch { .. } }]
-                    if *refused == coerce
-            ),
+            only_mismatched(&verdicts, "coerce"),
             "a mounted definition published a value sort no reader may have: {verdicts:?}",
         );
     }

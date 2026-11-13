@@ -179,19 +179,17 @@ fn a_record_that_does_not_cover_its_unit_is_not_read() {
 
 /// `held : Vouched = ((g : (Nat) -> Nat) => ((n : Nat) => Vouched/qed(()))(g(0)))(reaches)`: a proof reaching `reaches` as [`HELD`]'s does, in other terms, so a walk over a baseline holding that one judges this.
 fn held_otherwise() -> Item {
-    core_text_module(&fill!(
-        r#"${VOUCHED}
+    declared_item(
+        &fill!(
+            r#"${VOUCHED}
 let /held: #{node = InductType} /Vouched() =
     ((g: (n: #NatType) -> #NatType) =>
         ((n: #NatType) => #{node = Variant} /Vouched/qed(()))(g(0)))(/reaches);
 "#,
-        VOUCHED
-    ))
-    .items
-    .iter()
-    .find(|item| matches!(item, Item::Let(definition) if definition.name == global("held")))
-    .cloned()
-    .expect("the text defines `held`")
+            VOUCHED
+        ),
+        "held",
+    )
 }
 
 /// A baseline is read as a mounted record is, only where its record covers its module: one naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so a walk over it judges the unit whole, and refuses the proof, rather than read `reaches` as the record leaves it wherever the walk does not visit it. Mutation-checked: with a baseline taken whatever its record covers, the proof is accepted and no other test in this file fails.
