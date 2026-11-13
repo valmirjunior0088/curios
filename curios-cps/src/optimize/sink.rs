@@ -910,31 +910,13 @@ impl<'m> Sink<'m> {
             target: join,
             args: vec![Atom::Literal(Literal::Nat(Natural::from(decided)))],
         };
-        // A switch edge enters a continuation and never returns, so a result the operation handed straight to the function's return reaches it from the decided edge through a continuation of its own.
-        let mut members = if made { vec![join, arm] } else { vec![arm] };
-        let decided_edge = match self.module.continuation(join) {
-            Some(_) => decided_value,
-            None => {
-                let returned = self.add(Node::ApplyCont(decided_value));
-                let settled = self.module.add_continuation(Continuation {
-                    debug_name: Some("arm".into()),
-                    params: Vec::new(),
-                    body: returned,
-                });
-                self.parent.insert(returned, Holder::Continuation(settled));
-                self.carved(settled, from);
-                members.push(settled);
-                Edge {
-                    target: settled,
-                    args: Vec::new(),
-                }
-            }
-        };
+        // The decided edge hands its value where the operation's result went, the function's return among the places that may be: a switch's edge goes there as a jump does.
+        let members = if made { vec![join, arm] } else { vec![arm] };
         let other_edge = Edge {
             target: arm,
             args: Vec::new(),
         };
-        let cases = BTreeMap::from([(decided, decided_edge), (1 - decided, other_edge)]);
+        let cases = BTreeMap::from([(decided, decided_value), (1 - decided, other_edge)]);
         let switch = self.add(Node::Switch {
             scrutinee: first,
             cases,

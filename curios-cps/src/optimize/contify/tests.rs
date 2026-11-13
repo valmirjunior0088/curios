@@ -7,8 +7,9 @@ use {
     std::collections::BTreeMap,
 };
 
+/// A loop's return is the call's once the loop is a continuation: its jumps go there, and so does a switch's edge, which the lowering gives a block of its own where the call returned to the caller's own return.
 #[test]
-fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
+fn contifies_a_single_entry_tail_loop_and_hands_its_returns_to_the_call() {
     let mut module = Module::new();
     let entry = module.reserve_function();
     let entry_return = module.reserve_continuation();
@@ -89,20 +90,10 @@ fn contifies_a_single_entry_tail_loop_and_bridges_switch_returns() {
         .find(|continuation| continuation.debug_name.as_deref() == Some("loop"))
         .unwrap();
     assert_eq!(loop_cont.params, vec![loop_param]);
-    let return_bridge = module
-        .continuations()
-        .iter()
-        .flatten()
-        .find(|continuation| continuation.debug_name.as_deref() == Some("contified return"))
-        .unwrap();
-    assert!(matches!(
-        module.node(return_bridge.body),
-        Some(Node::ApplyCont(Edge { target, .. })) if *target == entry_return
-    ));
     let Node::Switch { cases, .. } = module.node(switch).unwrap() else {
         panic!("loop switch changed shape")
     };
-    assert_ne!(cases[&0].target, entry_return);
+    assert_eq!(cases[&0].target, entry_return);
     module.verify().unwrap();
 }
 

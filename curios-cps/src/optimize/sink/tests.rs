@@ -186,13 +186,9 @@ fn a_call_a_conjunctions_second_operand_reads_runs_only_where_the_first_holds() 
     };
     assert_eq!(*scrutinee, Atom::Value(a));
     assert_eq!(cases[&1].target, arm);
-    let decided = module
-        .continuation(cases[&0].target)
-        .expect("an edge enters a continuation");
-    assert!(matches!(
-        module.node(decided.body),
-        Some(Node::ApplyCont(Edge { target, args })) if *target == return_cont && *args == vec![nat(0)]
-    ));
+    // The decided edge hands `false` straight to the return.
+    assert_eq!(cases[&0].target, return_cont);
+    assert_eq!(cases[&0].args, vec![nat(0)]);
     module.verify().unwrap();
 }
 
@@ -231,13 +227,9 @@ fn a_disjunction_runs_its_second_operand_where_the_first_is_false() {
         panic!("the branch switches on the first operand");
     };
     assert_eq!(cases[&0].target, arm);
-    let decided = module
-        .continuation(cases[&1].target)
-        .expect("an edge enters a continuation");
-    assert!(matches!(
-        module.node(decided.body),
-        Some(Node::ApplyCont(Edge { target, args })) if *target == return_cont && *args == vec![nat(1)]
-    ));
+    // The decided edge hands `true` straight to the return.
+    assert_eq!(cases[&1].target, return_cont);
+    assert_eq!(cases[&1].args, vec![nat(1)]);
     module.verify().unwrap();
 }
 

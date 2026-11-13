@@ -1,7 +1,7 @@
 use {
     super::{SCC_CLONE_NODE_LIMIT, copy_bodies, introducing_letfun},
     crate::{
-        Atom, CallAnalysis, Callee, Continuation, CopyPlan, Edge, FunctionId, Module, Node, NodeId,
+        CallAnalysis, Callee, Continuation, CopyPlan, Edge, FunctionId, Module, Node, NodeId,
         analyze_calls, function_nodes,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -66,8 +66,8 @@ pub fn contify_calls(module: &mut Module) -> bool {
     changed
 }
 
-/// The three nodes contification adds beside the copied body: its initial transfer, return bridge, and bridge scope. The call node itself is reused.
-const CONTIFICATION_NODE_OVERHEAD: usize = 3;
+/// The one node contification adds beside the copied body: its initial transfer. The call node itself is reused.
+const CONTIFICATION_NODE_OVERHEAD: usize = 1;
 
 /// One admitted loop-entry copy whose sole external caller can receive its body as a continuation.
 ///
@@ -210,10 +210,7 @@ pub fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId) {
     assert_eq!(found, callee);
 
     let loop_cont = module.reserve_continuation();
-    let return_bridge = module.reserve_continuation();
-    let return_value = module.add_value(Some("contified return".into()));
-    let return_body = module.reserve_node();
-    let loop_scope = module.reserve_node();
+    // Every transfer to the callee's return goes where the call returned, a switch's edge as a jump does: the machine lowering gives an edge to a function's return a block of its own, so the call's return may be the caller's.
     for node_id in function_nodes(module, callee) {
         let node = module.node_mut(node_id).unwrap();
         match node {
@@ -249,7 +246,7 @@ pub fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId) {
             Node::Switch { cases, default, .. } => {
                 for edge in cases.values_mut().chain(default.iter_mut()) {
                     if edge.target == function.return_cont {
-                        edge.target = return_bridge;
+                        edge.target = return_to;
                     }
                 }
             }
@@ -265,34 +262,12 @@ pub fn contify_call(module: &mut Module, callee: FunctionId, call: NodeId) {
             args,
         }),
     );
-    module.define_node(
-        return_body,
-        Node::ApplyCont(Edge {
-            target: return_to,
-            args: vec![Atom::Value(return_value)],
-        }),
-    );
-    module.define_continuation(
-        return_bridge,
-        Continuation {
-            debug_name: Some("contified return".into()),
-            params: vec![return_value],
-            body: return_body,
-        },
-    );
-    module.define_node(
-        loop_scope,
-        Node::LetCont {
-            continuations: vec![return_bridge],
-            body: function.body,
-        },
-    );
     module.define_continuation(
         loop_cont,
         Continuation {
             debug_name: function.debug_name,
             params: function.params,
-            body: loop_scope,
+            body: function.body,
         },
     );
     module.set_node(
