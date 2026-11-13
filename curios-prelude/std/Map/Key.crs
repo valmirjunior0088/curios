@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Nat, Int, Bool, Str, Eq, Hash, Ord, Ordering};
+use /std/{Bytes, Bool, Eq, Hash, Ord, Ordering};
 
 -- **`Flt` is deliberately not a key, and the reason is not the proof.** Injectivity holds and is cheap — `Flt/of_le_bytes` inverts `Flt/to_le_bytes`, so the witness is one congruence through a guarded decoder. What stops it is that this concept promises injectivity on *propositional* equality while `/std/ops/Eql`'s `Flt` witness is IEEE `==`, and the two disagree at both ends: `+0.0` and `-0.0` are distinct values with distinct encodings that `==` calls equal, so a map would hold them as two entries; a `NaN` is found by lookup though `==` calls it equal to nothing. Nothing here forbids that, because a key's law says nothing about `Eql` — which is exactly why the witness is withheld until what a map means for such a carrier is decided rather than discovered.
 --- How a key type encodes to the byte string that identifies it, with the proofs that distinct keys encode distinctly and that the encodings stand in the keys' own order.
@@ -16,58 +16,6 @@ pub concept Key(K: Type): pub Type {
 }
 
 pub use Key/*;
-
---- The identity encoding, in the order of bytes.
-satisfy Key(Bytes) {
-    injective(_, _, same) = same,
-    monotone(_, _) = Eq/refl(),
-}
-
---- The UTF-8 bytes, whose order is a text's.
-satisfy Key(Str) {
-    injective(a, b, same) = Str/eq_of_bytes(a, b, same),
-    monotone(_, _) = Eq/refl(),
-}
-
---- The code in the order of the numbers, whose injectivity is that order's.
-satisfy Key(Nat) {
-    injective = Hash/nat/injective,
-    monotone = Hash/nat/monotone,
-}
-
---- The one byte itself, a cons onto no bytes: injective in its head, and ordered as its head is.
-satisfy Key(Byte) {
-    injective(a, b, same) = Bytes/cons_injective_head(@a, @x[], @b, @x[], same),
-    monotone(a, b) =
-        match a < b
-        | true => Eq/refl()
-        | false => match a == b | true | false => Eq/refl() end
-        end,
-}
-
--- Which of the two one-byte encodings a run is, as a total function of any `Bytes`.
-let bool_of(z: Bytes) -> Bool =
-    z == x[0x1];
-
--- The encoding round-trips through it at both values, which is the whole of the injectivity below: two values encoding alike decode alike, and decoding is the identity.
-let bool_round(b: Bool) -> Eq()(bool_of(Hash/hash(b)), b) =
-    match b | true | false => Eq/refl() end;
-
---- One byte per value, `false`'s below `true`'s.
-satisfy Key(Bool) {
-    injective(a, b, same) =
-        Eq/trans(Eq/sym(bool_round(a)), Eq/trans(Eq/cong(bool_of, same), bool_round(b))),
-    monotone(a, b) =
-        match a
-        | false | true => match b | false | true => Eq/refl() end
-        end,
-}
-
---- The code in the order of the numbers, whose injectivity is that order's.
-satisfy Key(Int) {
-    injective = Hash/int/injective,
-    monotone = Hash/int/monotone,
-}
 
 --- A key is `eq` to itself in its order, as its encoding is in the order of bytes.
 pub let refl(@K: Type, use Key(K), a: K) -> Eq()(Ord/ord(a, a), Ordering/eq()) =

@@ -28,7 +28,7 @@ pub mod ord;
 pub use ord/{let ord};
 
 use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord, Hash,
-    proved};
+    Map, proved};
 use /std/ops/{Eql, Cmp};
 
 --- What a byte begins, as UTF-8 reads it.
@@ -553,4 +553,10 @@ satisfy Ord(Str) {
 --- The UTF-8 bytes.
 satisfy Hash(Str) {
     hash = to_bytes,
+}
+
+--- The UTF-8 bytes, whose order is a text's.
+satisfy Map/Key(Str) {
+    injective(a, b, same) = eq_of_bytes(a, b, same),
+    monotone(_, _) = Eq/refl(),
 }

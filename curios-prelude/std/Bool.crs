@@ -9,7 +9,7 @@ pub use and/{let and};
 pub mod or;
 pub use or/{let or};
 
-use /std/{Str, Option, Eq, Show, Spell, Ordering, Ord, Hash};
+use /std/{Str, Option, Bytes, Eq, Show, Spell, Ordering, Ord, Hash, Map};
 use /std/ops/{Eql, Or, And, Cmp};
 
 --- The other value.
@@ -88,4 +88,22 @@ satisfy Ord(Bool) {
 
 satisfy Hash(Bool) {
     hash(b) = match b | true => x[0x1] | false => x[0x0] end,
+}
+
+-- Which of the two one-byte encodings a run is, as a total function of any `Bytes`.
+let bool_of(z: Bytes) -> Bool =
+    z == x[0x1];
+
+-- The encoding round-trips through it at both values, which is the whole of the injectivity below: two values encoding alike decode alike, and decoding is the identity.
+let bool_round(b: Bool) -> Eq()(bool_of(Hash/hash(b)), b) =
+    match b | true | false => Eq/refl() end;
+
+--- One byte per value, `false`'s below `true`'s.
+satisfy Map/Key(Bool) {
+    injective(a, b, same) =
+        Eq/trans(Eq/sym(bool_round(a)), Eq/trans(Eq/cong(bool_of, same), bool_round(b))),
+    monotone(a, b) =
+        match a
+        | false | true => match b | false | true => Eq/refl() end
+        end,
 }

@@ -74,7 +74,7 @@ pub use Coprime/{let Coprime};
 pub mod Scale;
 pub use Scale/{let Scale};
 
-use /std/{Str, Option, Char, Bool, Show, Spell, Ord, Hash, Eq};
+use /std/{Str, Option, Char, Bool, Show, Spell, Ord, Hash, Map, Eq};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is the proposition `Bool/Holds(0 < n)` is: a natural is not zero exactly where zero is below it, which conversion decides.
@@ -215,4 +215,10 @@ satisfy Ord(Nat) {
 --- The code of [`Hash/nat`]: in the order of the numbers, so a smaller number's is before a larger one's.
 satisfy Hash(Nat) {
     hash = Hash/nat/code,
+}
+
+--- The code in the order of the numbers, whose injectivity is that order's.
+satisfy Map/Key(Nat) {
+    injective = Hash/nat/injective,
+    monotone = Hash/nat/monotone,
 }

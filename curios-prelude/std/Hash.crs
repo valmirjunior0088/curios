@@ -8,7 +8,7 @@ use /std/{Nat, Byte, Bytes, Bool, List};
 
 --- How a value encodes to the bytes that identify it.
 ---
---- The encoding is a value's identity and is *determined*: one value encodes to one byte string, in any program, from the value and the carrier's documented reading alone — which is what `/std/Map`'s `Key` adds injectivity and the type's own order to, and what makes two runs of the same program agree.
+--- The encoding is a value's identity and is *determined*: one value encodes to one byte string, in any program, from the value and the carrier's documented reading alone — which is what `/std/Map/Key` adds injectivity and the type's own order to, and what makes two runs of the same program agree.
 pub concept Hash(T: Type): pub Type {
     --- The encoding.
     hash(T) -> Bytes,

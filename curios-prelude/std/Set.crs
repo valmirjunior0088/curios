@@ -8,52 +8,51 @@ pub use to_list/{let to_list};
 
 use /std/{Nat, List, Map, Show, Spell, Fmt};
 use /std/ops/{Eql};
-use /std/Map/{Key};
 
 --- A set of keys: a map from them to nothing.
 ---
---- Built and read under one `Key(K)` dictionary, which its type names as a `Map`'s does: a set under another dictionary is a value of another type.
-pub struct Set(K: Type, use Key(K)): Type {
+--- Built and read under one `Map/Key(K)` dictionary, which its type names as a `Map`'s does: a set under another dictionary is a value of another type.
+pub struct Set(K: Type, use Map/Key(K)): Type {
     map: Map(K, {}),
 }
 
 --- The empty set.
-pub let empty(@K: Type, use Key(K)) -> Set(K) =
+pub let empty(@K: Type, use Map/Key(K)) -> Set(K) =
     Set { map = Map/empty() };
 
 --- How many elements.
-pub let len(@K: Type, use Key(K), s: Set(K)) -> Nat =
+pub let len(@K: Type, use Map/Key(K), s: Set(K)) -> Nat =
     Map/len(s.map);
 
 --- `s` with `k`.
-pub let insert(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =
+pub let insert(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Set(K) =
     Set { map = Map/insert(s.map, k, ()) };
 
 --- `s` without `k`; unchanged when absent.
-pub let remove(@K: Type, use Key(K), s: Set(K), k: K) -> Set(K) =
+pub let remove(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Set(K) =
     Set { map = Map/remove(s.map, k) };
 
 --- Over the elements in their order, with `f(elem, acc)`.
-pub let fold(@K: Type, use Key(K), @A: Type, s: Set(K), init: A, f: (K, A) -> A) -> A =
+pub let fold(@K: Type, use Map/Key(K), @A: Type, s: Set(K), init: A, f: (K, A) -> A) -> A =
     Map/fold(s.map, init, (k, _, acc) => f(k, acc));
 
 --- The set of the elements of `l`.
-pub let of_list(@K: Type, use Key(K), l: List(K)) -> Set(K) =
+pub let of_list(@K: Type, use Map/Key(K), l: List(K)) -> Set(K) =
     List/fold(l, empty(), (k, acc) => insert(acc, k));
 
 --- Every element of either.
-pub let union(@K: Type, use Key(K), a: Set(K), b: Set(K)) -> Set(K) =
+pub let union(@K: Type, use Map/Key(K), a: Set(K), b: Set(K)) -> Set(K) =
     Set { map = Map/union(a.map, b.map) };
 
-satisfy (@K: Type, use Key(K), use Eql(K)) => Eql(Set(K)) {
+satisfy (@K: Type, use Map/Key(K), use Eql(K)) => Eql(Set(K)) {
     eql(a, b) = to_list(a) == to_list(b),
     neq(a, b) = to_list(a) != to_list(b),
 }
 
-satisfy (@K: Type, use Key(K), use Show(K)) => Show(Set(K)) {
+satisfy (@K: Type, use Map/Key(K), use Show(K)) => Show(Set(K)) {
     show(s) = Show/show(to_list(s)),
 }
 
-satisfy (@K: Type, use Key(K), use Spell(K)) => Spell(Set(K)) {
+satisfy (@K: Type, use Map/Key(K), use Spell(K)) => Spell(Set(K)) {
     spell(s) = Fmt/render("Set/of_list(#)")(to_list(s)),
 }
