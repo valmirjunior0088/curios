@@ -478,6 +478,35 @@ fn a_node_reached_from_two_places_is_refused() {
     );
 }
 
+/// A cycle's panic names a member by its place among the names the module holds, so one naming a place the module holds no name at is refused before an emitter reads past them.
+#[test]
+fn a_cycle_naming_a_member_the_module_does_not_hold_is_refused() {
+    let mut module = Module::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let member = module.add_member("n".into());
+    let body = module.add_node(Node::Panic(Panic::Cycle(Some(member))));
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module.set_node(
+        body,
+        Node::Panic(Panic::Cycle(Some(MemberId(member.0 + 1)))),
+    );
+
+    let error = module.verify().unwrap_err();
+    assert!(error.to_string().contains("holds no name for"), "{error}");
+}
+
 /// A module holding one rebuild ahead of the minimal body: `built`, a `Pair`, rebuilt at `slots` into `rebuilt` as a `Pair` where `as_row` and as another row of its width otherwise, then a read of `built` where `read_after` and of `rebuilt` otherwise, each at the row it was made as.
 fn module_rebuilding(as_row: bool, slots: Vec<(usize, Atom)>, read_after: bool) -> Module {
     let mut module = minimal_module();

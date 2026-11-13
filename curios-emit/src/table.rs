@@ -391,8 +391,10 @@ pub struct Table<'a> {
     cell_type: curios_wasm::TypeName,
 
     panic: OnceCell<curios_wasm::FuncName>,
-    // One slot per class, in `Panic::ALL`'s order, minted lazily: a module declares the refusals its code can reach and no others.
-    refuse: [OnceCell<curios_wasm::FuncName>; curios_cps::Panic::ALL.len()],
+    // The helper of each refusal the code reaches, minted lazily: a module declares the refusals its code can reach and no others, a cycle's once for each member it names.
+    refuse: RefCell<BTreeMap<curios_cps::Panic, curios_wasm::FuncName>>,
+    // The names of the computed members, which a cycle's sentence states.
+    members: &'a [String],
     // One slot per big-number helper, in `BigHelper::ALL`'s order, minted lazily like `refuse`: a module declares the helpers its code and its other helpers reach and no others.
     big: [OnceCell<curios_wasm::FuncName>; BigHelper::ALL.len()],
     // One slot per float helper, in `FltHelper::ALL`'s order, minted lazily like `big`.
@@ -499,6 +501,7 @@ impl<'a> Table<'a> {
             cell_type: curios_wasm::TypeName::from("cell"),
             panic: OnceCell::new(),
             refuse: Default::default(),
+            members: module.members(),
             big: Default::default(),
             flt: Default::default(),
             bytes_force: OnceCell::new(),
@@ -962,24 +965,26 @@ impl<'a> Table<'a> {
         )
     }
 
+    /// The name of a computed member, as a cycle's sentence states it.
+    pub fn member(&self, member: curios_cps::MemberId) -> &str {
+        &self.members[member.index()]
+    }
+
     /// `$refuse/<class> () -> ()`: build the class's sentence from its data segment, hand it to `sys.panic`, and never return. First use marks it for emission, so nothing is allocated for a refusal until one fires.
     fn refuse_func(&self, panic: curios_cps::Panic) -> curios_wasm::FuncName {
-        let slot = curios_cps::Panic::ALL
-            .iter()
-            .position(|class| *class == panic)
-            .expect("`Panic::ALL` holds every class");
-
-        self.refuse[slot]
-            .get_or_init(|| refuse_func_name(panic))
+        self.refuse
+            .borrow_mut()
+            .entry(panic)
+            .or_insert_with(|| refuse_func_name(panic))
             .clone()
     }
 
-    /// The refusals the emitted code referenced, in `Panic::ALL`'s order. Read after every body that can refuse has been built — the rope helpers' included.
+    /// The refusals the emitted code referenced, in their classes' order and a cycle's members'. Read after every body that can refuse has been built — the rope helpers' included.
     pub fn refuse_funcs(&self) -> Vec<(curios_cps::Panic, curios_wasm::FuncName)> {
-        curios_cps::Panic::ALL
-            .into_iter()
-            .zip(&self.refuse)
-            .filter_map(|(class, slot)| Some((class, slot.get()?.clone())))
+        self.refuse
+            .borrow()
+            .iter()
+            .map(|(panic, name)| (*panic, name.clone()))
             .collect()
     }
 

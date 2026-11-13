@@ -1,6 +1,6 @@
 //! The emitted module's exports and dispatch table, and the loop shapes that need a dispatcher.
 
-use crate::test_support::*;
+use crate::{test_support::*, *};
 
 #[test]
 fn unknown_callee_dispatches_through_the_closure_table() {
@@ -90,7 +90,7 @@ fn a_panic_node_reports_its_class() {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
-    let body = module.add_node(curios_cps::Node::Panic(curios_cps::Panic::Cycle));
+    let body = module.add_node(curios_cps::Node::Panic(curios_cps::Panic::Cycle(None)));
     module.define_function(
         main,
         curios_cps::Function {
@@ -106,4 +106,50 @@ fn a_panic_node_reports_its_class() {
     let wat = wat(&module);
     assert_contains(&wat, "call $refuse/cycle");
     assert_contains(&wat, "array.new_data $bytes $refusal/cycle");
+}
+
+/// A cycle's panic that names its member has a helper and a sentence of its own, the sentence saying which value was read while its initializer ran.
+#[test]
+fn a_cycles_panic_names_the_member_it_was_seated_for() {
+    let mut module = curios_cps::Module::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let _first = module.add_member("first".into());
+    let member = module.add_member("second".into());
+    let body = module.add_node(curios_cps::Node::Panic(curios_cps::Panic::Cycle(Some(
+        member,
+    ))));
+    module.define_function(
+        main,
+        curios_cps::Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+
+    let (emitted, _) = into_wasm(&module);
+    let wat = emitted.to_string();
+    assert_contains(&wat, "call $refuse/cycle/1");
+    assert_contains(&wat, "array.new_data $bytes $refusal/cycle/1");
+    let sentences = emitted
+        .datas()
+        .iter()
+        .map(|(_, segment)| String::from_utf8_lossy(&segment.bytes).into_owned())
+        .collect::<Vec<_>>();
+    assert!(
+        sentences
+            .iter()
+            .any(|sentence| sentence.starts_with("the recursive value `second` was read")),
+        "{sentences:?}"
+    );
+    assert!(
+        sentences
+            .iter()
+            .all(|sentence| !sentence.contains("`first`")),
+        "{sentences:?}"
+    );
 }

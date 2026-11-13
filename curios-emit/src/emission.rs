@@ -352,6 +352,8 @@ pub struct EmissionModule {
     entry: Option<EmissionFunctionName>,
     /// The nominal rows this module constructs and reads, each with its debug name and slot carriers. See [`EmissionData::Row`].
     rows: Vec<(curios_cps::RowId, curios_cps::Row)>,
+    /// The names of the computed members a cycle's refusal states, each at its identity's place.
+    members: Vec<String>,
     /// The suspension row only when the residual entry may return it: what selects turn exports and their dispatch requirements.
     entry_suspension: Option<curios_cps::RowId>,
     /// The slots of each row some rebuild writes.
@@ -372,6 +374,14 @@ impl EmissionModule {
 
     pub fn set_rows(&mut self, rows: Vec<(curios_cps::RowId, curios_cps::Row)>) {
         self.rows = rows;
+    }
+
+    pub fn members(&self) -> &[String] {
+        &self.members
+    }
+
+    pub fn set_members(&mut self, members: Vec<String>) {
+        self.members = members;
     }
 
     pub fn entry_suspension(&self) -> Option<curios_cps::RowId> {

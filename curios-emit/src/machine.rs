@@ -176,6 +176,8 @@ pub struct MachineModule {
     function_hints: BTreeMap<curios_cps::FunctionId, String>,
     /// Every nominal row the CPS module declared, with its debug name and slot carriers — carried whole rather than collected from constructions, so a row whose constructions were all optimized away still declares a type for the projections that may outlive them.
     rows: Vec<(curios_cps::RowId, curios_cps::Row)>,
+    /// The names of the computed members a cycle's refusal states, as the CPS module holds them.
+    members: Vec<String>,
     /// The suspension row only when CPS's residual return flow admits it at the entry; the complete row roster is independent.
     entry_suspension: Option<curios_cps::RowId>,
 }
@@ -188,6 +190,10 @@ impl MachineModule {
 
     pub fn rows(&self) -> &[(curios_cps::RowId, curios_cps::Row)] {
         &self.rows
+    }
+
+    pub fn members(&self) -> &[String] {
+        &self.members
     }
 
     pub fn entry_suspension(&self) -> Option<curios_cps::RowId> {
@@ -316,6 +322,7 @@ pub fn lower(
         entry: source.entry().unwrap(),
         function_hints,
         rows,
+        members: source.members().to_vec(),
         entry_suspension: source.entry_suspension(),
     };
     module.verify().expect("invalid closed machine CFG");

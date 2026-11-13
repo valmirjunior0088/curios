@@ -5,8 +5,8 @@
 use {
     super::{
         Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
-        Node, NodeId, Repr, RowId, UseTarget, ValueDef, ValueExpr, ValueId, atoms, nodes_from,
-        visit_atoms_mut,
+        MemberId, Node, NodeId, Repr, RowId, UseTarget, ValueDef, ValueExpr, ValueId, atoms,
+        nodes_from, visit_atoms_mut,
     },
     curios_common::{Arena, ArenaId},
     curios_num::{Floating, Natural},
@@ -34,6 +34,8 @@ pub struct Module {
     rows: Vec<Option<Row>>,
     /// The row a forced description's suspension is built as, registered by the door at the first suspension operation it lowers. This identity survives optimization independently of whether the entry can return a suspension; `entry_suspension` answers that from the current graph.
     suspension: Option<RowId>,
+    /// The names of the computed members a [`Panic::Cycle`](crate::Panic::Cycle) states, appended by the ANF door and never removed, so a guard keeps its member's name whatever the optimizer does to the function it was written in.
+    members: Vec<String>,
     /// The functions no pass copies into a caller — not the inliner, contification or specialization — so a call of one stays a call. What a caller reaches only on a path it rarely takes belongs here: the path it does take stays small enough for the caller itself to be copied where it is called.
     out_of_line: BTreeSet<FunctionId>,
     entry: Option<FunctionId>,
@@ -193,6 +195,18 @@ impl Module {
             Intrinsic::RowGet(row, index) => self.slot_repr(*row, *index),
             _ => op.result_repr(),
         }
+    }
+
+    /// Register the name of a computed member and hand back its identity. The ANF door is the only caller; see [`Panic::Cycle`](crate::Panic::Cycle).
+    pub fn add_member(&mut self, name: String) -> MemberId {
+        let id = MemberId::from_index(self.members.len());
+        self.members.push(name);
+        id
+    }
+
+    /// The names of the computed members, each at its identity's place.
+    pub fn members(&self) -> &[String] {
+        &self.members
     }
 
     pub fn rows(&self) -> impl Iterator<Item = (RowId, &Row)> {

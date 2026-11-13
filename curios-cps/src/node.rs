@@ -35,6 +35,7 @@ id!(ValueId, "~v");
 id!(FunctionId, "~f");
 id!(ContinuationId, "~k");
 id!(RowId, "~r");
+id!(MemberId, "~m");
 
 impl FunctionId {
     pub fn from_index(index: usize) -> Self {
@@ -218,7 +219,7 @@ pub enum Node {
 }
 
 /// The classes of failure a compiled program can stop with, each rendered by the emitter as one sentence naming the rule, the carrier and the remedy. A `Node::Panic` carries one; the emitter's own checks — a narrowing to the host wire, a read past the end, a `Flt` decode — reach for the same classes as instruction sequences, since they are decided while lowering an intrinsic rather than as nodes. The sentences themselves are the emitter's (`curios-emit`'s `refusal.rs`), so what the IR states is the vocabulary and what the emitter states is the text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Panic {
     /// A `Nat` argument to a foreign function the wire's unsigned `i64` cannot carry. The wire is bounded; the number inside the program is unbounded.
     NatWire,
@@ -230,25 +231,13 @@ pub enum Panic {
     OutOfBounds,
     /// A `Flt` decoded from a byte string that is not eight bytes long.
     FltDecode,
-    /// A recursive value read while its own initializer is still running — a cycle the eager verifier could not see through a closure, met by forcing.
-    Cycle,
+    /// A recursive value read while its own initializer is still running — a cycle the eager verifier could not see through a closure, met by forcing. It holds the member whose initializer the guard stands at, where that member has a name, so the sentence says which value it is.
+    Cycle(Option<MemberId>),
     /// An arm the theory proved impossible was taken: a compiler bug, never the program's.
     Invariant,
 }
 
-impl Panic {
-    /// Every class, in declaration order: the order the emitter writes the refusal helpers a module reaches.
-    pub const ALL: [Panic; 7] = [
-        Panic::NatWire,
-        Panic::IntWire,
-        Panic::Capacity,
-        Panic::OutOfBounds,
-        Panic::FltDecode,
-        Panic::Cycle,
-        Panic::Invariant,
-    ];
-}
-
+/// The class's spelling, a named cycle's with its member's place after it: what the emitter names a refusal's helper and its sentence's segment by.
 impl fmt::Display for Panic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
@@ -257,7 +246,8 @@ impl fmt::Display for Panic {
             Panic::Capacity => "capacity",
             Panic::OutOfBounds => "bounds",
             Panic::FltDecode => "flt",
-            Panic::Cycle => "cycle",
+            Panic::Cycle(None) => "cycle",
+            Panic::Cycle(Some(member)) => return write!(f, "cycle/{}", member.index()),
             Panic::Invariant => "invariant",
         })
     }

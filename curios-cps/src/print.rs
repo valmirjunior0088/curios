@@ -16,7 +16,8 @@ mod tests;
 use {
     super::{
         Atom, Callee, CellOp, ChannelOp, ContinuationId, Edge, FieldGroup, FunctionId, Intrinsic,
-        IntrinsicCall, Literal, Module, Node, NodeId, Register, RowId, Slot, ValueExpr, ValueId,
+        IntrinsicCall, Literal, Module, Node, NodeId, Panic, Register, RowId, Slot, ValueExpr,
+        ValueId,
     },
     curios_abi::Namespace,
     curios_common::{grown, recurse},
@@ -417,7 +418,17 @@ impl Printer<'_, '_, '_, '_> {
                     );
                     return self.line(indent, halt);
                 }
-                Node::Panic(panic) => return self.line(indent, format!("panic {panic}{suffix}")),
+                Node::Panic(panic) => {
+                    let named = match panic {
+                        Panic::Cycle(Some(member)) => self
+                            .module
+                            .members()
+                            .get(member.index())
+                            .map_or_else(String::new, |name| format!("${name}")),
+                        _ => String::new(),
+                    };
+                    return self.line(indent, format!("panic {panic}{named}{suffix}"));
+                }
                 Node::Unreachable => return self.line(indent, format!("unreachable{suffix}")),
             };
         }

@@ -21,6 +21,7 @@ use {
 pub fn structurize(machine: &MachineModule) -> EmissionModule {
     let mut output = EmissionModule::new();
     output.set_rows(machine.rows().to_vec());
+    output.set_members(machine.members().to_vec());
     output.set_entry_suspension(machine.entry_suspension());
     output.set_rebuilt(rebuilt_slots(machine));
     for (function, wrapper) in &machine.wrappers {

@@ -3,7 +3,7 @@
 use {
     super::{
         Atom, Callee, ContinuationId, Edge, Function, FunctionId, Intrinsic, IntrinsicCall, Module,
-        Node, NodeId, RowId, ValueExpr, ValueId, atoms, function_nodes, rows_reaching,
+        Node, NodeId, Panic, RowId, ValueExpr, ValueId, atoms, function_nodes, rows_reaching,
     },
     curios_common::Sorted,
     std::{
@@ -1089,6 +1089,13 @@ impl Module {
                         args.len()
                     )));
                 }
+            }
+            Node::Panic(Panic::Cycle(Some(member)))
+                if self.members().get(member.index()).is_none() =>
+            {
+                return Err(VerifyError(format!(
+                    "{id} names the member {member}, which the module holds no name for"
+                )));
             }
             Node::Panic(_) | Node::Unreachable => {}
         }

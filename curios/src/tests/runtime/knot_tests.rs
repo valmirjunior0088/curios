@@ -128,12 +128,12 @@ fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
         main()
         "#,
     );
-    // The lowering emits `Panic(Cycle)`, and inlining the force function must preserve the refusal.
+    // The lowering emits `Panic(Cycle)` holding the member, and inlining the force function must preserve the refusal and the name it states.
     assert!(
         error.contains(
-            "panic: a recursive value was read while its own initializer was still running"
+            "panic: the recursive value `n` was read while its own initializer was still running"
         ),
-        "the stop must name the cycle: {error}"
+        "the stop must name the cycle and the member being forced: {error}"
     );
 }
 

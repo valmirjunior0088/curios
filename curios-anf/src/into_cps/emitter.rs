@@ -483,9 +483,10 @@ impl<'a> Emitter<'a> {
             body: run,
         });
         let run = self.continuation_of(run);
+        let member = hint.clone().map(|name| self.module.add_member(name));
         let cycle = self
             .module
-            .add_node(curios_cps::Node::Panic(curios_cps::Panic::Cycle));
+            .add_node(curios_cps::Node::Panic(curios_cps::Panic::Cycle(member)));
         let cycle = self.continuation_of(cycle);
         let status = self.module.add_value(None);
         let taken = self.module.add_node(curios_cps::Node::Switch {

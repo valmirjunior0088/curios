@@ -672,7 +672,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     /// Add the refusal helpers the emitted code referenced: per class, a passive data segment holding the sentence and a function that builds the `$bytes` payload from it, hands that to `sys.panic` and ends in the `unreachable` the import's return would otherwise need. The payload is built where the refusal fires, a path taken at most once, so a module pays nothing at start-up for a message it never prints.
     fn emit_refuse_funcs(&mut self) {
         for (class, func_name) in self.table.refuse_funcs() {
-            let bytes = refusal_message(class).as_bytes().to_vec();
+            let bytes =
+                refusal_message(class, |member| self.table.member(member).to_owned()).into_bytes();
             let length = bytes.len() as i32;
             let data_name = refusal_data_name(class);
             let type_name = curios_wasm::TypeName::from(func_name.as_str());

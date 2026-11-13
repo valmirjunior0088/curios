@@ -1315,10 +1315,12 @@ fn an_empty_initializer_is_a_cycle_and_a_taken_initializer_fills_the_result() {
     let curios_cps::Node::Switch { cases, .. } = resumed(&module, *return_to) else {
         panic!("take outcome")
     };
-    assert!(matches!(
-        resumed(&module, cases[&1].target),
-        curios_cps::Node::Panic(curios_cps::Panic::Cycle)
-    ));
+    let curios_cps::Node::Panic(curios_cps::Panic::Cycle(Some(member))) =
+        resumed(&module, cases[&1].target)
+    else {
+        panic!("a cycle naming its member")
+    };
+    assert_eq!(module.members()[member.index()], "left");
     let curios_cps::Node::ApplyFun {
         callee: curios_cps::Callee::Closure(thunk),
         args,
