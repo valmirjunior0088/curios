@@ -12,8 +12,11 @@
 mod tests;
 
 use {
-    crate::{EXTENSION, LIBRARY, MANIFEST, Manifest, Package, require_compiler, umbrella_over},
-    curios_common::{Qualifier, RootKind, is_identifier},
+    crate::{
+        EXTENSION, LIBRARY, MANIFEST, Manifest, Package, Refused, Step, require_compiler,
+        umbrella_over,
+    },
+    curios_common::{Qualifier, Report, RootKind, is_identifier},
     curios_module::{RootSource, open_entrypoint},
     std::{
         collections::BTreeMap,
@@ -23,14 +26,15 @@ use {
 };
 
 /// The package whose manifest sits in `directory`, and the resolver its library is lowered from — `None` when it has no library at all.
-pub fn package_at(directory: &Path) -> Result<(Package, Option<RootSource>), String> {
+pub fn package_at(directory: &Path) -> Result<(Package, Option<RootSource>), Box<Report>> {
     let manifest = Manifest::from_path(&directory.join(MANIFEST))?;
 
     let Manifest::Package(package) = manifest else {
-        return Err(format!(
-            "{} declares an umbrella, and an umbrella compiles nothing of its own: name one of its members instead",
-            directory.join(MANIFEST).display()
-        ));
+        return Err(Refused::of("not a package")
+            .stating("this manifest declares an umbrella")
+            .stating("an umbrella compiles nothing of its own")
+            .stating("name one of its members")
+            .about_path(&directory.join(MANIFEST)));
     };
 
     let source = package_source(&package, directory)?;
@@ -108,7 +112,10 @@ fn spelled_segments(relative: &Path) -> Option<Vec<String>> {
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.
 ///
 /// Every unit's `mod` chain is read here and read again when discovery asks for it. That is deliberate: the refusal of a file two units reach has to fire before elaboration, and one arriving as a module compiled twice, or as a program parsed as a module, would say nothing of the two claims. It is parsed once all the same where the two read one text, both reads going through the thread's parse memo (`curios_module::read_module`). Read from disk here; a source overlay reaches discovery's read and not this one, so a claim is judged on what is saved, which is the only thing two claims can be between.
-pub fn package_source(package: &Package, directory: &Path) -> Result<Option<RootSource>, String> {
+pub fn package_source(
+    package: &Package,
+    directory: &Path,
+) -> Result<Option<RootSource>, Box<Report>> {
     let umbrella = umbrella_over(directory)?;
     require_compiler(
         package,
@@ -142,24 +149,33 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
 
     // A module answers declarations of its package's library, so with no library there is none for a row's exports to answer — and no unit to hold the claim to.
     if source.is_none()
-        && let Some(foreign) = package
+        && let Some((row, foreign)) = package
             .foreign
             .iter()
-            .find(|foreign| !foreign.answers.is_empty())
+            .enumerate()
+            .find(|(_, foreign)| !foreign.answers.is_empty())
     {
-        return Err(format!(
-            "the foreign row {:?} of {} names declarations its exports answer, and the package has no `{LIBRARY}` to declare them in: a module answers its own package's declarations",
-            foreign.name, package.name
-        ));
+        return Err(Refused::of("no library")
+            .stating(format_args!(
+                "the foreign row `{}` names declarations its exports answer",
+                foreign.name
+            ))
+            .stating(format_args!(
+                "the package has no `{LIBRARY}` to declare them in"
+            ))
+            .stating("a module answers its own package's declarations")
+            .entry([Step::key("foreign"), Step::Row(row), Step::key("answers")])
+            .located_at(&directory.join(MANIFEST)));
     }
 
     Ok(source)
 }
 
-/// One unit's claim on a file: who claims it, and whether as the program compiled from it or as a module its `mod` chain reaches.
+/// One unit's claim on a file: who claims it, whether as the program compiled from it or as a module its `mod` chain reaches, and the `[[executables]]` row that makes the claim, for an executable.
 struct Claim {
     claimant: String,
     entry: bool,
+    row: Option<usize>,
 }
 
 /// Who claims the library's files.
@@ -172,7 +188,7 @@ fn one_unit_each(
     package: &Package,
     directory: &Path,
     library: Option<&RootSource>,
-) -> Result<(), String> {
+) -> Result<(), Box<Report>> {
     if package.executables.is_empty() {
         return Ok(());
     }
@@ -185,25 +201,31 @@ fn one_unit_each(
             let claim = Claim {
                 claimant: LIBRARY_CLAIMANT.to_string(),
                 entry: false,
+                row: None,
             };
             (file, claim)
         });
-    let executable_files = package.executables.iter().flat_map(|executable| {
-        let entry = directory.join(&executable.path);
-        let modules = open_entrypoint(&entry)
-            .map(|(entrypoint, loader, _)| loader.entry_reached_files(&entrypoint.module.items))
-            .unwrap_or_default();
+    let executable_files = package
+        .executables
+        .iter()
+        .enumerate()
+        .flat_map(|(row, executable)| {
+            let entry = directory.join(&executable.path);
+            let modules = open_entrypoint(&entry)
+                .map(|(entrypoint, loader, _)| loader.entry_reached_files(&entrypoint.module.items))
+                .unwrap_or_default();
 
-        iter::once((entry, true))
-            .chain(modules.into_iter().map(|file| (file, false)))
-            .map(|(file, entry)| {
-                let claim = Claim {
-                    claimant: package.describe(executable),
-                    entry,
-                };
-                (file, claim)
-            })
-    });
+            iter::once((entry, true))
+                .chain(modules.into_iter().map(|file| (file, false)))
+                .map(move |(file, entry)| {
+                    let claim = Claim {
+                        claimant: package.describe(executable),
+                        entry,
+                        row: Some(row),
+                    };
+                    (file, claim)
+                })
+        });
 
     let mut claimed = BTreeMap::<PathBuf, Claim>::new();
     for (file, claim) in library_files.chain(executable_files) {
@@ -218,20 +240,32 @@ fn one_unit_each(
     Ok(())
 }
 
-/// Why `file` cannot be in the units of `earlier` and `later` both, and what would put it in one.
+/// Why `file` cannot be in the units of `earlier` and `later` both, and what would put it in one: at the row of the program compiled from it where one of the two is, the later of two, and about the file where both reach it as a module.
 fn refusal(
     package: &Package,
     directory: &Path,
     file: &Path,
     earlier: &Claim,
     later: &Claim,
-) -> String {
+) -> Box<Report> {
     let spelled = file.strip_prefix(directory).unwrap_or(file).display();
+    let twice = Refused::of("file claimed twice");
+    let at_row = |refused: Refused, claim: &Claim| match claim.row {
+        Some(row) => refused
+            .entry([Step::key("executables"), Step::Row(row)])
+            .located_at(&directory.join(MANIFEST)),
+        None => refused.about_path(file),
+    };
 
     match (earlier.entry, later.entry) {
-        (true, true) => format!(
-            "{} and {} are both compiled from `{spelled}`: a file is one program's",
-            earlier.claimant, later.claimant
+        (true, true) => at_row(
+            twice
+                .stating(format_args!(
+                    "{} and {} are both compiled from `{spelled}`",
+                    earlier.claimant, later.claimant
+                ))
+                .stating("a file is one program's"),
+            later,
         ),
         (true, false) | (false, true) => {
             let (program, module) = match earlier.entry {
@@ -245,9 +279,19 @@ fn refusal(
                 false => None,
             }
             .unwrap_or_else(|| "a module".to_string());
-            format!(
-                "{} is compiled from `{spelled}`, which {} also declares as {named}: a file is a program or a module, never both",
-                program.claimant, module.claimant
+
+            at_row(
+                twice
+                    .stating(format_args!(
+                        "{} is compiled from `{spelled}`",
+                        program.claimant
+                    ))
+                    .stating(format_args!(
+                        "{} also declares it as {named}",
+                        module.claimant
+                    ))
+                    .stating("a file is a program or a module, never both"),
+                program,
             )
         }
         (false, false) => {
@@ -261,10 +305,15 @@ fn refusal(
                 }
                 false => format!("declare it in the library, and reach it from both{reach}"),
             };
-            format!(
-                "`{spelled}` is a module of {} and of {}: a file is one unit's, so {remedy}",
-                earlier.claimant, later.claimant
-            )
+
+            twice
+                .stating(format_args!(
+                    "`{spelled}` is a module of {} and of {}",
+                    earlier.claimant, later.claimant
+                ))
+                .stating("a file is one unit's")
+                .stating(remedy)
+                .about_path(file)
         }
     }
 }

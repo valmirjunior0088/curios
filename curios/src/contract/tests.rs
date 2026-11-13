@@ -373,7 +373,7 @@ fn expected() -> String {
 const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, leaves Nothing, options --target --port --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → refused: `run` takes a program's own file, and <root>/work/app/helper.crs is a module of `serve`: name `serve` instead
@@ -407,7 +407,7 @@ const EXPECTED: &str = r#"run SUBJECT — Program (its own file), store Write, l
 compile SUBJECT — Program (its own file), store Write, leaves Executable, options --target --output --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → refused: `compile` files what it builds under the package that declares it, and standard input has none: say where, as in `curios compile - --output program`
   work/app: serve.crs → program serve
   work/app: helper.crs → refused: `compile` takes a program's own file, and <root>/work/app/helper.crs is a module of `serve`: name `serve` instead
@@ -441,7 +441,7 @@ compile SUBJECT — Program (its own file), store Write, leaves Executable, opti
 compile SUBJECT --output out — Program (its own file), store Write, leaves Executable, options --target --output --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → refused: `compile` takes a program's own file, and <root>/work/app/helper.crs is a module of `serve`: name `serve` instead
@@ -475,7 +475,7 @@ compile SUBJECT --output out — Program (its own file), store Write, leaves Exe
 document SUBJECT — Library, store Write, leaves Pages, options --std --output --budget --manifest
   work/app: (none) → library app
   work/app: serve → refused: `document` takes a library, and a program is not one
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → refused: `document` takes a library, and a program is not one
   work/app: serve.crs → refused: `document` takes a library, and a program is not one
   work/app: helper.crs → refused: `document` takes a library, and a program is not one
@@ -511,7 +511,7 @@ document --std site — Nothing, store None, leaves Pages, options --std --outpu
 test SUBJECT — Any, store Write, leaves Nothing, options --target --port --filter --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → program serve through helper.crs
@@ -574,7 +574,7 @@ new fresh — Nothing, store None, leaves Package, options none
 lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → program serve through helper.crs
@@ -608,7 +608,7 @@ lint SUBJECT — Any, store Write, leaves Nothing, options --budget --manifest
 format SUBJECT — Files, store None, leaves Rewritten, options --check --width --manifest
   work/app: (none) → files lib.crs util.crs serve.crs helper.crs helper/deep.crs bench.crs within 100
   work/app: serve → files serve.crs helper.crs helper/deep.crs within 100
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → standard input within 100
   work/app: serve.crs → files serve.crs within 100
   work/app: helper.crs → files helper.crs within 100
@@ -642,7 +642,7 @@ format SUBJECT — Files, store None, leaves Rewritten, options --check --width 
 wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --server --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → program serve through helper.crs
@@ -676,7 +676,7 @@ wonder SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --st
 wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --server --budget --manifest
   work/app: (none) → entire app
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → program serve through helper.crs
@@ -710,7 +710,7 @@ wonder --tests SUBJECT — Any, store Write, leaves Nothing, options --tests --c
 wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → program serve through helper.crs
@@ -744,7 +744,7 @@ wonder --cost SUBJECT — Program, store Write, leaves Nothing, options --tests 
 wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → program serve through helper.crs
@@ -778,7 +778,7 @@ wonder --stage core SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, o
 wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → program serve through helper.crs
@@ -812,7 +812,7 @@ wonder --stage anf SUBJECT — Program, store Write, leaves Nothing, options --t
 wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → program serve through helper.crs
@@ -846,7 +846,7 @@ wonder --at 1:1 SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, optio
 wonder --declarations SUBJECT — ProgramOrLibrary, store Write, leaves Nothing, options --tests --cost --stage --at --declarations --server --budget --manifest
   work/app: (none) → program serve
   work/app: serve → program serve
-  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable "serve", the executable "bench"
+  work/app: absent → refused: "app" declares no executable named "absent"; it declares the executable `serve`, the executable `bench`
   work/app: - → loose -
   work/app: serve.crs → program serve
   work/app: helper.crs → program serve through helper.crs

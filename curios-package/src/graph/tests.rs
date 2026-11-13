@@ -197,7 +197,7 @@ fn two_dependents_resolving_one_name_two_ways_is_refused() {
     let refusal = mounts(&root.join("app")).expect_err("one name, two places");
     assert!(refusal.contains("resolves two ways"), "{refusal}");
     assert!(
-        refusal.contains("\"left\"") && refusal.contains("\"right\""),
+        refusal.contains("`left`") && refusal.contains("`right`"),
         "{refusal}"
     );
 }
@@ -310,7 +310,7 @@ fn two_dependents_pinning_one_name_two_ways_is_refused() {
         "{refusal}"
     );
     assert!(
-        refusal.contains("\"left\"") && refusal.contains("\"right\""),
+        refusal.contains("`left`") && refusal.contains("`right`"),
         "both dependents are named: {refusal}"
     );
 
@@ -396,7 +396,7 @@ fn a_catalogued_pin_against_a_direct_pin_is_refused_as_two_pins() {
         "{refusal}"
     );
     assert!(
-        refusal.contains("\"left\"") && refusal.contains("\"right\""),
+        refusal.contains("`left`") && refusal.contains("`right`"),
         "both dependents are named: {refusal}"
     );
 }
@@ -431,7 +431,7 @@ fn a_dependency_cycle_is_refused() {
     let refusal = mounts(&root.join("a")).expect_err("a cycle");
     assert!(refusal.contains("cycle"), "{refusal}");
     assert!(
-        refusal.contains("\"a\"") && refusal.contains("\"b\""),
+        refusal.contains("`a` depends on `b`\n│  `b` depends on `a` again"),
         "{refusal}"
     );
 }
@@ -477,7 +477,7 @@ fn a_cycle_reached_through_a_placed_name_is_refused() {
     let refusal = mounts(&root.join("app")).expect_err("b and c cycle");
     assert!(refusal.contains("cycle"), "{refusal}");
     assert!(
-        refusal.contains("\"b\"") && refusal.contains("\"c\""),
+        refusal.contains("`b` depends on `c`\n│  `c` depends on `b` again"),
         "{refusal}"
     );
 }
@@ -510,7 +510,7 @@ fn a_row_keyed_by_the_wrong_name_is_refused() {
     );
 
     let refusal = mounts(&root.join("app")).expect_err("a consumer cannot rename a package");
-    assert!(refusal.contains("declares itself \"base\""), "{refusal}");
+    assert!(refusal.contains("declares itself `base`"), "{refusal}");
 }
 
 /// A pin and a live row for one name are refused as a pin against a live row, in either order: the store's directory for the pinned side is the right directory and the wrong fact, and a reader sent there would be looking for a path nobody wrote.
@@ -578,11 +578,11 @@ fn a_pin_against_a_live_row_is_refused_as_pinned_against_live() {
 
         let refusal = mounts(&root.join("app")).expect_err(name);
         assert!(
-            refusal.contains(&format!("is pinned to `abc123` ({hash}) by {pinned:?}")),
+            refusal.contains(&format!("is pinned to `abc123` ({hash}) by `{pinned}`")),
             "{name}: {refusal}"
         );
         assert!(
-            refusal.contains(&format!("taken live by {live:?} from")),
+            refusal.contains(&format!("taken live by `{live}` from")),
             "{name}: {refusal}"
         );
         assert!(!refusal.contains("resolves two ways"), "{name}: {refusal}");
@@ -621,7 +621,7 @@ fn the_four_marker_mismatches_are_four_refusals() {
         (
             "graph-marker-unenumerated",
             "name = \"app\"\n\n[dependencies]\nabsent = { source = \"member\" }\n",
-            "the governing umbrella enumerates no member declaring that name",
+            "the governing umbrella lists no member declaring that name",
         ),
         // A `catalog` row naming something the catalog does not hold.
         (
@@ -677,12 +677,15 @@ fn a_catalog_row_pointing_nowhere_is_refused_against_the_umbrella() {
 
     let refusal = mounts(&root.join("app")).expect_err("a catalog row with nothing at its path");
     assert!(
-        refusal.starts_with(&format!(
-            "the catalog row \"shape\" of the umbrella at {}, which the dependency \"shape\" of \"app\" names, resolves to {}",
-            root.join(MANIFEST).display(),
+        refusal.contains(&format!(
+            "`shape` resolves to {}",
             root.join("vendor/shape").display()
         )),
         "{refusal}"
+    );
+    assert!(
+        refusal.ends_with(&format!("╰─ [error] {}:5:1", root.join(MANIFEST).display())),
+        "the catalog row, in the umbrella's manifest: {refusal}"
     );
 }
 
@@ -706,11 +709,15 @@ fn a_dependency_with_no_manifest_is_refused_against_the_row() {
     );
 
     let refusal = mounts(&root.join("app")).expect_err("a directory that is not a package");
+    assert!(refusal.contains("`base` resolves to"), "{refusal}");
+    assert!(refusal.contains("no `curios.toml` sits there"), "{refusal}");
     assert!(
-        refusal.starts_with("the dependency \"base\" of \"app\" resolves to"),
-        "{refusal}"
+        refusal.ends_with(&format!(
+            "╰─ [error] {}:5:1",
+            root.join("app").join(MANIFEST).display()
+        )),
+        "the row, in its dependent's manifest: {refusal}"
     );
-    assert!(refusal.contains("holds no `curios.toml`"), "{refusal}");
     assert!(!refusal.contains("os error"), "{refusal}");
 }
 
@@ -751,7 +758,7 @@ fn a_marker_in_an_ungoverned_package_is_refused_for_the_missing_governance() {
 
         let refusal = mounts(&root.join("app")).expect_err(name);
         assert!(
-            refusal.contains("no umbrella governs \"app\""),
+            refusal.contains("no umbrella governs `app`"),
             "{name}: {refusal}"
         );
         assert!(

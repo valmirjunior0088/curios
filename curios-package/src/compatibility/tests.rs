@@ -84,8 +84,12 @@ fn the_running_compilers_version_is_accepted_whatever_its_build() {
             &format!("name = \"app\"\ncompiler = \"{version}\"\n"),
         );
         let governing = Governing::of(&root).expect("the declaration is valid");
-        order(&governing)
-            .unwrap_or_else(|error| panic!("the installed compiler is the one stated: {error}"));
+        order(&governing).unwrap_or_else(|error| {
+            panic!(
+                "the installed compiler is the one stated: {}",
+                error.render()
+            )
+        });
     }
 }
 
@@ -101,7 +105,8 @@ fn another_version_newer_or_older_names_the_manifest_and_both_versions() {
         let governing = Governing::of(&root).expect("the manifest is well formed");
         let error = order(&governing)
             .err()
-            .expect("this compiler is not the one stated");
+            .expect("this compiler is not the one stated")
+            .render();
         assert!(
             error.contains(&root.join(MANIFEST).display().to_string()),
             "{error}"
@@ -174,7 +179,8 @@ fn an_inherited_other_version_is_reported_against_the_umbrella() {
     let governing = Governing::of(&root.join("member")).expect("the manifest is well formed");
     let error = order(&governing)
         .err()
-        .expect("the inherited version is not this compiler's");
+        .expect("the inherited version is not this compiler's")
+        .render();
     assert!(
         error.contains(&root.join(MANIFEST).display().to_string()),
         "{error}"
@@ -203,7 +209,8 @@ fn dependencies_use_their_own_umbrella_and_never_the_consumers() {
     let governing = Governing::of(&root.join("app")).expect("the root package is supported");
     let error = order(&governing)
         .err()
-        .expect("the dependency is written for another compiler");
+        .expect("the dependency is written for another compiler")
+        .render();
     assert!(
         error.contains(&root.join("vendor/curios.toml").display().to_string()),
         "{error}"
@@ -212,7 +219,8 @@ fn dependencies_use_their_own_umbrella_and_never_the_consumers() {
     fs::remove_file(root.join("vendor/curios.toml")).unwrap();
     let error = order(&governing)
         .err()
-        .expect("the dependency states no version of its own");
+        .expect("the dependency states no version of its own")
+        .render();
     assert!(
         error.contains("a standalone package states one, as `compiler"),
         "{error}"

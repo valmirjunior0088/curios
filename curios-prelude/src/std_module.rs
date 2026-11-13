@@ -20,8 +20,12 @@ pub fn std_directory() -> PathBuf {
 ///
 /// **Read as the package it is, by the reader every package has.** Its `curios.toml` names it, describes it and says what its modules answer, and `curios-package` makes the unit's source of that here exactly as it does for a package a command compiles. So the library the compiler is built with and the one a command compiles from this tree are one reading of one manifest, and nothing the manifest states is restated in Rust. Its header is `lib.crs` beside the manifest and its namespace *is* that directory; nothing here enumerates its modules, because a module enters a unit by being declared `mod` in a header and the resolver reads each one when discovery asks for it.
 pub fn std_source() -> RootSource {
-    let (_, source) = package_at(&std_directory())
-        .unwrap_or_else(|refusal| panic!("the standard library's package is refused: {refusal}"));
+    let (_, source) = package_at(&std_directory()).unwrap_or_else(|refusal| {
+        panic!(
+            "the standard library's package is refused: {}",
+            refusal.render()
+        )
+    });
 
     source
         .expect("the standard library's header sits beside its manifest")

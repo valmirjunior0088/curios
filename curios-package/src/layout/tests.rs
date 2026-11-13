@@ -125,10 +125,11 @@ fn a_module_two_units_declare_is_refused() {
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("a module two units declare");
+        .expect_err("a module two units declare")
+        .render();
     assert!(
         refusal.contains(
-            "`parse.crs` is a module of the library and of the package's own executable \"json\""
+            "`parse.crs` is a module of the library and of the package's own executable `json`"
         ),
         "{refusal}"
     );
@@ -153,9 +154,10 @@ fn a_program_the_library_declares_as_a_module_is_refused() {
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("a program and a module at once");
+        .expect_err("a program and a module at once")
+        .render();
     assert!(
-        refusal.contains("the executable \"parse\" is compiled from `parse.crs`, which the library also declares as the module `/json/parse`"),
+        refusal.contains("the executable `parse` is compiled from `parse.crs`\n│  the library also declares it as the module `/json/parse`"),
         "{refusal}"
     );
 }
@@ -177,12 +179,13 @@ fn two_programs_compiled_from_one_file_are_refused_without_a_library() {
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("two programs from one file, library or no library");
-    assert!(refusal.contains("the executable \"foo\""), "{refusal}");
+        .expect_err("two programs from one file, library or no library")
+        .render();
+    assert!(refusal.contains("the executable `foo`"), "{refusal}");
     // The second claimant is one the manifest never wrote, so the refusal says what wrote it.
     assert!(
         refusal.contains(
-            "the package's own executable \"json\" that `exe.crs` beside the manifest declares"
+            "the package's own executable `json` that `exe.crs` beside the manifest declares"
         ),
         "{refusal}"
     );
@@ -207,7 +210,8 @@ fn an_unparseable_header_still_leaves_the_executables_checked() {
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("two programs from one file");
+        .expect_err("two programs from one file")
+        .render();
     assert!(
         refusal.contains("are both compiled from `exe.crs`"),
         "{refusal}"
@@ -254,10 +258,11 @@ fn an_executable_the_library_declares_as_a_module_is_refused() {
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("a file that is a program and a module");
-    assert!(refusal.contains("the executable \"tool\""), "{refusal}");
+        .expect_err("a file that is a program and a module")
+        .render();
+    assert!(refusal.contains("the executable `tool`"), "{refusal}");
     assert!(
-        refusal.contains("declares as the module `/nested/app/main`"),
+        refusal.contains("declares it as the module `/nested/app/main`"),
         "{refusal}"
     );
 }
@@ -277,6 +282,7 @@ fn an_umbrella_is_not_a_unit() {
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("an umbrella is not a unit");
+        .expect_err("an umbrella is not a unit")
+        .render();
     assert!(refusal.contains("compiles nothing of its own"), "{refusal}");
 }

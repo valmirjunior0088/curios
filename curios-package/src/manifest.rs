@@ -139,10 +139,10 @@ impl Package {
     pub fn describe(&self, executable: &Executable) -> String {
         match executable.name == self.name && executable.path == Path::new(EXECUTABLE) {
             true => format!(
-                "the package's own executable {:?} that `{EXECUTABLE}` beside the manifest declares",
+                "the package's own executable `{}` that `{EXECUTABLE}` beside the manifest declares",
                 executable.name
             ),
-            false => format!("the executable {:?}", executable.name),
+            false => format!("the executable `{}`", executable.name),
         }
     }
 }

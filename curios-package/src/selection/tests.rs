@@ -116,7 +116,7 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
     let refusal = entry(None, &ambiguous).expect_err("two executables and no default");
     assert!(refusal.contains("more than one executable"), "{refusal}");
     assert!(
-        refusal.contains("\"serve\"") && refusal.contains("\"bench\""),
+        refusal.contains("`serve`") && refusal.contains("`bench`"),
         "{refusal}"
     );
     // `compile` and `wonder --stage` resolve a bare command through the same call, so the refusal names no subcommand.
@@ -164,7 +164,7 @@ fn a_name_selects_a_declared_executable() {
         refusal.contains("no executable named \"absent\""),
         "{refusal}"
     );
-    assert!(refusal.contains("\"serve\""), "{refusal}");
+    assert!(refusal.contains("`serve`"), "{refusal}");
 }
 
 /// **The placement.** A file is placed by what declares it, whichever command asks: an executable's entry is that executable, and a file beside it that no `mod` declares is loose.
@@ -404,7 +404,7 @@ fn a_found_executable_is_listed_with_the_file_that_declares_it() {
     let refusal = entry(None, &root).expect_err("two executables and no default");
     assert!(
         refusal.ends_with(
-            "; it declares the executable \"serve\", the package's own executable \"app\" that `exe.crs` beside the manifest declares"
+            "; it declares the executable `serve`, the package's own executable `app` that `exe.crs` beside the manifest declares"
         ),
         "{refusal}"
     );
@@ -432,7 +432,7 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
     let refusal = entry(None, &root).expect_err("no exe.crs to mean");
     assert_eq!(
         refusal,
-        "\"app\" has no executable of its own: no `exe.crs` sits beside the manifest, and no `[[executables]]` row declares one by that name; it declares the executable \"serve\""
+        "\"app\" has no executable of its own: no `exe.crs` sits beside the manifest, and no `[[executables]]` row declares one by that name; it declares the executable `serve`"
     );
 
     // Asked for by name rather than through `default`, the same absence earns the same words.
