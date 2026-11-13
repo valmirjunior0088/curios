@@ -16,7 +16,7 @@ fn write(root: &Path, path: &str, source: &str) {
 
 fn future() -> CompilerVersion {
     let mut version = CompilerVersion::current();
-    version.0.major += 1;
+    version.version.major += 1;
     version
 }
 
@@ -25,18 +25,83 @@ fn past() -> CompilerVersion {
 }
 
 #[test]
-fn a_compiler_version_is_bare_and_never_a_range() {
-    for spelling in ["", "1.2", ">=1.2.3", "^1.2.3", "1.2.3, <2.0.0"] {
+fn a_compiler_version_is_bare_or_a_minimum_and_no_other_range() {
+    for spelling in [
+        "",
+        "1.2",
+        ">= 1.2",
+        "^1.2.3",
+        "~1.2.3",
+        "> 1.2.3",
+        "<= 1.2.3",
+        "1.2.3, <2.0.0",
+        ">= 1.2.3, <2.0.0",
+    ] {
         let error = spelling
             .parse::<CompilerVersion>()
             .unwrap_err()
             .said
             .to_string();
-        assert!(error.contains("bare SemVer version"), "{error}");
+        assert!(
+            error.contains("`compiler` is a SemVer version such as")
+                && error.contains("or a minimum, \">= "),
+            "{error}"
+        );
     }
-    assert_eq!(
-        "1.2.3".parse::<CompilerVersion>().unwrap().to_string(),
-        "1.2.3"
+    for (spelling, written) in [
+        ("1.2.3", "1.2.3"),
+        (">= 1.2.3", ">= 1.2.3"),
+        (">=1.2.3", ">= 1.2.3"),
+    ] {
+        assert_eq!(
+            spelling.parse::<CompilerVersion>().unwrap().to_string(),
+            written
+        );
+    }
+}
+
+/// A minimum accepts the version it names and every later one, and refuses an older compiler naming both versions.
+#[test]
+fn a_minimum_accepts_its_version_and_every_later_one() {
+    let root = Temporary::new("compatibility", "minimum");
+    for accepted in [past(), CompilerVersion::current()] {
+        write(
+            &root,
+            MANIFEST,
+            &format!("name = \"app\"\ncompiler = \">= {accepted}\"\n"),
+        );
+        let governing = Governing::of(&root).expect("the declaration is valid");
+        order(&governing).unwrap_or_else(|error| {
+            panic!(
+                "a compiler at or past the minimum is accepted: {}",
+                error.render()
+            )
+        });
+    }
+
+    let required = future();
+    write(
+        &root,
+        MANIFEST,
+        &format!("name = \"app\"\ncompiler = \">= {required}\"\n"),
+    );
+    let governing = Governing::of(&root).expect("the manifest is well formed");
+    let error = order(&governing)
+        .err()
+        .expect("this compiler is older than the minimum")
+        .render();
+    assert!(
+        error.contains(&format!(
+            "this package requires Curios {required} or later\n"
+        )),
+        "{error}"
+    );
+    assert!(
+        error.contains(&format!(
+            "this compiler is Curios {}",
+            CompilerVersion::current()
+        )),
+        "{error}"
     );
 }
 
