@@ -4,12 +4,12 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, Tree, called, core_read, malformed, nested,
-        tree, value, value_fields, value_term, value_variant, word,
+        Decoration, Fields, ReadError, Reader, Refusal, called, core_read, malformed, nested, tree,
+        value, value_fields, value_term, value_variant, word,
     },
     crate::{
         BytesPattern, CoreText, Frame, FuncParam, ListPattern, MatchPattern, MatrixArm, NatLiteral,
-        NatPattern, Pattern, Radix, Shown, label_terms, sub,
+        NatPattern, Pattern, Radix, Rendered, label_terms, sub,
     },
     curios_common::Plicity,
     curios_core::{
@@ -18,15 +18,15 @@ use {
 };
 
 /// A match: its head and motive, then each arm.
-pub fn match_written(
+pub fn match_written<D: Rendered>(
     Match {
         head,
         result,
         cases,
     }: Match,
-    frame: Frame,
-) -> Tree {
-    let mut fields = Vec::<Decoration>::new();
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
+    let mut fields = Vec::<Decoration<D>>::new();
     let motive = match result {
         MatchResult::Family(motive) => Some(motive_written(motive, frame)),
         MatchResult::Ambient(goal) => {
@@ -37,7 +37,7 @@ pub fn match_written(
             None
         }
     };
-    let mut held = Vec::<Decoration>::new();
+    let mut held = Vec::<Decoration<D>>::new();
     let arms = match cases {
         Cases::Bool {
             false_case,
@@ -153,7 +153,10 @@ fn binder(word: &str) -> MatchPattern {
 }
 
 /// A written motive: the function over its binders the family it states is.
-fn motive_written(motive: Scope<curios_core::Many>, frame: Frame) -> Tree {
+fn motive_written<D: Rendered>(
+    motive: Scope<curios_core::Many>,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let labels = frame.labels(motive.label_iter());
     let terms = label_terms(&labels);
     let opened = motive.open(&terms.iter().collect::<Vec<_>>());
@@ -173,12 +176,16 @@ fn motive_written(motive: Scope<curios_core::Many>, frame: Frame) -> Tree {
 }
 
 /// One arm: its pattern, then its body.
-fn arm(pattern: MatchPattern, body: Term, frame: Frame) -> MatrixArm<Shown> {
+fn arm<D: Rendered>(pattern: MatchPattern, body: Term, frame: Frame<'_, D>) -> MatrixArm<D> {
     MatrixArm::of(pattern, sub(body, frame))
 }
 
 /// A family's arm: its constructor's tag over its payload's binders, each under its mark.
-fn constructor_arm(tag: &str, induct_arm: InductArm, frame: Frame) -> MatrixArm<Shown> {
+fn constructor_arm<D: Rendered>(
+    tag: &str,
+    induct_arm: InductArm,
+    frame: Frame<'_, D>,
+) -> MatrixArm<D> {
     let labels = frame.labels(induct_arm.label_iter());
     let terms = label_terms(&labels);
     let args = labels

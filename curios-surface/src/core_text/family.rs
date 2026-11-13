@@ -4,12 +4,12 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, Tree, bracketed, call, called, core_read,
+        Decoration, Fields, ReadError, Reader, Refusal, bracketed, call, called, core_read,
         malformed, term_global, term_word, tree, universe_suffix, universes_read,
         universes_written, value, value_unmarked, value_variant, verbatim, word, word_value,
     },
     crate::{
-        CoreText, Frame, Shown, StructLit, StructLitEntry, TupleField, argument, name_of,
+        CoreText, Frame, Rendered, StructLit, StructLitEntry, TupleField, argument, name_of,
         nominal_arguments, string_literal, sub,
     },
     curios_common::Plicity,
@@ -19,8 +19,12 @@ use {
 };
 
 /// The fields a nominal node's decorator sets: the node it is, and the instance it stands at where it states one.
-fn nominal_fields(node: &'static str, universes: &Universes, frame: Frame) -> Vec<Decoration> {
-    let mut fields = Vec::<Decoration>::from([("node", word_value(node))]);
+fn nominal_fields<D: Rendered>(
+    node: &'static str,
+    universes: &Universes,
+    frame: Frame<'_, D>,
+) -> Vec<Decoration<D>> {
+    let mut fields = Vec::<Decoration<D>>::from([("node", word_value(node))]);
     if let Some(universes) = universes_written(universes, frame) {
         fields.push(("universes", universes));
     }
@@ -29,26 +33,30 @@ fn nominal_fields(node: &'static str, universes: &Universes, frame: Frame) -> Ve
 }
 
 /// A nominal declaration's name as it is written: in a reader's spelling, with the instance it stands at after it, a token no grammar reads.
-fn nominal_name(name: &Global, universes: &Universes, frame: Frame) -> Tree {
-    match frame.core_text() {
-        true => frame.global(name),
-        false => match universe_suffix(universes, frame) {
+fn nominal_name<D: Rendered>(
+    name: &Global,
+    universes: &Universes,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
+    match frame.reader() {
+        None => frame.global(name),
+        Some(leave) => match universe_suffix(universes, frame) {
             suffix if suffix.is_empty() => frame.global(name),
-            suffix => verbatim(format!("{}{suffix}", frame.spelling.symbol(name))),
+            suffix => verbatim(leave, format!("{}{suffix}", frame.spelling.symbol(name))),
         },
     }
 }
 
 /// A family as the call of its former: its parameters, then its indices where it has any; in a reader's spelling, each list only where it holds any, and the bare name where it has neither.
-pub fn family_written(
+pub fn family_written<D: Rendered>(
     InductType {
         name,
         universes,
         params,
         indices,
     }: InductType,
-    frame: Frame,
-) -> Tree {
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let marks = frame
         .spelling
         .nominal_marks(&name, params.len() + indices.len());
@@ -66,7 +74,7 @@ pub fn family_written(
 }
 
 /// A constructor's value as the call of its constructor's definition: its family's parameters under `@`, then its payload.
-pub fn variant_written(
+pub fn variant_written<D: Rendered>(
     Variant {
         name,
         universes,
@@ -74,17 +82,20 @@ pub fn variant_written(
         tag,
         payload,
     }: Variant,
-    frame: Frame,
-) -> Tree {
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     // A reader writes a constructor's value as the constructor's call, its family's parameters left for inference.
-    if !frame.core_text() {
+    if let Some(leave) = frame.reader() {
         let constructor = match universe_suffix(&universes, frame) {
             suffix if suffix.is_empty() => constructor_name(&name, &tag, frame),
-            suffix => verbatim(format!(
-                "{}{suffix}/{}",
-                frame.spelling.symbol(&name),
-                tag.as_string()
-            )),
+            suffix => verbatim(
+                leave,
+                format!(
+                    "{}{suffix}/{}",
+                    frame.spelling.symbol(&name),
+                    tag.as_string()
+                ),
+            ),
         };
         return match payload.is_empty() {
             true => constructor,
@@ -102,7 +113,7 @@ pub fn variant_written(
                 .into_iter()
                 .map(|field| argument(Plicity::Explicit, sub(field, frame))),
         )
-        .collect::<Vec<crate::Argument<Shown>>>();
+        .collect::<Vec<crate::Argument<D>>>();
 
     frame.decorated(
         nominal_fields("Variant", &universes, frame),
@@ -111,12 +122,12 @@ pub fn variant_written(
 }
 
 /// A constructor's definition named under its family: the family's path and the tag, as the spelling spells that path.
-fn constructor_name(name: &Global, tag: &Atom, frame: Frame) -> Tree {
+fn constructor_name<D: Rendered>(name: &Global, tag: &Atom, frame: Frame<'_, D>) -> crate::Term<D> {
     match name {
         Global::Authored(family) => {
             frame.global(&Global::Authored(family.with(tag.as_string().as_str())))
         }
-        Global::Witness(_) => verbatim(format!(
+        Global::Witness(_) => word(format!(
             "{}/{}",
             frame.spelling.symbol(name),
             tag.as_string()
@@ -125,14 +136,14 @@ fn constructor_name(name: &Global, tag: &Atom, frame: Frame) -> Tree {
 }
 
 /// A record type as the call of its former.
-pub fn record_written(
+pub fn record_written<D: Rendered>(
     StructType {
         name,
         universes,
         params,
     }: StructType,
-    frame: Frame,
-) -> Tree {
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let marks = frame.spelling.nominal_marks(&name, params.len());
     if !frame.core_text() && params.is_empty() {
         return nominal_name(&name, &universes, frame);
@@ -146,7 +157,7 @@ pub fn record_written(
 }
 
 /// A record literal: its former's call where it states parameters, and its fields between braces.
-pub fn literal_written(
+pub fn literal_written<D: Rendered>(
     Struct {
         name,
         universes,
@@ -154,8 +165,8 @@ pub fn literal_written(
         fields,
         entries,
     }: Struct,
-    frame: Frame,
-) -> Tree {
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     if let Some(literal) = string_literal(&name, &fields, frame.spelling) {
         return literal;
     }
@@ -192,7 +203,7 @@ pub fn literal_written(
             })
             .collect(),
     }));
-    let mut decoration = Vec::<Decoration>::new();
+    let mut decoration = Vec::<Decoration<D>>::new();
     if let Some(universes) = universes_written(&universes, frame) {
         decoration.push(("universes", universes));
     }
@@ -212,7 +223,7 @@ pub fn literal_written(
 }
 
 /// How a literal elaboration has not rebuilt wrote one of its entries, as Core names it.
-fn entry_written(entry: &StructEntry) -> Tree {
+fn entry_written<D: Rendered>(entry: &StructEntry) -> crate::Term<D> {
     let label = |label: &Option<String>| match label {
         Some(label) => called(word("Some"), vec![word(label.as_str())]),
         None => word("None"),

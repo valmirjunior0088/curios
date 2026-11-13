@@ -3,11 +3,9 @@
 //! **A function is written as it binds**, its parameters under their marks — `@x`, `use w` — each over the domain Core holds for it, and a type former's η-form as the lambda it is. **A call is its head and its arguments under their marks**, the head parenthesized where it is a lambda or carries a decorator of its own. **A foreign call is the call of its `foreign` declaration under `#{node = Foreign}`**, the type a row that does not return is handed under `@`: the row it is made through is the one that declaration states.
 
 use {
-    super::{
-        ReadError, Reader, Refusal, Tree, call, core_read, term_global, tree, word, word_value,
-    },
+    super::{ReadError, Reader, Refusal, call, core_read, term_global, tree, word, word_value},
     crate::{
-        CoreText, Frame, Pattern, call_arguments, lambda_parameters, marked_arguments,
+        CoreText, Frame, Pattern, Rendered, call_arguments, lambda_parameters, marked_arguments,
         parameter_types, sub,
     },
     curios_common::Plicity,
@@ -15,7 +13,10 @@ use {
 };
 
 /// A function type: its parameters, then what it returns.
-pub fn function_type_written(FuncType { telescope }: FuncType, frame: Frame) -> Tree {
+pub fn function_type_written<D: Rendered>(
+    FuncType { telescope }: FuncType,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let plicities = telescope.marks();
     let mut params = Vec::with_capacity(telescope.len());
     let output = parameter_types(telescope.cursor(), &plicities, frame, &mut params);
@@ -24,7 +25,10 @@ pub fn function_type_written(FuncType { telescope }: FuncType, frame: Frame) -> 
 }
 
 /// A function: its parameters, always between parentheses, each over its domain in Core text, then its body.
-pub fn function_written(Func { telescope }: Func, frame: Frame) -> Tree {
+pub fn function_written<D: Rendered>(
+    Func { telescope }: Func,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     // A reader is shown a type former's η-form as the former it stands for, the lambda a reader would contract anyway.
     if !frame.core_text()
         && let Some(former) = former_eta(&telescope)
@@ -39,7 +43,7 @@ pub fn function_written(Func { telescope }: Func, frame: Frame) -> Tree {
 }
 
 /// A type former a lambda is the η-form of, as a reader writes it: its name alone where the binders took every argument, and its call over what they left otherwise, each argument under the declaration's mark.
-fn former_written(former: FormerEta, frame: Frame) -> Tree {
+fn former_written<D: Rendered>(former: FormerEta, frame: Frame<'_, D>) -> crate::Term<D> {
     match former {
         FormerEta::Intrinsic(name) => word(frame.spelling.intrinsic_symbol(name)),
         FormerEta::Nominal(name, prefix, arity) => {
@@ -62,19 +66,22 @@ fn former_written(former: FormerEta, frame: Frame) -> Tree {
 }
 
 /// A call: its head, then its arguments under their marks. The printer parenthesizes a head no call takes as it stands: a lambda, which would take the arguments into its body, and a decorated node, whose decorator would be read over the call.
-pub fn apply_written(Apply { head, arguments }: Apply, frame: Frame) -> Tree {
+pub fn apply_written<D: Rendered>(
+    Apply { head, arguments }: Apply,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     call(sub(head, frame), call_arguments(arguments, frame))
 }
 
 /// A call across the wire: the call of the declaration that states its row.
-pub fn foreign_written(
+pub fn foreign_written<D: Rendered>(
     Foreign {
         function,
         declared,
         arguments: mut implicits,
     }: Foreign,
-    frame: Frame,
-) -> Tree {
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let explicits = implicits.split_off(usize::from(function.diverges()));
     let call = call(
         frame.global(&declared),

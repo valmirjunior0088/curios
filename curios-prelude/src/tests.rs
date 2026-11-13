@@ -416,26 +416,23 @@ fn written_whole(
     ));
     let spelling = curios_surface::Spelling::core_text()
         .with_form_scope(Rc::clone(&scope))
-        .written_whole()
-        .written_as_text();
+        .written_whole();
 
     (scope, Rc::new(spelling))
 }
 
-/// Every unit of the prelude reads back from the Core text it prints as the unit it is, item for item and by Core's equality, each read over the units before it: the printer and the reader hold one another to every form the prelude's terms take.
+/// Every unit of the prelude reads back as the unit it is, item for item and by Core's equality, each read over the units before it, from the tree of Core text it is written whole as and from the text that tree prints as: the writer is the reader's inverse, and the printer and the parser hold one another to every form the prelude's terms take.
 #[test]
 fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
     with_prelude(|prelude| {
         for (index, unit) in prelude.iter().enumerate() {
             let (scope, spelling) = written_whole(prelude, index);
             let written = unit.core();
+            let tree = written.spelled(&spelling).written();
             let text = written.spelled(&spelling).to_string();
-            let file = text
+            let parsed = text
                 .parse::<CoreFile>()
                 .unwrap_or_else(|error| panic!("{}", error.format()));
-            let (read, entry) =
-                to_core(&file, Some(&scope)).unwrap_or_else(|error| panic!("{}", refusal(&error)));
-            assert!(entry.is_none(), "a unit closes with no entry");
             let spelled = |item: &Item| {
                 Definitions {
                     items: vec![item.clone()].into(),
@@ -443,16 +440,22 @@ fn every_unit_of_the_prelude_reads_back_from_its_core_text() {
                 .spelled(&spelling)
                 .to_string()
             };
-            for (place, (read, written)) in read.items.iter().zip(written.items.iter()).enumerate()
-            {
-                assert!(
-                    read == written,
-                    "item {place} reads back otherwise:\n{}\nas\n{}",
-                    spelled(written),
-                    spelled(read)
-                );
+            for (from, file) in [("tree", &tree), ("text", &parsed)] {
+                let (read, entry) = to_core(file, Some(&scope))
+                    .unwrap_or_else(|error| panic!("from its {from}: {}", refusal(&error)));
+                assert!(entry.is_none(), "a unit closes with no entry");
+                for (place, (read, written)) in
+                    read.items.iter().zip(written.items.iter()).enumerate()
+                {
+                    assert!(
+                        read == written,
+                        "item {place} reads back from its {from} otherwise:\n{}\nas\n{}",
+                        spelled(written),
+                        spelled(read)
+                    );
+                }
+                assert_eq!(read.items.len(), written.items.len(), "the unit's items");
             }
-            assert_eq!(read.items.len(), written.items.len(), "the unit's items");
         }
     });
 }

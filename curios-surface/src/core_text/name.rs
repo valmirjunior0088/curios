@@ -4,12 +4,12 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, Tree, bracketed, called, core_read,
-        literal_fields, literal_of, literal_variant, malformed, shown, string, term_global,
-        term_number, term_string, term_word, universe_suffix, universes_read, universes_written,
-        value, value_number, value_term, value_unmarked, value_variant, verbatim, word,
+        Decoration, Fields, ReadError, Reader, Refusal, bracketed, called, core_read,
+        literal_fields, literal_of, literal_variant, malformed, string, term_global, term_number,
+        term_string, term_word, universe_suffix, universes_read, universes_written, value,
+        value_number, value_term, value_unmarked, value_variant, verbatim, word,
     },
-    crate::{Apply, CoreText, CoreValue, Frame, ShownForm, sub},
+    crate::{Apply, CoreText, CoreValue, Frame, Rendered, sub},
     curios_common::{InfixOp, Span},
     curios_core::{
         Binding, CalleeId, Global, ImplicitOrigin, Instance, Mention, Metavar, MetavarId,
@@ -18,11 +18,14 @@ use {
 };
 
 /// A global at an instance: its name, under a decorator stating the instance where it states one.
-pub fn instance_written(Instance { name, universes }: Instance, frame: Frame) -> Tree {
-    if !frame.core_text() {
+pub fn instance_written<D: Rendered>(
+    Instance { name, universes }: Instance,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
+    if let Some(leave) = frame.reader() {
         return match universe_suffix(&universes, frame) {
             suffix if suffix.is_empty() => frame.global(&name),
-            suffix => verbatim(format!("{}{suffix}", frame.spelling.symbol(&name))),
+            suffix => verbatim(leave, format!("{}{suffix}", frame.spelling.symbol(&name))),
         };
     }
     let fields = universes_written(&universes, frame)
@@ -33,7 +36,7 @@ pub fn instance_written(Instance { name, universes }: Instance, frame: Frame) ->
 }
 
 /// A variable: a free one by the word its binder is printed under, a bound one by its index.
-pub fn var_written(var: Var, frame: Frame) -> Tree {
+pub fn var_written<D: Rendered>(var: Var, frame: Frame<'_, D>) -> crate::Term<D> {
     match var.binding() {
         Binding::Bound(index) => frame.decorated(
             vec![(
@@ -50,14 +53,14 @@ pub fn var_written(var: Var, frame: Frame) -> Tree {
 }
 
 /// A metavariable as `?` under what states it, or bare where the spelling writes none.
-pub fn metavar_written(metavar: Metavar, frame: Frame) -> Tree {
+pub fn metavar_written<D: Rendered>(metavar: Metavar, frame: Frame<'_, D>) -> crate::Term<D> {
     if frame.spelling.anonymizes_metavariables() {
         return super::tree(crate::Subterm::Goal);
     }
-    if !frame.core_text() {
-        return reader_metavar(metavar, frame);
+    if let Some(leave) = frame.reader() {
+        return reader_metavar(metavar, frame, leave);
     }
-    let mut fields = Vec::<Decoration>::from([(
+    let mut fields = Vec::<Decoration<D>>::from([(
         "id",
         value(super::numeral(metavar.id.0, curios_common::Sign::Unmarked)),
     )]);
@@ -81,7 +84,11 @@ pub fn metavar_written(metavar: Metavar, frame: Frame) -> Tree {
 }
 
 /// A metavariable as a reader is shown it: its id, and its spine after it where an entry is other than a variable, the case worth seeing.
-fn reader_metavar(metavar: Metavar, frame: Frame) -> Tree {
+fn reader_metavar<D: Rendered>(
+    metavar: Metavar,
+    frame: Frame<'_, D>,
+    leave: D::Leave,
+) -> crate::Term<D> {
     let renaming = metavar.spine.is_identity()
         || metavar
             .spine
@@ -96,14 +103,15 @@ fn reader_metavar(metavar: Metavar, frame: Frame) -> Tree {
             .collect(),
     };
 
-    shown(ShownForm::Metavar {
-        id: metavar.id.to_string(),
+    super::tree(crate::Subterm::Core(D::metavar(
+        leave,
+        metavar.id.to_string(),
         spine,
-    })
+    )))
 }
 
 /// Why a metavariable was made, as Core names it.
-fn origin_written(origin: &MetavarOrigin, frame: Frame) -> Tree {
+fn origin_written<D: Rendered>(origin: &MetavarOrigin, frame: Frame<'_, D>) -> crate::Term<D> {
     match origin {
         MetavarOrigin::Hole => word("Hole"),
         MetavarOrigin::Goal => word("Goal"),
@@ -126,8 +134,8 @@ fn origin_written(origin: &MetavarOrigin, frame: Frame) -> Tree {
 }
 
 /// The callee an implicit or a witness slot belongs to, as Core names it.
-fn callee_written(callee: &CalleeId, frame: Frame) -> Tree {
-    let named = |variant: &str, name: Tree| called(word(variant), vec![name]);
+fn callee_written<D: Rendered>(callee: &CalleeId, frame: Frame<'_, D>) -> crate::Term<D> {
+    let named = |variant: &str, name: crate::Term<D>| called(word(variant), vec![name]);
     match callee {
         CalleeId::Function(Mention::Declaration(name)) => {
             named("Function", named("Declaration", frame.global(name)))
@@ -157,7 +165,7 @@ fn callee_written(callee: &CalleeId, frame: Frame) -> Tree {
 }
 
 /// An optional text as Core holds it: `None`, or the text under `Some`.
-fn optional(text: &Option<String>) -> Tree {
+fn optional<D: Rendered>(text: &Option<String>) -> crate::Term<D> {
     match text {
         Some(text) => called(word("Some"), vec![string(text.as_str())]),
         None => word("None"),

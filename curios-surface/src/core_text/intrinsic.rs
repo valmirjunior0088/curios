@@ -4,13 +4,13 @@
 
 use {
     super::{
-        ReadError, Reader, Refusal, Tree, bracketed, core_read, hexadecimal, malformed, numeral,
-        shown, term_word, tree, universes_read, universes_written, value, value_term,
+        ReadError, Reader, Refusal, bracketed, core_form, core_read, hexadecimal, malformed,
+        numeral, term_word, tree, universes_read, universes_written, value, value_term,
         value_unmarked, value_word, verbatim, word,
     },
     crate::{
         BytesSegment, CoreForm, CoreIntrinsic, CoreText, CoreValue, Frame, IntrinsicForm, Literal,
-        NumLit, Shown, ShownForm, Writer, intrinsic_form, sub, written_intrinsic,
+        NumLit, Rendered, Writer, intrinsic_form, sub, written_intrinsic,
     },
     curios_common::{Sign, Span},
     curios_core::{Intrinsic, Nat, Subterm, Term, Universes},
@@ -18,9 +18,9 @@ use {
 };
 
 /// `intrinsic` as Core text.
-pub fn intrinsic_written(intrinsic: Intrinsic, frame: Frame) -> Tree {
-    if !frame.core_text() {
-        return reader_intrinsic(intrinsic, frame);
+pub fn intrinsic_written<D: Rendered>(intrinsic: Intrinsic, frame: Frame<'_, D>) -> crate::Term<D> {
+    if let Some(leave) = frame.reader() {
+        return reader_intrinsic(intrinsic, frame, leave);
     }
     match intrinsic {
         Intrinsic::Bool(value) => tree(crate::Subterm::Literal(Literal::Bool(value))),
@@ -649,7 +649,7 @@ pub fn intrinsic_written(intrinsic: Intrinsic, frame: Frame) -> Tree {
 }
 
 /// A `Nat`: a numeral where it is one, and its variant over the term it offsets otherwise.
-fn nat_written(nat: Nat, frame: Frame) -> Tree {
+fn nat_written<D: Rendered>(nat: Nat, frame: Frame<'_, D>) -> crate::Term<D> {
     match nat {
         Nat::Zero => numeral(0u32, Sign::Unmarked),
         Nat::Succ(offset, tail) => match &*tail {
@@ -666,7 +666,7 @@ fn nat_written(nat: Nat, frame: Frame) -> Tree {
 }
 
 /// An `Int` as its numeral, signed where it is below zero.
-fn integer_written(integer: &Integer) -> Tree {
+fn integer_written<D: Rendered>(integer: &Integer) -> crate::Term<D> {
     let sign = match *integer < Integer::from(0i32) {
         true => Sign::Negative,
         false => Sign::Unmarked,
@@ -676,7 +676,7 @@ fn integer_written(integer: &Integer) -> Tree {
 }
 
 /// A `Flt` as the literal that reads back as it, or its bits in hexadecimal where none does: a NaN other than the default one of either sign.
-fn flt_literal(flt: Floating) -> Tree {
+fn flt_literal<D: Rendered>(flt: Floating) -> crate::Term<D> {
     match flt.is_nan() && flt.abs().to_bits() != Floating::nan().to_bits() {
         true => hexadecimal(flt.to_bits(), 16),
         false => tree(crate::Subterm::Literal(Literal::Flt(flt))),
@@ -684,7 +684,7 @@ fn flt_literal(flt: Floating) -> Tree {
 }
 
 /// A packed literal over `bytes`.
-fn bracketed_packed(bytes: &[u8]) -> Tree {
+fn bracketed_packed<D: Rendered>(bytes: &[u8]) -> crate::Term<D> {
     tree(crate::Subterm::Literal(Literal::Bytes(
         bytes
             .iter()
@@ -694,7 +694,7 @@ fn bracketed_packed(bytes: &[u8]) -> Tree {
 }
 
 /// A list of term operands between brackets.
-fn listed_terms(terms: Vec<Term>, frame: Frame) -> CoreValue<Shown> {
+fn listed_terms<D: Rendered>(terms: Vec<Term>, frame: Frame<'_, D>) -> CoreValue<D> {
     bracketed(
         terms
             .into_iter()
@@ -704,38 +704,42 @@ fn listed_terms(terms: Vec<Term>, frame: Frame) -> CoreValue<Shown> {
 }
 
 /// An instance an operation states, as a decorator's universes are written, `{}` where it states none.
-fn universes_value(universes: &Universes, frame: Frame) -> CoreValue<Shown> {
+fn universes_value<D: Rendered>(universes: &Universes, frame: Frame<'_, D>) -> CoreValue<D> {
     universes_written(universes, frame).unwrap_or_else(|| CoreValue::Fields(Vec::new()))
 }
 
 /// A rounding as its variant's name.
-fn rounding_value(rounding: Rounding) -> CoreValue<Shown> {
+fn rounding_value<D: Rendered>(rounding: Rounding) -> CoreValue<D> {
     value(word(format!("{rounding:?}")))
 }
 
 /// `#` and a variant's name, then its operands where it has any.
-fn called(name: &str, operands: Vec<CoreValue<Shown>>) -> Tree {
-    shown(ShownForm::Core(CoreForm::Intrinsic(CoreIntrinsic {
+fn called<D: Rendered>(name: &str, operands: Vec<CoreValue<D>>) -> crate::Term<D> {
+    core_form(CoreForm::Intrinsic(CoreIntrinsic {
         variant: crate::Label::from(name),
         operands: (!operands.is_empty()).then_some(operands),
-    })))
+    }))
 }
 
 /// How the reader's spelling writes an intrinsic's pieces: each operand as its tree, and each declaration of `/sys` by the path the reader reaches it by.
-impl Writer<Term, Shown> for Frame<'_> {
-    fn operand(&self, operand: Term) -> Option<Tree> {
+impl<D: Rendered> Writer<Term, D> for Frame<'_, D> {
+    fn operand(&self, operand: Term) -> Option<crate::Term<D>> {
         Some(sub(operand, *self))
     }
 
-    fn sys(&self, path: &str) -> Option<Tree> {
+    fn sys(&self, path: &str) -> Option<crate::Term<D>> {
         Some(word(self.spelling.intrinsic_symbol(path)))
     }
 }
 
 /// An intrinsic as a reader writes it, read off the one table of how one is written ([`intrinsic_form`]): a type former or a constant by the path under `/sys` its declaration stands at, spelled as the reader reaches it; an operation as its call or its operator; a literal as itself; a handle the host minted, which no source spells, by its token.
-fn reader_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Tree {
+fn reader_intrinsic<D: Rendered>(
+    intrinsic: Intrinsic,
+    frame: Frame<'_, D>,
+    leave: D::Leave,
+) -> crate::Term<D> {
     match intrinsic_form(intrinsic, frame.spelling.keeps_grouping()) {
-        IntrinsicForm::Handle(token) => verbatim(format!("Handle({token})")),
+        IntrinsicForm::Handle(token) => verbatim(leave, format!("Handle({token})")),
         form => written_intrinsic(form, &frame).expect("a reader writes every form but a handle"),
     }
 }

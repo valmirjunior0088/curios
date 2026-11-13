@@ -6,12 +6,12 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Refusal, Tree, bracketed, called, decorated, malformed,
-        nested, numeral, term_number, term_word, tree, value, value_fields, value_number,
-        value_term, value_unmarked, value_variant, verbatim, word,
+        Decoration, Fields, ReadError, Refusal, bracketed, called, decorated, malformed, nested,
+        numeral, term_number, term_word, tree, value, value_fields, value_number, value_term,
+        value_unmarked, value_variant, verbatim, word,
     },
     crate::{
-        Apply, CoreForm, CoreText, CoreValue, Decorated, Frame, Infix, Shown, Spelling, Subterm,
+        Apply, CoreForm, CoreText, CoreValue, Decorated, Frame, Infix, Rendered, Spelling, Subterm,
     },
     curios_common::{InfixOp, Plicity, Sign},
     curios_core::{
@@ -21,22 +21,25 @@ use {
 };
 
 /// `sort` as its word, under a decorator where its level or quality is not the word's; in a reader's spelling, with its level after it where it is not 0.
-pub fn sort_written(Sort { quality, level }: Sort, frame: Frame) -> Tree {
-    if !frame.core_text() {
+pub fn sort_written<D: Rendered>(
+    Sort { quality, level }: Sort,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
+    if let Some(leave) = frame.reader() {
         let word = reader_quality(&quality);
         // A level is the sort's whole content, so a concrete one is shown; an unsolved one names nothing a reader can act on.
         if level.is_zero() || (frame.spelling.erases_universes() && level.metas().next().is_some())
         {
             return quality_word(word);
         }
-        return verbatim(format!("{word}.{{{}}}", reader_level(&level)));
+        return verbatim(leave, format!("{word}.{{{}}}", reader_level(&level)));
     }
     let (word, template) = match quality {
         Quality::Type => ("Type", Quality::Type),
         Quality::Prop => ("Prop", Quality::Prop),
         Quality::Param(_) | Quality::Meta(_) => ("Sort", Quality::Param(QualityParam(0))),
     };
-    let mut fields = Vec::<Decoration>::new();
+    let mut fields = Vec::<Decoration<D>>::new();
     if quality != template {
         fields.push(("quality", value(quality_written(&quality))));
     }
@@ -50,7 +53,7 @@ pub fn sort_written(Sort { quality, level }: Sort, frame: Frame) -> Tree {
 }
 
 /// The sort word `word` is, as the tree's node of it.
-fn quality_word(word: &str) -> Tree {
+fn quality_word<D: Rendered>(word: &str) -> crate::Term<D> {
     tree(match word {
         "Type" => Subterm::Type,
         "Prop" => Subterm::Prop,
@@ -98,7 +101,7 @@ pub fn level_spelled(level: &Level, spelling: &Spelling) -> String {
 }
 
 /// An instance after the name it is of, as a reader is shown it: the sorts it states, then its levels, or nothing where it states none or the spelling leaves universes out.
-pub fn universe_suffix(universes: &Universes, frame: Frame) -> String {
+pub fn universe_suffix<D: Rendered>(universes: &Universes, frame: Frame<'_, D>) -> String {
     if universes.is_empty() || frame.spelling.erases_universes() {
         return String::new();
     }
@@ -122,7 +125,7 @@ pub fn universe_suffix(universes: &Universes, frame: Frame) -> String {
 }
 
 /// A quality as Core names it.
-fn quality_written(quality: &Quality) -> Tree {
+fn quality_written<D: Rendered>(quality: &Quality) -> crate::Term<D> {
     match quality {
         Quality::Type => word("Type"),
         Quality::Prop => word("Prop"),
@@ -132,7 +135,7 @@ fn quality_written(quality: &Quality) -> Tree {
 }
 
 /// `level` as the term it is: a constant, a parameter by its letter and an unsolved level as `#{id = 4} ?`, each under its offset, and their `max` where there are several.
-pub fn level_written(level: &Level) -> Tree {
+pub fn level_written<D: Rendered>(level: &Level) -> crate::Term<D> {
     let mut parts = Vec::new();
     if level.constant != 0 || level.atoms.is_empty() {
         parts.push(numeral(level.constant, Sign::Unmarked));
@@ -195,11 +198,14 @@ fn parameter_letter(index: usize) -> String {
 }
 
 /// An instance's universes as a struct-valued field's value, or `None` where it states none.
-pub fn universes_written(universes: &Universes, frame: Frame) -> Option<CoreValue<Shown>> {
+pub fn universes_written<D: Rendered>(
+    universes: &Universes,
+    frame: Frame<'_, D>,
+) -> Option<CoreValue<D>> {
     if universes.is_empty() || frame.spelling.erases_universes() {
         return None;
     }
-    let mut fields = Vec::<Decoration>::new();
+    let mut fields = Vec::<Decoration<D>>::new();
     if !universes.levels.is_empty() {
         fields.push((
             "levels",
@@ -229,8 +235,8 @@ pub fn universes_written(universes: &Universes, frame: Frame) -> Option<CoreValu
 }
 
 /// A declaration's scheme as a struct-valued field's value, or `None` where it is the empty one.
-pub fn universe_context_written(context: &UniverseContext) -> Option<CoreValue<Shown>> {
-    let mut fields = Vec::<Decoration>::new();
+pub fn universe_context_written<D: Rendered>(context: &UniverseContext) -> Option<CoreValue<D>> {
+    let mut fields = Vec::<Decoration<D>>::new();
     if context.parameter_count != 0 {
         fields.push((
             "parameter_count",

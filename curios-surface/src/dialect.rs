@@ -5,6 +5,8 @@
 //! **What Core text writes beyond a program.** An operand under a decorator, `#{field = value, …} operand`, a witness named by its identity and an intrinsic node by its variant ([`CoreForm`]); a declaration's head, the decorator before it and the absolute name it declares ([`CoreHead`]); the decorator before a case; a `use` binder's word, where a program's witness binder has none; and the file a `.crsc` is ([`CoreFile`]), whose items are joined into groups by `and` whatever their kinds, and whose entry states its type.
 //!
 //! **What a print shows and no grammar reads back is a dialect too**, [`Shown`]: Core text's forms over its own terms, and the forms only a bounded print or a reader's spelling writes ([`ShownForm`]). A dump, a certifier's refusal and a report's term are shown, since each may elide; a tree no parser makes a shown one, so none is ever read as Core text.
+//!
+//! **One writer builds either tree** ([`Rendered`]): Core text written whole, the text a reader reads back, is Core text's own tree, and everything else a shown one. What only a shown tree holds is built under a leave Core text's tree has no value of, so a whole print holding `…` or a reader's token is no tree the writer can build, and the print is the reader's inverse by its type.
 
 use {
     crate::{Label, Term, TopConcept, TopForeign, TopInduct, TopLet, TopStruct, TopTest},
@@ -55,6 +57,86 @@ impl Dialect for Shown {
     type Form = ShownForm;
     type Head = CoreHead<Shown>;
     type Fields = Vec<DecoratorField<Shown>>;
+}
+
+/// A dialect a render of Core builds a tree of: Core text's own, which a reader reads back, or a shown one. Both hold Core text's forms; what no grammar reads is built only under a leave, which a shown tree's render holds and Core text's has no value of, so no walk writes one into a tree a reader reads.
+pub trait Rendered: Dialect<Head = CoreHead<Self>, Fields = Vec<DecoratorField<Self>>> {
+    /// What a render holds to write what no grammar reads back.
+    type Leave: Copy;
+
+    /// The leave a render of this dialect holds, where the dialect grants one.
+    fn leave() -> Option<Self::Leave>;
+
+    /// A form of Core text, as this dialect holds one.
+    fn core(form: CoreForm<Self>) -> Self::Form;
+
+    /// `…`, what a bounded print leaves out.
+    fn elided(leave: Self::Leave) -> Self::Form;
+
+    /// A token as a reader's spelling writes it, which no grammar reads.
+    fn spelled(leave: Self::Leave, text: String) -> Self::Form;
+
+    /// A metavariable as a reader is shown it, with its spine after it.
+    fn metavar(leave: Self::Leave, id: String, spine: Vec<Term<Self>>) -> Self::Form;
+
+    /// A term elaboration ascribed a type, as a reader is shown it.
+    fn ascribed(leave: Self::Leave, term: Term<Self>, type_: Term<Self>) -> Self::Form;
+}
+
+impl Rendered for CoreText {
+    type Leave = Unwritable;
+
+    fn leave() -> Option<Unwritable> {
+        None
+    }
+
+    fn core(form: CoreForm) -> CoreForm {
+        form
+    }
+
+    fn elided(leave: Unwritable) -> CoreForm {
+        match leave {}
+    }
+
+    fn spelled(leave: Unwritable, _: String) -> CoreForm {
+        match leave {}
+    }
+
+    fn metavar(leave: Unwritable, _: String, _: Vec<Term<CoreText>>) -> CoreForm {
+        match leave {}
+    }
+
+    fn ascribed(leave: Unwritable, _: Term<CoreText>, _: Term<CoreText>) -> CoreForm {
+        match leave {}
+    }
+}
+
+impl Rendered for Shown {
+    type Leave = ();
+
+    fn leave() -> Option<()> {
+        Some(())
+    }
+
+    fn core(form: CoreForm<Shown>) -> ShownForm {
+        ShownForm::Core(form)
+    }
+
+    fn elided((): ()) -> ShownForm {
+        ShownForm::Elided
+    }
+
+    fn spelled((): (), text: String) -> ShownForm {
+        ShownForm::Spelled(text)
+    }
+
+    fn metavar((): (), id: String, spine: Vec<Term<Shown>>) -> ShownForm {
+        ShownForm::Metavar { id, spine }
+    }
+
+    fn ascribed((): (), term: Term<Shown>, type_: Term<Shown>) -> ShownForm {
+        ShownForm::Ascribed { term, type_ }
+    }
 }
 
 /// What a shown term writes in an operand's place beyond a program's forms.

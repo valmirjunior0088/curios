@@ -2,11 +2,12 @@
 
 use {
     crate::{
-        CoreEntry, CoreHead, CoreItem, CoreMember, CoreValue, Decoration, DecoratorField, Frame,
-        LetSignature, Shown, ShownOptions, TopForeign, TopLet, TopTest, Tree, bracketed,
-        core_written, decoration_fields, family_declared, from_core, level_spelled, literal_of,
-        nested, print_shown, print_shown_entry, print_shown_item, print_term, record_declared,
-        spell, string, sub, tree, universe_context_written, value, word, word_value,
+        CoreEntry, CoreFile, CoreHead, CoreItem, CoreMember, CoreText, CoreValue, Decoration,
+        DecoratorField, Frame, LetSignature, Rendered, Shown, ShownOptions, TopForeign, TopLet,
+        TopTest, bracketed, core_written, decoration_fields, family_declared, from_core,
+        level_spelled, literal_of, nested, print_core_entry, print_core_item, print_core_term,
+        print_shown, print_shown_entry, print_shown_item, print_term, record_declared, spell,
+        string, sub, tree, universe_context_written, value, word, word_value,
     },
     curios_abi::{ForeignFunction, StdioCodes},
     curios_common::{InfixOp, LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
@@ -368,6 +369,8 @@ impl Spelling {
     }
 
     /// This spelling with every binder `render` opens under a word of its own, where it was handed no rename: [`Spelling::with_words`] for a render that writes several terms in one naming, a declaration's head and its cases, whose dry run is the render itself. `terms` are what it writes, whose names no word may read like.
+    ///
+    /// The dry run builds a shown tree whatever the render it stands for builds: it writes each binder by its label before any rename, which only a shown tree holds.
     pub(crate) fn with_words_of<R>(
         self: &Rc<Self>,
         terms: &[Term],
@@ -378,10 +381,7 @@ impl Spelling {
         }
         let mint = Minting::recording();
         mint.allow_all(terms);
-        render(Frame {
-            spelling: self,
-            mint: &mint,
-        });
+        render(Frame::new(self, &mint));
         let recorded = mint
             .recorded
             .expect("a recording mint records")
@@ -446,8 +446,12 @@ impl Spelling {
     }
 
     /// This spelling writing every term whole, eliding nothing, as Core text a reader reads back is written: a dump is read about the compiler and bounded as a report is, since a term's tree can outgrow any print — a tower of sixty pairs is a type of 2⁶⁰ leaves.
+    ///
+    /// Core text a reader reads back is Core text proper written as a text of its own, so this spelling is one too, and what it writes is Core text's own tree ([`CoreText`]), which holds no form a reader does not read: no `…`, no reader's token, nothing a print shows alone.
     pub fn written_whole(mut self) -> Self {
         self.whole = true;
+        self.core_text = true;
+        self.as_text = true;
         self
     }
 
@@ -1643,7 +1647,13 @@ fn print_core(term: Term, spelling: &Rc<Spelling>) -> Printer {
 }
 
 /// [`print_core`] under `mint`: a fresh one for a render, a recording one for [`build_rename`]'s dry run — which is allowed what the render is, so the two elide at the same subterms and open the same binders in the same order.
+///
+/// Written whole, a render builds Core text's own tree, and its dry run the shown tree, which alone holds a binder's label before the rename the dry run is for.
 fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer {
+    if spelling.writes_whole() && mint.recorded.is_none() {
+        mint.allow(&term);
+        return print_core_term(core_written(term, Frame::<CoreText>::new(spelling, mint)));
+    }
     // The translation is tried on a mint of its own, taken up where it prints the term: one it declines is printed here as it would have been untranslated.
     if spelling.translated {
         let attempt = mint.attempt(&term);
@@ -1656,7 +1666,7 @@ fn print_minting(term: Term, spelling: &Rc<Spelling>, mint: &Minting) -> Printer
 
     mint.allow(&term);
     print_shown(
-        core_written(term, Frame { spelling, mint }),
+        core_written(term, Frame::new(spelling, mint)),
         shown_options(spelling),
     )
 }
@@ -1669,17 +1679,11 @@ fn shown_options(spelling: &Spelling) -> ShownOptions {
 }
 
 /// `term` as the shown tree a render under `spelling` builds, on a mint of its own.
-fn written_term(term: Term, spelling: &Rc<Spelling>) -> Tree {
+fn written_term<D: Rendered>(term: Term, spelling: &Rc<Spelling>) -> crate::Term<D> {
     let mint = Minting::default();
     mint.allow(&term);
 
-    core_written(
-        term,
-        Frame {
-            spelling,
-            mint: &mint,
-        },
-    )
+    core_written(term, Frame::new(spelling, &mint))
 }
 
 /// A value of Core a report or a dump writes, under a spelling or faithfully.
@@ -1828,17 +1832,37 @@ impl fmt::Display for Spelled<'_, Program> {
         if print_items(&program.definitions, formatter, spelling)? > 0 {
             formatter.write_str("\n\n")?;
         }
-        let written = |term: &Term| written_term(term.clone(), &spelling.with_words(term));
-        let entry = CoreEntry {
-            body: written(&program.entrypoint.body),
-            type_: program.entrypoint.type_.as_ref().map(written),
+        let printer = match spelling.writes_whole() {
+            true => print_core_entry(entry_written(program, spelling)),
+            false => print_shown_entry(entry_written(program, spelling), shown_options(spelling)),
         };
 
-        write_printer(
-            print_shown_entry(entry, shown_options(spelling)),
-            formatter,
-            spelling,
-        )
+        write_printer(printer, formatter, spelling)
+    }
+}
+
+/// The term a program closes with and the type it states, as `spelling` writes them.
+fn entry_written<D: Rendered>(program: &Program, spelling: &Rc<Spelling>) -> CoreEntry<D> {
+    let written = |term: &Term| written_term(term.clone(), &spelling.with_words(term));
+
+    CoreEntry {
+        body: written(&program.entrypoint.body),
+        type_: program.entrypoint.type_.as_ref().map(written),
+    }
+}
+
+impl Spelled<'_, Definitions> {
+    /// The tree of Core text these definitions are written whole as, which [`to_core`](crate::to_core) reads with no parse between: the print is the reader's inverse by its type, since the tree holds no form the reader does not read.
+    pub fn written(&self) -> CoreFile {
+        let spelling = Rc::new((**self.spelling()).clone().written_whole());
+        let mut items = Vec::new();
+        items_written(self.value(), &spelling, |item| {
+            items.push(item);
+            Ok(())
+        })
+        .expect("collecting an item does not fail");
+
+        CoreFile { items, entry: None }
     }
 }
 
@@ -1872,18 +1896,32 @@ fn print_items(
     spelling: &Rc<Spelling>,
 ) -> Result<usize, fmt::Error> {
     let mut written = 0;
-    let mut write = |formatter: &mut fmt::Formatter<'_>, item: CoreItem<Shown>| {
+    let mut write = |formatter: &mut fmt::Formatter<'_>, printer: Printer| {
         if written > 0 {
             formatter.write_str("\n\n")?;
         }
         written += 1;
 
-        write_printer(
-            print_shown_item(item, shown_options(spelling)),
-            formatter,
-            spelling,
-        )
+        write_printer(printer, formatter, spelling)
     };
+    match spelling.writes_whole() {
+        true => items_written::<CoreText>(definitions, spelling, |item| {
+            write(formatter, print_core_item(item))
+        })?,
+        false => items_written::<Shown>(definitions, spelling, |item| {
+            write(formatter, print_shown_item(item, shown_options(spelling)))
+        })?,
+    }
+
+    Ok(written)
+}
+
+/// Each item of `definitions` as `spelling` writes it, in a tree of the dialect `D`, handed to `each` as it is built.
+fn items_written<D: Rendered>(
+    definitions: &Definitions,
+    spelling: &Rc<Spelling>,
+    mut each: impl FnMut(CoreItem<D>) -> fmt::Result,
+) -> fmt::Result {
     let implied = Implied::of(definitions);
     for (place, item) in definitions.items.places().zip(definitions.items.iter()) {
         if implied.omitted.contains(&place) {
@@ -1902,18 +1940,15 @@ fn print_items(
                         )
                     });
                     let implied = made.is_some_and(|made| **definition == made);
-                    write(
-                        formatter,
-                        CoreItem::Foreign(foreign_declared(
-                            definition, &function, implied, spelling,
-                        )),
-                    )?;
+                    each(CoreItem::Foreign(foreign_declared(
+                        definition, &function, implied, spelling,
+                    )))?;
                     if implied {
                         continue;
                     }
                 }
                 if let Some(test) = test_declared(definition, spelling) {
-                    write(formatter, CoreItem::Test(test))?;
+                    each(CoreItem::Test(test))?;
                     continue;
                 }
                 let member = Member {
@@ -1923,10 +1958,7 @@ fn print_items(
                     universe_context: Some(&definition.universe_context),
                     group: None,
                 };
-                write(
-                    formatter,
-                    CoreItem::Group(vec![member.written(&implied, spelling)]),
-                )?;
+                each(CoreItem::Group(vec![member.written(&implied, spelling)]))?;
             }
             Item::Rec(rec) => {
                 let mut context = Some(&rec.universe_context);
@@ -1946,12 +1978,12 @@ fn print_items(
                         .written(&implied, spelling)
                     })
                     .collect();
-                write(formatter, CoreItem::Group(members))?;
+                each(CoreItem::Group(members))?;
             }
         }
     }
 
-    Ok(written)
+    Ok(())
 }
 
 /// The row `definition` is the declaration of, where its value beneath its own binders is a call of that row.
@@ -1968,13 +2000,13 @@ fn foreign_row(definition: &Definition) -> Option<Arc<ForeignFunction>> {
 }
 
 /// A foreign row in its form, `foreign /f(Bytes) -> Bytes`: the row's name where it is not its declaration's path, and where the definition it implies is the one the module holds, that definition's island where it is not its name's parent.
-fn foreign_declared(
+fn foreign_declared<D: Rendered>(
     definition: &Definition,
     function: &ForeignFunction,
     implied: bool,
     spelling: &Rc<Spelling>,
-) -> TopForeign<Shown> {
-    let mut fields = Vec::<Decoration>::new();
+) -> TopForeign<D> {
+    let mut fields = Vec::<Decoration<D>>::new();
     if definition.name.qualifier().map(Qualifier::join).as_deref() != Some(function.name.as_str()) {
         fields.push(("name", value(string(function.name.as_str()))));
     }
@@ -1995,7 +2027,10 @@ fn foreign_declared(
 }
 
 /// A test in its form, `test /t = value`, where it is the definition the form makes against the scope the spelling holds: `None` where the spelling holds none, or the test is another.
-fn test_declared(definition: &Definition, spelling: &Rc<Spelling>) -> Option<TopTest<Shown>> {
+fn test_declared<D: Rendered>(
+    definition: &Definition,
+    spelling: &Rc<Spelling>,
+) -> Option<TopTest<D>> {
     if definition.kind != DefinitionKind::Test {
         return None;
     }
@@ -2034,7 +2069,10 @@ fn test_declared(definition: &Definition, spelling: &Rc<Spelling>) -> Option<Top
 }
 
 /// A head's decorator: its fields in Core text proper, and none in a reader's spelling, which writes no decorator.
-fn decorated_fields(spelling: &Spelling, fields: Vec<Decoration>) -> Vec<DecoratorField<Shown>> {
+fn decorated_fields<D: Rendered>(
+    spelling: &Spelling,
+    fields: Vec<Decoration<D>>,
+) -> Vec<DecoratorField<D>> {
     match spelling.writes_core_text() {
         true => decoration_fields(fields),
         false => Vec::new(),
@@ -2050,7 +2088,10 @@ fn declared_label(name: &Global) -> crate::Label {
 }
 
 /// A definition's island, where it is not its name's parent.
-fn island_field(definition: &Definition, spelling: &Spelling) -> Option<Decoration> {
+fn island_field<D: Rendered>(
+    definition: &Definition,
+    spelling: &Spelling,
+) -> Option<Decoration<D>> {
     let parent = definition.name.qualifier().map(Qualifier::without_last);
     (parent.as_ref() != Some(&definition.island))
         .then(|| ("island", module_written(&definition.island, spelling)))
@@ -2142,24 +2183,18 @@ struct Member<'a> {
 
 impl Member<'_> {
     /// This member under its decorator: a nominal declaration in its form, any other definition as a `let`.
-    fn written(self, implied: &Implied, spelling: &Rc<Spelling>) -> CoreMember<Shown> {
+    fn written<D: Rendered>(self, implied: &Implied, spelling: &Rc<Spelling>) -> CoreMember<D> {
         match self.definition.kind.nominal() {
             Some(nominal) => {
                 let nominal = nominal.clone();
                 let terms = declaration_terms(self.definition, &nominal);
-                let words =
-                    spelling.with_words_of(&terms, |frame| self.declared(&nominal, implied, frame));
+                let words = spelling.with_words_of(&terms, |frame| {
+                    self.declared::<Shown>(&nominal, implied, frame)
+                });
                 let mint = Minting::default();
                 mint.allow_all(&terms);
 
-                self.declared(
-                    &nominal,
-                    implied,
-                    Frame {
-                        spelling: &words,
-                        mint: &mint,
-                    },
-                )
+                self.declared(&nominal, implied, Frame::new(&words, &mint))
             }
             None => {
                 let definition = self.definition;
@@ -2196,7 +2231,12 @@ impl Member<'_> {
     }
 
     /// A nominal declaration in its form under `frame`, its decorator stating what differs from what the form builds: the node it is where its item is not the one its keyword makes, its former's parts and its entry's beside the ones the form spells, and the items it implies that its module lacks.
-    fn declared(&self, nominal: &Nominal, implied: &Implied, frame: Frame) -> CoreMember<Shown> {
+    fn declared<D: Rendered>(
+        &self,
+        nominal: &Nominal,
+        implied: &Implied,
+        frame: Frame<'_, D>,
+    ) -> CoreMember<D> {
         let definition = self.definition;
         let (member, words) = match nominal {
             Nominal::Inductive(declaration) => (
@@ -2222,7 +2262,7 @@ impl Member<'_> {
         };
 
         // A family's item is a group, its own where it is alone; a record's and a concept's is a `let` where it is alone.
-        let mut fields = Vec::<Decoration>::new();
+        let mut fields = Vec::<Decoration<D>>::new();
         match (self.group, matches!(nominal, Nominal::Inductive(_))) {
             (None, true) => fields.push(("node", word_value("Let"))),
             (Some((_, 1)), false) => fields.push(("node", word_value("Rec"))),
@@ -2297,12 +2337,12 @@ fn declaration_terms(definition: &Definition, nominal: &Nominal) -> Vec<Term> {
 }
 
 /// What a nominal declaration's entry holds beside what its form spells and its former's: the module its representation belongs to where it is not its name's parent, the polarities and the variances its elaboration filed, and a scheme apart from its former's; and a concept's own parts where they are not read off its record — its scheme, its superclass edges and its fields' labels, which `words` are as the form wrote them.
-fn entry_fields(
+fn entry_fields<D: Rendered>(
     definition: &Definition,
     nominal: &Nominal,
     words: &[String],
-    frame: Frame,
-) -> Vec<Decoration> {
+    frame: Frame<'_, D>,
+) -> Vec<Decoration<D>> {
     let (universe_context, module, polarities, variances) = match nominal {
         Nominal::Inductive(declaration) => (
             &declaration.universe_context,
@@ -2317,7 +2357,7 @@ fn entry_fields(
             &record.variances,
         ),
     };
-    let mut fields = Vec::<Decoration>::new();
+    let mut fields = Vec::<Decoration<D>>::new();
     if Some(*module) != definition.name.qualifier().map(Qualifier::without_last) {
         fields.push(("module", module_written(module, frame.spelling)));
     }
@@ -2350,7 +2390,7 @@ fn entry_fields(
         fields.push(("entry", nested(vec![("universe_context", context)])));
     }
     if let Nominal::Concept { concept, record } = nominal {
-        let mut own = Vec::<Decoration>::new();
+        let mut own = Vec::<Decoration<D>>::new();
         if concept.universe_context != record.universe_context {
             let context = universe_context_written(&concept.universe_context)
                 .unwrap_or_else(|| nested(Vec::new()));
@@ -2389,7 +2429,7 @@ fn entry_fields(
 }
 
 /// A module as a decorator names it: by its path, and the root, which no path names, as the slash every absolute path leads with.
-fn module_written(module: &Qualifier, spelling: &Spelling) -> CoreValue<Shown> {
+fn module_written<D: Rendered>(module: &Qualifier, spelling: &Spelling) -> CoreValue<D> {
     match module.is_root() {
         true => CoreValue::Root,
         false => word_value(spelling.symbol(&Global::Authored(*module))),
@@ -2424,16 +2464,16 @@ pub fn concept_supers_read_off(name: Global, record: &StructDecl) -> Vec<Global>
 }
 
 /// The fields a declaration's decorator sets: its scheme where it has one, its kind where it is not one a declaration writes, its island where it is not its name's parent, or a constructor's family's module, its proof mark and the sort its value inhabits where it states them. A former's entry is no decorator's: it is the declaration's own form.
-fn definition_fields(
+fn definition_fields<D: Rendered>(
     name: &Global,
     kind: &DefinitionKind,
     island: &Qualifier,
     proof: bool,
     value_sort: Option<&Term>,
-    universe_context: Option<CoreValue<Shown>>,
+    universe_context: Option<CoreValue<D>>,
     spelling: &Rc<Spelling>,
-) -> Vec<Decoration> {
-    let mut fields = Vec::<Decoration>::new();
+) -> Vec<Decoration<D>> {
+    let mut fields = Vec::<Decoration<D>>::new();
     if let Some(context) = universe_context {
         fields.push(("universe_context", context));
     }

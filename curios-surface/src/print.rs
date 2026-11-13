@@ -1973,6 +1973,11 @@ pub fn print_core_entry(entry: CoreEntry) -> Printer {
     CORE_TEXT.core_entry(entry)
 }
 
+/// A term of Core text, as the formatter writes one.
+pub fn print_core_term(term: Term<CoreText>) -> Printer {
+    CORE_TEXT.term(term)
+}
+
 pub fn print_term(term: Term) -> Printer {
     PROGRAM.term(term)
 }

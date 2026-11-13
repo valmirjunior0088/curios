@@ -6,13 +6,13 @@
 
 use {
     super::{
-        Fields, OpenedEntry, ReadError, Reader, Refusal, Tree, core_read, malformed,
-        telescope_read, universe_context_read, value, value_fields, value_list, value_module,
-        value_term, value_unmarked, value_word,
+        Fields, OpenedEntry, ReadError, Reader, Refusal, core_read, malformed, telescope_read,
+        universe_context_read, value, value_fields, value_list, value_module, value_term,
+        value_unmarked, value_word,
     },
     crate::{
-        CasePayloadParam, CoreHead, CoreText, CoreValue, Frame, FuncTypeParam, Shown, TopCase,
-        TopConcept, TopInduct, TopStruct, decoration_fields, sub,
+        CasePayloadParam, CoreHead, CoreText, CoreValue, Frame, FuncTypeParam, Rendered, Shown,
+        TopCase, TopConcept, TopInduct, TopStruct, decoration_fields, sub,
     },
     curios_common::{Plicity, Qualifier},
     curios_core::{
@@ -38,12 +38,12 @@ impl Binder {
     }
 
     /// The word this binder is written by where it has a hint or `read` says something reads it, and none where it is written as its type alone.
-    fn word(&self, read: bool, frame: Frame) -> Option<String> {
+    fn word<D: Rendered>(&self, read: bool, frame: Frame<'_, D>) -> Option<String> {
         (self.named || read).then(|| frame.spelling.label(&self.label))
     }
 
     /// This binder under its mark: by its word where it has a hint or `read` says something reads it, and as its type alone otherwise.
-    pub fn written(&self, read: bool, frame: Frame) -> FuncTypeParam<Shown> {
+    pub fn written<D: Rendered>(&self, read: bool, frame: Frame<'_, D>) -> FuncTypeParam<D> {
         FuncTypeParam {
             plicity: self.mark,
             label: self.word(read, frame),
@@ -53,7 +53,10 @@ impl Binder {
 }
 
 /// The entries of a telescope from `cursor` to its end, each opened at the variable of a word of its own.
-pub fn binders<B: Bound>(cursor: &mut Cursor<'_, B>, frame: Frame) -> Vec<Binder> {
+pub fn binders<D: Rendered, B: Bound>(
+    cursor: &mut Cursor<'_, B>,
+    frame: Frame<'_, D>,
+) -> Vec<Binder> {
     let mut binders = Vec::new();
     while let (Some((hint, type_)), Some(mark)) = (cursor.entry(), cursor.mark()) {
         let label = frame.label(cursor.label());
@@ -83,7 +86,7 @@ pub fn hidden(mark: Plicity) -> Plicity {
 }
 
 /// The head a declaration of `name` is written under, its decorator empty: the caller states what it sets.
-fn head_of(name: &Global) -> CoreHead<Shown> {
+fn head_of<D: Rendered>(name: &Global) -> CoreHead<D> {
     CoreHead {
         fields: Vec::new(),
         name: *name,
@@ -99,7 +102,11 @@ fn label_of(name: &Global) -> crate::Label {
 }
 
 /// A family's form: its head, then each case; `end` is the printer's.
-pub fn family_declared(name: &Global, entry: &InductDecl, frame: Frame) -> TopInduct<Shown> {
+pub fn family_declared<D: Rendered>(
+    name: &Global,
+    entry: &InductDecl,
+    frame: Frame<'_, D>,
+) -> TopInduct<D> {
     let mut cursor = entry.arity.cursor();
     let params = binders(&mut cursor, frame);
     let indices = cursor
@@ -166,13 +173,13 @@ fn reads(telescope: &Telescope<Vec<Term>>, params: &[Binder], param: &Binder) ->
 }
 
 /// A case: its tag over its payload, then its targets where its family has indices, under the parameters it states where they are not its family's.
-fn case_written(
+fn case_written<D: Rendered>(
     tag: &Atom,
     signature: &InductParam,
     params: &[Binder],
     indexed: bool,
-    frame: Frame,
-) -> TopCase<Shown> {
+    frame: Frame<'_, D>,
+) -> TopCase<D> {
     let mut cursor = signature.telescope.cursor();
     let mut stated = Vec::with_capacity(params.len());
     let mut own = true;
@@ -215,17 +222,17 @@ fn case_written(
 }
 
 /// A record's form: its parameters, its sort and its fields, each field under its mark and by the word it is written by where it has one, with the word each is written by in order — empty for a superclass edge and for a field nothing names.
-pub struct RecordWritten {
-    pub params: Vec<FuncTypeParam<Shown>>,
+pub struct RecordWritten<D: Rendered = Shown> {
+    pub params: Vec<FuncTypeParam<D>>,
     pub rep_pub: bool,
-    pub result_sort: Tree,
-    pub fields: Vec<(Plicity, Option<String>, Tree)>,
+    pub result_sort: crate::Term<D>,
+    pub fields: Vec<(Plicity, Option<String>, crate::Term<D>)>,
     pub words: Vec<String>,
 }
 
-impl RecordWritten {
+impl<D: Rendered> RecordWritten<D> {
     /// The record as a `struct` declaration of `name`.
-    pub fn structure(self, name: &Global) -> TopStruct<Shown> {
+    pub fn structure(self, name: &Global) -> TopStruct<D> {
         TopStruct {
             doc: None,
             core: head_of(name),
@@ -251,7 +258,7 @@ impl RecordWritten {
     }
 
     /// The record as a `concept` declaration of `name`.
-    pub fn concept(self, name: &Global) -> TopConcept<Shown> {
+    pub fn concept(self, name: &Global) -> TopConcept<D> {
         TopConcept {
             doc: None,
             core: head_of(name),
@@ -276,7 +283,7 @@ impl RecordWritten {
 }
 
 /// A record's form.
-pub fn record_declared(record: &StructDecl, frame: Frame) -> RecordWritten {
+pub fn record_declared<D: Rendered>(record: &StructDecl, frame: Frame<'_, D>) -> RecordWritten<D> {
     let mut cursor = record.arity.cursor();
     let params = binders(&mut cursor, frame);
     let fields = cursor

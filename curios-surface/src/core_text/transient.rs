@@ -4,13 +4,12 @@
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, Tree, bracketed, call, core_read, numeral,
-        shown, term_global, tree, value, value_number, value_term, value_unmarked, word,
-        word_value,
+        Decoration, Fields, ReadError, Reader, Refusal, bracketed, call, core_read, numeral,
+        term_global, tree, value, value_number, value_term, value_unmarked, word, word_value,
     },
     crate::{
         Alternative, BytesPattern, CoreText, Frame, ListPattern, MatchPattern, MatrixArm,
-        NatPattern, ProofLiteral, ShownForm, lambda_parameters, sub, written_pattern,
+        NatPattern, ProofLiteral, Rendered, lambda_parameters, sub, written_pattern,
     },
     curios_common::{Plicity, Sign},
     curios_core::{
@@ -20,9 +19,9 @@ use {
 };
 
 /// An elaboration-only form under the node it is.
-pub fn transient_written(transient: Transient, frame: Frame) -> Tree {
+pub fn transient_written<D: Rendered>(transient: Transient, frame: Frame<'_, D>) -> crate::Term<D> {
     let node = |name: &'static str| vec![("node", word_value(name))];
-    if !frame.core_text() {
+    if let Some(leave) = frame.reader() {
         match transient {
             Transient::Infix(Infix { op, left, right }) => {
                 return tree(crate::Subterm::Infix(crate::Infix {
@@ -33,10 +32,11 @@ pub fn transient_written(transient: Transient, frame: Frame) -> Tree {
             }
             // No surface form states a type beside a bare term, so a reader is shown the pair bracketed.
             Transient::Ascribed(Ascribed { term, type_ }) => {
-                return shown(ShownForm::Ascribed {
-                    term: sub(term, frame),
-                    type_: sub(type_, frame),
-                });
+                return tree(crate::Subterm::Core(D::ascribed(
+                    leave,
+                    sub(term, frame),
+                    sub(type_, frame),
+                )));
             }
             Transient::Derive => return tree(crate::Subterm::Derive),
             transient => return transient_written_as_core(transient, frame, node),
@@ -47,11 +47,11 @@ pub fn transient_written(transient: Transient, frame: Frame) -> Tree {
 }
 
 /// [`transient_written`] for every form whose reader's spelling is its Core text's without the decorator.
-fn transient_written_as_core(
+fn transient_written_as_core<D: Rendered>(
     transient: Transient,
-    frame: Frame,
-    node: impl Fn(&'static str) -> Vec<Decoration>,
-) -> Tree {
+    frame: Frame<'_, D>,
+    node: impl Fn(&'static str) -> Vec<Decoration<D>>,
+) -> crate::Term<D> {
     match transient {
         Transient::Infix(Infix { op, left, right }) => frame.decorated(
             node("Infix"),
@@ -115,7 +115,10 @@ fn transient_written_as_core(
 }
 
 /// A match as it was written: its head and motive, then each arm as its alternatives over the names their rows' bodies bind and the body the first row's opening is — in Core text, each row an arm of its own, its pattern over places and its body as the function over its binders it is, each over the domain Core holds for it, the field `arms` saying how many rows each arm holds where one holds more than one.
-fn matrix_written(Matrix { head, motive, arms }: Matrix, frame: Frame) -> Tree {
+fn matrix_written<D: Rendered>(
+    Matrix { head, motive, arms }: Matrix,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let motive = motive.map(|motive| sub(motive, frame));
     let arms = match frame.core_text() {
         true => arms

@@ -15,7 +15,7 @@ mod dialect;
 use dialect::*;
 pub use dialect::{
     CoreEntry, CoreFile, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
-    CoreValue, Decorated, DecoratorField, Dialect, Program, Unwritable,
+    CoreValue, Decorated, DecoratorField, Dialect, Program, Rendered, Unwritable,
 };
 
 mod term;

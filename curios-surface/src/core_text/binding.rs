@@ -3,15 +3,19 @@
 //! **`let x: T = v; tail` builds a block**, and consecutive `let`s one block of them all, as Core holds them; a block whose tail is a block of its own writes it between parentheses. **`let f: T = b and g: U = c; tail` builds a group**, and a group of one member is that `let` under `#{node = Rec}`, a member being in scope of its own body.
 
 use {
-    super::{ReadError, Reader, Refusal, Tree, core_read, tree, word_value},
+    super::{ReadError, Reader, Refusal, core_read, tree, word_value},
     crate::{
-        CoreText, Frame, LetBinding, LetGroup, LetSignature, Pattern, Shown, label_terms, sub,
+        CoreText, Frame, LetBinding, LetGroup, LetSignature, Pattern, Rendered, label_terms, sub,
     },
     curios_core::{Bound, Free, Let, Many, Rec, Scope, Subterm, Term},
 };
 
 /// One binding of a block or a group: its word, its type and its value.
-fn binding(word: String, type_: Tree, body: Tree) -> LetBinding<Shown> {
+fn binding<D: Rendered>(
+    word: String,
+    type_: crate::Term<D>,
+    body: crate::Term<D>,
+) -> LetBinding<D> {
     LetBinding {
         binder: Pattern::Binder(crate::Label::from(word)),
         signature: LetSignature::Name {
@@ -22,7 +26,10 @@ fn binding(word: String, type_: Tree, body: Tree) -> LetBinding<Shown> {
 }
 
 /// A block: each binding under the ones before it, then its tail. The printer writes a tail that is a block of its own between parentheses, since a run of statements reads as one block.
-pub fn let_written(Let { bindings, tail }: Let, frame: Frame) -> Tree {
+pub fn let_written<D: Rendered>(
+    Let { bindings, tail }: Let,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let labels = frame.labels(tail.label_iter());
     let terms = label_terms(&labels);
     let terms = terms.iter().collect::<Vec<_>>();
@@ -47,7 +54,7 @@ pub fn let_written(Let { bindings, tail }: Let, frame: Frame) -> Tree {
 }
 
 /// A group: each member under every member's name, then its tail; a group of one member under `#{node = Rec}`, which a block of that one binding would otherwise be.
-pub fn rec_written(Rec { group, tail }: Rec, frame: Frame) -> Tree {
+pub fn rec_written<D: Rendered>(Rec { group, tail }: Rec, frame: Frame<'_, D>) -> crate::Term<D> {
     let labels = frame.labels(tail.label_iter());
     let terms = label_terms(&labels);
     let terms = terms.iter().collect::<Vec<_>>();

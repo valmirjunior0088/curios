@@ -10,7 +10,7 @@
 //!
 //! **What Core's equality does not read is not written.** A term's position and a binder's place among the written ones are left out, and a binder is written by its hint, renamed where it would capture or has none: two terms printed alike are one term to every judgment.
 //!
-//! **Each node kind's form and template live in a module of their own, its reader beside its writer.** A sort and the levels it is at, an intrinsic, a function, a tuple, a nominal family or record, a match, a binding, a name, the forms only elaboration builds, and a nominal declaration's form. A reader builds what its form builds and sets what the decorator states, refusing a field its node does not hold; [`to_core`] reads a file's items, making the items a form implies where a reader puts them. A writer builds the shown tree its form is ([`Tree`]), which the program's printer lays out as it lays out a program.
+//! **Each node kind's form and template live in a module of their own, its reader beside its writer.** A sort and the levels it is at, an intrinsic, a function, a tuple, a nominal family or record, a match, a binding, a name, the forms only elaboration builds, and a nominal declaration's form. A reader builds what its form builds and sets what the decorator states, refusing a field its node does not hold; [`to_core`] reads a file's items, making the items a form implies where a reader puts them. A writer builds the tree its form is, Core text's own or a shown one ([`Rendered`]), which the program's printer lays out as it lays out a program.
 
 #[cfg(test)]
 mod tests;
@@ -55,10 +55,13 @@ use transient::*;
 mod tuple;
 use tuple::*;
 
-use curios_core::{Subterm, Term};
+use {
+    crate::Rendered,
+    curios_core::{Subterm, Term},
+};
 
 /// `term` as the shown tree a print lays out under `frame`, with no bound on its descent: [`sub`] is the guarded door every child goes through.
-pub fn core_written(term: Term, frame: Frame) -> Tree {
+pub fn core_written<D: Rendered>(term: Term, frame: Frame<'_, D>) -> crate::Term<D> {
     match Term::unwrap_or_clone(term) {
         Subterm::Sort(sort) => sort_written(sort, frame),
         Subterm::Intrinsic(intrinsic) => intrinsic_written(intrinsic, frame),

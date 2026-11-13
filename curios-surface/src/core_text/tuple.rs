@@ -4,16 +4,19 @@
 
 use {
     super::{
-        Fields, ReadError, Reader, Refusal, Tree, called, core_read, malformed, numeral,
-        telescope_read, term_global, term_number, tree, value, value_variant, word,
+        Fields, ReadError, Reader, Refusal, called, core_read, malformed, numeral, telescope_read,
+        term_global, term_number, tree, value, value_variant, word,
     },
-    crate::{CoreText, Frame, TupleField, TupleTypeParam, sub},
+    crate::{CoreText, Frame, Rendered, TupleField, TupleTypeParam, sub},
     curios_common::{Plicity, Sign},
     curios_core::{Field, Proj, Term, Tuple, TupleType},
 };
 
 /// A tuple type: each field's type, under its label where it has one a reader wrote or a later field reads.
-pub fn tuple_type_written(TupleType { telescope }: TupleType, frame: Frame) -> Tree {
+pub fn tuple_type_written<D: Rendered>(
+    TupleType { telescope }: TupleType,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let mut fields = Vec::with_capacity(telescope.len());
     let mut cursor = telescope.cursor();
     while let Some((_, type_)) = cursor.entry() {
@@ -37,7 +40,10 @@ pub fn tuple_type_written(TupleType { telescope }: TupleType, frame: Frame) -> T
 }
 
 /// A tuple: each field's value, under its label where it carries one; the printer writes a lone unlabelled one before a comma, which no parenthesized term ends with.
-pub fn tuple_written(Tuple { fields, names }: Tuple, frame: Frame) -> Tree {
+pub fn tuple_written<D: Rendered>(
+    Tuple { fields, names }: Tuple,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let mut names = names.into_iter().chain(std::iter::repeat(None));
     let fields = fields
         .into_iter()
@@ -52,7 +58,10 @@ pub fn tuple_written(Tuple { fields, names }: Tuple, frame: Frame) -> Tree {
 }
 
 /// A projection: its head, then the field it reads, under the record and place it reads where a declaration resolved it or none did.
-pub fn projection_written(Proj { head, field }: Proj, frame: Frame) -> Tree {
+pub fn projection_written<D: Rendered>(
+    Proj { head, field }: Proj,
+    frame: Frame<'_, D>,
+) -> crate::Term<D> {
     let read = |field: crate::Field| {
         tree(crate::Subterm::Proj(crate::Proj {
             head: sub(head, frame),
