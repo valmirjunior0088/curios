@@ -1,5 +1,6 @@
 use {
     super::{Mark, Parsed, Parser, ParserError, ParserState, Stated},
+    curios_common::is_identifier_char,
     curios_unicode::is_default_ignorable,
 };
 
@@ -106,12 +107,14 @@ pub fn shown(text: &str) -> String {
     shown
 }
 
-/// What stands at the head of `rest`, as a failure says it after `obtained`: its first `limit` characters short of the next blank, quoted; a blank, where one stands first; and the end of the file at it alone, since a caret before a blank has text after it.
-pub fn obtained(rest: &str, limit: usize) -> String {
+/// What stands at the head of `rest`, as a failure says it after `obtained`: the token there, quoted — a word whole, and otherwise the run of characters up to the next blank or word character; a blank, where one stands first; and the end of the file at it alone, since a caret before a blank has text after it.
+///
+/// The token is what its reader wrote. Cut to the length of the literal that was expected, a missed `|` would name the `e` of the `end` standing in its place, a fragment that names nothing.
+pub fn obtained(rest: &str) -> String {
+    let worded = rest.chars().next().is_some_and(is_identifier_char);
     let found: String = rest
         .chars()
-        .take(limit)
-        .take_while(|char| !is_blank(*char))
+        .take_while(|char| !is_blank(*char) && is_identifier_char(*char) == worded)
         .collect();
 
     match (found.is_empty(), rest.is_empty()) {

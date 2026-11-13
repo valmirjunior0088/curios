@@ -147,3 +147,29 @@ fn a_word_another_language_reserves_is_named_with_the_form_written_instead() {
     let plain = refusal("let three : Nat = add 1 2;\nthree");
     assert!(!plain.contains("is no keyword of Curios"), "{plain}");
 }
+
+/// A literal missed names the token standing in its place whole: a word to its end, and punctuation up to the next blank or word, where the literal's own length would cut a word to a letter that names nothing.
+#[test]
+fn a_missed_literal_names_the_token_in_its_place() {
+    for (source, expected) in [
+        (
+            "let x : Nat = (1 end;\nx",
+            "expected: `)`\n│  obtained: `end`",
+        ),
+        (
+            "let x : Nat = (1 ]] y;\nx",
+            "expected: `)`\n│  obtained: `]]`",
+        ),
+        (
+            "let x : List(Nat) = [1, 2 end;\nx",
+            "expected: `]`\n│  obtained: `end`",
+        ),
+        (
+            "let x : Nat = (1",
+            "expected: `)`\n│  obtained: the end of the file",
+        ),
+    ] {
+        let report = refusal(source);
+        assert!(report.contains(expected), "{source:?} reported {report}");
+    }
+}

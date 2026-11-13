@@ -109,7 +109,7 @@ impl ParserError {
         }
     }
 
-    /// The failure of a literal that was not at `state`: the literal expected, and what was obtained in its place as [`obtained`] says it, up to the literal's length.
+    /// The failure of a literal that was not at `state`: the literal expected, and what was obtained in its place as [`obtained`] says it.
     pub(crate) fn expected(state: ParserState, expected: &'static str) -> Self {
         Self::saying(state, Message::Expected(expected))
     }
@@ -147,7 +147,7 @@ impl ParserError {
                 said.stating(format_args!("expected: `{expected}`"));
                 said.stating(format_args!(
                     "obtained: {}",
-                    obtained(&self.source.text()[self.offset..], expected.chars().count())
+                    obtained(&self.source.text()[self.offset..])
                 ));
             }
         }

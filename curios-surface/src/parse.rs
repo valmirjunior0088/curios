@@ -482,7 +482,7 @@ fn parse_keyword<'a>(expected: &'static str) -> impl Parser<'a, ()> {
                     (_, true) => pure(()).boxed(),
                     ("", false) => fail(vec![
                         format!("expected: the keyword `{expected}`"),
-                        format!("obtained: {}", obtained(rest, 1)),
+                        format!("obtained: {}", obtained(rest)),
                     ])
                     .boxed(),
                     // The report spans the word, so the caret underlines it rather than standing after it.
