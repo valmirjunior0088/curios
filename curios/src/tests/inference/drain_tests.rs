@@ -112,24 +112,6 @@ fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
     );
 }
 
-// A match whose scrutinee's type nothing decided is refused where it is read, as its eliminator refuses a scrutinee of any other type: the report names the carrier the match expected.
-#[test]
-fn a_match_nothing_types_is_refused_as_its_eliminator_refuses() {
-    let report = error(
-        r#"
-        use /std/{Nat};
-        let g(n: Nat) -> Nat =
-            let p = ?;
-            match p | [] => 0 | [_, .._] => 1 end;
-        /std/print("unreachable")
-        "#,
-    );
-    assert!(
-        report.contains("expected: a List"),
-        "the report should name the carrier the match expected:\n{report}"
-    );
-}
-
 // The two lambdas have their type where `Eq()`'s call completes, so the declared type is whole before the body is read, and reflexivity is refused between two whole types: the fault keeps a mismatch's words, with both sides spelled.
 #[test]
 fn reflexivity_at_two_lambdas_that_differ_is_a_mismatch() {

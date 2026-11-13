@@ -5,9 +5,10 @@
 use {
     super::{Misaligned, Mode, align, elaborate, stands_at},
     crate::{
-        BinderSite, Context, Error, MotiveShape, check, check_motive, dead_guard, decided_sort_of,
-        expect, hold_prop, is_prop, pending, probe_open_sort, quality_of, reduce_with, refine_head,
-        resolved_for_display, same_uncommitted, zonk_solved_term_metas,
+        BinderSite, Context, Error, MotiveShape, check, check_is_sort, check_motive, dead_guard,
+        decided_sort_of, expect, hold_prop, is_prop, pending, probe_open_sort, quality_of,
+        reduce_with, refine_head, resolved_for_display, same_uncommitted, stuck_on_metavar,
+        zonk_solved_term_metas,
     },
     curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
     curios_common::Plicity,
@@ -38,7 +39,7 @@ impl Scrutinee {
         })
     }
 
-    /// The rebuilt scrutinee and its type, required to be the given intrinsic type; any other is refused as `eliminator` refuses it.
+    /// The rebuilt scrutinee and its type, required to be the given intrinsic type; any other is refused as `eliminator` refuses it. A type nothing has decided yet, stuck on a metavariable — a written goal's stand-in is one — is held to that type, which the arms name, as a checked term's is.
     fn of_intrinsic(
         self,
         context: &mut Context,
@@ -46,6 +47,17 @@ impl Scrutinee {
         expected: IntrinsicHead,
     ) -> Result<(Term, Term), Error> {
         let Self { term: head, type_ } = self;
+        if stuck_on_metavar(context, &type_) {
+            let carrier: Term = Subterm::Intrinsic(match expected {
+                IntrinsicHead::Nat => Intrinsic::NatType,
+                IntrinsicHead::Bool => Intrinsic::BoolType,
+                IntrinsicHead::Bytes => Intrinsic::BytesType,
+            })
+            .into();
+            expect(context, &head, &type_, &carrier)?;
+
+            return Ok((head, carrier));
+        }
         let carrier = match expected {
             IntrinsicHead::Nat => matches!(&*type_, Subterm::Intrinsic(Intrinsic::NatType)),
             IntrinsicHead::Bool => matches!(&*type_, Subterm::Intrinsic(Intrinsic::BoolType)),
@@ -383,6 +395,18 @@ impl SequenceSplit {
                     term: head,
                     type_: head_type,
                 } = scrutinee;
+                // A type nothing has decided yet is held to a list, as [`Scrutinee::of_intrinsic`] holds one to its carrier, of an element type left to what pins it.
+                let head_type = match stuck_on_metavar(context, &head_type) {
+                    true => {
+                        let slot = Term::hole(context.mint_metavar());
+                        let element = check_is_sort(context, &slot)?.0;
+                        let list: Term = Subterm::Intrinsic(Intrinsic::ListType(element)).into();
+                        expect(context, &head, &head_type, &list)?;
+
+                        list
+                    }
+                    false => head_type,
+                };
                 let element = match &*head_type {
                     Subterm::Intrinsic(Intrinsic::ListType(element)) => element.clone(),
                     _ => {
