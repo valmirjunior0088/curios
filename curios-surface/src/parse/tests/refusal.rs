@@ -35,7 +35,7 @@ fn the_refusal_of_two_terms_stands_at_the_second() {
         .unwrap_err();
 
     assert_eq!(
-        error.report().span.expect("located").line_column(),
+        error.report().span().expect("located").line_column(),
         (1, 23),
         "{}",
         error.format()

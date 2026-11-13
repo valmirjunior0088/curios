@@ -325,7 +325,7 @@ fn an_induct_case_with_no_payload_list_reports_where_the_list_is_missing() {
             error.format()
         );
         assert_eq!(
-            error.report().span.expect("located").line_column(),
+            error.report().span().expect("located").line_column(),
             (1, column),
             "{source}: {}",
             error.format()

@@ -14,6 +14,8 @@ pub enum Kind {
     Goal,
     /// An exact finding nothing stops on.
     Lint,
+    /// A text the formatter would write otherwise.
+    Format,
 }
 
 impl Kind {
@@ -23,6 +25,7 @@ impl Kind {
             Kind::Error => "error",
             Kind::Goal => "goal",
             Kind::Lint => "lint",
+            Kind::Format => "format",
         }
     }
 

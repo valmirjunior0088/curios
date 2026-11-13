@@ -51,7 +51,7 @@ fn a_candidate_anchor_that_is_no_item_ends_the_loop_uncommitted() {
     let error = Module::parse(&Source::inline("pub let a : Nat = ;\nlet x = 1;\n")).unwrap_err();
 
     assert_eq!(
-        error.report().span.expect("located").line_column().0,
+        error.report().span().expect("located").line_column().0,
         2,
         "reported at the candidate"
     );
@@ -112,7 +112,7 @@ fn the_whole_or_nothing_reading_refuses_at_the_first_broken_item() {
         error.format()
     );
     assert_eq!(
-        error.report().span.expect("located").line_column().0,
+        error.report().span().expect("located").line_column().0,
         1,
         "the first item's own location"
     );
@@ -133,7 +133,7 @@ fn a_broken_last_item_reports_itself_rather_than_the_missing_tail() {
         error.format()
     );
     assert_eq!(
-        error.report().span.expect("located").line_column().0,
+        error.report().span().expect("located").line_column().0,
         1,
         "the item's own location"
     );

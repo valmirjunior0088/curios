@@ -210,7 +210,7 @@ fn a_witness_binder_takes_its_word_in_core_text_alone() {
 /// A program's grammar reads none of Core text's forms — a decorator, a declaration's absolute name, a witness by its identity, an intrinsic node — and refuses each where it stands, at the token it does not expect; `%` between two operands is the remainder still.
 #[test]
 fn a_program_reads_no_form_of_core_text() {
-    let refused_at = |error: ParserError| error.report().span.map(|span| span.start);
+    let refused_at = |error: ParserError| error.report().span().map(|span| span.start);
     for (source, at) in [
         ("#{a = x} f", 0),
         ("f(#{a = x} y)", 2),

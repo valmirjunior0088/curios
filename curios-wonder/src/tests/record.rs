@@ -36,11 +36,7 @@ fn a_parse_failure_is_one_error_at_the_offset_the_parser_stopped() {
     };
 
     assert_eq!(report.severity, Severity::Error);
-    let span = report
-        .report
-        .span
-        .as_ref()
-        .expect("a parse failure is located");
+    let span = report.report.span().expect("a parse failure is located");
     assert_eq!(span.line_column(), (2, 1));
     assert!(
         report.rendered(&Style::plain()).contains("<stdin>:2:1"),
@@ -57,11 +53,7 @@ fn a_refused_type_is_one_error_at_the_term_refused() {
     };
 
     assert_eq!(report.severity, Severity::Error);
-    let span = report
-        .report
-        .span
-        .as_ref()
-        .expect("a type error is located");
+    let span = report.report.span().expect("a type error is located");
     assert_eq!(span.line_column(), (1, 23));
     // The record renders as the compile path prints: message, then the snippet the span draws.
     assert!(
@@ -115,8 +107,8 @@ fn every_goal_is_its_own_record_at_its_own_occurrence() {
 
     assert_eq!(first.severity, Severity::Goal);
     assert_eq!(second.severity, Severity::Goal);
-    assert_eq!(first.report.span.as_ref().unwrap().line_column(), (1, 21));
-    assert_eq!(second.report.span.as_ref().unwrap().line_column(), (2, 21));
+    assert_eq!(first.report.span().unwrap().line_column(), (1, 21));
+    assert_eq!(second.report.span().unwrap().line_column(), (2, 21));
     // What the report says carries no pane — the span is the record's, and the transport draws or does not draw it.
     assert_eq!(first.report.message(), "`/std/Nat` expected");
 }
@@ -134,7 +126,7 @@ fn a_lint_is_its_own_record_at_the_word() {
         report.report.message(),
         "unused import\n  `Bool` is never used\n  delete it"
     );
-    assert_eq!(report.report.span.as_ref().unwrap().line_column(), (1, 11));
+    assert_eq!(report.report.span().unwrap().line_column(), (1, 11));
     assert!(
         report.rendered(&Style::plain()).contains("<stdin>:1:11"),
         "{}",
@@ -257,8 +249,8 @@ fn every_refusal_in_a_broken_file_is_listed() {
 
     assert_eq!(first.severity, Severity::Error);
     assert_eq!(second.severity, Severity::Error);
-    assert_eq!(first.report.span.as_ref().unwrap().line_column(), (1, 21));
-    assert_eq!(second.report.span.as_ref().unwrap().line_column(), (3, 21));
+    assert_eq!(first.report.span().unwrap().line_column(), (1, 21));
+    assert_eq!(second.report.span().unwrap().line_column(), (3, 21));
 }
 
 #[test]
@@ -269,9 +261,9 @@ fn a_goal_beside_a_refusal_keeps_its_goal_severity() {
     };
 
     assert_eq!(refusal.severity, Severity::Error);
-    assert_eq!(refusal.report.span.as_ref().unwrap().line_column(), (1, 21));
+    assert_eq!(refusal.report.span().unwrap().line_column(), (1, 21));
     assert_eq!(goal.severity, Severity::Goal);
-    assert_eq!(goal.report.span.as_ref().unwrap().line_column(), (2, 21));
+    assert_eq!(goal.report.span().unwrap().line_column(), (2, 21));
 }
 
 /// A withheld witness declaration reports nothing of its own, and neither do its consumers: the miss they would report is the withholding's consequence, and the withholding's cause is already in the answer.
@@ -308,7 +300,7 @@ fn a_broken_declaration_is_reported_beside_the_declarations_after_it() {
     };
 
     assert_eq!(first.severity, Severity::Error);
-    assert_eq!(first.report.span.as_ref().unwrap().line_column().0, 1);
+    assert_eq!(first.report.span().unwrap().line_column().0, 1);
     assert_eq!(second.severity, Severity::Error);
-    assert_eq!(second.report.span.as_ref().unwrap().line_column(), (2, 21));
+    assert_eq!(second.report.span().unwrap().line_column(), (2, 21));
 }

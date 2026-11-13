@@ -64,6 +64,76 @@ fn a_goal_is_answered_on_stdout_with_exit_zero() {
     );
 }
 
+/// A text the formatter would write otherwise is said once, after what the compiler says of it, with the command that rewrites it, and stops nothing: standard input by its own name, and a canonical text not at all.
+#[test]
+fn a_text_the_formatter_would_rewrite_is_said_once_with_the_way_out() {
+    let root = temporary("not-canonical-stdin");
+    fs::create_dir_all(&root).unwrap();
+
+    let answered = curios(
+        &root,
+        &["wonder", "-"],
+        "let   unused = 1;\n/std/print(  \"\")\n",
+    );
+
+    assert!(answered.status.success());
+    let text = stdout(&answered);
+    assert!(
+        text.ends_with(concat!(
+            "╰─ [lint] <stdin>:1:7\n",
+            "\n",
+            "not canonical\n",
+            "│  the formatter would rewrite this text\n",
+            "├─ try; curios format -\n",
+            "╰─ [format] <stdin>\n",
+        )),
+        "{text}"
+    );
+
+    let canonical = curios(&root, &["wonder", "-"], "/std/print(\"\")\n");
+    assert_eq!(stdout(&canonical), "");
+}
+
+/// Every file a subject is written in is asked about, as `format` would rewrite it, and each is named as its reader spells it: a package's two files that are not canonical are two reports, and a file asked about alone is one.
+#[test]
+fn each_file_the_formatter_would_rewrite_is_a_report_of_its_own() {
+    let root = project("not-canonical-files");
+    write(&root, "lib.crs", "pub   mod util;\n");
+    write(&root, "app.crs", "/std/print(  /app/util/word)\n");
+
+    let entire = curios(&root, &["wonder"], "");
+    assert!(entire.status.success());
+    assert_eq!(
+        stdout(&entire),
+        concat!(
+            "not canonical\n",
+            "│  the formatter would rewrite this file\n",
+            "├─ try; curios format lib.crs\n",
+            "╰─ [format] lib.crs\n",
+            "\n",
+            "not canonical\n",
+            "│  the formatter would rewrite this file\n",
+            "├─ try; curios format app.crs\n",
+            "╰─ [format] app.crs\n",
+        )
+    );
+
+    let alone = curios(&root, &["wonder", "app.crs"], "");
+    assert_eq!(
+        stdout(&alone),
+        concat!(
+            "not canonical\n",
+            "│  the formatter would rewrite this file\n",
+            "├─ try; curios format app.crs\n",
+            "╰─ [format] app.crs\n",
+        )
+    );
+
+    // `lint` reads what the compilation found, which a text's layout is no part of.
+    let linted = curios(&root, &["lint"], "");
+    assert_eq!(stdout(&linted), "");
+}
+
 /// `--manifest` takes the file as it is spelled, and a bare `curios.toml` names the one in the working directory: its parent is the empty path, which is no directory to resolve on its own.
 #[test]
 fn a_bare_manifest_override_names_the_working_directory() {
@@ -159,7 +229,7 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
 fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     let root = temporary("stemless");
     fs::create_dir_all(&root).unwrap();
-    let module = "use /std/{Nat};\n\npub let double(n: Nat) -> Nat = n * 2;\n";
+    let module = "use /std/{Nat};\n\npub let double(n: Nat) -> Nat =\n    n * 2;\n";
     write(&root, "my-file.crs", module);
     write(&root, "myfile.crs", module);
 

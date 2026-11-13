@@ -10,12 +10,13 @@ use {
         STDIN_LABEL, Severity, Subject, Uncosted, Written, checked, cost, declared_tests,
         diagnostics, stage, unit_stage, written,
     },
-    curios_common::{Span, Style},
+    curios_common::{About, Kind, Report, Said, Source, Span, Style},
     curios_core::Declared,
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
-    curios_package::{Entry, Library, Program, Selection},
+    curios_package::{Entry, Library, Program, Selection, Spelling},
     curios_pipeline::{CompileError, Progress},
+    curios_surface::{Formatted, Width},
     curios_verdict::{Session, Verdicts},
     std::{
         collections::BTreeSet,
@@ -329,17 +330,26 @@ impl Asked {
     }
 }
 
-/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, a blank line between each, `telling` told of each subject's compile as it goes.
+/// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, and after them each text of it the formatter would write otherwise, `files` and standard input read within `width`, a blank line between each, `telling` told of each subject's compile as it goes.
 pub fn wonder_diagnostics(
     budget: u64,
     selection: Selection,
+    files: &[PathBuf],
+    width: Width,
     telling: &mut dyn Telling,
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
     let answers = Asked::every(selection)?;
+    let reader = telling.reader();
+    let unformatted = uncanonical(&answers, files, width, &reader);
 
-    let reports = rendered(answers, budget, &overlay, telling);
+    let mut reports = rendered(answers, budget, &overlay, telling);
+    reports.extend(
+        unformatted
+            .iter()
+            .map(|report| report.rendered(Kind::Format, &reader)),
+    );
     if !reports.is_empty() {
         telling.answering();
         answer(format_args!("{}\n", reports.join("\n\n")));
@@ -374,6 +384,43 @@ pub fn wonder_tests(
         }
     }
     listed
+}
+
+/// Each text of a subject the formatter would write otherwise, a report a text: each of `files`, once, and the text a subject of `answers` was read from standard input as. A text the formatter refuses is none of them, since why it refuses is the compilation's to say.
+///
+/// **One report a text, never one a place**: what would move is the formatter's to show, by writing it, and the way out is one command however much moves.
+fn uncanonical(answers: &[Asked], files: &[PathBuf], width: Width, reader: &Style) -> Vec<Report> {
+    let moved = |formatted| matches!(formatted, Ok(Formatted::Changed(_)));
+    let report = |about, what: &str, subject: &str| {
+        let mut said = Said::line("not canonical");
+        said.stating(format_args!("the formatter would rewrite this {what}"));
+
+        Report::about(about, said).trying(format!("curios format {subject}"))
+    };
+    let mut seen = BTreeSet::new();
+    let written = files
+        .iter()
+        .filter(|path| seen.insert(*path))
+        .filter(|path| moved(Formatted::from_path(path, width)))
+        .map(|path| report(About::Path(path.clone()), "file", &reader.spelled(path)));
+    let read = answers
+        .iter()
+        .filter_map(|asked| match &asked.subject {
+            Subject::Entry {
+                origin: Origin::Text { label, text },
+                ..
+            } => Some((label, text)),
+            _ => None,
+        })
+        .filter(|(label, text)| {
+            moved(Formatted::from_source(
+                &Source::labelled(label, text.as_str()),
+                width,
+            ))
+        })
+        .map(|(label, _)| report(About::Named(label.clone()), "text", Spelling::STDIN));
+
+    written.chain(read).collect()
 }
 
 /// Every answer's diagnostics, rendered, each distinct fact once.

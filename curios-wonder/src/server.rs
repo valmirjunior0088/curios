@@ -750,7 +750,7 @@ fn adapt(document: &Path, record: &Diagnosis) -> (PathBuf, Diagnostic) {
             .map(curios_module::identity)
             .unwrap_or_else(|| document.to_path_buf())
     };
-    let (path, range) = match &record.report.span {
+    let (path, range) = match record.report.span() {
         Some(span) => (lies_in(span), range_of(span)),
         None => (document.to_path_buf(), Range::default()),
     };

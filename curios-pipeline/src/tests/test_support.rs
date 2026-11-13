@@ -788,7 +788,7 @@ pub fn pasted(source: &str) -> Result<String, String> {
     let mut answers = reports
         .iter()
         .map(|report| {
-            let span = report.span.as_ref().expect("a goal report is located");
+            let span = report.span().expect("a goal report is located");
             assert_eq!(
                 span.source.text(),
                 source,

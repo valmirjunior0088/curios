@@ -146,6 +146,43 @@ fn the_panes_of_a_report_share_one_gutter() {
     );
 }
 
+/// A report about a file as a whole, or a thing by its name, closes on it with no code shown, and each way out is a branch above that line, behind `try`.
+#[test]
+fn a_report_about_a_file_or_a_name_closes_on_it_under_its_ways_out() {
+    let said = || {
+        let mut said = Said::line("not canonical");
+        said.stating("the formatter would rewrite this file");
+        said
+    };
+    let reader = Style {
+        here: Some("/work/app".into()),
+        ..Style::plain()
+    };
+
+    assert_eq!(
+        Report::about(About::Path("/work/app/src/lib.crs".into()), said())
+            .trying("curios format src/lib.crs")
+            .rendered(Kind::Format, &reader),
+        concat!(
+            "not canonical\n",
+            "│  the formatter would rewrite this file\n",
+            "├─ try; curios format src/lib.crs\n",
+            "╰─ [format] src/lib.crs",
+        )
+    );
+    assert_eq!(
+        Report::about(About::Named("<stdin>".into()), said())
+            .trying("curios format -")
+            .rendered(Kind::Format, &reader),
+        concat!(
+            "not canonical\n",
+            "│  the formatter would rewrite this file\n",
+            "├─ try; curios format -\n",
+            "╰─ [format] <stdin>",
+        )
+    );
+}
+
 /// A report about no place closes on its word alone, and one about text no file holds on the line and the column.
 #[test]
 fn a_report_closes_on_what_it_has_of_a_place() {

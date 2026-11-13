@@ -274,7 +274,7 @@ fn a_declarations_member_written_alone_is_reported_where_it_stands() {
             "{source:?} reported {report}"
         );
         assert_eq!(
-            error.report().span.map(|span| span.start),
+            error.report().span().map(|span| span.start),
             source.find(')'),
             "{source:?} reported {report}"
         );

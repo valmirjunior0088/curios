@@ -160,7 +160,7 @@ impl Headed {
                 if let Some(label) = declares {
                     label.rebase(source);
                 }
-                if let Some(span) = &mut report.span {
+                if let Some(span) = report.span_mut() {
                     span.source = Arc::clone(source);
                 }
                 for note in &mut report.notes {

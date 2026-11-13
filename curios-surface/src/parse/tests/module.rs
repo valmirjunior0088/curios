@@ -450,7 +450,7 @@ fn what_stands_past_a_programs_final_term_is_refused_as_what_it_is() {
             "{source:?} reported {report}"
         );
         assert_eq!(
-            error.report().span.expect("located").line_column(),
+            error.report().span().expect("located").line_column(),
             place,
             "{source:?} reported {report}"
         );

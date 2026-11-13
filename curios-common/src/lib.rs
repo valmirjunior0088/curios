@@ -20,8 +20,8 @@ pub use entropy::{Entropy, Mint};
 
 mod span;
 pub use span::{
-    ArchivedNote, ArchivedReport, ArchivedSource, ArchivedSpan, LINE_WIDTH, Note, Pane, Report,
-    Said, Source, Span,
+    About, ArchivedNote, ArchivedReport, ArchivedSource, ArchivedSpan, LINE_WIDTH, Note, Pane,
+    Report, Said, Source, Span,
 };
 
 mod style;

@@ -38,7 +38,7 @@ use {
         Entry, Fetch, Pinning, Repoint, Spelling, Store, Target, Transport, curate, pin, scaffold,
     },
     curios_pipeline::CompileError,
-    curios_surface::Formatted,
+    curios_surface::{Formatted, Width},
     curios_wonder::{
         Linted, STDIN_LABEL, Staged, answer, lint, serve, std_documentation, wonder_at,
         wonder_cost, wonder_declarations, wonder_diagnostics, wonder_stage, wonder_tests,
@@ -735,11 +735,23 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Wonder {
             query, elaboration, ..
         } => match query {
-            Query::Check => wonder_diagnostics(
-                elaboration.budget,
-                contract.admit_any(subject, manifest, &here()?)?,
-                &mut Asking::checking(answered.clone()),
-            )?,
+            Query::Check => {
+                let directory = here()?;
+                // What the formatter would rewrite is said beside what the compiler says, never in its place: where the texts cannot be listed, the compilation's own report says why, and `format` is where a `[format]` table is refused.
+                let (files, width) = match contract.written_in(subject, manifest, &directory) {
+                    Ok(Rewritten::Files(files, width)) => (files, width),
+                    Ok(Rewritten::Stdin(width)) => (Vec::new(), width),
+                    Err(_) => (Vec::new(), Width::default()),
+                };
+
+                wonder_diagnostics(
+                    elaboration.budget,
+                    contract.admit_any(subject, manifest, &directory)?,
+                    &files,
+                    width,
+                    &mut Asking::checking(answered.clone()),
+                )?
+            }
             Query::Tests => wonder_tests(
                 elaboration.budget,
                 contract.admit_any(subject, manifest, &here()?)?,

@@ -18,7 +18,7 @@ fn placed(source: &str) -> Vec<Option<String>> {
     refusal(source)
         .iter()
         .map(|report| {
-            let span = report.span.as_ref()?;
+            let span = report.span()?;
 
             Some(span.source.text()[span.start..span.end].to_string())
         })
@@ -52,7 +52,7 @@ fn note(text: &str, message: &str) -> (String, String) {
 /// Whether the one note of `source`'s refusal is placed before the refusal itself, in the text.
 fn noted_above(source: &str) -> bool {
     let reports = refusal(source);
-    let refused = reports[0].span.as_ref().expect("the refusal is placed");
+    let refused = reports[0].span().expect("the refusal is placed");
 
     reports[0].notes[0].span.start < refused.start
 }
@@ -128,7 +128,7 @@ fn a_proof_reaching_a_partial_definition_is_placed_at_the_name_it_reaches() {
         /std/print("x")
     "#;
     let reports = refusal(source);
-    let span = reports[0].span.as_ref().expect("the obligation is placed");
+    let span = reports[0].span().expect("the obligation is placed");
     assert_eq!(&span.source.text()[span.start..span.end], "loop");
     // The occurrence in the body, not the name the declaration is written under.
     assert!(
@@ -250,7 +250,7 @@ fn a_conflicting_export_is_placed_at_the_selector_that_arrives_second() {
         /std/print("x")
     "#;
     let reports = refusal(source);
-    let span = reports[0].span.as_ref().expect("the conflict is placed");
+    let span = reports[0].span().expect("the conflict is placed");
     assert_eq!(&span.source.text()[span.start..span.end], "x");
     assert!(
         span.source.text()[..span.start].ends_with("pub use /B/{y, "),
@@ -445,7 +445,7 @@ fn an_import_of_a_declared_label_notes_the_declaration() {
         /std/print("x")
     "#;
     let reports = refusal(source);
-    let refused = reports[0].span.as_ref().expect("the conflict is placed");
+    let refused = reports[0].span().expect("the conflict is placed");
     assert!(
         refused.source.text()[..refused.start].ends_with("use /std/{"),
         "placed after {:?}",

@@ -539,6 +539,27 @@ impl Contract {
     ) -> Result<Rewritten, String> {
         debug_assert_eq!(self.accepts, Accepts::Files, "{}", self.command);
 
+        Self::rewritten(subject, manifest, directory, settings)
+    }
+
+    /// What [`admit_files`](Self::admit_files) would rewrite of whatever `subject` selects, for a command that takes any subject and says of each text it is written in whether the formatter would write it otherwise.
+    pub fn written_in(
+        &self,
+        subject: Option<&str>,
+        manifest: Option<&Path>,
+        directory: &Path,
+    ) -> Result<Rewritten, String> {
+        debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
+
+        Self::rewritten(subject, manifest, directory, &FormatSettings::default())
+    }
+
+    fn rewritten(
+        subject: Option<&str>,
+        manifest: Option<&Path>,
+        directory: &Path,
+        settings: &FormatSettings,
+    ) -> Result<Rewritten, String> {
         Ok(match Spelling::of(subject) {
             Spelling::File(path) => {
                 let path = file_subject(path)?;

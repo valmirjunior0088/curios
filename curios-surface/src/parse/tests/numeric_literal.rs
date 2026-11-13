@@ -152,7 +152,7 @@ fn a_sign_that_touches_no_magnitude_is_told_what_a_sign_leads() {
             "{source:?} reported {report}"
         );
         assert_eq!(
-            error.report().span.map(|span| span.start),
+            error.report().span().map(|span| span.start),
             source.find(['-', '+']).map(|sign| sign + 1),
             "{source:?} reported {report}"
         );

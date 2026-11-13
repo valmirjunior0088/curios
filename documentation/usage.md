@@ -128,7 +128,7 @@ type mismatch
 ╰─ [error] demo.crs:3:18
 ```
 
-The first line is a tag: a few words that name the kind of thing reported, the same wherever it is met and whichever stage reports it, with nothing of the program in them. What is reported of this program follows on a trunk, a fact a line and in one order: what stands here, the terms at issue each behind a label, the rule it is held to, and the way out, said as what to write. Then comes the program's own text, an empty line of the trunk above and below it, with marks under what the report is about. The last line says what the report is, in brackets, and where it stands: `[error]` for what a rule refuses, `[goal]` for a [written goal](language.md#written-goals), `[lint]` for a [lint](#lint), then the file, the line and the column, the file spelled from where the invocation stands, as one word a terminal opens. A report about a second place shows that place first, closed by what stands there and a `;`, as a step of the tree is by what it came to, so the report's own place is always its last line, the one line in brackets; and every pane of one report shares a gutter, so the code of each begins in one column:
+The first line is a tag: a few words that name the kind of thing reported, the same wherever it is met and whichever stage reports it, with nothing of the program in them. What is reported of this program follows on a trunk, a fact a line and in one order: what stands here, the terms at issue each behind a label, the rule it is held to, and the way out, said as what to write. Then comes the program's own text, an empty line of the trunk above and below it, with marks under what the report is about. The last line says what the report is, in brackets, and where it stands: `[error]` for what a rule refuses, `[goal]` for a [written goal](language.md#written-goals), `[lint]` for a [lint](#lint), then the file, the line and the column, the file spelled from where the invocation stands, as one word a terminal opens. A report about a file as a whole shows no code and closes on the file alone, as `[format]` does for a text the formatter would rewrite ([`wonder`](#wonder)), and a way out that is a command stands above the last line, behind `try`. A report about a second place shows that place first, closed by what stands there and a `;`, as a step of the tree is by what it came to, so the report's own place is always its last line, the one line in brackets; and every pane of one report shares a gutter, so the code of each begins in one column:
 
 ```text
 declaration cycle
@@ -486,7 +486,7 @@ A file that cannot be formatted closes as `format; refused`, why following, and 
 
 | Query | Answers |
 | --- | --- |
-| none | every diagnostic, goal and lint — the errors and goals rendered as `run` reports them, each lint after them as [`lint`](#lint) describes — a blank line between; nothing when the subject compiles clean. A unit is asked under its written tail, never the test program `test` synthesizes, since that tail raises nothing a test's own check did not |
+| none | every diagnostic, goal and lint — the errors and goals rendered as `run` reports them, each lint after them as [`lint`](#lint) describes — then each text the formatter would rewrite, a blank line between; nothing when the subject compiles clean and is canonical. A unit is asked under its written tail, never the test program `test` synthesizes, since that tail raises nothing a test's own check did not |
 | `--tests` | every test the subject declares, one path per line, in declaration order — the library's, then each executable's, for the package entire; nothing when it declares none, and nothing executes |
 | `--cost` | what became of each declaration by the time the optimizer settled — `<name>`, a tab, then `survived`, `specialized <n>` or `absorbed` — one row per line, ordered by name. Nothing is judged: a row states the fate and stops |
 | `--stage <STAGE>` | the program's representation at one rung of the pipeline, reprinted. A rung the compilation reached is answered even when a later stage refuses, and is written where it is reached, so nothing a later stage does unmakes it: the rendering goes to stdout, what stopped the program goes to stderr, and the exit is 0. Only a program that stops *before* the rung has not answered, and exits 2 when written goals alone stopped it and 1 otherwise |
@@ -495,6 +495,17 @@ A file that cannot be formatted closes as `format; refused`, why following, and 
 | `--server` | every question the others answer, asked by an editor over the language server protocol on standard input and output: what an editor integration launches. It publishes a document's diagnostics as the document is edited, and every open document's when one is saved, read from the disk as it then stands; it formats a document, and answers where the name under a cursor is declared, what that declaration states of it — its head and prose, as a hover — and what the document declares: each from the document's last check, so none waits on a check in hand, and a declaration edited since answers once it is checked again. It takes no subject, since an editor hands it its documents, and one written beside it is refused where the line is parsed |
 
 No subject at all is the governing package entire for the check and `--tests`, and the sole or `default` executable for `--stage` and `--cost`, which both need a program and so refuse a file written as a module. For `--at` and `--declarations` it is that executable's entry file.
+
+The check also asks the formatter about every text its subject is written in — the files [`format`](#format) would rewrite for the same subject, each at its package's width, or standard input — and says of each that would change that it is `not canonical`, once a text however much of it would move, with the command that rewrites it:
+
+```text
+not canonical
+│  the formatter would rewrite this file
+├─ try; curios format shapes.crs
+╰─ [format] shapes.crs
+```
+
+It is no lint, since no compilation finds it, so [`lint`](#lint) says nothing of it and no exit code turns on it: `format --check` is the question whose answer is a code. A text the formatter refuses is not reported here, since the check's own report says why.
 
 `--at` and `--declarations` are asked about one file: the one the subject names, an executable's entry where it names one, and a library's header where it names none of its files. They are answered by the lowering, which is where a written name is resolved, and by no checker, so a file that does not elaborate answers as one that does, and only one that does not lower stops the question as it stops a build.
 

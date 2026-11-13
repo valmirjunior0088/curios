@@ -21,7 +21,7 @@ pub fn write(root: &Path, path: &str, contents: &str) {
     fs::write(path, contents).unwrap();
 }
 
-/// A package whose library spreads over two files and whose executable uses it.
+/// A package whose library spreads over two files and whose executable uses it, each file laid out as the formatter writes it, so a check of it says nothing.
 pub fn project(name: &str) -> Temporary {
     let root = temporary(name);
     write(
@@ -30,7 +30,11 @@ pub fn project(name: &str) -> Temporary {
         "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
     );
     write(&root, "lib.crs", "pub mod util;\n");
-    write(&root, "util.crs", "pub let word : /std/Str = \"placed\";\n");
+    write(
+        &root,
+        "util.crs",
+        "pub let word: /std/Str =\n    \"placed\";\n",
+    );
     write(&root, "app.crs", "/std/print(/app/util/word)\n");
     root
 }

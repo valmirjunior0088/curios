@@ -84,7 +84,7 @@ fn a_batch_renders_one_report_per_member() {
     assert_eq!(
         reports
             .iter()
-            .map(|report| report.span.as_ref().map(|span| (span.start, span.end)))
+            .map(|report| report.span().map(|span| (span.start, span.end)))
             .collect::<Vec<_>>(),
         vec![Some((0, 1)), Some((2, 3))]
     );

@@ -850,7 +850,7 @@ fn the_server_files_a_unit_from_the_disk_and_nothing_for_a_keystroke() {
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
 
-    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = \"placed\";\n"}}}"#, uri));
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"pub let word: /std/Str =\n    \"placed\";\n"}}}"#, uri));
     let published = editor.receive();
     assert!(published.contains(r#""diagnostics":[]"#), "{published}");
     let filed = slots(&root);

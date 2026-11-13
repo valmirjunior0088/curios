@@ -54,7 +54,7 @@ fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_
                 .text()
                 .expect("a program's unit holds its lowering")
                 .anchors()]);
-            let span = report.span.as_ref().expect("a lint is placed");
+            let span = report.span().expect("a lint is placed");
 
             span.source.path().expect("in a file").to_path_buf()
         })

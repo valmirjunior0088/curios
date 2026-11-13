@@ -239,13 +239,25 @@ fn window(text: &str, line_start: usize, line_end: usize, at: usize) -> (usize, 
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]
 pub struct Report {
-    pub span: Option<Span>,
+    /// What the report is about, which its last line names, where it is about anything a reader can be pointed at.
+    pub about: Option<About>,
     /// The kind of thing reported, as a tag: a few words that name it wherever it is met, and nothing of the program it is met in.
     pub headline: String,
     /// What is reported of this program, a fact each, in the order they are said: what stands here, then what it is held to, then the way out. A fact too wide for a line runs over several, each after its first indented as the fact writes it.
     pub facts: Vec<String>,
     /// Each further place the report is about, in the order it says them — see [`Note`].
     pub notes: Vec<Note>,
+    /// Each command that is a way out, as its reader types it.
+    pub tries: Vec<String>,
+}
+
+/// What a report is about: a place in a text, shown with its line; a file or a directory as a whole, spelled from where its reader stands; or a thing by its own name, standard input among them.
+#[derive(Debug, Clone, PartialEq)]
+#[curios_archive::archived]
+pub enum About {
+    Place(Span),
+    Path(#[archived_with(curios_archive::AsString)] PathBuf),
+    Named(String),
 }
 
 /// What a report says before it stands anywhere, as whoever says it builds it: a tag, and each fact beneath it. The first line begun is the tag, and every one begun after it a fact, so which is which is how it was built and nothing reads it back out of text.
@@ -341,14 +353,46 @@ impl Report {
 
     /// A report of what `said` says, about `span` where it is about a place.
     pub fn of(span: Option<Span>, said: Said) -> Self {
+        Self::said(span.map(About::Place), said)
+    }
+
+    /// A report of what `said` says, about `about`.
+    pub fn about(about: About, said: Said) -> Self {
+        Self::said(Some(about), said)
+    }
+
+    fn said(about: Option<About>, said: Said) -> Self {
         let (headline, facts) = said.into_parts();
 
         Self {
-            span,
+            about,
             headline,
             facts,
             notes: Vec::new(),
+            tries: Vec::new(),
         }
+    }
+
+    /// The place in a text the report is about, where it is about one.
+    pub fn span(&self) -> Option<&Span> {
+        match &self.about {
+            Some(About::Place(span)) => Some(span),
+            Some(About::Path(_) | About::Named(_)) | None => None,
+        }
+    }
+
+    /// [`span`](Self::span), to move.
+    pub fn span_mut(&mut self) -> Option<&mut Span> {
+        match &mut self.about {
+            Some(About::Place(span)) => Some(span),
+            Some(About::Path(_) | About::Named(_)) | None => None,
+        }
+    }
+
+    /// This report, with `command` as a way out.
+    pub fn trying(mut self, command: impl Into<String>) -> Self {
+        self.tries.push(command.into());
+        self
     }
 
     /// This report, resting on `fact` as well.
@@ -392,7 +436,7 @@ impl Report {
         self
     }
 
-    /// The report as a reader of `style` sees it, a block: what it says, alone on a line; what that rests on, a line a fact, on a trunk; each further place it is about, its code closed by what stands there; and its own place, its code closed by the word of what the report is, `kind`, in brackets.
+    /// The report as a reader of `style` sees it, a block: what it says, alone on a line; what that rests on, a line a fact, on a trunk; each further place it is about, its code closed by what stands there; each command that is a way out, behind `try`; and what it is about, closed by the word of what the report is, `kind`, in brackets: its own place under its code, or a file or a name, which has no code to show.
     ///
     /// ```text
     /// `a` is already declared
@@ -424,7 +468,7 @@ impl Report {
             .notes
             .iter()
             .map(|note| &note.span)
-            .chain(&self.span)
+            .chain(self.span())
             .map(|span| span.pane().number.to_string().len())
             .max()
             .unwrap_or(0);
@@ -470,11 +514,19 @@ impl Report {
                 note.span.place(style)
             ));
         }
-        match &self.span {
-            Some(span) => {
+        lines.extend(
+            self.tries
+                .iter()
+                .map(|command| format!("{} try; {command}", style.dim("├─"))),
+        );
+        let closed = |subject: String| format!("{} {badge} {subject}", style.dim("╰─"));
+        match &self.about {
+            Some(About::Place(span)) => {
                 lines.extend(pane(span));
-                lines.push(format!("{} {badge} {}", style.dim("╰─"), span.place(style)));
+                lines.push(closed(span.place(style)));
             }
+            Some(About::Path(path)) => lines.push(closed(style.spelled(path))),
+            Some(About::Named(name)) => lines.push(closed(name.clone())),
             None => lines.push(format!("{} {badge}", style.dim("╰─"))),
         }
 
