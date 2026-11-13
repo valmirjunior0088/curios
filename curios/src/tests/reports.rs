@@ -63,3 +63,29 @@ fn a_witness_refusal_is_located_at_its_concept_application() {
     assert!(bare.contains("orphan witness"), "{bare}");
     assert!(bare.contains("satisfy Show(Nat) {"), "{bare}");
 }
+
+// An operation that is another's operand reports its own refusal at itself: its operator's bound, which nothing in a chain discharges, is placed at the operation written for it, on either side of the operator it stands beside, as it is where it stands alone.
+#[test]
+fn an_operations_bound_is_reported_at_the_operation_inside_a_chain() {
+    for (source, place) in [
+        (
+            "use /std/{Bool, Nat};\nlet f(x: Nat) -> Bool =\n    10 / x > 1;\n/std/print(\"no\")\n",
+            "│  3 │     10 / x > 1;\n│    │     ^^^^^^",
+        ),
+        (
+            "use /std/{Bool, Nat};\nlet f(x: Nat) -> Bool =\n    1 < 10 / x;\n/std/print(\"no\")\n",
+            "│  3 │     1 < 10 / x;\n│    │         ^^^^^^",
+        ),
+        (
+            "use /std/{Nat};\nlet f(x: Nat) -> Nat =\n    10 / x;\n/std/print(\"no\")\n",
+            "│  3 │     10 / x;\n│    │     ^^^^^^",
+        ),
+    ] {
+        let report = error(source);
+        assert!(
+            report.contains("the bound of the `/` operator was not discharged"),
+            "expected the bound's refusal:\n{report}"
+        );
+        assert!(report.contains(place), "expected the place:\n{report}");
+    }
+}

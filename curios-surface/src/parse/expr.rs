@@ -485,9 +485,18 @@ pub fn parse_infix_rest<'a, D: Grammar>(left: Term<D>, min_prec: u8) -> impl Par
         })
     })
     .and_drop(refuse_asymmetric_operator)
+    // Each operation folded here is spanned from its left operand's start to its right operand's end, as `apply_suffixes` spans a chain's nodes: an operation that is another's operand, `10 / x` in `10 / x > 1`, otherwise carries no span of its own, and an error at it — its operator's bound — is reported at the declaration it stands in.
     .map(move |pairs| {
         pairs.into_iter().fold(left, |left, (op, right)| {
-            Subterm::Infix(Infix { op, left, right }).into()
+            let span = left
+                .span()
+                .zip(right.span())
+                .map(|(start, end)| Span::new(start.source.clone(), start.start, end.end));
+            let node: Term<D> = Subterm::Infix(Infix { op, left, right }).into();
+            match span {
+                Some(span) => node.with_span(span),
+                None => node,
+            }
         })
     }).parse(state)
 }
