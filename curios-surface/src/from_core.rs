@@ -15,11 +15,11 @@ use {
     },
     crate::{
         Alternative, Apply, Argument, Binder, BytesPattern, BytesSegment, Dialect, Field, Func,
-        FuncParam, FuncType, FuncTypeParam, Infix, Label, Let, LetBinding, LetGroup, LetSignature,
-        ListEntry, ListPattern, Literal, Match, MatchPattern, MatchPatternField, MatrixArm, Name,
-        NatLiteral, NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix,
-        StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType,
-        TupleTypeParam,
+        FuncParam, FuncType, FuncTypeParam, Guard, HeadlessMatch, Infix, Label, Let, LetBinding,
+        LetGroup, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern,
+        MatchPatternField, MatrixArm, Name, NatLiteral, NatPattern, NumLit, Pattern, PatternField,
+        Program, Proj, ProofLiteral, Radix, StrLit, StructLit, StructLitEntry, Subterm, Term,
+        Tuple, TupleField, TupleType, TupleTypeParam,
     },
     curios_common::{InfixOp, Plicity, Qualifier, Sign, recurse},
     curios_core::Bound,
@@ -491,12 +491,14 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
     })
 }
 
-/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each arm as its alternatives, each pattern over the names its own row's body binds, beside the body the first row's opening reads back as — the one the arm was written with. A `choose` bind arm reads back as the match of two arms it stands for.
+/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each arm as its alternatives, each pattern over the names its own row's body binds, beside the guards and the body the first row's opening reads back as — the ones the arm was written with. A `choose` bind arm reads back as the match of two arms it stands for, and a match over `()` whose rows write an unnamed `_`, every one but the last guarded, as the match with no head it was lowered from.
 ///
 /// The motive's binders are opened ahead of the scrutinee's and the arms' after both, the order Core's printer ([`Spellable`](crate::Spellable)) opens them in.
 fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
     let curios_core::Matrix { head, motive, arms } = matrix;
 
+    let unheaded = motive.is_none()
+        && matches!(&*head, curios_core::Subterm::Tuple(tuple) if tuple.fields.is_empty());
     let motive = match motive {
         Some(motive) => Some(sub(motive, frame)?),
         None => None,
@@ -505,12 +507,12 @@ fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
     let arms = arms
         .into_iter()
         .map(|curios_core::Arm { alternatives }| {
-            let mut body = None;
+            let mut first = None;
             let alternatives = alternatives
                 .into_iter()
                 .map(|row| {
-                    let (pattern, opened) = written_row(row, frame)?;
-                    body.get_or_insert(opened);
+                    let (pattern, guards, opened) = written_row(row, frame)?;
+                    first.get_or_insert((guards, opened));
 
                     Some(Alternative {
                         pattern,
@@ -518,44 +520,88 @@ fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
+            let (guards, body) = first?;
 
             Some(MatrixArm {
                 alternatives,
-                body: body?,
+                guards,
+                body,
             })
         })
         .collect::<Option<Vec<_>>>()?;
 
+    if unheaded && let Some(headless) = HeadlessMatch::of_arms(&arms) {
+        return Some(Subterm::HeadlessMatch(headless).into());
+    }
+
     Some(Subterm::Match(Match { head, motive, arms }).into())
 }
 
-/// A row as a program writes it: its pattern over the names its body binds, and the body under them.
+/// A row as a program writes it: its pattern over the names its body binds, each guard over the names written before it, and the body under them all. Every binder is opened once, under one label, so a guard and the body read one name alike.
 fn written_row(
-    curios_core::Row { pattern, body }: curios_core::Row,
+    curios_core::Row {
+        pattern,
+        guards,
+        body,
+    }: curios_core::Row,
     frame: Frame,
-) -> Option<(MatchPattern, Term)> {
+) -> Option<(MatchPattern, Vec<Guard>, Term)> {
     let curios_core::Subterm::Func(function) = &*body else {
         return None;
     };
-    let mut params = Vec::with_capacity(function.telescope.len());
-    let body = lambda_parameters(
-        function.telescope.cursor(),
-        &function.telescope.marks(),
-        frame,
-        false,
-        &mut params,
-    )?;
-    let mut names =
-        params
-            .into_iter()
-            .map(|param| match param.expect("every slot is filled").pattern {
-                Pattern::Binder(name) => name,
-                Pattern::Tuple(_) | Pattern::Struct { .. } => {
-                    unreachable!("a lambda's parameter is read back as a name")
-                }
-            });
+    let mut cursor = function.telescope.cursor();
+    let mut opened = Vec::with_capacity(function.telescope.len());
+    let mut names: Vec<Binder> = Vec::with_capacity(function.telescope.len());
+    while let Some((hint, _)) = cursor.entry() {
+        let label = frame.mint.cursor_label(&cursor);
+        // Asked before the cursor moves past the binder it asks about.
+        let named = hint.is_some() || cursor.binder_used();
+        names.push(
+            Label::from(match named {
+                true => frame.word(&label),
+                false => "_".to_string(),
+            })
+            .into(),
+        );
+        cursor.advance(curios_core::Term::free_var(&label));
+        opened.push(curios_core::Term::free_var(&label));
+    }
+    let body = sub(cursor.body().expect("a cursor past every entry"), frame)?;
 
-    Some((written_pattern(&pattern, &mut names), body))
+    let at = |function: &curios_core::Term, place: usize| {
+        let curios_core::Subterm::Func(function) = &**function else {
+            return None;
+        };
+        sub(
+            function
+                .telescope
+                .open(&opened[..place].iter().collect::<Vec<_>>()),
+            frame,
+        )
+    };
+    let mut names = names.into_iter();
+    let mut place = pattern.binders();
+    let written = written_pattern(&pattern, &mut names);
+    let mut read = Vec::with_capacity(guards.len());
+    for guard in &guards {
+        read.push(match guard {
+            curios_core::Guard::Holds(condition) => Guard::Holds(at(condition, place)?),
+            curios_core::Guard::Binds { pattern, value } => {
+                let value = at(value, place)?;
+                place += pattern.binders();
+
+                Guard::Binds {
+                    pattern: Box::new(Alternative {
+                        pattern: written_pattern(pattern, &mut names),
+                        span: None,
+                    }),
+                    value,
+                }
+            }
+        });
+    }
+
+    Some((written, read, body))
 }
 
 /// A row's pattern as a program writes it, each binder under the next of `names`: what a report names an arm by.

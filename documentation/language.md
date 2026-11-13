@@ -536,7 +536,7 @@ pub let parser() -> Parse(Bytes, Nat) =
 
 A `!` may stand at any depth where its region's type sequences: in a top-level value, a program's final term, a test's body or a witness's field. A function needs no permission to hold one. A function of no parameters is written `parser()` and called `parser()`.
 
-A local `let`'s value, annotated or not, shares the region around it, so an unused first binding moves no action to another region. An independent computation is a function, called where its description is needed. A `match` arm and a `choose` arm each keep a region of their own, whose monad comes from the arm's own expected type. No `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
+A local `let`'s value, annotated or not, shares the region around it, so an unused first binding moves no action to another region. An independent computation is a function, called where its description is needed. A `match` arm, a guard and a `choose` arm each keep a region of their own, whose monad comes from its own expected type. No `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
 
 A region's monad is read from its type, never from an action in it. A region whose type is not known yet waits for it, and one whose type can never name a monad — a lambda's body in inference position, say — is refused, asking for the result type around it to be annotated.
 
@@ -767,6 +767,55 @@ The alternatives of one arm match no value in common, so no order among them dec
 
 Alternatives stand at the top of an arm, and no pattern holds them: `some('a' | 'b')` is written `some('a') | some('b')`.
 
+### Guards
+
+An arm may write guards after its patterns, each after a comma: a `Bool` term, which passes where it is `true`, or `pattern = term`, which passes where the term's value matches the pattern. An arm is taken by a value its pattern matches where every guard passes. Its guards run from the left, each only where the ones before it passed, and the names a bind guard binds are in scope in the guards after it and in the body.
+
+```crs
+use /std/{Nat, Option};
+
+pub let size(value: Option(Nat)) -> Nat =
+    match value
+    | some(n), n > 9 => 2
+    | some(n), n != 0, 100 / n > 20 => 1
+    | _ => 0
+    end;
+```
+
+A guarded arm takes none of its values for itself: where a guard fails, the value goes on to the arms after it that its pattern's case reaches, in the order they are written, and a value only guarded arms reach is a value no arm matches. Guards never order patterns: two arms whose patterns meet are held to the rules of [Binders beside patterns](#binders-beside-patterns) as they would be with no guard.
+
+What an arm knows is what it writes, guards included: in its body each condition holds and each pattern has matched. Where an arm's one guard is a condition and fails, the arms after it that are typed at the same case know it is false:
+
+```crs
+use /std/{Nat, Option};
+
+pub let share(value: Option(Nat)) -> Nat =
+    match value
+    | some(n), n == 0 => 0
+    | some(n) => 100 / n
+    | none() => 0
+    end;
+```
+
+A chain of guards that fails, or a bind guard that fails, teaches the arms after it nothing, since either failed in more ways than one. A bind guard whose pattern cannot fail is refused: a binding with no case to test is a `let`. A guard takes no [alternatives](#alternatives); the value they would test is written as the head.
+
+An arm of a [fold](#natural-number-induction) takes guards as any arm does: it is tried at every step its pattern reaches, its guards run at each, and a guard may read that step's hypothesis.
+
+```crs
+use /std/{List, Nat};
+
+pub let large(values: List(Nat)) -> Nat =
+    match values
+    | [] => 0
+    | [head, .._]; count, head > 9 => count + 1
+    | [_, .._]; count => count
+    end;
+```
+
+A guard is a region of its own, as an arm's body is ([Postfix `!`](#postfix-)). A guard's term is an operand, so a `let`, a lambda or a function type stands in one in parentheses.
+
+`&&` is no chain of guards: `a && b` evaluates both, and `b` knows nothing of `a`; `| a, b =>` evaluates `b` only where `a` holds, and `b` may rely on it.
+
 ### The arm that cannot fail
 
 A final arm whose pattern takes nothing apart that could fail — most often a bare `_` — takes every value the arms before it leave.
@@ -907,6 +956,23 @@ pub let first_or_zero(bytes: Bytes) -> Byte =
     | x[head, .._] => head
     end;
 ```
+
+### A match with no head
+
+A `match` that writes no scrutinee is guards alone: each arm is a list of guards, the arms are tried from the top, and the final arm is `| _ =>`, which is required.
+
+```crs
+use /std/{Bool, Map, Nat, Str};
+
+pub let found(condition: Bool, map: Map(Str, Nat), key: Str) -> Nat =
+    match
+    | condition => 0
+    | some(value) = Map/try_get(map, key) => value
+    | _ => 1
+    end;
+```
+
+It is a match of no columns: every arm reaches its one case, so a condition that fails as an arm's one guard is known false in every arm after it, the final `_` included.
 
 ## Guarded ladders (`choose`)
 
@@ -1604,6 +1670,8 @@ A bound the facts do not imply is refused. The report names the facts it conside
 | `Name { ..base, ... }` | Structure update |
 | `struct Slot(K: Type, use Key(K)): …` | A type declared under a premise — the dictionary is an argument of the type |
 | `match term ... end` | Typed elimination or dispatch |
+| `\| pattern, guard, … =>` | An arm taken where its pattern matches and each guard passes: a `Bool`, or `pattern = term` |
+| `match \| guard, … => … \| _ => … end` | A match with no head: guards alone, closed by a default |
 | `choose ... end` | Guarded ladder |
 | `test name = body;` | Test — a `/std/Test` description, run by `curios test` |
 | `satisfy C(args) { ... }` | Registered witness, which has no name |

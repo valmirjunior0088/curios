@@ -276,6 +276,10 @@ pub fn match_read(
 ) -> Result<Term, ReadError> {
     let span = head.span();
     let refused = |what: &'static str| ReadError::at(Refusal::Malformed(what), span);
+    // An elimination's arms are its cases; a guard stands only in a match before its patterns are compiled, `#{node = Matrix}`.
+    if arms.iter().any(|arm| !arm.guards.is_empty()) {
+        return Err(refused("an elimination's arm, which writes no guard"));
+    }
     let head_read = core_read(head, reader)?;
     let result = match (motive, fields.take("result")) {
         (Some(motive), None) => MatchResult::Family(motive_read(motive, reader)?),

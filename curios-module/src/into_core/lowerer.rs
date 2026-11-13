@@ -716,6 +716,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     MatchCompiler::term,
                 )?
             }
+            // A match with no head is the match of no columns — see `MatchCompiler::headless`.
+            Subterm::HeadlessMatch(headless) => {
+                MatchCompiler::new(self).headless(headless, MatchCompiler::term)?
+            }
             // A `let` block: each statement is in scope for the statements after it and the tail, and for itself — a lone binding that names itself, or a `let … and …;` group, lowers to a core `rec`; see [`Self::lower_let_group`].
             Subterm::Let(let_) => self.lower_let(&let_.groups, &let_.tail)?,
             // An annotation's expression is checked at its own expected type. A bang there still needs a monadic expectation; it never floats into the value whose annotation it is.
@@ -755,6 +759,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let match_term = MatchCompiler::new(self).match_region(match_, &mut binds)?;
                 self.wrap(binds, match_term)
             }
+            // No scrutinee runs ahead of the arms, so nothing hoists: each guard and each arm is its own region.
+            Subterm::HeadlessMatch(headless) => MatchCompiler::new(self).headless_region(headless),
             // The `choose` head arm's test runs unconditionally (its bangs hoist here); deeper arms and the default are branch-local.
             Subterm::Choose(choose) => {
                 let mut binds = Vec::new();
@@ -1030,6 +1036,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // A `let`/`match`/`choose` sub-expression hoists its bound-expression / scrutinee / head-test bangs into the enclosing region (this `binds`).
             Subterm::Let(let_) => self.build_let(let_, binds)?,
             Subterm::Match(match_) => MatchCompiler::new(self).match_region(match_, binds)?,
+            // A match with no head has nothing to hoist.
+            Subterm::HeadlessMatch(headless) => {
+                MatchCompiler::new(self).headless_region(headless)?
+            }
             Subterm::Choose(choose) => MatchCompiler::new(self).choose_region(choose, binds)?,
             // A lambda is a value and hoists nothing outward, so it desugars as its own region.
             Subterm::Func(_) => self.region(term)?,
@@ -1357,6 +1367,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         arms: vec![curios_core::Arm {
                             alternatives: vec![curios_core::Row {
                                 pattern,
+                                guards: Vec::new(),
                                 body: curios_core::Term::func(
                                     Vec::<(curios_core::Free, curios_core::Term)>::new(),
                                     body,

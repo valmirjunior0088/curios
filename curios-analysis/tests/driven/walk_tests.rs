@@ -10,11 +10,11 @@ use {
     curios_cert::Certifier,
     curios_common::{InfixOp, Plicity, Qualifier},
     curios_core::{
-        Apply, Argument, Arm, Bang, Carrier, Cases, Field, Free, Global, InductArm, InductType,
-        Infix, Instance, Intrinsic, Level, Many, Match, MatchResult, Matrix, Metavar, MetavarId,
-        MetavarOrigin, MetavarSpine, Nat, Pattern, Proj, Row, Scope, Struct, StructEntry,
-        StructType, Subterm, Term, Three, Totality, Transient, Tuple, Two, UniverseContext,
-        Universes, Variant,
+        Apply, Argument, Arm, Bang, Carrier, Cases, Field, Free, Global, Guard, InductArm,
+        InductType, Infix, Instance, Intrinsic, Level, Many, Match, MatchResult, Matrix, Metavar,
+        MetavarId, MetavarOrigin, MetavarSpine, Nat, Pattern, Proj, Row, Scope, Struct,
+        StructEntry, StructType, Subterm, Term, Three, Totality, Transient, Tuple, Two,
+        UniverseContext, Universes, Variant,
     },
     curios_num::Natural,
     std::{collections::BTreeMap, slice, sync::Arc},
@@ -265,10 +265,12 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
                     alternatives: vec![
                         Row {
                             pattern: Pattern::Binder,
+                            guards: vec![Guard::Holds(markers.visited())],
                             body: markers.visited(),
                         },
                         Row {
                             pattern: Pattern::Binder,
+                            guards: Vec::new(),
                             body: markers.visited(),
                         },
                     ],

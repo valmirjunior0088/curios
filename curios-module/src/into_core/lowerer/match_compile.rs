@@ -3,8 +3,9 @@ use {
     crate::Error,
     curios_common::Span,
     curios_surface::{
-        Alternative, BytesPattern, Choose, ChooseArm, ChooseTest, ListPattern, Match, MatchPattern,
-        MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField, Term,
+        Alternative, BytesPattern, Choose, ChooseArm, ChooseTest, Guard, HeadlessArm,
+        HeadlessMatch, ListPattern, Match, MatchPattern, MatchPatternField, MatrixArm, NatLiteral,
+        NatPattern, Pattern, PatternField, Term,
     },
     std::{collections::BTreeSet, mem},
 };
@@ -37,6 +38,54 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     ) -> Result<curios_core::Term, Error> {
         let head = self.collect(&match_.head, binds)?;
         self.headed(head, &match_.motive, &match_.arms, Self::region)
+    }
+
+    /// A match with no head inside a region: there is no scrutinee to run ahead of the arms, so nothing hoists, and each guard and each body is a region of its own.
+    pub fn headless_region(&self, headless: &HeadlessMatch) -> Result<curios_core::Term, Error> {
+        self.headless(headless, Self::region)
+    }
+
+    /// A match with no head as the match of no columns: a match over `()` whose rows write `_`, each with its arm's guards and body, the default last. `leaf` lowers each guard and each body, as [`Self::headed`]'s does.
+    pub fn headless(
+        &self,
+        HeadlessMatch { arms, default }: &HeadlessMatch,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let mut rows = arms
+            .iter()
+            .map(|HeadlessArm { guards, body }| self.unheaded(guards, body, leaf))
+            .collect::<Result<Vec<_>, Error>>()?;
+        rows.push(self.unheaded(&[], default, leaf)?);
+
+        Ok(curios_core::Term::matrix(curios_core::Matrix {
+            head: curios_core::Term::tuple(Vec::<curios_core::Term>::new()),
+            motive: None,
+            arms: rows
+                .into_iter()
+                .map(|row| curios_core::Arm {
+                    alternatives: vec![row],
+                })
+                .collect(),
+        }))
+    }
+
+    /// One arm of a match with no head as its row: `_` over the `()` the match is over, which binds nothing its guards or body can name.
+    fn unheaded(
+        &self,
+        guards: &[Guard],
+        body: &Term,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Row, Error> {
+        let unnamed = self.mint([String::new()]);
+
+        self.row(
+            curios_core::Pattern::Binder,
+            unnamed,
+            guards,
+            body,
+            None,
+            leaf,
+        )
     }
 
     /// Desugars a `choose` inside a region: the head arm's test mirrors the `subterm` path's right-fold, but only the *first* condition runs unconditionally, so only its bangs hoist into `binds`. Every deeper condition evaluates just when its predecessor is false, so each lowers as its own sub-region inside that false branch (see [`Self::ladder_region`]).
@@ -102,7 +151,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         for alternative in alternatives {
             if let MatchPattern::Binder(name) = &alternative.pattern {
                 return Err(placed(
-                    Error::BindArmIrrefutable,
+                    Error::BindCannotFail,
                     name.span().or(alternative.span.as_ref()),
                 ));
             }
@@ -112,6 +161,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let (_, unnamed) = self.mint([String::new()]).remove(0);
         let rest = curios_core::Row {
             pattern: curios_core::Pattern::Binder,
+            guards: Vec::new(),
             body: curios_core::Term::func(
                 vec![(
                     unnamed,
@@ -125,7 +175,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             head: value,
             motive: None,
             arms: vec![
-                self.arm(alternatives, body, leaf)?,
+                self.arm(alternatives, &[], body, leaf)?,
                 curios_core::Arm {
                     alternatives: vec![rest],
                 },
@@ -157,7 +207,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         let arms = arms
             .iter()
-            .map(|arm| self.arm(&arm.alternatives, &arm.body, leaf))
+            .map(|arm| self.arm(&arm.alternatives, &arm.guards, &arm.body, leaf))
             .collect::<Result<Vec<_>, Error>>()?;
         let motive = motive
             .as_ref()
@@ -171,10 +221,11 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }))
     }
 
-    /// One arm: a row for each alternative, each its pattern and the body lowered again under that pattern's names, so that each is typed apart with metavariables of its own. Every alternative binds the names the first does, since the body reads each name of the arm in each of them, and a name an alternative lacks would read whatever else it names there ([`Error::MatchAlternativeNames`]).
+    /// One arm: a row for each alternative, each its pattern and the guards and body lowered again under that pattern's names, so that each is typed apart with metavariables of its own. Every alternative binds the names the first does, since the guards and the body read each name of the arm in each of them, and a name an alternative lacks would read whatever else it names there ([`Error::MatchAlternativeNames`]).
     fn arm(
         &self,
         alternatives: &[Alternative],
+        guards: &[Guard],
         body: &Term,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Arm, Error> {
@@ -197,25 +248,69 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     ));
                 }
 
-                self.row(pattern, binders, body, alternative.span.as_ref(), leaf)
+                self.row(
+                    pattern,
+                    binders,
+                    guards,
+                    body,
+                    alternative.span.as_ref(),
+                    leaf,
+                )
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
         Ok(curios_core::Arm { alternatives })
     }
 
-    /// One alternative as a row: its pattern, and the body lowered under the names the pattern binds, as the function over those binders — placed where the pattern is written, which is where a row no value reaches is reported.
+    /// One alternative as a row: its pattern, each guard lowered under the names written before it, and the body under all of them, each as the function over those binders — the body placed where the pattern is written, which is where a row no value reaches is reported. A bind guard's pattern binds its names after the ones before it, and is refused where it cannot fail ([`Error::BindCannotFail`]).
     fn row(
         &self,
         pattern: curios_core::Pattern,
-        binders: Vec<Binder>,
+        mut binders: Vec<Binder>,
+        guards: &[Guard],
         body: &Term,
         span: Option<&Span>,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Row, Error> {
-        let body = self.bound(&binders, || leaf(self, body))?;
-        // A pattern's binder has no type written: the scrutinee's gives it one where the pattern is compiled.
-        let function = curios_core::Term::func(
+        let mut lowered = Vec::with_capacity(guards.len());
+        for guard in guards {
+            lowered.push(match guard {
+                Guard::Holds(condition) => {
+                    curios_core::Guard::Holds(self.function(&binders, condition, leaf)?)
+                }
+                Guard::Binds { pattern, value } => {
+                    if !takes_apart(&pattern.pattern) {
+                        return Err(placed(Error::BindCannotFail, pattern.span.as_ref()));
+                    }
+                    let value = self.function(&binders, value, leaf)?;
+                    let pattern = self.pattern(&pattern.pattern, &mut binders)?;
+
+                    curios_core::Guard::Binds { pattern, value }
+                }
+            });
+        }
+        let function = self.function(&binders, body, leaf)?;
+
+        Ok(curios_core::Row {
+            pattern,
+            guards: lowered,
+            body: match span {
+                Some(span) => self.context.placed(span, function),
+                None => function,
+            },
+        })
+    }
+
+    /// `term` lowered under `binders` as the function over them. A pattern's binder has no type written: the scrutinee's gives it one where the pattern is compiled, and a bind guard's the value's.
+    fn function(
+        &self,
+        binders: &[Binder],
+        term: &Term,
+        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
+    ) -> Result<curios_core::Term, Error> {
+        let body = self.bound(binders, || leaf(self, term))?;
+
+        Ok(curios_core::Term::func(
             binders
                 .iter()
                 .map(|(_, binder)| {
@@ -226,15 +321,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 })
                 .collect::<Vec<_>>(),
             body,
-        );
-
-        Ok(curios_core::Row {
-            pattern,
-            body: match span {
-                Some(span) => self.context.placed(span, function),
-                None => function,
-            },
-        })
+        ))
     }
 
     /// A pattern as Core holds it, with every name it binds minted onto `binders` in the order it writes them. A struct pattern's head is resolved as a struct literal's is ([`Lowerer::resolve_nominal`]): the scrutinee's type is held to the structure it names where the pattern is compiled.
@@ -362,7 +449,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     }
 }
 
-/// The arms of a headed match that are not its default: every arm, less a final top-level bare `_` after arms that each dispatch — a constructor tag or any of the hardcoded-carrier leaves ([`MatchPattern::is_dispatchable`]), in each of their alternatives. A *named* final binder in that position is a mistake ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a default — it stays a binding — and neither is a `_` after tuple/struct arms, which project exhaustively and need none, nor a `_` beside other alternatives, which meets them.
+/// The arms of a headed match that are not its default: every arm, less a final top-level bare `_` with no guard after arms that each dispatch — a constructor tag or any of the hardcoded-carrier leaves ([`MatchPattern::is_dispatchable`]), in each of their alternatives. A *named* final binder with no guard in that position is a mistake ([`Error::MatchNamedCatchAll`]). A lone `_` with no concrete arms is not a default — it stays a binding — and neither is a `_` after tuple/struct arms, which project exhaustively and need none, nor a `_` beside other alternatives, which meets them, nor a guarded one, which takes nothing for itself.
 fn dispatching(arms: &[MatrixArm]) -> Result<&[MatrixArm], Error> {
     let dispatches = |arm: &MatrixArm| {
         arm.alternatives
@@ -371,7 +458,9 @@ fn dispatching(arms: &[MatrixArm]) -> Result<&[MatrixArm], Error> {
     };
 
     match arms.split_last() {
-        Some((last, init)) if !init.is_empty() && init.iter().all(dispatches) => {
+        Some((last, init))
+            if !init.is_empty() && init.iter().all(dispatches) && last.guards.is_empty() =>
+        {
             match last.alternatives.as_slice() {
                 [
                     Alternative {
@@ -402,6 +491,22 @@ fn placed(error: Error, span: Option<&Span>) -> Error {
     match span {
         Some(span) => error.at(span.clone()),
         None => error,
+    }
+}
+
+/// Whether `pattern` takes some part of a value apart, and so can fail: a binder takes nothing apart, and a tuple or a structure takes apart what one of its fields does.
+fn takes_apart(pattern: &MatchPattern) -> bool {
+    match pattern {
+        MatchPattern::Binder(_) => false,
+        MatchPattern::Tuple(fields) | MatchPattern::Struct { fields, .. } => {
+            fields.iter().any(|field| takes_apart(&field.value))
+        }
+        MatchPattern::Variant { .. }
+        | MatchPattern::Bool(_)
+        | MatchPattern::Char(_)
+        | MatchPattern::Nat(_)
+        | MatchPattern::List(_)
+        | MatchPattern::Bytes(_) => true,
     }
 }
 

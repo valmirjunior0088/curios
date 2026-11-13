@@ -91,6 +91,8 @@ variants!(Error {
     MatrixInconsistentShape,
     MatrixDuplicateRow,
     MatrixUncovered,
+    MatrixGuarded,
+    MatrixGuardedBeforeCase,
     MatrixArmsMeet,
     MatrixAlternativesMeet,
     MatrixStructHead,

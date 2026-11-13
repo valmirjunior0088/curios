@@ -1184,6 +1184,22 @@ impl Displayed<'_> {
                     f.stating("write the arm");
                 }
             }
+            Error::MatrixGuarded { value, guarded } => {
+                f.text("missing arm");
+                f.stating(format_args!(
+                    "no arm matches `{value}` where the guards of `{guarded}` fail"
+                ));
+                f.stating("a guarded arm takes nothing for itself");
+                f.stating("write an arm with no guard after it");
+            }
+            Error::MatrixGuardedBeforeCase { general, case } => {
+                f.text("misplaced arm");
+                f.stating(format_args!(
+                    "`{case}` is a case of `{general}`, which is written before it"
+                ));
+                f.stating("a general arm stands after its exceptions, guarded or not");
+                f.stating(format_args!("write `{case}` first"));
+            }
             Error::MatrixArmsMeet {
                 value,
                 first,

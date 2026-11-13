@@ -6,9 +6,11 @@
 //!
 //! **A row is typed once, where its own pattern states it.** A row whose every case on the way to its leaf is one it states is elaborated at that leaf, whose frames are the row's own. A row that a binder of its own put under a case another row wrote reaches a leaf whose frames hold more than it states, and may reach several. It is elaborated once, by its own walk ([`Compiler::walk`]): its cases entered alone, standing on the frames held where the match is entered. Each leaf it reaches holds that body with the leaf's binders in the places of the walk's ([`Term::substitute`]), which the elaborator does not type again and the certifier does.
 //!
-//! **The row that cannot fail**, a final row that takes nothing apart, states no case, so it is read where the match stands and at the match's own type, once, after the rows before it: written in place where one leaf reaches it, and bound once as a function of no argument, called from each, where more do.
+//! **The row that cannot fail**, a final row that takes nothing apart and has no guard, after rows of which one takes the scrutinee apart, states no case, so it is read where the match stands and at the match's own type, once, after the rows before it: written in place where one leaf reaches it, and bound once as a function of no argument, called from each, where more do. Where no row takes the scrutinee apart there is one leaf, and every row is read there.
 //!
-//! **Arm order decides nothing.** The rows that reach a leaf are its candidates, and the first written is taken. Each of the others either has it as a case, a general arm standing after its exception, or is a case of it, which no value reaches there; two that are neither would mean one thing in one order and another in the other, and the match is refused. A case no row reaches is a value no arm matches, reported as its pattern, and a row no leaf takes is an arm no value reaches.
+//! **Arm order decides nothing between patterns.** The rows that reach a leaf are its candidates, and the first written is taken. Each of the others either has it as a case, a general arm standing after its exception, or is a case of it, which no value reaches there; two that are neither would mean one thing in one order and another in the other, and the match is refused. A case no row reaches is a value no arm matches, reported as its pattern, and a row no leaf takes is an arm no value reaches.
+//!
+//! **A row with guards takes nothing for itself** ([`Compiler::guarded`]). Where it is the first candidate, its guards run, and where one fails the candidates after it are what the value takes. A row whose one guard is a `Bool` is a `Bool` split at its leaf, its own body the true case and the candidates after it the false one, so they are read under the condition's failure; any other row with guards fails in more ways than one, so the candidates after it are read once, at the leaf, and stand wherever one of its guards fails.
 //!
 //! **An arm of several alternatives is a row for each**, typed apart as arms of their own are, so two of them that reach one leaf are refused, whichever is a case of the other: an arm's alternatives match no value in common, and no order among them says which typing a value takes.
 
@@ -22,8 +24,8 @@ use {
     },
     curios_common::{Plicity, recurse},
     curios_core::{
-        Arm, Atom, Bind, Free, InductArm, Many, Matrix, Mention, Pattern, Row, Scope, StructType,
-        Subterm, Telescope, Term, Tuple,
+        Arm, Atom, Bind, Free, Guard, InductArm, Many, Matrix, Mention, Pattern, Row, Scope,
+        StructType, Subterm, Telescope, Term, Tuple,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
@@ -91,8 +93,10 @@ struct Line<'m> {
     row: usize,
     /// What it writes at each column left.
     cells: Vec<Cell<'m>>,
-    /// What each of the row's binders stands for, once its pattern is read.
+    /// What each of the binders the row's pattern writes stands for, once its pattern is read. Its bind guards' binders are bound where those guards run.
     taken: Vec<Option<Term>>,
+    /// Whether the row's guards are still to run, where it is the candidate a leaf takes.
+    guarded: bool,
     /// The binders bound ahead of the body, each to what it stands for, in the order they were read: the first is outermost.
     lets: Vec<(Free, Term)>,
     /// Each hypothesis the row writes under a structure's name: what it stands for, the name as written and what it resolves to. Held where the row's body stands ([`Compiler::body_of`]), a hypothesis having no type before its case is entered.
@@ -178,8 +182,13 @@ impl<'m> Compiler<'m> {
         let matrix = self.matrix;
         let rows = self.rows.len();
 
-        // A final row that takes nothing apart states no case. A lone one is a binding, read where its one leaf stands.
-        if rows > 1 && refutations(&self.row(rows - 1).pattern) == 0 {
+        // A final row that takes nothing apart and has no guard states no case. A lone one is a binding, read where its one leaf stands, and so is one after rows none of which takes the scrutinee apart: there is one leaf, and the row is read there, after the guards of the rows before it.
+        if rows > 1
+            && let Some(last) = self.rows.last()
+            && refutations(&last.pattern) == 0
+            && last.guards.is_empty()
+            && (0..rows).any(|row| refutations(&self.row(row).pattern) > 0)
+        {
             self.fallthrough = Some(Fallthrough {
                 row: rows - 1,
                 stand_in: context.fresh(None),
@@ -229,7 +238,8 @@ impl<'m> Compiler<'m> {
         Line {
             row,
             cells: vec![Some((&self.row(row).pattern, 0))],
-            taken: vec![None; self.labels[row].len()],
+            taken: vec![None; self.row(row).pattern.binders()],
+            guarded: !self.row(row).guards.is_empty(),
             lets: Vec::new(),
             held: Vec::new(),
             cases: Vec::new(),
@@ -422,7 +432,7 @@ impl<'m> Compiler<'m> {
         written_pattern(&self.row(row).pattern, &mut names).to_string()
     }
 
-    /// The rows that reach a place where every column is read: the first written is the arm a value there takes, and it is a case of every other, since nothing else orders two arms that match one value. No two of them are alternatives of one arm, which match no value in common.
+    /// The rows that reach a place where every column is read: the first written is the arm a value there takes, and it is a case of every other, since nothing else orders two arms that match one value. No two of them are alternatives of one arm, which match no value in common. Where the first has guards, it takes the value only where they pass ([`Compiler::guarded`]).
     fn leaf(
         &mut self,
         context: &mut Context,
@@ -448,7 +458,7 @@ impl<'m> Compiler<'m> {
                 }
                 .at_opt(self.row(case.unwrap_or(other.row)).body.extent()));
             }
-            // An arm written after one it is a case of is no second claim on the value: the first takes it, and the later one is reached by nothing here.
+            // An arm written after one it is a case of is no second claim on the value: the first takes it, and the later one is reached by nothing here. Guards order no pattern, so two that meet are refused whether or not the first is guarded.
             if !instance(first, later) && !instance(later, first) {
                 return Err(Error::MatrixArmsMeet {
                     value: self.value(0),
@@ -457,10 +467,23 @@ impl<'m> Compiler<'m> {
                 }
                 .at_opt(self.row(other.row).body.extent()));
             }
-            self.covers[other.row].get_or_insert(line.row);
+            // A guard orders no pattern: a guarded arm before one that is a case of it would hand the case on where its guards fail, where with no guard the case would be reached by nothing — so it is held to the order an arm with no guard is.
+            if line.guarded && !instance(first, later) {
+                return Err(Error::MatrixGuardedBeforeCase {
+                    general: self.written(line.row),
+                    case: self.written(other.row),
+                }
+                .at_opt(self.row(other.row).body.extent()));
+            }
+            if !line.guarded {
+                self.covers[other.row].get_or_insert(line.row);
+            }
         }
         self.taken[line.row] = true;
 
+        if line.guarded {
+            return self.guarded(context, line, lines, mode);
+        }
         if self
             .fallthrough
             .as_ref()
@@ -479,6 +502,89 @@ impl<'m> Compiler<'m> {
         let Mode::Check(expected) = mode else {
             unreachable!("a row is put under a case beneath a dispatch");
         };
+
+        Ok((self.walked(context, &line)?, expected))
+    }
+
+    /// The first candidate at a leaf when it has guards to run, and `rest`, the candidates after it: what a value there takes where one of its guards fails.
+    ///
+    /// A row whose one guard is a `Bool`, typed at this leaf, is a `Bool` split on that condition: its body the true case and `rest` the false one, so each row of `rest` typed at this leaf is read where the condition is false. Any other fails in more ways than one: `rest` is read once, here, and the row is read as the function of it ([`Compiler::failing`]), applied where it stands — `rest` in place where the row has one guard, and a function of no argument, called at each failure, where it has more. A row typed once by its own walk is read so too, its walk the function. A row with guards and no candidate after it leaves what they refuse with no arm.
+    fn guarded(
+        &mut self,
+        context: &mut Context,
+        mut line: Line<'m>,
+        rest: Vec<Line<'m>>,
+        mode: Mode,
+    ) -> Result<(Term, Term), Error> {
+        let row = line.row;
+        if rest.is_empty() {
+            return Err(Error::MatrixGuarded {
+                value: self.value(0),
+                guarded: self.written(row),
+            }
+            .at_opt(self.row(row).body.extent()));
+        }
+
+        if let [Guard::Holds(condition)] = self.row(row).guards.as_slice()
+            && !self.strays[row]
+        {
+            let condition = Self::opened_at(condition, &line);
+            line.guarded = false;
+            let scrutinee = Scrutinee::read(context, &condition)?;
+            let motive = self.motive(context, false);
+            let term = self.term;
+
+            return context.awaiting(|context| {
+                let split = Rc::new(BoolSplit::resolve(
+                    context, scrutinee, &motive, term, &mode,
+                )?);
+                let false_case = split.arm(context, false, |context, expected| {
+                    recurse(|| self.leaf(context, rest, Mode::Check(expected))).map(|(arm, _)| arm)
+                })?;
+                let true_case = split.arm(context, true, |context, expected| {
+                    recurse(|| self.leaf(context, vec![line], Mode::Check(expected)))
+                        .map(|(arm, _)| arm)
+                })?;
+
+                Ok(split.rebuild(false_case, true_case))
+            });
+        }
+
+        let (rest, type_) = recurse(|| self.leaf(context, rest, mode))?;
+        let function = match self.strays[row] {
+            true => self.walked(context, &line)?,
+            false => {
+                let function = self.failing(context, line, &type_);
+                let expected = failing_type(context, &type_);
+                let (function, _) = elaborate(context, &function, Mode::Check(expected))
+                    .map_err(|error| self.in_alternative(row, error))?;
+
+                function
+            }
+        };
+        let Subterm::Func(function) = &*function else {
+            unreachable!("a row with guards is read as the function of what its failures take");
+        };
+        let taken = match self.row(row).guards.len() {
+            1 => function.telescope.open(&[&rest]),
+            _ => {
+                let bound = context.fresh(None);
+                let call = Term::apply(Term::free_var(&bound), Vec::<Term>::new());
+                let thunk_type = Term::func_type(Vec::<(Free, Term)>::new(), type_.clone());
+                let thunk = Term::func(Vec::<(Free, Term)>::new(), rest);
+
+                Term::let_block(
+                    vec![(bound, thunk_type, thunk)],
+                    function.telescope.open(&[&call]),
+                )
+            }
+        };
+
+        Ok((taken, type_))
+    }
+
+    /// The instance a leaf holds of a row its own walk elaborated: the walk's body with the leaf's binders in the places of the walk's.
+    fn walked(&mut self, context: &mut Context, line: &Line<'m>) -> Result<Term, Error> {
         let walked = match &self.walks[line.row] {
             Some(walked) => Rc::clone(walked),
             None => {
@@ -499,7 +605,7 @@ impl<'m> Compiler<'m> {
             .zip(line.cases.iter().map(Term::free_var))
             .collect::<Vec<_>>();
 
-        Ok((walked.body.substitute(&renamed), expected))
+        Ok(walked.body.substitute(&renamed))
     }
 
     /// The stand-in for the row that cannot fail, which is read once the rows before it are ([`Compiler::settled`]). The match's own type, which that row is read at, is held to the type of the case here, where the cases above are in view.
@@ -1287,21 +1393,33 @@ impl<'m> Compiler<'m> {
         written
             || writing
                 .iter()
-                .any(|(_, line)| holds_goal(&self.row(line.row).body))
+                .any(|(_, line)| row_holds_goal(self.row(line.row)))
     }
 
-    /// Whether the body of the row at `row` names its binder at `place`.
+    /// Whether the row at `row` names its binder at `place`: its body, or a guard written after the binder.
     fn names(&self, row: usize, place: usize) -> bool {
-        let mut cursor = self.body(row).cursor();
-        for _ in 0..place {
-            let (_, domain) = cursor
-                .entry()
-                .expect("a row's body binds what its pattern writes");
-            // A row's binder has no type written, so nothing after it reads what stands in its place here.
-            cursor.advance(domain);
-        }
+        let written = self.row(row);
 
-        cursor.binder_used()
+        std::iter::once(&written.body)
+            .chain(written.guards.iter().map(Guard::term))
+            .any(|function| {
+                let Subterm::Func(func) = &**function else {
+                    unreachable!("a row's guards and body are functions over its binders");
+                };
+                if place >= func.telescope.len() {
+                    return false;
+                }
+                let mut cursor = func.telescope.cursor();
+                for _ in 0..place {
+                    let (_, domain) = cursor
+                        .entry()
+                        .expect("a row's function binds what is written before it");
+                    // A row's binder has no type written, so nothing after it reads what stands in its place here.
+                    cursor.advance(domain);
+                }
+
+                cursor.binder_used()
+            })
     }
 
     /// A tuple or struct column flattened into one column for each field, a projection of the scrutinee: a value of either has one shape, so matching one is reading its fields, and no row is put under a case by it. The rows that write the shape agree, field by field, on the label each is written with; a row that writes a binder binds its name to the column and reads no field. A struct pattern's head is the structure the column's type is.
@@ -1467,19 +1585,23 @@ impl<'m> Compiler<'m> {
             .collect::<Vec<_>>();
         let body = self.body(line.row).open(&values);
 
-        let body = line
-            .lets
-            .into_iter()
-            .rev()
-            .fold(body, |tail, (name, value)| {
-                let hole = Term::hole(context.mint_metavar());
+        Self::bound_ahead(context, line.lets, line.held, body)
+    }
 
-                Term::let_(&name, hole, value, tail)
-            });
+    /// `body` under what a row binds ahead of it: each name to what it stands for, the first outermost, and each hypothesis written under a structure's name, as the one-row match over it whose row is the head over no field — the row takes nothing apart, and compiling it reads the head against the hypothesis's type, as an arm's pattern is read.
+    fn bound_ahead(
+        context: &mut Context,
+        lets: Vec<(Free, Term)>,
+        held: Vec<(Term, String, Mention)>,
+        body: Term,
+    ) -> Term {
+        let body = lets.into_iter().rev().fold(body, |tail, (name, value)| {
+            let hole = Term::hole(context.mint_metavar());
 
-        // Each hypothesis written under a structure's name, as the one-row match over it whose row is the head over no field: the row takes nothing apart, and compiling it reads the head against the hypothesis's type, as an arm's pattern is read.
-        line.held
-            .into_iter()
+            Term::let_(&name, hole, value, tail)
+        });
+
+        held.into_iter()
             .rev()
             .fold(body, |tail, (value, head, structure)| {
                 Term::matrix(Matrix {
@@ -1492,11 +1614,120 @@ impl<'m> Compiler<'m> {
                                 structure,
                                 fields: Vec::new(),
                             },
+                            guards: Vec::new(),
                             body: Term::func(Vec::<(Free, Term)>::new(), tail),
                         }],
                     }],
                 })
             })
+    }
+
+    /// A row with guards as the function of what a value takes where one of them fails, `(failed: type_) => …`: each guard a `Bool` match or a match over its value, the row's body past the last, and `failed` wherever one fails — under what the row binds ahead of it, as [`Compiler::body_of`] writes a body.
+    fn failing(&mut self, context: &mut Context, line: Line<'m>, type_: &Term) -> Term {
+        let failed = context.fresh(None);
+        let mut values = line
+            .taken
+            .iter()
+            .map(|value| {
+                value
+                    .clone()
+                    .expect("a row's every binder is read ahead of its guards")
+            })
+            .collect::<Vec<_>>();
+        let passing = self.passing(context, line.row, 0, &mut values, &Term::free_var(&failed));
+        let chain = Self::bound_ahead(context, line.lets, line.held, passing);
+
+        Term::func(vec![(failed, type_.clone())], chain)
+    }
+
+    /// The guards of the row at `row` from the one at `index`, with `values` standing for the binders written before it, as the term a value that passed the ones before comes to: the row's body where none is left, and `failed` where this one fails.
+    fn passing(
+        &mut self,
+        context: &mut Context,
+        row: usize,
+        index: usize,
+        values: &mut Vec<Term>,
+        failed: &Term,
+    ) -> Term {
+        let written = self.row(row);
+        let Some(guard) = written.guards.get(index) else {
+            return opened(&written.body, values);
+        };
+
+        match guard {
+            Guard::Holds(condition) => {
+                let condition = opened(condition, values);
+                let passed = self.passing(context, row, index + 1, values, failed);
+
+                Term::bool_match(
+                    condition,
+                    None,
+                    Term::hole(context.mint_metavar()),
+                    failed.clone(),
+                    passed,
+                )
+            }
+            Guard::Binds { pattern, value } => {
+                let value = opened(value, values);
+                let first = values.len();
+                let names = (first..first + pattern.binders())
+                    .map(|place| {
+                        let (hint, written) = &self.labels[row][place];
+                        context.fresh_written(hint.as_deref(), *written)
+                    })
+                    .collect::<Vec<_>>();
+                values.extend(names.iter().map(Term::free_var));
+                let passed = self.passing(context, row, index + 1, values, failed);
+                values.truncate(first);
+                // The `_` binds nothing its body can name: a value the pattern refuses takes it, and learns nothing of the pattern.
+                let unnamed = context.fresh(None);
+
+                Term::matrix(Matrix {
+                    head: value,
+                    motive: None,
+                    arms: vec![
+                        Arm {
+                            alternatives: vec![Row {
+                                pattern: pattern.clone(),
+                                guards: Vec::new(),
+                                body: Term::func(
+                                    names
+                                        .into_iter()
+                                        .map(|name| (name, Term::hole(context.mint_metavar())))
+                                        .collect::<Vec<_>>(),
+                                    passed,
+                                ),
+                            }],
+                        },
+                        Arm {
+                            alternatives: vec![Row {
+                                pattern: Pattern::Binder,
+                                guards: Vec::new(),
+                                body: Term::func(
+                                    vec![(unnamed, Term::hole(context.mint_metavar()))],
+                                    failed.clone(),
+                                ),
+                            }],
+                        },
+                    ],
+                })
+            }
+        }
+    }
+
+    /// A guard of the row `line` is, a function over the binders its pattern writes, opened where the row stands: each binder in place of what it stands for there.
+    fn opened_at(guard: &Term, line: &Line<'m>) -> Term {
+        let values = line
+            .taken
+            .iter()
+            .map(|value| {
+                value
+                    .clone()
+                    .expect("a row's every binder is read ahead of its guards")
+            })
+            .collect::<Vec<_>>();
+
+        opened(guard, &values).substitute(&line.lets)
     }
 
     /// The row at `row` elaborated by its own walk: its cases entered alone, standing on the frames held where the match is entered.
@@ -1548,6 +1779,17 @@ impl<'m> Compiler<'m> {
                 _ => mode,
             };
             let cases = line.cases.clone();
+            // A row with guards is read as the function of what its failures take, which each leaf it reaches supplies.
+            if line.guarded {
+                let Mode::Check(type_) = mode else {
+                    unreachable!("a row is walked against the type its case stands at");
+                };
+                let function = self.failing(context, line, &type_);
+                let expected = failing_type(context, &type_);
+                let (body, _) = elaborate(context, &function, Mode::Check(expected))?;
+
+                return Ok(Walked { cases, body });
+            }
             let leaf = self.body_of(context, line);
             let (body, _) = elaborate(context, &leaf, mode)?;
 
@@ -1809,7 +2051,7 @@ impl<'m> Compiler<'m> {
         let mut places = Vec::with_capacity(self.rows.len());
         let mut readers = BTreeSet::new();
         for row in &self.rows {
-            let goal = holds_goal(&row.body);
+            let goal = row_holds_goal(row);
             let mut written = Vec::new();
             fold_places(&row.pattern, &mut Vec::new(), &mut |path, peeled| {
                 let reads = peeled.is_some_and(|hypothesis| {
@@ -1899,9 +2141,28 @@ fn labels(row: &Row) -> Vec<Label> {
         // A row's binder has no type written, so nothing after it reads what stands in its place here.
         cursor.advance(domain);
     }
-    debug_assert_eq!(labels.len(), row.pattern.binders());
+    debug_assert_eq!(labels.len(), row.binders());
 
     labels
+}
+
+/// Whether `row` holds a written goal, in its body or a guard: a goal could read anything in scope there, a fold's hypothesis included.
+fn row_holds_goal(row: &Row) -> bool {
+    holds_goal(&row.body) || row.guards.iter().any(|guard| holds_goal(guard.term()))
+}
+
+/// `function`, a row's guard or body — a function over the binders written before it — opened at `values`.
+fn opened(function: &Term, values: &[Term]) -> Term {
+    let Subterm::Func(func) = &**function else {
+        unreachable!("a row's guards and body are functions over its binders");
+    };
+
+    func.telescope.open(&values.iter().collect::<Vec<_>>())
+}
+
+/// The type of a row with guards read as the function of what its failures take: from `type_`, what a failure takes, to `type_`.
+fn failing_type(context: &mut Context, type_: &Term) -> Term {
+    Term::func_type(vec![(context.fresh(None), type_.clone())], type_.clone())
 }
 
 /// Hold a struct pattern's head, written `head` and resolved to `structure`, to the structure the type of `column` is.

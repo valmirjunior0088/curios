@@ -8,8 +8,8 @@ use {
     curios_common::{Qualifier, Source},
     curios_core::{
         Arm, Atom, CalleeId, Cases, Definition, DefinitionKind, Definitions, Field, Free, Func,
-        FuncType, Global, HeadKey, InductDecl, InductParam, Intrinsic, Item, Let, Level, Match,
-        MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality,
+        FuncType, Global, Guard, HeadKey, InductDecl, InductParam, Intrinsic, Item, Let, Level,
+        Match, MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality,
         QualityParam, RecItem, Row, Sort, StructDecl, Subterm, Telescope, Term, UniverseContext,
         UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
     },
@@ -432,10 +432,12 @@ fn every_node_written_reads_back_as_itself() {
                     alternatives: vec![
                         Row {
                             pattern: Pattern::Literal(3usize.into()),
+                            guards: Vec::new(),
                             body: Term::func(Vec::<(Free, Term)>::new(), one()),
                         },
                         Row {
                             pattern: Pattern::Zero,
+                            guards: Vec::new(),
                             body: Term::func(Vec::<(Free, Term)>::new(), one()),
                         },
                     ],
@@ -443,6 +445,7 @@ fn every_node_written_reads_back_as_itself() {
                 Arm {
                     alternatives: vec![Row {
                         pattern: Pattern::Binder,
+                        guards: Vec::new(),
                         body: over(Free::local(1, Some("m")), one()),
                     }],
                 },
@@ -455,12 +458,41 @@ fn every_node_written_reads_back_as_itself() {
                 Arm {
                     alternatives: vec![Row {
                         pattern: Pattern::Zero,
+                        guards: Vec::new(),
                         body: Term::func(Vec::<(Free, Term)>::new(), one()),
                     }],
                 },
                 Arm {
                     alternatives: vec![Row {
                         pattern: Pattern::Binder,
+                        guards: Vec::new(),
+                        body: over(Free::local(1, Some("m")), one()),
+                    }],
+                },
+            ],
+        }),
+        // A row with guards, each the function over the binders written before it: a condition over the pattern's, and a bind whose pattern binds nothing more, the body over them all.
+        Term::matrix(Matrix {
+            head: one(),
+            motive: None,
+            arms: vec![
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Binder,
+                        guards: vec![
+                            Guard::Holds(over(Free::local(1, Some("m")), one())),
+                            Guard::Binds {
+                                pattern: Pattern::Zero,
+                                value: over(Free::local(1, Some("m")), one()),
+                            },
+                        ],
+                        body: over(Free::local(1, Some("m")), one()),
+                    }],
+                },
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Binder,
+                        guards: Vec::new(),
                         body: over(Free::local(1, Some("m")), one()),
                     }],
                 },

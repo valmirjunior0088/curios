@@ -495,6 +495,8 @@ fn executed(term: &Term, syntax: &SyntaxRegistry) -> Term {
                             .iter()
                             .map(|row| Row {
                                 pattern: row.pattern.clone(),
+                                // A guard answers whether its arm is taken, never a tail.
+                                guards: row.guards.clone(),
                                 body: closing(&row.body, syntax),
                             })
                             .collect(),

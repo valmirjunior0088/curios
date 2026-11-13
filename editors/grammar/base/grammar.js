@@ -1,6 +1,6 @@
 /// <reference types="tree-sitter-cli/dsl" />
 
-// The surface grammar of `documentation/language.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, or a `choose` bind arm's refutability. Core text's grammar, in `core/`, extends this one, as the compiler reads a program and Core text by one grammar under a dialect.
+// The surface grammar of `documentation/language.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, a bind's refutability in a `choose` arm or a guard, or the default a match with no head closes with. Core text's grammar, in `core/`, extends this one, as the compiler reads a program and Core text by one grammar under a dialect.
 
 const {
   IDENTIFIER,
@@ -374,23 +374,46 @@ module.exports = grammar({
         ";",
       ),
 
+    // A match with no head is its arms' guards alone; its closing `| _ =>` is read as one more guard, which costs a highlighter nothing.
     match_term: ($) =>
       seq(
         "match",
-        field("scrutinee", $._term),
-        optional(seq(":", field("motive", $._term))),
-        repeat($.match_arm),
+        choice(
+          seq(
+            field("scrutinee", $._term),
+            optional(seq(":", field("motive", $._term))),
+            repeat($.match_arm),
+          ),
+          repeat1($.guarded_arm),
+        ),
         "end",
       ),
 
-    // An arm's alternatives, each after its bar, share one body.
+    // An arm's alternatives, each after its bar, share its guards and its body.
     match_arm: ($) =>
       seq(
         "|",
         field("pattern", $._match_pattern),
         repeat(seq("|", field("pattern", $._match_pattern))),
+        repeat(seq(",", field("guard", $.guard))),
         "=>",
         field("body", $._term),
+      ),
+
+    guarded_arm: ($) =>
+      seq(
+        "|",
+        field("guard", $.guard),
+        repeat(seq(",", field("guard", $.guard))),
+        "=>",
+        field("body", $._term),
+      ),
+
+    // A bind's pattern is read as a term, as a `choose` bind arm's is: every refutable pattern shape is also a term shape.
+    guard: ($) =>
+      seq(
+        field("test", $._infix),
+        optional(seq("=", field("value", $._infix))),
       ),
 
     choose_term: ($) => seq("choose", repeat($.choose_arm), "end"),

@@ -14,13 +14,13 @@ use {
         ChooseArm, ChooseTest, ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic,
         CoreItem, CoreMember, CoreText, CoreValue, Decorated, DecoratorField, Dialect, Doc, Field,
         FieldSugarParam, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
-        InductIndex, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry,
-        ListPattern, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern,
-        NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm,
-        StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign,
-        TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple,
-        TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField, intrinsic_form,
-        intrinsic_path,
+        Guard, HeadlessArm, HeadlessMatch, InductIndex, Infix, Intrinsic, IntrinsicForm, Label,
+        Let, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern, MatchPatternField,
+        Name, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral,
+        Radix, Shown, ShownForm, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase,
+        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse,
+        TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
+        intrinsic_form, intrinsic_path,
     },
     crate::{ELIDED, Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
@@ -253,7 +253,10 @@ const MAX_FLAT_ARMS: usize = 3;
 ///
 /// Nested flat, two ladders put both their `end`s on one line and nothing says which closes which: `match b | true => match c | true => false | false => true end | false => c end`. Breaking the outer gives every `end` a column that names what it closes. This is about pairing delimiters by eye, not about density — which is why it applies at any width.
 fn is_ladder<D: Layout>(body: &Term<D>) -> bool {
-    matches!(body.as_subterm(), Subterm::Match(_) | Subterm::Choose(_))
+    matches!(
+        body.as_subterm(),
+        Subterm::Match(_) | Subterm::HeadlessMatch(_) | Subterm::Choose(_)
+    )
 }
 
 /// A `Flt` literal as written: a finite value as its signed decimal, and the values no decimal spells as their literals, `+inf.0`, `-inf.0`, `+nan.0` and `-nan.0`. Source spells no other NaN, so the syntax holds none.
@@ -371,6 +374,35 @@ impl<D: Layout> TreePrinter<D> {
             .collect::<Vec<_>>();
 
         group(flow(items))
+    }
+
+    /// An arm's guards after what the arm writes before them: on the arm's line where its head fits there, and otherwise each on a line of its own at the arm's column, led by its comma, as an alternative after the first is led by its bar.
+    fn guards(self, guards: Vec<Guard<D>>) -> Printer {
+        flat(
+            guards
+                .into_iter()
+                .map(|guard| {
+                    flat([
+                        if_break(",", ""),
+                        line(),
+                        if_break("", ", "),
+                        self.guard(guard),
+                    ])
+                })
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    /// A guard: a condition, or a pattern and the value it matches, each term an operand, as the grammar reads it.
+    fn guard(self, guard: Guard<D>) -> Printer {
+        match guard {
+            Guard::Holds(condition) => self.operand(condition, 0),
+            Guard::Binds { pattern, value } => flat([
+                self.alternatives(vec![*pattern]),
+                pure(" = "),
+                self.operand(value, 0),
+            ]),
+        }
     }
 
     /// A match-arm pattern: a plain binder, an inductive constructor tag applied to sub-patterns, a tuple pattern, or a struct pattern — the refutable counterpart of [`TreePrinter::pattern`] (see `MatchPattern`'s doc comment). `Variant` stays positional (constructors have no field labels); `Tuple`/`Struct` mirror [`TreePrinter::pattern`]'s own field-printing exactly.
@@ -1008,6 +1040,7 @@ impl<D: Layout> TreePrinter<D> {
             | Subterm::Proj(_)
             | Subterm::Bang(_)
             | Subterm::Match(_)
+            | Subterm::HeadlessMatch(_)
             | Subterm::Choose(_) => self.term_followed(term, suffix),
             // A decorator takes the call chain after its operand, so under a suffix a decorated head is parenthesized: `(#{…} f)(x)` states the head's fields, where `#{…} f(x)` states the call's.
             Subterm::Core(form) if !D::takes_suffix(form) => flat([
@@ -1208,13 +1241,55 @@ impl<D: Layout> TreePrinter<D> {
                             .map(|arm| {
                                 flat([
                                     separator(),
-                                    pure("| "),
-                                    self.alternatives(arm.alternatives),
+                                    group(flat([
+                                        pure("| "),
+                                        self.alternatives(arm.alternatives),
+                                        self.guards(arm.guards),
+                                    ])),
                                     self.attached_body(" =>", arm.body),
                                 ])
                             })
                             .collect::<Vec<_>>(),
                     ),
+                    separator(),
+                    pure("end"),
+                    suffix,
+                ]));
+            }
+            // A match with no head lays its arms out as a headed one does, its first guard where a headed arm's patterns stand.
+            Subterm::HeadlessMatch(HeadlessMatch { arms, default }) => {
+                let forced = arms.len() + 1 > MAX_FLAT_ARMS
+                    || std::iter::once(&default)
+                        .chain(arms.iter().map(|arm| &arm.body))
+                        .any(is_ladder);
+                let separator = match forced {
+                    true => hard_line,
+                    false => line,
+                };
+                return group(flat([
+                    pure("match"),
+                    flat(
+                        arms.into_iter()
+                            .map(|HeadlessArm { guards, body }| {
+                                let mut guards = guards.into_iter();
+                                let first = guards
+                                    .next()
+                                    .expect("an arm of a match with no head writes a guard");
+                                flat([
+                                    separator(),
+                                    group(flat([
+                                        pure("| "),
+                                        self.guard(first),
+                                        self.guards(guards.collect()),
+                                    ])),
+                                    self.attached_body(" =>", body),
+                                ])
+                            })
+                            .collect::<Vec<_>>(),
+                    ),
+                    separator(),
+                    pure("| _"),
+                    self.attached_body(" =>", default),
                     separator(),
                     pure("end"),
                     suffix,

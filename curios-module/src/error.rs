@@ -72,8 +72,8 @@ pub enum Error {
     },
     /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
-    /// A `choose` bind arm `| pattern = value =>` whose `pattern` is a bare binder — irrefutable, so it always fires and the rest of the ladder is dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
-    BindArmIrrefutable,
+    /// A bind — a `choose` bind arm `| pattern = value =>` or a bind guard `pattern = value` — whose `pattern` takes nothing apart: it always matches, so the arms after it are dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
+    BindCannotFail,
     /// A headed match ended in a *named* catch-all (`| x =>`) among concrete constructor arms. Only a bare `| _ =>` is a catch-all default; a named binder there is almost certainly a mistake (a misspelled constructor, or a binder that silently swallows every remaining case).
     MatchNamedCatchAll {
         /// The name the arm binds, which its author may have meant as a constructor.
@@ -317,10 +317,10 @@ impl Error {
                 f.text("misplaced motive");
                 f.stating("a motive is written where every arm dispatches directly on one kind of tag or literal");
             }
-            Error::BindArmIrrefutable => {
+            Error::BindCannotFail => {
                 f.text("irrefutable pattern");
-                f.stating("a bind arm, `| pattern = value =>`, takes a refutable pattern");
-                f.stating("a bare binder always matches");
+                f.stating("a bind, `pattern = value`, takes a pattern that can fail");
+                f.stating("this one takes nothing apart, and so matches every value");
                 f.stating("write a `let`");
             }
             Error::MatchNamedCatchAll { binder } => {

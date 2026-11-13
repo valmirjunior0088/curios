@@ -8,6 +8,7 @@ mod core_text;
 mod documentation;
 mod foreign;
 mod grammar;
+mod guard;
 mod keyword;
 mod let_;
 mod local_binding;

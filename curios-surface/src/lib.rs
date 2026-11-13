@@ -22,10 +22,11 @@ mod term;
 use term::*;
 pub use term::{
     Alternative, Apply, Argument, Binder, BytesPattern, Choose, ChooseArm, ChooseTest, Field, Func,
-    FuncParam, FuncSugarParam, FuncType, FuncTypeParam, Infix, Let, LetBinding, LetGroup,
-    LetSignature, ListPattern, Match, MatchPattern, MatchPatternField, MatrixArm, NatPattern,
-    NumLit, Pattern, PatternField, Proj, ProofLiteral, StrLit, StructLit, StructLitEntry, Subterm,
-    Term, Tuple, TupleField, TupleType, TupleTypeParam, func_sugar_params, func_sugar_type_params,
+    FuncParam, FuncSugarParam, FuncType, FuncTypeParam, Guard, HeadlessArm, HeadlessMatch, Infix,
+    Let, LetBinding, LetGroup, LetSignature, ListPattern, Match, MatchPattern, MatchPatternField,
+    MatrixArm, NatPattern, NumLit, Pattern, PatternField, Proj, ProofLiteral, StrLit, StructLit,
+    StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType, TupleTypeParam, func_sugar_params,
+    func_sugar_type_params,
 };
 
 mod spell;

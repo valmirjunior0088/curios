@@ -9,7 +9,7 @@ use {
     },
     crate::{
         Alternative, BytesPattern, CoreText, Frame, ListPattern, MatchPattern, MatrixArm,
-        NatPattern, ProofLiteral, Rendered, lambda_parameters, sub, written_pattern,
+        NatPattern, ProofLiteral, Rendered, sub, written_pattern,
     },
     curios_common::{Plicity, Sign},
     curios_core::{
@@ -115,68 +115,159 @@ fn transient_written_as_core<D: Rendered>(
     }
 }
 
-/// A match as it was written: its head and motive, then each arm as its alternatives over the names their rows' bodies bind and the body the first row's opening is — in Core text, each row an arm of its own, its pattern over places and its body as the function over its binders it is, each over the domain Core holds for it, the field `arms` saying how many rows each arm holds where one holds more than one.
+/// A match as it was written: its head and motive, then each arm as its alternatives over the names their rows' bodies bind, and the guards and the body the first row's opening is — in Core text, each row an arm of its own, its pattern over places and each guard and its body as the function over its binders it is, each over the domain Core holds for it, the field `arms` saying how many rows each arm holds where one holds more than one. A reader is shown a match over `()` whose rows write an unnamed `_`, every one but the last guarded, as the match with no head it was lowered from.
 fn matrix_written<D: Rendered>(
     Matrix { head, motive, arms }: Matrix,
     frame: Frame<'_, D>,
 ) -> crate::Term<D> {
+    let unheaded =
+        motive.is_none() && matches!(&*head, Subterm::Tuple(tuple) if tuple.fields.is_empty());
     let motive = motive.map(|motive| sub(motive, frame));
     let arms = match frame.core_text() {
         true => arms
             .into_iter()
             .flat_map(|arm| arm.alternatives)
-            .map(|Row { pattern, body }| {
-                let places = &mut iter::repeat_with(|| "_".into());
+            .map(
+                |Row {
+                     pattern,
+                     guards,
+                     body,
+                 }| {
+                    let places = &mut iter::repeat_with(|| "_".into());
 
-                MatrixArm::of(written_pattern(&pattern, places), sub(body, frame))
-            })
+                    MatrixArm {
+                        alternatives: vec![Alternative {
+                            pattern: written_pattern(&pattern, places),
+                            span: None,
+                        }],
+                        guards: guards
+                            .into_iter()
+                            .map(|guard| match guard {
+                                curios_core::Guard::Holds(condition) => {
+                                    crate::Guard::Holds(sub(condition, frame))
+                                }
+                                curios_core::Guard::Binds { pattern, value } => {
+                                    crate::Guard::Binds {
+                                        pattern: Box::new(Alternative {
+                                            pattern: written_pattern(&pattern, places),
+                                            span: None,
+                                        }),
+                                        value: sub(value, frame),
+                                    }
+                                }
+                            })
+                            .collect(),
+                        body: sub(body, frame),
+                    }
+                },
+            )
             .collect::<Vec<_>>(),
         false => arms
             .into_iter()
             .map(|arm| {
-                let mut body = None;
+                let mut first = None;
                 let alternatives = arm
                     .alternatives
                     .into_iter()
-                    .map(|Row { pattern, body: row }| {
-                        let Subterm::Func(Func { telescope }) = &*row else {
-                            unreachable!("a row's body is a function over its binders");
-                        };
-                        let mut params = Vec::with_capacity(telescope.len());
-                        let opened = lambda_parameters(
-                            telescope.cursor(),
-                            &telescope.marks(),
-                            frame,
-                            &mut params,
-                        );
-                        let mut names = params.into_iter().map(|param| match param.pattern {
-                            crate::Pattern::Binder(name) => name,
-                            crate::Pattern::Tuple(_) | crate::Pattern::Struct { .. } => {
-                                unreachable!("a lambda's parameter is written as a name")
-                            }
-                        });
-                        body.get_or_insert(opened);
+                    .map(|row| {
+                        let (pattern, guards, body) = row_read_back(row, frame);
+                        first.get_or_insert((guards, body));
 
                         Alternative {
-                            pattern: written_pattern(&pattern, &mut names),
+                            pattern,
                             span: None,
                         }
                     })
                     .collect::<Vec<_>>();
+                let (guards, body) = first.expect("an arm writes at least one alternative");
 
                 MatrixArm {
                     alternatives,
-                    body: body.expect("an arm writes at least one alternative"),
+                    guards,
+                    body,
                 }
             })
             .collect::<Vec<_>>(),
     };
+
+    if unheaded
+        && !frame.core_text()
+        && let Some(headless) = crate::HeadlessMatch::of_arms(&arms)
+    {
+        return tree(crate::Subterm::HeadlessMatch(headless));
+    }
 
     tree(crate::Subterm::Match(crate::Match {
         head: sub(head, frame),
         motive,
         arms,
     }))
+}
+
+/// A row as a reader is shown it: its pattern over the names its body binds, each guard over the names written before it, and the body under them all — every binder opened once, under one label, as `lambda_parameters` opens a lambda's, so a guard and the body read one name alike.
+fn row_read_back<D: Rendered>(
+    Row {
+        pattern,
+        guards,
+        body,
+    }: Row,
+    frame: Frame<'_, D>,
+) -> (crate::MatchPattern<D>, Vec<crate::Guard<D>>, crate::Term<D>) {
+    let Subterm::Func(Func { telescope }) = &*body else {
+        unreachable!("a row's body is a function over its binders");
+    };
+    let mut cursor = telescope.cursor();
+    let mut opened = Vec::with_capacity(telescope.len());
+    let mut names = Vec::with_capacity(telescope.len());
+    while cursor.entry().is_some() {
+        let label = frame.label(cursor.label());
+        let core = frame.label_fields(cursor.label());
+        // Asked before the cursor moves past the binder it asks about.
+        let named = label.hint().is_some() || cursor.binder_used();
+        names.push(crate::Binder {
+            core,
+            label: crate::Label::from(match named {
+                true => frame.spelling.label(&label),
+                false => "_".to_string(),
+            }),
+        });
+        cursor.advance(Term::free_var(&label));
+        opened.push(Term::free_var(&label));
+    }
+    let body = sub(cursor.body().expect("a cursor past every entry"), frame);
+
+    let at = |function: &Term, place: usize| {
+        let Subterm::Func(Func { telescope }) = &**function else {
+            unreachable!("a row's guards are functions over the binders before them");
+        };
+        sub(
+            telescope.open(&opened[..place].iter().collect::<Vec<_>>()),
+            frame,
+        )
+    };
+    let mut names = names.into_iter();
+    let mut place = pattern.binders();
+    let written = written_pattern(&pattern, &mut names);
+    let guards = guards
+        .iter()
+        .map(|guard| match guard {
+            curios_core::Guard::Holds(condition) => crate::Guard::Holds(at(condition, place)),
+            curios_core::Guard::Binds { pattern, value } => {
+                let value = at(value, place);
+                place += pattern.binders();
+
+                crate::Guard::Binds {
+                    pattern: Box::new(Alternative {
+                        pattern: written_pattern(pattern, &mut names),
+                        span: None,
+                    }),
+                    value,
+                }
+            }
+        })
+        .collect();
+
+    (written, guards, body)
 }
 
 /// An operator, `#{node = Infix} (a + b)`: its operands, each a term of Core text.
@@ -264,17 +355,50 @@ pub fn node_transient_read(
                         ));
                     };
                     let pattern = pattern_read(&alternative.pattern, operand)?;
-                    let body = core_read(&arm.body, reader)?;
-                    match &*body {
-                        Subterm::Func(Func { telescope })
-                            if telescope.len() == pattern.binders() =>
-                        {
-                            Ok(Row { pattern, body })
-                        }
-                        _ => Err(refused(
-                            "a row's body, the function over its pattern's binders",
-                        )),
-                    }
+                    let mut over =
+                        |term: &crate::Term<CoreText>, binders: usize, what: &'static str| {
+                            let read = core_read(term, reader)?;
+                            match &*read {
+                                Subterm::Func(Func { telescope }) if telescope.len() == binders => {
+                                    Ok(read)
+                                }
+                                _ => Err(refused(what)),
+                            }
+                        };
+                    let mut binders = pattern.binders();
+                    let guards = arm
+                        .guards
+                        .iter()
+                        .map(|guard| match guard {
+                            crate::Guard::Holds(condition) => Ok(curios_core::Guard::Holds(over(
+                                condition,
+                                binders,
+                                "a guard, the function over the binders written before it",
+                            )?)),
+                            crate::Guard::Binds { pattern, value } => {
+                                let value = over(
+                                    value,
+                                    binders,
+                                    "a guard, the function over the binders written before it",
+                                )?;
+                                let pattern = pattern_read(&pattern.pattern, operand)?;
+                                binders += pattern.binders();
+
+                                Ok(curios_core::Guard::Binds { pattern, value })
+                            }
+                        })
+                        .collect::<Result<Vec<_>, ReadError>>()?;
+                    let body = over(
+                        &arm.body,
+                        binders,
+                        "a row's body, the function over its pattern's and its guards' binders",
+                    )?;
+
+                    Ok(Row {
+                        pattern,
+                        guards,
+                        body,
+                    })
                 })
                 .collect::<Result<Vec<_>, ReadError>>()?;
             let counts = match fields.take("arms") {

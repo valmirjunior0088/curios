@@ -721,6 +721,16 @@ pub enum Error {
         value: String,
         indexed: bool,
     },
+    /// A value only a guarded arm reaches: where its guards fail, no arm takes it. `value` is the value as a pattern, and `guarded` the last arm that reaches it, as written.
+    MatrixGuarded {
+        value: String,
+        guarded: String,
+    },
+    /// A guarded arm written before an arm that is a case of it. Guards order no pattern: with no guard the case would be reached by nothing, so a general arm stands after its exceptions, guarded or not. `general` and `case` are the two arms as written.
+    MatrixGuardedBeforeCase {
+        general: String,
+        case: String,
+    },
     /// Two arms that match one value, neither a case of the other. Arms have no priority, so nothing says which of the two the value takes. `value` is the value as a pattern, which is the arm that parts them, and `first` and `second` are the two arms as written.
     MatrixArmsMeet {
         value: String,

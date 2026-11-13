@@ -178,3 +178,30 @@ fn an_applied_choose_breaks_its_arms_to_keep_the_argument_attached() {
         )
     );
 }
+
+// An arm's guards stay on its line where its head fits there, and otherwise each stands on a line of its own at the arm's column, led by its comma, as an alternative after the first is led by its bar.
+#[test]
+fn guards_that_do_not_fit_stand_each_on_a_line_led_by_its_comma() {
+    assert_eq!(
+        canonical_within_width(
+            "let total =\n\
+             match | some(first_value) = alpha, some(second_value) = beta, first_value + second_value > 1000000000000, first_value != second_value => first_value + second_value | _ => 0 end;\n\
+             ()\n",
+        ),
+        concat!(
+            "let total =\n",
+            "    match\n",
+            "    | some(first_value) = alpha\n",
+            "    , some(second_value) = beta\n",
+            "    , first_value + second_value > 1000000000000\n",
+            "    , first_value != second_value => first_value + second_value\n",
+            "    | _ => 0\n",
+            "    end;\n",
+            "()\n",
+        )
+    );
+    assert_eq!(
+        canonical_within_width("let size = match o | some(n), n > 9 => 2 | _ => 0 end;\n()\n"),
+        "let size = match o | some(n), n > 9 => 2 | _ => 0 end;\n()\n",
+    );
+}

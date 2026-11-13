@@ -1,4 +1,4 @@
-//! Goals, `!`, `choose`, a match as the matrix it is written as, and the packed runs constant atoms fold into.
+//! Goals, `!`, `choose`, a match as the matrix it is written as, its guards, and the packed runs constant atoms fold into.
 
 use crate::into_core::test_support::*;
 
@@ -224,5 +224,58 @@ fn alternatives_that_bind_different_names_are_refused() {
     assert!(
         error.contains("`x` is bound by another alternative of this arm and not by this one"),
         "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_guard_lowers_to_a_function_over_the_names_written_before_it() {
+    // Each guard is a function over the names the pattern and the guards before it bind, and the body one over all of them: a bind guard adds its pattern's names for what follows it.
+    let term = run("match m | some(x), x > 1, some(y) = f(x), y > x => y | _ => 0 end");
+
+    let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
+        panic!("expected a matrix at the top, got {term:?}");
+    };
+    let row = &matrix.arms[0].alternatives[0];
+    let telescope = |function: &curios_core::Term| {
+        let curios_core::Subterm::Func(function) = &**function else {
+            panic!("expected a function, got {function:?}");
+        };
+        function.telescope.len()
+    };
+    assert_eq!(
+        row.guards
+            .iter()
+            .map(|guard| telescope(guard.term()))
+            .collect::<Vec<_>>(),
+        [1, 1, 2],
+    );
+    assert!(matches!(row.guards[1], curios_core::Guard::Binds { .. }));
+    assert_eq!(telescope(&row.body), row.binders());
+    assert_eq!(row.binders(), 2);
+}
+
+#[test]
+fn a_match_with_no_head_lowers_to_a_matrix_over_the_unit_value() {
+    // A match with no head is the match of no columns: its head is `()`, and every row writes `_`, its guards being all it tests.
+    let term = run("match | p => a | some(x) = o => x | _ => 0 end");
+
+    let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
+        panic!("expected a matrix at the top, got {term:?}");
+    };
+    assert_eq!(
+        matrix.head,
+        curios_core::Term::tuple(Vec::<curios_core::Term>::new())
+    );
+    assert!(
+        matrix
+            .rows()
+            .all(|row| row.pattern == curios_core::Pattern::Binder)
+    );
+    assert_eq!(
+        matrix
+            .rows()
+            .map(|row| row.guards.len())
+            .collect::<Vec<_>>(),
+        [1, 1, 0],
     );
 }

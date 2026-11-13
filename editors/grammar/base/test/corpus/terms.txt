@@ -285,6 +285,124 @@ end
       (number))))
 
 ================================================================================
+Guards after an arm's patterns
+================================================================================
+
+match o
+| some(n), n > 1, some(m) = f(n) => m
+| [h, .._]; count, h > 9 => count
+| _ => 0
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (match_term
+    (path
+      (identifier))
+    (match_arm
+      (constructor_pattern
+        (identifier)
+        (constructor_argument
+          (identifier)))
+      (guard
+        (binary
+          (path
+            (identifier))
+          (number)))
+      (guard
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier)))))
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier))))))
+      (path
+        (identifier)))
+    (match_arm
+      (list_pattern
+        (identifier)
+        (identifier)
+        (hypothesis
+          (identifier)))
+      (guard
+        (binary
+          (path
+            (identifier))
+          (number)))
+      (path
+        (identifier)))
+    (match_arm
+      (identifier)
+      (number))))
+
+================================================================================
+A match with no head
+================================================================================
+
+match
+| flag => 1
+| (some(x), _) = (lookup(key), p), x > 0 => x
+| _ => 0
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (match_term
+    (guarded_arm
+      (guard
+        (path
+          (identifier)))
+      (number))
+    (guarded_arm
+      (guard
+        (tuple
+          (tuple_field
+            (call
+              (path
+                (identifier))
+              (arguments
+                (argument
+                  (path
+                    (identifier))))))
+          (tuple_field
+            (path
+              (identifier))))
+        (tuple
+          (tuple_field
+            (call
+              (path
+                (identifier))
+              (arguments
+                (argument
+                  (path
+                    (identifier))))))
+          (tuple_field
+            (path
+              (identifier)))))
+      (guard
+        (binary
+          (path
+            (identifier))
+          (number)))
+      (path
+        (identifier)))
+    (guarded_arm
+      (guard
+        (path
+          (identifier)))
+      (number))))
+
+================================================================================
 Arms of alternatives
 ================================================================================
 

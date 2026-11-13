@@ -636,6 +636,7 @@ fn form_read(
         Subterm::Infix(_) => refused("an operator"),
         Subterm::Bang(_) => refused("a `!`"),
         Subterm::Choose(_) => refused("a `choose`"),
+        Subterm::HeadlessMatch(_) => refused("a match with no head"),
         Subterm::Hole => refused("a hole"),
         Subterm::Derive => refused("a derived body"),
         Subterm::ProofLiteral(ProofLiteral::Str(_)) => refused("a string"),

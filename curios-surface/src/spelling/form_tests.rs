@@ -1,11 +1,13 @@
-//! The forms a print writes: a foreign call, a tuple type, a successor and a numeral operand, a family's parameters and indices, a lambda and its body, a non-finite float, an append, and the bound a print keeps.
+//! The forms a print writes: a foreign call, a tuple type, a successor and a numeral operand, a family's parameters and indices, a lambda and its body, a non-finite float, an append, the bound a print keeps, and a match's guards.
 
 use {
     super::test_support::*,
     super::*,
     crate::ELIDED,
     curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
-    curios_core::{Telescope, TupleType, UniverseMetaId, UniverseParam},
+    curios_core::{
+        Arm, Guard, Matrix, Pattern, Row, Telescope, TupleType, UniverseMetaId, UniverseParam,
+    },
     std::sync::Arc,
 };
 
@@ -471,4 +473,62 @@ fn level_parameter_names_stay_alphabetic_past_the_sixth() {
             name(index)
         );
     }
+}
+
+/// A row's guards print after its pattern, each under the names written before it, a bind as its pattern and its value; and a matrix over `()` whose rows all write `_`, which is what a match with no head lowers to, prints as one, its rows' guards alone and its last row the default.
+#[test]
+fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_with_no_head() {
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let numeral = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+    let over = |binder: Free, term: Term| Term::func([(binder, nat())], term);
+    let row = |pattern: Pattern, guards: Vec<Guard>, body: Term| Arm {
+        alternatives: vec![Row {
+            pattern,
+            guards,
+            body,
+        }],
+    };
+    let (x, unnamed) = (Free::local(0, Some("x")), Free::local(1, None));
+    let flag = Term::intrinsic(Intrinsic::Bool(true));
+    let spelling = Rc::new(Spelling::default());
+
+    let headed = Term::matrix(Matrix {
+        head: numeral(1),
+        motive: None,
+        arms: vec![
+            row(
+                Pattern::Binder,
+                vec![
+                    Guard::Holds(over(x, flag.clone())),
+                    Guard::Binds {
+                        pattern: Pattern::Zero,
+                        value: over(x, Term::free_var(&x)),
+                    },
+                ],
+                over(x, Term::free_var(&x)),
+            ),
+            row(Pattern::Binder, Vec::new(), over(unnamed, numeral(1))),
+        ],
+    });
+    assert_eq!(
+        headed.spelled(&spelling).to_string(),
+        "match 1 | x, true, 0 = x => x | _ => 1 end"
+    );
+
+    let headless = Term::matrix(Matrix {
+        head: Term::tuple(Vec::<Term>::new()),
+        motive: None,
+        arms: vec![
+            row(
+                Pattern::Binder,
+                vec![Guard::Holds(over(unnamed, flag))],
+                over(unnamed, numeral(1)),
+            ),
+            row(Pattern::Binder, Vec::new(), over(unnamed, numeral(0))),
+        ],
+    });
+    assert_eq!(
+        headless.spelled(&spelling).to_string(),
+        "match | true => 1 | _ => 0 end"
+    );
 }

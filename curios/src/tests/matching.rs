@@ -1,8 +1,9 @@
-//! Matching: patterns, alternatives, the matrix form, motives, refinement and `choose`, end to end.
+//! Matching: patterns, alternatives, guards, the matrix form, motives, refinement and `choose`, end to end.
 
 mod alternative_tests;
 mod binder_tests;
 mod choose_tests;
+mod guard_tests;
 mod instance_tests;
 mod let_refinement_tests;
 mod matrix_tests;

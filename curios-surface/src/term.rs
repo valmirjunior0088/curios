@@ -384,11 +384,13 @@ pub struct Match<D: Dialect = Program> {
     pub arms: Vec<MatrixArm<D>>,
 }
 
-/// One arm of a [`Match`]: `| pattern | … => body`, its alternatives in the order they are written and the one body they share. Compiled by `curios-elab`'s matrix compiler into the single-level core match/projection forms — exactly what a person would get from hand-nesting matches (see its doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every argument a plain [`MatchPattern::Binder`]) comes to one core arm binding the written names.
+/// One arm of a [`Match`]: `| pattern | … , guard … => body`, its alternatives in the order they are written, the guards after them and the one body they share. Compiled by `curios-elab`'s matrix compiler into the single-level core match/projection forms — exactly what a person would get from hand-nesting matches (see its doc comment). A flat, unnested arm (`tag(x, y) => body`, i.e. every argument a plain [`MatchPattern::Binder`]) comes to one core arm binding the written names.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MatrixArm<D: Dialect = Program> {
     /// At least one.
     pub alternatives: Vec<Alternative<D>>,
+    /// The guards after the alternatives, each read under every alternative.
+    pub guards: Vec<Guard<D>>,
     pub body: Term<D>,
 }
 
@@ -400,9 +402,66 @@ impl<D: Dialect> MatrixArm<D> {
                 pattern,
                 span: None,
             }],
+            guards: Vec::new(),
             body,
         }
     }
+}
+
+/// A guard an arm writes after its patterns, or one of those an arm of a [`HeadlessMatch`] is: a `Bool`, which passes where it is `true`, or `pattern = value`, which passes where the value matches the pattern and binds its names for the guards after it and the arm's body.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Guard<D: Dialect = Program> {
+    Holds(Term<D>),
+    Binds {
+        pattern: Box<Alternative<D>>,
+        value: Term<D>,
+    },
+}
+
+/// A match with no head: guards alone, `match | guard, … => body | … | _ => default end`, the arms tried from the top and the default required. The match of no columns, lowered as a match over `()` whose arms write `_` (`into_core::match_compile`), so `curios-elab`'s matrix compiler reads its arms where a headed match's meet theirs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeadlessMatch<D: Dialect = Program> {
+    pub arms: Vec<HeadlessArm<D>>,
+    pub default: Term<D>,
+}
+
+impl<D: Dialect> HeadlessMatch<D> {
+    /// The match with no head a match over `()` with `arms` was lowered from: every arm one `_` that names nothing, every one guarded but the last, which has no guard. `None` where the arms are no such match's.
+    pub fn of_arms(arms: &[MatrixArm<D>]) -> Option<Self> {
+        let unnamed = |arm: &MatrixArm<D>| {
+            matches!(
+                arm.alternatives.as_slice(),
+                [Alternative { pattern: MatchPattern::Binder(name), .. }] if name.as_str() == "_"
+            )
+        };
+        let (default, guarded) = arms.split_last()?;
+        if !unnamed(default)
+            || !default.guards.is_empty()
+            || !guarded
+                .iter()
+                .all(|arm| unnamed(arm) && !arm.guards.is_empty())
+        {
+            return None;
+        }
+
+        Some(Self {
+            arms: guarded
+                .iter()
+                .map(|arm| HeadlessArm {
+                    guards: arm.guards.clone(),
+                    body: arm.body.clone(),
+                })
+                .collect(),
+            default: default.body.clone(),
+        })
+    }
+}
+
+/// One arm of a [`HeadlessMatch`]: its guards, at least one, and its body.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeadlessArm<D: Dialect = Program> {
+    pub guards: Vec<Guard<D>>,
+    pub body: Term<D>,
 }
 
 /// One of the patterns an arm writes before its `=>`: the arm is taken by a value any of them matches, its names bound as that one binds them.
@@ -686,6 +745,8 @@ pub enum Subterm<D: Dialect = Program> {
     Proj(Proj<D>),
     StructLit(StructLit<D>),
     Match(Match<D>),
+    /// A match with no head (see [`HeadlessMatch`]).
+    HeadlessMatch(HeadlessMatch<D>),
     /// An ordered guarded ladder (see [`Choose`]) — not a match, since it consumes no scrutinee.
     Choose(Choose<D>),
     Let(Let<D>),
