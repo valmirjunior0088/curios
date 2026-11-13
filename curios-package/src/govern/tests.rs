@@ -21,7 +21,14 @@ fn a_lone_package_governs_itself() {
     let root = tree(
         "govern-lone",
         &[
-            ("curios.toml", "compiler = \"0.0.0\"\nname = \"json\"\n"),
+            (
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"json\"\n"
+                ),
+            ),
             ("lib.crs", ""),
         ],
     );
@@ -40,7 +47,14 @@ fn a_subdirectory_of_a_package_is_governed_by_that_package() {
     let root = tree(
         "govern-subdirectory",
         &[
-            ("curios.toml", "compiler = \"0.0.0\"\nname = \"json\"\n"),
+            (
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"json\"\n"
+                ),
+            ),
             ("lib.crs", "pub mod parse;"),
             ("parse/lexer.crs", ""),
         ],
@@ -61,11 +75,22 @@ fn a_nested_package_governs_its_own_directory() {
     let root = tree(
         "govern-nested",
         &[
-            ("curios.toml", "compiler = \"0.0.0\"\nname = \"json\"\n"),
+            (
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"json\"\n"
+                ),
+            ),
             ("lib.crs", ""),
             (
                 "tools/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"tools\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"tools\"\n"
+                ),
             ),
             ("tools/lib.crs", ""),
             ("tools/src/extra.crs", ""),
@@ -104,7 +129,11 @@ fn an_umbrella_governs_a_member_it_enumerates() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"json\", \"tools/cli\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"json\", \"tools/cli\"]\n"
+                ),
             ),
             ("json/curios.toml", "name = \"json\"\n"),
             ("json/lib.crs", ""),
@@ -131,13 +160,21 @@ fn an_umbrella_governs_nothing_it_does_not_enumerate() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"json\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"json\"]\n"
+                ),
             ),
             ("json/curios.toml", "name = \"json\"\n"),
             ("json/lib.crs", ""),
             (
                 "scratch/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"scratch\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"scratch\"\n"
+                ),
             ),
             ("scratch/lib.crs", ""),
         ],
@@ -157,7 +194,11 @@ fn an_umbrella_root_is_governed_by_no_package() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"json\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"json\"]\n"
+                ),
             ),
             ("json/curios.toml", "name = \"json\"\n"),
             ("json/lib.crs", ""),
@@ -185,7 +226,11 @@ fn a_member_with_no_manifest_is_refused_against_the_umbrella() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"app\", \"bsae\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"app\", \"bsae\"]\n"
+                ),
             ),
             (
                 "app/curios.toml",
@@ -194,7 +239,11 @@ fn a_member_with_no_manifest_is_refused_against_the_umbrella() {
             ("app/lib.crs", ""),
             (
                 "base/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"base\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"base\"\n"
+                ),
             ),
             ("base/lib.crs", ""),
         ],
@@ -219,7 +268,11 @@ fn a_member_listed_twice_is_refused_as_listed_twice() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"base\", \"./base\", \"app\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"base\", \"./base\", \"app\"]\n"
+                ),
             ),
             (
                 "app/curios.toml",

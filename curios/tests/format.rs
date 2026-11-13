@@ -51,7 +51,11 @@ fn no_target_formats_what_the_package_declares_and_nothing_else() {
     write(
         &root,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"app\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
     );
     write(&root, "lib.crs", "pub mod util;\n");
     write(&root, "util.crs", UNFORMATTED);
@@ -164,7 +168,10 @@ fn a_package_formats_within_the_width_its_manifest_states() {
     write(
         &root,
         "curios.toml",
-        &format!("compiler = \"0.0.0\"\nname = \"app\"\n\n[format]\nwidth = {NARROWEST}\n"),
+        &format!(
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nwidth = {NARROWEST}\n",
+            compiler = env!("CARGO_PKG_VERSION")
+        ),
     );
     write(&root, "lib.crs", WIDE);
 
@@ -197,7 +204,11 @@ fn a_width_is_refused_for_a_file_a_package_governs_before_anything_is_written() 
     write(
         &root,
         "app/curios.toml",
-        "compiler = \"0.0.0\"\nname = \"app\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
     );
     write(&root, "app/lib.crs", UNFORMATTED);
     write(&root, "loose.crs", UNFORMATTED);

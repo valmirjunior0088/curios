@@ -1,4 +1,4 @@
-//! The minimum compiler a package declares, or inherits from the umbrella that enumerates it.
+//! The compiler a package is written for: the version it declares, or inherits from the umbrella that enumerates it.
 
 #[cfg(test)]
 mod tests;
@@ -13,7 +13,7 @@ use {
     },
 };
 
-/// A minimum Curios compiler version, compared by SemVer precedence rather than by build metadata.
+/// A Curios compiler version, compared by SemVer precedence, so build metadata is no part of it and a pre-release is a version of its own.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompilerVersion(Version);
 
@@ -27,12 +27,12 @@ impl CompilerVersion {
         )
     }
 
-    /// Refuse an older compiler before a package is compiled or its cached executable is selected.
+    /// Refuse every compiler but this one before a package is compiled or its cached executable is selected.
     fn require_current(&self, manifest: &Path) -> Result<(), String> {
         let current = Self::current();
-        if current.0.cmp_precedence(&self.0).is_lt() {
+        if current.0.cmp_precedence(&self.0).is_ne() {
             return Err(format!(
-                "{} requires Curios {self} or newer; this compiler is Curios {current}",
+                "{} requires Curios {self}; this compiler is Curios {current}",
                 manifest.display()
             ));
         }
@@ -69,8 +69,8 @@ pub fn require_compiler(
     directory: &Path,
     umbrella: Option<(&Umbrella, &Path)>,
 ) -> Result<(), String> {
-    let (minimum, owner) = compiler_requirement(package, directory, umbrella)?;
-    minimum.require_current(&owner)
+    let (stated, owner) = compiler_requirement(package, directory, umbrella)?;
+    stated.require_current(&owner)
 }
 
 /// Resolve the declaration before comparing versions: file placement may discover that a nearby package does not own the file at all.
@@ -93,7 +93,7 @@ pub fn compiler_requirement<'a>(
         }
         None => Ok((package.compiler.as_ref().ok_or_else(|| {
             format!(
-                "{} declares no minimum compiler version; a standalone package must state `compiler = \"{}\"`",
+                "{} declares no compiler version; a standalone package must state `compiler = \"{}\"`",
                 manifest.display(), CompilerVersion::current()
             )
         })?, manifest)),

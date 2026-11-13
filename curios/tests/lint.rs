@@ -51,7 +51,11 @@ fn a_clean_file_no_mod_declares_lints_clean_on_its_own() {
     write(
         &root,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"app\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
     );
     write(&root, "lib.crs", "");
     write(&root, "stray.crs", "pub let word : /std/Str = \"clean\";\n");
@@ -127,19 +131,31 @@ fn an_unused_dependency_is_reported_for_the_package_entire() {
     write(
         &root,
         "shape/curios.toml",
-        "compiler = \"0.0.0\"\nname = \"shape\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"shape\"\n"
+        ),
     );
     write(&root, "shape/lib.crs", "pub let sides : /std/Nat = 4;\n");
     write(
         &root,
         "json/curios.toml",
-        "compiler = \"0.0.0\"\nname = \"json\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n"
+        ),
     );
     write(&root, "json/lib.crs", "pub let depth : /std/Nat = 1;\n");
     write(
         &root,
         "app/curios.toml",
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nshape = { source = \"path\", path = \"../shape\" }\njson = { source = \"path\", path = \"../json\" }\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[dependencies]\nshape = { source = \"path\", path = \"../shape\" }\njson = { source = \"path\", path = \"../json\" }\n"
+        ),
     );
     write(
         &root,
@@ -172,7 +188,11 @@ fn a_store_that_cannot_be_written_is_said_once_and_changes_nothing() {
         write(
             &root,
             "curios.toml",
-            "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+            ),
         );
         write(&root, "lib.crs", "pub let word : /std/Str = \"clean\";\n");
         write(&root, "app.crs", "/std/print(/app/word)\n");

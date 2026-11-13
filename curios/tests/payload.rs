@@ -32,7 +32,11 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+        ),
     );
     write(&root, "lib.crs", "pub let word : /std/Str = \"reused\";\n");
     write(
@@ -267,7 +271,11 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
     write(
         &dep,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"dep\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"dep\"\n"
+        ),
     );
     write(&dep, "lib.crs", &code("/std/Nat"));
     let root = temporary("refused");
@@ -275,8 +283,9 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
         &root,
         "curios.toml",
         &format!(
-            "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[dependencies]\ndep = {{ source = \"path\", path = {:?} }}\n",
-            &*dep
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[dependencies]\ndep = {{ source = \"path\", path = {:?} }}\n",
+            &*dep,
+            compiler = env!("CARGO_PKG_VERSION")
         ),
     );
     write(&root, "lib.crs", ON_CODE);
@@ -316,7 +325,15 @@ fn a_dependency_edit_that_refuses_a_declaration_stops_every_command_over_a_warm_
 /// Packages `a`, and `b` standing on it, beside the root of a package `app` whose executable's entry is `entry`: `a` is in the fold of every manifest `app` writes that declares `b`, and spellable from the entry only where `app` declares it too.
 fn layered(name: &str, entry: &str) -> (Temporary, Temporary, Temporary) {
     let a = temporary(&format!("{name}-a"));
-    write(&a, "curios.toml", "compiler = \"0.0.0\"\nname = \"a\"\n");
+    write(
+        &a,
+        "curios.toml",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"a\"\n"
+        ),
+    );
     write(&a, "lib.crs", "pub let word : /std/Str = \"from a\";\n");
 
     let b = temporary(&format!("{name}-b"));
@@ -340,7 +357,10 @@ fn app_manifest(name: &str, dependencies: &[(&str, &Path)]) -> String {
         .map(|(name, path)| format!("{name} = {{ source = \"path\", path = {path:?} }}\n"))
         .collect::<String>();
 
-    format!("compiler = \"0.0.0\"\nname = \"{name}\"\n{executables}\n[dependencies]\n{rows}")
+    format!(
+        "compiler = \"{compiler}\"\nname = \"{name}\"\n{executables}\n[dependencies]\n{rows}",
+        compiler = env!("CARGO_PKG_VERSION")
+    )
 }
 
 /// What an executable's entry may name is what its manifest declares, whichever command compiles it: `test` refuses a declaration naming a dependency that `run` refuses it for, though another dependency puts that one in the fold.

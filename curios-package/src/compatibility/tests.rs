@@ -1,4 +1,4 @@
-//! Required minima, umbrella ownership, and dependency checks before compilation.
+//! Stated versions, umbrella ownership, and dependency checks before compilation.
 
 use {
     super::*,
@@ -20,8 +20,12 @@ fn future() -> CompilerVersion {
     version
 }
 
+fn past() -> CompilerVersion {
+    "0.0.0".parse().expect("a bare version")
+}
+
 #[test]
-fn a_compiler_minimum_is_a_version_and_never_a_range() {
+fn a_compiler_version_is_bare_and_never_a_range() {
     for spelling in ["", "1.2", ">=1.2.3", "^1.2.3", "1.2.3, <2.0.0"] {
         let error = spelling
             .parse::<CompilerVersion>()
@@ -37,10 +41,10 @@ fn a_compiler_minimum_is_a_version_and_never_a_range() {
 }
 
 #[test]
-fn a_standalone_package_requires_its_own_minimum() {
+fn a_standalone_package_states_its_own_compiler() {
     let root = Temporary::new("compatibility", "standalone");
     write(&root, MANIFEST, "name = \"app\"\n");
-    let error = Governing::of(&root).err().expect("a minimum is required");
+    let error = Governing::of(&root).err().expect("a version is required");
     assert!(
         error.contains("standalone package must state `compiler"),
         "{error}"
@@ -52,7 +56,7 @@ fn a_standalone_package_requires_its_own_minimum() {
 }
 
 #[test]
-fn an_umbrella_requires_the_minimum_its_members_inherit() {
+fn an_umbrella_states_the_compiler_its_members_inherit() {
     let error = "members = []"
         .parse::<Manifest>()
         .unwrap_err()
@@ -65,11 +69,10 @@ fn an_umbrella_requires_the_minimum_its_members_inherit() {
 }
 
 #[test]
-fn current_and_older_minima_accept_the_running_compiler() {
+fn the_running_compilers_version_is_accepted_whatever_its_build() {
     let root = Temporary::new("compatibility", "supported");
     for version in [
         CompilerVersion::current().to_string(),
-        "0.0.0".to_string(),
         format!("{}+build", CompilerVersion::current()),
     ] {
         write(
@@ -79,40 +82,43 @@ fn current_and_older_minima_accept_the_running_compiler() {
         );
         let governing = Governing::of(&root).expect("the declaration is valid");
         order(&governing)
-            .unwrap_or_else(|error| panic!("the installed compiler meets the minimum: {error}"));
+            .unwrap_or_else(|error| panic!("the installed compiler is the one stated: {error}"));
     }
 }
 
 #[test]
-fn a_newer_minimum_names_the_manifest_and_both_versions() {
-    let root = Temporary::new("compatibility", "newer");
-    let required = future();
-    write(
-        &root,
-        MANIFEST,
-        &format!("name = \"app\"\ncompiler = \"{required}\"\n"),
-    );
-    let governing = Governing::of(&root).expect("the manifest is well formed");
-    let error = order(&governing).err().expect("this compiler is too old");
-    assert!(
-        error.contains(&root.join(MANIFEST).display().to_string()),
-        "{error}"
-    );
-    assert!(
-        error.contains(&format!("requires Curios {required} or newer")),
-        "{error}"
-    );
-    assert!(
-        error.contains(&format!(
-            "this compiler is Curios {}",
-            CompilerVersion::current()
-        )),
-        "{error}"
-    );
+fn another_version_newer_or_older_names_the_manifest_and_both_versions() {
+    let root = Temporary::new("compatibility", "other");
+    for required in [future(), past()] {
+        write(
+            &root,
+            MANIFEST,
+            &format!("name = \"app\"\ncompiler = \"{required}\"\n"),
+        );
+        let governing = Governing::of(&root).expect("the manifest is well formed");
+        let error = order(&governing)
+            .err()
+            .expect("this compiler is not the one stated");
+        assert!(
+            error.contains(&root.join(MANIFEST).display().to_string()),
+            "{error}"
+        );
+        assert!(
+            error.contains(&format!("requires Curios {required};")),
+            "{error}"
+        );
+        assert!(
+            error.contains(&format!(
+                "this compiler is Curios {}",
+                CompilerVersion::current()
+            )),
+            "{error}"
+        );
+    }
 }
 
 #[test]
-fn only_enumerated_members_inherit_the_umbrellas_minimum() {
+fn only_enumerated_members_inherit_the_umbrellas_compiler() {
     let root = Temporary::new("compatibility", "membership");
     write(
         &root,
@@ -135,7 +141,11 @@ fn only_enumerated_members_inherit_the_umbrellas_minimum() {
     write(
         &root,
         "member/curios.toml",
-        "name = \"member\"\ncompiler = \"0.0.0\"\n",
+        concat!(
+            "name = \"member\"\ncompiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\n"
+        ),
     );
     let error = Governing::of(&root.join("member"))
         .err()
@@ -145,7 +155,7 @@ fn only_enumerated_members_inherit_the_umbrellas_minimum() {
 }
 
 #[test]
-fn an_inherited_newer_minimum_is_reported_against_the_umbrella() {
+fn an_inherited_other_version_is_reported_against_the_umbrella() {
     let root = Temporary::new("compatibility", "inherited-newer");
     write(
         &root,
@@ -156,7 +166,7 @@ fn an_inherited_newer_minimum_is_reported_against_the_umbrella() {
     let governing = Governing::of(&root.join("member")).expect("the manifest is well formed");
     let error = order(&governing)
         .err()
-        .expect("the inherited minimum is too new");
+        .expect("the inherited version is not this compiler's");
     assert!(
         error.contains(&root.join(MANIFEST).display().to_string()),
         "{error}"
@@ -185,7 +195,7 @@ fn dependencies_use_their_own_umbrella_and_never_the_consumers() {
     let governing = Governing::of(&root.join("app")).expect("the root package is supported");
     let error = order(&governing)
         .err()
-        .expect("the dependency requires a newer compiler");
+        .expect("the dependency is written for another compiler");
     assert!(
         error.contains(&root.join("vendor/curios.toml").display().to_string()),
         "{error}"
@@ -194,7 +204,7 @@ fn dependencies_use_their_own_umbrella_and_never_the_consumers() {
     fs::remove_file(root.join("vendor/curios.toml")).unwrap();
     let error = order(&governing)
         .err()
-        .expect("the dependency has no standalone minimum");
+        .expect("the dependency states no version of its own");
     assert!(
         error.contains("standalone package must state `compiler"),
         "{error}"
@@ -202,7 +212,7 @@ fn dependencies_use_their_own_umbrella_and_never_the_consumers() {
 }
 
 #[test]
-fn a_loose_file_does_not_use_the_surrounding_packages_compiler_minimum() {
+fn a_loose_file_does_not_use_the_surrounding_packages_compiler_version() {
     let root = Temporary::new("compatibility", "loose");
     write(
         &root,
@@ -234,6 +244,6 @@ fn a_loose_file_does_not_use_the_surrounding_packages_compiler_minimum() {
         &Overlay::default(),
     )
     .err()
-    .expect("a declared file uses its package's minimum");
+    .expect("a declared file uses its package's version");
     assert!(error.contains("requires Curios"), "{error}");
 }

@@ -104,7 +104,11 @@ fn tree() -> Temporary {
     for (path, text) in [
         (
             "work/curios.toml",
-            "compiler = \"0.0.0\"\nmembers = [\"app\"]\n",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nmembers = [\"app\"]\n"
+            ),
         ),
         (
             "work/app/curios.toml",
@@ -119,7 +123,11 @@ fn tree() -> Temporary {
         ("work/app/bench.crs", "/std/print(\"\")\n"),
         (
             "work/app/nested/curios.toml",
-            "compiler = \"0.0.0\"\nname = \"nested\"\n",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"nested\"\n"
+            ),
         ),
         ("work/app/nested/lib.crs", ""),
         ("scratch.crs", ""),

@@ -29,7 +29,11 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"shapes\"\ndescription = \"Shapes & their areas.\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"shapes\"\ndescription = \"Shapes & their areas.\"\n"
+        ),
     );
     write(
         &root,
@@ -188,7 +192,11 @@ fn a_package_without_a_library_is_refused_by_name() {
     write(
         &root,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"tool\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"tool\"\n"
+        ),
     );
     write(&root, "exe.crs", "/std/print(\"hi\")\n");
 

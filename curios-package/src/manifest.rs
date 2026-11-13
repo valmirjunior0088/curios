@@ -97,7 +97,7 @@ impl FromStr for Manifest {
 pub struct Package {
     /// The canonical name, which is this package's mount prefix and the only way any consumer refers to it. Declared here and nowhere else — no umbrella contributes to it, so reorganizing a tree renames nothing.
     pub name: String,
-    /// The standalone package's minimum compiler. An umbrella member leaves this absent and inherits its umbrella's requirement.
+    /// The compiler the standalone package is written for. An umbrella member leaves this absent and inherits its umbrella's.
     pub compiler: Option<CompilerVersion>,
     /// How the standalone package's files are formatted, `None` where it states no `[format]`. An umbrella member leaves this absent and inherits its umbrella's, as it does `compiler`.
     pub format: Option<FormatSettings>,
@@ -150,7 +150,7 @@ impl Package {
 /// A namespace for packages: the ones inside its tree, and the pinned rows those may share.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Umbrella {
-    /// The minimum compiler every enumerated member inherits.
+    /// The compiler every enumerated member is written for, which each inherits.
     pub compiler: CompilerVersion,
     /// How every enumerated member's files are formatted, `None` where it states no `[format]`.
     pub format: Option<FormatSettings>,

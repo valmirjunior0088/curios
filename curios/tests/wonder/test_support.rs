@@ -27,7 +27,11 @@ pub fn project(name: &str) -> Temporary {
     write(
         &root,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+        ),
     );
     write(&root, "lib.crs", "pub mod util;\n");
     write(

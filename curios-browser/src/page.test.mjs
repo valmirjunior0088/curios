@@ -20,6 +20,12 @@ const compiler = process.env.CURIOS;
 
 assert.ok(compiler, "CURIOS names the compiler under test");
 
+// A package is written for one compiler, so each fixture's manifest states the version of the one under test.
+const version = spawnSync(compiler, ["--version"], { encoding: "utf8" })
+  .stdout.trim()
+  .split(" ")
+  .pop();
+
 /** The `f1:` hash a manifest pins `contents` by: SHA-256 over its bytes. */
 const pinned = (contents) =>
   `f1:${createHash("sha256").update(contents).digest("hex")}`;
@@ -55,7 +61,7 @@ const manifest = ({
     .map(([page, path]) => `"${page}" = "${path}"\n`)
     .join("");
 
-  return `compiler = "0.0.0"\nname = "${name}"\n${rest}\n[[foreign]]\nname = "${row}"\n\n[foreign.browser]\npath = "${path}"\nhash = "${pinned(gateway)}"\n\n[foreign.browser.static]\n${served}\n[foreign.answers]\n${answered}`;
+  return `compiler = "${version}"\nname = "${name}"\n${rest}\n[[foreign]]\nname = "${row}"\n\n[foreign.browser]\npath = "${path}"\nhash = "${pinned(gateway)}"\n\n[foreign.browser.static]\n${served}\n[foreign.answers]\n${answered}`;
 };
 
 /** `curios compile --target browser`, run in `directory` with `rest` after it. */
@@ -193,7 +199,7 @@ test("an export that is no function is refused before the program runs, naming t
 
 test("the program's arguments are its name, then each arg= of the query, percent-decoded to bytes", async (t) => {
   const root = tree(t, {
-    "app/curios.toml": 'compiler = "0.0.0"\nname = "app"\n',
+    "app/curios.toml": `compiler = "${version}"\nname = "app"\n`,
     "app/exe.crs": `let main() -> /std/Io({}) =
     let args = /std/Proc/args()!;
     let _ = /std/Try/run(/std/Io/write(/std/Proc/stdout, /std/Bytes/join(x[124], args)))!;
@@ -263,7 +269,7 @@ main()
 
 test("a page is written under the store when no --output is given, holding nothing an earlier build left", async (t) => {
   const root = tree(t, {
-    "app/curios.toml": 'compiler = "0.0.0"\nname = "app"\n',
+    "app/curios.toml": `compiler = "${version}"\nname = "app"\n`,
     "app/exe.crs": '/std/print("hello")\n',
   });
   const page = join(root, "app/.curios/browser/app/app");
@@ -280,7 +286,7 @@ test("a page is written under the store when no --output is given, holding nothi
 
 test("a row that states no browser table is refused for a browser, naming the row and the table", async (t) => {
   const root = tree(t, {
-    "app/curios.toml": `compiler = "0.0.0"\nname = "app"\n\n[[foreign]]\nname = "native"\n\n[foreign.native]\npath = "plugin.wasm"\nhash = "${pinned("")}"\n\n[foreign.answers]\ndouble = "double"\n`,
+    "app/curios.toml": `compiler = "${version}"\nname = "app"\n\n[[foreign]]\nname = "native"\n\n[foreign.native]\npath = "plugin.wasm"\nhash = "${pinned("")}"\n\n[foreign.answers]\ndouble = "double"\n`,
     "app/lib.crs": DOUBLE,
     "app/exe.crs": DOUBLED,
   });

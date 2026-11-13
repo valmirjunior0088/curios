@@ -24,7 +24,11 @@ fn package(name: &str, manifest: &str, files: &[(&str, &str)]) -> Temporary {
 fn a_package_mounts_its_declared_name_over_its_manifest_directory() {
     let directory = package(
         "layout-package",
-        "compiler = \"0.0.0\"\nname = \"json\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n"
+        ),
         &[
             ("lib.crs", "pub mod parse;"),
             ("parse.crs", "pub mod lexer;"),
@@ -50,7 +54,11 @@ fn a_package_mounts_its_declared_name_over_its_manifest_directory() {
 fn a_package_with_no_library_header_has_no_library() {
     let directory = package(
         "layout-headerless",
-        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"serve\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n\n[[executables]]\nname = \"serve\"\n"
+        ),
         &[("serve.crs", "")],
     );
 
@@ -65,7 +73,11 @@ fn a_package_with_no_library_header_has_no_library() {
 fn an_unparsable_library_header_is_mounted_for_discovery_to_refuse() {
     let directory = package(
         "layout-broken-header",
-        "compiler = \"0.0.0\"\nname = \"json\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n"
+        ),
         &[("lib.crs", "pub let x : = ;")],
     );
 
@@ -78,7 +90,11 @@ fn an_unparsable_library_header_is_mounted_for_discovery_to_refuse() {
 fn a_program_beside_the_manifest_reads_its_modules_beside_it() {
     let directory = package(
         "layout-program-beside",
-        "compiler = \"0.0.0\"\nname = \"json\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n"
+        ),
         &[
             ("lib.crs", "pub mod parse;"),
             ("parse.crs", ""),
@@ -95,7 +111,11 @@ fn a_program_beside_the_manifest_reads_its_modules_beside_it() {
 fn a_module_two_units_declare_is_refused() {
     let directory = package(
         "layout-shared-module",
-        "compiler = \"0.0.0\"\nname = \"json\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n"
+        ),
         &[
             ("lib.crs", "pub mod parse;"),
             ("exe.crs", "mod parse;\n/std/print(\"\")\n"),
@@ -123,7 +143,11 @@ fn a_module_two_units_declare_is_refused() {
 fn a_program_the_library_declares_as_a_module_is_refused() {
     let directory = package(
         "layout-program-named-as-module",
-        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\n"
+        ),
         &[("lib.crs", "pub mod parse;"), ("parse.crs", "")],
     );
 
@@ -143,7 +167,11 @@ fn a_program_the_library_declares_as_a_module_is_refused() {
 fn two_programs_compiled_from_one_file_are_refused_without_a_library() {
     let directory = package(
         "layout-one-file-two-programs",
-        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n"
+        ),
         &[("exe.crs", "")],
     );
 
@@ -169,7 +197,11 @@ fn two_programs_compiled_from_one_file_are_refused_without_a_library() {
 fn an_unparseable_header_still_leaves_the_executables_checked() {
     let directory = package(
         "layout-one-file-unparseable",
-        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n"
+        ),
         &[("lib.crs", "pub let ="), ("exe.crs", "")],
     );
 
@@ -187,7 +219,11 @@ fn an_unparseable_header_still_leaves_the_executables_checked() {
 fn an_executable_below_the_root_reads_its_modules_where_it_sits() {
     let directory = package(
         "layout-program-below",
-        "compiler = \"0.0.0\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\npath = \"tools/parse.crs\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"json\"\n\n[[executables]]\nname = \"parse\"\npath = \"tools/parse.crs\"\n"
+        ),
         &[
             ("lib.crs", "pub mod parse;"),
             ("parse.crs", ""),
@@ -204,7 +240,11 @@ fn an_executable_below_the_root_reads_its_modules_where_it_sits() {
 fn an_executable_the_library_declares_as_a_module_is_refused() {
     let directory = package(
         "layout-program-as-module",
-        "compiler = \"0.0.0\"\nname = \"nested\"\n\n[[executables]]\nname = \"tool\"\npath = \"app/main.crs\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"nested\"\n\n[[executables]]\nname = \"tool\"\npath = \"app/main.crs\"\n"
+        ),
         &[
             ("lib.crs", "pub mod app;"),
             ("app.crs", "pub mod main;"),
@@ -227,7 +267,11 @@ fn an_executable_the_library_declares_as_a_module_is_refused() {
 fn an_umbrella_is_not_a_unit() {
     let directory = package(
         "layout-umbrella",
-        "compiler = \"0.0.0\"\nmembers = [\"json\"]\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nmembers = [\"json\"]\n"
+        ),
         &[],
     );
 

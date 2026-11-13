@@ -366,7 +366,11 @@ fn a_warming_check_never_publishes() {
     write(
         &root,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"app\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
     );
     write(&root, "lib.crs", "pub mod util;\n");
     write(&root, "util.crs", "pub let word : /std/Str = ?;\n");
@@ -552,7 +556,10 @@ fn formatting_answers_within_the_width_the_documents_package_states() {
     write(
         &root,
         "curios.toml",
-        &format!("compiler = \"0.0.0\"\nname = \"app\"\n\n[format]\nwidth = {NARROWEST}\n"),
+        &format!(
+            "compiler = \"{compiler}\"\nname = \"app\"\n\n[format]\nwidth = {NARROWEST}\n",
+            compiler = env!("CARGO_PKG_VERSION")
+        ),
     );
     let text =
         "pub let total: Nat =\n    combine(first_argument, second_argument, third_argument);\n";

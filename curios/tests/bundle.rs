@@ -133,7 +133,10 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
         .collect::<String>();
     fs::write(
         package.join("curios.toml"),
-        format!("compiler = \"0.0.0\"\nname = \"{name}\"\n{rows}"),
+        format!(
+            "compiler = \"{compiler}\"\nname = \"{name}\"\n{rows}",
+            compiler = env!("CARGO_PKG_VERSION")
+        ),
     )
     .expect("write the manifest");
 
@@ -182,7 +185,11 @@ fn compile_refuses_a_row_nothing_answers_and_says_what_would() {
     fs::create_dir_all(&package).expect("create the temp package");
     fs::write(
         package.join("curios.toml"),
-        "compiler = \"0.0.0\"\nname = \"unanswered\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"unanswered\"\n"
+        ),
     )
     .expect("write the manifest");
     fs::write(package.join("exe.crs"), UNANSWERED).expect("write the temp source");
@@ -204,15 +211,25 @@ fn an_umbrella_members_program_links_its_own_foreign_rows() {
     let package = calling_double(&root, "ffi", &[("probe", "double")]);
     fs::write(
         root.join("curios.toml"),
-        "compiler = \"0.0.0\"\nmembers = [\"ffi\"]\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nmembers = [\"ffi\"]\n"
+        ),
     )
     .expect("write the umbrella");
 
     // A member inherits its umbrella's `compiler`, and is refused for stating one of its own.
     let manifest = package.join("curios.toml");
     let stated = fs::read_to_string(&manifest).expect("read the member's manifest");
-    fs::write(&manifest, stated.replace("compiler = \"0.0.0\"\n", ""))
-        .expect("write the member's manifest");
+    fs::write(
+        &manifest,
+        stated.replace(
+            concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\n"),
+            "",
+        ),
+    )
+    .expect("write the member's manifest");
 
     let run = Command::new(env!("CARGO_BIN_EXE_curios"))
         .arg("run")
@@ -240,9 +257,8 @@ fn a_row_with_no_native_table_is_refused_natively_by_name() {
     fs::write(
         package.join("curios.toml"),
         format!(
-            "compiler = \"0.0.0\"\nname = \"clock\"\n\n[[foreign]]\nname = \"page\"\n\n[foreign.browser]\npath = \"web/double.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
-            digest(gateway)
-        ),
+            "compiler = \"{compiler}\"\nname = \"clock\"\n\n[[foreign]]\nname = \"page\"\n\n[foreign.browser]\npath = \"web/double.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
+            digest(gateway), compiler = env!("CARGO_PKG_VERSION")),
     )
     .expect("write the manifest");
     fs::write(package.join("lib.crs"), "pub foreign double(Nat) -> Nat;\n")
@@ -382,7 +398,11 @@ fn compile_produces_a_runnable_executable() {
     fs::create_dir_all(&package).expect("create the temp package");
     fs::write(
         package.join("curios.toml"),
-        "compiler = \"0.0.0\"\nname = \"bundle\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"bundle\"\n"
+        ),
     )
     .expect("write the manifest");
     fs::write(package.join("exe.crs"), r#"/std/print("hello")"#).expect("write the temp source");
@@ -405,7 +425,11 @@ fn printer(root: &Path) -> std::path::PathBuf {
     fs::create_dir_all(&package).expect("create the temp package");
     fs::write(
         package.join("curios.toml"),
-        "compiler = \"0.0.0\"\nname = \"printer\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"printer\"\n"
+        ),
     )
     .expect("write the manifest");
     fs::write(
@@ -498,7 +522,11 @@ fn a_branch_ticks_while_another_reads_standard_input() {
     fs::create_dir_all(&package).expect("create the temp package");
     fs::write(
         package.join("curios.toml"),
-        "compiler = \"0.0.0\"\nname = \"ticker\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"ticker\"\n"
+        ),
     )
     .expect("write the manifest");
     fs::write(

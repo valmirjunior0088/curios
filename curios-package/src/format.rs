@@ -49,7 +49,7 @@ impl FormatSettings {
         Ok(width.unwrap_or_default())
     }
 
-    /// [`FormatSettings::width_under`] for `file`: under the package `manifest` names or the one whose manifest is nearest above it, whose compiler minimum the running compiler must meet, and under nothing where no package governs it.
+    /// [`FormatSettings::width_under`] for `file`: under the package `manifest` names or the one whose manifest is nearest above it, whose stated compiler the running one must be, and under nothing where no package governs it.
     pub fn width_of_file(&self, file: &Path, manifest: Option<&Path>) -> Result<Width, String> {
         let governing = Governing::of_file(file, manifest)?;
         if let Some(governing) = &governing {
@@ -75,7 +75,7 @@ fn width<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Width>, D:
     Width::new(columns).map(Some).map_err(D::Error::custom)
 }
 
-/// Membership chooses the one owner of a package's format, as it chooses the owner of its compiler minimum: an enumerating umbrella, whose `[format]` a member does not restate, or the standalone package itself. The settings are `None` where the owner states no `[format]`, which is every setting at its default.
+/// Membership chooses the one owner of a package's format, as it chooses the owner of its compiler version: an enumerating umbrella, whose `[format]` a member does not restate, or the standalone package itself. The settings are `None` where the owner states no `[format]`, which is every setting at its default.
 pub fn format_owner<'a>(
     package: &'a Package,
     directory: &Path,

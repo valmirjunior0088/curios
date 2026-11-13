@@ -51,7 +51,7 @@ pub fn command(tree: &Tree) -> Command {
     command
         .subcommand(
             Command::new("release")
-                .about("Bump the workspace version and bundled library's compiler minimum, commit them, tag the release, and push main and the tag")
+                .about("Bump the workspace version and bundled library's compiler version, commit them, tag the release, and push main and the tag")
                 .arg(
                     Arg::new("bump")
                         .value_name("BUMP")

@@ -28,7 +28,14 @@ fn carried(root: &Temporary, path: &str, bytes: &[u8]) -> FileHash {
 
 #[test]
 fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
-    let (root, governing) = governed("carried", "compiler = \"0.0.0\"\nname = \"app\"\n");
+    let (root, governing) = governed(
+        "carried",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
+    );
     let hash = carried(&root, "foreign/probe.wasm", b"\0asm\x01\0\0\0");
 
     let pinned = pin(
@@ -67,7 +74,11 @@ fn a_carried_module_is_pinned_to_the_hash_of_its_bytes() {
 fn a_gateway_is_pinned_into_the_browser_table() {
     let (root, governing) = governed(
         "gateway",
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\nnative = { path = \"dom.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\nnative = { path = \"dom.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n"
+        ),
     );
     let hash = carried(&root, "web/dom.js", b"export const setText = () => {};\n");
 
@@ -119,7 +130,11 @@ fn a_gateway_is_pinned_into_the_browser_table() {
 fn an_inline_delivery_is_re_pinned_inline() {
     let (root, governing) = governed(
         "inline",
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"probe\"\nnative = { path = \"old.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[[foreign]]\nname = \"probe\"\nnative = { path = \"old.wasm\", hash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" }\n"
+        ),
     );
     let hash = carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
@@ -145,7 +160,14 @@ fn an_inline_delivery_is_re_pinned_inline() {
 
 #[test]
 fn pinning_a_row_to_what_it_already_says_writes_nothing() {
-    let (root, governing) = governed("idempotent", "compiler = \"0.0.0\"\nname = \"app\"\n");
+    let (root, governing) = governed(
+        "idempotent",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
+    );
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
     let repoint = Repoint::Carried("probe.wasm".into());
@@ -182,7 +204,14 @@ fn pinning_a_row_to_what_it_already_says_writes_nothing() {
 /// `--check` is the same question without the answer being written down, which is what makes it usable in CI.
 #[test]
 fn a_checked_pin_reports_what_it_would_write_and_writes_nothing() {
-    let (root, governing) = governed("checked", "compiler = \"0.0.0\"\nname = \"app\"\n");
+    let (root, governing) = governed(
+        "checked",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
+    );
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
     let before = fs::read_to_string(&governing.manifest).expect("read it back");
@@ -207,7 +236,11 @@ fn a_checked_pin_reports_what_it_would_write_and_writes_nothing() {
 /// Everything the manifest already said is still there, byte for byte, including what TOML gives no structure to.
 #[test]
 fn a_written_row_disturbs_nothing_beside_it() {
-    let manifest = "# the package\ncompiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\npath = \"serve.crs\"\n";
+    let manifest = concat!(
+        "# the package\ncompiler = \"",
+        env!("CARGO_PKG_VERSION"),
+        "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\npath = \"serve.crs\"\n"
+    );
     let (root, governing) = governed("undisturbed", manifest);
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
@@ -225,13 +258,23 @@ fn a_written_row_disturbs_nothing_beside_it() {
     assert!(written.contains("# the package"), "{written}");
     assert!(written.contains("[[executables]]"), "{written}");
     assert!(written.contains("name = \"serve\""), "{written}");
-    assert!(written.contains("compiler = \"0.0.0\""), "{written}");
+    assert!(
+        written.contains(concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"")),
+        "{written}"
+    );
 }
 
 /// Repointing from one delivery to the other has to remove the key it is leaving behind, or the row states two and is refused where it is read.
 #[test]
 fn repointing_a_module_to_a_url_clears_the_path_it_carried() {
-    let (root, governing) = governed("repointed", "compiler = \"0.0.0\"\nname = \"app\"\n");
+    let (root, governing) = governed(
+        "repointed",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
+    );
     carried(&root, "probe.wasm", b"\0asm\x01\0\0\0");
 
     pin(
@@ -254,7 +297,14 @@ fn repointing_a_module_to_a_url_clears_the_path_it_carried() {
 
 #[test]
 fn a_row_that_is_not_there_cannot_be_refreshed() {
-    let (_root, governing) = governed("absent", "compiler = \"0.0.0\"\nname = \"app\"\n");
+    let (_root, governing) = governed(
+        "absent",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
+    );
 
     let refusal = pin(
         &governing,
@@ -278,7 +328,14 @@ fn a_row_that_is_not_there_cannot_be_refreshed() {
 
 #[test]
 fn a_module_outside_the_package_is_refused_as_no_plain_relative_path() {
-    let (_root, governing) = governed("outside", "compiler = \"0.0.0\"\nname = \"app\"\n");
+    let (_root, governing) = governed(
+        "outside",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
+    );
 
     let refusal = pin(
         &governing,
@@ -301,10 +358,24 @@ fn a_dependency_named_otherwise_than_it_declares_itself_is_refused() {
     let dep = root.join("dep");
     fs::create_dir_all(&app).expect("create the package");
     fs::create_dir_all(&dep).expect("create the dependency");
-    fs::write(app.join(MANIFEST), "compiler = \"0.0.0\"\nname = \"app\"\n")
-        .expect("write the manifest");
-    fs::write(dep.join(MANIFEST), "compiler = \"0.0.0\"\nname = \"dep\"\n")
-        .expect("write the dependency's manifest");
+    fs::write(
+        app.join(MANIFEST),
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n"
+        ),
+    )
+    .expect("write the manifest");
+    fs::write(
+        dep.join(MANIFEST),
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"dep\"\n"
+        ),
+    )
+    .expect("write the dependency's manifest");
 
     let governing = Pinning::found(None, &app).expect("the package's own manifest");
     let refusal = pin(
@@ -325,7 +396,11 @@ fn a_dependency_named_otherwise_than_it_declares_itself_is_refused() {
 fn a_row_with_no_hash_is_given_one_by_a_refresh() {
     let (root, pinning) = governed(
         "unhashed",
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\n\n[foreign.answers]\nclick = \"click\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\n\n[foreign.answers]\nclick = \"click\"\n"
+        ),
     );
     let hash = carried(&root, "web/dom.js", b"export const click = () => {};\n");
     crate::Manifest::from_path(&pinning.manifest).expect_err("a row with no hash is refused");
@@ -351,7 +426,11 @@ fn a_row_with_no_hash_is_given_one_by_a_refresh() {
 fn a_row_naming_no_file_is_given_its_table_by_a_pin() {
     let (root, pinning) = governed(
         "tableless",
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.answers]\nclick = \"click\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.answers]\nclick = \"click\"\n"
+        ),
     );
     carried(&root, "web/dom.js", b"export const click = () => {};\n");
 
@@ -373,7 +452,11 @@ fn a_row_naming_no_file_is_given_its_table_by_a_pin() {
 /// A pin writes no manifest a command could not read: a refusal elsewhere in it is stated, and the file is left as it was.
 #[test]
 fn a_pin_that_would_leave_the_manifest_unreadable_writes_nothing() {
-    let manifest = "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\njson = { source = \"git\", url = \"https://example.invalid/json\", rev = \"abc\" }\n";
+    let manifest = concat!(
+        "compiler = \"",
+        env!("CARGO_PKG_VERSION"),
+        "\"\nname = \"app\"\n\n[dependencies]\njson = { source = \"git\", url = \"https://example.invalid/json\", rev = \"abc\" }\n"
+    );
     let (root, pinning) = governed("unreadable", manifest);
     carried(&root, "web/dom.js", b"export const click = () => {};\n");
 

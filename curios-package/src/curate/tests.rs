@@ -23,7 +23,14 @@ fn tree(name: &str, files: &[(&str, &str)]) -> Temporary {
 fn a_delivery_matching_its_pin_is_placed() {
     let root = tree(
         "curate-accept",
-        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+        &[(
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\n"
+            ),
+        )],
     );
     let scratch = root.join("scratch");
     fs::create_dir_all(&scratch).unwrap();
@@ -52,7 +59,14 @@ fn a_delivery_matching_its_pin_is_placed() {
 fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
     let root = tree(
         "curate-refuse",
-        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+        &[(
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\n"
+            ),
+        )],
     );
     let scratch = root.join("scratch");
     fs::create_dir_all(&scratch).unwrap();
@@ -89,12 +103,20 @@ fn a_live_project_acquires_nothing() {
         &[
             (
                 "app/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n"
+                ),
             ),
             ("app/lib.crs", ""),
             (
                 "base/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"base\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"base\"\n"
+                ),
             ),
             ("base/lib.crs", ""),
         ],
@@ -113,7 +135,11 @@ fn a_pin_of_a_live_member_is_not_acquired() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"app\", \"base\"]\n"
+                ),
             ),
             (
                 "app/curios.toml",
@@ -140,7 +166,11 @@ fn a_fetchable_catalog_row_is_acquired() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"app\"]\n\n[catalog]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"app\"]\n\n[catalog]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n"
+                ),
             ),
             (
                 "app/curios.toml",
@@ -168,7 +198,11 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"app\"]\n\n[catalog]\nbase = { source = \"path\", path = \"vendor/base\" }\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"app\"]\n\n[catalog]\nbase = { source = \"path\", path = \"vendor/base\" }\n"
+                ),
             ),
             (
                 "app/curios.toml",
@@ -178,7 +212,11 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
             // Reached only if the base is the umbrella's root: from `app/` this path names nothing.
             (
                 "vendor/base/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"base\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"def456\", hash = \"c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\" }\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"base\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"def456\", hash = \"c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\" }\n"
+                ),
             ),
             ("vendor/base/lib.crs", ""),
         ],
@@ -203,7 +241,14 @@ fn a_path_catalog_row_resolves_against_the_umbrella() {
 #[ignore = "shells out to git; the remote is local, so this needs no network"]
 fn a_fetched_revision_is_verified_and_placed() {
     let files = &[
-        ("curios.toml", "compiler = \"0.0.0\"\nname = \"http\"\n"),
+        (
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"http\"\n"
+            ),
+        ),
         ("lib.crs", "pub let get : Type = Type;"),
     ];
 
@@ -215,7 +260,14 @@ fn a_fetched_revision_is_verified_and_placed() {
 
     let root = tree(
         "curate-fetch",
-        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+        &[(
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\n"
+            ),
+        )],
     );
     let acquisition = Acquisition {
         name: "http".to_string(),
@@ -288,7 +340,14 @@ fn pinned(origin: &Path, rev: &str, hash: &TreeHash) -> Acquisition {
 #[ignore = "shells out to git; the remote is local, so this needs no network"]
 fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
     let files = &[
-        ("curios.toml", "compiler = \"0.0.0\"\nname = \"http\"\n"),
+        (
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"http\"\n"
+            ),
+        ),
         ("lib.crs", "pub let get : Type = Type;"),
     ];
     let measured = tree("curate-absent-expected", files);
@@ -297,7 +356,14 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
 
     let root = tree(
         "curate-absent",
-        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+        &[(
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\n"
+            ),
+        )],
     );
     let absent = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
@@ -322,7 +388,14 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
 #[ignore = "shells out to git; the remote is local, so this needs no network"]
 fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
     let files = &[
-        ("curios.toml", "compiler = \"0.0.0\"\nname = \"http\"\n"),
+        (
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"http\"\n"
+            ),
+        ),
         ("lib.crs", "pub let get : Type = Type;"),
     ];
     let measured = tree("curate-refs-expected", files);
@@ -332,7 +405,14 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
     for rev in [revision.as_str(), "v1", "master", "main"] {
         let root = tree(
             "curate-refs",
-            &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+            &[(
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n"
+                ),
+            )],
         );
         let store = Store::at(root.to_path_buf());
 
@@ -356,7 +436,14 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
 #[ignore = "shells out to git; the remote is local, so this needs no network"]
 fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
     let files = &[
-        ("curios.toml", "compiler = \"0.0.0\"\nname = \"shape\"\n"),
+        (
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"shape\"\n"
+            ),
+        ),
         ("lib.crs", "pub let message : /std/Str = \"shape\";"),
     ];
     let measured = tree("curate-mirrors-expected", files);
@@ -390,7 +477,11 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
             (
                 "app/curios.toml",
                 &fill!(
-                    "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\n${pin}mid = { source = \"path\", path = \"../mid\" }\n",
+                    concat!(
+                        "compiler = \"",
+                        env!("CARGO_PKG_VERSION"),
+                        "\"\nname = \"app\"\n\n[dependencies]\n${pin}mid = { source = \"path\", path = \"../mid\" }\n"
+                    ),
                     pin = pin(&origin)
                 ),
             ),
@@ -398,8 +489,9 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
             (
                 "mid/curios.toml",
                 &format!(
-                    "compiler = \"0.0.0\"\nname = \"mid\"\n\n[dependencies]\n{}",
-                    pin(&mirror)
+                    "compiler = \"{compiler}\"\nname = \"mid\"\n\n[dependencies]\n{}",
+                    pin(&mirror),
+                    compiler = env!("CARGO_PKG_VERSION")
                 ),
             ),
             ("mid/lib.crs", ""),
@@ -428,7 +520,14 @@ fn a_tree_pinned_through_two_mirrors_is_fetched_once() {
 fn a_fetched_module_matching_its_pin_is_placed() {
     let root = tree(
         "curate-module",
-        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+        &[(
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\n"
+            ),
+        )],
     );
     let module = root.join("libsha2.wasm");
     fs::write(&module, b"\0asm\x01\0\0\0").unwrap();
@@ -453,7 +552,14 @@ fn a_fetched_module_matching_its_pin_is_placed() {
 fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
     let root = tree(
         "curate-module-refuse",
-        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+        &[(
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\n"
+            ),
+        )],
     );
     let module = root.join("libsha2.wasm");
     fs::write(&module, b"\0asm\x01\0\0\0").unwrap();

@@ -552,7 +552,7 @@ A package is a namespace for definitions and an umbrella a namespace for package
 | Package key | Is |
 | --- | --- |
 | `name` | required: the package's canonical name, its mount prefix and every consumer's only way to refer to it |
-| `compiler` | required for a standalone package: its minimum Curios version, a bare SemVer version; an umbrella member inherits this from its umbrella instead |
+| `compiler` | required for a standalone package: the Curios version it is written for, a bare SemVer version; an umbrella member inherits this from its umbrella instead |
 | `description` | one line, which opens the landing page [`document`](#document) writes |
 | `default` | which executable a bare `run`, `compile` or `test` means; it may name a declared row or the package's own `exe.crs` program |
 | `[format]` | how [`format`](#format) writes the package's files: `width`, the columns a line is written within, 50 through 100; an umbrella member inherits this from its umbrella instead |
@@ -575,9 +575,9 @@ path = "tools/serve.crs"  # unless the row says otherwise
 
 An executable's `path` is spelled plainly, relative to the manifest: no `.`, `..` or leading `/`, since the checks that keep a file in one unit compare it as written. Its own modules load from the directory it sits in, so a program with modules of its own and a directory to itself is `path = "tools/serve/serve.crs"` beside `tools/serve/*.crs`.
 
-`compiler` states a minimum, not a range or an exact toolchain pin: `compiler = "0.16.9"` accepts that version and newer, using SemVer precedence and ignoring build metadata. An older compiler is refused before compilation or cached execution, naming the manifest, the required minimum and the running version. Every dependency is checked against its own effective requirement too. A standalone package must state one: there is no implicit minimum, so a manifest without `compiler` is refused, naming the line that would satisfy the running compiler, and `curios new` writes that line when it starts a package. Loose programs and standard input have no manifest requirement.
+`compiler` states the one version a package is written for, not a minimum or a range: `compiler = "0.16.9"` accepts that version and no other, by SemVer precedence, so build metadata is ignored and a pre-release is a version of its own. Any other compiler is refused before compilation or cached execution, naming the manifest, the version it states and the running one. Every dependency is checked against its own effective version too, so a pinned dependency is one written for the compiler that builds it. A standalone package must state one: there is no implicit version, so a manifest without `compiler` is refused, naming the line that would satisfy the running compiler, and `curios new` writes that line when it starts a package. Loose programs and standard input have no manifest requirement.
 
-An umbrella must declare `compiler`, and every package its `members` enumerates inherits that minimum. A member cannot declare a local override; the refusal points to its umbrella. A package merely beneath an umbrella directory is still standalone unless enumerated. Inheritance follows each dependency's own membership, never its consumer's umbrella. A dependency delivered without the umbrella it needs cannot inherit and must declare a standalone minimum in its own manifest.
+An umbrella must declare `compiler`, and every package its `members` enumerates inherits that version. A member cannot declare a local override; the refusal points to its umbrella. A package merely beneath an umbrella directory is still standalone unless enumerated. Inheritance follows each dependency's own membership, never its consumer's umbrella. A dependency delivered without the umbrella it needs cannot inherit and must declare a version of its own in its manifest.
 
 `[format]` is inherited as `compiler` is: an umbrella's table is every member's, a member that writes one of its own is refused naming its umbrella, and a package no umbrella enumerates states its own or takes every setting's default. A width outside 50 through 100 and a key the table does not take are refused where the manifest is read.
 
@@ -626,7 +626,7 @@ A `foreign` no entry names is the host's to answer. A program asks only for what
 
 | Umbrella key | Is |
 | --- | --- |
-| `compiler` | required: the minimum Curios version all enumerated members inherit |
+| `compiler` | required: the Curios version all enumerated members are written for, which each inherits |
 | `[format]` | how [`format`](#format) writes every enumerated member's files, which they inherit |
 | `members` | the packages this umbrella governs, as paths; an umbrella governs a package **only if it enumerates it**, so a directory nothing enumerates is governed by nothing above it, however deep it sits |
 | `catalog` | pins the members may draw on, keyed as a dependency table is |

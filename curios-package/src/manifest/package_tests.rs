@@ -79,13 +79,17 @@ fn a_name_alone_is_a_package() {
 #[test]
 fn an_umbrella_parses() {
     let Manifest::Umbrella(umbrella) = parse(&fill!(
-        r#"
-            compiler = "0.0.0"
+        concat!(
+            r#"
+            compiler = ""#,
+            env!("CARGO_PKG_VERSION"),
+            r#""
             members = ["json", "http_client", "tools/cli"]
 
             [catalog]
             toml_parse = { source = "git", url = "https://example/toml", rev = "abc123", hash = "c1:${digest}" }
-        "#,
+        "#
+        ),
         digest = "b".repeat(64)
     )) else {
         panic!("a manifest declaring `members` is an umbrella");
@@ -238,15 +242,17 @@ fn a_dangling_default_is_refused() {
 /// A catalog row is what a marker resolves to, so it cannot be a marker itself.
 #[test]
 fn a_marker_in_the_catalog_is_refused() {
-    let refusal = refuse(
+    let refusal = refuse(concat!(
         r#"
-            compiler = "0.0.0"
+            compiler = ""#,
+        env!("CARGO_PKG_VERSION"),
+        r#""
             members = ["json"]
 
             [catalog]
             base = { source = "member" }
-        "#,
-    );
+        "#
+    ));
 
     assert!(refusal.contains("names a marker source"), "{refusal}");
 }

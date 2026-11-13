@@ -1,4 +1,4 @@
-//! The release dance: the version in `Cargo.toml`, the lock file beside it, the bundled standard library's compiler minimum, one commit, one tag, and the push that publishes them — along with whatever else `main` had not published yet.
+//! The release dance: the version in `Cargo.toml`, the lock file beside it, the bundled standard library's compiler version, one commit, one tag, and the push that publishes them — along with whatever else `main` had not published yet.
 //!
 //! **Invoking this command is the intent to publish.** `.github/workflows/release.yml` fires on a `release/*` tag and creates the public GitHub release from it, so once the preflight passes the dance runs to the end without asking again. Every precondition is therefore a refusal taken before anything is written: a dirty tree, a branch that is not `main`, a `main` that origin has moved past, a tag that already exists, or a version that is not above the one in the manifest stops the recipe with nothing done.
 //!
@@ -104,7 +104,7 @@ fn git_ask(arguments: &[&str]) -> Result<String, String> {
     ask(Command::new("git"), arguments)
 }
 
-/// The workspace version in the root manifest — the authority every crate inherits and `Cargo.lock` records once per member; the standard library's compiler minimum follows it when a release is cut.
+/// The workspace version in the root manifest — the authority every crate inherits and `Cargo.lock` records once per member; the standard library's compiler version follows it when a release is cut.
 fn declared(document: &DocumentMut) -> Result<Version, String> {
     let version = document
         .get("workspace")
@@ -149,13 +149,13 @@ fn bump_manifests(
     current: Version,
     target: Version,
 ) -> Result<(), String> {
-    let minimum = standard
+    let stated = standard
         .get("compiler")
         .and_then(|compiler| compiler.as_str())
-        .ok_or_else(|| format!("{STANDARD_MANIFEST} has no `compiler` minimum"))?;
-    if minimum != current.to_string() {
+        .ok_or_else(|| format!("{STANDARD_MANIFEST} states no `compiler`"))?;
+    if stated != current.to_string() {
         return Err(format!(
-            "{STANDARD_MANIFEST} declares compiler {minimum:?}, which must match the workspace version {current} before a release"
+            "{STANDARD_MANIFEST} declares compiler {stated:?}, which must match the workspace version {current} before a release"
         ));
     }
 
@@ -164,7 +164,7 @@ fn bump_manifests(
     Ok(())
 }
 
-/// What the bump was allowed to do: the workspace version, its lock records, and the bundled library's compiler minimum, with nothing else changed.
+/// What the bump was allowed to do: the workspace version, its lock records, and the bundled library's compiler version, with nothing else changed.
 ///
 /// Each diff is scoped by its git invocation: a `compiler` line is admitted only in the library's manifest, and a `version` line only in Cargo's two files. A field moved elsewhere cannot pass as a release bump.
 fn verify(

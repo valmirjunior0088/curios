@@ -105,7 +105,11 @@ fn a_package_runs_its_sole_executable() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"hello\"\n\n[[executables]]\nname = \"hello\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"hello\"\n\n[[executables]]\nname = \"hello\"\n"
+                ),
             ),
             (
                 "lib.crs",
@@ -128,7 +132,11 @@ fn a_librarys_modules_read_from_the_manifests_directory() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+                ),
             ),
             ("lib.crs", "pub mod parse;\n"),
             ("parse.crs", "pub mod lexer;\n"),
@@ -153,7 +161,11 @@ fn a_member_reaches_another_member_through_its_umbrella() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"app\", \"base\"]\n"
+                ),
             ),
             ("base/curios.toml", "name = \"base\"\n"),
             ("base/lib.crs", "pub let answer : /std/Nat = 42;\n"),
@@ -180,7 +192,11 @@ fn a_package_with_no_library_still_runs_its_program() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"tool\", \"base\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"tool\", \"base\"]\n"
+                ),
             ),
             ("base/curios.toml", "name = \"base\"\n"),
             ("base/lib.crs", "pub let word : /std/Str = \"tool\";\n"),
@@ -203,7 +219,11 @@ fn a_file_no_unit_declares_compiles_loose_inside_a_package() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"hello\"\n\n[[executables]]\nname = \"hello\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"hello\"\n\n[[executables]]\nname = \"hello\"\n"
+                ),
             ),
             ("lib.crs", "pub let greeting : /std/Str = \"library\";\n"),
             ("hello.crs", "/std/print(/hello/greeting)\n"),
@@ -278,7 +298,11 @@ fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
             &[
                 (
                     "curios.toml",
-                    "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+                    concat!(
+                        "compiler = \"",
+                        env!("CARGO_PKG_VERSION"),
+                        "\"\nmembers = [\"app\", \"base\"]\n"
+                    ),
                 ),
                 ("base/curios.toml", "name = \"base\"\n"),
                 ("base/lib.crs", base),
@@ -324,7 +348,11 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"app\", \"base\"]\n"
+                ),
             ),
             ("base/curios.toml", "name = \"base\"\n"),
             ("base/lib.crs", "pub let answer : /std/Nat = 42;\n"),
@@ -376,7 +404,11 @@ fn a_library_test_declaration_rides_through_the_store() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"app\", \"base\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"app\", \"base\"]\n"
+                ),
             ),
             ("base/curios.toml", "name = \"base\"\n"),
             (
@@ -411,7 +443,11 @@ fn siblings(name: &str) -> Temporary {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"app\", \"alpha\", \"beta\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"app\", \"alpha\", \"beta\"]\n"
+                ),
             ),
             ("alpha/curios.toml", "name = \"alpha\"\n"),
             ("alpha/lib.crs", "pub let one : /std/Nat = 1;\n"),
@@ -467,7 +503,11 @@ fn a_unit_reached_after_different_others_is_filed_once() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"left\", \"right\", \"alpha\", \"beta\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"left\", \"right\", \"alpha\", \"beta\"]\n"
+                ),
             ),
             ("alpha/curios.toml", "name = \"alpha\"\n"),
             ("alpha/lib.crs", "pub let one : /std/Nat = 1;\n"),
@@ -525,8 +565,9 @@ fn library(root: &Path) -> TestSubject {
 fn a_test_subject_is_laid_out_as_a_page_for_a_browser() {
     let gateway = "export const twice = (n) => n * 2n;\n";
     let manifest = format!(
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"twice\"\n",
-        digest(gateway.as_bytes())
+        "compiler = \"{compiler}\"\nname = \"app\"\n\n[[foreign]]\nname = \"dom\"\n\n[foreign.browser]\npath = \"web/dom.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"twice\"\n",
+        digest(gateway.as_bytes()),
+        compiler = env!("CARGO_PKG_VERSION")
     );
     let root = tree(
         "e2e-test-page",
@@ -573,8 +614,9 @@ fn a_test_subject_is_laid_out_as_a_page_for_a_browser() {
 #[test]
 fn a_test_subject_reaching_a_row_with_no_browser_table_is_refused_naming_the_table() {
     let manifest = format!(
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[foreign]]\nname = \"native\"\n\n[foreign.native]\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
-        digest(b"")
+        "compiler = \"{compiler}\"\nname = \"app\"\n\n[[foreign]]\nname = \"native\"\n\n[foreign.native]\npath = \"plugin.wasm\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
+        digest(b""),
+        compiler = env!("CARGO_PKG_VERSION")
     );
     let root = tree(
         "e2e-test-page-refused",

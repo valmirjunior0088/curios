@@ -333,7 +333,11 @@ fn a_unit_kept_in_a_new_scope_replaces_what_its_old_scope_kept() {
     write(
         &root,
         "b/curios.toml",
-        "compiler = \"0.0.0\"\nname = \"beta\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"beta\"\n"
+        ),
     );
     assert_eq!(
         folded_reusing(&root, &overlay, &session),
@@ -443,7 +447,11 @@ fn a_unit_compiled_whole_in_a_new_scope_is_filed_there() {
     write(
         &root,
         "b/curios.toml",
-        "compiler = \"0.0.0\"\nname = \"beta\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"beta\"\n"
+        ),
     );
     assert_eq!(
         folded_reusing(&root, &Overlay::default(), &session),

@@ -24,9 +24,8 @@ fn package(root: &Path) {
     fs::write(
         root.join("curios.toml"),
         format!(
-            "compiler = \"0.0.0\"\nname = \"clock\"\n\n[[foreign]]\nname = \"page\"\n\n[foreign.browser]\npath = \"web/double.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
-            digest(GATEWAY)
-        ),
+            "compiler = \"{compiler}\"\nname = \"clock\"\n\n[[foreign]]\nname = \"page\"\n\n[foreign.browser]\npath = \"web/double.js\"\nhash = \"f1:{}\"\n\n[foreign.answers]\ndouble = \"double\"\n",
+            digest(GATEWAY), compiler = env!("CARGO_PKG_VERSION")),
     )
     .unwrap();
     fs::write(root.join("lib.crs"), "pub foreign double(Nat) -> Nat;\n").unwrap();
@@ -221,7 +220,7 @@ fn tested(root: &Path) {
     fs::create_dir_all(root).unwrap();
     fs::write(
         root.join("curios.toml"),
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[[executables]]\nname = \"quiet\"\n",
+        concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[[executables]]\nname = \"quiet\"\n"),
     )
     .unwrap();
     fs::write(

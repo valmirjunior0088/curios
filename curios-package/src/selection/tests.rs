@@ -85,7 +85,11 @@ fn a_bare_run_means_the_sole_executable() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                ),
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -104,7 +108,7 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
         let mut files = files.to_vec();
         files.push((
             "curios.toml",
-            "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
+            concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n"),
         ));
         files
     });
@@ -122,7 +126,7 @@ fn a_bare_run_needs_a_default_when_there_is_a_choice() {
         let mut files = files.to_vec();
         files.push((
             "curios.toml",
-            "compiler = \"0.0.0\"\nname = \"app\"\ndefault = \"bench\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
+            concat!("compiler = \"", env!("CARGO_PKG_VERSION"), "\"\nname = \"app\"\ndefault = \"bench\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n"),
         ));
         files
     });
@@ -138,7 +142,11 @@ fn a_name_selects_a_declared_executable() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\npath = \"tools/bench.crs\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\npath = \"tools/bench.crs\"\n"
+                ),
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -167,7 +175,11 @@ fn a_file_is_placed_by_what_declares_it_not_by_where_it_sits() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                ),
             ),
             ("lib.crs", ""),
             ("serve.crs", "/std/print(\"\")\n"),
@@ -205,7 +217,11 @@ fn a_declared_executable_builds_into_the_store() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nmembers = [\"json\"]\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"json\"]\n"
+                ),
             ),
             (
                 "json/curios.toml",
@@ -238,7 +254,11 @@ fn a_dash_is_standard_input_everywhere() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                ),
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -268,7 +288,14 @@ fn standard_input_has_no_entry_file() {
 fn standard_input_is_governed_by_no_manifest() {
     let root = tree(
         "stdin-manifest",
-        &[("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n")],
+        &[(
+            "curios.toml",
+            concat!(
+                "compiler = \"",
+                env!("CARGO_PKG_VERSION"),
+                "\"\nname = \"app\"\n"
+            ),
+        )],
     );
 
     let Err(refusal) = Selection::of(
@@ -290,12 +317,20 @@ fn a_package_of_programs_alone_runs_them() {
         &[
             (
                 "app/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n"
+                ),
             ),
             ("app/serve.crs", ""),
             (
                 "base/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"base\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"base\"\n"
+                ),
             ),
             ("base/lib.crs", ""),
         ],
@@ -315,13 +350,21 @@ fn an_executable_compiles_against_its_package_and_its_dependencies() {
         &[
             (
                 "app/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n"
+                ),
             ),
             ("app/lib.crs", ""),
             ("app/serve.crs", ""),
             (
                 "base/curios.toml",
-                "compiler = \"0.0.0\"\nname = \"base\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"base\"\n"
+                ),
             ),
             ("base/lib.crs", ""),
         ],
@@ -347,7 +390,11 @@ fn a_found_executable_is_listed_with_the_file_that_declares_it() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                ),
             ),
             ("serve.crs", ""),
             ("exe.crs", ""),
@@ -371,7 +418,11 @@ fn a_default_naming_the_absent_own_executable_names_the_file_that_would_declare_
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\ndefault = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\ndefault = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                ),
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -399,7 +450,14 @@ fn a_bare_command_on_a_package_of_a_library_alone_says_how_to_declare_one() {
         "run-no-executable",
         &[
             ("lib.crs", ""),
-            ("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n"),
+            (
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n"
+                ),
+            ),
         ],
     );
 
@@ -418,7 +476,11 @@ fn no_argument_selects_the_package_entire() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n\n[[executables]]\nname = \"bench\"\n"
+                ),
             ),
             ("lib.crs", ""),
             ("serve.crs", ""),
@@ -456,7 +518,14 @@ fn a_declared_library_module_selects_the_library_through_it() {
     let root = tree(
         "placed-library",
         &[
-            ("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n"),
+            (
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n"
+                ),
+            ),
             ("lib.crs", "pub mod util;\n"),
             ("util.crs", ""),
         ],
@@ -479,7 +548,11 @@ fn a_module_an_entry_declares_selects_its_program_and_one_it_does_not_is_loose()
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n\n[[executables]]\nname = \"serve\"\n"
+                ),
             ),
             ("serve.crs", "mod helper;\n/std/print(\"\")\n"),
             ("helper.crs", ""),
@@ -505,7 +578,14 @@ fn a_file_no_mod_chain_reaches_is_loose_wherever_it_sits() {
     let root = tree(
         "unreached",
         &[
-            ("curios.toml", "compiler = \"0.0.0\"\nname = \"app\"\n"),
+            (
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"app\"\n"
+                ),
+            ),
             ("lib.crs", "pub mod parse;\n"),
             ("parse.crs", ""),
             ("parse/lexer.crs", ""),
@@ -530,7 +610,11 @@ fn a_file_no_mod_chain_reaches_is_loose_wherever_it_sits() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"tool\"\n\n[[executables]]\nname = \"serve\"\npath = \"tools/serve.crs\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"tool\"\n\n[[executables]]\nname = \"serve\"\npath = \"tools/serve.crs\"\n"
+                ),
             ),
             ("exe.crs", "/std/print(\"\")\n"),
             ("tools/serve.crs", "/std/print(\"\")\n"),
@@ -564,7 +648,14 @@ fn umbrella(name: &str) -> Temporary {
     tree(
         name,
         &[
-            ("curios.toml", "compiler = \"0.0.0\"\nmembers = [\"app\"]\n"),
+            (
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nmembers = [\"app\"]\n"
+                ),
+            ),
             ("app/curios.toml", "name = \"app\"\n"),
             ("app/lib.crs", "pub mod util;\n"),
             ("app/util.crs", ""),

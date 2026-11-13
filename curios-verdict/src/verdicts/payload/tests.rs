@@ -146,7 +146,11 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[[executables]]\nname = \"app\"\n"
+        ),
     );
     write(&root, "lib.crs", &library("library"));
     write(&root, "app.crs", "/std/print(/app/word)\n");
@@ -271,7 +275,11 @@ fn a_changed_dependency_set_is_a_miss_at_the_same_address() {
     write(
         &shape,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"shape\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"shape\"\n"
+        ),
     );
     write(&shape, "lib.crs", "pub let side : /std/Nat = 4;\n");
 
@@ -310,7 +318,11 @@ fn two_executables_occupy_two_slots() {
     write(
         &root,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"app\"\n\n[[executables]]\nname = \"one\"\n\n[[executables]]\nname = \"two\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"app\"\n\n[[executables]]\nname = \"one\"\n\n[[executables]]\nname = \"two\"\n"
+        ),
     );
     write(&root, "lib.crs", &library("shared"));
     write(&root, "one.crs", "/std/print(/app/word)\n");
@@ -395,11 +407,19 @@ fn a_slot_does_not_answer_for_another_projects_program() {
     write(
         &shape,
         "curios.toml",
-        "compiler = \"0.0.0\"\nname = \"shape\"\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nname = \"shape\"\n"
+        ),
     );
     write(&shape, "lib.crs", "pub let word : /std/Str = \"shared\";\n");
 
-    let manifest = "compiler = \"0.0.0\"\nname = \"tool\"\n\n[[executables]]\nname = \"tool\"\n";
+    let manifest = concat!(
+        "compiler = \"",
+        env!("CARGO_PKG_VERSION"),
+        "\"\nname = \"tool\"\n\n[[executables]]\nname = \"tool\"\n"
+    );
     let (mine, theirs) = (temporary("aliasing-mine"), temporary("aliasing-theirs"));
     write(&mine, "curios.toml", manifest);
     write(&theirs, "curios.toml", manifest);

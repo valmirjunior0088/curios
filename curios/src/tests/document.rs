@@ -353,7 +353,14 @@ fn a_constructor_calls_its_family_once_per_parameter_group() {
     let root = tree(
         "document-indexed",
         &[
-            ("curios.toml", "compiler = \"0.0.0\"\nname = \"vectors\"\n"),
+            (
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"vectors\"\n"
+                ),
+            ),
             (
                 "lib.crs",
                 concat!(
@@ -463,7 +470,11 @@ fn a_package_documents_its_interface_for_its_consumers() {
         &[
             (
                 "curios.toml",
-                "compiler = \"0.0.0\"\nname = \"shapes\"\ndescription = \"Shapes and their areas.\"\n",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"shapes\"\ndescription = \"Shapes and their areas.\"\n"
+                ),
             ),
             (
                 "lib.crs",

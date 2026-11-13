@@ -27,16 +27,22 @@ fn flags(columns: usize) -> FormatSettings {
 
 #[test]
 fn a_package_and_an_umbrella_each_state_a_width_under_format() {
-    let Ok(Manifest::Package(package)) =
-        "name = \"app\"\ncompiler = \"0.0.0\"\n\n[format]\nwidth = 72\n".parse()
-    else {
+    let Ok(Manifest::Package(package)) = concat!(
+        "name = \"app\"\ncompiler = \"",
+        env!("CARGO_PKG_VERSION"),
+        "\"\n\n[format]\nwidth = 72\n"
+    )
+    .parse() else {
         panic!("a package's manifest");
     };
     assert_eq!(package.format, Some(flags(72)));
 
-    let Ok(Manifest::Umbrella(umbrella)) =
-        "compiler = \"0.0.0\"\nmembers = []\n\n[format]\nwidth = 80\n".parse()
-    else {
+    let Ok(Manifest::Umbrella(umbrella)) = concat!(
+        "compiler = \"",
+        env!("CARGO_PKG_VERSION"),
+        "\"\nmembers = []\n\n[format]\nwidth = 80\n"
+    )
+    .parse() else {
         panic!("an umbrella's manifest");
     };
     assert_eq!(umbrella.format, Some(flags(80)));
@@ -76,12 +82,20 @@ fn a_package_formats_at_the_width_it_states_and_at_the_line_width_where_it_state
     write(
         &root,
         "stated/curios.toml",
-        "name = \"stated\"\ncompiler = \"0.0.0\"\n\n[format]\nwidth = 72\n",
+        concat!(
+            "name = \"stated\"\ncompiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\n\n[format]\nwidth = 72\n"
+        ),
     );
     write(
         &root,
         "silent/curios.toml",
-        "name = \"silent\"\ncompiler = \"0.0.0\"\n",
+        concat!(
+            "name = \"silent\"\ncompiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\n"
+        ),
     );
 
     let stated = Governing::of(&root.join("stated")).expect("a package");
@@ -98,7 +112,11 @@ fn a_member_formats_at_its_umbrellas_width_and_states_none_of_its_own() {
     write(
         &root,
         MANIFEST,
-        "compiler = \"0.0.0\"\nmembers = [\"app\", \"own\"]\n\n[format]\nwidth = 60\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nmembers = [\"app\", \"own\"]\n\n[format]\nwidth = 60\n"
+        ),
     );
     write(&root, "app/curios.toml", "name = \"app\"\n");
     write(
@@ -132,13 +150,21 @@ fn a_flag_sets_the_width_of_what_no_package_governs_and_is_refused_where_one_doe
     write(
         &root,
         "app/curios.toml",
-        "name = \"app\"\ncompiler = \"0.0.0\"\n",
+        concat!(
+            "name = \"app\"\ncompiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\n"
+        ),
     );
     write(&root, "app/lib.crs", "");
     write(
         &root,
         "work/curios.toml",
-        "compiler = \"0.0.0\"\nmembers = []\n\n[format]\nwidth = 80\n",
+        concat!(
+            "compiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\nmembers = []\n\n[format]\nwidth = 80\n"
+        ),
     );
     write(&root, "work/scratch.crs", "");
     write(&root, "loose.crs", "");
@@ -178,7 +204,11 @@ fn a_file_outside_the_package_manifest_names_is_refused() {
     write(
         &root,
         "app/curios.toml",
-        "name = \"app\"\ncompiler = \"0.0.0\"\n",
+        concat!(
+            "name = \"app\"\ncompiler = \"",
+            env!("CARGO_PKG_VERSION"),
+            "\"\n"
+        ),
     );
     write(&root, "loose.crs", "");
 
