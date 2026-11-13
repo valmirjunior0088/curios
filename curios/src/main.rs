@@ -35,7 +35,8 @@ use {
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost},
     curios_package::{
-        Entry, Fetch, Pinning, Repoint, Spelling, Store, Target, Transport, curate, pin, scaffold,
+        Entry, Fetch, Pinning, Refused, Repoint, Spelling, Store, Target, Transport, curate, pin,
+        scaffold,
     },
     curios_pipeline::CompileError,
     curios_surface::{Formatted, Width},
@@ -219,9 +220,12 @@ fn dispatch() -> Result<(), Failure> {
             ..
         } => {
             if target == Target::Native && port.is_some() {
-                return Err(Failure::Error(
-                    "`--port` is where a page is served, and `--target native` runs the program here: `--target browser` serves its page".to_string(),
-                ));
+                return Err(Refused::of("surplus flag")
+                    .stating("`--port` is where a page is served")
+                    .stating("`--target native` runs the program here")
+                    .stating("write `--target browser` to serve its page")
+                    .about_named("--port")
+                    .into());
             }
 
             let program = contract.admit_program(subject, manifest, None, &here()?)?;
@@ -235,10 +239,7 @@ fn dispatch() -> Result<(), Failure> {
                 });
                 let (files, mut tree) = built(elaboration.budget, program, store)?;
                 let listener = bound(port.unwrap_or(PORT))?;
-                let port = listener
-                    .local_addr()
-                    .map_err(|error| format!("cannot read the address served on: {error}"))?
-                    .port();
+                let port = port_of(&listener)?;
 
                 // The address is what the node came to, and the one fact a reader needs from what follows, which is nothing until the server is stopped.
                 tree.open("serve", true);
@@ -300,9 +301,12 @@ fn dispatch() -> Result<(), Failure> {
             ..
         } => {
             if target == Target::Native && port.is_some() {
-                return Err(Failure::Error(
-                    "`--port` is where a page is served, and `--target native` runs the tests here: `--target browser` serves their pages".to_string(),
-                ));
+                return Err(Refused::of("surplus flag")
+                    .stating("`--port` is where a page is served")
+                    .stating("`--target native` runs the tests here")
+                    .stating("write `--target browser` to serve their pages")
+                    .about_named("--port")
+                    .into());
             }
 
             let selection = contract.admit_any(subject, manifest, &here()?)?;
@@ -390,26 +394,31 @@ fn dispatch() -> Result<(), Failure> {
                             (entry.canonicalize(), output.canonicalize())
                         && input == written
                     {
-                        return Err(Failure::Error(format!(
-                            "refusing to overwrite the input {}",
-                            entry.display()
-                        )));
+                        return Err(Refused::of("output is the input")
+                            .stating(format_args!(
+                                "`--output` names {}, the file being compiled",
+                                entry.display()
+                            ))
+                            .about_path(&output)
+                            .into());
                     }
                     // A directory takes no executable's place, and the write would say so only after the whole compilation.
                     if output.is_dir() {
-                        return Err(Failure::Error(format!(
-                            "{} is a directory; `--output` names the file to write",
-                            output.display()
-                        )));
+                        return Err(Refused::of("not a file")
+                            .stating("`--output` names the file to write")
+                            .stating("this path is a directory")
+                            .about_path(&output)
+                            .into());
                     }
                 }
                 // A file takes no page's place — the entry among them — and the write would say so only after the whole compilation.
                 Target::Browser => {
                     if output.is_file() {
-                        return Err(Failure::Error(format!(
-                            "{} is a file; `--output` names the directory the page is written in",
-                            output.display()
-                        )));
+                        return Err(Refused::of("not a directory")
+                            .stating("`--output` names the directory the page is written in")
+                            .stating("this path is a file")
+                            .about_path(&output)
+                            .into());
                     }
                 }
             }
@@ -674,8 +683,7 @@ fn dispatch() -> Result<(), Failure> {
                 match admitted {
                     // Standard input is answered on standard output, whole, so a pipe gets the canonical text whether or not anything moved.
                     Rewritten::Stdin(width) => {
-                        let text = io::read_to_string(io::stdin())
-                            .map_err(|error| format!("failed to read standard input: {error}"))?;
+                        let text = drained()?;
                         let formatted =
                             Formatted::from_source(&Source::labelled(STDIN_LABEL, &text), width)?;
 

@@ -9,14 +9,15 @@ mod tests;
 
 use {
     crate::{Elaboration, ManifestFlag, Mode, Pinned, Query},
+    curios_common::Report,
     curios_module::Overlay,
     curios_package::{
-        Entire, Entry, FormatSettings, Governing, Library, Program, Selection, Spelling,
+        Entire, Entry, FormatSettings, Governing, Library, Program, Refused, Selection, Spelling,
     },
     curios_pipeline::Stage,
     curios_surface::Width,
     curios_verdict::Verdicts,
-    curios_wonder::{Staged, file_subject},
+    curios_wonder::{STDIN_LABEL, Staged, file_subject},
     std::{
         env,
         path::{Path, PathBuf},
@@ -409,19 +410,14 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
-    ) -> Result<Selection, String> {
+    ) -> Result<Selection, Box<Report>> {
         let spelling = match Spelling::of(subject) {
             // A file is placed by what declares it, which starts from a file the disk holds: a path it does not hold is refused here, in the words the read would have failed with.
             Spelling::File(path) => Spelling::File(file_subject(path)?),
             spelling => spelling,
         };
 
-        Ok(Selection::of(
-            spelling,
-            manifest,
-            directory,
-            &Overlay::default(),
-        )?)
+        Selection::of(spelling, manifest, directory, &Overlay::default())
     }
 
     /// The program `subject` selects: a program, or the package entire's sole or `default` one — named by its own file where the contract says so, and with somewhere to put what is built, `output` included.
@@ -431,30 +427,42 @@ impl Contract {
         manifest: Option<&Path>,
         output: Option<&Path>,
         directory: &Path,
-    ) -> Result<Program, String> {
+    ) -> Result<Program, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Program, "{}", self.command);
 
         let program = match Self::selection(subject, manifest, directory)? {
             Selection::Program(program) => program,
             Selection::Entire(entire) => entire.default_program()?,
-            Selection::Library(_) => {
-                return Err(format!(
-                    "`{}` takes a program, and a library is not one: name an executable or a program file",
-                    self.command
-                ));
+            Selection::Library(library) => {
+                let refused = Refused::of("not a program")
+                    .stating(format_args!("`{}` takes a program", self.command))
+                    .stating(format_args!(
+                        "this file belongs to the library of `/{}`",
+                        library.package
+                    ))
+                    .stating("name an executable or a program file");
+
+                return Err(match &library.through {
+                    Some(file) => refused.about_path(file),
+                    None => refused.about_path(&library.manifest),
+                });
             }
         };
 
         if self.own_file_only
             && let (Some(module), Some(home)) = (program.through(), program.home())
         {
-            return Err(format!(
-                "`{}` takes a program's own file, and {} is a module of `{}`: name `{}` instead",
-                self.command,
-                module.display(),
-                home.executable,
-                home.executable
-            ));
+            return Err(Refused::of("not a program")
+                .stating(format_args!(
+                    "`{}` takes a program's own file",
+                    self.command
+                ))
+                .stating(format_args!(
+                    "this file is a module of `{}`",
+                    home.executable
+                ))
+                .trying(format!("curios {} {}", self.command, home.executable))
+                .about_path(module));
         }
 
         if self.product.filed_under_a_package() && program.home().is_none() && output.is_none() {
@@ -470,7 +478,7 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
-    ) -> Result<Staged, String> {
+    ) -> Result<Staged, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::ProgramOrLibrary, "{}", self.command);
 
         Ok(match Self::selection(subject, manifest, directory)? {
@@ -486,21 +494,30 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
-    ) -> Result<Library, String> {
+    ) -> Result<Library, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Library, "{}", self.command);
 
         match Self::selection(subject, manifest, directory)? {
             Selection::Library(library) => Ok(library),
             Selection::Entire(entire) => entire.library()?.ok_or_else(|| {
-                format!(
-                    "`{}` takes a library, and {:?} declares none",
-                    self.command, entire.governing.package.name
-                )
+                Refused::of("no library")
+                    .stating(format_args!("`{}` takes a library", self.command))
+                    .stating(format_args!(
+                        "`{}` declares none",
+                        entire.governing.package.name
+                    ))
+                    .about_path(&entire.governing.manifest)
             }),
-            Selection::Program(_) => Err(format!(
-                "`{}` takes a library, and a program is not one",
-                self.command
-            )),
+            Selection::Program(program) => {
+                let refused = Refused::of("not a library")
+                    .stating(format_args!("`{}` takes a library", self.command))
+                    .stating("a program is not one");
+
+                Err(match program.entry() {
+                    Entry::File(path) => refused.about_path(path),
+                    Entry::Stdin => refused.about_named(STDIN_LABEL),
+                })
+            }
         }
     }
 
@@ -510,7 +527,7 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
-    ) -> Result<Selection, String> {
+    ) -> Result<Selection, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
 
         Self::selection(subject, manifest, directory)
@@ -522,15 +539,17 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
-    ) -> Result<Entire, String> {
+    ) -> Result<Entire, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Entire, "{}", self.command);
 
         match Self::selection(subject, manifest, directory)? {
             Selection::Entire(entire) => Ok(*entire),
-            Selection::Library(_) | Selection::Program(_) => Err(format!(
-                "`{}` takes the governing package entire, and no subject",
-                self.command
-            )),
+            Selection::Library(_) | Selection::Program(_) => Err(Refused::of("surplus subject")
+                .stating(format_args!(
+                    "`{}` takes the governing package entire, and no subject",
+                    self.command
+                ))
+                .about_named(subject.unwrap_or_default())),
         }
     }
 
@@ -541,7 +560,7 @@ impl Contract {
         manifest: Option<&Path>,
         directory: &Path,
         settings: &FormatSettings,
-    ) -> Result<Rewritten, String> {
+    ) -> Result<Rewritten, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Files, "{}", self.command);
 
         Self::rewritten(subject, manifest, directory, settings)
@@ -553,7 +572,7 @@ impl Contract {
         subject: Option<&str>,
         manifest: Option<&Path>,
         directory: &Path,
-    ) -> Result<Rewritten, String> {
+    ) -> Result<Rewritten, Box<Report>> {
         debug_assert_eq!(self.accepts, Accepts::Any, "{}", self.command);
 
         Self::rewritten(subject, manifest, directory, &FormatSettings::default())
@@ -564,7 +583,7 @@ impl Contract {
         manifest: Option<&Path>,
         directory: &Path,
         settings: &FormatSettings,
-    ) -> Result<Rewritten, String> {
+    ) -> Result<Rewritten, Box<Report>> {
         Ok(match Spelling::of(subject) {
             Spelling::File(path) => {
                 let path = file_subject(path)?;
@@ -596,25 +615,40 @@ impl Contract {
 }
 
 /// What a command that builds says about a program no package declares and nothing said where to put: that it has nowhere, and the command line that gives it somewhere.
-fn homeless(command: &str, entry: &Entry) -> String {
+fn homeless(command: &str, entry: &Entry) -> Box<Report> {
+    let refused = |what: &str| {
+        Refused::of("missing output")
+            .stating(format_args!(
+                "`{command}` files what it builds under the package that declares it"
+            ))
+            .stating(format_args!("{what} has none"))
+    };
+
     match entry {
-        Entry::Stdin => format!(
-            "`{command}` files what it builds under the package that declares it, and standard input has none: say where, as in `curios {command} - --output program`"
-        ),
+        Entry::Stdin => refused("standard input")
+            .trying(format!("curios {command} - --output program"))
+            .about_named(STDIN_LABEL),
         Entry::File(path) => {
             let named = path
                 .file_stem()
                 .map_or_else(|| "program".into(), |stem| stem.to_string_lossy());
-            format!(
-                "`{command}` files what it builds under the package that declares it, and {} has none: say where, as in `curios {command} {} --output {named}`",
-                path.display(),
-                path.display()
-            )
+
+            refused("this file")
+                .trying(format!(
+                    "curios {command} {} --output {named}",
+                    path.display()
+                ))
+                .about_path(path)
         }
     }
 }
 
 /// Where the process stands, which is where an invocation's argument is resolved from.
-pub fn here() -> Result<PathBuf, String> {
-    env::current_dir().map_err(|error| error.to_string())
+pub fn here() -> Result<PathBuf, Box<Report>> {
+    env::current_dir().map_err(|error| {
+        Refused::of("unreadable directory")
+            .stating("the working directory could not be read")
+            .stating(error)
+            .about_named("the working directory")
+    })
 }

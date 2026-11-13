@@ -197,7 +197,9 @@ fn a_loose_file_compiles_only_where_output_says() {
     assert!(!refused.status.success());
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(
-        stderr.contains("`curios compile scratch.crs --output scratch`"),
+        stderr.contains(
+            "├─ try; curios compile scratch.crs --output scratch\n╰─ [error] scratch.crs"
+        ),
         "{stderr}"
     );
 

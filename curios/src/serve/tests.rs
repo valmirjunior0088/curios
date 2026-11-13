@@ -178,11 +178,12 @@ fn a_port_another_holds_is_refused_naming_the_flag_that_picks_another() {
     let taken = bound(0).unwrap();
     let port = taken.local_addr().unwrap().port();
 
-    let refusal = bound(port).unwrap_err();
+    let refusal = bound(port).unwrap_err().render();
 
     assert!(
-        refusal.starts_with(&format!("cannot serve on 127.0.0.1:{port}:"))
-            && refusal.ends_with("`--port` serves on another"),
+        refusal.starts_with(&format!(
+            "address unavailable\n│  `127.0.0.1:{port}` could not be served on\n"
+        )) && refusal.contains("write `--port` to serve on another"),
         "{refusal}"
     );
 }

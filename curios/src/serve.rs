@@ -13,6 +13,8 @@ use {
     curios_browser::{
         ARGUMENT, INDEX_HTML, Posted, Reply, Sent, Step, Stream, content_type, runner,
     },
+    curios_common::Report,
+    curios_package::Refused,
     httparse::{EMPTY_HEADER, Error, Status},
     std::{
         collections::BTreeMap,
@@ -235,10 +237,27 @@ pub fn url(port: u16, args: &[OsString]) -> String {
 }
 
 /// The listener a page is served on, at `port` of loopback, or why there is none: a port another process holds is refused by its number and by the flag that picks another.
-pub fn bound(port: u16) -> Result<TcpListener, String> {
+pub fn bound(port: u16) -> Result<TcpListener, Box<Report>> {
     TcpListener::bind((Ipv4Addr::LOCALHOST, port)).map_err(|error| {
-        format!("cannot serve on 127.0.0.1:{port}: {error}; `--port` serves on another")
+        Refused::of("address unavailable")
+            .stating(format_args!("`127.0.0.1:{port}` could not be served on"))
+            .stating(error)
+            .stating("write `--port` to serve on another")
+            .about_named(format!("127.0.0.1:{port}"))
     })
+}
+
+/// The port `listener` is bound to, which is the one asked for, or the one the system chose where none was.
+pub fn port_of(listener: &TcpListener) -> Result<u16, Box<Report>> {
+    listener
+        .local_addr()
+        .map(|address| address.port())
+        .map_err(|error| {
+            Refused::of("address unavailable")
+                .stating("the address served on could not be read")
+                .stating(error)
+                .about_named("--port")
+        })
 }
 
 /// Answer every connection `listener` accepts with `served`, each on a thread of its own, until the process is stopped.
@@ -253,10 +272,7 @@ pub fn serve_run(listener: &TcpListener, run: Run<'_>) -> Result<(), String> {
 
 /// Answer every connection `listener` accepts with `site`, each on a thread of its own, until the site is complete: the socket that takes a run's last step connects back once its reply is sent, so the accept ends.
 fn serve(listener: &TcpListener, site: &Site<'_>) -> Result<(), String> {
-    let port = listener
-        .local_addr()
-        .map_err(|error| format!("cannot read the address served on: {error}"))?
-        .port();
+    let port = port_of(listener).map_err(|report| report.render())?;
 
     thread::scope(|scope| {
         // A connection that fails before it is accepted is its client's, and ends nothing else.

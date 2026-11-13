@@ -13,14 +13,14 @@ use host::*;
 use {
     crate::{
         Access, Column, Failure, Reporting, Run, Served, Steps, Subject, Then, Tree, Wrote, alone,
-        answered, bound, cut, drained, framed, keep, kept, reader, relayed, serve_run, total,
-        troubled, url,
+        answered, bound, cut, drained, framed, keep, kept, port_of, reader, relayed, serve_run,
+        total, troubled, url,
     },
     curios::{TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Step, Stream},
-    curios_common::{Qualifier, Style},
+    curios_common::{Qualifier, Report, Style},
     curios_native::{OsHost, TestEnd},
-    curios_package::{Selection, Target},
+    curios_package::{Refused, Selection, Target},
     curios_pipeline::{CompileError, TestModule},
     curios_verdict::Verdicts,
     std::{
@@ -105,7 +105,7 @@ pub fn run_tests(
 ) -> Result<bool, CompileError> {
     let mut printer = Printer::new(filters);
 
-    for subject in test_subjects(selection, drained)? {
+    for subject in test_subjects(selection, || Ok(drained()?))? {
         let shown = Subject::of(subject.named());
         let store = subject.filed(|root| access.filed(root));
         let (tested, tree) = compiled(
@@ -177,7 +177,7 @@ fn prefix(filter: &str) -> Qualifier {
 const NAMED: usize = 3;
 
 /// The refusal of a `filter` no test of `declared` stands at or under, naming the paths nearest it: those sharing the most of its trailing segments, then those the fewest edits away.
-fn matching_nothing(filter: &str, declared: &[Qualifier]) -> String {
+fn matching_nothing(filter: &str, declared: &[Qualifier]) -> Box<Report> {
     let mut nearest = declared.iter().map(Qualifier::join).collect::<Vec<_>>();
     // Ordered by path first, so a path two subjects declare is named once and ties fall in its order.
     nearest.sort();
@@ -185,18 +185,19 @@ fn matching_nothing(filter: &str, declared: &[Qualifier]) -> String {
     nearest.sort_by_key(|path| (Reverse(shared_tail(path, filter)), edits(path, filter)));
     nearest.truncate(NAMED);
 
-    let named = nearest
-        .iter()
-        .map(|path| format!("'{path}'"))
-        .collect::<Vec<_>>();
-    match named.as_slice() {
-        [] => format!("no test matches '{filter}'"),
-        [only] => format!("no test matches '{filter}'; the nearest is {only}"),
-        [rest @ .., last] => format!(
-            "no test matches '{filter}'; the nearest are {} and {last}",
-            rest.join(", ")
-        ),
+    let refused = Refused::of("unknown test").stating(format_args!("no test matches `{filter}`"));
+    match nearest.is_empty() {
+        true => refused,
+        false => refused.stating(format_args!(
+            "the nearest: {}",
+            nearest
+                .iter()
+                .map(|path| format!("`{path}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
     }
+    .about_named("--filter")
 }
 
 /// How many trailing segments two test paths share.
@@ -372,12 +373,12 @@ impl<'a> Printer<'a> {
             .iter()
             .zip(&self.matched)
             .filter(|(_, matched)| !**matched)
-            .map(|(filter, _)| matching_nothing(filter, &self.declared))
+            .map(|(filter, _)| *matching_nothing(filter, &self.declared))
             .collect::<Vec<_>>();
 
         match unmatched.is_empty() {
             true => Ok(()),
-            false => Err(CompileError::failure(unmatched.join("\n"))),
+            false => Err(CompileError::Failure(unmatched)),
         }
     }
 
@@ -415,7 +416,7 @@ pub fn serve_tests(
     let mut planned = VecDeque::new();
     let mut pages = Vec::new();
 
-    for subject in test_subjects(selection, drained)? {
+    for subject in test_subjects(selection, || Ok(drained()?))? {
         let shown = Subject::of(subject.named());
         let store = subject.filed(|root| access.filed(root));
         let (tested, tree) = compiled(
@@ -452,10 +453,7 @@ pub fn serve_tests(
     };
 
     let listener = bound(port)?;
-    let port = listener
-        .local_addr()
-        .map_err(|error| format!("cannot read the address served on: {error}"))?
-        .port();
+    let port = port_of(&listener)?;
 
     alone("serve", url(port, &[]));
     printer.opened(tree, &modules);

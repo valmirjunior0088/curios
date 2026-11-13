@@ -375,7 +375,7 @@ fn a_filter_matching_nothing_exits_one_naming_it() {
 
     assert_eq!(output.status.code(), Some(1));
     assert!(
-        stderr(&output).contains("no test matches '/nope'"),
+        stderr(&output).contains("unknown test\n│  no test matches `/nope`\n"),
         "stderr: {}",
         stderr(&output)
     );
@@ -385,7 +385,7 @@ fn a_filter_matching_nothing_exits_one_naming_it() {
     assert_eq!(partial.status.code(), Some(1));
     assert!(
         stderr(&partial)
-            .contains("no test matches '/app/addition'; the nearest are '/app/addition_passes'"),
+            .contains("no test matches `/app/addition`\n│  the nearest: `/app/addition_passes`"),
         "stderr: {}",
         stderr(&partial)
     );

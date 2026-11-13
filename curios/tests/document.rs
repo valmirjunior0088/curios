@@ -204,7 +204,7 @@ fn a_package_without_a_library_is_refused_by_name() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("`document` takes a library, and \"tool\" declares none"),
+        stderr.contains("no library\n│  `document` takes a library\n│  `tool` declares none\n╰─ [error] curios.toml"),
         "{stderr}"
     );
     assert!(!root.join(".curios/documentation").exists());

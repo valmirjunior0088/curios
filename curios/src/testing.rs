@@ -71,13 +71,13 @@ pub fn test_subjects(
             if governing.directory.join(LIBRARY).is_file() {
                 // The library is tested in its own subject and built in every executable's, each over the dependency graph with the governing package's own library last — the order `wonder` walks and `run` compiles.
                 subjects.push(TestSubject::library(
-                    order(governing).map_err(CompileError::failure)?,
+                    order(governing)?,
                     &governing.package.name,
                     &governing.root,
                     &governing.manifest,
                 ));
             }
-            for program in entire.programs().map_err(CompileError::failure)? {
+            for program in entire.programs()? {
                 subjects.push(TestSubject::declared(program)?);
             }
 

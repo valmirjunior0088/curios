@@ -6,15 +6,15 @@ use {
     crate::{Subject, Tree, apart, reader},
     curios::{engine, opened, optimize, supplied, to_cwasm},
     curios_abi::ForeignStore,
-    curios_common::{Source, Style},
+    curios_common::{Report, Source, Style},
     curios_document::Documentation,
     curios_module::{RootSource, UnitSource},
-    curios_package::{Entry, Named, Program, Runs, Target},
+    curios_package::{Entry, Named, Program, Refused, Runs, Target},
     curios_pipeline::{Cache, CompileError, Fold, Progress, Stage},
     curios_surface::Entrypoint,
     curios_verdict::Verdicts,
     curios_wasm::Module,
-    curios_wonder::{Ended, Telling},
+    curios_wonder::{Ended, STDIN_LABEL, Telling},
     std::{
         cell::RefCell,
         io, mem,
@@ -161,9 +161,13 @@ pub fn open(entry: Option<&Path>) -> Result<(Entrypoint, RootSource, Arc<Source>
 }
 
 /// Standard input, drained to end — once, since a second read finds nothing.
-pub fn drained() -> Result<String, CompileError> {
-    io::read_to_string(io::stdin())
-        .map_err(|error| CompileError::failure(format!("failed to read standard input: {error}")))
+pub fn drained() -> Result<String, Box<Report>> {
+    io::read_to_string(io::stdin()).map_err(|error| {
+        Refused::of("unreadable input")
+            .stating("standard input could not be read")
+            .stating(error)
+            .about_named(STDIN_LABEL)
+    })
 }
 
 /// Compile `entrypoint` against `units` in the order given, and make the payload `finish` makes of the module, narrated by `steps` beside `store`, the one the fold files into, whose subject's tree comes back with the payload.

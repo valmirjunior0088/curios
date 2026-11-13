@@ -478,7 +478,7 @@ fn a_port_beside_the_native_target_is_refused() {
     assert_eq!(output.status.code(), Some(1));
     assert!(
         String::from_utf8_lossy(&output.stderr).contains(
-            "`--port` is where a page is served, and `--target native` runs the tests here: `--target browser` serves their pages"
+            "surplus flag\n│  `--port` is where a page is served\n│  `--target native` runs the tests here\n│  write `--target browser` to serve their pages\n╰─ [error] --port"
         ),
         "{}",
         String::from_utf8_lossy(&output.stderr)
