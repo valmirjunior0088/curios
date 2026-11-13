@@ -166,15 +166,33 @@ pub fn parse_choose_arm<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Ch
     parse_cond_arm.or(parse_bind_arm).parse(state)
 }
 
+/// What refuses a `choose` that closes with no default arm.
+const CHOOSE_TAKES_A_DEFAULT: &[&str] = &[
+    "a `choose` ends with a default arm, taken where no arm above it holds",
+    "write `| _ => …` before `end`",
+];
+
 // The mandatory `| _ =>` default arm closing a `choose` — a `Bool` ladder is a dispatch form (it enumerates no shapes), so `_` is required, not optional — or the arm parser explaining why what stands here is no arm.
 //
 // **A bare default here would report the wrong thing.** `many0` drops a recoverable arm failure (`curios_parse`'s repetition keeps only uncaught ones), leaving the default to invent `Expected '_'` at the arm's first token: a missing `=>`, or a pattern the arm grammar refuses, reported as a default the reader never meant to write. Re-running the arm parser recovers the diagnosis it already had, and [`Parser::or`] then keeps whichever error reached further, so a genuinely absent default still reports as one — both alternatives fail at the same `|` and the first takes the tie. The alternative never succeeds, since the loop stopped here precisely because the arm parser failed, so no arm is parsed twice. This is `Module::parse_items_end`'s recovery, for the same reason.
+//
+// **An `end` here is a `choose` with no default.** The arms are read and the word that closes the form stands where the default does, so the rule is what is broken, and it is refused by name at that word, where a bare default would report the bar it wanted and a letter of `end`.
 pub fn parse_choose_default<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    parse_literal("|")
-        .and_keep(parse_literal("_"))
-        .and_drop(parse_literal("=>"))
-        .and_keep(parse_term::<D>)
-        .or(parse_choose_arm.map(|arm| arm.body))
+    look_ahead(parse_keyword("end"))
+        .map(|()| true)
+        .or(pure(false))
+        .flat_map(|ended| match ended {
+            true => mark()
+                .and_drop(take_exact("end"))
+                .flat_map(|start| commit(fail_from(&start, CHOOSE_TAKES_A_DEFAULT)))
+                .boxed(),
+            false => parse_literal("|")
+                .and_keep(parse_literal("_"))
+                .and_drop(parse_literal("=>"))
+                .and_keep(parse_term::<D>)
+                .or(parse_choose_arm.map(|arm| arm.body))
+                .boxed(),
+        })
         .parse(state)
 }
 

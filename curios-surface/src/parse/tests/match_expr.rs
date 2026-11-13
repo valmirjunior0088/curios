@@ -343,12 +343,34 @@ fn a_malformed_choose_arm_reports_the_arm_rather_than_the_missing_default() {
         let report = source.parse::<Term>().unwrap_err().format();
         assert!(report.contains(expected), "{source:?} reported {report}");
     }
-    // A genuinely absent default still reports as one: both alternatives fail at the same `|`, and the first takes the tie.
+    // A genuinely absent default still reports as one, by the rule that asks for it.
     let report = "choose\n| f => 1\nend"
         .parse::<Term>()
         .unwrap_err()
         .format();
-    assert!(report.contains("expected: `|`"), "reported {report}");
+    assert!(
+        report.contains("a `choose` ends with a default arm"),
+        "reported {report}"
+    );
+}
+
+/// A `choose` that closes with no default arm breaks the rule that it ends with one, and is refused by that rule at the `end` standing in the arm's place.
+#[test]
+fn a_choose_with_no_default_arm_is_refused_by_name() {
+    for source in [
+        "choose | n > 2 => 1 end",
+        "choose end",
+        "choose | some(x) = o => x end",
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            report
+                .contains("a `choose` ends with a default arm, taken where no arm above it holds")
+                && report.contains("write `| _ => …` before `end`"),
+            "{source:?} reported {report}"
+        );
+        assert!(report.contains(" ^^^\n"), "{source:?} reported {report}");
+    }
 }
 
 // `choose` survives print → re-parse, including the arm-free form.
