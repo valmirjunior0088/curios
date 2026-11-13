@@ -1,6 +1,6 @@
 //! Which constructions of a row may write into a value of that row dying beside them: the proof [`rebuild_in_place`](super::rebuild_in_place) spends ([A value costs when it is kept, not when it is named](../../documentation/design/compilation/a-value-costs-when-it-is-kept-not-when-it-is-named.md)).
 //!
-//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures, a literal and constant data; a filler is null, which nothing shares. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value, which is Perceus's rule and what lets a path copy qualify, and where no run comes back to the read with that value still bound, each round's read naming the one object.
+//! **Three facts, each on a path.** Whether a value is consumed or only read, and where it is used last: a function's body and each continuation's are blocks, a node has a place along one, and a switch's edge is a path of its own, so a value one arm hands on and another returns is used once. Whether a value is unique: the greatest fixpoint the shared solver reaches as the least one of its dual, *shared*, over values and function returns, with every boundary the module does not see whole shared — an escaping function's or the entry's parameters, what a closure, a host, a cell or a channel hands back, a value a nested function captures, a literal and constant data; a filler is null, which nothing shares. A parameter is unique where every known call hands it a unique value dead after the call; a field read of a unique value is unique where no path from the read consumes that value before a run binds it again, which is Perceus's rule and what lets a path copy qualify, and where no run comes back to the read with that value still bound, each round's read naming the one object. Past the block that binds a value its name is another round's value, so what a loop does to its parameter on a later round is done to another value than the one a read took a field of.
 //!
 //! **Constants by tag.** A constant is one global every use shares, and it reaches every read of a slot it is stored in, so the constructor tags of the constant data that may reach each value flow through slots, calls and returns; a value some constant may be is rebuilt only within the arms of a test of its tag that rule every such tag out.
 //!
@@ -138,7 +138,7 @@ pub fn routes(module: &Module) -> Routes {
                         let consumed_after = shape
                             .consumed(of, &borrowed)
                             .iter()
-                            .any(|point| shape.reaches(read, point.node));
+                            .any(|point| shape.reaches_holding(of, read, point.node));
                         rules.add(move |solver| {
                             if consumed_after || shared(solver, world, &Atom::Value(of)) {
                                 solver.join((world, Key::Value(value)), Shared(true));
@@ -743,6 +743,8 @@ struct Shape {
     open: BTreeSet<FunctionId>,
     /// The blocks reachable from each block's successors, as asked.
     reach: RefCell<BTreeMap<Block, BTreeSet<Block>>>,
+    /// The blocks reachable from a block's successors without entering another, the first of each key, as asked.
+    reach_outside: RefCell<BTreeMap<(Block, Block), BTreeSet<Block>>>,
 }
 
 impl Shape {
@@ -769,6 +771,7 @@ impl Shape {
             returns: BTreeMap::new(),
             open: analyze_calls(module).escaping,
             reach: RefCell::new(BTreeMap::new()),
+            reach_outside: RefCell::new(BTreeMap::new()),
         };
         shape.open.extend(module.entry());
         let mut free = BTreeMap::<FunctionId, BTreeSet<ValueId>>::new();
@@ -1049,6 +1052,43 @@ impl Shape {
         (from_block == to_block && to_at > from_at) || self.reached(from_block).contains(&to_block)
     }
 
+    /// Whether `to` can run after `from` while `value` is still the value `from` names: on a path that does not enter the block binding it, where a run binds it again.
+    fn reaches_holding(&self, value: ValueId, from: NodeId, to: NodeId) -> bool {
+        let Some(home) = self.home(value) else {
+            return self.reaches(from, to);
+        };
+        let ((from_block, from_at), (to_block, to_at)) = (self.place[&from], self.place[&to]);
+        (from_block == to_block && to_at > from_at)
+            || self.reached_outside(home, from_block).contains(&to_block)
+    }
+
+    /// The block that binds `value`: its function's body, its continuation's, or the one its binder sits along.
+    fn home(&self, value: ValueId) -> Option<Block> {
+        match self.defs.get(&value) {
+            Some(Def::Param(function, _)) => Some(Block::Body(*function)),
+            Some(Def::ContParam(continuation, _)) => Some(Block::Cont(*continuation)),
+            _ => self.binder.get(&value).map(|binder| self.place[binder].0),
+        }
+    }
+
+    /// The blocks reachable from `block`'s successors on paths that never enter `closed`.
+    fn reached_outside(&self, closed: Block, block: Block) -> BTreeSet<Block> {
+        if let Some(reached) = self.reach_outside.borrow().get(&(closed, block)) {
+            return reached.clone();
+        }
+        let mut reached = BTreeSet::new();
+        let mut work = self.successors.get(&block).cloned().unwrap_or_default();
+        while let Some(next) = work.pop() {
+            if next != closed && reached.insert(next) {
+                work.extend(self.successors.get(&next).cloned().unwrap_or_default());
+            }
+        }
+        self.reach_outside
+            .borrow_mut()
+            .insert((closed, block), reached.clone());
+        reached
+    }
+
     /// Whether `to` can run after the consumption at `point`, on its edge.
     fn point_reaches(&self, point: Point, to: NodeId) -> bool {
         match point.into {
@@ -1107,26 +1147,10 @@ impl Shape {
     /// Whether a run can come back to `node` without binding `value` again: a rebuild there would write the memory the last round's rebuild handed on, and a read of it there names what the last round's read named.
     fn returns_without_rebinding(&self, value: ValueId, node: NodeId) -> bool {
         let (block, _) = self.place[&node];
-        let home = match self.defs.get(&value) {
-            Some(Def::Param(function, _)) => Block::Body(*function),
-            Some(Def::ContParam(continuation, _)) => Block::Cont(*continuation),
-            _ => match self.binder.get(&value) {
-                Some(binder) => self.place[binder].0,
-                None => return true,
-            },
-        };
-        let mut seen = BTreeSet::new();
-        let mut work = self.successors.get(&block).cloned().unwrap_or_default();
-        while let Some(next) = work.pop() {
-            if next == home || !seen.insert(next) {
-                continue;
-            }
-            if next == block {
-                return true;
-            }
-            work.extend(self.successors.get(&next).cloned().unwrap_or_default());
+        match self.home(value) {
+            Some(home) => self.reached_outside(home, block).contains(&block),
+            None => true,
         }
-        false
     }
 
     /// Whether `value` is defined where `node` can name it: before it along a block enclosing it.
@@ -1406,7 +1430,7 @@ impl<'s> Facts<'s> {
                         let consumed_after = shape
                             .consumed(of, borrowed)
                             .iter()
-                            .any(|point| shape.reaches(read, point.node));
+                            .any(|point| shape.reaches_holding(of, read, point.node));
                         rules.add(move |solver| {
                             if consumed_after || shared(solver, &Atom::Value(of)) {
                                 solver.join(Key::Value(value), Shared(true));

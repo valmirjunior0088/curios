@@ -102,6 +102,22 @@ const SPINES: &str = r#"
         end;
 "#;
 
+/// A map threaded once through a loop of inserts that counts its rounds, which two calls each start with a map of its own.
+const TWO_WALKS: &str = r#"
+    let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+        match n
+        | 0 => m
+        | k + 1; _ =>
+            let y = 75 * x % 65537;
+            walk(k, i + 1, y, Map/insert(m, y, i % 1000003))
+        end;
+    let sum(m: Map(Nat, Nat)) -> Nat = Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003);
+"#;
+
+/// What the two walks of [`TWO_WALKS`] hold, summed.
+const TWO_WALKS_SUM: &str =
+    "sum(walk(n, 0, (n + 1) % 65537, Map/empty())) + sum(walk(n, 0, (n + 7) % 65537, Map/empty()))";
+
 /// A search tree whose insert rebuilds the node it takes apart on every path, threaded once through a loop.
 const SEARCH_TREE: &str = r#"
     induct Tree: Type
@@ -177,6 +193,13 @@ fn map_insert_rebuilds_its_node_at_every_level_in_a_loop_using_its_map_once() {
         0,
         "{module}"
     );
+    assert!(rebuilds_of(&module, NODE) >= 8, "{module}");
+}
+
+/// Two loops each threading a map of its own through its inserts: `walk` stays a function both call, whose loop hands its map back where it ends, and what a later round does to the map it is handed is done to another map than the one a round took apart, so each insert still reaches the version that rebuilds its node at every level.
+#[test]
+fn map_insert_rebuilds_its_node_in_each_of_two_loops_threading_a_map_of_its_own() {
+    let (_, module) = modules(&program(TWO_WALKS, TWO_WALKS_SUM));
     assert!(rebuilds_of(&module, NODE) >= 8, "{module}");
 }
 
@@ -406,6 +429,33 @@ fn a_branch_read_on_every_round_of_a_loop_is_inserted_into_by_a_copy() {
     assert_eq!(run(&module, "5"), run(&kept, "5"));
 }
 
+/// A tree a loop hands on as it took it, a branch of it read and inserted into on every round: the tree the next round is handed is the one this round read, so the insert copies, and every round's size is the one it is when every insert copies.
+#[test]
+fn a_branch_of_a_tree_a_loop_hands_on_as_it_took_it_is_inserted_into_by_a_copy() {
+    let source = program(
+        &[
+            SEARCH_TREE,
+            r#"
+            let drip(n: Nat, t: Tree, acc: Nat) -> Nat =
+                match n
+                | 0 => acc + size(t)
+                | k + 1; _ =>
+                    match t
+                    | leaf() => acc
+                    | node(l, _, _) => drip(k, t, acc + size(insert(l, 70000 + k)))
+                    end
+                end;
+            "#,
+        ]
+        .concat(),
+        "drip(n, walk(n, (n + 1) % 65537, Tree/node(Tree/leaf(), n + 100000, Tree/leaf())), 0)",
+    );
+    let (lowered, module) = modules(&source);
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    assert_eq!(run(&module, "5"), run(&kept, "5"));
+}
+
 /// A search tree's insert that hands back the node it was handed where the key is found, first handed the constant empty tree: the child it hands on is held by a node it may return, and what the insert of a constant hands back may be that constant, so no unique value enters the loop and nothing is rebuilt.
 #[test]
 fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
@@ -598,11 +648,13 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
         REMOVALS,
         "Map/fold(drain(n, fill(n, Map/empty())), 0, (_, v, acc) => (acc + v) % 1000003)",
     );
+    let two_walks = program(TWO_WALKS, TWO_WALKS_SUM);
     for (source, n) in corpus.into_iter().chain([
         (heap, "300"),
         (spines, "300"),
         (removals, "300"),
         (tree, "300"),
+        (two_walks, "300"),
     ]) {
         let (lowered, rebuilt) = modules(&source);
         let mut kept = lowered;
