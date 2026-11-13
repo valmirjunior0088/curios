@@ -4,24 +4,58 @@ use {
     super::test_support::*,
     crate::*,
     curios_analysis::{Erased, test_support::*},
-    curios_common::Qualifier,
-    curios_core::{
-        Certification, Certified, Definitions, Free, Global, Intrinsic, Item, Nat, Term, Totality,
-        Universes, test_support::*,
-    },
-    std::collections::BTreeMap,
+    curios_common::{Qualifier, fill},
+    curios_core::{Certification, Certified, Definitions, Global, Item, Totality},
 };
+
+/// `Vouched`, a proposition of one case holding a unit, which is not defined.
+const VOUCHED: &str = r#"
+#{absent = [/Vouched/qed]}
+induct /Vouched: pub Prop
+| qed(u: {})
+end
+"#;
+
+/// `sink`, which does not terminate, and `reaches : (Nat) -> Nat`, which calls it: a library one of whose definitions reaches a partial one.
+const LIBRARY: &str = r#"
+let /sink: (n: #NatType) -> #NatType =
+    #{node = Rec}
+    (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
+    x);
+
+let /reaches: (m: #NatType) -> #NatType =
+    (m: #NatType) => /sink(m);
+"#;
+
+/// `held : Vouched`, a proof applying a lambda to `reaches`, which it reads nothing of.
+const HELD: &str = r#"
+let /held: #{node = InductType} /Vouched() =
+    ((g: (n: #NatType) -> #NatType) => #{node = Variant} /Vouched/qed(()))(/reaches);
+"#;
+
+/// [`LIBRARY`], with [`VOUCHED`] and the proof [`HELD`] beside it where `held` is.
+fn reaching_library(held: bool) -> Definitions {
+    match held {
+        true => core_text_module(&fill!(
+            "${VOUCHED}${LIBRARY}${HELD}",
+            VOUCHED,
+            LIBRARY,
+            HELD
+        )),
+        false => core_text_module(LIBRARY),
+    }
+}
+
+/// The proof [`HELD`], carried over a library it reads `reaches` of.
+fn carried_proof_definitions() -> Definitions {
+    core_text_module(&fill!("${VOUCHED}${HELD}", VOUCHED, HELD))
+}
 
 /// Partiality is a classification: a definition reaching a partial one is accepted, and a rule refusing every mention of a partial definition would break the language.
 #[test]
 fn a_definition_reaching_a_partial_one_is_accepted() {
     assert_eq!(
-        fixture_verdicts(
-            &reaching_library(false),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        ),
+        text_verdicts(LIBRARY),
         Vec::new(),
         "a definition reaching a partial one was refused",
     );
@@ -59,12 +93,7 @@ fn carried_beneath(judged: &Definitions, certification: &Certification) -> Vec<V
 /// A later walk reads a carried unit's totality from the certifier's record: the library certified alone leaves `reaches` partial in its record, and the proof reaching it, judged beneath that record, is refused exactly as it is judged fresh in one module with the library.
 #[test]
 fn a_carried_units_totality_is_read_from_the_certifiers_record() {
-    let library = fixture_certified(
-        &reaching_library(false),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let library = text_certified(LIBRARY);
     assert_eq!(library.verdicts, Vec::new(), "the library is certified");
     assert_eq!(
         library.certification.totality(&reaches()),
@@ -77,12 +106,7 @@ fn a_carried_units_totality_is_read_from_the_certifiers_record() {
         "carried beneath its record, the proof reaching a partial definition must be refused: {carried:?}",
     );
 
-    let judged = fixture_verdicts(
-        &reaching_library(true),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let judged = fixture_verdicts(&reaching_library(true), BUDGET, &Globals::default(), SYNTAX);
     assert!(
         refuses_the_proof_reaching_partiality(&judged),
         "judged fresh, the same proof must be refused for reaching a partial definition: {judged:?}",
@@ -102,27 +126,27 @@ fn a_unit_mounted_with_an_empty_record_is_classified_by_the_reading_walk() {
 
 /// Obligation (V) fires at an argument position, where the corpus never reaches it.
 ///
-/// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes obligation (V) inert at argument positions", so a fixture reaching it has to be constructed. [`proof_at_an_argument_definitions`] is one: `held : Nat = ((p : Vouched) => 0)(proof)`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
+/// [The soundness board](../../../documentation/design/soundness/the-soundness-board.md)'s *Rejected* paragraph says the corpus "passes obligation (V) inert at argument positions", so a fixture reaching it has to be constructed. This is one: `held : Nat = ((p : Vouched) => 0)(proof)`, whose only recorded position naming `reaches` is the argument — `held`'s type and body sit at `Nat`, which the classification records nothing for. The control is the same term with `Vouched/qed(())` in the argument's place, which names nothing partial and must stay accepted.
 #[test]
 fn a_proof_at_an_argument_position_reaching_a_partial_definition_is_refused() {
-    let verdicts = fixture_verdicts(
-        &proof_at_an_argument_definitions(true),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
+    let at_an_argument = |proof: &str| {
+        text_verdicts(&fill!(
+            "${VOUCHED}${LIBRARY}\nlet /held: #NatType =\n    ((p: #{node = InductType} /Vouched()) => 0)(${proof});",
+            VOUCHED,
+            LIBRARY,
+            proof
+        ))
+    };
+
+    let verdicts = at_an_argument(
+        "((g: (n: #NatType) -> #NatType) => #{node = Variant} /Vouched/qed(()))(/reaches)",
     );
     assert!(
         refuses_the_proof_reaching_partiality(&verdicts),
         "a proof at an argument position reaching a partial definition was not refused: {verdicts:?}",
     );
-
     assert_eq!(
-        fixture_verdicts(
-            &proof_at_an_argument_definitions(false),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        ),
+        at_an_argument("#{node = Variant} /Vouched/qed(())"),
         Vec::new(),
         "the same argument position holding a total proof was refused",
     );
@@ -153,41 +177,21 @@ fn a_record_that_does_not_cover_its_unit_is_not_read() {
     );
 }
 
-/// `held : Vouched = ((g : (Nat) -> Nat) => ((n : Nat) => Vouched/qed(()))(g(0)))(reaches)`: a proof reaching `reaches` as [`held_proof`]'s does, in other terms, so a walk over a baseline holding that one judges this.
+/// `held : Vouched = ((g : (Nat) -> Nat) => ((n : Nat) => Vouched/qed(()))(g(0)))(reaches)`: a proof reaching `reaches` as [`HELD`]'s does, in other terms, so a walk over a baseline holding that one judges this.
 fn held_otherwise() -> Item {
-    let (vouched_name, _) = vouched_declaration();
-    let vouched = Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new());
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let g = Free::local(940, Some("g"));
-
-    authored(
-        &Global::Authored(Qualifier::from(["held"])),
-        vouched.clone(),
-        Term::apply(
-            Term::func(
-                [(
-                    g,
-                    Term::func_type([(Free::local(941, Some("n")), nat.clone())], nat.clone()),
-                )],
-                Term::apply(
-                    Term::func(
-                        [(Free::local(942, Some("n")), nat)],
-                        Term::variant(
-                            vouched_name,
-                            Vec::<Term>::new(),
-                            "qed",
-                            [Term::tuple(Vec::<Term>::new())],
-                        ),
-                    ),
-                    [Term::apply(
-                        Term::free_var(&g),
-                        [Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
-                    )],
-                ),
-            ),
-            [Term::instance(reaches(), Universes::default())],
-        ),
-    )
+    core_text_module(&fill!(
+        r#"${VOUCHED}
+let /held: #{node = InductType} /Vouched() =
+    ((g: (n: #NatType) -> #NatType) =>
+        ((n: #NatType) => #{node = Variant} /Vouched/qed(()))(g(0)))(/reaches);
+"#,
+        VOUCHED
+    ))
+    .items
+    .iter()
+    .find(|item| matches!(item, Item::Let(definition) if definition.name == global("held")))
+    .cloned()
+    .expect("the text defines `held`")
 }
 
 /// A baseline is read as a mounted record is, only where its record covers its module: one naming `reaches` as `Total` and nothing else was not made by a walk over the library — `sink` is missing — so a walk over it judges the unit whole, and refuses the proof, rather than read `reaches` as the record leaves it wherever the walk does not visit it. Mutation-checked: with a baseline taken whatever its record covers, the proof is accepted and no other test in this file fails.
@@ -247,24 +251,11 @@ fn covering_the_library(extra: bool) -> Certification {
 
 /// [`carried_proof_definitions`] with `again : Vouched = held` beside the proof: a reader of `held` at a proof position, which a walk taking `held` for partial refuses.
 fn carried_proof_and_its_reader() -> Definitions {
-    let (vouched_name, declaration) = vouched_declaration();
-    let again = authored(
-        &Global::Authored(Qualifier::from(["again"])),
-        Term::induct_type(vouched_name, Vec::<Term>::new(), Vec::<Term>::new()),
-        Term::instance(
-            Global::Authored(Qualifier::from(["held"])),
-            Universes::default(),
-        ),
-    );
-
-    declaring(
-        Definitions {
-            items: vec![held_proof(), again].into(),
-        },
-        BTreeMap::from([(vouched_name, declaration)]),
-        [],
-        [],
-    )
+    core_text_module(&fill!(
+        "${VOUCHED}${HELD}\nlet /again: #{node = InductType} /Vouched() = /held;",
+        VOUCHED,
+        HELD
+    ))
 }
 
 /// A record answers for the unit it was filed with and for no name beside it: an entry under a name the unit does not declare classifies nothing.
@@ -300,20 +291,34 @@ fn a_record_answers_for_no_name_its_unit_does_not_declare() {
 #[test]
 fn a_proof_reaching_two_partial_definitions_names_the_first_written() {
     for (first, second) in [("zeta", "alpha"), ("alpha", "zeta")] {
-        let verdicts = fixture_verdicts(
-            &two_sinks_definitions(first, second),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        );
+        let verdicts = text_verdicts(&fill!(
+            r#"${VOUCHED}
+let /${first}: (n: #NatType) -> #NatType =
+    #{node = Rec}
+    (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
+    x);
+
+let /${second}: (n: #NatType) -> #NatType =
+    #{node = Rec}
+    (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
+    x);
+
+let /held: #{node = InductType} /Vouched() =
+    ((g: (n: #NatType) -> #NatType, h: (n: #NatType) -> #NatType) =>
+        #{node = Variant} /Vouched/qed(()))(/${first}, /${second});
+"#,
+            VOUCHED,
+            first,
+            second
+        ));
 
         assert!(
-            verdicts.iter().any(|verdict| matches!(
-                &verdict.error,
+            refuses(&verdicts, Some("held"), |error| matches!(
+                error,
                 Error::NotTotal {
                     erased: Erased::Proof,
                     reached: Some(name),
-                } if *name == Global::Authored(Qualifier::from([first]))
+                } if *name == global(first)
             )),
             "a proof reaching `{first}` and then `{second}` was not refused by `{first}`: {verdicts:?}",
         );

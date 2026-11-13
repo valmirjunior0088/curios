@@ -537,6 +537,40 @@ fn every_module_written_reads_back_as_itself() {
     }
 }
 
+/// A group's member is named two ways inside its group, and each reads back as itself: by its path, which is what the group binds, and as an instance of it, a global the group binds nothing of, which is written under `#{node = Instance}`.
+#[test]
+fn a_member_named_at_its_instance_inside_its_group_reads_back_apart_from_its_binder() {
+    let name = global(&["loop"]);
+    let local = Free::local(905, Some("loop"));
+    let grouped = |body: Term| {
+        let definition = Definition {
+            name,
+            kind: DefinitionKind::Authored,
+            universe_context: UniverseContext::empty(),
+            island: Qualifier::empty(),
+            proof: false,
+            value_sort: None,
+            type_: nat_type(),
+            body,
+        };
+        Definitions {
+            items: vec![Item::Rec(RecItem::new(vec![(local, definition)]))].into(),
+        }
+    };
+    let by_its_binder = grouped(Term::free_var(&local));
+    let at_its_instance = grouped(Term::instance(name, Universes::default()));
+
+    assert_ne!(by_its_binder, at_its_instance);
+    for definitions in [by_its_binder, at_its_instance] {
+        assert_eq!(
+            module_read_back(&definitions),
+            definitions,
+            "{}",
+            definitions.faithful()
+        );
+    }
+}
+
 /// A local no binder in the text binds is written whole by its identity and read back as that local, which a reader's own binders are minted apart from; a report names it by its word alone.
 #[test]
 fn a_local_no_binder_binds_reads_back_as_itself() {

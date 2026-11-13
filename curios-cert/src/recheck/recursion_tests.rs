@@ -1,17 +1,27 @@
 //! A recursive member is certified only with its group.
 
-use {
-    super::test_support::*,
-    crate::*,
-    curios_analysis::test_support::*,
-    curios_common::{Qualifier, fill},
-    curios_core::{
-        Definitions, Entrypoint, Free, Global, Intrinsic, Item, Level, Nat, Program, RecGroup,
-        RecItem, Term, Universes, test_support::*,
-    },
-    curios_surface::Spelling,
-    std::collections::BTreeMap,
-};
+use {super::test_support::*, crate::*, curios_common::fill};
+
+/// `Absurd`, an empty proposition, and `bad : Absurd` the member selection of `rec x : Absurd = ${body}`, closing with `bad`.
+const SELECTION: &str = r#"
+induct /Absurd: pub Prop
+end
+
+let /bad: #{node = InductType} /Absurd() =
+    #{node = Rec}
+    (let x: #{node = InductType} /Absurd() = ${body};
+    x);
+
+/bad
+: #{node = InductType} /Absurd()
+"#;
+
+/// Whether `verdicts` refuse `bad` for a group that does not descend.
+fn bad_does_not_descend(verdicts: &[Verdict]) -> bool {
+    refuses(verdicts, Some("bad"), |error| {
+        matches!(error, Error::NotDescending { .. })
+    })
+}
 
 /// `rec f : Absurd = f` reached as a member selection, which must be refused by the same rule the block spelling is refused by.
 ///
@@ -26,30 +36,20 @@ use {
 /// The control is the same construction at a *legal* group, and it is not decoration. General recursion at a relevant type is the language's design, and the group is self-referential, so a rule that certified the group at every selection *by opening its bodies over the group itself* would re-enter the check it is already inside and never terminate. It must stay accepted, and it must stay accepted quickly.
 #[test]
 fn a_recursive_member_is_certified_only_with_its_group() {
+    let does_not_descend = |error: &Error| matches!(error, Error::NotDescending { .. });
+    let mismatched = |error: &Error| matches!(error, Error::Mismatch { .. });
     for (label, body, refusal) in [
         (
             "a non-descending proof",
-            Term::free_var(&member()),
-            "does not descend",
+            "x",
+            &does_not_descend as &dyn Fn(&Error) -> bool,
         ),
-        (
-            "a body that is not of the declared type",
-            Term::tuple(Vec::<Term>::new()),
-            "expected",
-        ),
+        ("a body that is not of the declared type", "()", &mismatched),
     ] {
-        let verdicts = fixture_verdicts(
-            &selection_module(body),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        );
+        let verdicts = text_verdicts(&fill!(SELECTION, body));
 
         assert!(
-            verdicts.iter().any(|verdict| verdict
-                .error
-                .rendered(&Spelling::default())
-                .contains(refusal)),
+            refuses(&verdicts, Some("bad"), refusal),
             "{label}: the certifier accepted a closed inhabitant of an empty proposition: {verdicts:?}",
         );
     }
@@ -60,30 +60,17 @@ fn a_recursive_member_is_certified_only_with_its_group() {
 /// `rec f : (Nat) -> Nat = (n) => f(n)` does not descend, and that is legal — a program that loops is a program rather than an unsoundness, and the obligations bite only where erasure deletes. Refusing every member selection would close the witness above and take this with it.
 #[test]
 fn a_member_of_a_legal_group_is_still_accepted() {
-    let f = member();
-    let n = Free::local(901, Some("n"));
-    let nat = Term::intrinsic(Intrinsic::NatType);
-
-    let group = RecGroup::closing(vec![(
-        f,
-        Term::func_type([(n, nat.clone())], nat.clone()),
-        Term::func(
-            [(n, nat.clone())],
-            Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
-        ),
-    )]);
-
-    let definitions = Definitions {
-        items: vec![authored(
-            &Global::Authored(Qualifier::from(["ok"])),
-            Term::func_type([(n, nat.clone())], nat),
-            Term::rec_proj(group, 0),
-        )]
-        .into(),
-    };
+    let verdicts = text_verdicts(
+        r#"
+let /ok: (n: #NatType) -> #NatType =
+    #{node = Rec}
+    (let x: (n: #NatType) -> #NatType = (n2: #NatType) => x(n2);
+    x);
+"#,
+    );
 
     assert_eq!(
-        fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX),
+        verdicts,
         Vec::new(),
         "general recursion at a relevant type is legal however it is spelled",
     );
@@ -92,48 +79,13 @@ fn a_member_of_a_legal_group_is_still_accepted() {
 /// A member handed bare to an intrinsic operation is a call of it: `rec f : Absurd = fold([], f, (x, acc) => acc)` is `f` by one reduction, the empty list's fold handing back its initial value, so the group recurs on nothing. The fold applies no argument to the member, and the occurrence is held to descend as a selection's is.
 #[test]
 fn a_member_handed_bare_to_a_list_fold_does_not_descend() {
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let absurd = Term::induct_type(
-        Global::Authored(Qualifier::from(["Absurd"])),
-        Vec::<Term>::new(),
-        Vec::<Term>::new(),
-    );
-    let (x, acc) = (Free::local(902, Some("x")), Free::local(903, Some("acc")));
-    let handed_back = Term::intrinsic(Intrinsic::ListFold {
-        element: nat.clone(),
-        result: absurd.clone(),
-        list: Term::intrinsic(Intrinsic::List {
-            element: nat.clone(),
-            items: Vec::new(),
-        }),
-        init: Term::free_var(&member()),
-        function: Term::func([(x, nat), (acc, absurd)], Term::free_var(&acc)),
-    });
+    let body = "#ListFold(#NatType, #{node = InductType} /Absurd(), #List(#NatType, []), x, (y: #NatType, acc: #{node = InductType} /Absurd()) => acc)";
+    let verdicts = text_verdicts(&fill!(SELECTION, body));
 
-    let verdicts = fixture_verdicts(
-        &selection_module(handed_back),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
-    );
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
+        bad_does_not_descend(&verdicts),
         "the certifier accepted a closed inhabitant of an empty proposition: {verdicts:?}",
     );
-}
-
-/// `let bad : Nat = <body>`, the one item of a module built by hand.
-fn bad_definitions(body: Term) -> Definitions {
-    Definitions {
-        items: vec![authored(
-            &Global::Authored(Qualifier::from(["bad"])),
-            Term::intrinsic(Intrinsic::NatType),
-            body,
-        )]
-        .into(),
-    }
 }
 
 /// A projection past a tuple's components is refused, not aborted on.
@@ -141,61 +93,36 @@ fn bad_definitions(body: Term) -> Definitions {
 /// This is the shape the README names outright, and the count it is refused by at the boundary is `Counted::Components`.
 #[test]
 fn a_projection_past_a_tuples_components_is_refused() {
-    let definitions = bad_definitions(Term::proj(
-        Term::tuple([
-            Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-        ]),
-        7,
-    ));
+    let verdicts = text_verdicts("let /bad: #NatType = (0, 1).7;");
 
     assert!(
-        !fixture_verdicts(&definitions, 1_000_000, &Globals::default(), SYNTAX).is_empty(),
-        "the walk must refuse a projection past the components of what it projects from",
+        refuses(
+            &verdicts,
+            Some("bad"),
+            miscounted(Counted::Components, 8, 2)
+        ),
+        "the walk must refuse a projection past the components of what it projects from: {verdicts:?}",
     );
-}
-
-/// `held : (y : (Type 1) -> Type 1) -> Type 1 = (y) => rec m : Type 1 = y(m) end.0`: the one shape whose projection survives forcing with its declared type a sort.
-///
-/// `Sort::of` reads a member's declared type only through `sort_of_neutral`, which `reduce_forced` reaches only for a projection `force` left standing — and `force` keeps the folded spelling exactly where the member's body reduces to a neutral *mentioning the group*, which is what the opaque head `y` makes of `y(m)`. The mention is the group's only call, recorded with no arguments and graded unknown, so the group does not descend; and the member's declared type yields a sort, so `check_group`'s local gate is owed a descent. The two halves are the same self-mention, which is why nothing escapes both: `yields_a_sort_where` peels arrows and projects tuple fields, so an applied or a projected member is inside the gate too.
-fn surviving_projection_definitions() -> Definitions {
-    let sort = Term::type_at(Level::zero().succ().expect("a level has a successor"));
-    let opaque = Free::local(950, Some("y"));
-    let member = Free::local(951, Some("m"));
-    let group = Term::rec_proj(
-        RecGroup::closing(vec![(
-            member,
-            sort.clone(),
-            Term::apply(Term::free_var(&opaque), [Term::free_var(&member)]),
-        )]),
-        0,
-    );
-    let opaque_type = Term::func_type([(Free::local(952, Some("t")), sort.clone())], sort.clone());
-
-    Definitions {
-        items: vec![authored(
-            &Global::Authored(Qualifier::from(["held"])),
-            Term::func_type([(opaque, opaque_type.clone())], sort),
-            Term::func([(opaque, opaque_type)], group),
-        )]
-        .into(),
-    }
 }
 
 /// A member whose declared type is a sort cannot both keep its folded spelling under forcing and descend.
 #[test]
 fn a_member_whose_projection_survives_forcing_is_owed_a_descent() {
-    let verdicts = fixture_verdicts(
-        &surviving_projection_definitions(),
-        1_000_000,
-        &Globals::default(),
-        SYNTAX,
+    let verdicts = text_verdicts(
+        r#"
+let /held: (y: (t: #{level = 1} Type) -> #{level = 1} Type) -> #{level = 1} Type =
+    (y: (t: #{level = 1} Type) -> #{level = 1} Type) =>
+        #{node = Rec}
+        (let x: #{level = 1} Type = y(x);
+        x);
+"#,
     );
 
     assert!(
-        verdicts
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
+        refuses(&verdicts, Some("held"), |error| matches!(
+            error,
+            Error::NotDescending { .. }
+        )),
         "a group whose member names itself where erasure deletes it was admitted: {verdicts:?}",
     );
 }
@@ -207,54 +134,38 @@ fn a_member_whose_projection_survives_forcing_is_owed_a_descent() {
 /// The control is the same group with its member spelled by the local the group binds, refused for the descent it owes.
 #[test]
 fn a_member_named_at_its_instance_inside_its_group_is_undeclared() {
-    let name = Global::Authored(Qualifier::from(["loop"]));
-    let local = Free::local(905, Some("loop"));
-    let instanced = Term::instance(name, Universes::default());
-    let at_its_instance = grouped_at_absurd(name, local, instanced);
-    let by_its_local = grouped_at_absurd(name, local, Term::free_var(&local));
+    let grouped = |body: &str| {
+        text_verdicts(&fill!(
+            r#"
+induct /Absurd: pub Prop
+end
 
-    let verdicts = fixture_verdicts(&at_its_instance, 1_000_000, &Globals::default(), SYNTAX);
-    let undeclared = |verdict: &Verdict| matches!(verdict.error, Error::Undeclared(undeclared) if undeclared == name);
+#{node = Rec}
+let /loop: #{node = InductType} /Absurd() =
+    ${body};
+
+/loop
+: #{node = InductType} /Absurd()
+"#,
+            body
+        ))
+    };
+
+    let verdicts = grouped("#{node = Instance} /loop");
     assert!(
-        verdicts.iter().any(undeclared),
+        refuses(&verdicts, Some("loop"), |error| *error
+            == Error::Undeclared(global("loop"))),
         "a member named at its instance inside its own group was read as something: {verdicts:?}",
     );
 
-    let control = fixture_verdicts(&by_its_local, 1_000_000, &Globals::default(), SYNTAX);
+    let control = grouped("/loop");
     assert!(
-        control
-            .iter()
-            .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
+        refuses(&control, Some("loop"), |error| matches!(
+            error,
+            Error::NotDescending { .. }
+        )),
         "the control stopped refusing: a group of one at an empty proposition owes a descent: {control:?}",
     );
-}
-
-/// `rec loop : Absurd = <body>` as a module's one group, closed with `loop`, with `Absurd` an empty proposition: the member is declared under `name` and bound to `local` inside.
-fn grouped_at_absurd(name: Global, local: Free, body: Term) -> Program {
-    let family = Global::Authored(Qualifier::from(["Absurd"]));
-    let absurd = Term::induct_type(family, Vec::<Term>::new(), Vec::<Term>::new());
-    let Item::Let(definition) = authored(&name, absurd, body) else {
-        unreachable!("`authored` builds a `let`");
-    };
-
-    Program {
-        definitions: declaring(
-            Definitions {
-                items: vec![Item::Rec(RecItem::new(vec![(local, *definition)]))].into(),
-            },
-            BTreeMap::from([(family, proposition(Vec::new()))]),
-            [],
-            [],
-        ),
-        entrypoint: Entrypoint {
-            body: Term::instance(name, Universes::default()),
-            type_: Some(Term::induct_type(
-                family,
-                Vec::<Term>::new(),
-                Vec::<Term>::new(),
-            )),
-        },
-    }
 }
 
 /// An indirection does not launder a recursive occurrence past the call recorder: `rec f : Absurd = let g : Absurd = f; g` and `rec f : Absurd = ((g : Absurd) => g)(f)` are refused as `rec f : Absurd = f` is.
@@ -266,37 +177,44 @@ fn grouped_at_absurd(name: Global, local: Free, body: Term) -> Program {
 /// Mutation-checked: with that `record_call` removed, both modules certify a closed inhabitant of an empty proposition and this test fails — as the direct spellings' tests in this module do, which is the point: the indirection is held by the same rule and by no second one.
 #[test]
 fn an_indirection_does_not_launder_a_member_past_the_call_recorder() {
-    let absurd = || {
-        Term::induct_type(
-            Global::Authored(Qualifier::from(["Absurd"])),
-            Vec::<Term>::new(),
-            Vec::<Term>::new(),
-        )
-    };
-    let taken = Free::local(904, Some("g"));
-    let aliased = Term::let_(
-        &taken,
-        absurd(),
-        Term::free_var(&member()),
-        Term::free_var(&taken),
-    );
-    let passed = Term::apply(
-        Term::func([(taken, absurd())], Term::free_var(&taken)),
-        [Term::free_var(&member())],
-    );
+    for (label, text) in [
+        (
+            "a `let`'s value",
+            r#"
+induct /Absurd: pub Prop
+end
 
-    for (label, body) in [("a `let`'s value", aliased), ("a redex's argument", passed)] {
-        let verdicts = fixture_verdicts(
-            &selection_module(body),
-            1_000_000,
-            &Globals::default(),
-            SYNTAX,
-        );
+let /bad: #{node = InductType} /Absurd() =
+    #{node = Rec}
+    (let x: #{node = InductType} /Absurd() =
+        let g: #{node = InductType} /Absurd() = x;
+        g;
+    x);
+
+/bad
+: #{node = InductType} /Absurd()
+"#,
+        ),
+        (
+            "a redex's argument",
+            r#"
+induct /Absurd: pub Prop
+end
+
+let /bad: #{node = InductType} /Absurd() =
+    #{node = Rec}
+    (let x: #{node = InductType} /Absurd() = ((g: #{node = InductType} /Absurd()) => g)(x);
+    x);
+
+/bad
+: #{node = InductType} /Absurd()
+"#,
+        ),
+    ] {
+        let verdicts = text_verdicts(text);
 
         assert!(
-            verdicts
-                .iter()
-                .any(|verdict| matches!(verdict.error, Error::NotDescending { .. })),
+            bad_does_not_descend(&verdicts),
             "{label}: a member reached through an indirection closed its group with no call, and the certifier accepted a closed inhabitant of an empty proposition: {verdicts:?}",
         );
     }

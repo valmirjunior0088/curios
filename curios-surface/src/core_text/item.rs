@@ -197,10 +197,19 @@ fn group_read(
     reader: &mut Reader<'_>,
 ) -> Result<(Item, Vec<Definition>), ReadError> {
     let mut scheme = None;
-    let mut read = Vec::with_capacity(members.len());
-    for (index, member) in members.iter().enumerate() {
-        read.push(member_read(member, index, &mut scheme, reader)?);
-    }
+    let (mut read, held) = reader.grouped(|reader| {
+        members
+            .iter()
+            .enumerate()
+            .map(|(index, member)| member_read(member, index, &mut scheme, reader))
+            .collect::<Result<Vec<_>, _>>()
+    })?;
+    // What a member names of another by an instance is the global, put back once the group has bound what it names by its path.
+    let instances = |term: &Term| {
+        held.iter().fold(term.clone(), |term, (local, instance)| {
+            term.replace_term(&Term::free_var(local), instance)
+        })
+    };
     let constructors = read
         .iter_mut()
         .flat_map(|member| std::mem::take(&mut member.constructors))
@@ -217,8 +226,10 @@ fn group_read(
         _ => true,
     };
     if !grouped {
-        let lone = read.pop().expect("a group has a member");
-        return Ok((Item::Let(Box::new(lone.definition)), constructors));
+        let mut lone = read.pop().expect("a group has a member").definition;
+        lone.type_ = instances(&lone.type_);
+        lone.body = instances(&lone.body);
+        return Ok((Item::Let(Box::new(lone)), constructors));
     }
     let context = scheme.unwrap_or_default();
     let instance = context.identity_instance();
@@ -245,6 +256,8 @@ fn group_read(
                 definition.type_ = definition.type_.replace_term(reference, binder);
                 definition.body = definition.body.replace_term(reference, binder);
             }
+            definition.type_ = instances(&definition.type_);
+            definition.body = instances(&definition.body);
             definition.universe_context = context.clone();
             (local, definition)
         })

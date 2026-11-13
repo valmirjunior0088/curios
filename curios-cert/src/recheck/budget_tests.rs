@@ -3,14 +3,52 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Cost, Definition, Definitions, Free, Global, InductDecl, InductParam, Intrinsic,
-        Item, Level, Nat, Nominal, RecGroup, RecItem, ReduceError, Telescope, Term,
-        UniverseContext, UniverseParam, Universes, Variance, test_support::*,
-    },
+    curios_common::{Qualifier, fill},
+    curios_core::{Cost, Global, ReduceError, Variance},
 };
+
+/// `Alias : Type = Good`, `Spin : Type` a group that does not descend, `spent : Spin = 0`, which runs a judgment out unfolding `Spin`, and last `Good`, whose one case holds an `Alias`.
+const SPENT_BESIDE_AN_ALIASED_PAYLOAD: &str = r#"
+let /Alias: Type =
+    #{node = InductType} /Good();
+
+let /Spin: Type =
+    #{node = Rec}
+    (let x: Type = x;
+    x);
+
+let /spent: /Spin =
+    0;
+
+#{absent = [/Good/c]}
+induct /Good: pub Type
+| c(x: /Alias)
+end
+"#;
+
+/// `Count.{u} : (X : Type u) -> Nat`, folding `${unfolding}` down to `0`, and `Held.{u} : (i : Nat) -> Type u` whose one case targets `Count(Nat)`: a variance walk reads the index by reducing it, which costs as much as the fold.
+const HELD_AT_A_COUNTED_INDEX: &str = r#"
+#{universe_context = {parameter_count = 1}}
+let /Count: (X: #{level = u} Type) -> #NatType =
+    (X: #{level = u} Type) => match ${unfolding}: (m) => #NatType | 0 => 0 | pred + 1; ih => ih end;
+
+#{universe_context = {parameter_count = 1}, absent = [/Held/hold]}
+induct /Held: (i: #NatType) -> pub #{level = u} Type
+| hold(): ((#{universes = {levels = [u]}} /Count)(#NatType))
+end
+"#;
+
+/// `Vouched`, a proposition, and `bad : Vouched` a group of one that names itself.
+const PROOF_TYPED_NULLARY_GROUP: &str = r#"
+#{absent = [/Vouched/qed]}
+induct /Vouched: pub Prop
+| qed(u: {})
+end
+
+#{node = Rec}
+let /bad: #{node = InductType} /Vouched() =
+    /bad;
+"#;
 
 fn good() -> Global {
     Global::Authored(Qualifier::from(["Good"]))
@@ -18,65 +56,6 @@ fn good() -> Global {
 
 fn spent() -> Global {
     Global::Authored(Qualifier::from(["spent"]))
-}
-
-/// `induct Good | c(x : Alias)` with `Alias : Type = Good`, beside `spent = 0` declared at `Spin : Type = rec s : Type = s`, which no budget converts to `Nat`.
-fn spent_item_beside_an_aliased_payload() -> Definitions {
-    let alias = Global::Authored(Qualifier::from(["Alias"]));
-    let spin = Global::Authored(Qualifier::from(["Spin"]));
-    let s = Free::local(930, Some("s"));
-
-    let group = RecGroup::closing(vec![(s, Term::type_ground(), Term::free_var(&s))]);
-
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
-            Atom::from("c"),
-            InductParam::new(
-                Telescope::build(
-                    [(
-                        Free::local(931, Some("x")),
-                        Term::instance(alias, Universes::default()),
-                    )],
-                    Vec::new(),
-                ),
-                vec![Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    Definitions {
-        items: vec![
-            authored(
-                &alias,
-                Term::type_ground(),
-                Term::induct_type(good(), Vec::<Term>::new(), Vec::<Term>::new()),
-            ),
-            authored(&spin, Term::type_ground(), Term::rec_proj(group, 0)),
-            authored(
-                &spent(),
-                Term::instance(spin, Universes::default()),
-                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-            ),
-            // The family's former is the module's last item, so its entry is judged once `spent` has been.
-            Item::Rec(RecItem::new(vec![(
-                fresh(None),
-                Definition::former(
-                    good(),
-                    Qualifier::default(),
-                    Nominal::Inductive(declaration),
-                ),
-            )])),
-        ]
-        .into(),
-    }
 }
 
 /// Strict positivity is judged on a budget of its own, not on what the item judged before it left.
@@ -88,12 +67,7 @@ fn spent_item_beside_an_aliased_payload() -> Definitions {
 /// Mutation-checked against the restore: with the analysis run on what the judgment before it left, `Good` is refused for the budget.
 #[test]
 fn positivity_is_judged_on_its_own_budget() {
-    let verdicts = fixture_verdicts(
-        &spent_item_beside_an_aliased_payload(),
-        100_000,
-        &Globals::default(),
-        SYNTAX,
-    );
+    let verdicts = text_certified_within(SPENT_BESIDE_AN_ALIASED_PAYLOAD, 100_000).verdicts;
 
     assert!(
         verdicts.iter().any(|verdict| verdict.name == Some(spent())
@@ -114,85 +88,6 @@ fn held() -> Global {
 const COSTLY: usize = 20_000;
 const BETWEEN: u64 = 4 * Cost::FRAME.get();
 
-/// `induct Held.{u}: (i : Nat) -> Type u | hold() : (Count.{u}(Nat))` over `let Count.{u}(X : Type u) -> Nat = match unfolding | 0 => 0 | _ + 1; ih => ih end`. Typing the target reads `Count`'s type and never its value, and strict positivity reads no target; the variance walk reduces it, to see whether what is left still holds `u`, and that is the fold's every iteration.
-fn held_at_a_counted_index(unfolding: usize) -> Definitions {
-    let level = || Level::param(UniverseParam(0));
-    let scheme = || UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: Vec::new(),
-    };
-    let nat_type = || Term::intrinsic(Intrinsic::NatType);
-    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
-
-    let count = Global::Authored(Qualifier::from(["Count"]));
-    let counted = Free::local(940, Some("X"));
-    let (motive, pred, ih) = (
-        Free::local(941, Some("m")),
-        Free::local(942, Some("pred")),
-        Free::local(943, Some("ih")),
-    );
-    let unfolded = Term::nat_match(
-        nat(unfolding),
-        Some(&motive),
-        nat_type(),
-        nat(0),
-        &pred,
-        &ih,
-        Term::free_var(&ih),
-    );
-    let alias = match authored(
-        &count,
-        Term::func_type([(counted, Term::type_at(level()))], nat_type()),
-        Term::func([(counted, Term::type_at(level()))], unfolded),
-    ) {
-        Item::Let(definition) => Item::Let(Box::new(Definition {
-            universe_context: scheme(),
-            ..*definition
-        })),
-        item => item,
-    };
-
-    let declaration = InductDecl {
-        universe_context: scheme(),
-        arity: Telescope::done(Telescope::build(
-            [(Free::local(944, Some("i")), nat_type())],
-            (),
-        )),
-        constructors: vec![(
-            Atom::from("hold"),
-            InductParam::new(
-                Telescope::done(vec![Term::apply(
-                    Term::instance(count, vec![level()]),
-                    [nat_type()],
-                )]),
-                Vec::new(),
-            ),
-        )]
-        .into(),
-        result_sort: Term::type_at(level()),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-
-    Definitions {
-        items: vec![
-            alias,
-            Item::Rec(RecItem::new(vec![(
-                fresh(None),
-                Definition::former(
-                    held(),
-                    Qualifier::default(),
-                    Nominal::Inductive(declaration),
-                ),
-            )])),
-        ]
-        .into(),
-    }
-}
-
 /// A variance walk the budget cuts short is refused for the budget and files no vector: a reduction the budget refuses reads its term as holding every level it carries, so what the walk computed past it may be the budget's and not the declaration's.
 ///
 /// Two controls hold the budget to the walk alone. The same module with a count that unfolds in a step is accepted on the short budget, so typing fits it, and the costly one is accepted on a budget that runs the fold; each files `Held` irrelevant in its level, which its constructor's target does not hold once `Count` is unfolded.
@@ -201,12 +96,7 @@ fn held_at_a_counted_index(unfolding: usize) -> Definitions {
 #[test]
 fn a_variance_walk_the_budget_cuts_short_is_refused_and_files_no_vector() {
     let certified = |unfolding: usize, budget: u64| {
-        fixture_certified(
-            &held_at_a_counted_index(unfolding),
-            budget,
-            &Globals::default(),
-            SYNTAX,
-        )
+        text_certified_within(&fill!(HELD_AT_A_COUNTED_INDEX, unfolding), budget)
     };
     let irrelevant = Some(&[Variance::Irrelevant][..]);
 
@@ -243,13 +133,7 @@ fn a_variance_walk_the_budget_cuts_short_is_refused_and_files_no_vector() {
 fn no_budget_accepts_a_proof_typed_group_that_does_not_descend() {
     let mut by_the_rule = 0;
     for budget in [1, 2, 10, 100, 1_000, 10_000, 1_000_000] {
-        let verdicts = fixture_verdicts(
-            &proof_typed_nullary_group(),
-            budget,
-            &Globals::default(),
-            SYNTAX,
-        );
-
+        let verdicts = text_certified_within(PROOF_TYPED_NULLARY_GROUP, budget).verdicts;
         assert!(
             !verdicts.is_empty(),
             "at a budget of {budget} the walk found nothing to refuse: {verdicts:?}",
@@ -261,7 +145,6 @@ fn no_budget_accepts_a_proof_typed_group_that_does_not_descend() {
             by_the_rule += 1;
         }
     }
-
     assert!(
         by_the_rule > 0,
         "no budget in the sweep reached the rule's own refusal, so the sweep says nothing about it",

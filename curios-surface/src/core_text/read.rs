@@ -9,9 +9,9 @@
 use {
     super::{
         bound_read, family_read, foreign_read, free_read, function_read, function_type_read,
-        infix_read, instance_read, intrinsic_read, let_read, literal_read, match_read,
-        metavar_read, node_transient_read, packed_read, projection_read, rec_read, record_read,
-        sort_read, tuple_read, tuple_type_read, variant_read,
+        group_instance_read, infix_read, instance_read, intrinsic_read, let_read, literal_read,
+        match_read, metavar_read, node_transient_read, packed_read, projection_read, rec_read,
+        record_read, sort_read, tuple_read, tuple_type_read, variant_read,
     },
     crate::{
         Apply, CoreForm, CoreText, CoreValue, Decorated, DecoratorField, FormScope, Literal,
@@ -120,6 +120,8 @@ pub struct Reader<'s> {
     minted: u64,
     /// Each node the text named under `#{share = k}`, by its key: what `#{shared = k} _` reads as.
     shared: HashMap<u64, curios_core::Term>,
+    /// Whether a group item's members are being read, and each instance of a member read among them, held under a local of its own until the group has bound its members ([`Reader::grouped`]).
+    grouping: Option<Vec<(Free, curios_core::Term)>>,
 }
 
 impl<'s> Reader<'s> {
@@ -132,7 +134,33 @@ impl<'s> Reader<'s> {
             free: HashMap::new(),
             minted: READ_MINTED,
             shared: HashMap::new(),
+            grouping: None,
         }
+    }
+
+    /// `instance`, or where a group item's members are being read, a local of its own that stands for it until the group has bound its members.
+    pub fn held_apart(&mut self, instance: curios_core::Term) -> curios_core::Term {
+        if self.grouping.is_none() {
+            return instance;
+        }
+        let local = self.fresh(None);
+        if let Some(held) = &mut self.grouping {
+            held.push((local, instance));
+        }
+
+        curios_core::Term::free_var(&local)
+    }
+
+    /// `read` run over a group item's members, with what it reads of an instance of a member held apart, and each such local handed back beside what it stands for.
+    pub fn grouped<R>(
+        &mut self,
+        read: impl FnOnce(&mut Self) -> Result<R, ReadError>,
+    ) -> Result<(R, Vec<(Free, curios_core::Term)>), ReadError> {
+        let outer = self.grouping.replace(Vec::new());
+        let read = read(self);
+        let held = std::mem::replace(&mut self.grouping, outer).unwrap_or_default();
+
+        Ok((read?, held))
     }
 
     /// What forms are made against, or the refusal of `form` where there is no scope.
@@ -577,6 +605,7 @@ fn node_read(
         "Foreign" => foreign_read(operand, reader),
         "Rec" => rec_read(operand, reader),
         "Infix" => infix_read(operand, reader),
+        "Instance" => group_instance_read(operand, fields, reader),
         "NumLit" | "Bang" | "Ascribed" | "Derive" | "Name" | "Method" | "Matrix" => {
             node_transient_read(name, operand, fields, reader)
         }

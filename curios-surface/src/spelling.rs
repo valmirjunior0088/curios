@@ -13,9 +13,10 @@ use {
     curios_common::{InfixOp, LINE_WIDTH, Plicity, Qualifier, Symbol, SyntaxRegistry},
     curios_core::{
         Arity, Atom, Bound, Cursor, Definition, DefinitionKind, Definitions, Field, Free, Func,
-        Global, HeadKey, InductArm, Intrinsic, Item, Label, Level, Lexicon, Marks, Members,
-        Mention, Nat, Nominal, Notation, Program, Scope, Sharing, Spellings, StructDecl, Subterm,
-        Symbols, Term, UniverseContext, UniverseError, WitnessKey, inconsistent_sort, suffixes_of,
+        Global, HeadKey, InductArm, Instance, Intrinsic, Item, Label, Level, Lexicon, Marks,
+        Members, Mention, Nat, Nominal, Notation, Program, Scope, Sharing, Spellings, StructDecl,
+        Subterm, Symbols, Term, UniverseContext, UniverseError, WitnessKey, inconsistent_sort,
+        suffixes_of,
     },
     curios_num::{Binary, Floating, Integer, Natural, Rounding},
     curios_print::{Printer, run_printer, run_printer_within},
@@ -89,6 +90,8 @@ pub struct Spelling {
     shares: bool,
     /// The nodes the dry run of a render under [`Spelling::with_sharing`] met more than once, by where the render meets each: what the render names, set where the dry run that found them hands its words over ([`Spelling::with_words`]).
     shared: Option<Rc<SharedNodes>>,
+    /// The members of the group item being written, by the local each one's scopes are opened at: a member is written by its path where its group names it, and an instance of a member, a global its group does not bind, under `#{node = Instance}` ([`Spelling::grouping`]).
+    group: Option<Rc<HashMap<Free, Instance>>>,
     /// The key the next node met again is named by. Shared by a spelling's copies, so the terms of one print take keys of their own, and begun anew where a print begins ([`Spelling::begun`]), so a print names its nodes alike each time.
     keys: Rc<Cell<u64>>,
     /// What a test's and a foreign row's forms are made against, where a module's printer is handed it ([`FormScope`]).
@@ -472,6 +475,26 @@ impl Spelling {
         self
     }
 
+    /// This spelling writing the members of a group item, each opened at its local of `members`: what the group binds is written as the member at the group's own instance, as a reader names it, and what names a member otherwise is an instance of it, which a reader would read as the group's binder unless told.
+    fn grouping(&self, members: impl IntoIterator<Item = (Free, Instance)>) -> Self {
+        Self {
+            group: Some(Rc::new(members.into_iter().collect())),
+            ..self.clone()
+        }
+    }
+
+    /// The member of the group item being written that `local` stands for, at the group's own instance, where it stands for one.
+    pub fn group_member(&self, local: &Free) -> Option<&Instance> {
+        self.group.as_ref().and_then(|group| group.get(local))
+    }
+
+    /// Whether `name` is a member of the group item being written.
+    pub fn groups(&self, name: &Global) -> bool {
+        self.group
+            .as_ref()
+            .is_some_and(|group| group.values().any(|member| member.name == *name))
+    }
+
     /// This spelling where a print begins: the first node it names is keyed `0`.
     fn begun(&self) {
         self.keys.set(0);
@@ -709,6 +732,9 @@ impl Shorten {
 
 /// Where the identities a render mints for the binders it opens begin: above every index a compilation mints, which counts up from zero one binder at a time and does not reach half of a `u64` in any computation that ends.
 const PRINTED: u64 = 1 << 63;
+
+/// The first identity a group item's members are opened at when it is written, below every one a render opens and above every one a module holds.
+const GROUPED: u64 = 1 << 61;
 
 /// The fewest child documents a render may build, whatever its term: a report's worth of reading.
 const RENDER_FLOOR: u64 = 5_000;
@@ -2108,7 +2134,19 @@ fn items_written<D: Rendered>(
             }
             Item::Rec(rec) => {
                 let mut context = Some(rec.universe_context());
-                let definitions = rec.definitions();
+                // Each member's scopes opened at a local of its own, past every identity a module holds, so what the group binds is told from an instance of a member.
+                let locals = (0..rec.exports().len())
+                    .map(|index| Free::local(GROUPED + index as u64, None))
+                    .collect::<Vec<_>>();
+                let definitions =
+                    rec.opened(&locals.iter().map(Term::free_var).collect::<Vec<_>>());
+                let universes = rec.universe_context().identity_instance();
+                let spelling = &Rc::new(spelling.grouping(locals.iter().copied().zip(
+                    rec.exports().iter().map(|export| Instance {
+                        name: export.name,
+                        universes: universes.clone(),
+                    }),
+                )));
                 let members = definitions
                     .iter()
                     .zip(rec.exports())

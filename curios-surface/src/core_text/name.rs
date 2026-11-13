@@ -7,7 +7,7 @@ use {
         Decoration, Fields, READ_MINTED, ReadError, Reader, Refusal, bracketed, called, core_read,
         literal_fields, literal_of, literal_variant, malformed, string, term_global, term_number,
         term_string, term_word, universe_suffix, universes_read, universes_written, value,
-        value_number, value_term, value_unmarked, value_variant, verbatim, word,
+        value_number, value_term, value_unmarked, value_variant, verbatim, word, word_value,
     },
     crate::{Apply, CoreText, CoreValue, Frame, Minting, Rendered, sub},
     curios_common::{InfixOp, Span},
@@ -18,8 +18,17 @@ use {
 };
 
 /// A global at an instance: its name, under a decorator stating the instance where it states one.
-pub fn instance_written<D: Rendered>(
+pub fn instance_written<D: Rendered>(instance: Instance, frame: Frame<'_, D>) -> crate::Term<D> {
+    // A member of the group being written is what the group binds wherever it is written at the group's own instance, so an instance of one says it is the global.
+    let genuine = frame.spelling.groups(&instance.name);
+
+    instance_spelled(instance, genuine, frame)
+}
+
+/// `Instance` as Core text writes it, under `#{node = Instance}` where it is `genuine`: a member of the group being written that the group does not bind.
+fn instance_spelled<D: Rendered>(
     Instance { name, universes }: Instance,
+    genuine: bool,
     frame: Frame<'_, D>,
 ) -> crate::Term<D> {
     if let Some(leave) = frame.reader() {
@@ -28,9 +37,11 @@ pub fn instance_written<D: Rendered>(
             suffix => verbatim(leave, format!("{}{suffix}", frame.spelling.symbol(&name))),
         };
     }
-    let fields = universes_written(&universes, frame)
-        .map(|universes| vec![("universes", universes)])
-        .unwrap_or_default();
+    let fields = genuine
+        .then(|| ("node", word_value("Instance")))
+        .into_iter()
+        .chain(universes_written(&universes, frame).map(|universes| ("universes", universes)))
+        .collect();
 
     frame.decorated(fields, frame.global(&name))
 }
@@ -48,6 +59,15 @@ pub fn var_written<D: Rendered>(var: Var, frame: Frame<'_, D>) -> crate::Term<D>
             )],
             super::tree(crate::Subterm::Held),
         ),
+        // What the group being written binds is its member at the group's own instance.
+        Binding::Free(free) if frame.spelling.group_member(free).is_some() => {
+            let member = frame
+                .spelling
+                .group_member(free)
+                .expect("a member of the group")
+                .clone();
+            instance_spelled(member, false, frame)
+        }
         // A local the render did not open is the term's own, and only its identity tells it from another; a whole write states it, and a report, read about the term, names it by its word.
         Binding::Free(free) if frame.spelling.writes_whole() && !Minting::opened(free) => frame
             .decorated(
@@ -192,6 +212,23 @@ pub fn instance_read(name: Global, fields: &mut Fields<'_>) -> Result<Term, Read
     };
 
     Ok(Term::instance(name, universes))
+}
+
+/// An instance of a group's member written inside the group, `#{node = Instance} /f`: the global, which the group's reader would otherwise read as what the group binds. Read inside a group it is held apart under a local of its own until the group has bound its members ([`Reader::grouped`]).
+pub fn group_instance_read(
+    operand: &crate::Term<CoreText>,
+    fields: &mut Fields<'_>,
+    reader: &mut Reader<'_>,
+) -> Result<Term, ReadError> {
+    let Some(name) = term_global(operand) else {
+        return Err(ReadError::at(
+            Refusal::Malformed("a member's path under `#{node = Instance}`"),
+            operand.span(),
+        ));
+    };
+    let instance = instance_read(name, fields)?;
+
+    Ok(reader.held_apart(instance))
 }
 
 /// A local no binder in the text binds, `#{binding = Free(k)} word`: the local whose identity is `k`, under `word`. An identity a reader mints its own binders at is refused, since the two would be one local.
