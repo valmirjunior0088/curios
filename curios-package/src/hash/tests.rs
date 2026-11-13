@@ -127,7 +127,8 @@ fn a_name_that_is_not_utf8_is_refused() {
     let name = OsStr::from_bytes(b"\xff.crs");
 
     let refusal = spelled(name, &Path::new("tree").join(name))
-        .expect_err("a delivered tree may hold no name that is not UTF-8");
+        .expect_err("a delivered tree may hold no name that is not UTF-8")
+        .render();
     assert!(refusal.contains("spell no UTF-8"), "{refusal}");
 }
 
@@ -139,6 +140,11 @@ fn a_symlink_in_a_delivered_tree_is_refused() {
 
     let refusal = TreeHash::of(&root)
         .map(|_| ())
-        .expect_err("a delivered tree may hold no symlink");
-    assert!(refusal.contains("is a symlink"), "{refusal}");
+        .expect_err("a delivered tree may hold no symlink")
+        .render();
+    assert!(
+        refusal.starts_with("symbolic link\n│  a delivered tree may hold none\n"),
+        "{refusal}"
+    );
+    assert!(refusal.ends_with("alias.crs"), "{refusal}");
 }

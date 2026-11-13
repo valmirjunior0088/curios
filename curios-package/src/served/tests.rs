@@ -124,12 +124,11 @@ fn a_symlink_is_refused_wherever_it_stands() {
         let refusal = served(&gateway(&[(entry, path)]), &root).unwrap_err();
 
         assert!(
-            refusal.contains(&format!(
-                "the static entry {entry:?} of the foreign row \"page\""
-            )) && refusal.contains(&format!(
-                "{}, which is a symbolic link",
-                root.join(at).display()
-            )),
+            refusal.starts_with("symbolic link\n")
+                && refusal.contains(&format!(
+                    "the static entry `{entry}` of the foreign row `page` reaches {}",
+                    root.join(at).display()
+                )),
             "{refusal}"
         );
     }
@@ -142,8 +141,8 @@ fn an_entry_whose_path_names_nothing_is_refused_by_the_entry() {
     let refusal = served(&gateway(&[("logo.svg", "web/logo.svg")]), &root).unwrap_err();
 
     assert!(
-        refusal.contains("the static entry \"logo.svg\" of the foreign row \"page\" reads")
-            && refusal.contains("which holds nothing"),
+        refusal.starts_with("unreadable file\n")
+            && refusal.contains("the static entry `logo.svg` of the foreign row `page` reads"),
         "{refusal}"
     );
 }

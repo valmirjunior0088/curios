@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::{
-        Dependency, Governing, MANIFEST, Manifest, Package, Refused, Snapshot, package_source,
+        Dependency, Governing, MANIFEST, Manifest, Package, Refused, Row, Snapshot, package_source,
     },
     curios_common::Report,
     curios_module::RootSource,
@@ -243,15 +243,8 @@ impl Walk<'_> {
     }
 
     /// Where the row `name` of the package in `from` is written: its `[dependencies]`, in the manifest that was read for the governing package and in the one beside every other.
-    fn written<'n>(&self, from: &Path, name: &'n str) -> Written<'n> {
-        Written {
-            manifest: match from == self.governing.directory {
-                true => self.governing.manifest.clone(),
-                false => from.join(MANIFEST),
-            },
-            table: "dependencies",
-            name,
-        }
+    fn written(&self, from: &Path, name: &str) -> Row {
+        Row::of(self.governing.manifest_of(from), ["dependencies", name])
     }
 
     /// The snapshot `row` pins — read through a `catalog` marker to the umbrella's row it names, so a catalogued pin and a direct one disagreeing about a name are refused as the two pins they are, before either is located, rather than as two store paths once both are. A marker nothing answers pins nothing here; [`Walk::point`] is where it is refused, naming what is missing.
@@ -277,7 +270,7 @@ impl Walk<'_> {
         from: &Path,
         name: &str,
         row: &Dependency,
-        written: &Written<'_>,
+        written: &Row,
     ) -> Result<PathBuf, Box<Report>> {
         let directory = self.point(dependent, from, name, row, written)?;
 
@@ -297,7 +290,7 @@ impl Walk<'_> {
         from: &Path,
         name: &str,
         row: &Dependency,
-        written: &Written<'_>,
+        written: &Row,
     ) -> Result<PathBuf, Box<Report>> {
         // A marker nothing answers is one of two faults, and the refusal has to say which: an umbrella governs and its list lacks the name, or no umbrella governs — one above may well list the name, and what it omits is the package asking. Told the first when the second is true, a reader checks the entry that is there and misses the one that is not.
         let ungoverned = |marker: &str| {
@@ -354,11 +347,7 @@ impl Walk<'_> {
                 })?;
 
                 // The row being located is the umbrella's now, so the refusal stands in the umbrella's manifest: the member wrote a marker and no path, and a refusal at the member's row sends the reader to a file that holds nothing to fix.
-                let catalogued = Written {
-                    manifest: self.governing.root.join(MANIFEST),
-                    table: "catalog",
-                    name,
-                };
+                let catalogued = Row::of(self.governing.root.join(MANIFEST), ["catalog", name]);
 
                 self.locate(dependent, &self.governing.root, name, row, &catalogued)
             }
@@ -391,22 +380,6 @@ impl Walk<'_> {
                 }
             }
         }
-    }
-}
-
-/// Where a dependency's row is written: the manifest that holds it, the table it sits in, and the name it is filed under. A refusal of the row stands there.
-struct Written<'a> {
-    manifest: PathBuf,
-    table: &'static str,
-    name: &'a str,
-}
-
-impl Written<'_> {
-    /// The report of `refused`, at this row.
-    fn refuse(&self, refused: Refused) -> Box<Report> {
-        refused
-            .entry([self.table, self.name])
-            .located_at(&self.manifest)
     }
 }
 

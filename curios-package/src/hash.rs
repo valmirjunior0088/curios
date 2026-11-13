@@ -4,8 +4,9 @@
 mod tests;
 
 use {
-    curios_common::{Fingerprint, Said, digest},
-    std::{ffi::OsStr, fmt, fs, path::Path},
+    crate::Refused,
+    curios_common::{Fingerprint, Report, Said, digest},
+    std::{ffi::OsStr, fmt, fs, io, path::Path},
 };
 
 /// The scheme a delivered source tree is accepted against.
@@ -109,7 +110,7 @@ impl TreeHash {
     /// **Both halves are length-framed**, which the scheme has to do and [`Fingerprint::feed`] is how: without it a file `ab` holding `c` and a file `a` holding `bc` feed the digest identical bytes, and two different trees would share a store key. The frame is the byte length as a little-endian `u64` before each half, the one frame every key in the workspace uses.
     ///
     /// A symlink is refused rather than followed or recorded. Following one lets a delivered tree reach outside itself; recording one puts a path in the hash whose meaning depends on where it is unpacked. Neither is a criterion a delivery can be accepted against. A name that is not UTF-8 is refused for the same reason: the scheme spells every path in UTF-8 whatever the platform, so a name it cannot spell is one it could only hash by replacing bytes, and two names that differ only in the bytes replaced would share a key.
-    pub fn of(directory: &Path) -> Result<Self, String> {
+    pub fn of(directory: &Path) -> Result<Self, Box<Report>> {
         let mut files = Vec::new();
         collect(directory, &mut Vec::new(), &mut files)?;
         files.sort();
@@ -129,24 +130,29 @@ fn collect(
     directory: &Path,
     at: &mut Vec<String>,
     files: &mut Vec<(String, Vec<u8>)>,
-) -> Result<(), String> {
-    let entries =
-        fs::read_dir(directory).map_err(|error| format!("{}: {error}", directory.display()))?;
+) -> Result<(), Box<Report>> {
+    let unreadable =
+        |tag: &str, path: &Path, error: io::Error| Refused::of(tag).stating(error).about_path(path);
+    let entries = fs::read_dir(directory)
+        .map_err(|error| unreadable("unreadable directory", directory, error))?;
 
     for entry in entries {
-        let entry = entry.map_err(|error| format!("{}: {error}", directory.display()))?;
+        let entry = entry.map_err(|error| unreadable("unreadable directory", directory, error))?;
         let path = entry.path();
 
         // `symlink_metadata` rather than `metadata`, because the question is what the entry *is*, not what it points at.
         let kind = fs::symlink_metadata(&path)
-            .map_err(|error| format!("{}: {error}", path.display()))?
+            .map_err(|error| unreadable("unreadable file", &path, error))?
             .file_type();
 
         if kind.is_symlink() {
-            return Err(format!(
-                "{} is a symlink, and a delivered tree may hold none: following one reaches outside the tree, and recording one hashes a path whose meaning depends on where it is unpacked",
-                path.display()
-            ));
+            return Err(Refused::of("symbolic link")
+                .stating("a delivered tree may hold none")
+                .stating("following one reaches outside the tree")
+                .stating(
+                    "recording one hashes a path whose meaning depends on where it is unpacked",
+                )
+                .about_path(&path));
         }
 
         at.push(spelled(&entry.file_name(), &path)?);
@@ -155,7 +161,7 @@ fn collect(
             true => collect(&path, at, files)?,
             false => files.push((
                 at.join("/"),
-                fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?,
+                fs::read(&path).map_err(|error| unreadable("unreadable file", &path, error))?,
             )),
         }
 
@@ -168,12 +174,13 @@ fn collect(
 /// The UTF-8 spelling of `name`, the entry at `path`, or the refusal a delivered tree earns for a name the scheme cannot spell.
 ///
 /// Decided apart from the walk, because it is a question about the name alone: whether a filesystem will even hold a name that spells no UTF-8 is that filesystem's business, and a check that needed one to exist first could not be exercised on a filesystem that refuses to create it.
-fn spelled(name: &OsStr, path: &Path) -> Result<String, String> {
+fn spelled(name: &OsStr, path: &Path) -> Result<String, Box<Report>> {
     name.to_str().map(str::to_string).ok_or_else(|| {
-        format!(
-            "{} is named by bytes that spell no UTF-8, and a delivered tree may hold none: the hash spells every path in UTF-8 whatever the platform, so a name it cannot spell is one it cannot verify",
-            path.display()
-        )
+        Refused::of("invalid name")
+            .stating("this file is named by bytes that spell no UTF-8, and a delivered tree may hold none")
+            .stating("the hash spells every path in UTF-8 whatever the platform")
+            .stating("a name it cannot spell is one it cannot verify")
+            .about_path(path)
     })
 }
 

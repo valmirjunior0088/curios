@@ -481,7 +481,7 @@ fn fetched_module(
     let staged = Staged::new(store)?;
 
     told(Transport::Asked);
-    deliver_module(staged.path(), url, subject)?;
+    deliver_module(staged.path(), url, subject).map_err(|refused| refused.said.to_string())?;
     told(Transport::Answered);
 
     let bytes = fs::read(staged.path())
@@ -506,7 +506,7 @@ fn fetched_tree(
     fs::create_dir_all(staged.path())
         .map_err(|error| format!("failed to create {}: {error}", staged.path().display()))?;
     told(Transport::Asked);
-    deliver(staged.path(), url, rev)?;
+    deliver(staged.path(), url, rev).map_err(|refused| refused.said.to_string())?;
     told(Transport::Answered);
 
     let hash = TreeHash::of(staged.path())?;

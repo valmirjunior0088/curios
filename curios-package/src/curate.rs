@@ -11,9 +11,10 @@ mod tests;
 
 use {
     crate::{
-        Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Snapshot, Store,
-        Subject, Target, TreeHash,
+        Dependency, FileHash, Foreign, Governing, MANIFEST, Manifest, Module, Refused, Row,
+        Snapshot, Step, Store, Subject, Target, TreeHash,
     },
+    curios_common::Report,
     std::{
         collections::BTreeSet,
         fmt, fs, io,
@@ -30,6 +31,8 @@ pub struct Acquisition {
     pub name: String,
     pub url: String,
     pub snapshot: Snapshot,
+    /// The row that pins it, in the manifest of the first package the walk met writing it: where a refusal of the fetch stands.
+    pub written: Row,
 }
 
 impl Acquisition {
@@ -62,6 +65,8 @@ pub struct ModuleAcquisition {
     pub target: Target,
     pub url: String,
     pub hash: FileHash,
+    /// The row's table of that target, in its package's manifest: where a refusal of the fetch stands.
+    pub written: Row,
 }
 
 impl fmt::Display for ModuleAcquisition {
@@ -105,7 +110,10 @@ pub enum Fetch<'a> {
 /// Iterated to a fixed point rather than walked once, because a dependency's own dependencies cannot be read until it is there: each round materializes what the manifests currently reachable declare, and the next round sees further. A round that fetches nothing new is the end of it — and a round that fetches without revealing anything is impossible, since a fetched tree either has a manifest or is refused for having none.
 ///
 /// Modules come after, in one pass. A fetched module is a file and declares nothing, so it can reveal no further rows — which is what lets this be a pass rather than another fixed point.
-pub fn curate(governing: &Governing, mut told: impl FnMut(Fetch<'_>)) -> Result<Curated, String> {
+pub fn curate(
+    governing: &Governing,
+    mut told: impl FnMut(Fetch<'_>),
+) -> Result<Curated, Box<Report>> {
     let store = governing.store();
     let mut curated = Curated::default();
 
@@ -169,11 +177,13 @@ struct Reachable {
 /// Every `[[foreign]]` row the governing package's graph declares, with the package that declared it and the directory a carried module's path is relative to.
 ///
 /// One walk with the fetch's, for the reason `acquisitions` gives: resolution is where a directory comes from, and a second traversal could resolve a row differently.
-pub fn declared_modules(governing: &Governing) -> Result<Vec<(String, PathBuf, Foreign)>, String> {
+pub fn declared_modules(
+    governing: &Governing,
+) -> Result<Vec<(String, PathBuf, Foreign)>, Box<Report>> {
     Ok(acquisitions(governing)?.rows)
 }
 
-fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
+fn acquisitions(governing: &Governing) -> Result<Reachable, Box<Report>> {
     let mut reachable = Reachable::default();
     let mut seen = BTreeSet::new();
     let mut frontier = vec![(governing.package.clone(), governing.directory.clone())];
@@ -196,6 +206,14 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
                         target,
                         url: url.clone(),
                         hash: delivery.hash.clone(),
+                        written: Row::of(
+                            governing.manifest_of(&directory),
+                            [
+                                Step::key("foreign"),
+                                Step::Named(foreign.name.clone()),
+                                Step::key(target.spelled()),
+                            ],
+                        ),
                     });
                 }
             }
@@ -209,12 +227,23 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
             // A `catalog` marker names a row the umbrella holds, and *that* row is what this walk must realize — so it is resolved before the dispatch below, leaving the fetchable arm the only place a fetch is decided. Resolved after instead, a fetchable catalog row would be acquired by nobody: the marker would land in the store at a hash nothing had put there, and `order` would refuse it naming `curate`, which had just declined to fetch it. A member marker names a directory rather than a row, so only this one indirects.
             //
             // The base travels with the row because a relative `path` is relative to whoever wrote it: the umbrella's root for a catalog row, the depending package's own directory otherwise. `order` reads it the same way, at `Walk::point`'s catalog arm.
-            let (row, base) = match row {
+            let (row, base, written) = match row {
                 Dependency::Catalog => match catalogued(governing, name) {
-                    Some(row) => (row, governing.root.as_path()),
+                    Some(row) => (
+                        row,
+                        governing.root.as_path(),
+                        Row::of(governing.root.join(MANIFEST), ["catalog", name.as_str()]),
+                    ),
                     None => continue,
                 },
-                row => (row, directory.as_path()),
+                row => (
+                    row,
+                    directory.as_path(),
+                    Row::of(
+                        governing.manifest_of(&directory),
+                        ["dependencies", name.as_str()],
+                    ),
+                ),
             };
 
             let resolved = match row {
@@ -228,6 +257,7 @@ fn acquisitions(governing: &Governing) -> Result<Reachable, String> {
                             rev: rev.clone(),
                             hash: hash.clone(),
                         },
+                        written,
                     });
 
                     governing.store().source(hash)
@@ -260,25 +290,26 @@ fn fetch_module(
     store: &Store,
     acquisition: &ModuleAcquisition,
     arrived: impl FnOnce(),
-) -> Result<(), String> {
+) -> Result<(), Box<Report>> {
     let placed = store.foreign(&acquisition.hash);
     let scratch = placed.with_extension("fetching");
 
     if let Some(parent) = placed.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|error| unwritable(parent, &error))?;
     }
     let _ = fs::remove_file(&scratch);
 
     let subject = format!(
-        "the foreign module {} of {}",
+        "the foreign module `{}` of `{}`",
         acquisition.name, acquisition.package
     );
-    let outcome = deliver_module(&scratch, &acquisition.url, &subject).and_then(|()| {
-        arrived();
+    let outcome = deliver_module(&scratch, &acquisition.url, &subject)
+        .map_err(|refused| acquisition.written.refuse(refused))
+        .and_then(|()| {
+            arrived();
 
-        accept_module(&scratch, &placed, acquisition)
-    });
+            accept_module(&scratch, &placed, acquisition)
+        });
 
     if outcome.is_err() {
         let _ = fs::remove_file(&scratch);
@@ -295,15 +326,18 @@ fn attempted(
     attempt: io::Result<Output>,
     subject: &str,
     url: &str,
-) -> Option<Result<(), String>> {
+) -> Option<Result<(), Refused>> {
     match attempt {
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-        Err(error) => Some(Err(format!("failed to run `{program}`: {error}"))),
+        Err(error) => Some(Err(Refused::of("fetcher not run")
+            .stating(format_args!("`{program}` could not be run"))
+            .stating(error))),
         Ok(output) if output.status.success() => Some(Ok(())),
-        Ok(output) => Some(Err(format!(
-            "failed to fetch {subject} from {url} with `{program}`: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ))),
+        Ok(output) => Some(Err(Refused::of("fetch failed")
+            .stating(format_args!(
+                "{subject} could not be fetched from {url} with `{program}`"
+            ))
+            .stating(String::from_utf8_lossy(&output.stderr).trim()))),
     }
 }
 
@@ -312,7 +346,7 @@ fn attempted(
 /// Two of them because neither is universally installed and both are ubiquitous enough that demanding a particular one would be arbitrary — the same reasoning that shells out at all rather than vendoring a client.
 ///
 /// `subject` names what is being fetched, since the two callers describe it differently: `curate` knows the package a row was declared by, and `curios pin` is being handed the row that does not exist yet.
-pub fn deliver_module(scratch: &Path, url: &str, subject: &str) -> Result<(), String> {
+pub fn deliver_module(scratch: &Path, url: &str, subject: &str) -> Result<(), Refused> {
     let curl = Command::new("curl")
         .args([
             "--location",
@@ -340,9 +374,10 @@ pub fn deliver_module(scratch: &Path, url: &str, subject: &str) -> Result<(), St
         return outcome;
     }
 
-    Err(format!(
-        "{subject} is fetched from {url}, and neither `curl` nor `wget` is on PATH; this toolchain reaches the network through whichever of them is installed"
-    ))
+    Err(Refused::of("no fetcher")
+        .stating(format_args!("{subject} is fetched from {url}"))
+        .stating("neither `curl` nor `wget` is on `PATH`")
+        .stating("this toolchain reaches the network through whichever of them is installed"))
 }
 
 /// Accept the delivery against its pin and place it, or refuse stating both digests.
@@ -350,20 +385,33 @@ fn accept_module(
     scratch: &Path,
     placed: &Path,
     acquisition: &ModuleAcquisition,
-) -> Result<(), String> {
-    let bytes = fs::read(scratch)
-        .map_err(|error| format!("failed to read {}: {error}", scratch.display()))?;
+) -> Result<(), Box<Report>> {
+    let bytes = fs::read(scratch).map_err(|error| {
+        Refused::of("unreadable file")
+            .stating(error)
+            .about_path(scratch)
+    })?;
     let delivered = FileHash::of_bytes(&bytes);
 
     if delivered != acquisition.hash {
         // The same two conditions `Foreign::bytes` states, with the likely one inverted: bytes that arrived from elsewhere changed without you, where bytes you build change because you built them.
-        return Err(format!(
-            "the foreign module {} of {} was fetched from {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: the publisher re-cut this version and said so, or you repointed this row yourself — then `{} --refresh`\n  pay close attention if: nothing announced a change — an artifact replaced in place, under a version already published, is what a compromised release looks like, and this hash is the only thing that noticed",
-            acquisition.name,
-            acquisition.package,
-            acquisition.url,
-            acquisition.hash,
-            Subject::Foreign(acquisition.target).invocation(&acquisition.name)
+        return Err(acquisition.written.refuse_at(
+            "hash",
+            Refused::of("hash mismatch")
+                .stating(format_args!(
+                    "the foreign module `{}` of `{}` was fetched from {}",
+                    acquisition.name, acquisition.package, acquisition.url
+                ))
+                .stating(format_args!("expected: {}", acquisition.hash))
+                .stating(format_args!("obtained: {delivered}"))
+                .stating("intended if the publisher re-cut this version and said so, or you repointed this row yourself")
+                .stating("pay close attention if nothing announced a change")
+                .stating("an artifact replaced in place, under a version already published, is what a compromised release looks like")
+                .stating("this hash is the only thing that noticed")
+                .trying(format!(
+                    "{} --refresh",
+                    Subject::Foreign(acquisition.target).invocation(&acquisition.name)
+                )),
         ));
     }
 
@@ -375,7 +423,7 @@ fn accept_module(
 
             Ok(())
         }
-        Err(error) => Err(format!("failed to place {}: {error}", placed.display())),
+        Err(error) => Err(unwritable(placed, &error)),
     }
 }
 
@@ -389,17 +437,22 @@ fn catalogued<'a>(governing: &'a Governing, name: &str) -> Option<&'a Dependency
 /// Fetch `acquisition`, verify it, and place it — in that order, and only in that order.
 ///
 /// The tree is hashed where it lands temporarily and moved into the store only once it has been accepted, so a failed or interrupted fetch cannot leave a directory the store would later read as a verified delivery.
-fn fetch(store: &Store, acquisition: &Acquisition, arrived: impl FnOnce()) -> Result<(), String> {
+fn fetch(
+    store: &Store,
+    acquisition: &Acquisition,
+    arrived: impl FnOnce(),
+) -> Result<(), Box<Report>> {
     let scratch = store.source(acquisition.hash()).with_extension("fetching");
     let _ = fs::remove_dir_all(&scratch);
-    fs::create_dir_all(&scratch)
-        .map_err(|error| format!("failed to create {}: {error}", scratch.display()))?;
+    fs::create_dir_all(&scratch).map_err(|error| unwritable(&scratch, &error))?;
 
-    let outcome = deliver(&scratch, &acquisition.url, &acquisition.snapshot.rev).and_then(|()| {
-        arrived();
+    let outcome = deliver(&scratch, &acquisition.url, &acquisition.snapshot.rev)
+        .map_err(|refused| acquisition.written.refuse(refused))
+        .and_then(|()| {
+            arrived();
 
-        accept(&scratch, store, acquisition)
-    });
+            accept(&scratch, store, acquisition)
+        });
 
     if outcome.is_err() {
         let _ = fs::remove_dir_all(&scratch);
@@ -411,7 +464,7 @@ fn fetch(store: &Store, acquisition: &Acquisition, arrived: impl FnOnce()) -> Re
 /// Ask `git` for `rev` of `url`, into `scratch`.
 ///
 /// Takes the two fields rather than an [`Acquisition`], because `curios pin` delivers a tree it has no pin for yet — computing that pin is the whole of what it is doing.
-pub fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), String> {
+pub fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), Refused> {
     git(scratch, &["init", "--quiet"])?;
     git(scratch, &["remote", "add", "origin", url])?;
 
@@ -430,30 +483,40 @@ pub fn deliver(scratch: &Path, url: &str, rev: &str) -> Result<(), String> {
     }
 
     // Source is what was delivered; the object store is how it arrived. A fresh clone's differs run to run, so leaving it in would make the hash unreproducible and the store key meaningless.
-    fs::remove_dir_all(scratch.join(".git"))
-        .map_err(|error| format!("failed to drop the fetched repository's metadata: {error}"))
+    fs::remove_dir_all(scratch.join(".git")).map_err(|error| {
+        Refused::of("unwritable directory")
+            .stating("the fetched repository's metadata could not be dropped")
+            .stating(error)
+    })
 }
 
 /// Verify the delivery and move it into the store.
-fn accept(scratch: &Path, store: &Store, acquisition: &Acquisition) -> Result<(), String> {
+fn accept(scratch: &Path, store: &Store, acquisition: &Acquisition) -> Result<(), Box<Report>> {
     let delivered = TreeHash::of(scratch)?;
 
     if &delivered != acquisition.hash() {
         // The two conditions the module refusals state, with the discriminator a *tree* has and a file does not: what the row pins decides whether the delivery could have moved at all.
-        return Err(format!(
-            "the dependency {:?} was fetched from {} at {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: this row pins a branch or a tag and it has moved — then `curios pin dependency {} --refresh`\n  pay close attention if: this row pins a commit object, which cannot move — a tree that changed under one means the history it came from was rewritten",
-            acquisition.name,
-            acquisition.url,
-            acquisition.snapshot.rev,
-            acquisition.snapshot.hash,
-            acquisition.name
+        return Err(acquisition.written.refuse(
+            Refused::of("hash mismatch")
+                .stating(format_args!(
+                    "the dependency `{}` was fetched from {} at {}",
+                    acquisition.name, acquisition.url, acquisition.snapshot.rev
+                ))
+                .stating(format_args!("expected: {}", acquisition.snapshot.hash))
+                .stating(format_args!("obtained: {delivered}"))
+                .stating("intended if this row pins a branch or a tag, and it has moved")
+                .stating("pay close attention if this row pins a commit, which should not move")
+                .stating("a tree that changed under one means its history was rewritten")
+                .trying(format!(
+                    "curios pin dependency {} --refresh",
+                    acquisition.name
+                )),
         ));
     }
 
     let placed = store.source(acquisition.hash());
     if let Some(parent) = placed.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|error| unwritable(parent, &error))?;
     }
 
     // Another process may have placed the identical tree while this one was fetching. Content-addressed means the two are the same tree, so losing the race costs nothing but the work.
@@ -464,29 +527,37 @@ fn accept(scratch: &Path, store: &Store, acquisition: &Acquisition) -> Result<()
 
             Ok(())
         }
-        Err(error) => Err(format!("failed to place {}: {error}", placed.display())),
+        Err(error) => Err(unwritable(&placed, &error)),
     }
 }
 
 /// Run `git` in `directory`, with its own diagnostics on failure.
-fn git(directory: &Path, arguments: &[&str]) -> Result<(), String> {
+fn git(directory: &Path, arguments: &[&str]) -> Result<(), Refused> {
     let output = Command::new("git")
         .current_dir(directory)
         .args(arguments)
         .output()
         .map_err(|error| {
-            format!(
-                "`git {}` could not be run: {error}. `curate` is the only thing in this toolchain that fetches, and it fetches by asking the `git` already on this machine.",
-                arguments.join(" ")
-            )
+            Refused::of("fetcher not run")
+                .stating(format_args!(
+                    "`git {}` could not be run",
+                    arguments.join(" ")
+                ))
+                .stating(error)
+                .stating("`curate` is the only thing in this toolchain that fetches, and it fetches by asking the `git` on this machine")
         })?;
 
     match output.status.success() {
         true => Ok(()),
-        false => Err(format!(
-            "`git {}` failed: {}",
-            arguments.join(" "),
-            String::from_utf8_lossy(&output.stderr).trim()
-        )),
+        false => Err(Refused::of("fetch failed")
+            .stating(format_args!("`git {}` failed", arguments.join(" ")))
+            .stating(String::from_utf8_lossy(&output.stderr).trim())),
     }
+}
+
+/// The refusal of a place in the store the system would not let be written, in the system's words.
+fn unwritable(path: &Path, error: &io::Error) -> Box<Report> {
+    Refused::of("unwritable store")
+        .stating(error)
+        .about_path(path)
 }

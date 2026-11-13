@@ -16,7 +16,8 @@ mod package_tests;
 
 use {
     crate::{
-        CompilerVersion, FileHash, FormatSettings, Refused, STORE, Step, Store, Subject, TreeHash,
+        CompilerVersion, FileHash, FormatSettings, Refused, Row, STORE, Step, Store, Subject,
+        TreeHash,
     },
     curios_common::{About, Report, Said, Source, is_identifier, is_keyword},
     serde::Deserialize,
@@ -599,27 +600,50 @@ impl Delivery {
         target: Target,
         directory: &Path,
         store: &Store,
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<Vec<u8>, Box<Report>> {
+        // The row's table of this target, in its package's manifest, which is where its `hash` is written.
+        let written = Row::of(
+            directory.join(MANIFEST),
+            [
+                Step::key("foreign"),
+                Step::Named(name.to_string()),
+                Step::key(target.spelled()),
+            ],
+        );
         let path = match &self.module {
             Module::Filed(path) => directory.join(path),
             Module::Fetched(_) => store.foreign(&self.hash),
         };
 
         let bytes = fs::read(&path).map_err(|error| {
-            format!(
-                "the foreign module {name:?} is not at {}: {error}",
-                path.display()
+            written.refuse(
+                Refused::of("unreadable file")
+                    .stating(format_args!(
+                        "the foreign module `{name}` is read from {}",
+                        path.display()
+                    ))
+                    .stating(error),
             )
         })?;
 
         let delivered = FileHash::of_bytes(&bytes);
         if delivered != self.hash {
             // The two conditions rather than one instruction: a re-pin is the ordinary answer here and the alarming one, and which it is depends on something only the reader knows.
-            return Err(format!(
-                "the foreign module {name:?} at {} is not what it is pinned to\n  expected {}\n  delivered {delivered}\n  this is intended if: you rebuilt the module from source you control — then `{} --refresh`\n  pay close attention if: you did not rebuild it, or a dependency delivered it rather than you building it",
-                path.display(),
-                self.hash,
-                Subject::Foreign(target).invocation(name),
+            return Err(written.refuse_at(
+                "hash",
+                Refused::of("hash mismatch")
+                    .stating(format_args!(
+                        "the foreign module `{name}` at {} is not what it is pinned to",
+                        path.display()
+                    ))
+                    .stating(format_args!("expected: {}", self.hash))
+                    .stating(format_args!("obtained: {delivered}"))
+                    .stating("intended if you rebuilt the module from source you control")
+                    .stating("pay close attention if you did not rebuild it, or a dependency delivered it rather than you building it")
+                    .trying(format!(
+                        "{} --refresh",
+                        Subject::Foreign(target).invocation(name)
+                    )),
             ));
         }
 

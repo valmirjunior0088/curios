@@ -30,7 +30,7 @@ use test_runner::*;
 
 use {
     curios::{bindings_of, optimize},
-    curios_common::{Source, Style},
+    curios_common::{Kind, Report, Source, Style},
     curios_cranelift::module_exports,
     curios_document::write_documentation,
     curios_native::{Bundle, Compiled, OsHost},
@@ -78,6 +78,8 @@ fn install_profiling(path: PathBuf) {
 enum Failure {
     /// A compile that stopped, with what it reported: rendered where it is printed, for whoever reads it there.
     Stopped(CompileError),
+    /// What a command refuses before anything is compiled, as its report: rendered where it is printed, for whoever reads it there.
+    Refused(Box<Report>),
     Error(String),
     Concluded(Concluded),
 }
@@ -95,6 +97,12 @@ enum Concluded {
 impl From<String> for Failure {
     fn from(message: String) -> Self {
         Failure::Error(message)
+    }
+}
+
+impl From<Box<Report>> for Failure {
+    fn from(report: Box<Report>) -> Self {
+        Failure::Refused(report)
     }
 }
 
@@ -821,6 +829,11 @@ fn main() -> ExitCode {
                 CompileError::Incomplete(_) => ExitCode::from(2),
                 CompileError::Failure(_) | CompileError::Mixed { .. } => ExitCode::FAILURE,
             }
+        }
+        Err(Failure::Refused(report)) => {
+            eprintln!("{}", report.rendered(Kind::Error, reader()));
+
+            ExitCode::FAILURE
         }
         Err(Failure::Error(report)) => {
             eprintln!("{report}");

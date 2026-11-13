@@ -63,6 +63,14 @@ impl Governing {
         )
     }
 
+    /// The manifest of the package in `directory`, a package of this invocation's graph: the one that was read for the governing package, which `--manifest` may have named, and the one beside every other.
+    pub(crate) fn manifest_of(&self, directory: &Path) -> PathBuf {
+        match directory == self.directory {
+            true => self.manifest.clone(),
+            false => directory.join(MANIFEST),
+        }
+    }
+
     /// Where this project's generated things go — its own beside it, and the shared ones in the cache every project uses.
     pub fn store(&self) -> Store {
         Store::at(self.root.clone())

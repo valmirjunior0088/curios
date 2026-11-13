@@ -7,15 +7,22 @@ mod tests;
 
 use {
     curios_common::{About, Report, Said, Source, Span},
-    std::{fmt, ops::Range, path::Path, sync::Arc},
+    std::{
+        fmt,
+        ops::Range,
+        path::{Path, PathBuf},
+        sync::Arc,
+    },
     toml_edit::{Document, Item, Table, TableLike, Value},
 };
 
 /// One step into a manifest: the key of a table, or a row of an array by its position.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Step {
     Key(String),
     Row(usize),
+    /// The row of an array of tables whose `name` is this one: how a refusal written from a record reaches the row the record was read from.
+    Named(String),
 }
 
 impl Step {
@@ -157,6 +164,35 @@ impl Refused {
     }
 }
 
+/// A row of a manifest that a record remembers, for a refusal written long after the manifest was read: the file, and the steps that lead to the row.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Row {
+    pub manifest: PathBuf,
+    pub steps: Vec<Step>,
+}
+
+impl Row {
+    /// The row `steps` lead to in the manifest at `manifest`.
+    pub fn of<S: Into<Step>>(manifest: PathBuf, steps: impl IntoIterator<Item = S>) -> Self {
+        Self {
+            manifest,
+            steps: steps.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    /// The report of `refused`, at this row.
+    pub fn refuse(&self, refused: Refused) -> Box<Report> {
+        refused.entry(self.steps.clone()).located_at(&self.manifest)
+    }
+
+    /// The report of `refused`, at the value this row states for `field`.
+    pub fn refuse_at(&self, field: &str, refused: Refused) -> Box<Report> {
+        refused
+            .value(self.steps.iter().cloned().chain([Step::key(field)]))
+            .located_at(&self.manifest)
+    }
+}
+
 /// Where `at` stands in `text`, a manifest's, where it stands anywhere.
 fn found(text: &str, at: &At) -> Option<Range<usize>> {
     let (steps, keyed) = match at {
@@ -202,6 +238,10 @@ impl<'a> Node<'a> {
             (Node::Item(Item::ArrayOfTables(rows)), Step::Row(index)) => {
                 Some((None, Node::Table(rows.get(*index)?)))
             }
+            (Node::Item(Item::ArrayOfTables(rows)), Step::Named(name)) => rows
+                .iter()
+                .find(|row| row.get("name").and_then(Item::as_str) == Some(name))
+                .map(|row| (None, Node::Table(row))),
             (
                 Node::Item(Item::Value(Value::Array(array))) | Node::Value(Value::Array(array)),
                 Step::Row(index),

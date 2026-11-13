@@ -44,6 +44,7 @@ fn a_delivery_matching_its_pin_is_placed() {
             rev: "abc123".to_string(),
             hash: hash.clone(),
         },
+        written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     };
 
     accept(&scratch, &Store::at(root.to_path_buf()), &acquisition)
@@ -80,13 +81,22 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
             rev: "abc123".to_string(),
             hash: TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap(),
         },
+        written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     };
 
     let refusal = accept(&scratch, &Store::at(root.to_path_buf()), &acquisition)
-        .expect_err("a tampered delivery");
+        .expect_err("a tampered delivery")
+        .render();
 
-    assert!(refusal.contains("not what it is pinned to"), "{refusal}");
-    assert!(refusal.contains(&delivered.to_string()), "{refusal}");
+    assert!(refusal.starts_with("hash mismatch\n"), "{refusal}");
+    assert!(
+        refusal.contains(&format!("obtained: {delivered}")),
+        "{refusal}"
+    );
+    assert!(
+        refusal.contains("├─ try; curios pin dependency http --refresh"),
+        "{refusal}"
+    );
     assert!(
         !Store::at(root.to_path_buf())
             .source(&acquisition.snapshot.hash)
@@ -276,6 +286,7 @@ fn a_fetched_revision_is_verified_and_placed() {
             rev: revision,
             hash: expected.clone(),
         },
+        written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     };
 
     fetch(&Store::at(root.to_path_buf()), &acquisition, || {})
@@ -330,6 +341,7 @@ fn pinned(origin: &Path, rev: &str, hash: &TreeHash) -> Acquisition {
             rev: rev.to_string(),
             hash: hash.clone(),
         },
+        written: Row::of(PathBuf::from("curios.toml"), ["dependencies", "http"]),
     }
 }
 
@@ -372,7 +384,8 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
         &pinned(&origin, absent, &expected),
         || {},
     )
-    .expect_err("a revision this remote does not hold");
+    .expect_err("a revision this remote does not hold")
+    .render();
 
     assert!(refusal.contains(absent), "{refusal}");
     assert!(
@@ -425,7 +438,10 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
         }
 
         fetch(&store, &pinned(&origin, rev, &expected), || {}).unwrap_or_else(|refusal| {
-            panic!("{rev} names a revision this remote holds: {refusal}")
+            panic!(
+                "{rev} names a revision this remote holds: {}",
+                refusal.render()
+            )
         });
         assert!(store.source(&expected).join("lib.crs").is_file(), "{rev}");
     }
@@ -539,6 +555,14 @@ fn a_fetched_module_matching_its_pin_is_placed() {
         target: Target::Native,
         url: format!("file://{}", module.display()),
         hash: hash.clone(),
+        written: Row::of(
+            PathBuf::from("curios.toml"),
+            [
+                Step::key("foreign"),
+                Step::Named("sha2".to_string()),
+                Step::key("native"),
+            ],
+        ),
     };
 
     let store = Store::at(root.to_path_buf());
@@ -571,16 +595,32 @@ fn a_fetched_module_failing_its_pin_is_refused_and_files_nothing() {
         target: Target::Native,
         url: format!("file://{}", module.display()),
         hash: pinned.clone(),
+        written: Row::of(
+            PathBuf::from("curios.toml"),
+            [
+                Step::key("foreign"),
+                Step::Named("sha2".to_string()),
+                Step::key("native"),
+            ],
+        ),
     };
 
     let store = Store::at(root.to_path_buf());
-    let refusal =
-        fetch_module(&store, &acquisition, || {}).expect_err("a delivery failing its pin");
+    let refusal = fetch_module(&store, &acquisition, || {})
+        .expect_err("a delivery failing its pin")
+        .render();
 
-    assert!(refusal.contains("is not what it is pinned to"), "{refusal}");
+    assert!(refusal.starts_with("hash mismatch\n"), "{refusal}");
     assert!(
-        refusal.contains(&FileHash::of_bytes(b"\0asm\x01\0\0\0").to_string()),
+        refusal.contains(&format!(
+            "obtained: {}",
+            FileHash::of_bytes(b"\0asm\x01\0\0\0")
+        )),
         "the refusal states what arrived: {refusal}"
+    );
+    assert!(
+        refusal.contains("├─ try; curios pin foreign sha2 --target native --refresh"),
+        "{refusal}"
     );
     assert!(!store.foreign(&pinned).exists(), "nothing was filed");
 }

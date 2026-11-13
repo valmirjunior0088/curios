@@ -55,7 +55,9 @@ fn a_name_no_path_could_spell_is_refused_before_writing() {
     let (_temporary, parent) = fresh("scaffold_bad_name");
     let root = parent.join("not-a-name");
 
-    let refusal = scaffold(&root).expect_err("a dash is no identifier");
+    let refusal = scaffold(&root)
+        .expect_err("a dash is no identifier")
+        .render();
     assert!(refusal.contains("no name a path could spell"), "{refusal}");
     assert!(!root.exists(), "nothing is left behind");
 }
@@ -67,7 +69,9 @@ fn an_existing_package_is_not_overwritten() {
     scaffold(&root).expect("a fresh directory");
     let written = fs::read_to_string(root.join(MANIFEST)).unwrap();
 
-    let refusal = scaffold(&root).expect_err("a directory that already holds a package");
+    let refusal = scaffold(&root)
+        .expect_err("a directory that already holds a package")
+        .render();
     assert!(refusal.contains("already holds a package"), "{refusal}");
     assert_eq!(
         fs::read_to_string(root.join(MANIFEST)).unwrap(),
@@ -112,9 +116,11 @@ fn an_existing_file_is_not_overwritten() {
         fs::create_dir_all(&root).unwrap();
         fs::write(root.join(name), "theirs\n").unwrap();
 
-        let refusal = scaffold(&root).expect_err("a directory that already holds the file");
+        let refusal = scaffold(&root)
+            .expect_err("a directory that already holds the file")
+            .render();
         assert!(
-            refusal.contains(&format!("already holds a {name}")),
+            refusal.contains(&format!("this directory already holds a `{name}`")),
             "{refusal}"
         );
         assert_eq!(fs::read_to_string(root.join(name)).unwrap(), "theirs\n");

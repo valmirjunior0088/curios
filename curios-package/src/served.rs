@@ -8,7 +8,8 @@
 mod tests;
 
 use {
-    crate::Gateway,
+    crate::{Gateway, MANIFEST, Refused, Row, Step},
+    curios_common::Report,
     std::{
         fs,
         path::{Path, PathBuf},
@@ -28,16 +29,28 @@ pub struct Served {
 
 impl Gateway {
     /// Every file this gateway's `static` table serves, read against `directory`, its package's own, for the foreign row `row`: in page-path order within each entry, the entries in theirs.
-    pub fn served(&self, row: &str, directory: &Path) -> Result<Vec<Served>, String> {
+    pub fn served(&self, row: &str, directory: &Path) -> Result<Vec<Served>, Box<Report>> {
         let mut served = Vec::new();
 
         for (entry, path) in &self.statics {
-            let subject = format!("the static entry {entry:?} of the foreign row {row:?}");
-            let read = linkless(directory, path, &subject)?;
+            let subject = format!("the static entry `{entry}` of the foreign row `{row}`");
+            // Every refusal of an entry stands at the entry, in the `static` table of the row's browser table.
+            let written = Row::of(
+                directory.join(MANIFEST),
+                [
+                    Step::key("foreign"),
+                    Step::Named(row.to_string()),
+                    Step::key("browser"),
+                    Step::key("static"),
+                    Step::key(entry.as_str()),
+                ],
+            );
+            let stand = |refused: Refused| written.refuse(refused);
+            let read = linkless(directory, path, &subject).map_err(stand)?;
 
             match fs::metadata(&read) {
                 Ok(metadata) if metadata.is_dir() => {
-                    walked(&read, entry, &subject, entry, &mut served)?;
+                    walked(&read, entry, &subject, entry, &mut served).map_err(stand)?;
                 }
                 Ok(metadata) if metadata.is_file() => served.push(Served {
                     entry: entry.clone(),
@@ -45,15 +58,17 @@ impl Gateway {
                     file: read,
                 }),
                 Ok(_) => {
-                    return Err(format!(
-                        "{subject} reads {}, which is neither a file nor a directory",
-                        read.display()
+                    return Err(stand(
+                        Refused::of("not a file")
+                            .stating(format_args!("{subject} reads {}", read.display()))
+                            .stating("it is neither a file nor a directory"),
                     ));
                 }
                 Err(error) => {
-                    return Err(format!(
-                        "{subject} reads {}, which holds nothing: {error}",
-                        read.display()
+                    return Err(stand(
+                        Refused::of("unreadable file")
+                            .stating(format_args!("{subject} reads {}", read.display()))
+                            .stating(error),
                     ));
                 }
             }
@@ -64,7 +79,7 @@ impl Gateway {
 }
 
 /// `path` under `directory`, refused for `subject` where it, or a directory on the way to it, is a symlink.
-fn linkless(directory: &Path, path: &Path, subject: &str) -> Result<PathBuf, String> {
+fn linkless(directory: &Path, path: &Path, subject: &str) -> Result<PathBuf, Refused> {
     let mut read = directory.to_path_buf();
 
     for component in path.components() {
@@ -79,11 +94,10 @@ fn linkless(directory: &Path, path: &Path, subject: &str) -> Result<PathBuf, Str
 }
 
 /// The refusal of the symlink at `path`, which `subject` reaches.
-fn linked(subject: &str, path: &Path) -> String {
-    format!(
-        "{subject} reaches {}, which is a symbolic link; a page serves the package's own files, and a link may name anything",
-        path.display()
-    )
+fn linked(subject: &str, path: &Path) -> Refused {
+    Refused::of("symbolic link")
+        .stating(format_args!("{subject} reaches {}", path.display()))
+        .stating("a page serves the package's own files, and a link may name anything")
 }
 
 /// Every file under `directory`, served at `page` joined with its path inside, onto `served` for the entry `entry`, which `subject` names.
@@ -93,9 +107,12 @@ fn walked(
     subject: &str,
     entry: &str,
     served: &mut Vec<Served>,
-) -> Result<(), String> {
-    let unreadable =
-        |error: std::io::Error| format!("{subject} reads {}: {error}", directory.display());
+) -> Result<(), Refused> {
+    let unreadable = |error: std::io::Error| {
+        Refused::of("unreadable directory")
+            .stating(format_args!("{subject} reads {}", directory.display()))
+            .stating(error)
+    };
 
     let mut children = fs::read_dir(directory)
         .map_err(unreadable)?
@@ -106,17 +123,19 @@ fn walked(
 
     for child in children {
         let Some(name) = child.file_name().and_then(|name| name.to_str()) else {
-            return Err(format!(
-                "{subject} holds {}, whose name no page path can spell",
-                child.display()
-            ));
+            return Err(Refused::of("invalid name")
+                .stating(format_args!("{subject} holds {}", child.display()))
+                .stating("no page path can spell its name"));
         };
         if name.starts_with('.') {
             continue;
         }
 
-        let metadata = fs::symlink_metadata(&child)
-            .map_err(|error| format!("{subject} reads {}: {error}", child.display()))?;
+        let metadata = fs::symlink_metadata(&child).map_err(|error| {
+            Refused::of("unreadable file")
+                .stating(format_args!("{subject} reads {}", child.display()))
+                .stating(error)
+        })?;
         let page = format!("{page}/{name}");
 
         if metadata.file_type().is_symlink() {
