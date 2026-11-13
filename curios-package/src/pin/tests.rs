@@ -314,10 +314,11 @@ fn a_row_that_is_not_there_cannot_be_refreshed() {
         false,
         |_| {},
     )
-    .expect_err("there is no row to re-pin");
+    .expect_err("there is no row to re-pin")
+    .render();
 
     assert!(
-        refusal.contains("there is no foreign module \"absent\""),
+        refusal.contains("there is no foreign module `absent`"),
         "{refusal}"
     );
     assert!(
@@ -345,7 +346,8 @@ fn a_module_outside_the_package_is_refused_as_no_plain_relative_path() {
         false,
         |_| {},
     )
-    .expect_err("a module is named from the manifest");
+    .expect_err("a module is named from the manifest")
+    .render();
 
     assert!(refusal.contains("no plain relative path"), "{refusal}");
 }
@@ -386,9 +388,10 @@ fn a_dependency_named_otherwise_than_it_declares_itself_is_refused() {
         false,
         |_| {},
     )
-    .expect_err("a package is referred to by the name it declares");
+    .expect_err("a package is referred to by the name it declares")
+    .render();
 
-    assert!(refusal.contains("declares itself \"dep\""), "{refusal}");
+    assert!(refusal.contains("declares itself `dep`"), "{refusal}");
 }
 
 /// The refusal of a row that states no `hash` names `--refresh` as what writes one, so `--refresh` must be able to: a pin reads only the row it writes, and holds the manifest it leaves to the manifest's rules.
@@ -468,10 +471,11 @@ fn a_pin_that_would_leave_the_manifest_unreadable_writes_nothing() {
         false,
         |_| {},
     )
-    .expect_err("the dependency row still lacks its hash");
+    .expect_err("the dependency row still lacks its hash")
+    .render();
 
     assert!(
-        refusal.contains("as this pin would leave it") && refusal.contains("requires `hash`"),
+        refusal.contains("as the pin would leave it") && refusal.contains("requires `hash`"),
         "{refusal}"
     );
     assert_eq!(

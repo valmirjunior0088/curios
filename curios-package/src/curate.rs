@@ -556,7 +556,7 @@ fn git(directory: &Path, arguments: &[&str]) -> Result<(), Refused> {
 }
 
 /// The refusal of a place in the store the system would not let be written, in the system's words.
-fn unwritable(path: &Path, error: &io::Error) -> Box<Report> {
+pub fn unwritable(path: &Path, error: &io::Error) -> Box<Report> {
     Refused::of("unwritable store")
         .stating(error)
         .about_path(path)

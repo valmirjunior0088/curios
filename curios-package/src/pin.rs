@@ -9,9 +9,10 @@ mod tests;
 
 use {
     crate::{
-        FileHash, MANIFEST, Manifest, Store, Target, TreeHash, deliver, deliver_module,
-        nearest_manifest, umbrella_over,
+        FileHash, MANIFEST, Manifest, Refused, Row, Step, Store, Target, TreeHash, deliver,
+        deliver_module, nearest_manifest, umbrella_over, unwritable,
     },
+    curios_common::{Report, Source},
     curios_module::identity,
     std::{
         fs,
@@ -34,20 +35,24 @@ pub struct Pinning {
 
 impl Pinning {
     /// What a pin writes: the manifest `manifest` names where it names one, and the one nearest `directory` otherwise, as a command governed by it would find it.
-    pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, String> {
+    pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, Box<Report>> {
         let manifest = match manifest {
             Some(manifest) => identity(manifest),
             None => {
-                let directory = directory
-                    .canonicalize()
-                    .map_err(|error| format!("{}: {error}", directory.display()))?;
+                let directory = directory.canonicalize().map_err(|error| {
+                    Refused::of("unreadable directory")
+                        .stating(error)
+                        .about_path(directory)
+                })?;
 
                 nearest_manifest(&directory)
                     .ok_or_else(|| {
-                        format!(
-                            "no `{MANIFEST}` in {} or any directory above it; `curios pin` writes a row into a package's manifest",
-                            directory.display()
-                        )
+                        Refused::of("no manifest")
+                            .stating(format_args!(
+                                "no `{MANIFEST}` in this directory or any directory above it"
+                            ))
+                            .stating("`curios pin` writes a row into a package's manifest")
+                            .about_path(&directory)
                     })?
                     .join(MANIFEST)
             }
@@ -78,14 +83,13 @@ struct Staged(PathBuf);
 
 impl Staged {
     /// Stage a path under `store`, with nothing at it.
-    fn new(store: &Store) -> Result<Self, String> {
+    fn new(store: &Store) -> Result<Self, Box<Report>> {
         let path = store.staging(&std::process::id().to_string());
 
         let _ = fs::remove_dir_all(&path);
         let _ = fs::remove_file(&path);
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+            fs::create_dir_all(parent).map_err(|error| unwritable(parent, &error))?;
         }
 
         Ok(Self(path))
@@ -98,16 +102,15 @@ impl Staged {
     /// File what was staged at `placed`, which is the digest it was just found to have.
     ///
     /// Another process may have placed the identical bytes meanwhile. Content-addressed means they are the same bytes, so losing the race costs nothing but the work — the same reading `curate` makes of the same situation.
-    fn file(&self, placed: &Path) -> Result<(), String> {
+    fn file(&self, placed: &Path) -> Result<(), Box<Report>> {
         if let Some(parent) = placed.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+            fs::create_dir_all(parent).map_err(|error| unwritable(parent, &error))?;
         }
 
         match fs::rename(&self.0, placed) {
             Ok(()) => Ok(()),
             Err(_) if placed.exists() => Ok(()),
-            Err(error) => Err(format!("failed to place {}: {error}", placed.display())),
+            Err(error) => Err(unwritable(placed, &error)),
         }
     }
 }
@@ -136,6 +139,21 @@ impl Subject {
         match self {
             Self::Foreign(_) => "foreign module",
             Self::Dependency => "dependency",
+        }
+    }
+
+    /// Where its row `name` is written in `manifest`: a dependency's in `[dependencies]`, and a foreign module's in its target's table of the row. A refusal of a pin stands there, and at the manifest where the row is not written yet.
+    fn written(self, manifest: &Path, name: &str) -> Row {
+        match self {
+            Self::Foreign(target) => Row::of(
+                manifest.to_path_buf(),
+                [
+                    Step::key("foreign"),
+                    Step::Named(name.to_string()),
+                    Step::key(target.spelled()),
+                ],
+            ),
+            Self::Dependency => Row::of(manifest.to_path_buf(), ["dependencies", name]),
         }
     }
 
@@ -265,28 +283,41 @@ pub fn pin(
     repoint: &Repoint,
     check: bool,
     mut told: impl FnMut(Transport),
-) -> Result<Pinned, String> {
-    let text = fs::read_to_string(&pinning.manifest)
-        .map_err(|error| format!("failed to read {}: {error}", pinning.manifest.display()))?;
-    let before = text
-        .parse::<DocumentMut>()
-        .map_err(|error| format!("{} is not valid TOML: {error}", pinning.manifest.display()))?;
+) -> Result<Pinned, Box<Report>> {
+    let written = subject.written(&pinning.manifest, name);
+    let text = fs::read_to_string(&pinning.manifest).map_err(|error| {
+        Refused::of("unreadable file")
+            .stating(error)
+            .about_path(&pinning.manifest)
+    })?;
+    let before = text.parse::<DocumentMut>().map_err(|error| {
+        let refused = Refused::of("syntax error").stating(error.message());
+
+        match error.span() {
+            Some(range) => refused.range(range),
+            None => refused,
+        }
+        .located_at(&pinning.manifest)
+    })?;
 
     let existed = present(&before, subject, name);
     if repoint.edits_existing() && !existed {
-        return Err(format!(
-            "there is no {} {name:?} in {} to re-pin; `{} --url <URL>` is what writes one",
-            subject.noun(),
-            pinning.manifest.display(),
-            subject.invocation(name)
-        ));
+        return Err(Refused::of("unknown row")
+            .stating(format_args!(
+                "there is no {} `{name}` in this manifest to re-pin",
+                subject.noun()
+            ))
+            .trying(format!("{} --url <URL>", subject.invocation(name)))
+            .about_path(&pinning.manifest));
     }
 
     let settled = match subject {
         Subject::Foreign(target) => {
-            settled_foreign(pinning, target, name, repoint, &before, &mut told)?
+            settled_foreign(pinning, target, name, repoint, &before, &written, &mut told)?
         }
-        Subject::Dependency => settled_dependency(pinning, name, repoint, &before, &mut told)?,
+        Subject::Dependency => {
+            settled_dependency(pinning, name, repoint, &before, &written, &mut told)?
+        }
     };
 
     // What the row says now, against what it would say — so a second identical pin has nothing to write and says so.
@@ -324,15 +355,17 @@ pub fn pin(
         }
     }
 
-    undisturbed(&before, &after, subject, name)?;
+    undisturbed(&before, &after, subject, name).map_err(|refused| written.refuse(refused))?;
 
     // What is written is what every later command reads, so it is read here first: a manifest a pin leaves is one each of them can read, whatever the one it found could not.
-    let written = after.to_string();
-    written.parse::<Manifest>().map_err(|refusal| {
-        format!(
-            "{}, as this pin would leave it: {}",
-            pinning.manifest.display(),
-            refusal.said
+    let left = after.to_string();
+    left.parse::<Manifest>().map_err(|refused: Refused| {
+        // Placed in the text the pin would leave, which is the text the refusal is of: the lines it shows are no file's yet.
+        Box::new(
+            refused
+                .stating("this is the manifest as the pin would leave it")
+                .stating("nothing was written")
+                .located(&Source::held(&pinning.manifest, left.clone())),
         )
     })?;
 
@@ -340,8 +373,11 @@ pub fn pin(
         return Ok(pinned);
     }
 
-    fs::write(&pinning.manifest, written)
-        .map_err(|error| format!("failed to write {}: {error}", pinning.manifest.display()))?;
+    fs::write(&pinning.manifest, left).map_err(|error| {
+        Refused::of("unwritable file")
+            .stating(error)
+            .about_path(&pinning.manifest)
+    })?;
 
     Ok(Pinned {
         wrote: true,
@@ -357,7 +393,7 @@ fn undisturbed(
     after: &DocumentMut,
     subject: Subject,
     name: &str,
-) -> Result<(), String> {
+) -> Result<(), Refused> {
     let touched = match subject {
         Subject::Foreign(_) => "foreign",
         Subject::Dependency => "dependencies",
@@ -372,10 +408,13 @@ fn undisturbed(
             .filter(|key| before.get(key).is_none()),
     ) {
         if key != touched && rendered(before, &key) != rendered(after, &key) {
-            return Err(format!(
-                "writing the {} {name:?} would have changed `{key}`, which it was not asked about; nothing was written",
-                subject.noun()
-            ));
+            return Err(Refused::of("compiler fault")
+                .stating(format_args!(
+                    "writing the {} `{name}` would have changed `{key}`",
+                    subject.noun()
+                ))
+                .stating("the pin was not asked about it")
+                .stating("nothing was written"));
         }
     }
 
@@ -412,22 +451,24 @@ fn undisturbed(
 
     match others(before) == others(after) {
         true => Ok(()),
-        false => Err(format!(
-            "writing the {} {name:?} would have changed another row in `{touched}`; nothing was written",
-            subject.noun()
-        )),
+        false => Err(Refused::of("compiler fault")
+            .stating(format_args!(
+                "writing the {} `{name}` would have changed another row in `{touched}`",
+                subject.noun()
+            ))
+            .stating("nothing was written")),
     }
 }
 
 /// One row, in whichever of TOML's two spellings it was written.
 ///
 /// Both, because a manifest is somebody's file: `json = { source = "git", … }` is what the reference shows and what this writes, and `[dependencies.json]` is the same row written the other way. A writer that understood only its own spelling would silently add a second row beside the one already there.
-enum Row<'a> {
+enum RowMut<'a> {
     Table(&'a mut Table),
     Inline(&'a mut InlineTable),
 }
 
-impl Row<'_> {
+impl RowMut<'_> {
     /// Say `value` for `key`.
     fn set(&mut self, key: &str, value: &str) {
         match self {
@@ -456,16 +497,21 @@ impl Row<'_> {
 /// A module's path as a row may state it: plain and relative, as an executable's `path` is.
 ///
 /// A module the package *carries* is inside it, so the spelling is checked here rather than by the reader that would refuse it later. A dependency's `path` is held to nothing of the sort — it names a live sibling, and `../shape` is what that looks like.
-fn plain(path: &Path, name: &str) -> Result<String, String> {
+fn plain(path: &Path, name: &str) -> Result<String, Refused> {
     match path
         .components()
         .find(|component| !matches!(component, Component::Normal(_)))
     {
-        Some(component) => Err(format!(
-            "the foreign module {name:?} would be pinned at {}, whose `{}` is no plain relative path; a row names a file inside the package by its path from the manifest, with no `.`, `..` or leading `/`",
-            path.display(),
-            component.as_os_str().to_string_lossy()
-        )),
+        Some(component) => Err(Refused::of("invalid path")
+            .stating(format_args!(
+                "the foreign module `{name}` would be pinned at `{}`",
+                path.display()
+            ))
+            .stating(format_args!(
+                "its `{}` is no plain relative path",
+                component.as_os_str().to_string_lossy()
+            ))
+            .stating("a row names a file inside the package by its path from the manifest, with no `.`, `..` or leading `/`")),
         None => Ok(path.to_string_lossy().replace('\\', "/")),
     }
 }
@@ -476,16 +522,24 @@ fn fetched_module(
     url: &str,
     subject: &str,
     target: Target,
+    written: &Row,
     told: &mut dyn FnMut(Transport),
-) -> Result<(FileHash, Probe), String> {
+) -> Result<(FileHash, Probe), Box<Report>> {
     let staged = Staged::new(store)?;
 
     told(Transport::Asked);
-    deliver_module(staged.path(), url, subject).map_err(|refused| refused.said.to_string())?;
+    deliver_module(staged.path(), url, subject).map_err(|refused| written.refuse(refused))?;
     told(Transport::Answered);
 
-    let bytes = fs::read(staged.path())
-        .map_err(|error| format!("failed to read what was fetched from {url}: {error}"))?;
+    let bytes = fs::read(staged.path()).map_err(|error| {
+        written.refuse(
+            Refused::of("unreadable file")
+                .stating(format_args!(
+                    "what was fetched from {url} could not be read"
+                ))
+                .stating(error),
+        )
+    })?;
     let hash = FileHash::of_bytes(&bytes);
 
     let placed = store.foreign(&hash);
@@ -499,18 +553,18 @@ fn fetched_tree(
     store: &Store,
     url: &str,
     rev: &str,
+    written: &Row,
     told: &mut dyn FnMut(Transport),
-) -> Result<(TreeHash, String), String> {
+) -> Result<(TreeHash, String), Box<Report>> {
     let staged = Staged::new(store)?;
 
-    fs::create_dir_all(staged.path())
-        .map_err(|error| format!("failed to create {}: {error}", staged.path().display()))?;
+    fs::create_dir_all(staged.path()).map_err(|error| unwritable(staged.path(), &error))?;
     told(Transport::Asked);
-    deliver(staged.path(), url, rev).map_err(|refused| refused.said.to_string())?;
+    deliver(staged.path(), url, rev).map_err(|refused| written.refuse(refused))?;
     told(Transport::Answered);
 
     let hash = TreeHash::of(staged.path())?;
-    let declared = declares(staged.path())?;
+    let declared = declares(staged.path(), written)?;
 
     staged.file(&store.source(&hash))?;
 
@@ -520,12 +574,13 @@ fn fetched_tree(
 /// The name the package at `directory` declares for itself.
 ///
 /// What makes a dependency's positional name checkable at all: a `[dependencies]` key is the package's mount prefix and the only way anything refers to it, so it is the dependency's to declare and the user's only to state. Reading it here means a disagreement is refused before a row is written, rather than by the resolver once one has been.
-fn declares(directory: &Path) -> Result<String, String> {
+fn declares(directory: &Path, written: &Row) -> Result<String, Box<Report>> {
     match Manifest::from_path(&directory.join(MANIFEST))? {
         Manifest::Package(package) => Ok(package.name),
-        Manifest::Umbrella(_) => Err(format!(
-            "{} declares an umbrella; a dependency is a package",
-            directory.display()
+        Manifest::Umbrella(_) => Err(written.refuse(
+            Refused::of("not a package")
+                .stating(format_args!("{} declares an umbrella", directory.display()))
+                .stating("a dependency is a package"),
         )),
     }
 }
@@ -586,16 +641,21 @@ fn settled_foreign(
     name: &str,
     repoint: &Repoint,
     document: &DocumentMut,
+    written: &Row,
     told: &mut dyn FnMut(Transport),
-) -> Result<Settled, String> {
+) -> Result<Settled, Box<Report>> {
     let store = pinning.store();
-    let carried = |path: &Path| -> Result<Settled, String> {
-        let spelled = plain(path, name)?;
+    let carried = |path: &Path| -> Result<Settled, Box<Report>> {
+        let spelled = plain(path, name).map_err(|refused| written.refuse(refused))?;
         let at = pinning.directory.join(path);
         let bytes = fs::read(&at).map_err(|error| {
-            format!(
-                "the foreign module {name:?} is not at {}: {error}",
-                at.display()
+            written.refuse(
+                Refused::of("unreadable file")
+                    .stating(format_args!(
+                        "the foreign module `{name}` is read from {}",
+                        at.display()
+                    ))
+                    .stating(error),
             )
         })?;
 
@@ -610,12 +670,13 @@ fn settled_foreign(
         })
     };
 
-    let mut fetched = |url: &str| -> Result<Settled, String> {
+    let mut fetched = |url: &str| -> Result<Settled, Box<Report>> {
         let (hash, probe) = fetched_module(
             &store,
             url,
-            &format!("the foreign module {name:?}"),
+            &format!("the foreign module `{name}`"),
             target,
+            written,
             told,
         )?;
 
@@ -632,9 +693,20 @@ fn settled_foreign(
     match repoint {
         Repoint::Carried(path) => carried(path),
         Repoint::Fetched { url, .. } => fetched(url),
-        Repoint::Revised(_) => Err(format!(
-            "the foreign module {name:?} has no revision to set: a module is one file, pinned by the hash of its bytes. `{} --url <URL>` repoints it, and `--refresh` re-pins what it already names",
-            Subject::Foreign(target).invocation(name)
+        Repoint::Revised(_) => Err(written.refuse(
+            Refused::of("no revision")
+                .stating(format_args!(
+                    "the foreign module `{name}` has no revision to set"
+                ))
+                .stating("a module is one file, pinned by the hash of its bytes")
+                .trying(format!(
+                    "{} --url <URL>",
+                    Subject::Foreign(target).invocation(name)
+                ))
+                .trying(format!(
+                    "{} --refresh",
+                    Subject::Foreign(target).invocation(name)
+                )),
         )),
         // Whichever delivery the row already states, performed again. The row has one or the other, because a row stating both is refused where it is read.
         Repoint::Refresh => {
@@ -644,8 +716,12 @@ fn settled_foreign(
             ) {
                 (Some(path), _) => carried(Path::new(&path)),
                 (None, Some(url)) => fetched(&url),
-                (None, None) => Err(format!(
-                    "the foreign module {name:?} states neither `path` nor `url`, so there is nothing to deliver again"
+                (None, None) => Err(written.refuse(
+                    Refused::of("missing field")
+                        .stating(format_args!(
+                            "the foreign module `{name}` states neither `path` nor `url`"
+                        ))
+                        .stating("there is nothing to deliver again"),
                 )),
             }
         }
@@ -660,21 +736,25 @@ fn settled_dependency(
     name: &str,
     repoint: &Repoint,
     document: &DocumentMut,
+    written: &Row,
     told: &mut dyn FnMut(Transport),
-) -> Result<Settled, String> {
+) -> Result<Settled, Box<Report>> {
     let store = pinning.store();
-    let agreed = |declared: &str, at: &str| -> Result<(), String> {
+    let agreed = |declared: &str, at: &str| -> Result<(), Box<Report>> {
         match declared == name {
             true => Ok(()),
             // The resolver's own sentence, made at the moment a row would be written rather than the moment one is read.
-            false => Err(format!(
-                "the dependency {name:?} resolves to {at}, which declares itself {declared:?}; a package is referred to by the name it declares"
+            false => Err(written.refuse(
+                Refused::of("name mismatch")
+                    .stating(format_args!("`{name}` resolves to {at}"))
+                    .stating(format_args!("that package declares itself `{declared}`"))
+                    .stating("a package is referred to by the name it declares"),
             )),
         }
     };
 
-    let mut fetched = |url: &str, rev: &str| -> Result<Settled, String> {
-        let (hash, declared) = fetched_tree(&store, url, rev, told)?;
+    let mut fetched = |url: &str, rev: &str| -> Result<Settled, Box<Report>> {
+        let (hash, declared) = fetched_tree(&store, url, rev, written, told)?;
         agreed(&declared, &format!("{url} at {rev}"))?;
 
         Ok(Settled {
@@ -692,8 +772,13 @@ fn settled_dependency(
     // The existing row's own URL, for the two forms that keep it.
     let url_of = |key: &str| {
         stated(document, Subject::Dependency, name, "url").ok_or_else(|| {
-            format!(
-                "the dependency {name:?} states no `url`, so there is no repository for `--{key}` to deliver from; only a `source = \"git\"` row is pinned to a revision"
+            written.refuse(
+                Refused::of("no repository")
+                    .stating(format_args!("`{name}` states no `url`"))
+                    .stating(format_args!(
+                        "there is no repository for `--{key}` to deliver from"
+                    ))
+                    .stating("only a `source = \"git\"` row is pinned to a revision"),
             )
         })
     };
@@ -703,7 +788,7 @@ fn settled_dependency(
         Repoint::Carried(path) => {
             let spelled = path.to_string_lossy().replace('\\', "/");
             let at = pinning.directory.join(path);
-            agreed(&declares(&at)?, &at.display().to_string())?;
+            agreed(&declares(&at, written)?, &at.display().to_string())?;
 
             Ok(Settled {
                 // A live sibling on disk has no pin, deliberately: live code has nothing to be pinned to.
@@ -717,8 +802,14 @@ fn settled_dependency(
         }
         Repoint::Fetched { url, rev } => {
             let rev = rev.as_deref().ok_or_else(|| {
-                format!(
-                    "the dependency {name:?} is fetched from a repository, which is pinned to a revision: `curios pin dependency {name} --url {url} --rev <REV>`"
+                written.refuse(
+                    Refused::of("missing revision")
+                        .stating(format_args!(
+                            "`{name}` is fetched from a repository, which is pinned to a revision"
+                        ))
+                        .trying(format!(
+                            "curios pin dependency {name} --url {url} --rev <REV>"
+                        )),
                 )
             })?;
 
@@ -727,8 +818,10 @@ fn settled_dependency(
         Repoint::Revised(rev) => fetched(&url_of("rev")?, rev),
         Repoint::Refresh => {
             let rev = stated(document, Subject::Dependency, name, "rev").ok_or_else(|| {
-                format!(
-                    "the dependency {name:?} states no `rev`; only a row pinned to a revision has a delivery to perform again"
+                written.refuse(
+                    Refused::of("no revision")
+                        .stating(format_args!("`{name}` states no `rev`"))
+                        .stating("only a row pinned to a revision has a delivery to perform again"),
                 )
             })?;
 
@@ -740,7 +833,7 @@ fn settled_dependency(
 /// The row `name` keys, created empty if it is not there yet — of a `[[foreign]]` row, its target's delivery table, created too.
 ///
 /// A created row carries the one field that identifies it — a `[[foreign]]` row its `name`, since the array is keyed by nothing else — so the row is findable the moment it exists rather than only once the caller has finished filling it. A delivery table already written inline, `native = { … }`, is written inline, as a dependency row is.
-fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> Row<'a> {
+fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> RowMut<'a> {
     match subject {
         Subject::Foreign(target) => {
             let tables = document
@@ -767,8 +860,8 @@ fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> R
                 .entry(target.spelled())
                 .or_insert(Item::Table(Table::new()))
             {
-                Item::Value(Value::InlineTable(inline)) => Row::Inline(inline),
-                item => Row::Table(item.as_table_mut().expect(
+                Item::Value(Value::InlineTable(inline)) => RowMut::Inline(inline),
+                item => RowMut::Table(item.as_table_mut().expect(
                     "a foreign row's delivery is a table, as the manifest reader holds it",
                 )),
             }
@@ -786,8 +879,8 @@ fn row_mut<'a>(document: &'a mut DocumentMut, subject: Subject, name: &str) -> R
                 .or_insert(Item::Value(Value::InlineTable(InlineTable::new())));
 
             match entry {
-                Item::Table(table) => Row::Table(table),
-                Item::Value(Value::InlineTable(inline)) => Row::Inline(inline),
+                Item::Table(table) => RowMut::Table(table),
+                Item::Value(Value::InlineTable(inline)) => RowMut::Inline(inline),
                 other => {
                     // A `[dependencies]` key holding a string or an array is not a row this can edit, and overwriting it would discard whatever somebody meant by it.
                     unreachable!("a dependency row is a table or an inline table, not {other:?}")
