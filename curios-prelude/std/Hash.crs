@@ -4,7 +4,7 @@ pub mod nat;
 --- An integer's encoding in the order of the numbers, with the laws that say so.
 pub mod int;
 
-use /std/{Nat, Byte, Bytes, Bool, Str, List, Option, Int, Flt};
+use /std/{Nat, Byte, Bytes, Bool, List};
 
 --- How a value encodes to the bytes that identify it.
 ---
@@ -54,48 +54,3 @@ pub let digest(b: Bytes) -> Bytes =
 --- The digest of `v`'s encoding.
 pub let of(@T: Type, use Hash(T), v: T) -> Bytes =
     digest(Hash/hash(v));
-
---- The identity encoding.
-satisfy Hash(Bytes) {
-    hash(b) = b,
-}
-
---- The UTF-8 bytes.
-satisfy Hash(Str) {
-    hash = Str/to_bytes,
-}
-
---- The code of [`nat`]: in the order of the numbers, so a smaller number's is before a larger one's.
-satisfy Hash(Nat) {
-    hash = nat/code,
-}
-
---- The code of [`int`]: its natural's at or above zero and a complement below, so a smaller integer's is before a larger one's.
-satisfy Hash(Int) {
-    hash = int/code,
-}
-
---- The one byte itself.
----
---- Spelled as the byte rather than routed through `Bytes/of_nat` and padded back to one byte, which is the same encoding for all 256 values and says it the long way round: `of_nat` answers the empty run at zero, so the padding existed only to undo that. Written directly, `/std/Map`'s `Key(Byte)` reads the byte back with the index that put it there instead of proving its way through a minimal encoding.
-satisfy Hash(Byte) {
-    hash(b) = x[b],
-}
-
-satisfy Hash(Bool) {
-    hash(b) = match b | true => x[0x1] | false => x[0x0] end,
-}
-
---- The little-endian bit pattern, so distinct floats encode distinctly, every NaN pattern among them.
-satisfy Hash(Flt) {
-    hash = Flt/to_le_bytes,
-}
-
-satisfy (@A: Type, use Hash(A)) => Hash(List(A)) {
-    hash(values) = tagged(List/len(values), List/map(values, (value) => Hash/hash(value))),
-}
-
-satisfy (@A: Type, use Hash(A)) => Hash(Option(A)) {
-    hash(value) =
-        match value | none() => tagged(0, []) | some(inner) => tagged(1, [Hash/hash(inner)]) end,
-}

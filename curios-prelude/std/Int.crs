@@ -51,7 +51,7 @@ pub use ord/{let ord};
 pub mod DivMod;
 pub use DivMod/{let DivMod};
 
-use /std/{Nat, Bool, Str, Option, Show, Spell, Ord, Eq};
+use /std/{Nat, Bool, Str, Option, Show, Spell, Ord, Hash, Eq};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
@@ -196,4 +196,9 @@ satisfy Spell(Int) {
 
 satisfy Ord(Int) {
     ord = ord,
+}
+
+--- The code of [`Hash/int`]: its natural's at or above zero and a complement below, so a smaller integer's is before a larger one's.
+satisfy Hash(Int) {
+    hash = Hash/int/code,
 }

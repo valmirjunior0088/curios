@@ -27,7 +27,7 @@ pub use len/{let len};
 pub mod ord;
 pub use ord/{let ord};
 
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord,
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Result, Eq, Show, Spell, Ordering, Ord, Hash,
     proved};
 use /std/ops/{Eql, Cmp};
 
@@ -548,4 +548,9 @@ satisfy Cmp(Str) {
 
 satisfy Ord(Str) {
     ord = ord,
+}
+
+--- The UTF-8 bytes.
+satisfy Hash(Str) {
+    hash = to_bytes,
 }

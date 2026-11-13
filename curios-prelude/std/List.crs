@@ -31,7 +31,7 @@ pub use sort_by/{let sort_by};
 pub mod sort;
 pub use sort/{let sort};
 
-use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord, proved};
+use /std/{Nat, Bool, Option, Str, Show, Spell, Fmt, Monad, Ordering, Ord, Hash, proved};
 use /std/ops/{Eql, Cmp};
 
 --- The element at `i`, or `none` past the end.
@@ -252,4 +252,8 @@ satisfy (@T: Type, use Ord(T)) => Cmp(List(T)) {
 
 satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
     ord = ord,
+}
+
+satisfy (@A: Type, use Hash(A)) => Hash(List(A)) {
+    hash(values) = Hash/tagged(len(values), map(values, (value) => Hash/hash(value))),
 }

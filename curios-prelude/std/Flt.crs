@@ -46,7 +46,7 @@ mod grammar;
 use grammar/{of_decimal_in, of_str_in, of_hex_str_in};
 
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Ordering, Show, Spell, Fmt, Ord,
-    Vec, Eq, proved};
+    Hash, Vec, Eq, proved};
 use /std/ops/{Eql, Cmp, Add, Sub, Mul, Div, Rem};
 
 --- That `b` is eight bytes long, decided.
@@ -583,4 +583,9 @@ satisfy Spell(Flt) {
 
 satisfy Ord(Flt) {
     ord = ord,
+}
+
+--- The little-endian bit pattern, so distinct floats encode distinctly, every NaN pattern among them.
+satisfy Hash(Flt) {
+    hash = to_le_bytes,
 }

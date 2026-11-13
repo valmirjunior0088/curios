@@ -1,7 +1,7 @@
 pub use /sys/{let Option};
 pub use /sys/Option/{some, none};
 
-use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Ordering, Ord};
+use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Ordering, Ord, Hash};
 use /std/ops/{Eql, Cmp};
 
 --- `f` on the value, or `none`.
@@ -113,4 +113,12 @@ satisfy (@A: Type, use Ord(A)) => Cmp(Option(A)) {
 
 satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
     ord = ord,
+}
+
+satisfy (@A: Type, use Hash(A)) => Hash(Option(A)) {
+    hash(value) =
+        match value
+        | none() => Hash/tagged(0, [])
+        | some(inner) => Hash/tagged(1, [Hash/hash(inner)])
+        end,
 }

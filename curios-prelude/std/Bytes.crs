@@ -11,7 +11,8 @@ pub use to_nat/{let to_nat};
 pub mod ord;
 pub use ord/{let ord};
 
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Ordering, Ord, proved};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Show, Spell, Fmt, Ordering, Ord, Hash,
+    proved};
 use /std/ops/{Eql, Cmp};
 
 --- The byte at `i`, or `none` past the end.
@@ -329,4 +330,9 @@ satisfy Spell(Bytes) {
     spell(b) =
         let parts = fold(b, [], (byte, acc) => [..acc, Nat/to_str(Byte/to_nat(byte))]);
         Fmt/render("x[%]")(Str/join(", ", parts)),
+}
+
+--- The identity encoding.
+satisfy Hash(Bytes) {
+    hash(b) = b,
 }
