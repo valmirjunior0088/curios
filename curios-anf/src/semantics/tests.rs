@@ -311,7 +311,9 @@ fn generators_of() -> Vec<(Constant, Constant)> {
 #[test]
 fn every_free_monoid_part_the_oracle_names_keeps_its_laws_under_its_fold() {
     let fold = |operation: SequenceOp, operands: &[Constant]| match Semantics::fold_sequence(
-        operation, operands,
+        operation,
+        operands,
+        u64::MAX,
     ) {
         FoldOutcome::Value(value) => value,
         other => panic!("{operation:?} does not fold {operands:?}: {other:?}"),
@@ -356,4 +358,49 @@ fn every_free_monoid_part_the_oracle_names_keeps_its_laws_under_its_fold() {
         }
     }
     assert!(parts.contains(&FreeMonoidPart::Product) && parts.contains(&FreeMonoidPart::Append));
+}
+
+/// A run is built only within the allowance, counted before it is built: a replicate by its count, a concatenation by its operands' sum and an append by one more, each folding at the allowance and declined a byte past it.
+#[test]
+fn a_run_past_the_allowance_is_declined_where_one_at_it_folds() {
+    let run = |length: usize| Constant::Bytes(Binary::replicate(7, length));
+    let count = |count: u64| Constant::Nat(Natural::from(count));
+    let rows = [
+        (
+            SequenceOp::BytesReplicate,
+            vec![count(8), Constant::Byte(7)],
+            vec![count(9), Constant::Byte(7)],
+        ),
+        (
+            SequenceOp::BytesConcat,
+            vec![run(5), run(3)],
+            vec![run(5), run(4)],
+        ),
+        (
+            SequenceOp::BytesAppend,
+            vec![run(7), Constant::Byte(7)],
+            vec![run(8), Constant::Byte(7)],
+        ),
+    ];
+    for (operation, at, past) in rows {
+        assert_eq!(
+            Semantics::fold_sequence(operation, &at, 64),
+            FoldOutcome::Value(run(8)),
+            "{operation:?} at the allowance"
+        );
+        assert_eq!(
+            Semantics::fold_sequence(operation, &past, 64),
+            FoldOutcome::Unknown,
+            "{operation:?} past the allowance"
+        );
+    }
+    // A count no memory holds is declined by its number, with nothing asked of the allocator.
+    assert_eq!(
+        Semantics::fold_sequence(
+            SequenceOp::BytesReplicate,
+            &[count(u64::MAX), Constant::Byte(0)],
+            u64::MAX,
+        ),
+        FoldOutcome::Unknown
+    );
 }

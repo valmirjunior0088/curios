@@ -36,6 +36,11 @@ pub const PASS_REIFY_BUDGET: usize = 100_000;
 /// The erased carriers are unbounded, so multiplication and the left shifts can be asked to build without bound while costing one step each; a step budget cannot see that and a width can. A constant wider than one replacement may reify could not be placed in the module even if it were built, so this is the point past which folding is work with no possible use. Exhaustion here is a *decline*, like every other bound in this module: partial evaluation that folds less is always sound.
 pub const MAX_FOLD_BITS: u64 = MAX_REIFY_BYTES as u64 * 8;
 
+/// The longest list a fold may build, in elements — [`MAX_REIFY_BYTES`] read in the unit a list grows in, an element charged a replacement as a byte of payload is.
+///
+/// A concatenation costs one step whatever it joins, so a chain of them doubles a list past any memory there is in a few dozen steps, as a chain of products does a numeral. A `Bytes` is held to [`MAX_FOLD_BITS`] where the oracle folds it, and exhaustion here is a decline as it is there.
+pub const MAX_FOLD_ELEMENTS: usize = MAX_REIFY_BYTES;
+
 /// The step fuel shared across a pass, plus the per-candidate counters.
 pub struct Budget {
     pool: usize,

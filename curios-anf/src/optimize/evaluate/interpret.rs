@@ -5,7 +5,7 @@
 //! Closedness and scope: a candidate call is evaluated from an empty frame; every atom it transitively reads must resolve to a constant, a module function, or a top-level item value (a CAF forced on demand and memoized), never a runtime binder. A function reference closes on demand against the current frame. Scalar and packed-binary operations fold through [`Semantics`] — the single source of truth under the numeric law — while list operations, closures, and `ListMap` are interpreted directly.
 
 use {
-    super::{Bail, Budget, Closure, ListWindow, MAX_FOLD_BITS, Value},
+    super::{Bail, Budget, Closure, ListWindow, MAX_FOLD_BITS, MAX_FOLD_ELEMENTS, Value},
     crate::{
         Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId, FreeValues,
         FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,
@@ -479,7 +479,11 @@ impl<'m> Evaluator<'m> {
                 let Some(constants) = leaves(&operands) else {
                     return Outcome::Bail(Bail::Unsupported);
                 };
-                fold(Semantics::fold_sequence(operation, &constants))
+                fold(Semantics::fold_sequence(
+                    operation,
+                    &constants,
+                    MAX_FOLD_BITS,
+                ))
             }
         }
     }
@@ -729,6 +733,14 @@ fn peel(grain: SequenceGrain, sequence: &Value, at: usize) -> Result<Option<(Val
     }
 }
 
+/// Decline a list of `length` elements past [`MAX_FOLD_ELEMENTS`], before it is built.
+fn list_within(length: Option<usize>) -> Result<(), Bail> {
+    match length.is_some_and(|length| length <= MAX_FOLD_ELEMENTS) {
+        true => Ok(()),
+        false => Err(Bail::Unsupported),
+    }
+}
+
 fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Bail> {
     let list = |index: usize| match operands.get(index) {
         Some(Value::List(elements)) => Ok(elements.clone()),
@@ -751,7 +763,9 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
             None => Err(Bail::Trap),
         },
         SequenceOp::ListAppend => {
-            let mut elements = list(0)?.to_vec();
+            let list = list(0)?;
+            list_within(list.len().checked_add(1))?;
+            let mut elements = list.to_vec();
             match operands.get(1) {
                 Some(element) => elements.push(element.clone()),
                 None => return Err(Bail::Arity),
@@ -759,9 +773,17 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
             Ok(Value::List(ListWindow::new(elements)))
         }
         SequenceOp::ListConcat => {
+            let lists = (0..operands.len())
+                .map(list)
+                .collect::<Result<Vec<_>, _>>()?;
+            list_within(
+                lists
+                    .iter()
+                    .try_fold(0usize, |length, list| length.checked_add(list.len())),
+            )?;
             let mut elements = Vec::new();
-            for position in 0..operands.len() {
-                elements.extend(list(position)?.iter().cloned());
+            for list in &lists {
+                elements.extend(list.iter().cloned());
             }
             Ok(Value::List(ListWindow::new(elements)))
         }

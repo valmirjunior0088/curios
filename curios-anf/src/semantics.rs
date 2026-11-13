@@ -570,8 +570,12 @@ impl Semantics {
         fold_outcome(compute())
     }
 
-    /// Constant-fold a sequence operation. Only packed-binary operations can fold — the constant domain has no list carrier, so list operations are always [`FoldOutcome::Unknown`] here (the evaluator interprets them over its own value domain instead). An element is a `Byte`.
-    pub fn fold_sequence(operation: SequenceOp, operands: &[Constant]) -> FoldOutcome {
+    /// Constant-fold a sequence operation. Only packed-binary operations can fold — the constant domain has no list carrier, so list operations are always [`FoldOutcome::Unknown`] here (the evaluator interprets them over its own value domain instead). An element is a `Byte`, and a run that would pass `allowance` bits, a byte being eight, is declined rather than built: a replicate's count, a concatenation's sum, an append's one more.
+    pub fn fold_sequence(
+        operation: SequenceOp,
+        operands: &[Constant],
+        allowance: u64,
+    ) -> FoldOutcome {
         let bytes = |index: usize| match operands.get(index) {
             Some(Constant::Bytes(value)) => Some(value),
             _ => None,
@@ -610,12 +614,22 @@ impl Semantics {
                         },
                     );
                 }
-                SequenceOp::BytesAppend => Constant::Bytes(bytes(0)?.append_byte(byte(1)?)),
-                SequenceOp::BytesConcat => Constant::Bytes(Binary::concat(
-                    (0..operands.len()).map(bytes).collect::<Option<Vec<_>>>()?,
-                )),
+                SequenceOp::BytesAppend => {
+                    let run = bytes(0)?;
+                    run_within(run.len().checked_add(1), allowance)?;
+                    Constant::Bytes(run.append_byte(byte(1)?))
+                }
+                SequenceOp::BytesConcat => {
+                    let runs = (0..operands.len()).map(bytes).collect::<Option<Vec<_>>>()?;
+                    let length = runs
+                        .iter()
+                        .try_fold(0usize, |length, run| length.checked_add(run.len()));
+                    run_within(length, allowance)?;
+                    Constant::Bytes(Binary::concat(runs))
+                }
                 SequenceOp::BytesReplicate => {
-                    Constant::Bytes(Binary::replicate(byte(1)?, usize::try_from(nat(0)?).ok()?))
+                    let count = run_within(usize::try_from(nat(0)?).ok(), allowance)?;
+                    Constant::Bytes(Binary::replicate(byte(1)?, count))
                 }
                 // Two literals of different lengths decline to fold rather than answering, exactly as the Core reducer declines them: the length is the type's to hold and the checker's to enforce, and a folder that decided it here would be answering for a run that is neither operand's.
                 SequenceOp::BytesAnd => {
@@ -757,6 +771,18 @@ pub enum FreeMonoidPart {
     Product,
     /// The product of a sequence and one generator on its right: `(s, x)` is `s` followed by `x`.
     Append,
+}
+
+/// `length` where a run of that many bytes fits `allowance` bits.
+///
+/// Growing, as a product is: a replicate builds its whole count in one step and a chain of concatenations doubles, so a few dozen steps ask for more memory than there is, and a length can decline what a step budget cannot see.
+fn run_within(length: Option<usize>, allowance: u64) -> Option<usize> {
+    let length = length?;
+    u64::try_from(length)
+        .ok()
+        .and_then(|length| length.checked_mul(8))
+        .is_some_and(|bits| bits <= allowance)
+        .then_some(length)
 }
 
 fn fold_outcome(result: Option<Result<Constant, TrapKind>>) -> FoldOutcome {
