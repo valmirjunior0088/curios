@@ -306,9 +306,7 @@ fn compile_refuses_the_modules_a_run_would() {
     let twice = calling_double(&root, "twice", &[("one", "double"), ("two", "double")]);
     let refusal = refused(&twice, &root.join("twice.out"), &[]);
     assert!(
-        refusal.contains(
-            "the foreign rows \"one\" and \"two\" both name an export that answers `/twice/double`"
-        ),
+        refusal.contains("`one` and `two` both name an export that answers `/twice/double`"),
         "{refusal}"
     );
 

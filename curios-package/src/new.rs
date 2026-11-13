@@ -25,7 +25,7 @@ pub fn scaffold(directory: &Path) -> Result<Vec<PathBuf>, String> {
         .ok_or_else(|| format!("{} names no package", directory.display()))?;
 
     // The same predicate the manifest parser applies, rather than a second opinion about what a name may be.
-    canonical(&name, "package name")?;
+    canonical(&name).map_err(|refused| refused.said.to_string())?;
 
     let manifest = directory.join(MANIFEST);
     if manifest.exists() {

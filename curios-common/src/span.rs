@@ -251,6 +251,13 @@ pub struct Report {
     pub tries: Vec<String>,
 }
 
+// Scaffolding while the refusals still held as text become reports: it goes with the last of them.
+impl From<Box<Report>> for String {
+    fn from(report: Box<Report>) -> Self {
+        report.render()
+    }
+}
+
 /// What a report is about: a place in a text, shown with its line; a file or a directory as a whole, spelled from where its reader stands; or a thing by its own name, standard input among them.
 #[derive(Debug, Clone, PartialEq)]
 #[curios_archive::archived]

@@ -99,7 +99,7 @@ fn a_fetchable_column_that_would_read_as_an_option_is_refused() {
     ] {
         let refusal = refuse(&format!("name = \"json\"\n[dependencies]\nhttp = {row}"));
         assert!(
-            refusal.contains(&format!("`{field}` beginning with `-`")),
+            refusal.contains(&format!("`{field}` begins with `-`")),
             "{row}: {refusal}"
         );
         assert!(refusal.contains("would read it as an option"), "{refusal}");

@@ -4,7 +4,7 @@
 mod tests;
 
 use {
-    curios_common::{Fingerprint, digest},
+    curios_common::{Fingerprint, Said, digest},
     std::{ffi::OsStr, fmt, fs, path::Path},
 };
 
@@ -18,11 +18,16 @@ const FILE_SCHEME: &str = "f1:";
 const DIGITS: usize = 64;
 
 /// The digest `spelling` states under `scheme`, or why it states none — the shape both schemes share, so neither can drift from the other about what a well-formed hash looks like.
-fn parse_under(spelling: &str, scheme: &str) -> Result<String, String> {
+fn parse_under(spelling: &str, scheme: &str) -> Result<String, Said> {
     let Some(digest) = spelling.strip_prefix(scheme) else {
-        return Err(format!(
-            "{spelling:?} names no hash scheme this compiler knows; the scheme is `{scheme}`"
-        ));
+        return Err({
+            let mut said = Said::line("unknown hash scheme");
+            said.stating(format_args!(
+                "{spelling:?} names no hash scheme this compiler knows"
+            ));
+            said.stating(format_args!("the scheme is `{scheme}`"));
+            said
+        });
     };
 
     // Lowercase is part of the spelling rather than a normalization, because the hash is a store key: two spellings of one digest would be two directories.
@@ -32,9 +37,14 @@ fn parse_under(spelling: &str, scheme: &str) -> Result<String, String> {
             .all(|digit| matches!(digit, '0'..='9' | 'a'..='f'))
     {
         true => Ok(spelling.to_string()),
-        false => Err(format!(
-            "{spelling:?} is no `{scheme}` hash: the scheme takes {DIGITS} lowercase hex digits"
-        )),
+        false => Err({
+            let mut said = Said::line("invalid hash");
+            said.stating(format_args!("{spelling:?} is no `{scheme}` hash"));
+            said.stating(format_args!(
+                "the scheme takes {DIGITS} lowercase hex digits"
+            ));
+            said
+        }),
     }
 }
 
@@ -46,7 +56,7 @@ pub struct FileHash(String);
 
 impl FileHash {
     /// The hash `spelling` states, or why it states none.
-    pub fn parse(spelling: &str) -> Result<Self, String> {
+    pub fn parse(spelling: &str) -> Result<Self, Said> {
         parse_under(spelling, FILE_SCHEME).map(Self)
     }
 
@@ -79,7 +89,7 @@ pub struct TreeHash(String);
 
 impl TreeHash {
     /// The hash `spelling` states, or why it states none.
-    pub fn parse(spelling: &str) -> Result<Self, String> {
+    pub fn parse(spelling: &str) -> Result<Self, Said> {
         parse_under(spelling, TREE_SCHEME).map(Self)
     }
 

@@ -4,7 +4,7 @@
 mod tests;
 
 use {
-    crate::{MANIFEST, Package, Umbrella},
+    crate::{MANIFEST, Package, Refused, Umbrella},
     semver::Version,
     std::{
         fmt,
@@ -41,11 +41,18 @@ impl CompilerVersion {
 }
 
 impl FromStr for CompilerVersion {
-    type Err = String;
+    type Err = Refused;
 
-    fn from_str(spelling: &str) -> Result<Self, String> {
+    fn from_str(spelling: &str) -> Result<Self, Refused> {
         spelling.parse().map(Self).map_err(|error| {
-            format!("`compiler` must be a bare SemVer version such as \"{}\", not a range: {spelling:?}: {error}", Self::current())
+            Refused::of("invalid version")
+                .stating(format_args!("written: {spelling:?}"))
+                .stating(format_args!(
+                    "`compiler` is a bare SemVer version such as \"{}\", not a range",
+                    Self::current()
+                ))
+                .stating(error)
+                .value(["compiler"])
         })
     }
 }

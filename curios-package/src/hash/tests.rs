@@ -35,7 +35,8 @@ fn a_c1_hash_parses() {
 #[test]
 fn an_unknown_scheme_is_refused() {
     let refusal = TreeHash::parse(&format!("c2:{}", "a".repeat(64)))
-        .expect_err("a scheme this compiler does not know");
+        .expect_err("a scheme this compiler does not know")
+        .to_string();
 
     assert!(refusal.contains("names no hash scheme"), "{refusal}");
 }
@@ -43,14 +44,18 @@ fn an_unknown_scheme_is_refused() {
 /// A bare digest with no scheme is the same refusal: the prefix is what lets two schemes verify during a transition, so it is never optional.
 #[test]
 fn a_scheme_less_digest_is_refused() {
-    let refusal = TreeHash::parse(&"a".repeat(64)).expect_err("a digest with no scheme");
+    let refusal = TreeHash::parse(&"a".repeat(64))
+        .expect_err("a digest with no scheme")
+        .to_string();
 
     assert!(refusal.contains("names no hash scheme"), "{refusal}");
 }
 
 #[test]
 fn a_short_digest_is_refused() {
-    let refusal = TreeHash::parse("c1:abc").expect_err("a digest of the wrong length");
+    let refusal = TreeHash::parse("c1:abc")
+        .expect_err("a digest of the wrong length")
+        .to_string();
 
     assert!(refusal.contains("64 lowercase hex digits"), "{refusal}");
 }
@@ -58,8 +63,9 @@ fn a_short_digest_is_refused() {
 /// Uppercase is refused rather than folded, because the hash is a store key and two spellings of one digest would be two directories.
 #[test]
 fn an_uppercase_digest_is_refused() {
-    let refusal =
-        TreeHash::parse(&format!("c1:{}", "A".repeat(64))).expect_err("an uppercase digest");
+    let refusal = TreeHash::parse(&format!("c1:{}", "A".repeat(64)))
+        .expect_err("an uppercase digest")
+        .to_string();
 
     assert!(refusal.contains("64 lowercase hex digits"), "{refusal}");
 }

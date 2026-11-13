@@ -58,20 +58,15 @@ fn an_export_answers_a_declaration_named_from_its_own_package() {
     const ROW: &str = "name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n\n[foreign.native]\npath = \"m.wasm\"\nhash = \"f1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"\n\n[foreign.answers]\n";
 
     for (claim, expected) in [
-        (
-            "/crypto/digest/sha256",
-            "this one is written `digest/sha256`",
-        ),
-        ("/std/rand/rand_bytes", "is no declaration of crypto"),
-        ("/other/give", "is no declaration of crypto"),
-        ("/cryptography/give", "is no declaration of crypto"),
+        ("/crypto/digest/sha256", "write `digest/sha256`"),
+        ("/std/rand/rand_bytes", "is no declaration of `/crypto`"),
+        ("/other/give", "is no declaration of `/crypto`"),
+        ("/cryptography/give", "is no declaration of `/crypto`"),
         ("digest//sha256", "it is empty"),
         ("digest/let", "it is a keyword"),
         ("../other/give", "it is no identifier"),
     ] {
-        let refusal = format!("{ROW}\"{claim}\" = \"answer\"\n")
-            .parse::<Manifest>()
-            .expect_err("a claim outside the package");
+        let refusal = refuse(&format!("{ROW}\"{claim}\" = \"answer\"\n"));
 
         assert!(refusal.contains(expected), "{claim}: {refusal}");
     }
@@ -88,17 +83,15 @@ fn a_declaration_two_rows_answer_is_refused() {
         )
     };
 
-    let refusal = format!(
+    let refusal = refuse(&format!(
         "name = \"crypto\"\n\n{}{}",
         row("sha2", "SHA256_Digest"),
         row("other", "digest")
-    )
-    .parse::<Manifest>()
-    .expect_err("one declaration, two rows");
+    ));
 
     assert!(
         refusal.contains(
-            "the foreign rows \"sha2\" and \"other\" both name an export that answers `/crypto/digest/sha256`"
+            "`sha2` and `other` both name an export that answers `/crypto/digest/sha256`"
         ),
         "{refusal}"
     );
@@ -148,7 +141,7 @@ fn a_foreign_row_with_no_delivery_says_where_one_goes() {
     let refusal = refuse("name = \"crypto\"\n\n[[foreign]]\nname = \"sha2\"\n");
 
     assert!(
-        refusal.contains("names no module: state `[foreign.native]`"),
+        refusal.contains("names no module\n  state `[foreign.native]`"),
         "{refusal}"
     );
 }
@@ -217,7 +210,7 @@ fn the_page_s_own_names_are_refused() {
         ));
 
         assert!(
-            refusal.contains("which the page holds for itself"),
+            refusal.contains("the page holds that path for itself"),
             "{table:?} reported {refusal}"
         );
     }

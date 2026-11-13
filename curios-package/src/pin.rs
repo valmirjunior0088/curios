@@ -330,8 +330,9 @@ pub fn pin(
     let written = after.to_string();
     written.parse::<Manifest>().map_err(|refusal| {
         format!(
-            "{}, as this pin would leave it: {refusal}",
-            pinning.manifest.display()
+            "{}, as this pin would leave it: {}",
+            pinning.manifest.display(),
+            refusal.said
         )
     })?;
 

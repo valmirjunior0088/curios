@@ -46,7 +46,9 @@ fn a_package_and_an_umbrella_each_state_a_width_under_format() {
 fn a_key_format_does_not_take_is_refused_where_the_manifest_is_read() {
     let refusal = "name = \"app\"\n\n[format]\nwidht = 80\n"
         .parse::<Manifest>()
-        .unwrap_err();
+        .unwrap_err()
+        .said
+        .to_string();
     assert!(refusal.contains("unknown field `widht`"), "{refusal}");
     assert!(refusal.contains("`width`"), "{refusal}");
 }
@@ -61,7 +63,9 @@ fn a_width_the_formatter_does_not_admit_is_refused_where_the_manifest_is_read() 
     ] {
         let refusal = format!("name = \"app\"\n\n[format]\nwidth = {stated}\n")
             .parse::<Manifest>()
-            .unwrap_err();
+            .unwrap_err()
+            .said
+            .to_string();
         assert!(refusal.contains(refused), "{stated}: {refusal}");
     }
 }

@@ -9,8 +9,13 @@ pub fn parse(source: &str) -> Manifest {
         .expect("a manifest this test states is legal")
 }
 
-/// The refusal `source` earns, or the panic of it having been accepted.
+/// What the refusal `source` earns says, its tag and each fact beneath it, or the panic of it having been accepted.
 pub fn refuse(source: &str) -> String {
+    refused(source).said.to_string()
+}
+
+/// The refusal `source` earns, or the panic of it having been accepted.
+pub fn refused(source: &str) -> Refused {
     source
         .parse::<Manifest>()
         .expect_err("a manifest this test states is refused")

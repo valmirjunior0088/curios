@@ -134,7 +134,7 @@ fn a_nameless_package_is_refused() {
         "#,
     );
 
-    assert!(refusal.contains("declares none"), "{refusal}");
+    assert!(refusal.contains("declares no `name`"), "{refusal}");
 }
 
 /// A dash is the ordinary way to spell a package name elsewhere, and the one this language cannot resolve. A `/` is the other: a name is one word, so the segments that would have made `myorg/json` a namespace are refused by the same identifier check rather than by a rule of their own.
@@ -163,7 +163,7 @@ fn an_executable_named_by_no_identifier_is_refused() {
         "#,
     );
 
-    assert!(refusal.contains("single identifier"), "{refusal}");
+    assert!(refusal.contains("not named by one identifier"), "{refusal}");
 }
 
 #[test]
@@ -229,7 +229,10 @@ fn a_dangling_default_is_refused() {
         "#,
     );
 
-    assert!(refusal.contains("does not declare"), "{refusal}");
+    assert!(
+        refusal.contains("declares no executable of that name"),
+        "{refusal}"
+    );
 }
 
 /// A catalog row is what a marker resolves to, so it cannot be a marker itself.

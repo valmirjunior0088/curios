@@ -545,7 +545,7 @@ Present only in a compiler built with the `profile` feature, which carries the f
 
 ## The manifest
 
-A `curios.toml` declares a package or an umbrella, never both, and one that declares neither is refused naming what each would have had to state. Unknown keys are refused too, so a misspelling is an error rather than a setting that silently did nothing.
+A `curios.toml` declares a package or an umbrella, never both, and one that declares neither is refused naming what each would have had to state. Unknown keys are refused too, so a misspelling is an error rather than a setting that silently did nothing. What a manifest states is refused where it states it: the report stands at the key, the value or the row it is about, with that line of the manifest shown ([What a command reports](#what-a-command-reports)), and at the file where it is about the manifest as a whole.
 
 A package is a namespace for definitions and an umbrella a namespace for packages, which is why no manifest is both: an umbrella whose first member is this package is one directory away.
 

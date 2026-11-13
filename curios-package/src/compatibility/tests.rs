@@ -23,7 +23,11 @@ fn future() -> CompilerVersion {
 #[test]
 fn a_compiler_minimum_is_a_version_and_never_a_range() {
     for spelling in ["", "1.2", ">=1.2.3", "^1.2.3", "1.2.3, <2.0.0"] {
-        let error = spelling.parse::<CompilerVersion>().unwrap_err();
+        let error = spelling
+            .parse::<CompilerVersion>()
+            .unwrap_err()
+            .said
+            .to_string();
         assert!(error.contains("bare SemVer version"), "{error}");
     }
     assert_eq!(
@@ -49,8 +53,15 @@ fn a_standalone_package_requires_its_own_minimum() {
 
 #[test]
 fn an_umbrella_requires_the_minimum_its_members_inherit() {
-    let error = "members = []".parse::<Manifest>().unwrap_err();
-    assert!(error.contains("an umbrella must declare"), "{error}");
+    let error = "members = []"
+        .parse::<Manifest>()
+        .unwrap_err()
+        .said
+        .to_string();
+    assert!(
+        error.contains("this umbrella states no `compiler`"),
+        "{error}"
+    );
 }
 
 #[test]

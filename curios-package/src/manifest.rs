@@ -15,8 +15,10 @@ mod foreign_tests;
 mod package_tests;
 
 use {
-    crate::{CompilerVersion, FileHash, FormatSettings, STORE, Store, Subject, TreeHash},
-    curios_common::{is_identifier, is_keyword},
+    crate::{
+        CompilerVersion, FileHash, FormatSettings, Refused, STORE, Step, Store, Subject, TreeHash,
+    },
+    curios_common::{About, Report, Said, Source, is_identifier, is_keyword},
     serde::Deserialize,
     std::{
         collections::BTreeMap,
@@ -51,13 +53,18 @@ impl Manifest {
     /// The manifest `path` holds, with every refusal named against that file — and the package's own executable, when `exe.crs` sits beside it.
     ///
     /// Discovery happens here rather than in [`FromStr`], because only this spelling knows where the manifest *is*. The text alone can be parsed without a filesystem, which is what the tests and the umbrella walk rely on.
-    pub fn from_path(path: &Path) -> Result<Self, String> {
-        let source =
-            fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    pub fn from_path(path: &Path) -> Result<Self, Box<Report>> {
+        let source = Source::read(path).map_err(|error| {
+            let mut said = Said::line("unreadable file");
+            said.stating(error);
+
+            Report::about(About::Path(path.to_path_buf()), said)
+        })?;
 
         let manifest: Self = source
+            .text()
             .parse()
-            .map_err(|refusal| format!("{}: {refusal}", path.display()))?;
+            .map_err(|refused: Refused| refused.located(&source))?;
 
         Ok(match (manifest, path.parent()) {
             (Self::Package(package), Some(directory)) => {
@@ -69,11 +76,18 @@ impl Manifest {
 }
 
 impl FromStr for Manifest {
-    type Err = String;
+    type Err = Refused;
 
     fn from_str(source: &str) -> Result<Self, Self::Err> {
         toml::from_str::<Document>(source)
-            .map_err(|error| error.to_string())?
+            .map_err(|error| {
+                let refused = Refused::of("syntax error").stating(error.message());
+
+                match error.span() {
+                    Some(range) => refused.range(range),
+                    None => refused,
+                }
+            })?
             .classify()
     }
 }
@@ -215,7 +229,7 @@ struct Document {
 
 impl Document {
     /// Which mode this document is in, and what that answer costs.
-    fn classify(self) -> Result<Manifest, String> {
+    fn classify(self) -> Result<Manifest, Refused> {
         let package = declared(&[
             ("name", self.name.is_some()),
             ("description", self.description.is_some()),
@@ -230,29 +244,40 @@ impl Document {
         ]);
 
         match (package.is_empty(), umbrella.is_empty()) {
-            (false, false) => Err(format!(
-                "a manifest is a package or an umbrella, never both: this one declares {package} beside {umbrella}. A package is a namespace for definitions and an umbrella a namespace for packages; an umbrella whose first member is this package is one directory away."
-            )),
-            (true, true) => Err(format!(
-                "a manifest declares a package or an umbrella, and this one declares neither: a package states `name`, an umbrella states `members`. A bare `.crs` file needs no {MANIFEST} at all."
-            )),
+            (false, false) => Err(Refused::of("ambiguous manifest")
+                .stating(format_args!(
+                    "this manifest declares {package} beside {umbrella}"
+                ))
+                .stating("a manifest is a package or an umbrella, never both")
+                .stating("a package is a namespace for definitions, and an umbrella a namespace for packages")
+                .stating("make an umbrella one directory up, with this package as its first member")
+                .entry([match self.members.is_some() {
+                    true => "members",
+                    false => "catalog",
+                }])),
+            (true, true) => Err(Refused::of("empty manifest")
+                .stating("this manifest declares neither a package nor an umbrella")
+                .stating("a package states `name`, and an umbrella states `members`")
+                .stating(format_args!("a bare `.crs` file needs no {MANIFEST}"))),
             (false, true) => self.package().map(Manifest::Package),
             (true, false) => self.umbrella().map(Manifest::Umbrella),
         }
     }
 
     /// This document read as a package.
-    fn package(self) -> Result<Package, String> {
+    fn package(self) -> Result<Package, Refused> {
         let Some(spelling) = self.name else {
-            return Err(
-                "a package declares its own canonical name, and this one declares none: `name` is both its mount prefix and every consumer's only way to refer to it".to_string(),
-            );
+            return Err(Refused::of("missing name")
+                .stating("this package declares no `name`")
+                .stating("a name is its mount prefix, and every consumer's way to refer to it"));
         };
-        let name = canonical(&spelling, "package name")?;
+        let name = canonical(&spelling).map_err(|refused| refused.value(["name"]))?;
 
         let mut executables = Vec::new();
-        for row in self.executables.unwrap_or_default() {
-            executables.push(row.executable(&executables)?);
+        for (index, row) in self.executables.unwrap_or_default().into_iter().enumerate() {
+            let placed =
+                |refused: Refused| refused.under([Step::key("executables"), Step::Row(index)]);
+            executables.push(row.executable(&executables).map_err(placed)?);
         }
 
         // `default` is a reference like any other, so a dangling one is refused here rather than discovered by a `curios run` that finds nothing. The package's own name is exempt: it is the one name [`Package::discovered`] may still add, from an `exe.crs` this pass cannot see — and when that file turns out to be absent too, `curios run` refuses it by name before anything elaborates.
@@ -262,14 +287,16 @@ impl Document {
                 .iter()
                 .any(|executable| &executable.name == default)
         {
-            return Err(format!(
-                "`default` names the executable {default:?}, which this package does not declare"
-            ));
+            return Err(Refused::of("unknown executable")
+                .stating(format_args!("`default` names `{default}`"))
+                .stating("this package declares no executable of that name")
+                .value(["default"]));
         }
 
         let mut foreign = Vec::new();
-        for row in self.foreign.unwrap_or_default() {
-            foreign.push(row.foreign(&name, &foreign)?);
+        for (index, row) in self.foreign.unwrap_or_default().into_iter().enumerate() {
+            let placed = |refused: Refused| refused.under([Step::key("foreign"), Step::Row(index)]);
+            foreign.push(row.foreign(&name, &foreign).map_err(placed)?);
         }
 
         Ok(Package {
@@ -278,32 +305,40 @@ impl Document {
             format: self.format,
             description: self.description,
             default: self.default,
-            dependencies: table(self.dependencies.unwrap_or_default(), "dependency row")?,
+            dependencies: table(self.dependencies.unwrap_or_default(), "dependencies")?,
             executables,
             foreign,
         })
     }
 
     /// This document read as an umbrella.
-    fn umbrella(self) -> Result<Umbrella, String> {
-        let catalog = table(self.catalog.unwrap_or_default(), "catalog row")?;
+    fn umbrella(self) -> Result<Umbrella, Refused> {
+        let catalog = table(self.catalog.unwrap_or_default(), "catalog")?;
 
         // A catalog row is what a member's marker resolves *to*, so it cannot be a marker itself: umbrellas do not nest, and nothing sits above one to answer a marker it wrote.
         if let Some((name, _)) = catalog
             .iter()
             .find(|(_, row)| matches!(row, Dependency::Member | Dependency::Catalog))
         {
-            return Err(format!(
-                "the catalog row {name:?} names a marker source; a catalog row names a fetchable source or `path`"
-            ));
+            return Err(Refused::of("misplaced marker")
+                .stating(format_args!(
+                    "the catalog row `{name}` names a marker source"
+                ))
+                .stating("a catalog row is what a marker resolves to")
+                .stating("it names a fetchable source or `path`")
+                .value(["catalog", name.as_str(), "source"]));
         }
 
         Ok(Umbrella {
             compiler: self
                 .compiler
                 .ok_or_else(|| {
-                    "an umbrella must declare its members' minimum compiler version in `compiler`"
-                        .to_string()
+                    Refused::of("missing compiler version")
+                        .stating("this umbrella states no `compiler`")
+                        .stating(format_args!(
+                            "an umbrella states the one its members inherit, as `compiler = \"{}\"`",
+                            CompilerVersion::current()
+                        ))
                 })?
                 .parse()?,
             format: self.format,
@@ -324,7 +359,7 @@ impl Document {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DependencyRow {
-    source: Source,
+    source: Resolver,
     url: Option<String>,
     rev: Option<String>,
     hash: Option<String>,
@@ -332,8 +367,8 @@ struct DependencyRow {
 }
 
 impl DependencyRow {
-    /// What this row resolves to, or which field the source it names cannot use — or requires. `subject` names the row for a refusal: the table it sits in, and the name it is filed under.
-    fn dependency(self, subject: &str) -> Result<Dependency, String> {
+    /// What this row resolves to, or which field the source it names cannot use — or requires.
+    fn dependency(self) -> Result<Dependency, Refused> {
         let Self {
             source,
             url,
@@ -344,9 +379,9 @@ impl DependencyRow {
 
         // Exactly the fields this source takes. Both directions are checked against it, so a field is never quietly ignored and never quietly defaulted: a `rev` on a live row is a pin somebody believed in.
         let takes: &[&str] = match source {
-            Source::Member | Source::Catalog => &[],
-            Source::Git => &["url", "rev", "hash"],
-            Source::Path => &["path"],
+            Resolver::Member | Resolver::Catalog => &[],
+            Resolver::Git => &["url", "rev", "hash"],
+            Resolver::Path => &["path"],
         };
         let stated = [
             ("url", url.is_some()),
@@ -359,27 +394,30 @@ impl DependencyRow {
             .iter()
             .find(|(field, stated)| *stated && !takes.contains(field))
         {
-            return Err(format!(
-                "the {subject} is `source = \"{source}\"`, which takes no `{field}`"
-            ));
+            return Err(Refused::of("surplus field")
+                .stating(format_args!("this row is `source = \"{source}\"`"))
+                .stating(format_args!("that source takes no `{field}`"))
+                .entry([*field]));
         }
 
         let require = |field: &str, value: Option<String>| {
             value.ok_or_else(|| {
-                format!("the {subject} is `source = \"{source}\"`, which requires `{field}`")
+                Refused::of("missing field")
+                    .stating(format_args!("this row is `source = \"{source}\"`"))
+                    .stating(format_args!("that source requires `{field}`"))
             })
         };
 
         match source {
-            Source::Member => Ok(Dependency::Member),
-            Source::Catalog => Ok(Dependency::Catalog),
-            Source::Git => Ok(Dependency::Git {
-                url: optionless("url", require("url", url)?, subject)?,
-                rev: optionless("rev", require("rev", rev)?, subject)?,
+            Resolver::Member => Ok(Dependency::Member),
+            Resolver::Catalog => Ok(Dependency::Catalog),
+            Resolver::Git => Ok(Dependency::Git {
+                url: optionless("url", require("url", url)?)?,
+                rev: optionless("rev", require("rev", rev)?)?,
                 hash: TreeHash::parse(&require("hash", hash)?)
-                    .map_err(|refusal| format!("the {subject}: {refusal}"))?,
+                    .map_err(|said| Refused::saying(said).value(["hash"]))?,
             }),
-            Source::Path => Ok(Dependency::Path {
+            Resolver::Path => Ok(Dependency::Path {
                 path: require("path", path)?.into(),
             }),
         }
@@ -393,11 +431,12 @@ impl DependencyRow {
 /// It matters past the manifest somebody wrote: `curate` walks each fetched dependency's own manifest for further rows, so a pinned tree supplies these fields for fetches on its consumer's machine. Vouching for a tree's bytes is not authorizing it to pass options to that consumer's `git`.
 ///
 /// A leading `-` and nothing more. Demanding a full object name would forbid pinning by tag or branch, which is a decision about what a pin may be rather than a repair — and `--` is no alternative to either, since `git checkout --detach -- <rev>` reads what follows as a path.
-fn optionless(field: &str, value: String, subject: &str) -> Result<String, String> {
+fn optionless(field: &str, value: String) -> Result<String, Refused> {
     match value.starts_with('-') {
-        true => Err(format!(
-            "the {subject} states a `{field}` beginning with `-` ({value:?}); `curios curate` hands it to a fetcher, which would read it as an option rather than as a {field}"
-        )),
+        true => Err(Refused::of("invalid value")
+            .stating(format_args!("`{field}` begins with `-`"))
+            .stating("`curios curate` hands it to a fetcher, which would read it as an option")
+            .value([field])),
         false => Ok(value),
     }
 }
@@ -405,14 +444,14 @@ fn optionless(field: &str, value: String, subject: &str) -> Result<String, Strin
 /// The resolvers a row may name. `member` and `catalog` are markers: each names exactly the umbrella-side list that answers it.
 #[derive(Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-enum Source {
+enum Resolver {
     Member,
     Catalog,
     Git,
     Path,
 }
 
-impl fmt::Display for Source {
+impl fmt::Display for Resolver {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Member => "member",
@@ -590,7 +629,7 @@ impl Delivery {
 
 impl ForeignRow {
     /// This row as a declared provider of the package `package`, against the ones already declared before it.
-    fn foreign(self, package: &str, declared: &[Foreign]) -> Result<Foreign, String> {
+    fn foreign(self, package: &str, declared: &[Foreign]) -> Result<Foreign, Refused> {
         let Self {
             name,
             native,
@@ -598,34 +637,46 @@ impl ForeignRow {
             answers,
         } = self;
 
-        let name = canonical(&name, "foreign row name")?;
+        let name = canonical(&name).map_err(|refused| refused.value(["name"]))?;
 
         if declared.iter().any(|foreign| foreign.name == name) {
-            return Err(format!("the foreign row {name:?} is declared twice"));
+            return Err(Refused::of("duplicate foreign row")
+                .stating(format_args!("`{name}` is declared twice")));
         }
 
         if native.is_none() && browser.is_none() {
-            return Err(format!(
-                "the foreign row {name:?} names no module: state `[foreign.native]` for what the native target links or `[foreign.browser]` for what a browser does, each with a `path` for a file the package carries or a `url` for one it fetches, beside its `hash`"
-            ));
+            return Err(Refused::of("missing module")
+                .stating(format_args!("`{name}` names no module"))
+                .stating("state `[foreign.native]` for what the native target links")
+                .stating("or `[foreign.browser]` for what a browser does")
+                .stating("each with a `path` for a file the package carries or a `url` for one it fetches, beside its `hash`"));
         }
         let native = native
             .map(|row| row.delivery(&name, Target::Native))
-            .transpose()?;
-        let browser = browser.map(|row| row.gateway(&name)).transpose()?;
+            .transpose()
+            .map_err(|refused| refused.under(["native"]))?;
+        let browser = browser
+            .map(|row| row.gateway(&name))
+            .transpose()
+            .map_err(|refused| refused.under(["browser"]))?;
 
         // Each declaration is claimed once across the package's rows: nothing chooses between two answers, and the rows of one manifest are where two claims on one declaration can be written.
         let mut claimed = BTreeMap::new();
         for (spelled, export) in answers.unwrap_or_default() {
-            let declaration = own_declaration(package, &spelled, &name)?;
+            let answer = |refused: Refused| refused.entry(["answers", spelled.as_str()]);
+            let declaration = own_declaration(package, &spelled, &name).map_err(answer)?;
 
             if let Some(earlier) = declared
                 .iter()
                 .find(|foreign| foreign.answers.contains_key(&declaration))
             {
-                return Err(format!(
-                    "the foreign rows {:?} and {name:?} both name an export that answers `{declaration}`; a declaration is answered by one export of one module",
-                    earlier.name
+                return Err(answer(
+                    Refused::of("duplicate answer")
+                        .stating(format_args!(
+                            "`{}` and `{name}` both name an export that answers `{declaration}`",
+                            earlier.name
+                        ))
+                        .stating("a declaration is answered by one export of one module"),
                 ));
             }
 
@@ -643,7 +694,7 @@ impl ForeignRow {
 
 impl DeliveryRow {
     /// This table of the foreign row `name`, the one for `target`, as what that target links.
-    fn delivery(self, name: &str, target: Target) -> Result<Delivery, String> {
+    fn delivery(self, name: &str, target: Target) -> Result<Delivery, Refused> {
         let Self { path, url, hash } = self;
 
         delivered(path, url, hash, name, target)
@@ -654,7 +705,7 @@ impl GatewayRow {
     /// This `[foreign.browser]` table of the foreign row `name`, as what a browser links for it.
     ///
     /// **The page's own names are refused here, for every package.** A gateway the package carries stands at its path in the page, a fetched one at `<row>.js`, and a `static` key at itself, so each of [`PAGE_FILES`] is refused where the manifest is read rather than where a page is put together, and in a library as in a program, so no package can come to depend on standing there.
-    fn gateway(self, name: &str) -> Result<Gateway, String> {
+    fn gateway(self, name: &str) -> Result<Gateway, Refused> {
         let Self {
             path,
             url,
@@ -665,21 +716,26 @@ impl GatewayRow {
         let delivery = delivered(path, url, hash, name, Target::Browser)?;
         held_by_the_page(
             &stands(&delivery.module, name),
-            &format!("the gateway of the foreign row {name:?}"),
+            &format!("the gateway of the foreign row `{name}`"),
         )?;
 
         let mut served = BTreeMap::new();
         for (page, package) in statics.unwrap_or_default() {
-            let subject = format!("the static file {page:?} of the foreign row {name:?}");
+            let subject = format!("the static file `{page}` of the foreign row `{name}`");
+            let entry = |refused: Refused| refused.entry(["static", page.as_str()]);
+            let valued = |refused: Refused| refused.value(["static", page.as_str()]);
 
-            plain_static(&page, &subject, "page path")?;
-            held_by_the_page(&page, &subject)?;
-            let read = plain_static(&package, &subject, "package path")?;
+            plain_static(&page, &subject, "page path").map_err(entry)?;
+            held_by_the_page(&page, &subject).map_err(entry)?;
+            let read = plain_static(&package, &subject, "package path").map_err(valued)?;
             // The store is the toolchain's, and a page that served it would serve every build product the project holds.
             if read.starts_with(STORE) {
-                return Err(format!(
-                    "{subject} is read from {package}, under `{STORE}`, which is the toolchain's and no file a page serves"
-                ));
+                return Err(Refused::of("invalid path")
+                    .stating(format_args!(
+                        "{subject} is read from `{package}`, under `{STORE}`"
+                    ))
+                    .stating("that directory is the toolchain's, and no file a page serves")
+                    .value(["static", page.as_str()]));
             }
 
             served.insert(page, read);
@@ -693,29 +749,36 @@ impl GatewayRow {
 }
 
 /// Refuse a page path `stands` that one of [`PAGE_FILES`] is, for `subject`.
-fn held_by_the_page(stands: &str, subject: &str) -> Result<(), String> {
+fn held_by_the_page(stands: &str, subject: &str) -> Result<(), Refused> {
     match PAGE_FILES.contains(&stands) {
-        true => Err(format!(
-            "{subject} would stand at `{stands}`, which the page holds for itself: no file of a package may stand at {}",
-            PAGE_FILES.map(|file| format!("`{file}`")).join(", ")
-        )),
+        true => Err(Refused::of("reserved path")
+            .stating(format_args!("{subject} would stand at `{stands}`"))
+            .stating("the page holds that path for itself")
+            .stating(format_args!(
+                "no file of a package may stand at {}",
+                PAGE_FILES.map(|file| format!("`{file}`")).join(", ")
+            ))),
         false => Ok(()),
     }
 }
 
 /// `path`, one side of a `static` entry for `subject`, as a plain relative path naming something: no `.`, `..`, leading `/` or empty spelling.
-fn plain_static(path: &str, subject: &str, side: &str) -> Result<PathBuf, String> {
+fn plain_static(path: &str, subject: &str, side: &str) -> Result<PathBuf, Refused> {
     let spelled = PathBuf::from(path);
 
     match spelled
         .components()
         .find(|component| !matches!(component, Component::Normal(_)))
     {
-        _ if path.is_empty() => Err(format!("{subject} has an empty {side}")),
-        Some(component) => Err(format!(
-            "{subject} has the {side} {path}, whose `{}` is no plain relative path; a `static` entry names a page path and a file of the package each with no `.`, `..` or leading `/`",
-            component.as_os_str().to_string_lossy()
-        )),
+        _ if path.is_empty() => Err(Refused::of("invalid path")
+            .stating(format_args!("{subject} has an empty {side}"))),
+        Some(component) => Err(Refused::of("invalid path")
+            .stating(format_args!("{subject} has the {side} `{path}`"))
+            .stating(format_args!(
+                "its `{}` is no plain relative path",
+                component.as_os_str().to_string_lossy()
+            ))
+            .stating("a `static` entry names a page path and a file of the package, each with no `.`, `..` or leading `/`")),
         None => Ok(spelled),
     }
 }
@@ -727,84 +790,101 @@ fn delivered(
     hash: Option<String>,
     name: &str,
     target: Target,
-) -> Result<Delivery, String> {
+) -> Result<Delivery, Refused> {
     let invocation = Subject::Foreign(target).invocation(name);
     let target = target.spelled();
 
     // Where the file comes from: one spelling or the other, checked in both directions so neither is quietly ignored nor quietly defaulted — `DependencyRow`'s rule, applied to the other thing a manifest delivers.
     let module = match (path, url) {
         (Some(path), None) => Module::Filed(plain_relative(&path, name)?),
-        (None, Some(url)) => {
-            Module::Fetched(optionless("url", url, &format!("foreign row {name:?}"))?)
-        }
+        (None, Some(url)) => Module::Fetched(optionless("url", url)?),
         (Some(_), Some(_)) => {
-            return Err(format!(
-                "the foreign row {name:?} states `path` beside `url` in `[foreign.{target}]`; a file is carried by the package or fetched, never both"
-            ));
+            return Err(Refused::of("conflicting fields")
+                .stating(format_args!(
+                    "`{name}` states `path` beside `url` in `[foreign.{target}]`"
+                ))
+                .stating("a file is carried by the package or fetched, never both")
+                .entry(["url"]));
         }
         (None, None) => {
-            return Err(format!(
-                "the foreign row {name:?} names no file in `[foreign.{target}]`: state `path` for one the package carries, or `url` for one it fetches"
-            ));
+            return Err(Refused::of("missing field")
+                .stating(format_args!(
+                    "`{name}` names no file in `[foreign.{target}]`"
+                ))
+                .stating("state `path` for one the package carries, or `url` for one it fetches"));
         }
     };
 
     // Both deliveries state it, because it answers what the file *is* rather than where it came from — and the carried case is the one that would otherwise go unchecked, since the tree holding it may be the entry package or a live path dependency, neither of which is pinned.
     let Some(hash) = hash else {
-        return Err(format!(
-            "the foreign row {name:?} states no `hash` in `[foreign.{target}]`; a file is accepted against one however it arrives, and `{invocation} --refresh` writes the one it currently has"
-        ));
+        return Err(Refused::of("missing hash")
+            .stating(format_args!(
+                "`{name}` states no `hash` in `[foreign.{target}]`"
+            ))
+            .stating("a file is accepted against one however it arrives")
+            .trying(format!("{invocation} --refresh")));
     };
 
     Ok(Delivery {
         module,
-        hash: FileHash::parse(&hash)
-            .map_err(|refusal| format!("the foreign row {name:?}: {refusal}"))?,
+        hash: FileHash::parse(&hash).map_err(|said| Refused::saying(said).value(["hash"]))?,
     })
 }
 
 /// The qualified name of the declaration `spelled` names in the library of the package `package`, for the foreign row `row`.
 ///
 /// **A module answers its own package's declarations, and the spelling is what makes that so.** The path is read from the package's root, plain and relative as an executable's is, so every declaration it can name lies under the package's own prefix: a claim on another package's row, or on the standard library's, has no spelling, and nothing later has to hold a claim to its claimant. An absolute path is refused here, where the manifest is read.
-fn own_declaration(package: &str, spelled: &str, row: &str) -> Result<String, String> {
+fn own_declaration(package: &str, spelled: &str, row: &str) -> Result<String, Refused> {
     if let Some(absolute) = spelled.strip_prefix('/') {
         let own = absolute
             .strip_prefix(package)
             .and_then(|rest| rest.strip_prefix('/'));
 
         return Err(match own {
-            Some(relative) => format!(
-                "the foreign row {row:?} says an export answers `{spelled}`; a declaration is named from the package's own root, so this one is written `{relative}`"
-            ),
-            None => format!(
-                "the foreign row {row:?} says an export answers `{spelled}`, which is no declaration of {package}; a module answers its own package's declarations, each named from the package's root, as `digest/sha256` names `/{package}/digest/sha256`"
-            ),
+            Some(relative) => Refused::of("unrooted name")
+                .stating(format_args!(
+                    "`{row}` says an export answers `{spelled}`"
+                ))
+                .stating("a declaration is named from the package's own root")
+                .stating(format_args!("write `{relative}`")),
+            None => Refused::of("unknown declaration")
+                .stating(format_args!(
+                    "`{row}` says an export answers `{spelled}`"
+                ))
+                .stating(format_args!("that is no declaration of `/{package}`"))
+                .stating("a module answers its own package's declarations, each named from the package's root")
+                .stating(format_args!(
+                    "`digest/sha256` names `/{package}/digest/sha256`"
+                )),
         });
     }
 
     for segment in spelled.split('/') {
-        canonical(
-            segment,
-            &format!("segment of the declaration {spelled:?} the foreign row {row:?} names"),
-        )?;
+        canonical(segment)?;
     }
 
     Ok(format!("/{package}/{spelled}"))
 }
 
 /// A path a row names inside its own package, refused where it is not one — the rule an executable's `path` keeps, stated once for both.
-fn plain_relative(path: &str, subject: &str) -> Result<PathBuf, String> {
+fn plain_relative(path: &str, subject: &str) -> Result<PathBuf, Refused> {
     let path = PathBuf::from(path);
 
     match path
         .components()
         .find(|component| !matches!(component, Component::Normal(_)))
     {
-        Some(component) => Err(format!(
-            "the foreign row {subject:?} names the module {}, whose `{}` is no plain relative path; a row names a file inside the package by its path from the manifest, with no `.`, `..` or leading `/`",
-            path.display(),
-            component.as_os_str().to_string_lossy()
-        )),
+        Some(component) => Err(Refused::of("invalid path")
+            .stating(format_args!(
+                "`{subject}` names the module `{}`",
+                path.display()
+            ))
+            .stating(format_args!(
+                "its `{}` is no plain relative path",
+                component.as_os_str().to_string_lossy()
+            ))
+            .stating("a row names a file inside the package by its path from the manifest, with no `.`, `..` or leading `/`")
+            .value(["path"])),
         None => Ok(path),
     }
 }
@@ -819,13 +899,16 @@ struct ExecutableRow {
 
 impl ExecutableRow {
     /// This row as a declared entry program, against the ones already declared before it.
-    fn executable(self, declared: &[Executable]) -> Result<Executable, String> {
+    fn executable(self, declared: &[Executable]) -> Result<Executable, Refused> {
         let Self { name, path } = self;
 
         if !is_identifier(&name) {
-            return Err(format!(
-                "the executable {name:?} is not named by a single identifier, so `curios run` could not tell it from a file argument"
-            ));
+            return Err(Refused::of("invalid name")
+                .stating(format_args!(
+                    "the executable `{name}` is not named by one identifier"
+                ))
+                .stating("`curios run` could not tell it from a file argument")
+                .value(["name"]));
         }
 
         // One rule for every row, including the package's own: a declared executable is compiled from the file named after it. `exe.crs` is not a default here — it is what `Package::discovered` finds when *no* row claims the package's name, so writing a row always means what it says and never silently redirects an existing package's file.
@@ -839,26 +922,34 @@ impl ExecutableRow {
             .components()
             .find(|component| !matches!(component, Component::Normal(_)))
         {
-            return Err(format!(
-                "the executable {name:?} is compiled from {}, whose `{}` is no plain relative path; a row names a file inside the package by its path from the manifest, with no `.`, `..` or leading `/`",
-                path.display(),
-                component.as_os_str().to_string_lossy()
-            ));
+            return Err(Refused::of("invalid path")
+                .stating(format_args!(
+                    "the executable `{name}` is compiled from `{}`",
+                    path.display()
+                ))
+                .stating(format_args!(
+                    "its `{}` is no plain relative path",
+                    component.as_os_str().to_string_lossy()
+                ))
+                .stating("a row names a file inside the package by its path from the manifest, with no `.`, `..` or leading `/`")
+                .value(["path"]));
         }
 
         if let Some(previous) = declared.iter().find(|executable| executable.name == name) {
-            return Err(format!(
-                "the executable {name:?} is declared twice, from {} and from {}",
-                previous.path.display(),
-                path.display()
-            ));
+            return Err(Refused::of("duplicate executable")
+                .stating(format_args!("`{name}` is declared twice"))
+                .stating(format_args!(
+                    "from `{}` and from `{}`",
+                    previous.path.display(),
+                    path.display()
+                )));
         }
 
         // The library header is the library's root, so no program is compiled from it.
         if path == Path::new(LIBRARY) {
-            return Err(format!(
-                "the executable {name:?} is compiled from `{LIBRARY}`, which is the package's library header"
-            ));
+            return Err(Refused::of("misplaced executable")
+                .stating(format_args!("`{name}` is compiled from `{LIBRARY}`"))
+                .stating("that file is the package's library header"));
         }
 
         Ok(Executable { name, path })
@@ -874,16 +965,18 @@ fn declared(keys: &[(&'static str, bool)]) -> String {
         .join(" and ")
 }
 
-/// Every row of one table, by the canonical name each is filed under.
+/// Every row of the table `key` names, by the canonical name each is filed under.
 fn table(
     rows: BTreeMap<String, DependencyRow>,
-    what: &str,
-) -> Result<BTreeMap<String, Dependency>, String> {
+    key: &str,
+) -> Result<BTreeMap<String, Dependency>, Refused> {
     rows.into_iter()
         .map(|(written, row)| {
+            let placed = |refused: Refused| refused.under([key, written.as_str()]);
+
             Ok((
-                canonical(&written, what)?,
-                row.dependency(&format!("{what} {written:?}"))?,
+                canonical(&written).map_err(placed)?,
+                row.dependency().map_err(placed)?,
             ))
         })
         .collect()
@@ -892,11 +985,12 @@ fn table(
 /// The canonical name `written` states, refused when it is not one.
 ///
 /// **A name is one word, and that is the whole rule.** It is the prefix the package mounts at, and a prefix is an atom: `myorg` in a hypothetical `myorg/json` would denote nothing on its own, so admitting segments here would make every package silently declare namespaces nobody wrote. A segment of names is a real thing to want, but it belongs to a package's own modules, where somebody declares each one.
-pub fn canonical(written: &str, what: &str) -> Result<String, String> {
+pub fn canonical(written: &str) -> Result<String, Refused> {
     let refuse = |reason: &str| {
-        format!(
-            "the {what} {written:?} is no name a path could spell: {reason}. A name is a single Curios identifier — no dashes, no `/`, and no keyword."
-        )
+        Refused::of("invalid name")
+            .stating(format_args!("`{written}` is no name a path could spell"))
+            .stating(reason)
+            .stating("a name is one identifier: no dashes, no `/`, no keyword")
     };
 
     match written {
