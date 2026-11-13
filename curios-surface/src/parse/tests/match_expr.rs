@@ -454,6 +454,14 @@ fn a_choose_condition_arm_still_calls_a_qualified_name() {
     );
 }
 
+/// A scrutinee that is a structure literal holds terms in its braces, so one beginning with a qualified call is no pattern that went wrong: the probe for a `match` written with braces keeps a pattern's refusal to itself.
+#[test]
+fn a_structure_literal_scrutinee_still_calls_a_qualified_name() {
+    if let Err(error) = "match Wrap { Option/some(7) } | w => w end".parse::<Term>() {
+        panic!("{}", error.format());
+    }
+}
+
 /// A dispatch case keeps its numeral whole, however wide it is: the width the erased carrier has is chosen at the erase boundary, not here.
 ///
 /// Narrowed to `u32` in the parser, a wide case would not be refused as one: the failure backtracks past every `Nat` leaf, and the arm is reported as holding no pattern.

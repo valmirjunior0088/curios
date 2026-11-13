@@ -9,7 +9,7 @@ use {
     },
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail_from, look_ahead, many0, mark, not_ahead, pure,
-        sep_by0_trailing, spanned, take_exact,
+        sep_by0_trailing, spanned, take_exact, uncommit,
     },
 };
 
@@ -34,12 +34,14 @@ const MATCH_TAKES_BARS: &[&str] = &[
 ];
 
 // A `match` written as another language writes it, `match n { 0 => …, _ => … }`, reads as a scrutinee that is a structure literal, which commits at its brace and reports the `}` it wanted at the first arrow. Probed before the scrutinee: a name, a brace, a pattern that opens with no parenthesis and an arrow are no literal's beginning — an entry is a term, and a lambda's parameters are parenthesized — so the refusal is exact, and stands at the brace.
+//
+// A refusal the pattern grammar commits to stays in the probe: where the scrutinee is a structure literal, what stands in its braces is a term, `match Wrap { Option/some(7) } | …`, which no pattern's rule judges.
 fn refuse_braced_match<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     look_ahead(
         parse_name
             .and_drop(parse_literal("{"))
             .and_drop(not_ahead("("))
-            .and_drop(parse_match_pattern)
+            .and_drop(uncommit(parse_match_pattern))
             .and_drop(take_exact("=>")),
     )
     .map(|_| true)
