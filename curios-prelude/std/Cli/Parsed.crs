@@ -144,16 +144,10 @@ let read(
     match v
     | nil() => match ok end
     | cons(@s, @rest, head, tail) =>
-        let pick =
-            match s.name == name: (b) =>
-                (here: match b | true => Bool/True | false => Has(rest, name) end) -> match b
-                | true => s.T
-                | false => Lookup(rest, name)
-                end
-            | true => (_) => head
-            | false => (later) => read(@rest, tail, name, @later)
-            end;
-        pick(ok)
+        match s.name == name
+        | true => head
+        | false => read(@rest, tail, name, @ok)
+        end
     end;
 
 --- The option or positional named `name` of the command `p` was parsed against, at the type its declaration decides.
@@ -208,24 +202,16 @@ let pick(
     @ok: HasIn(commands, name),
 ) -> Option(Parsed(NamedIn(commands, name))) =
     match chosen
-    | here(@c, @rest, parsed) =>
-        let found =
-            match /std/Cli/name(c) == name: (b) =>
-                (held: match b | true => Bool/True | false => HasIn(rest, name) end) -> Option(
-                    Parsed(match b | true => c | false => NamedIn(rest, name) end))
-            | true => (_) => Option/some(parsed)
-            | false => (_) => Option/none()
-            end;
-        found(ok)
-    | there(@c, @rest, more) =>
-        let found =
-            match /std/Cli/name(c) == name: (b) =>
-                (held: match b | true => Bool/True | false => HasIn(rest, name) end) -> Option(
-                    Parsed(match b | true => c | false => NamedIn(rest, name) end))
-            | true => (_) => Option/none()
-            | false => (later) => pick(more, name, @later)
-            end;
-        found(ok)
+    | here(@c, @_, parsed) =>
+        match /std/Cli/name(c) == name
+        | true => Option/some(parsed)
+        | false => Option/none()
+        end
+    | there(@c, @_, more) =>
+        match /std/Cli/name(c) == name
+        | true => Option/none()
+        | false => pick(more, name, @ok)
+        end
     end;
 
 --- The parse of the command `name` of the group `p` was parsed against, where the line chose it, and `none` where it chose another. A name the group lacks is refused where it is written.

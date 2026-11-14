@@ -307,11 +307,10 @@ pub let declare(command: Command, version: Option(Str), @ok: WellFormed(command,
 
 --- A declaration checked as the program runs: the command line, or every problem that keeps it from describing one.
 pub let checked(command: Command, version: Option(Str)) -> Result(List(Problem), Cli) =
-    match check/problems(command, version): (problems) =>
-        (made: (ok: Clear(problems)) -> Cli) -> Result(List(Problem), Cli)
-    | [] => (made) => Result/success(made(Bool/True/qed()))
-    | [p, ..more] => (_) => Result/failure([p, ..more])
-    end((ok) => Cli { command = command, version = version, @ok = ok });
+    match check/problems(command, version)
+    | [] => Result/success(Cli { command = command, version = version, @ok = Bool/True/qed() })
+    | [p, ..more] => Result/failure([p, ..more])
+    end;
 
 --- Why a line was refused.
 pub induct Failure: pub Type
@@ -439,13 +438,11 @@ pub let try_main(
     version: Option(Str),
     run: (Parsed(command)) -> Io({}),
 ) -> Io({}) =
-    match check/problems(command, version): (problems) =>
-        (go: (ok: Clear(problems)) -> Io({})) -> Io({})
-    | [] => (go) => go(Bool/True/qed())
+    match check/problems(command, version)
+    | [] => main(Cli { command = command, version = version, @ok = Bool/True/qed() }, run)
     | [p, ..more] =>
-        (_) =>
-            let _ =
-                Fmt/print_err("error: invalid command line declaration: %\n")(
-                    Str/join("; ", List/map([p, ..more], described)))!;
-            Proc/exit(1)
-    end((ok) => main(Cli { command = command, version = version, @ok = ok }, run));
+        let _ =
+            Fmt/print_err("error: invalid command line declaration: %\n")(
+                Str/join("; ", List/map([p, ..more], described)))!;
+        Proc/exit(1)
+    end;
