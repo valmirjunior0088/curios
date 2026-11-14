@@ -77,13 +77,10 @@ let field_problems(f: Field) -> List(Problem) =
         ..List/map(List/filter(longs, (n) => Bool/not(writable(n))), Problem/invalid_name),
         ..match shown(f.long) | true => [] | false => [Problem/invalid_name(f.long)] end,
         ..match f.short
-        | some(c) => match clusterable(c) | true => [] | false => [Problem/invalid_short(c)] end
-        | none() => []
+        | some(c), Bool/not(clusterable(c)) => [Problem/invalid_short(c)]
+        | _ => []
         end,
-        ..match f.env
-        | some(n) => match variable(n) | true => [] | false => [Problem/invalid_name(n)] end
-        | none() => []
-        end];
+        ..match f.env | some(n), Bool/not(variable(n)) => [Problem/invalid_name(n)] | _ => [] end];
 
 let every(ps: Positionals) -> List(Positional) =
     [..ps.required, ..ps.optional, ..match ps.rest | none() => [] | some(p) => [p] end];

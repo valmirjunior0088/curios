@@ -247,15 +247,10 @@ pub let closest(word: Str, known: List(Str)) -> Option(Str) =
             (candidate, best: Option({Str, Nat})) =>
                 let d = distance(word, candidate);
                 match best
-                | some(held) =>
-                    match d < held.1 | true => Option/some((candidate, d)) | false => best end
-                | none() => Option/some((candidate, d))
+                | some(held), held.1 <= d => best
+                | _ => Option/some((candidate, d))
                 end);
     match near
-    | some(found) =>
-        match found.1 <= 2 && found.1 < Str/len(word)
-        | true => Option/some(found.0)
-        | false => Option/none()
-        end
-    | none() => Option/none()
+    | some(found), found.1 <= 2 && found.1 < Str/len(word) => Option/some(found.0)
+    | _ => Option/none()
     end;
