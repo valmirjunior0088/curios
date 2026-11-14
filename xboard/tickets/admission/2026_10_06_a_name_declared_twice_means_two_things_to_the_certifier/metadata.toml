@@ -1,5 +1,4 @@
 title = "A name declared twice means two things to the certifier"
-found = 2026-10-06
 status = "fixed"
 
 [[witness]]

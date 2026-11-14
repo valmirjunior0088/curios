@@ -712,7 +712,7 @@ pub struct RecMemberScopes {
 
 /// The shared knot of a mutually-recursive group. Every member type and body is scoped over the full group. `Rc` sharing is an implementation detail; equality and hashing remain structural through the scoped items.
 ///
-/// **A group binds no universe.** Its members' level and quality parameters are the enclosing declaration's, positionally, so an instance of that declaration substitutes them with every other level it binds and every reader of a member reads one thing. A group that bound its own would be a second reading of the same index — the one the certifier admitted Hurkens' paradox through, `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` — since a scope walk shadows what a positional reader substitutes. `check_group` therefore checks a member's terms as written, under the constraints the declaration holding the group assumed.
+/// **A group binds no universe.** Its members' level and quality parameters are the enclosing declaration's, positionally, so an instance of that declaration substitutes them with every other level it binds and every reader of a member reads one thing. A group that bound its own would be a second reading of the same index — the one the certifier admitted Hurkens' paradox through, `xboard/src/formation/2026_11_02_a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` — since a scope walk shadows what a positional reader substitutes. `check_group` therefore checks a member's terms as written, under the constraints the declaration holding the group assumed.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct RecGroup {
@@ -1053,7 +1053,7 @@ pub struct Foreign {
 pub struct Instance {
     /// The declaration this occurrence instantiates. A global, as a family's and a constructor's name is, so that a binder no scheme governs — a local, a bound variable, a `let` — has no spelling here; the nominal normal forms carry their instance in their own universe vectors instead (see `Term::stamp_declaration_node`).
     ///
-    /// A projection out of a recursive group is no such name, and there is no other shape one can take. A group binds no universe ([`RecGroup`]), so a member has no scheme for an instance to satisfy and its levels are the enclosing declaration's, settled by the instance of *that* declaration; an instance that named a member would be a second binder over the same indices, which is the reading `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
+    /// A projection out of a recursive group is no such name, and there is no other shape one can take. A group binds no universe ([`RecGroup`]), so a member has no scheme for an instance to satisfy and its levels are the enclosing declaration's, settled by the instance of *that* declaration; an instance that named a member would be a second binder over the same indices, which is the reading `xboard/src/formation/2026_11_02_a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
     pub name: Global,
     pub universes: Universes,
 }

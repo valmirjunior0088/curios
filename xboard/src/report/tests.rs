@@ -293,10 +293,9 @@ const EXAMPLE: &[(&str, &str)] = &[
         r#"description = "Are these two terms equal?""#,
     ),
     (
-        "conversion/a_proof_of_true_passes_for_one_of_false/metadata.toml",
+        "conversion/2026_10_02_a_proof_of_true_passes_for_one_of_false/metadata.toml",
         r#"
             title = "A proof of `True` passes for one of `False`"
-            found = 2026-10-02
             status = "fixed"
 
             [[witness]]
@@ -306,7 +305,7 @@ const EXAMPLE: &[(&str, &str)] = &[
         "#,
     ),
     (
-        "conversion/a_proof_of_true_passes_for_one_of_false/the_proof_of_true.crs",
+        "conversion/2026_10_02_a_proof_of_true_passes_for_one_of_false/the_proof_of_true.crs",
         "-- The term the run puts, which proves `True` and so nothing at `False`.\n/std/Bool/True/qed()\n",
     ),
 ];

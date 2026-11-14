@@ -1,6 +1,6 @@
 //! The board read off its records, `xboard/tickets/`: a directory per part holding its `metadata.toml`, and in it a directory per ticket holding the ticket's `metadata.toml` and its witnesses' texts.
 //!
-//! The loader holds a record to the words it knows: a ticket's directory is named for its title, its day is one the calendar has, its status is `open` or `fixed`, a witness states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and withholds only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
+//! The loader holds a record to the words it knows: a ticket's directory is named for the day it was found, one the calendar has, and then its title, its status is `open` or `fixed`, a witness states its `source` or the steps of its history, closing with its proof's, every text is a program, `.crs`, or Core text, `.crsc`, every file is one a witness puts, a step mounts a unit at a path of one name and withholds only a unit an earlier step mounted, and a refusal names a checker the witness is put to, an error that checker's crate states, and where it stands by `entry` or an absolute path. A record that breaks any of them fails the run.
 
 #[cfg(test)]
 mod tests;
@@ -12,7 +12,6 @@ use {
     curios_verdict::test_support::Written,
     serde::Deserialize,
     std::collections::{BTreeMap, BTreeSet},
-    toml::value::Datetime,
 };
 
 /// What every record of the board is named.
@@ -30,7 +29,6 @@ struct PartRecord {
 #[serde(deny_unknown_fields)]
 struct TicketRecord {
     title: String,
-    found: Datetime,
     status: Status,
     witness: Vec<WitnessRecord>,
 }
@@ -122,19 +120,24 @@ pub fn load_ticket(directory: &str, files: &BTreeMap<&str, &str>) -> Result<Tick
         .ok_or_else(|| format!("{directory}: a ticket's directory holds its `{METADATA}`"))?;
     let TicketRecord {
         title,
-        found,
         status,
         witness,
     } = toml::from_str(record).map_err(|error| in_record(error.to_string()))?;
 
+    let Some((day, named)) = directory.split_at_checked(DAY.len()) else {
+        return Err(format!(
+            "{directory}: a ticket's directory is named for the day it was found, `{DAY}`, then its title"
+        ));
+    };
+    let found_on = day_of(day).ok_or_else(|| {
+        format!("{directory}: a ticket's directory is named for the day it was found, `{DAY}`, then its title, and `{day}` is no day the calendar has")
+    })?;
     let filed = filed_as(&title);
-    if filed != directory {
+    if named.strip_prefix('_') != Some(filed.as_str()) {
         return Err(in_record(format!(
-            "its title files the ticket as `{filed}`"
+            "its title files the ticket as `{day}_{filed}`"
         )));
     }
-    let found_on =
-        day(&found).ok_or_else(|| in_record(format!("`{found}` is no day the calendar has")))?;
     if witness.is_empty() {
         return Err(in_record("a ticket carries a witness".to_string()));
     }
@@ -359,16 +362,22 @@ fn expected(record: RefusedRecord, witness: &Witness) -> Result<Expected, String
     Ok(Expected { by, error, within })
 }
 
-/// The day `found` states, where it states a day alone and the calendar has it.
-fn day(found: &Datetime) -> Option<Date> {
-    match found {
-        Datetime {
-            date: Some(date),
-            time: None,
-            offset: None,
-        } => Date::new(date.year, date.month, date.day),
-        _ => None,
+/// How a ticket's directory spells the day it was found, ahead of its title.
+const DAY: &str = "YYYY_MM_DD";
+
+/// The day `spelled` names, where it is spelled as [`DAY`] is, in digits, and the calendar has it.
+fn day_of(spelled: &str) -> Option<Date> {
+    let [year, month, day] = spelled.split('_').collect::<Vec<_>>()[..] else {
+        return None;
+    };
+    let digits = |part: &str, count: usize| {
+        part.len() == count && part.bytes().all(|byte| byte.is_ascii_digit())
+    };
+    if !(digits(year, 4) && digits(month, 2) && digits(day, 2)) {
+        return None;
     }
+
+    Date::new(year.parse().ok()?, month.parse().ok()?, day.parse().ok()?)
 }
 
 /// The name a ticket's directory takes from its title: lowercase, a backtick or an apostrophe dropped, and every other run of what is not a letter or a digit one `_`.

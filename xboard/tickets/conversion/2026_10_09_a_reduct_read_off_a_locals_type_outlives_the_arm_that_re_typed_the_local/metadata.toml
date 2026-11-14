@@ -1,5 +1,4 @@
 title = "A reduct read off a local's type outlives the arm that re-typed the local"
-found = 2026-10-09
 status = "fixed"
 
 [[witness]]

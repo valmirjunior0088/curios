@@ -834,7 +834,7 @@ pub struct RecItem {
     group: RecGroup,
     /// The universe context every definition of this item was declared under, which is the one its group's members' level and quality parameters mean.
     ///
-    /// Held by the item and not by the group, because it is the *declaration's*: a group is a term, its members' parameters are positionally the parameters of whatever declaration holds it, and an instance of that declaration substitutes them with every other level it binds. A context on the group would be a second binder over the same indices, which is the reading `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
+    /// Held by the item and not by the group, because it is the *declaration's*: a group is a term, its members' parameters are positionally the parameters of whatever declaration holds it, and an instance of that declaration substitutes them with every other level it binds. A context on the group would be a second binder over the same indices, which is the reading `xboard/src/formation/2026_11_02_a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
     universe_context: UniverseContext,
 }
 

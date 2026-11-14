@@ -1,5 +1,4 @@
 title = "An arm of a fold is typed with its scrutinee at the arm's case, and is taken at every tail"
-found = 2026-10-07
 status = "fixed"
 
 [[witness]]

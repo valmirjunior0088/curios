@@ -38,11 +38,11 @@ fn a_candidate_is_read_as_what_its_name_says_it_is() {
 #[test]
 fn a_ticket_is_probed_by_its_record_and_the_texts_beside_it() {
     let root = Temporary::new("xboard", "ticket");
-    let directory = root.join("formation").join("a_forged_proof");
+    let directory = root.join("formation").join("2026_10_02_a_forged_proof");
     fs::create_dir_all(&directory).expect("the directory is made");
     fs::write(
         directory.join(METADATA),
-        "title = \"A forged proof\"\nfound = 2026-10-02\nstatus = \"open\"\n\n[[witness]]\nwhat = \"a program\"\nsource = \"a_program.crs\"\nrefused = [{ by = \"elaborator\" }]\n",
+        "title = \"A forged proof\"\nstatus = \"open\"\n\n[[witness]]\nwhat = \"a program\"\nsource = \"a_program.crs\"\nrefused = [{ by = \"elaborator\" }]\n",
     )
     .expect("the record is written");
     fs::write(directory.join("a_program.crs"), "/std/Bool/True/qed()")

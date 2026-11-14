@@ -1,5 +1,4 @@
 title = "A group met as a bare projection is checked under the enclosing declaration's constraints and read under the reader's"
-found = 2026-11-02
 status = "fixed"
 
 [[witness]]

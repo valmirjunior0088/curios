@@ -199,7 +199,7 @@ fn cumulativity_takes_no_type_to_a_lower_level() {
     assert!(stands(&verdicts, "upward"), "{verdicts:?}");
 }
 
-/// The four products Hurkens' paradox reads off its carrier, each claimed at the level of the types it quantifies over, as `xboard/tickets/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers/`'s witness reads them: `(A: Type) -> A`, the universe `U` of System U−, a product over the predicates on a `Type 1` and one over a `Type 1`; then each a level up, where it stands.
+/// The four products Hurkens' paradox reads off its carrier, each claimed at the level of the types it quantifies over, as `xboard/tickets/formation/2026_11_02_a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers/`'s witness reads them: `(A: Type) -> A`, the universe `U` of System U−, a product over the predicates on a `Type 1` and one over a `Type 1`; then each a level up, where it stands.
 const HURKENS_CARRIER: &str = r#"
 let /bottom : Type = (A: Type) -> A;
 let /universe : Type =

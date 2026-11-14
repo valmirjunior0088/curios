@@ -373,7 +373,7 @@ fn level_differences_pair_sorts_only_where_the_reading_pairs_them() {
 
 /// A metavariable's answer is one level wherever it stands: the same parameter inside a group as outside it.
 ///
-/// A group binds no universe ([`curios_core::RecGroup`]), so no binder stands between a term and the declaration whose parameters its levels are, and an answer substituted into both positions is shifted by nothing. A group that bound its own would have made the inner occurrence read the parameter after it — the second reading of one index that `xboard/src/formation/a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
+/// A group binds no universe ([`curios_core::RecGroup`]), so no binder stands between a term and the declaration whose parameters its levels are, and an answer substituted into both positions is shifted by nothing. A group that bound its own would have made the inner occurrence read the parameter after it — the second reading of one index that `xboard/src/formation/2026_11_02_a_group_met_as_a_bare_projection_is_checked_under_the_enclosing_declarations_constraints_and_read_under_the_readers.rs` admitted Hurkens' paradox through.
 #[test]
 fn a_universe_metavariable_answer_is_one_level_wherever_it_stands() {
     let meta = UniverseMetaId(0);

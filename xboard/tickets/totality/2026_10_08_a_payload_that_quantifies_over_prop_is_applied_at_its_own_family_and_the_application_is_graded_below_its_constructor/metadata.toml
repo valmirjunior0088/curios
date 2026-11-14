@@ -1,5 +1,4 @@
 title = "A payload that quantifies over `Prop` is applied at its own family, and the application is graded below its constructor"
-found = 2026-10-08
 status = "fixed"
 
 [[witness]]

@@ -2,13 +2,12 @@
 
 use {super::*, std::collections::BTreeMap};
 
-/// The directory a ticket titled "A forged proof" is filed in.
-const DIRECTORY: &str = "a_forged_proof";
+/// The directory a ticket titled "A forged proof", found on 2026-10-02, is filed in.
+const DIRECTORY: &str = "2026_10_02_a_forged_proof";
 
 /// A ticket's record, with a witness of each form.
 const RECORD: &str = r#"
     title = "A forged proof"
-    found = 2026-10-02
     status = "open"
 
     [[witness]]
@@ -25,7 +24,6 @@ const RECORD: &str = r#"
 /// A ticket's record whose one witness is a history: a program mounted at `/lib`, its record of `/lib/one` withheld, and Core text read over it.
 const HISTORY: &str = r#"
     title = "A forged proof"
-    found = 2026-10-02
     status = "open"
 
     [[witness]]
@@ -46,6 +44,11 @@ const HISTORY: &str = r#"
 
 /// The ticket `record` states, read with a text for each of the record's witnesses and any `others` beside them.
 fn read(record: &str, others: &[(&str, &str)]) -> Result<Ticket, String> {
+    read_in(DIRECTORY, record, others)
+}
+
+/// The ticket `record` states, filed in `directory`, read as [`read`] reads one.
+fn read_in(directory: &str, record: &str, others: &[(&str, &str)]) -> Result<Ticket, String> {
     let mut files = BTreeMap::from([
         (METADATA, record),
         ("a_program.crs", "/std/Bool/True/qed()"),
@@ -53,7 +56,7 @@ fn read(record: &str, others: &[(&str, &str)]) -> Result<Ticket, String> {
     ]);
     files.extend(others.iter().copied());
 
-    load_ticket(DIRECTORY, &files)
+    load_ticket(directory, &files)
 }
 
 /// The refusal of `record`, which must be refused.
@@ -103,12 +106,12 @@ fn a_board_reads_its_parts_in_the_order_of_their_directories() {
             "admission/metadata.toml",
             r#"description = "What is believed?""#,
         ),
-        ("admission/a_forged_proof/metadata.toml", RECORD),
+        ("admission/2026_10_02_a_forged_proof/metadata.toml", RECORD),
         (
-            "admission/a_forged_proof/a_program.crs",
+            "admission/2026_10_02_a_forged_proof/a_program.crs",
             "/std/Bool/True/qed()",
         ),
-        ("admission/a_forged_proof/a_module.crsc", "0"),
+        ("admission/2026_10_02_a_forged_proof/a_module.crsc", "0"),
     ];
     let parts = load_board(files).expect("the board reads");
 
@@ -135,7 +138,26 @@ fn a_board_reads_its_parts_in_the_order_of_their_directories() {
 fn a_directory_its_title_does_not_name_is_refused() {
     let record = RECORD.replace("A forged proof", "A forged proof of `False`");
 
-    assert!(refusal(&record).contains("files the ticket as `a_forged_proof_of_false`"));
+    assert!(refusal(&record).contains("files the ticket as `2026_10_02_a_forged_proof_of_false`"));
+}
+
+#[test]
+fn a_directory_that_does_not_open_with_its_day_is_refused() {
+    let refused = |directory: &str| read_in(directory, RECORD, &[]).expect_err("refused");
+
+    assert!(refused("a_forged_proof").contains("named for the day it was found"));
+    assert!(refused("2026_10_2_a_forged_proof").contains("no day the calendar has"));
+    assert!(refused("2026-10-02_a_forged_proof").contains("no day the calendar has"));
+}
+
+#[test]
+fn a_record_stating_its_day_is_refused() {
+    let record = RECORD.replace(
+        r#"status = "open""#,
+        "found = 2026-10-02\nstatus = \"open\"",
+    );
+
+    assert!(refusal(&record).contains("unknown field `found`"));
 }
 
 #[test]
@@ -145,8 +167,9 @@ fn a_status_is_open_or_fixed() {
 
 #[test]
 fn a_day_the_calendar_does_not_have_is_refused() {
-    assert!(read(&RECORD.replace("2026-10-02", "2026-02-30"), &[]).is_err());
-    assert!(refusal(&RECORD.replace("2026-10-02", "2026-10-02T12:00:00")).contains("no day"));
+    let refused = read_in("2026_02_30_a_forged_proof", RECORD, &[]).expect_err("refused");
+
+    assert!(refused.contains("`2026_02_30` is no day the calendar has"));
 }
 
 #[test]
