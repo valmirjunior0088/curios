@@ -148,7 +148,7 @@ pub let range(lo: Nat, hi: Nat) -> List(Nat) =
 
 --- `n` copies of `x`.
 pub let replicate(@T: Type, n: Nat, x: T) -> List(T) =
-    match n | 0 => [] | _ + 1; acc => [x, ..acc] end;
+    match n | 0 => [] | k + 1 => [x, ..replicate(k, x)] end;
 
 --- `f` on every element, the results concatenated.
 pub let concat_map(@T: Type, @B: Type, l: List(T), f: (T) -> List(B)) -> List(B) =

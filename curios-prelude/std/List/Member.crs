@@ -29,14 +29,21 @@ pub let uncons(
     head: (Eq()(x, h)) -> P,
     tail: (Member()(x, l)) -> P,
 ) -> P =
-    match i: (y, m, _) =>
-        match m
-        | [] => Bool/True
-        | [k, ..r] => (head: (Eq()(y, k)) -> P, tail: (Member()(y, r)) -> P) -> P
-        end
+    unconsed(i)(head, tail);
+
+-- What a member of `m` gives a proof of `P` to take apart: nothing of no elements, and of a cons its head or its tail.
+let Unconsed(@T: Type, P: Prop, x: T, m: List(T)) -> Prop =
+    match m
+    | [] => Bool/True
+    | [k, ..r] => (head: (Eq()(x, k)) -> P, tail: (Member()(x, r)) -> P) -> P
+    end;
+
+-- `uncons` over a member of any list, whose indices the match on `i` substitutes where a cons's would not be.
+let unconsed(@T: Type, @P: Prop, @x: T, @m: List(T), i: Member()(x, m)) -> Unconsed(P, x, m) =
+    match i
     | here() => (head, _) => head(Eq/refl())
     | there(rest) => (_, tail) => tail(rest)
-    end(head, tail);
+    end;
 
 --- A member of `a` is a member of `a` followed by `b`.
 pub let left(
@@ -46,7 +53,7 @@ pub let left(
     b: List(T),
     i: Member()(x, a),
 ) -> Member()(x, [..a, ..b]) =
-    match i: (y, l, _) => Member()(y, [..l, ..b])
+    match i
     | here() => Member/here()
     | there(rest) => Member/there(left(b, rest))
     end;
@@ -59,10 +66,7 @@ pub let right(
     @b: List(T),
     i: Member()(x, b),
 ) -> Member()(x, [..a, ..b]) =
-    match a: (m) => Member()(x, [..m, ..b])
-    | [] => i
-    | [_, .._]; ih => Member/there(ih)
-    end;
+    match a | [] => i | [_, ..t] => Member/there(right(t, i)) end;
 
 --- A member of `a` followed by `b` is a member of one of the two, and `P` follows from whichever it is.
 pub let split(
@@ -75,12 +79,11 @@ pub let split(
     first: (Member()(x, a)) -> P,
     second: (Member()(x, b)) -> P,
 ) -> P =
-    match a: (m) => (i: Member()(x, [..m, ..b]), first: (Member()(x, m)) -> P) -> P
-    | [] => (i, _) => second(i)
-    | [_, ..t]; ih =>
-        (i, first) =>
-            uncons(
-                i,
-                (e) => first(Eq/subst((k: T) => Member()(x, [k, ..t]), e, Member/here())),
-                (rest) => ih(rest, (j) => first(Member/there(j))))
-    end(i, first);
+    match a
+    | [] => second(i)
+    | [_, ..t] =>
+        uncons(
+            i,
+            (e) => first(Eq/subst((k: T) => Member()(x, [k, ..t]), e, Member/here())),
+            (rest) => split(t, rest, (j) => first(Member/there(j)), second))
+    end;
