@@ -247,10 +247,7 @@ pub let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> N
 
 --- `to_str_significant` in the direction `r`. The exponent of the last digit is first estimated from the binary exponent — `log₁₀ 2` is `0.30103` to five places, which puts the estimate at most one off — then settled by the digits it gives: too many, and the exponent steps up; too few, and it steps down, answering a carry to `10ⁿ` as one digit at the exponent above.
 pub let to_str_significant_in(r: Rounding, f: Flt, n: Nat) -> Str =
-    match Dyadic/try_of(f)
-    | some(d) => match d.mantissa == +0 | true => to_str(f) | false => significant(r, d, n) end
-    | none() => to_str(f)
-    end;
+    match Dyadic/try_of(f) | some(d), d.mantissa != +0 => significant(r, d, n) | _ => to_str(f) end;
 
 --- A finite nonzero `d` with `n` significant digits in the direction `r`.
 pub let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =

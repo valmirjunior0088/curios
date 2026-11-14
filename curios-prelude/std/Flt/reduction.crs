@@ -27,11 +27,10 @@ pub let product(a: Flt, b: Flt) -> Term =
     match (of(a), of(b))
     | (nan(_), _) | (infinite(_), nan(_)) | (number(_, _), nan(_)) => Term/nan(a + b)
     | (invalid(), _) | (infinite(_), invalid()) | (number(_, _), invalid()) => Term/invalid()
-    | (infinite(_), infinite(_)) => Term/infinite(negative)
-    | (infinite(_), number(y, _)) =>
-        match y.mantissa == +0 | true => Term/invalid() | false => Term/infinite(negative) end
-    | (number(x, _), infinite(_)) =>
-        match x.mantissa == +0 | true => Term/invalid() | false => Term/infinite(negative) end
+    | (infinite(_), number(zero, _)) | (number(zero, _), infinite(_)), zero.mantissa == +0 =>
+        Term/invalid()
+    | (infinite(_), infinite(_)) | (infinite(_), number(_, _)) | (number(_, _), infinite(_)) =>
+        Term/infinite(negative)
     | (number(x, _), number(y, _)) => Term/number(x * y, negative)
     end;
 
@@ -39,9 +38,11 @@ pub let product(a: Flt, b: Flt) -> Term =
 pub let sum(r: Rounding, a: Flt, b: Flt) -> Term =
     match (of(a), of(b))
     | (nan(_), _) | (infinite(_), nan(_)) | (number(_, _), nan(_)) => Term/nan(a + b)
-    | (invalid(), _) | (infinite(_), invalid()) | (number(_, _), invalid()) => Term/invalid()
-    | (infinite(x), infinite(y)) =>
-        match x == y | true => Term/infinite(x) | false => Term/invalid() end
+    | (infinite(x), infinite(y)), x == y => Term/infinite(x)
+    | (invalid(), _)
+    | (infinite(_), invalid())
+    | (number(_, _), invalid())
+    | (infinite(_), infinite(_)) => Term/invalid()
     | (infinite(x), number(_, _)) => Term/infinite(x)
     | (number(_, _), infinite(y)) => Term/infinite(y)
     | (number(x, _), number(y, _)) =>
