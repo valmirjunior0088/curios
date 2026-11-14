@@ -34,7 +34,7 @@ use stage::*;
 
 mod named;
 use named::*;
-pub use named::{Declaration, Described, Named, Witnessed, Written, described};
+pub use named::{Declaration, Described, Named, Witnessed, Written, described, placed};
 
 mod cost;
 use cost::*;

@@ -1,4 +1,4 @@
-//! What `wonder --at` and `wonder --declarations` answer — the names a file writes, read off its subject as it was lowered, each with the declaration it names — and what `wonder --name` answers of a declaration by its path.
+//! What `wonder --at` and `wonder --declarations` answer — the names a file writes, read off its subject as it was lowered, each with the declaration it names — and what `wonder --at`, `wonder --name` and `wonder --witnesses` answer of the declaration a place or a path names.
 
 use {
     crate::*,
@@ -361,4 +361,42 @@ fn a_programs_own_private_declaration_is_answered_by_its_own_path() {
 #[test]
 fn a_path_that_names_nothing_answers_nothing() {
     assert_eq!(described(POINT, "/std/Bool/nope"), None);
+}
+
+/// A place answers the declaration its name names as a path does, its type aside, which no checker is asked: a use of `/std/Bool/not` answers the library's definition.
+#[test]
+fn a_place_answers_the_declaration_its_name_names() {
+    const PROGRAM: &str =
+        "use /std/{Bool, print};\nlet flipped: Bool = Bool/not(true);\nprint(\"\")";
+    let offset = PROGRAM.find("not").expect("the program writes it");
+    let column = offset - PROGRAM[..offset].rfind('\n').expect("on the second line");
+    let described = crate::placed(
+        DEFAULT_BUDGET,
+        Subject::Entry {
+            units: Vec::new(),
+            origin: Origin::Text {
+                label: "<stdin>".to_string(),
+                text: PROGRAM.to_string(),
+            },
+            declares: None,
+        },
+        Path::new("<stdin>"),
+        (2, column),
+        &Overlay::default(),
+        None,
+        &mut |_| {},
+    )
+    .expect("the program lowers")
+    .expect("a name stands there");
+
+    assert_eq!(
+        (
+            described.path.as_str(),
+            described.declared,
+            described.public,
+            described.type_,
+            described.witnesses,
+        ),
+        ("/std/Bool/not", Declared::Authored, Some(true), None, None),
+    );
 }

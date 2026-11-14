@@ -8,9 +8,9 @@ use {
     crate::{
         Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Named, Origin, Reached,
         Refusal, STDIN_LABEL, Severity, Subject, Uncosted, Written, checked, cost, declared_tests,
-        described, diagnostics, stage, unit_stage, written,
+        described, diagnostics, placed, stage, unit_stage, written,
     },
-    curios_common::{About, Kind, LINE_WIDTH, Qualifier, Report, Said, Source, Span, Style},
+    curios_common::{About, Kind, LINE_WIDTH, Qualifier, Report, Said, Source, Style},
     curios_core::Declared,
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
@@ -337,6 +337,34 @@ impl Asked {
         texts
     }
 
+    /// What the name written at `place` of `file` of the subject names ([`placed`]).
+    pub fn placed(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        file: &Path,
+        place: Place,
+        telling: &mut dyn Telling,
+    ) -> Result<Option<Described>, Vec<Diagnosis>> {
+        let (subject, store) = self.taken(telling);
+        let cache = store.as_ref();
+        let placed = placed(
+            budget,
+            subject,
+            file,
+            (place.line, place.column),
+            overlay,
+            cache,
+            &mut |progress| telling.step(progress, cache),
+        );
+        telling.ended(match &placed {
+            Err(diagnostics) => Ended::of(diagnostics),
+            Ok(_) => Ended::Done,
+        });
+
+        placed
+    }
+
     /// What `path` names in the subject's scope ([`described`]).
     pub fn described(
         self,
@@ -601,30 +629,49 @@ impl FromStr for Place {
     }
 }
 
-/// `wonder --at LINE:COLUMN [SUBJECT]`: the name written at a place of the file `staged` is asked through, to stdout — one row, then its declaration's head and prose where its text is held — and nothing where no name stands there. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --at LINE:COLUMN [SUBJECT]`: the declaration the name written at a place of the file `staged` is asked through names, to stdout — the block `--name` answers with but for the type, which no checker is asked, then its prose and head as its author wrote them, where its text is held — and nothing where no name stands there. The block names the command that lists its witnesses where it has any, `subject` as the command line wrote it. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
     place: Place,
+    subject: Option<&str>,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
-    for_names(budget, staged, telling, |texts| {
-        let names = texts.iter().flat_map(|text| &text.names);
-        let offset = texts
-            .first()
-            .and_then(|text| text.text.source.offset_of(place.line, place.column));
+    let overlay = Overlay::default();
+    let reader = telling.reader();
+    let (asked, file) = asked_about(staged)?;
 
-        if let Some(named) = offset.and_then(|offset| Named::at(names, offset)) {
-            answer(format_args!("{}\n", row(named)));
-            // Beneath the row, a blank line before each: the head as its author wrote it, then the prose above it.
-            if let Some(heading) = named.declaration.as_ref().and_then(Declaration::heading) {
-                answer(format_args!("\n{}\n", heading.head));
-                if !heading.prose.is_empty() {
-                    answer(format_args!("\n{}\n", heading.prose.join("\n")));
+    let placed = asked.placed(budget, &overlay, &file, place, telling);
+    let described = match placed {
+        Ok(described) => {
+            telling.answering();
+            described
+        }
+        Err(diagnostics) => return Err(stopped(diagnostics)),
+    };
+    if let Some(described) = described {
+        answer(format_args!(
+            "{}\n",
+            block(&described, Some(listing(&described.path, subject)))
+                .rendered(Kind::Declaration, &reader)
+        ));
+        if let Some(heading) = described
+            .declaration
+            .as_ref()
+            .and_then(Declaration::heading)
+        {
+            answer("\n");
+            for line in &heading.prose {
+                match line.is_empty() {
+                    true => answer("---\n"),
+                    false => answer(format_args!("--- {line}\n")),
                 }
             }
+            answer(format_args!("{}\n", heading.head));
         }
-    })
+    }
+
+    Ok(())
 }
 
 /// `wonder --declarations [SUBJECT]`: every definition the file `staged` is asked through declares, one row per line to stdout, in the order they are written. `telling` is told as [`wonder_diagnostics`]' is.
@@ -654,14 +701,10 @@ pub fn wonder_name(
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
     let described = declaration(budget, staged, path, telling)?;
-    let listing = match subject {
-        Some(subject) => format!("curios wonder --witnesses {} {subject}", path.join()),
-        None => format!("curios wonder --witnesses {}", path.join()),
-    };
-
     answer(format_args!(
         "{}\n",
-        block(&described, Some(listing)).rendered(Kind::Declaration, &reader)
+        block(&described, Some(listing(&path.join(), subject)))
+            .rendered(Kind::Declaration, &reader)
     ));
     if let Some(declaration) = &described.declaration {
         answer(format_args!("\n{}\n", declaration.written()));
@@ -698,6 +741,14 @@ pub fn wonder_witnesses(
     }
 
     Ok(())
+}
+
+/// The command that lists the witnesses of the declaration at `path`, asked in the scope of `subject` as the command line wrote it.
+fn listing(path: &str, subject: Option<&str>) -> String {
+    match subject {
+        Some(subject) => format!("curios wonder --witnesses {path} {subject}"),
+        None => format!("curios wonder --witnesses {path}"),
+    }
 }
 
 /// The declaration `path` names in the scope of what `staged` is ([`described`]), an answer about to be written; refused where the path names nothing in scope, and where the subject stops before the answer, as a build stops.
@@ -801,23 +852,7 @@ fn for_names(
     answer: impl FnOnce(&[Written]),
 ) -> Result<(), CompileError> {
     let overlay = Overlay::default();
-
-    let (asked, file) = match staged {
-        Staged::Program(program) => {
-            let file = match (program.through(), program.entry()) {
-                (Some(module), _) => module.to_path_buf(),
-                (None, Entry::File(entry)) => entry.clone(),
-                (None, Entry::Stdin) => PathBuf::from(STDIN_LABEL),
-            };
-
-            (Asked::about_program(program)?, file)
-        }
-        Staged::Library(library) => {
-            let file = asked_through(&library)?;
-
-            (Asked::about_library(library), file)
-        }
-    };
+    let (asked, file) = asked_about(staged)?;
 
     let texts = asked.written(budget, &overlay, &file, telling);
     match texts {
@@ -830,12 +865,36 @@ fn for_names(
     }
 }
 
+/// The question `staged` is asked as, beside the file a question about one file of it is about: the one it was selected through, a program's own entry, or a library's header.
+fn asked_about(staged: Staged) -> Result<(Asked, PathBuf), CompileError> {
+    match staged {
+        Staged::Program(program) => {
+            let file = match (program.through(), program.entry()) {
+                (Some(module), _) => module.to_path_buf(),
+                (None, Entry::File(entry)) => entry.clone(),
+                (None, Entry::Stdin) => PathBuf::from(STDIN_LABEL),
+            };
+
+            Ok((Asked::about_program(program)?, file))
+        }
+        Staged::Library(library) => {
+            let file = asked_through(&library)?;
+
+            Ok((Asked::about_library(library), file))
+        }
+    }
+}
+
 /// One name as a row: the declaration's path, what it is declared as, and where its name is written, a tab between each — the place left out where no file holds it.
 fn row(named: &Named) -> String {
     let declared = declared_as(named.declared);
 
     match named.declaration.as_ref().and_then(Declaration::place) {
-        Some(place) => format!("{}\t{declared}\t{}", named.name, placed(place)),
+        Some(place) => format!(
+            "{}\t{declared}\t{}",
+            named.name,
+            place.place(&Style::plain())
+        ),
         None => format!("{}\t{declared}", named.name),
     }
 }
@@ -851,16 +910,6 @@ fn declared_as(declared: Declared) -> &'static str {
         Declared::Method => "method",
         Declared::Witness => "witness",
         Declared::Test => "test",
-    }
-}
-
-/// Where `span` begins, as a diagnostic's header names it: the file, the line and the column.
-fn placed(span: &Span) -> String {
-    let (line, column) = span.line_column();
-
-    match span.source.path() {
-        Some(path) => format!("{}:{line}:{column}", path.display()),
-        None => format!("{line}:{column}"),
     }
 }
 

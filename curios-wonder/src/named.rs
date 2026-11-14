@@ -40,6 +40,8 @@ pub struct Named {
     pub written: Span,
     /// The declaration it names: by the path it is declared at, or for a witness, which has none, by its head as written.
     pub name: String,
+    /// The declaration it names, as the lowering resolved it.
+    pub named: Global,
     /// What the declaration is declared as.
     pub declared: Declared,
     /// Whether `written` is where the declaration is named, rather than a use of it.
@@ -118,17 +120,76 @@ pub fn written(
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Vec<Written>, Vec<Diagnosis>> {
+    let reading = Reading::of(file, overlay);
+
+    lowering(
+        budget,
+        subject,
+        overlay,
+        cache,
+        progress,
+        |scope, own, entry| reading.read(scope, own, entry),
+    )
+}
+
+/// The declaration the name written at `line` and `column` of `file` names, as [`described`] answers one but for its type: what the lowering says of it, the subject lowered and elaborated nowhere, so a file that does not check answers as one that does. `None` where no name stands there, and where the subject is not written in `file`. `overlay` and `cache` behave as they do for `diagnostics`.
+///
+/// The refusal is a subject that has nothing to read, as `written`'s is.
+pub fn placed(
+    budget: u64,
+    subject: Subject,
+    file: &Path,
+    (line, column): (usize, usize),
+    overlay: &Overlay,
+    cache: Option<&Verdicts>,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<Option<Described>, Vec<Diagnosis>> {
+    let reading = Reading::of(file, overlay);
+
+    lowering(
+        budget,
+        subject,
+        overlay,
+        cache,
+        progress,
+        |scope, own, entry| {
+            let texts = reading.read(scope, own, entry);
+            let offset = texts.first()?.text.source.offset_of(line, column)?;
+            let named = Named::at(texts.iter().flat_map(|text| &text.names), offset)?;
+            let (said, _) = said_of(scope, own, named.named, overlay)?;
+
+            Some(Described {
+                asked: named.name.clone(),
+                path: named.name.clone(),
+                declared: said.declared,
+                public: said.public,
+                declaration: said.declaration,
+                type_: None,
+                members: said.members,
+                witnesses: said.witnesses,
+            })
+        },
+    )
+}
+
+/// `subject` lowered, no further, handed to `then` with the units in scope, its own lowering and the term its program closes with where it is one: what a question about what a file writes reads, asked of no checker.
+fn lowering<T>(
+    budget: u64,
+    subject: Subject,
+    overlay: &Overlay,
+    cache: Option<&Verdicts>,
+    progress: &mut dyn FnMut(Progress<'_>),
+    then: impl FnOnce(&[&Unit], &PreparedText, Option<&curios_core::Entrypoint>) -> T,
+) -> Result<T, Vec<Diagnosis>> {
     let store = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = store.as_ref().map(|store| store as &dyn Cache);
-    let reading = Reading::of(file, overlay);
 
     match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
 
-            Fold::new(budget, &units, through).lowered_unit(&mut *progress, |scope, text| {
-                reading.read(scope, text, None)
-            })
+            Fold::new(budget, &units, through)
+                .lowered_unit(&mut *progress, |scope, own| then(scope, own, None))
         }
         Subject::Entry {
             units,
@@ -143,7 +204,7 @@ pub fn written(
                 &entrypoint,
                 &loader.tested(),
                 &mut *progress,
-                |scope, text, entry| reading.read(scope, text, Some(entry)),
+                |scope, own, entry| then(scope, own, Some(entry)),
             )
         }
     }
@@ -209,6 +270,7 @@ impl<'a> Reading<'a> {
                                 }
                             },
                             written: mention.span,
+                            named: mention.name,
                             declared,
                             declares: mention.declared.is_some(),
                             declaration,
@@ -348,9 +410,9 @@ pub struct Witnessed {
     pub keyed: String,
 }
 
-/// What the lowering says of a declaration asked about by its path: all a [`Described`] says but its type.
+/// What the lowering says of a declaration: all a [`Described`] says but its type and how it was asked for.
 struct Lowered {
-    path: Qualifier,
+    name: Global,
     declared: Declared,
     public: Option<bool>,
     declaration: Option<Declaration>,
@@ -376,21 +438,9 @@ pub fn described(
             .filter_map(|unit| unit.text())
             .collect::<Vec<_>>();
         let path = own.named_by(&texts, asked).unwrap_or(*asked);
-        let name = Global::Authored(path);
-        let stands = |label: &Span| holds(overlay, &label.source);
-        let found = found(scope, own, &name, &stands)?;
-        let spellings = own.spellings(&texts);
-        let witnesses = witnesses(scope, own, &stands, &spellings, &found, &name);
-        let said = Lowered {
-            path,
-            declared: found.declared,
-            public: found.lowered.is_public(&path),
-            declaration: found.declaration,
-            members: members(&found.lowered.lexicon(), &name, found.declared),
-            witnesses,
-        };
+        let (said, unit) = said_of(scope, own, Global::Authored(path), overlay)?;
 
-        Some(match found.unit {
+        Some(match unit {
             Some(unit) => {
                 let others = scope
                     .iter()
@@ -484,6 +534,37 @@ pub fn described(
             )))
         }
     }
+}
+
+/// What the lowering says of `name`: what it is declared as and where, whether it is written `pub`, its members and the witnesses in scope it takes part in — by the subject's own lowering `own`, then the units in `scope` — beside the unit in scope that declares it, none for the subject's own. A file holds the text a unit the compiler was built with read as `overlay` says. `None` for a name no lowered item declares.
+fn said_of<'s>(
+    scope: &[&'s Unit],
+    own: &'s PreparedText,
+    name: Global,
+    overlay: &Overlay,
+) -> Option<(Lowered, Option<&'s Unit>)> {
+    let texts = scope
+        .iter()
+        .filter_map(|unit| unit.text())
+        .collect::<Vec<_>>();
+    let stands = |label: &Span| holds(overlay, &label.source);
+    let found = found(scope, own, &name, &stands)?;
+    let spellings = own.spellings(&texts);
+    let witnesses = witnesses(scope, own, &stands, &spellings, &found, &name);
+
+    Some((
+        Lowered {
+            name,
+            declared: found.declared,
+            public: name
+                .qualifier()
+                .and_then(|path| found.lowered.is_public(path)),
+            declaration: found.declaration,
+            members: members(&found.lowered.lexicon(), &name, found.declared),
+            witnesses,
+        },
+        found.unit,
+    ))
 }
 
 /// The members of `name`, declared as `declared`, by the names `lexicon` writes them by, in the order they are declared: a family's constructors, a structure's fields, a concept's methods — a field that is a superclass edge is none — and a field written without a label by its position. None for anything else.
@@ -630,7 +711,7 @@ fn spelled(
     kept: Option<(&Lexicon, &Places)>,
     scope: &[&Lexicon],
 ) -> Described {
-    let name = Global::Authored(said.path);
+    let name = said.name;
     let spelling = Rc::new(spelling_at(definitions, kept, scope, &SYNTAX, name));
     let type_ = definitions.items.iter().find_map(|item| {
         item.definitions()
@@ -642,7 +723,7 @@ fn spelled(
 
     Described {
         asked: asked.join(),
-        path: said.path.join(),
+        path: name.path(),
         declared: said.declared,
         public: said.public,
         declaration: said.declaration,

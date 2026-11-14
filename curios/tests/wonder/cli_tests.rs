@@ -246,7 +246,7 @@ fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     assert_eq!(named, "");
 }
 
-/// A place answers the name written there as one row on stdout: the declaration's path, what it is declared as, and where its name is written, a tab between each.
+/// A place answers the name written there on stdout as `--name` answers a declaration, a block — its path, what it is declared as, and where its name is written — then the prose and head its author wrote.
 #[test]
 fn a_place_answers_the_name_written_there() {
     let root = project("at");
@@ -264,16 +264,16 @@ fn a_place_answers_the_name_written_there() {
         String::from_utf8_lossy(&answered.stderr)
     );
     let answer = stdout(&answered);
-    let (row, stated) = answer
-        .split_once('\n')
-        .expect("a row, then what follows it");
-    let fields = row.split('\t').collect::<Vec<_>>();
-    assert_eq!(fields[..2], ["/app/util/word", "definition"], "{answer}");
-    assert!(fields[2].ends_with("util.crs:2:9"), "{answer}");
-    // Beneath the row, the declaration's head as its author wrote it, and the prose above it.
     assert_eq!(
-        stated,
-        "\npub let word: /std/Str\n\nThe word a run prints.\n"
+        answer,
+        concat!(
+            "/app/util/word\n",
+            "│  public definition\n",
+            "└─ [declaration] util.crs:2:9\n",
+            "\n",
+            "--- The word a run prints.\n",
+            "pub let word: /std/Str\n",
+        )
     );
 
     // Asked again, of the library the first question filed: a unit restored from the store states its declarations as one compiled now does.
@@ -324,7 +324,13 @@ fn a_program_that_does_not_check_answers_where_a_name_is_declared() {
     );
     assert_eq!(
         stdout(&answered),
-        "/one\tdefinition\t<stdin>:1:5\n\nlet one: /std/Nat\n"
+        concat!(
+            "/one\n",
+            "│  private definition\n",
+            "└─ [declaration] <stdin>:1:5\n",
+            "\n",
+            "let one: /std/Nat\n",
+        )
     );
 }
 

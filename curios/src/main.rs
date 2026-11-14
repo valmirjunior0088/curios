@@ -824,6 +824,7 @@ fn dispatch() -> Result<(), Failure> {
                 elaboration.budget,
                 contract.admit_staged(subject, manifest, &here()?)?,
                 place,
+                subject,
                 &mut Asking::reading(answered.clone()),
             )?,
             Query::Declarations => wonder_declarations(
