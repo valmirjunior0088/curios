@@ -110,8 +110,8 @@ impl<'a> Context<'a, '_> {
                 output.push(set());
                 0
             }
-            curios_cps::IntrinsicCall::ListMap => {
-                unreachable!("a list map is no frame-budget operation")
+            op @ (curios_cps::IntrinsicCall::ListMap | curios_cps::IntrinsicCall::HeapApply) => {
+                unreachable!("{op:?} is no frame-budget operation")
             }
         };
         self.coordination_resume(&mut output, &frame.resume, arity);

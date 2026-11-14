@@ -80,7 +80,7 @@ pub struct EmissionMatchTarget {
     pub default: Option<EmissionJumpTarget>,
 }
 
-/// A user-code call in tail position: `Direct` names a known function, `Indirect` invokes a closure value through the shared closure type of its arity (`call_indirect` through the module's closure table). Both name the `resume` block, which receives the callee's results as its parameters — one for a closure call, the callee's result count for a direct one — except when `resume` is the enclosing body's return sentinel, where the call is a genuine tail call and codegen emits `return_call`/`return_call_indirect` instead of branching.
+/// A user-code call in tail position: `Direct` names a known function, `Indirect` invokes a closure value through the shared closure type of its arity (`call_indirect` through the module's closure table), and `Heap` invokes the closure's heap entry, its `params` the closure's arguments and then the continuation its answer goes to, through the heap table beside its arity's ([`curios_cps::IntrinsicCall::HeapApply`]). Each names the `resume` block, which receives the callee's results as its parameters — one for a closure call, the callee's result count for a direct one — except when `resume` is the enclosing body's return sentinel, where the call is a genuine tail call and codegen emits `return_call`/`return_call_indirect` instead of branching.
 #[derive(Debug, Clone)]
 pub enum EmissionCallTarget {
     Direct {
@@ -89,6 +89,11 @@ pub enum EmissionCallTarget {
         resume: EmissionBlockName,
     },
     Indirect {
+        target: EmissionValueName,
+        params: Vec<EmissionArg>,
+        resume: EmissionBlockName,
+    },
+    Heap {
         target: EmissionValueName,
         params: Vec<EmissionArg>,
         resume: EmissionBlockName,
@@ -179,7 +184,8 @@ impl EmissionTail {
                 .collect(),
             EmissionTail::Call(
                 EmissionCallTarget::Direct { resume, .. }
-                | EmissionCallTarget::Indirect { resume, .. },
+                | EmissionCallTarget::Indirect { resume, .. }
+                | EmissionCallTarget::Heap { resume, .. },
             ) => vec![resume],
             EmissionTail::Host(EmissionHostTarget::Foreign { resume, .. }) => vec![resume],
             EmissionTail::Host(EmissionHostTarget::Halt { .. }) => vec![],
@@ -310,13 +316,32 @@ impl EmissionBody {
     }
 
     /// Collect the arity of every *indirect* call site in this region (and its nested blocks). A closure of that arity is invoked here even when the optimizer has specialized its definition away (a higher-order function's argument inlined, dropping the only closure of that arity while a `call_indirect` in its body survives), so a closure type for the arity is needed even though no closure of it is defined.
+    ///
+    /// A heap call of a closure of `n` arguments reads its closure at arity `n`, dispatches at `n + 1` through the heap table, and, where the closure has no twin, hands the answer on at one.
     fn collect_indirect_arities(&self, out: &mut BTreeSet<usize>) {
-        if let EmissionTail::Call(EmissionCallTarget::Indirect { params, .. }) = &self.tail {
-            out.insert(params.len());
+        match &self.tail {
+            EmissionTail::Call(EmissionCallTarget::Indirect { params, .. }) => {
+                out.insert(params.len());
+            }
+            EmissionTail::Call(EmissionCallTarget::Heap { params, .. }) => {
+                out.extend([params.len() - 1, params.len(), 1]);
+            }
+            _ => {}
         }
 
         for (_, block) in &self.blocks {
             block.region.collect_indirect_arities(out);
+        }
+    }
+
+    /// Collect the arity of the closure every heap call site in this region and its nested blocks calls: the arities a heap table is needed for.
+    fn collect_heap_arities(&self, out: &mut BTreeSet<usize>) {
+        if let EmissionTail::Call(EmissionCallTarget::Heap { params, .. }) = &self.tail {
+            out.insert(params.len() - 1);
+        }
+
+        for (_, block) in &self.blocks {
+            block.region.collect_heap_arities(out);
         }
     }
 }
@@ -357,6 +382,8 @@ pub struct EmissionFunction {
 pub struct EmissionModule {
     consts: Vec<(EmissionValueName, EmissionData)>,
     clsrs: Vec<(EmissionClosureName, EmissionClosure)>,
+    /// The heap entry of each closure whose function has a twin, under the closure's own name: a body reading the closure's environment as the closure does, taking its arguments and then the continuation its answer goes to, and entering the twin.
+    heap_clsrs: Vec<(EmissionClosureName, EmissionClosure)>,
     funcs: Vec<(EmissionFunctionName, EmissionFunction)>,
     entry: Option<EmissionFunctionName>,
     /// The nominal rows this module constructs and reads, each with its debug name and slot carriers. See [`EmissionData::Row`].
@@ -458,6 +485,28 @@ impl EmissionModule {
         self.clsrs.push((clsr_name, clsr));
     }
 
+    /// The heap entries of the closures whose functions have twins, each under its closure's name, in insertion order.
+    pub fn heap_clsrs(&self) -> &[(EmissionClosureName, EmissionClosure)] {
+        &self.heap_clsrs
+    }
+
+    /// Append the heap entry of the closure `clsr_name`, a closure already added.
+    pub fn add_heap_clsr(&mut self, clsr_name: EmissionClosureName, clsr: EmissionClosure) {
+        self.heap_clsrs.push((clsr_name, clsr));
+    }
+
+    /// The arities of the closures some heap call calls, each the arity of a heap table.
+    pub fn heap_arities(&self) -> BTreeSet<usize> {
+        let mut arities = BTreeSet::new();
+        for (_, clsr) in &self.clsrs {
+            clsr.region.collect_heap_arities(&mut arities);
+        }
+        for (_, func) in &self.funcs {
+            func.region.collect_heap_arities(&mut arities);
+        }
+        arities
+    }
+
     /// The function definitions, in insertion order — the order they print and emit in.
     pub fn funcs(&self) -> &[(EmissionFunctionName, EmissionFunction)] {
         &self.funcs
@@ -468,10 +517,11 @@ impl EmissionModule {
         self.funcs.push((func_name, func));
     }
 
-    /// Every definition's body, the closures' then the functions', each in insertion order — what a pass rewriting bodies in place walks.
+    /// Every definition's body, the closures', their heap entries' and the functions', each in insertion order — what a pass rewriting bodies in place walks.
     pub fn regions_mut(&mut self) -> impl Iterator<Item = &mut EmissionBody> {
         self.clsrs
             .iter_mut()
+            .chain(self.heap_clsrs.iter_mut())
             .map(|(_, clsr)| &mut clsr.region)
             .chain(self.funcs.iter_mut().map(|(_, func)| &mut func.region))
     }
@@ -628,7 +678,10 @@ impl EmissionTail {
             EmissionTail::Call(EmissionCallTarget::Direct { params, .. }) => {
                 rename_jump_args(params, renames)
             }
-            EmissionTail::Call(EmissionCallTarget::Indirect { target, params, .. }) => {
+            EmissionTail::Call(
+                EmissionCallTarget::Indirect { target, params, .. }
+                | EmissionCallTarget::Heap { target, params, .. },
+            ) => {
                 rename_name(target, renames);
                 rename_jump_args(params, renames);
             }

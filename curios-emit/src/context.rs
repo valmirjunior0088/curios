@@ -872,10 +872,45 @@ impl<'a, 'b> Context<'a, 'b> {
         params: &'a [EmissionArg],
         resume: &'a EmissionBlockName,
     ) -> Vec<curios_wasm::Instr> {
-        let mut output = Vec::new();
         let arity = params.len();
+        self.dispatch_instrs(
+            target,
+            params,
+            resume,
+            arity,
+            self.table().clsr_table(arity),
+        )
+    }
+
+    /// The call of the closure `target`'s heap entry: `params` are its arguments and then the continuation, dispatched on the closure's own index through the heap table of its arity.
+    pub fn call_heap_instrs(
+        &self,
+        target: &'a EmissionValueName,
+        params: &'a [EmissionArg],
+        resume: &'a EmissionBlockName,
+    ) -> Vec<curios_wasm::Instr> {
+        let arity = params.len() - 1;
+        self.dispatch_instrs(
+            target,
+            params,
+            resume,
+            arity,
+            self.table().heap_table(arity),
+        )
+    }
+
+    /// A call through `table` of the body at the index the closure `target`, of `arity`, carries, typed at as many parameters as `params` holds.
+    fn dispatch_instrs(
+        &self,
+        target: &'a EmissionValueName,
+        params: &'a [EmissionArg],
+        resume: &'a EmissionBlockName,
+        arity: usize,
+        table_name: curios_wasm::TableName,
+    ) -> Vec<curios_wasm::Instr> {
+        let mut output = Vec::new();
         let envr_type = self.table().find_envr_type(arity);
-        let clsr_type = self.table().find_clsr_type(arity);
+        let clsr_type = self.table().find_clsr_type(params.len());
 
         output.extend(self.load_value_instrs(target, LoadAs::NonNull));
 
@@ -897,12 +932,12 @@ impl<'a, 'b> Context<'a, 'b> {
 
         if self.is_resume(resume) {
             output.push(curios_wasm::Instr::ReturnCallIndirect {
-                table_name: self.table().clsr_table(arity),
+                table_name,
                 type_name: clsr_type,
             });
         } else {
             output.push(curios_wasm::Instr::CallIndirect {
-                table_name: self.table().clsr_table(arity),
+                table_name,
                 type_name: clsr_type,
             });
 
@@ -926,6 +961,11 @@ impl<'a, 'b> Context<'a, 'b> {
                 params,
                 resume,
             }) => self.call_indirect_instrs(target, params, resume),
+            EmissionTail::Call(EmissionCallTarget::Heap {
+                target,
+                params,
+                resume,
+            }) => self.call_heap_instrs(target, params, resume),
             EmissionTail::Host(host) => self.host_instrs(host),
             EmissionTail::Cell(cell) => self.cell_instrs(cell),
             EmissionTail::Channel(channel) => self.channel_instrs(channel),

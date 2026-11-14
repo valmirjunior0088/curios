@@ -92,11 +92,46 @@ pub struct ClsrData<'a> {
     resume: &'a EmissionBlockName,
 }
 
+/// The names one arity's heap calls dispatch through: its heap table, and the adapter that table holds for every closure whose function has no twin.
+#[derive(Debug, Clone)]
+struct HeapData {
+    table: curios_wasm::TableName,
+    adapter: curios_wasm::FuncName,
+}
+
+/// Each closure's slot in its arity's dispatch table, in the module's ordered closure walk: the order each arity's element segment lists its bodies in, so the indices are reproducible. The count is per arity because each arity dispatches through its own typed table, and 1-based because slot 0 stays null.
+fn clsr_indices(module: &EmissionModule) -> Vec<i32> {
+    let mut next_index = BTreeMap::<usize, i32>::new();
+    module
+        .clsrs()
+        .iter()
+        .map(|(_, clsr)| {
+            let index = next_index.entry(clsr.params.len()).or_insert(0);
+            *index += 1;
+            *index
+        })
+        .collect()
+}
+
 impl<'a> ClsrData<'a> {
     pub fn new(clsr_name: &'a EmissionClosureName, clsr: &'a EmissionClosure, index: i32) -> Self {
+        Self::named(clsr_name, clsr, index, format!("clsr/{}", clsr_name))
+    }
+
+    /// The heap entry `heap` of the closure `clsr_name`, at the closure's `index`: it reads the closure's own environment, so it shares the closure's environment type and fields.
+    pub fn heap(clsr_name: &'a EmissionClosureName, heap: &'a EmissionClosure, index: i32) -> Self {
+        Self::named(clsr_name, heap, index, format!("heap/{}", clsr_name))
+    }
+
+    fn named(
+        clsr_name: &'a EmissionClosureName,
+        clsr: &'a EmissionClosure,
+        index: i32,
+        func_name: String,
+    ) -> Self {
         Self {
             index,
-            func_name: curios_wasm::FuncName::from(format!("clsr/{}", clsr_name)),
+            func_name: curios_wasm::FuncName::from(func_name),
             envr_type: curios_wasm::TypeName::from(format!("envr/{}", clsr_name)),
             fields: clsr
                 .fields
@@ -369,6 +404,8 @@ pub struct Table<'a> {
     special_local: curios_wasm::LocalName,
     special_label: curios_wasm::LabelName,
     clsr_tables: BTreeMap<usize, curios_wasm::TableName>,
+    /// One heap table for each arity some heap call calls a closure at, beside that arity's closure table and indexed alike.
+    heap_tables: BTreeMap<usize, HeapData>,
     flt_type: curios_wasm::TypeName,
     big_type: curios_wasm::TypeName,
     words_type: curios_wasm::TypeName,
@@ -448,6 +485,8 @@ pub struct Table<'a> {
     /// The scalar consts a register can hold, each with its carrier and the instruction that is its value there: a `Flt` and a small `Nat`. Hoisting renames a literal to its const whatever reads it, so a register read would otherwise take the global back out of its box.
     const_registers: HashMap<&'a EmissionValueName, (curios_cps::Repr, curios_wasm::Instr)>,
     clsrs: HashMap<&'a EmissionClosureName, ClsrData<'a>>,
+    /// The heap entries, each under its closure's name, at its closure's index and environment.
+    heap_clsrs: HashMap<&'a EmissionClosureName, ClsrData<'a>>,
     funcs: HashMap<&'a EmissionFunctionName, FuncData<'a>>,
     /// The values the representation analysis decided to hold in a register, and at which carrier. A name absent here is held behind a reference, which is every synthetic name codegen mints for itself.
     raw: &'a HashMap<EmissionValueName, curios_cps::Repr>,
@@ -477,6 +516,19 @@ impl<'a> Table<'a> {
                     (
                         arity,
                         curios_wasm::TableName::from(format!("clsr/{}", arity)),
+                    )
+                })
+                .collect(),
+            heap_tables: module
+                .heap_arities()
+                .into_iter()
+                .map(|arity| {
+                    (
+                        arity,
+                        HeapData {
+                            table: curios_wasm::TableName::from(format!("heap/{}", arity)),
+                            adapter: curios_wasm::FuncName::from(format!("heap/adapter/{}", arity)),
+                        },
                     )
                 })
                 .collect(),
@@ -646,16 +698,31 @@ impl<'a> Table<'a> {
                 })
                 .map(|(const_name, _)| const_name)
                 .collect(),
-            // Table indices come from the module's ordered closure walk — the same order each arity's element segment lists its bodies in — never from this map's iteration. The counter is per arity because each arity dispatches through its own typed table.
-            clsrs: {
-                let mut next_index = BTreeMap::<usize, i32>::new();
-                module
+            // Table indices come from the module's ordered closure walk ([`clsr_indices`]), never from this map's iteration.
+            clsrs: module
+                .clsrs()
+                .iter()
+                .zip(clsr_indices(module))
+                .map(|((clsr_name, clsr), index)| {
+                    (clsr_name, ClsrData::new(clsr_name, clsr, index))
+                })
+                .collect(),
+            // A heap entry sits at its closure's index in the heap table, so a heap call dispatches on the index the closure carries.
+            heap_clsrs: {
+                let indices: HashMap<&EmissionClosureName, i32> = module
                     .clsrs()
                     .iter()
-                    .map(|(clsr_name, clsr)| {
-                        let index = next_index.entry(clsr.params.len()).or_insert(0);
-                        *index += 1;
-                        (clsr_name, ClsrData::new(clsr_name, clsr, *index))
+                    .map(|(clsr_name, _)| clsr_name)
+                    .zip(clsr_indices(module))
+                    .collect();
+                module
+                    .heap_clsrs()
+                    .iter()
+                    .map(|(clsr_name, heap)| {
+                        (
+                            clsr_name,
+                            ClsrData::heap(clsr_name, heap, indices[clsr_name]),
+                        )
                     })
                     .collect()
             },
@@ -685,6 +752,34 @@ impl<'a> Table<'a> {
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks closure table for arity `{}`", arity))
             .clone()
+    }
+
+    /// The heap table for closures of `arity`, indexed as its closure table is: each slot the heap entry of the closure at that slot, or the arity's adapter where the closure's function has no twin. Typed `(ref null $clsr/{arity + 1})`, the arguments then the continuation.
+    pub fn heap_table(&self, arity: usize) -> curios_wasm::TableName {
+        self.find_heap(arity).table.clone()
+    }
+
+    /// Every heap table, by the arity of the closures it dispatches.
+    pub fn heap_tables(&self) -> impl Iterator<Item = (usize, curios_wasm::TableName)> + '_ {
+        self.heap_tables
+            .iter()
+            .map(|(arity, heap)| (*arity, heap.table.clone()))
+    }
+
+    /// The heap entry of the closure `clsr_name`, where its function has a twin.
+    pub fn find_heap_clsr(&self, clsr_name: &EmissionClosureName) -> Option<&ClsrData<'a>> {
+        self.heap_clsrs.get(clsr_name)
+    }
+
+    /// The heap entry every closure of `arity` whose function has no twin shares: it calls the closure natively and hands the answer to the continuation.
+    pub fn heap_adapter(&self, arity: usize) -> curios_wasm::FuncName {
+        self.find_heap(arity).adapter.clone()
+    }
+
+    fn find_heap(&self, arity: usize) -> &HeapData {
+        self.heap_tables
+            .get(&arity)
+            .unwrap_or_else(|| panic!("`Table` lacks a heap table for arity `{}`", arity))
     }
 
     pub fn top_type(is_nullable: bool) -> curios_wasm::ValType {

@@ -30,6 +30,14 @@ pub fn structurize(machine: &MachineModule) -> EmissionModule {
             convert_wrapper(machine, wrapper),
         );
     }
+    for (function, wrapper) in &machine.wrappers {
+        if let Some(twin) = wrapper.twin {
+            output.add_heap_clsr(
+                wrapper_name(machine, *function),
+                convert_heap_wrapper(machine, wrapper, twin),
+            );
+        }
+    }
     for (id, function) in &machine.functions {
         let resume = return_name(*id);
         let (region, minted) =
@@ -103,6 +111,52 @@ fn convert_wrapper(machine: &MachineModule, wrapper: &MachineWrapper) -> Emissio
             vec![],
             EmissionTail::Call(EmissionCallTarget::Direct {
                 target: direct_name(machine, wrapper.function),
+                params: call_params,
+                resume,
+            }),
+        ),
+    }
+}
+
+/// The heap entry of `wrapper`'s closure: the closure's environment read as the closure reads it, handed with the arguments and the continuation to `twin`, which takes what of the environment it needs.
+fn convert_heap_wrapper(
+    machine: &MachineModule,
+    wrapper: &MachineWrapper,
+    twin: curios_cps::FunctionId,
+) -> EmissionClosure {
+    let index = wrapper.function.index();
+    let resume = EmissionBlockName::from(format!("return/heap/{index}"));
+    let fields = wrapper
+        .captures
+        .iter()
+        .copied()
+        .map(value_name)
+        .map(EmissionBinder::from)
+        .collect::<Vec<_>>();
+    let params = (0..=wrapper.arity)
+        .map(|position| match position == wrapper.arity {
+            true => EmissionValueName::from(format!("heap/{index}/k")),
+            false => EmissionValueName::from(format!("heap/{index}/arg/{position}")),
+        })
+        .map(EmissionBinder::from)
+        .collect::<Vec<_>>();
+    let call_params = machine.functions[&twin]
+        .free_values
+        .iter()
+        .copied()
+        .map(value_name)
+        .chain(params.iter().map(|param| param.name.clone()))
+        .map(EmissionArg::Value)
+        .collect();
+    EmissionClosure {
+        fields,
+        params,
+        resume: resume.clone(),
+        region: EmissionBody::new(
+            vec![],
+            vec![],
+            EmissionTail::Call(EmissionCallTarget::Direct {
+                target: direct_name(machine, twin),
                 params: call_params,
                 resume,
             }),
@@ -358,6 +412,18 @@ impl<'a> MachineFunctionBridge<'a> {
                 args,
             } => self.list_map(args, self.resume.clone(), values),
             MachineTerminator::Intrinsic {
+                op: curios_cps::IntrinsicCall::HeapApply,
+                args,
+                resume,
+            } => {
+                let resume = self.resume_target(*resume, &[None], blocks);
+                self.heap_apply(args, resume, values)
+            }
+            MachineTerminator::IntrinsicReturn {
+                op: curios_cps::IntrinsicCall::HeapApply,
+                args,
+            } => self.heap_apply(args, self.resume.clone(), values),
+            MachineTerminator::Intrinsic {
                 op:
                     op @ (curios_cps::IntrinsicCall::FrameEnter { .. }
                     | curios_cps::IntrinsicCall::FrameLeave { .. }),
@@ -502,6 +568,23 @@ impl<'a> MachineFunctionBridge<'a> {
         EmissionTail::Jump(EmissionJumpTarget {
             target: resume,
             params: vec![EmissionArg::Value(result)],
+        })
+    }
+
+    /// The call of a closure's heap entry, `args` the closure, its arguments and then the continuation.
+    fn heap_apply(
+        &mut self,
+        args: &[MachineOperand],
+        resume: EmissionBlockName,
+        values: &mut Vec<(EmissionValueName, EmissionValue)>,
+    ) -> EmissionTail {
+        let [MachineOperand::Value(closure), params @ ..] = args else {
+            unreachable!("a heap call's first operand is its closure");
+        };
+        EmissionTail::Call(EmissionCallTarget::Heap {
+            target: value_name(*closure),
+            params: self.jump_args(params, values),
+            resume,
         })
     }
 

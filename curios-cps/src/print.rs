@@ -386,7 +386,7 @@ impl Printer<'_, '_, '_, '_> {
                         | IntrinsicCall::FrameLeave { weight } => {
                             format!("{}({weight})", intrinsic_call_name(*op))
                         }
-                        IntrinsicCall::ListMap => {
+                        IntrinsicCall::ListMap | IntrinsicCall::HeapApply => {
                             format!("{}({})", intrinsic_call_name(*op), self.operands(args))
                         }
                     };
@@ -656,6 +656,7 @@ fn intrinsic_call_name(op: IntrinsicCall) -> &'static str {
         IntrinsicCall::ListMap => "List/map",
         IntrinsicCall::FrameEnter { .. } => "frame/enter",
         IntrinsicCall::FrameLeave { .. } => "frame/leave",
+        IntrinsicCall::HeapApply => "heap/apply",
     }
 }
 

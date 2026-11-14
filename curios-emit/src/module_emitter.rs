@@ -1,12 +1,12 @@
 use {
     super::{
-        BigEmitter, BigHelper, Context, EmissionClosure, EmissionClosureName, EmissionData,
-        EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter,
-        FltEmitter, FltHelper, ImmediateLayout, RopeData, RopeEmitter, Table, TurnEmitter,
-        big_sub_type, bytes_sub_type, cell_sub_type, channel_sub_type, concrete_val,
-        elems_sub_type, flt_sub_type, longs_sub_type, null, refusal_data_name, refusal_message,
-        rope_base_sub_type, rope_enter_sub_type, rope_leaf_sub_type, rope_node_sub_type,
-        rope_room_sub_type, rope_view_sub_type, words_sub_type,
+        BigEmitter, BigHelper, ClsrData, Context, EmissionClosure, EmissionData, EmissionFunction,
+        EmissionFunctionName, EmissionModule, EmissionValueName, ExprEmitter, FltEmitter,
+        FltHelper, ImmediateLayout, RopeData, RopeEmitter, Table, TurnEmitter, big_sub_type,
+        bytes_sub_type, cell_sub_type, channel_sub_type, concrete_val, elems_sub_type,
+        flt_sub_type, longs_sub_type, null, refusal_data_name, refusal_message, rope_base_sub_type,
+        rope_enter_sub_type, rope_leaf_sub_type, rope_node_sub_type, rope_room_sub_type,
+        rope_view_sub_type, words_sub_type,
     },
     curios_abi::{ENTRY, Namespace, PANIC, WireType},
     curios_num::Binary,
@@ -543,29 +543,26 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    fn emit_let_clsr(&mut self, name: &'a EmissionClosureName, clsr: &'a EmissionClosure) {
+    /// Emit the body `clsr` as the function `data` names: a closure, or a closure's heap entry.
+    fn emit_let_clsr(&mut self, data: &'a ClsrData<'a>, clsr: &'a EmissionClosure) {
         let mut locals = Default::default();
         let mut expr = Default::default();
 
         ExprEmitter::new(
-            Context::new_clsr(self.table, self.table.find_clsr(name), &mut locals),
+            Context::new_clsr(self.table, data, &mut locals),
             self.module,
             &mut expr,
         )
         .emit_root_region(&clsr.region);
 
         self.module.add_func(
-            self.table.find_clsr(name).func_name(),
+            data.func_name(),
             curios_wasm::Func {
                 // Declared at the arity type itself, not a named subtype: the body's `ref.func` then types as `(ref $clsr/N)`, which is exactly what its arity's table holds.
-                type_name: self
-                    .table
-                    .find_clsr_type(self.table.find_clsr(name).arity()),
+                type_name: self.table.find_clsr_type(data.arity()),
                 params: iter::once(self.table.special_local())
                     .chain(clsr.params.iter().map(|param| {
-                        self.table
-                            .find_clsr(name)
-                            .find_param(&param.name)
+                        data.find_param(&param.name)
                             .unwrap_or_else(|| panic!("`ClsrData` lacks param `{}`", param.name))
                     }))
                     .collect(),
@@ -575,65 +572,158 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
+    /// The entry every closure of `arity` without a twin shares in its heap table: it calls the closure natively through its own table and hands the answer to the continuation, the last parameter, in tail position.
+    fn emit_heap_adapter(&mut self, arity: usize) {
+        let local = |index: usize| curios_wasm::LocalName::from(format!("heap/arg/{index}"));
+        let k = curios_wasm::LocalName::from("heap/k");
+        let code = |envr_type: curios_wasm::TypeName| {
+            [
+                curios_wasm::Instr::RefCast {
+                    ref_type: curios_wasm::RefType {
+                        is_nullable: false,
+                        heap_type: curios_wasm::HeapType::Concrete(envr_type.clone()),
+                    },
+                },
+                curios_wasm::Instr::StructGet {
+                    type_name: envr_type,
+                    field_name: self.table.special_field(),
+                },
+            ]
+        };
+
+        let mut expr: curios_wasm::Expr = Default::default();
+        // The continuation's environment first, under the answer the native call leaves.
+        expr.push(curios_wasm::Instr::LocalGet {
+            local_name: k.clone(),
+        });
+        expr.push(curios_wasm::Instr::RefAsNonNull);
+        expr.push(curios_wasm::Instr::LocalGet {
+            local_name: self.table.special_local(),
+        });
+        for index in 0..arity {
+            expr.push(curios_wasm::Instr::LocalGet {
+                local_name: local(index),
+            });
+        }
+        expr.push(curios_wasm::Instr::LocalGet {
+            local_name: self.table.special_local(),
+        });
+        for instr in code(self.table.find_envr_type(arity)) {
+            expr.push(instr);
+        }
+        expr.push(curios_wasm::Instr::CallIndirect {
+            table_name: self.table.clsr_table(arity),
+            type_name: self.table.find_clsr_type(arity),
+        });
+        expr.push(curios_wasm::Instr::LocalGet {
+            local_name: k.clone(),
+        });
+        for instr in code(self.table.find_envr_type(1)) {
+            expr.push(instr);
+        }
+        expr.push(curios_wasm::Instr::ReturnCallIndirect {
+            table_name: self.table.clsr_table(1),
+            type_name: self.table.find_clsr_type(1),
+        });
+
+        self.module.add_func(
+            self.table.heap_adapter(arity),
+            curios_wasm::Func {
+                type_name: self.table.find_clsr_type(arity + 1),
+                params: iter::once(self.table.special_local())
+                    .chain((0..arity).map(local))
+                    .chain([k])
+                    .collect(),
+                locals: Vec::new(),
+                expr,
+            },
+        );
+    }
+
     /// One dispatch table per closure arity, typed `(ref null $clsr/N)` and filled by one active element segment in the module's ordered closure walk, so [`ClsrData::index`](super::ClsrData::index) is reproducible. The element type is what deletes the `call_indirect` signature check: the call site expects exactly the table's element type, so the engine proves the match statically instead of comparing type indices per dispatch. Slot 0 stays null — a shell's zeroed index field must trap, and a null entry does exactly that under `call_indirect`. A table exists for every arity the module dispatches at, because an indirect call site can survive the inlining-away of every closure definition of its arity.
     fn emit_clsr_tables(&mut self, module: &'a EmissionModule) {
         for (arity, type_name) in self.table.clsr_types() {
-            let exprs: Vec<curios_wasm::Expr> = module
+            let bodies = module
                 .clsrs()
                 .iter()
                 .filter(|(_, clsr)| clsr.params.len() == arity)
-                .map(|(name, _)| {
-                    let mut expr: curios_wasm::Expr = Default::default();
-                    expr.push(curios_wasm::Instr::RefFunc {
-                        func_name: self.table.find_clsr(name).func_name(),
-                    });
-                    expr
+                .map(|(name, _)| self.table.find_clsr(name).func_name())
+                .collect();
+            self.emit_dispatch_table(self.table.clsr_table(arity), type_name, bodies);
+        }
+    }
+
+    /// One heap table per arity a heap call calls a closure at, laid out as that arity's closure table: each slot the heap entry of the closure in the same slot there, or the arity's adapter where the closure's function has no twin, typed at the arguments and then the continuation.
+    fn emit_heap_tables(&mut self, module: &'a EmissionModule) {
+        for (arity, table_name) in self.table.heap_tables() {
+            let entries = module
+                .clsrs()
+                .iter()
+                .filter(|(_, clsr)| clsr.params.len() == arity)
+                .map(|(name, _)| match self.table.find_heap_clsr(name) {
+                    Some(heap) => heap.func_name(),
+                    None => self.table.heap_adapter(arity),
                 })
                 .collect();
-
-            let slots = exprs.len() as u64 + 1;
-            self.module.add_table(
-                self.table.clsr_table(arity),
-                curios_wasm::Table {
-                    table_type: curios_wasm::TableType {
-                        address_type: curios_wasm::AddressType::I32,
-                        ref_type: curios_wasm::RefType {
-                            is_nullable: true,
-                            heap_type: curios_wasm::HeapType::Concrete(type_name.clone()),
-                        },
-                        limits: curios_wasm::Limits {
-                            min: slots,
-                            max: Some(slots),
-                        },
-                    },
-                    expr: None,
-                },
-            );
-
-            if exprs.is_empty() {
-                continue;
-            }
-
-            let mut offset: curios_wasm::Expr = Default::default();
-            offset.push(curios_wasm::Instr::I32Const { value: 1 });
-
-            self.module.add_elem(
-                curios_wasm::ElemName::from(format!("clsr/{}", arity)),
-                curios_wasm::ElemSegment {
-                    mode: curios_wasm::ElemMode::Active {
-                        table_name: self.table.clsr_table(arity),
-                        offset,
-                    },
-                    list: curios_wasm::ElemList::Exprs(
-                        curios_wasm::RefType {
-                            is_nullable: false,
-                            heap_type: curios_wasm::HeapType::Concrete(type_name),
-                        },
-                        exprs,
-                    ),
-                },
-            );
+            self.emit_dispatch_table(table_name, self.table.find_clsr_type(arity + 1), entries);
         }
+    }
+
+    /// A dispatch table typed `(ref null $type_name)` holding `bodies` from slot 1, slot 0 null, filled by one active element segment named as the table is.
+    fn emit_dispatch_table(
+        &mut self,
+        table_name: curios_wasm::TableName,
+        type_name: curios_wasm::TypeName,
+        bodies: Vec<curios_wasm::FuncName>,
+    ) {
+        let exprs: Vec<curios_wasm::Expr> = bodies
+            .into_iter()
+            .map(|func_name| {
+                let mut expr: curios_wasm::Expr = Default::default();
+                expr.push(curios_wasm::Instr::RefFunc { func_name });
+                expr
+            })
+            .collect();
+
+        let slots = exprs.len() as u64 + 1;
+        self.module.add_table(
+            table_name.clone(),
+            curios_wasm::Table {
+                table_type: curios_wasm::TableType {
+                    address_type: curios_wasm::AddressType::I32,
+                    ref_type: curios_wasm::RefType {
+                        is_nullable: true,
+                        heap_type: curios_wasm::HeapType::Concrete(type_name.clone()),
+                    },
+                    limits: curios_wasm::Limits {
+                        min: slots,
+                        max: Some(slots),
+                    },
+                },
+                expr: None,
+            },
+        );
+
+        if exprs.is_empty() {
+            return;
+        }
+
+        let mut offset: curios_wasm::Expr = Default::default();
+        offset.push(curios_wasm::Instr::I32Const { value: 1 });
+
+        self.module.add_elem(
+            curios_wasm::ElemName::from(table_name.as_str()),
+            curios_wasm::ElemSegment {
+                mode: curios_wasm::ElemMode::Active { table_name, offset },
+                list: curios_wasm::ElemList::Exprs(
+                    curios_wasm::RefType {
+                        is_nullable: false,
+                        heap_type: curios_wasm::HeapType::Concrete(type_name),
+                    },
+                    exprs,
+                ),
+            },
+        );
     }
 
     fn emit_let_func(&mut self, name: &'a EmissionFunctionName, func: &'a EmissionFunction) {
@@ -956,10 +1046,29 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         for (name, clsr) in module.clsrs() {
-            self.emit_let_clsr(name, clsr);
+            self.emit_let_clsr(self.table.find_clsr(name), clsr);
         }
 
         self.emit_clsr_tables(module);
+
+        // A heap entry is emitted only at an arity some heap call dispatches at, since only a heap table reaches it.
+        for (name, heap) in module.heap_clsrs() {
+            if self
+                .table
+                .heap_tables()
+                .any(|(arity, _)| arity + 1 == heap.params.len())
+            {
+                let data = self
+                    .table
+                    .find_heap_clsr(name)
+                    .unwrap_or_else(|| panic!("`Table` lacks the heap entry of `{name}`"));
+                self.emit_let_clsr(data, heap);
+            }
+        }
+        for (arity, _) in self.table.heap_tables().collect::<Vec<_>>() {
+            self.emit_heap_adapter(arity);
+        }
+        self.emit_heap_tables(module);
 
         for (name, func) in module.funcs() {
             self.emit_let_func(name, func);

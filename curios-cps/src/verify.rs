@@ -1076,6 +1076,30 @@ impl Module {
                 }
             }
             Node::Intrinsic {
+                op: IntrinsicCall::HeapApply,
+                args,
+                return_to,
+            } => {
+                if args.len() < 2 {
+                    return Err(VerifyError(format!(
+                        "{id} HeapApply expects a closure and a continuation, got {} operands",
+                        args.len()
+                    )));
+                }
+                if self.continuation_arity(
+                    current_function,
+                    return_cont,
+                    facts,
+                    scope,
+                    *return_to,
+                )? != 1
+                {
+                    return Err(VerifyError(format!(
+                        "{id} HeapApply continuation must accept one value"
+                    )));
+                }
+            }
+            Node::Intrinsic {
                 op: op @ (IntrinsicCall::FrameEnter { .. } | IntrinsicCall::FrameLeave { .. }),
                 args,
                 return_to,

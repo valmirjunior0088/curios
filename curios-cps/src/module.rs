@@ -38,6 +38,8 @@ pub struct Module {
     members: Vec<String>,
     /// The functions no pass copies into a caller — not the inliner, contification or specialization — so a call of one stays a call. What a caller reaches only on a path it rarely takes belongs here: the path it does take stays small enough for the caller itself to be copied where it is called.
     out_of_line: BTreeSet<FunctionId>,
+    /// Each function [`bound_frames`](crate::bound_frames) wrote a twin for, with the twin: what a closure of the function enters where [`IntrinsicCall::HeapApply`](crate::IntrinsicCall::HeapApply) calls it.
+    twins: BTreeMap<FunctionId, FunctionId>,
     entry: Option<FunctionId>,
 }
 
@@ -109,6 +111,16 @@ impl Module {
     /// Whether `function` is kept out of line.
     pub fn is_out_of_line(&self, function: FunctionId) -> bool {
         self.out_of_line.contains(&function)
+    }
+
+    /// Record `twin` as the function that runs `original` on the heap.
+    pub(crate) fn record_twin(&mut self, original: FunctionId, twin: FunctionId) {
+        self.twins.insert(original, twin);
+    }
+
+    /// The function that runs `function` on the heap, taking its parameters and then the continuation its answer goes to, where one was written.
+    pub fn twin(&self, function: FunctionId) -> Option<FunctionId> {
+        self.twins.get(&function).copied()
     }
 
     /// The registered suspension representation, independent of the entry capability [`Self::entry_suspension`] derives.

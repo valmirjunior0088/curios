@@ -15,6 +15,7 @@ mod copying;
 mod dead_parameters;
 mod entry;
 mod fields;
+mod frames;
 mod ladder;
 mod rebuild;
 mod reconstruction;

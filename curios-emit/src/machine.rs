@@ -165,6 +165,8 @@ pub struct MachineWrapper {
     function: curios_cps::FunctionId,
     captures: Vec<MachineValueId>,
     arity: usize,
+    /// The function's twin, which the closure's heap entry enters with the captures it needs, each one the closure holds, its arguments and the continuation.
+    twin: Option<curios_cps::FunctionId>,
 }
 
 #[derive(Debug, Clone)]
@@ -279,6 +281,7 @@ pub fn lower(
                     function: *function,
                     captures: free_values[function].clone(),
                     arity: definition.params.len(),
+                    twin: source.twin(*function),
                 },
             )
         })
@@ -935,6 +938,22 @@ impl MachineModule {
                     "closure wrapper ABI does not match direct code".into(),
                 ));
             }
+            // A twin is a copy of its function's body, so what it needs is what the function needs, and the closure's environment holds all of it.
+            if let Some(twin) = wrapper.twin {
+                let twin = self.functions.get(&twin).ok_or_else(|| {
+                    MachineVerifyError(format!("{function}'s heap entry enters an undefined twin"))
+                })?;
+                if twin.params.len() != wrapper.arity + 1
+                    || !twin
+                        .free_values
+                        .iter()
+                        .all(|value| wrapper.captures.contains(value))
+                {
+                    return Err(MachineVerifyError(format!(
+                        "{function}'s twin needs what its closure does not hold"
+                    )));
+                }
+            }
         }
         Ok(())
     }
@@ -1131,6 +1150,21 @@ impl MachineModule {
                 }
                 verify_block_resume(function, *resume, op.result_arity())?;
             }
+            MachineTerminator::Intrinsic {
+                op: curios_cps::IntrinsicCall::HeapApply,
+                args,
+                resume,
+            } => {
+                heap_operands(owner, args)?;
+                verify_block_resume(function, *resume, 1)?;
+            }
+            MachineTerminator::IntrinsicReturn {
+                op: curios_cps::IntrinsicCall::HeapApply,
+                args,
+            } => {
+                heap_operands(owner, args)?;
+                tail_returns(owner, function, 1)?;
+            }
             // Every tail position hands its own results straight out of the function, as a tail direct call does, so each is held to the function's result count: a closure call and a `ListMap` produce one, a host or cell operation what its row says.
             MachineTerminator::TailIndirectCall { .. } => tail_returns(owner, function, 1)?,
             MachineTerminator::IntrinsicReturn {
@@ -1237,6 +1271,19 @@ fn tail_returns(
         )));
     }
     Ok(())
+}
+
+/// A heap call's operands: a closure, its arguments and then the continuation.
+fn heap_operands(
+    owner: curios_cps::FunctionId,
+    args: &[MachineOperand],
+) -> Result<(), MachineVerifyError> {
+    match args {
+        [MachineOperand::Value(_), .., _] => Ok(()),
+        _ => Err(MachineVerifyError(format!(
+            "{owner} HeapApply takes a closure value, its arguments and a continuation"
+        ))),
+    }
 }
 
 fn verify_edge(function: &MachineFunction, edge: &MachineEdge) -> Result<(), MachineVerifyError> {
