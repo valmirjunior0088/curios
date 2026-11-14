@@ -1,12 +1,11 @@
 use {
     super::{
         Grammar, members, parse_func_pattern_param, parse_infix_expr, parse_keyword, parse_literal,
-        parse_match_pattern, parse_name, parse_pattern, parse_term_before_arrow, trimmed,
-        with_span,
+        parse_match_pattern, parse_name, parse_pattern, trimmed, with_span,
     },
     crate::{
-        Alternative, Choose, ChooseArm, ChooseTest, Func, Guard, HeadlessArm, HeadlessMatch, Match,
-        MatrixArm, Pattern, Subterm, Term, parse_term, parse_whitespace,
+        Alternative, Func, Guard, HeadlessArm, HeadlessMatch, Match, MatrixArm, Pattern, Subterm,
+        Term, parse_term, parse_whitespace,
     },
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail_from, look_ahead, many0, mark, not_ahead, pure,
@@ -185,7 +184,11 @@ const HEADLESS_MATCH_TAKES_A_DEFAULT: &[&str] = &[
     "write `| _ => …` before `end`",
 ];
 
-// The default closing a match with no head, `| _ => body`, required, or the arm parser explaining why what stands here is no arm. As `parse_choose_default`, and for its reasons: `many0` drops a recoverable arm failure, so the arm parser is run again for the diagnosis it had, and an `end` standing where the default does is refused by the rule that asks for one.
+// The default closing a match with no head, `| _ => body` — guards alone enumerate no shapes, so `_` is required, not optional — or the arm parser explaining why what stands here is no arm.
+//
+// **A bare default here would report the wrong thing.** `many0` drops a recoverable arm failure (`curios_parse`'s repetition keeps only uncaught ones), leaving the default to invent `Expected '_'` at the arm's first token: a missing `=>`, or a pattern the guard grammar refuses, reported as a default the reader never meant to write. Re-running the arm parser recovers the diagnosis it already had, and [`Parser::or`] then keeps whichever error reached further, so a genuinely absent default still reports as one — both alternatives fail at the same `|` and the first takes the tie. The alternative never succeeds, since the loop stopped here precisely because the arm parser failed, so no arm is parsed twice. This is `Module::parse_items_end`'s recovery, for the same reason.
+//
+// **An `end` here is a match with no head and no default.** The arms are read and the word that closes the form stands where the default does, so the rule is what is broken, and it is refused by name at that word, where a bare default would report the bar it wanted and a letter of `end`.
 fn parse_headless_default<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     look_ahead(parse_keyword("end"))
         .map(|()| true)
@@ -229,86 +232,6 @@ pub fn parse_cons_ih<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Optio
         .and_keep(parse_pattern::<D>)
         .map(Some)
         .or(pure(None))
-        .parse(state)
-}
-
-// A bind arm `| pattern | … = value => body` (Rust `if let`): the arm fires when `value` matches one of the refutable alternatives. The `=` separator is guarded against `==` (equality) and `=>` (an empty value) via `not_ahead`, mirroring the `!` vs `!=` idiom. Tried *after* the condition arm, since a bind pattern like `some(x)` also parses as a condition term and the condition arm cannot take a bind arm from it: `=` is no infix operator, so a condition term stops there and the arm fails wanting its `=>`. Reading it second is what lets it keep its commitments — a pattern the grammar refuses by name, a qualified constructor above all, is then the diagnosis instead of being re-read as an ordinary call and reported at the `=` that follows it.
-pub fn parse_bind_arm<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ChooseArm<D>> {
-    parse_literal("|")
-        .and_keep(parse_alternatives::<D>)
-        .and_drop(
-            take_exact("=")
-                .and_drop(not_ahead("="))
-                .and_drop(not_ahead(">")),
-        )
-        .and_drop(parse_whitespace)
-        .and(parse_term_before_arrow)
-        .and_drop(parse_literal("=>"))
-        .and(parse_term::<D>)
-        .map(|((alternatives, value), body)| ChooseArm {
-            test: ChooseTest::Bind {
-                alternatives,
-                value,
-            },
-            body,
-        })
-        .parse(state)
-}
-
-// A choose condition arm `| cond => body`. The catch spans through `=>` so a condition term that merely *starts* like the default backtracks cleanly. A bare `_` is no term, so the choose's `| _ =>` default reads as no condition arm and `many0` stops, handing it to `parse_choose_default`; a condition that merely *begins* with `_` (e.g. `_ready`) is a name, and an ordinary condition.
-pub fn parse_cond_arm<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ChooseArm<D>> {
-    parse_literal("|")
-        .and_keep(parse_term_before_arrow)
-        .and_drop(parse_literal("=>"))
-        .and(parse_term::<D>)
-        .map(|(condition, body)| ChooseArm {
-            test: ChooseTest::Cond(condition),
-            body,
-        })
-        .parse(state)
-}
-
-// One choose arm: a condition arm first, else a bind arm. The condition arm is the reading that cannot be mistaken — its term stops at a `=`, which is no infix operator — so trying it first costs the bind arm nothing and leaves the bind arm free to commit.
-pub fn parse_choose_arm<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ChooseArm<D>> {
-    parse_cond_arm.or(parse_bind_arm).parse(state)
-}
-
-/// What refuses a `choose` that closes with no default arm.
-const CHOOSE_TAKES_A_DEFAULT: &[&str] = &[
-    "a `choose` ends with a default arm, taken where no arm above it holds",
-    "write `| _ => …` before `end`",
-];
-
-// The mandatory `| _ =>` default arm closing a `choose` — a `Bool` ladder is a dispatch form (it enumerates no shapes), so `_` is required, not optional — or the arm parser explaining why what stands here is no arm.
-//
-// **A bare default here would report the wrong thing.** `many0` drops a recoverable arm failure (`curios_parse`'s repetition keeps only uncaught ones), leaving the default to invent `Expected '_'` at the arm's first token: a missing `=>`, or a pattern the arm grammar refuses, reported as a default the reader never meant to write. Re-running the arm parser recovers the diagnosis it already had, and [`Parser::or`] then keeps whichever error reached further, so a genuinely absent default still reports as one — both alternatives fail at the same `|` and the first takes the tie. The alternative never succeeds, since the loop stopped here precisely because the arm parser failed, so no arm is parsed twice. This is `Module::parse_items_end`'s recovery, for the same reason.
-//
-// **An `end` here is a `choose` with no default.** The arms are read and the word that closes the form stands where the default does, so the rule is what is broken, and it is refused by name at that word, where a bare default would report the bar it wanted and a letter of `end`.
-pub fn parse_choose_default<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    look_ahead(parse_keyword("end"))
-        .map(|()| true)
-        .or(pure(false))
-        .flat_map(|ended| match ended {
-            true => mark()
-                .and_drop(take_exact("end"))
-                .flat_map(|start| commit(fail_from(&start, CHOOSE_TAKES_A_DEFAULT)))
-                .boxed(),
-            false => parse_literal("|")
-                .and_keep(parse_literal("_"))
-                .and_drop(parse_literal("=>"))
-                .and_keep(parse_term::<D>)
-                .or(parse_choose_arm.map(|arm| arm.body))
-                .boxed(),
-        })
-        .parse(state)
-}
-
-// `choose | test => body | … | _ => default end`. No head term — the arms are `Bool` conditions or refutable binds, tried top-to-bottom, first to fire wins. Distinguished from `match` by keyword alone, so there is no disambiguation to speak of here.
-pub fn parse_choose<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    parse_keyword("choose")
-        .and_keep(many0(parse_choose_arm).and(parse_choose_default))
-        .and_drop(parse_keyword("end"))
-        .map(|(arms, default)| Subterm::Choose(Choose { arms, default }).into())
         .parse(state)
 }
 

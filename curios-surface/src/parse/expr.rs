@@ -1,11 +1,11 @@
 use {
     super::{
-        DEFINITION_NAMES_ITS_MEMBERS, Grammar, MEMO_ATOMIC_TERM, MEMO_TERM, MEMO_TERM_BEFORE_ARROW,
-        Read, comment_ending_at, members, parse_caller_sort, parse_choose, parse_func,
-        parse_func_type, parse_intrinsic, parse_keyword, parse_let_binder, parse_literal,
-        parse_mark, parse_match, parse_name, parse_numbered_binder, parse_parens, parse_pattern,
-        parse_premise, parse_prop, parse_qualified_name, parse_struct_lit, parse_tuple,
-        parse_tuple_type, parse_type, parse_usize_raw, refused,
+        DEFINITION_NAMES_ITS_MEMBERS, Grammar, MEMO_ATOMIC_TERM, MEMO_TERM, Read,
+        comment_ending_at, members, parse_caller_sort, parse_func, parse_func_type,
+        parse_intrinsic, parse_keyword, parse_let_binder, parse_literal, parse_mark, parse_match,
+        parse_name, parse_numbered_binder, parse_parens, parse_pattern, parse_premise, parse_prop,
+        parse_qualified_name, parse_struct_lit, parse_tuple, parse_tuple_type, parse_type,
+        parse_usize_raw, refused,
     },
     crate::{
         Apply, Argument, Binder, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding,
@@ -377,13 +377,12 @@ pub fn parse_atomic_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, T
 }
 
 pub fn parse_atomic_term_inner<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    // The head is spanned on its own, and each suffix with its own extent, so `apply_suffixes` can span every node of the chain; the outer `with_span` still covers the whole chain, innermost-wins. `match` and `choose` are heads because `end` closes them: nothing after one can be read as part of it, so an operator, a call, a projection or a `!` may follow one bare.
+    // The head is spanned on its own, and each suffix with its own extent, so `apply_suffixes` can span every node of the chain; the outer `with_span` still covers the whole chain, innermost-wins. A `match` is a head because `end` closes it: nothing after one can be read as part of it, so an operator, a call, a projection or a `!` may follow one bare.
     with_span(
         with_span(
             D::parse_atom
                 .or(parse_goal)
                 .or(parse_match)
-                .or(parse_choose)
                 .or(parse_struct_lit)
                 .or(parse_qualified_name.map(|n| Subterm::Name(n).into()))
                 .or(parse_type)
@@ -590,7 +589,7 @@ fn refuse_juxtaposed_term<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
                     .next()
                     .is_some_and(|char| matches!(char, '[' | '"' | '\'')),
                 "and" => false,
-                word => !is_keyword(word) || matches!(word, "true" | "false" | "match" | "choose"),
+                word => !is_keyword(word) || matches!(word, "true" | "false" | "match"),
             };
             if !begins_a_term || skipped.contains('\n') {
                 return pure(()).boxed();
@@ -648,21 +647,11 @@ fn written_instead_of(word: &str) -> Option<&'static str> {
 }
 
 pub fn parse_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    recurse(|| memoize(MEMO_TERM, term(true)).parse(state))
+    recurse(|| memoize(MEMO_TERM, term()).parse(state))
 }
 
-/// [`parse_term`] where the form around the term owes an arrow before the term that follows it: a `choose` arm's condition, a bind arm's value. A term standing where that arrow belongs is the arm's missing `=>`, which the arm reports, so the term is read without [`refuse_juxtaposed_term`]'s probe.
-pub fn parse_term_before_arrow<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    recurse(|| memoize(MEMO_TERM_BEFORE_ARROW, term(false)).parse(state))
-}
-
-/// A term, with the probe for a second one on its line where `probed`.
-fn term<'a, D: Grammar>(probed: bool) -> impl Parser<'a, Term<D>> {
-    let juxtaposed = move || match probed {
-        true => refuse_juxtaposed_term.boxed(),
-        false => pure(()).boxed(),
-    };
-
+/// A term, with the probe for a second one on its line.
+fn term<'a, D: Grammar>() -> impl Parser<'a, Term<D>> {
     move |state: ParserState<'a>| {
         with_span(
             refuse_declaration_head.and_keep(
@@ -672,7 +661,7 @@ fn term<'a, D: Grammar>(probed: bool) -> impl Parser<'a, Term<D>> {
                     .or(parse_let)
                     .or(parse_func_type)
                     .or(parse_func)
-                    .or(parse_infix_expr(0).and_drop(juxtaposed))
+                    .or(parse_infix_expr(0).and_drop(refuse_juxtaposed_term))
                     .or(refuse_non_term),
             ),
         )

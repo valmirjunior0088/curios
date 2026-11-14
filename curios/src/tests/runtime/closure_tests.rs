@@ -277,7 +277,7 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
             end;
 
         let step(model: Nat, tag: Nat) -> {Nat, Thing(Nat)} =
-            choose
+            match
             | tag == 1 => (model + 1, Thing/nothing())
             | tag == 2 => (model, Thing/stop())
             | tag == 3 => (model, Thing/doing(Io/pure(model * 2)))

@@ -9,7 +9,7 @@ fn bangs_lower_in_value_regions_at_every_lexical_depth() {
         "let x: M = action!; x",
         "let x = action!; x",
         "match flag | true => action! | false => fallback end",
-        "choose | flag => action! | _ => fallback end",
+        "match | flag => action! | _ => fallback end",
         "let x: C = C { field = action! }; x",
         "test t = action!; tail",
         "concept C(A: Type): pub Type { field: M } satisfy (@A: Type) => C(A) { field = action! } tail",

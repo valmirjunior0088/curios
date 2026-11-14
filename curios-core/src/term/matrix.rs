@@ -8,7 +8,7 @@ use {
     curios_num::Natural,
 };
 
-/// A match before its patterns are compiled: the scrutinee, the motive where one is written, and the arms in the order they are written. A `choose` bind arm is the two arms `pattern => body | _ => rest`, the rest of its ladder being what a value the pattern does not match takes, and a match with no head is a match over `()` whose rows write `_`. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.
+/// A match before its patterns are compiled: the scrutinee, the motive where one is written, and the arms in the order they are written. A match with no head is a match over `()` whose rows write `_`. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Matrix {

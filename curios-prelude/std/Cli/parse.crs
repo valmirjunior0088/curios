@@ -197,7 +197,7 @@ let leaf_values(
 
 -- What `raw` asks before the line is read further: help, then the version, then the first refusal.
 let asked(@A: Type, raw: Raw, path: List(Str), version: Option(Str)) -> Option(Reading(A)) =
-    choose
+    match
     | raw.help => Option/some(Reading/help(path))
     | some(text) = Option/filter(version, (_) => raw.version) => Option/some(Reading/version(text))
     | some(f) = raw.failure => Option/some(Reading/refused(path, f))

@@ -228,7 +228,7 @@ fn a_partial_definition_stays_usable_in_a_program() {
         use /std/{Nat};
 
         let collatz(n : Nat, steps : Nat) -> Nat =
-            choose
+            match
             | n <= 1 => steps
             | n % 2 == 0 => collatz(n / 2, steps + 1)
             | _ => collatz(3 * n + 1, steps + 1)

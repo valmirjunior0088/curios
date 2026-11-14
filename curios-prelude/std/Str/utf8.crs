@@ -4,7 +4,7 @@ use /std/Str/{Class, Scan};
 --- What `c` begins.
 pub let classify(c: Byte) -> Class =
     let n = Byte/to_nat(c);
-    choose
+    match
     | Nat/in_range(n, 0x0, 0x7F) => Class/ascii()
     | Nat/in_range(n, 0xC2, 0xDF) => Class/lead(1, 0x80, 0xBF, n - 0xC0)
     | Nat/in_range(n, 0xE0, 0xEF) =>
@@ -28,7 +28,7 @@ pub let step(c: Byte, s: Scan) -> Scan =
     match s
     | bad() => Scan/bad()
     | cont(rem, lo, hi) =>
-        choose
+        match
         | Bool/not(Nat/in_range(n, lo, hi)) => Scan/bad()
         | rem == 1 => Scan/lead()
         | _ => Scan/cont(rem - 1, 0x80, 0xBF)

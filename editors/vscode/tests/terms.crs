@@ -32,7 +32,7 @@ let ops = a || b && c == d != e <= f >= g < h > i + j - k * l / m % n;
 let seq = act! + x;
 let path = a/b;
 let lambda = (x: Nat, y) => x;
-choose
+match
 | flag => 1
 | some(value) = lookup(key) => value
 | _ => 0

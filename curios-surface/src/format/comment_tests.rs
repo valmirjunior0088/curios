@@ -58,7 +58,7 @@ fn a_comment_above_an_induct_clause_stays_above_and() {
     assert_eq!(formatted(source), source);
 }
 
-/// A comment leading a member of a delimited list — a `match` or `choose` arm, a struct-literal, concept or witness field, an `induct` case — stays above the member, where it could print *inside* it: `injective(a, b, same) =` on one line and the comment that was written above the field on the next. Each fixture below is already canonical, so asserting the placement and the fixed point pins both halves.
+/// A comment leading a member of a delimited list — a `match` arm, a struct-literal, concept or witness field, an `induct` case — stays above the member, where it could print *inside* it: `injective(a, b, same) =` on one line and the comment that was written above the field on the next. Each fixture below is already canonical, so asserting the placement and the fixed point pins both halves.
 #[test]
 fn a_comment_above_a_match_arm_stays_above_the_bar() {
     let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    -- the successor case\n    | p + 1 => p\n    end;\n\nf(1)\n";
@@ -71,8 +71,8 @@ fn a_comment_above_a_match_arm_stays_above_the_bar() {
 }
 
 #[test]
-fn a_comment_above_a_choose_arm_stays_above_the_bar() {
-    let source = "let f(n: /std/Nat) -> /std/Nat =\n    choose\n    | n == 0 => 1\n    -- the fallback\n    | _ => n\n    end;\n\nf(1)\n";
+fn a_comment_above_an_arm_of_a_match_with_no_head_stays_above_the_bar() {
+    let source = "let f(n: /std/Nat) -> /std/Nat =\n    match\n    | n == 0 => 1\n    -- the fallback\n    | _ => n\n    end;\n\nf(1)\n";
     let output = formatted(source);
     assert!(
         output.contains("\n    -- the fallback\n    | _"),
@@ -135,7 +135,7 @@ fn a_trailing_comment_after_a_separator_rides_the_line_it_was_written_on() {
 /// **A trailing comment does not drift to the next break**, each surfacing one arm down and the last, having no break left inside the construct, past `end;`: `-- affirmative` would document the negative arm and `-- negative` the declaration.
 #[test]
 fn a_trailing_comment_stays_on_the_arm_it_was_written_on() {
-    let source = "let d(b: /std/Bool) -> /std/Str =\n    choose\n    | b == true => \"yes\" -- affirmative\n    | _ => \"no\" -- negative\n    end;\n\nd(true)\n";
+    let source = "let d(b: /std/Bool) -> /std/Str =\n    match\n    | b == true => \"yes\" -- affirmative\n    | _ => \"no\" -- negative\n    end;\n\nd(true)\n";
     let output = formatted(source);
 
     let affirmative = output
@@ -169,7 +169,7 @@ fn a_trailing_comment_stays_on_the_arm_it_was_written_on() {
 /// **The regression for the formatter refusing its own output.** Two comments driven onto one output line are *one* comment when it reparses — a line comment runs to the end of its line — so the verifier saw one fewer than it captured and refused to write. The shape below is exactly what that drift would produce, and a single `curios format` would then leave a file that every later `curios format --check` rejects.
 #[test]
 fn an_interior_trailing_comment_does_not_escape_its_construct() {
-    let source = "let d(b: /std/Bool) -> /std/Str =\n    choose\n    | b == true => \"yes\"\n    | _ => \"no\" -- inner\n    end; -- tail\n\nd(true)\n";
+    let source = "let d(b: /std/Bool) -> /std/Str =\n    match\n    | b == true => \"yes\"\n    | _ => \"no\" -- inner\n    end; -- tail\n\nd(true)\n";
     let output = formatted(source);
 
     assert!(

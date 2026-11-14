@@ -190,7 +190,7 @@ let offset_of(sign: Char, h: Nat, m: Nat, s: Nat) -> Parse(Str, Offset) =
     match h <= 23 && m <= 59 && s <= 59
     | true =>
         let seconds = Nat/to_int(h * 3600 + m * 60 + s);
-        choose
+        match
         | sign == '-' && seconds == +0 => Parse/pure(Offset/unknown())
         | sign == '-' => known_offset(+0 - seconds)
         | _ => known_offset(seconds)
@@ -276,7 +276,7 @@ let duration_parts(hours: Nat, minutes: Nat, last: Nat) -> Parse(Str, Int) =
     | true =>
         let read = more_digits(0, 0)!;
         let unit = Parse/str/char!;
-        choose
+        match
         | unit == 'H' && last < 1 => duration_parts(read.value, minutes, 1)
         | unit == 'M' && last < 2 => duration_parts(hours, read.value, 2)
         | unit == 'S' => total(hours, minutes, read.value, 0)

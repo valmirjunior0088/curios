@@ -70,7 +70,7 @@ let basic_body(acc: Str) -> Parse(Str, Str) =
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
-        choose
+        match
         | c == '"' =>
             let _ = Parse/str/char!;
             Parse/pure(here)
@@ -112,7 +112,7 @@ let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
     match next
     | none() => stop
     | some(c) =>
-        choose
+        match
         | c == ' ' =>
             let _ = Parse/str/char!;
             trim_run(seen_nl)
@@ -146,7 +146,7 @@ let quote_run(quote: Char, acc: Str) -> Parse(Str, {Str, Bool}) =
     let run = Parse/str/take_while((c) => c == quote)!;
     let q = Str/len(run);
     let mark = Str/of_char(quote);
-    choose
+    match
     | q >= 6 => Parse/fail("too many quotes")
     | q >= 3 => Parse/pure((Str/concat(acc, Str/repeat(mark, q - 3)), true))
     | _ => Parse/pure((Str/concat(acc, run), false))
@@ -159,7 +159,7 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
-        choose
+        match
         | c == '"' =>
             let (kept, closed) = quote_run('"', here)!;
             match closed | true => Parse/pure(kept) | false => ml_basic_body(kept) end
@@ -200,7 +200,7 @@ let ml_literal_body(acc: Str) -> Parse(Str, Str) =
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
-        choose
+        match
         | c == '\'' =>
             let (kept, closed) = quote_run('\'', here)!;
             match closed | true => Parse/pure(kept) | false => ml_literal_body(kept) end

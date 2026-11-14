@@ -72,7 +72,7 @@ let furthest: Int =
 --- A handle ready once the monotonic clock has reached `i`: what a description suspends on to wait until then. One already past is ready at once; one before the clock's origin crosses as the origin, which has passed too.
 let deadline(i: Instant) -> Io(Handle) =
     let split = Int/DivMod/of(Instant/to_nanos(i), 1000000000);
-    choose
+    match
     | split.quotient < +0 => clock_deadline(+0, 0)
     | split.quotient > furthest => clock_deadline(furthest, 0)
     | _ => clock_deadline(split.quotient, split.remainder)

@@ -44,7 +44,7 @@ let alone(class: GraphemeBreak) -> Bool =
 
 --- Whether a cluster ends between a character of class `before` and `next`, of class `class`, the run up to `before` being `run`: the rules of UAX #29 in their order, the first that decides deciding.
 pub let breaks(before: GraphemeBreak, next: Char, class: GraphemeBreak, run: Run) -> Bool =
-    choose
+    match
     -- GB3.
     | before == GraphemeBreak/cr() && class == GraphemeBreak/lf() => false
     -- GB4 and GB5.

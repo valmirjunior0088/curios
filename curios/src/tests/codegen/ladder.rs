@@ -452,7 +452,7 @@ let token_walk: Parse(Bytes, List(Bytes)) =
     Parse/sep_by0(Parse/bytes/take_while((b) => Byte/to_nat(b) != ','), Parse/bytes/expect(','));
 
 let work(mode: Str, n: Nat) -> Nat =
-    choose
+    match
     | Str/eql(mode, "json") =>
         match Json/decode(Str/flatten(["[", Str/repeat("1, ", n), "1]"]))
         | success(value) => match value | arr(items) => List/len(items) | _ => 0 end

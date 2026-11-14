@@ -21,13 +21,6 @@ pub fn name(label: &str) -> Term {
     Subterm::Name(Name::from([label.to_string()])).into()
 }
 
-pub fn cond_arm(condition: Term, body: Term) -> ChooseArm {
-    ChooseArm {
-        test: ChooseTest::Cond(condition),
-        body,
-    }
-}
-
 /// The captured comment texts of one parse, in offset order.
 pub fn comments_of(source: &str) -> Vec<String> {
     let source = Source::inline(source);

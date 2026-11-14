@@ -100,7 +100,7 @@ fn a_numeral_in_an_arm_takes_the_type_another_arm_gives() {
         r#"
         let typed_first = match c | true => i | false => 5 end;
         let typed_last = match c | true => 5 | false => i end;
-        let chosen = choose | c => i | _ => 5 end;
+        let chosen = match | c => i | _ => 5 end;
         let folded = match xs | [] => 0 | [h, ..t] => h end;
         print(and(and(Int/to_str(typed_first), Int/to_str(typed_last)), and(Int/to_str(chosen), Int/to_str(folded))))
         "#,

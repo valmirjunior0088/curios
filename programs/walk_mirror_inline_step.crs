@@ -17,16 +17,16 @@ end
 
 let mclassify(c: Byte) -> MClass =
     let n = Byte/to_nat(c);
-    choose
+    match
     | Nat/in_range(n, 0x0, 0x7F) => MClass/ascii()
     | Nat/in_range(n, 0xC2, 0xDF) => MClass/lead(1, 0x80, 0xBF, n - 0xC0)
     | Nat/in_range(n, 0xE0, 0xEF) =>
-        let lo = choose | n == 0xE0 => 0xA0 | _ => 0x80 end;
-        let hi = choose | n == 0xED => 0x9F | _ => 0xBF end;
+        let lo = match | n == 0xE0 => 0xA0 | _ => 0x80 end;
+        let hi = match | n == 0xED => 0x9F | _ => 0xBF end;
         MClass/lead(2, lo, hi, n - 0xE0)
     | Nat/in_range(n, 0xF0, 0xF4) =>
-        let lo = choose | n == 0xF0 => 0x90 | _ => 0x80 end;
-        let hi = choose | n == 0xF4 => 0x8F | _ => 0xBF end;
+        let lo = match | n == 0xF0 => 0x90 | _ => 0x80 end;
+        let hi = match | n == 0xF4 => 0x8F | _ => 0xBF end;
         MClass/lead(3, lo, hi, n - 0xF0)
     | _ => MClass/bad()
     end;
@@ -36,7 +36,7 @@ let _mstep(c: Byte, s: MScan) -> MScan =
     match s
     | bad() => MScan/bad()
     | cont(rem, lo, hi) =>
-        choose
+        match
         | Bool/not(Nat/in_range(n, lo, hi)) => MScan/bad()
         | rem == 1 => MScan/lead()
         | _ => MScan/cont(rem - 1, 0x80, 0xBF)
@@ -63,7 +63,7 @@ let walk3(sc: MScan, b: Bytes, acc: {Nat, Nat}) -> {Nat, Nat} =
         | cont(rem, lo, hi) =>
             let n = Byte/to_nat(h);
             let partial = acc.1 * 0x40 + (n - 0x80);
-            choose
+            match
             | Bool/not(Nat/in_range(n, lo, hi)) => walk3(MScan/bad(), t, acc)
             | rem == 1 => walk3(MScan/lead(), t, ((acc.0 + partial) % 1000003, 0))
             | _ => walk3(MScan/cont(rem - 1, 0x80, 0xBF), t, (acc.0, partial))

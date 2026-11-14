@@ -20,7 +20,7 @@ let until_char(stop: Char) -> Parse(Str, Str) =
     Parse/str/take_while((c) => c != stop);
 
 let named_reference(body: Str) -> Option(Str) =
-    choose
+    match
     | body == "amp" => Option/some("&")
     | body == "lt" => Option/some("<")
     | body == "gt" => Option/some(">")
@@ -165,7 +165,7 @@ and tree() -> Parse(Str, Html) =
             match second
             | none() => lone_bracket
             | some(after) =>
-                choose
+                match
                 | after == '/' => Parse/fail("a closing tag")
                 | after == '!' => Parse/or(comment(), declaration())
                 | is_name_char(after) => element()

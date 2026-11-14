@@ -4,7 +4,7 @@ use /std/time/{Month, Weekday, iso8601};
 
 --- Whether `year` is a leap year of the proleptic Gregorian calendar: four divides it, and a hundred does not unless four hundred does.
 pub let is_leap(year: Int) -> Bool =
-    choose
+    match
     | year % 400 == +0 => true
     | year % 100 == +0 => false
     | year % 4 == +0 => true

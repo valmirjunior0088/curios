@@ -52,7 +52,7 @@ let components(b: Bytes) -> {before: List(Bytes), last: Bytes} =
 
 --- `a/b`, with one separator between them whatever `a` ends in; an empty side is the other side.
 pub let join(a: Path, b: Path) -> Path =
-    choose
+    match
     | is_empty(a) => b
     | is_empty(b) => a
     | ends_with_separator(a.0) => Path { x[..a.0, ..b.0] }

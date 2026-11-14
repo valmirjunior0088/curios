@@ -108,7 +108,7 @@ pub let is_754_version_2019: Bool =
 --- The class `f` falls in.
 pub let class(f: Flt) -> Class =
     let minus = is_sign_minus(f);
-    choose
+    match
     | is_signaling(f) => Class/signaling_nan()
     | is_nan(f) => Class/quiet_nan()
     | is_infinite(f) =>
@@ -140,7 +140,7 @@ pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
 
 --- IEEE's `remainder` (§5.3.1): `x - n · y` for the integer `n` nearest `x / y`, ties to even, which is exact. A zero answer has `x`'s sign; an infinite `x` or a zero `y` is invalid, and an infinite `y` leaves `x`. Unlike `rem`, which truncates the quotient, the answer is at most half of `y` in magnitude.
 pub let remainder(x: Flt, y: Flt) -> Flt =
-    choose
+    match
     | is_nan(x) || is_nan(y) => x + y
     | (some(d), some(v)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
         let e = Int/min(d.exponent, v.exponent);
@@ -231,7 +231,7 @@ pub let augmented_mul(x: Flt, y: Flt) -> {Flt, Flt} =
 --- IEEE's `nextUp` (§5.3.1): the least float above `f`. `-0` and `+0` step to the least subnormal, the negative least subnormal to `-0`, `-inf` to the negative largest finite value, and `+inf` stays; a NaN answers itself quieted.
 pub let next_up(f: Flt) -> Flt =
     let b = exact/bits(f);
-    choose
+    match
     | is_nan(f) => f + f
     | f == +inf.0 => f
     | is_zero(f) => exact/of_bits(1)
@@ -258,7 +258,7 @@ pub let try_log_b(f: Flt) -> Option(Int) =
 
 --- IEEE's `minimumNumber` (§9.6): the lesser of the two, a NaN giving way to a number and `-0` below `+0`; two NaNs answer a NaN.
 pub let minimum_number(a: Flt, b: Flt) -> Flt =
-    choose
+    match
     | is_nan(a) && is_nan(b) => a + b
     | is_nan(a) => b
     | is_nan(b) => a
@@ -267,7 +267,7 @@ pub let minimum_number(a: Flt, b: Flt) -> Flt =
 
 --- IEEE's `maximumNumber`, the twin of `minimum_number`.
 pub let maximum_number(a: Flt, b: Flt) -> Flt =
-    choose
+    match
     | is_nan(a) && is_nan(b) => a + b
     | is_nan(a) => b
     | is_nan(b) => a
@@ -276,7 +276,7 @@ pub let maximum_number(a: Flt, b: Flt) -> Flt =
 
 --- IEEE's `minimumMagnitude`: the one of lesser magnitude, `min` at equal magnitudes; a NaN propagates.
 pub let minimum_magnitude(a: Flt, b: Flt) -> Flt =
-    choose
+    match
     | is_nan(a) || is_nan(b) => a + b
     | abs(a) < abs(b) => a
     | abs(b) < abs(a) => b
@@ -285,7 +285,7 @@ pub let minimum_magnitude(a: Flt, b: Flt) -> Flt =
 
 --- IEEE's `maximumMagnitude`, the twin of `minimum_magnitude`.
 pub let maximum_magnitude(a: Flt, b: Flt) -> Flt =
-    choose
+    match
     | is_nan(a) || is_nan(b) => a + b
     | abs(a) > abs(b) => a
     | abs(b) > abs(a) => b
@@ -294,7 +294,7 @@ pub let maximum_magnitude(a: Flt, b: Flt) -> Flt =
 
 --- IEEE's `minimumMagnitudeNumber`: `minimum_magnitude`, a NaN giving way to a number.
 pub let minimum_magnitude_number(a: Flt, b: Flt) -> Flt =
-    choose
+    match
     | is_nan(a) && is_nan(b) => a + b
     | is_nan(a) => b
     | is_nan(b) => a
@@ -303,7 +303,7 @@ pub let minimum_magnitude_number(a: Flt, b: Flt) -> Flt =
 
 --- IEEE's `maximumMagnitudeNumber`, the twin of `minimum_magnitude_number`.
 pub let maximum_magnitude_number(a: Flt, b: Flt) -> Flt =
-    choose
+    match
     | is_nan(a) && is_nan(b) => a + b
     | is_nan(a) => b
     | is_nan(b) => a
@@ -363,7 +363,7 @@ pub let try_to_int(f: Flt) -> Option(Int) =
 ---
 --- It computes the order `Nat/ord` reads through [`total_key`], which is injective ([`total_key_injective`]): that order is total and answers `eq` exactly at an equation by `Nat/ord`'s laws. That `ord` is that order at every pair, the comparisons it leads with included, is not proved here: no law ties `Flt`'s `<` to the bits.
 pub let ord(x: Flt, y: Flt) -> Ordering =
-    choose
+    match
     | x < y => Ordering/lt()
     | y < x => Ordering/gt()
     | _ => Nat/ord(total_key(x), total_key(y))
@@ -428,7 +428,7 @@ pub let to_str(f: Flt) -> Str =
             place(place(place(place(place(b6 % 0x10, at(5)), at(4)), at(3)), at(2)), at(1)),
             at(0));
     let sign = match b7 >= 0x80 | true => "-" | false => "+" end;
-    choose
+    match
     | exp_field == 0x7FF && mant_field == 0 => Str/concat(sign, "inf")
     | exp_field == 0x7FF =>
         let quiet = mant_field >= pow2(51);
@@ -474,7 +474,7 @@ pub let to_hex_str(f: Flt) -> Str =
     let sign = match is_sign_minus(f) | true => "-" | false => "+" end;
     let field = Nat/shr(b, 52) % 2048;
     let fraction = b % pow2(52);
-    choose
+    match
     | field == 2047 => to_str(f)
     | field == 0 && fraction == 0 => Str/concat(sign, "0x0p+0")
     | _ =>
@@ -552,7 +552,7 @@ satisfy Spell(Flt) {
     spell(f) =
         match is_finite(f)
         | false =>
-            choose
+            match
             | f > +0.0 => "+inf.0"
             | f < +0.0 => "-inf.0"
             | exact/bits(f) == exact/bits(+nan.0) => "+nan.0"

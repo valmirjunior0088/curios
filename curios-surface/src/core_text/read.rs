@@ -4,7 +4,7 @@
 //!
 //! **A word an enclosing binder binds is its variable.** A binder is opened at a free local of its own, minted with its word as its hint, and closed over once its scope is read; a word no binder binds is a free local, one for each word, since a local's number means something only in the declaration that minted it.
 //!
-//! **What Core text refuses is a form whose meaning needs typing or resolution**: an operator through a concept, `!`, `choose`, a held place or a hole, a string, a name only resolution could place. Each is refused by name, where it stands, unless a decorator states the node it is — an elaboration-only form written to be refused by a checker.
+//! **What Core text refuses is a form whose meaning needs typing or resolution**: an operator through a concept, `!`, a match with no head, a held place or a hole, a string, a name only resolution could place. Each is refused by name, where it stands, unless a decorator states the node it is — an elaboration-only form written to be refused by a checker.
 
 use {
     super::{
@@ -635,7 +635,6 @@ fn form_read(
         Subterm::Literal(Literal::List(_)) => refused("a list literal"),
         Subterm::Infix(_) => refused("an operator"),
         Subterm::Bang(_) => refused("a `!`"),
-        Subterm::Choose(_) => refused("a `choose`"),
         Subterm::HeadlessMatch(_) => refused("a match with no head"),
         Subterm::Hole => refused("a hole"),
         Subterm::Derive => refused("a derived body"),

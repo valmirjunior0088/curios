@@ -1,4 +1,4 @@
-//! Goals, `!`, `choose`, a match as the matrix it is written as, its guards, and the packed runs constant atoms fold into.
+//! Goals, `!`, a match as the matrix it is written as, its guards, and the packed runs constant atoms fold into.
 
 use crate::into_core::test_support::*;
 
@@ -43,36 +43,9 @@ fn bang_lowers_to_the_bang_transient() {
 }
 
 #[test]
-fn choose_lowers_to_nested_bool_matches() {
-    // `choose | p => a | q => b | _ => ? end` right-folds into two nested `Bool` matches: the first condition's false branch holds the second, whose own false branch is the `_` default (a plain hole here).
-    let term = run("choose | p => a | q => b | _ => ? end");
-
-    let curios_core::Subterm::Match(outer) = &*term else {
-        panic!("expected a Match at the top, got {term:?}");
-    };
-    let curios_core::Cases::Bool { false_case, .. } = &outer.cases else {
-        panic!("expected the outer Cases::Bool, got {:?}", outer.cases);
-    };
-    let curios_core::Subterm::Match(inner) = &**false_case else {
-        panic!("expected a nested Match in the outer false branch, got {false_case:?}");
-    };
-    let curios_core::Cases::Bool {
-        false_case: inner_false,
-        ..
-    } = &inner.cases
-    else {
-        panic!("expected the inner Cases::Bool, got {:?}", inner.cases);
-    };
-    assert!(
-        matches!(&**inner_false, curios_core::Subterm::Metavar(_)),
-        "the `_` default should sit at the innermost false branch, got {inner_false:?}"
-    );
-}
-
-#[test]
-fn bind_arm_bare_binder_is_rejected() {
-    // `| x = n =>` binds irrefutably — always fires, so the rest of the ladder is dead. Rejected in favor of a `let`.
-    let error = run_err("choose | x = n => x | _ => 0 end");
+fn a_bind_guard_that_cannot_fail_is_rejected() {
+    // `| x = n =>` binds irrefutably — its arm takes every value, so the arms after it are dead. Rejected in favor of a `let`.
+    let error = run_err("match | x = n => x | _ => 0 end");
     assert!(
         error.contains("refutable") && error.contains("let"),
         "unexpected error: {error}"
@@ -116,21 +89,6 @@ fn a_match_lowers_to_the_matrix_it_is_written_as() {
 }
 
 #[test]
-fn a_bind_arm_lowers_to_the_two_arms_it_stands_for() {
-    // `| pattern = value => body` is the matrix of two arms over `value`: its own, and a `_` that takes the rest of the ladder.
-    let term = run("choose | some(x) = m => x | _ => 0 end");
-
-    let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
-        panic!("expected a matrix at the top, got {term:?}");
-    };
-    assert_eq!(matrix.arms.len(), 2);
-    assert_eq!(
-        matrix.arms[1].alternatives[0].pattern,
-        curios_core::Pattern::Binder
-    );
-}
-
-#[test]
 fn a_motive_on_a_head_that_does_not_dispatch_is_rejected() {
     // A motive attaches to the scrutinee's own dispatch, which a tuple pattern never builds: it projects.
     let error = run_err("match p : (q) => T | (x, y) => x end");
@@ -165,12 +123,12 @@ fn a_lone_non_sequence_spread_keeps_its_concat_wrapper() {
     assert!(!format!("{:?}", run(r"x[..x[0x48]]")).contains("BytesConcat"));
 }
 
-/// The match lowering's refusals stand at what they are about: a named final arm and an irrefutable bind arm at the binder, and a motive no arm dispatches under at the motive.
+/// The match lowering's refusals stand at what they are about: a named final arm and an irrefutable bind guard at the binder, and a motive no arm dispatches under at the motive.
 #[test]
 fn a_match_refusal_stands_at_the_binder_or_the_motive_it_is_about() {
     for (source, underlined) in [
         ("match m | some(x) => x | rest => 0 end", "rest"),
-        ("choose | some(x) = m => x | y = m => 0 | _ => 1 end", "y"),
+        ("match | some(x) = m => x | y = m => 0 | _ => 1 end", "y"),
         (
             "match (a, b) : (p) => Nat | (0, _) => 0 | (_, k) => k end",
             "(p) => Nat",

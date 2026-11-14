@@ -204,7 +204,7 @@ pub let address_of(scheme: Url/Scheme, head: Head) -> Result(Refusal, Address) =
     match head.target == "*"
     | false => Result/map(resource_of(scheme, head, host), (url) => Address/resource(url))
     | true =>
-        choose
+        match
         | head.method != Method/options() =>
             Result/failure(Refusal/malformed("only OPTIONS is asked of the server itself"))
         | Option/is_none(host) && Version/is_1_1(head.version) =>

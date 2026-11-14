@@ -30,7 +30,7 @@ satisfy Spell(EastAsianWidth) {
 
 -- The class `/sys/east_asian_width` gives `code`.
 let of_code(code: Nat) -> EastAsianWidth =
-    choose
+    match
     | code == /sys/east_asian_width/ambiguous => ambiguous()
     | code == /sys/east_asian_width/halfwidth => halfwidth()
     | code == /sys/east_asian_width/wide => wide()

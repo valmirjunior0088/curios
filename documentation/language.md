@@ -13,7 +13,6 @@ Every `crs` example is a whole program or module that `curios wonder` reports no
 - [Operators](#operators)
 - [Sequencing and effects](#sequencing-and-effects)
 - [Pattern matching](#pattern-matching)
-- [Guarded ladders (`choose`)](#guarded-ladders-choose)
 - [Declarations and modules](#declarations-and-modules)
 - [Recursive groups](#recursive-groups)
 - [Inductive declarations](#inductive-declarations)
@@ -65,7 +64,7 @@ These words are reserved, and no path segment may be one:
 
 | Declaration and expression words | Literal words |
 | --- | --- |
-| `let`, `match`, `choose`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
+| `let`, `match`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
 
 `concept`, `satisfy`, `and` and `test` are contextual: each is a word only where the grammar uses it, and an ordinary identifier elsewhere. `Type`, `Prop` and `Sort` are sorts where they stand as terms, and may still be path segments.
 
@@ -486,7 +485,7 @@ No program with a goal compiles. The other declarations are still checked in the
 
 A `let`, a lambda and a function type are whole-term forms: a body or a tail extends to the end of the term around it. There is no ascription `term: type`: a `:` annotation stands only at a binder, a signature and a motive.
 
-An infix operand is an atom — a literal, a name, a sort (`Type`, `Prop` or `Sort`), a tuple, a tuple type, a structure literal, a goal, a `match`, a `choose`, or a term in parentheses — followed by any chain of calls, projections and postfix `!`. A `match` and a `choose` are atoms because `end` closes them. A whole-term form is no operand until it is put in parentheses.
+An infix operand is an atom — a literal, a name, a sort (`Type`, `Prop` or `Sort`), a tuple, a tuple type, a structure literal, a goal, a `match`, or a term in parentheses — followed by any chain of calls, projections and postfix `!`. A `match`, headed or not, is an atom because `end` closes it. A whole-term form is no operand until it is put in parentheses.
 
 ```text
 1 + match flag | true => 1 | false => 0 end
@@ -512,7 +511,7 @@ An operator is a call of its concept's method, resolved as any witness is, intri
 
 `==` and `!=` are two methods of `Eql`, `eql` and `neq`, so a witness supplies both, and `!=` is no negation of `eql`.
 
-`&&` and `||` are calls of `And/and` and `Or/or`, as `+` is of `Add/add`, and not conditionals: neither operand is a fact in the other. So `x != 0 && 10 / x > 1` is refused, and `choose | x != 0 => 10 / x > 1 | _ => false end` is how the guard reaches the division.
+`&&` and `||` are calls of `And/and` and `Or/or`, as `+` is of `Add/add`, and not conditionals: neither operand is a fact in the other. So `x != 0 && 10 / x > 1` is refused, and `match | x != 0, 10 / x > 1 => true | _ => false end` is how a guard reaches the division.
 
 `/` and `%` carry the precondition their concept declares. `Div` and `Rem` each have a field `Ok(A) -> Prop`, and the operator takes an implicit proof of `Ok(divisor)`. On `Nat`, `a / b` needs `Nat/NonZero(b)`, which is `Holds(b != 0)`: reduction proves it where `b` is a literal, and the facts in scope prove it otherwise — a hypothesis or a guard that `b != 0`, or that `0 < b`, the same proposition at `Nat` ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
@@ -536,7 +535,7 @@ pub let parser() -> Parse(Bytes, Nat) =
 
 A `!` may stand at any depth where its region's type sequences: in a top-level value, a program's final term, a test's body or a witness's field. A function needs no permission to hold one. A function of no parameters is written `parser()` and called `parser()`.
 
-A local `let`'s value, annotated or not, shares the region around it, so an unused first binding moves no action to another region. An independent computation is a function, called where its description is needed. A `match` arm, a guard and a `choose` arm each keep a region of their own, whose monad comes from its own expected type. No `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
+A local `let`'s value, annotated or not, shares the region around it, so an unused first binding moves no action to another region. An independent computation is a function, called where its description is needed. A `match` arm and a guard each keep a region of their own, whose monad comes from its own expected type. No `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
 
 A region's monad is read from its type, never from an action in it. A region whose type is not known yet waits for it, and one whose type can never name a monad — a lambda's body in inference position, say — is refused, asking for the result type around it to be annotated.
 
@@ -973,25 +972,6 @@ pub let found(condition: Bool, map: Map(Str, Nat), key: Str) -> Nat =
 ```
 
 It is a match of no columns: every arm reaches its one case, so a condition that fails as an arm's one guard is known false in every arm after it, the final `_` included.
-
-## Guarded ladders (`choose`)
-
-`choose` is a ladder of guarded arms, tried from the top, with no scrutinee; its final arm is `| _ =>`, which is required.
-
-```crs
-use /std/{Bool, Map, Nat, Str};
-
-pub let found(condition: Bool, map: Map(Str, Nat), key: Str) -> Nat =
-    choose
-    | condition => 0
-    | some(value) = Map/try_get(map, key) => value
-    | _ => 1
-    end;
-```
-
-A condition arm is taken where its term is `true`. A bind arm, `| pattern = term =>`, is taken where the term matches its pattern, or one of the [alternatives](#alternatives) written there: `| left(x) | right(x) = either => x`. A bind arm's pattern can fail: a bare binder, and a tuple or structure pattern that takes nothing apart, are refused, since such an arm is always taken and is written as a `let`.
-
-A taken arm learns what an equivalent nested `match` would: its condition, or its pattern's case.
 
 ## Declarations and modules
 
@@ -1672,7 +1652,6 @@ A bound the facts do not imply is refused. The report names the facts it conside
 | `match term ... end` | Typed elimination or dispatch |
 | `\| pattern, guard, … =>` | An arm taken where its pattern matches and each guard passes: a `Bool`, or `pattern = term` |
 | `match \| guard, … => … \| _ => … end` | A match with no head: guards alone, closed by a default |
-| `choose ... end` | Guarded ladder |
 | `test name = body;` | Test — a `/std/Test` description, run by `curios test` |
 | `satisfy C(args) { ... }` | Registered witness, which has no name |
 | `satisfy C(args) { .. }` | Derived witness — the compiler writes the body |

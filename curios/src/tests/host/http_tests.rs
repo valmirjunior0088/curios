@@ -59,7 +59,7 @@ const SERVER: &str = r#"
             Response/of_text(
                 200,
                 Str/flatten([Show/show(r.method), " ", r.url.path, " ", Nat/to_str(Bytes/len(r.body))]));
-        choose
+        match
         | r.url.path == "/fail" => Try/raise(Io/Error/connection_refused())
         | r.url.path == "/dated" =>
             Try/pure(Response/with_header(said, "Date", "Tue, 15 Nov 1994 08:12:31 GMT"))

@@ -20,7 +20,7 @@ pub let Ratio: Type =
 
 --- `of_decimal` in the direction `r`. The sign goes into the rounding rather than after it, since a directed rounding reads it.
 pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
-    choose
+    match
     | d == 0 => match negative | true => -0.0 | false => +0.0 end
     | e >= +0 && (exact/bit_len(d) >= 1025 || e >= +309) => clamped(r, negative, false)
     | e < +0 && Nat/to_int(digits) + e <= -324 => clamped(r, negative, true)
@@ -132,7 +132,7 @@ pub let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =
 --- The infinity or NaN a special name spells, of `negative`'s sign: `inf` or `infinity`, and `nan` or `snan` with an optional payload, in any case. The decimal and hex readers share it, since both write these values the same way.
 pub let special(negative: Bool) -> Parse(Str, Flt) =
     let name = Parse/str/take_while(Char/is_ascii_alpha)!;
-    choose
+    match
     | Str/eql_ignoring_ascii_case(name, "inf") || Str/eql_ignoring_ascii_case(name, "infinity") =>
         Parse/pure(match negative | true => -inf.0 | false => +inf.0 end)
     | Str/eql_ignoring_ascii_case(name, "nan") => nan(negative, false)

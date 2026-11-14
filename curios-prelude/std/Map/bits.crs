@@ -23,7 +23,7 @@ end
 
 -- The place, of a byte's eight from its top, at which two bytes that differ first do: a ladder of shifts, each by a literal.
 let place(x: Nat, y: Nat) -> Nat =
-    choose
+    match
     | Nat/shr(x, 7) != Nat/shr(y, 7) => 1
     | Nat/shr(x, 6) != Nat/shr(y, 6) => 2
     | Nat/shr(x, 5) != Nat/shr(y, 5) => 3

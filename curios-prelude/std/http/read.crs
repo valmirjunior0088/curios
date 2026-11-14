@@ -63,7 +63,7 @@ let head_from(
     match Bool/holds(i < Bytes/len(held))
     | none() =>
         let known = Bytes/len(held) - s.ending;
-        choose
+        match
         | Bool/not(s.lined) && known - s.start > limits.line =>
             Reader/Step/refused(Refusal/line_too_long())
         | known > limits.head => Reader/Step/refused(Refusal/head_too_large())
@@ -88,7 +88,7 @@ let head_from(
                 match s.lined
                 | true => next(2, true)
                 | false =>
-                    choose
+                    match
                     | lenient && i - 1 == s.start =>
                         head_from(
                             limits,
@@ -126,7 +126,7 @@ pub let length(limits: Limits, n: Nat, held: Bytes) -> Reader/Step({}, Refusal, 
 
 let hex(byte: Byte) -> Option(Nat) =
     let n = Byte/to_nat(byte);
-    choose
+    match
     | Nat/in_range(n, '0', '9') => Option/some(n - '0')
     | Nat/in_range(n, 'a', 'f') => Option/some(n - 'a' + 10)
     | Nat/in_range(n, 'A', 'F') => Option/some(n - 'A' + 10)

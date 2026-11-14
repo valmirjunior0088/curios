@@ -129,7 +129,7 @@ const ROWS: &[Row] = &[
         "{}",
         "match k | 0 => () | j + 1 => let _: Holds(j < n) = proved(); () end",
     ),
-    // A zero check, which conversion holds to be the bound: a natural against zero is its order comparison, so an `==` guard's false arm, a `!=` guard's true one, a `Bool/not` of one and a `choose`'s default arm each answer `0 < count`, with the check on either side and over a length.
+    // A zero check, which conversion holds to be the bound: a natural against zero is its order comparison, so an `==` guard's false arm, a `!=` guard's true one, a `Bool/not` of one and the default arm of a match with no head each answer `0 < count`, with the check on either side and over a length.
     body(
         "total: Nat, count: Nat",
         "Nat",
@@ -153,7 +153,7 @@ const ROWS: &[Row] = &[
     body(
         "total: Nat, count: Nat",
         "Nat",
-        "choose | count == 0 => 0 | _ => total / count end",
+        "match | count == 0 => 0 | _ => total / count end",
     ),
     body(
         "total: Nat, xs: List(Nat)",
@@ -221,7 +221,7 @@ const ROWS: &[Row] = &[
     body(
         "xs: List(Nat), i: Nat, c: Nat, within: Holds(i <= List/len(xs))",
         "Nat",
-        "choose | c == 32 => 0 | c == 10 => 0 | c == 9 => 0 | c == 13 => 0 | i == List/len(xs) => 0 | _ => List/get(xs, i) end",
+        "match | c == 32 => 0 | c == 10 => 0 | c == 9 => 0 | c == 13 => 0 | i == List/len(xs) => 0 | _ => List/get(xs, i) end",
     ),
     // A natural's bound read at `Int`.
     claim(
@@ -309,7 +309,7 @@ const ROWS: &[Row] = &[
     body(
         "a: Nat, b: Nat",
         "Nat",
-        "choose | a < b => 1 | b < a => 2 | a == b => 3 | _ => match proved(@False) end end",
+        "match | a < b => 1 | b < a => 2 | a == b => 3 | _ => match proved(@False) end end",
     ),
     // A range check from zero over a local definition, `Str`'s shape: the check folds to its upper bound, which is still proved over the check the arm recorded.
     body(
@@ -682,7 +682,7 @@ const CONTROLS: &[Row] = &[
     body(
         "a: Nat, b: Nat",
         "Nat",
-        "choose | a < b => 1 | b < a => 2 | _ => match proved(@False) end end",
+        "match | a < b => 1 | b < a => 2 | _ => match proved(@False) end end",
     ),
     // A product of three facts.
     claim("x: Nat, p: Holds(x * x * x <= 7)", "Holds(x <= 1)"),

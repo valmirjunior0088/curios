@@ -448,8 +448,8 @@
 #                           ^ source.curios
 #                            ^ source.curios variable.other.curios
 #                             ^ source.curios punctuation.separator.curios
->choose
-#^^^^^^ source.curios keyword.control.curios
+>match
+#^^^^^ source.curios keyword.control.curios
 >| flag => 1
 #^ source.curios punctuation.separator.curios
 # ^ source.curios

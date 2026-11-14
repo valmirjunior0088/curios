@@ -24,7 +24,7 @@ let from_exact(r: Rounding, e: Dyadic, sticky: Bool, result: Flt) -> Exceptions 
 
 --- What `rounded/add(r, a, b)` raises: invalid for a signaling NaN or infinities of opposite signs, and otherwise what rounding the exact sum raises.
 pub let add(r: Rounding, a: Flt, b: Flt) -> Exceptions =
-    choose
+    match
     | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
     | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
     | (some(x), some(y)) = (Dyadic/try_of(a), Dyadic/try_of(b)) =>
@@ -39,7 +39,7 @@ pub let sub(r: Rounding, a: Flt, b: Flt) -> Exceptions =
 
 --- What `rounded/mul(r, a, b)` raises: invalid for a signaling NaN or a zero times an infinity, nothing for an infinity or a zero otherwise, and what rounding the exact product raises.
 pub let mul(r: Rounding, a: Flt, b: Flt) -> Exceptions =
-    choose
+    match
     | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
     | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
     | Flt/is_infinite(a) && Flt/is_zero(b) || Flt/is_zero(a) && Flt/is_infinite(b) => invalid
@@ -52,7 +52,7 @@ pub let mul(r: Rounding, a: Flt, b: Flt) -> Exceptions =
 
 --- What `rounded/div(r, a, b)` raises: invalid for a signaling NaN, `0 / 0` or `∞ / ∞`; division by zero for a finite nonzero value over a zero; nothing for the other exact cases; and otherwise what rounding the quotient raises, read from 64 quotient bits and whether a remainder was left.
 pub let div(r: Rounding, a: Flt, b: Flt) -> Exceptions =
-    choose
+    match
     | Flt/is_signaling(a) || Flt/is_signaling(b) => invalid
     | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
     | (some(x), some(y)) = (Dyadic/try_of(a), Dyadic/try_of(b)) =>
@@ -78,7 +78,7 @@ pub let div(r: Rounding, a: Flt, b: Flt) -> Exceptions =
 pub let fma(r: Rounding, a: Flt, b: Flt, c: Flt) -> Exceptions =
     let zero_times_infinity =
         Flt/is_infinite(a) && Flt/is_zero(b) || Flt/is_zero(a) && Flt/is_infinite(b);
-    choose
+    match
     | Flt/is_signaling(a) || Flt/is_signaling(b) || Flt/is_signaling(c) => invalid
     | zero_times_infinity && Bool/not(Flt/is_nan(c)) => invalid
     | Flt/is_nan(a) || Flt/is_nan(b) || Flt/is_nan(c) => Exceptions/none
@@ -94,7 +94,7 @@ pub let fma(r: Rounding, a: Flt, b: Flt, c: Flt) -> Exceptions =
 
 --- What `rounded/sqrt(r, a)` raises: invalid for a signaling NaN and for a negative value other than `-0`, and otherwise inexact exactly when the root squared is not `a`. No root of a finite value overflows or is tiny.
 pub let sqrt(r: Rounding, a: Flt) -> Exceptions =
-    choose
+    match
     | Flt/is_signaling(a) => invalid
     | Flt/is_nan(a) => Exceptions/none
     | a < +0.0 => invalid
@@ -119,7 +119,7 @@ pub let to_integral(_: Rounding, a: Flt) -> Exceptions =
 
 --- What IEEE's `roundToIntegralExact` in the direction `r` raises (§5.3.1): invalid for a signaling NaN, and inexact when the integral value differs from `a`.
 pub let to_integral_exact(r: Rounding, a: Flt) -> Exceptions =
-    choose
+    match
     | Flt/is_signaling(a) => invalid
     | Flt/is_nan(a) => Exceptions/none
     | _ => Exceptions { ..Exceptions/none, inexact = rounded/to_integral(r, a) != a }
@@ -127,7 +127,7 @@ pub let to_integral_exact(r: Rounding, a: Flt) -> Exceptions =
 
 --- What `rounded/scale(r, f, n)` raises: invalid for a signaling NaN, nothing for a NaN, an infinity or a zero, and otherwise what rounding the exact `f · 2^n` raises.
 pub let scale(r: Rounding, f: Flt, n: Int) -> Exceptions =
-    choose
+    match
     | Flt/is_signaling(f) => invalid
     | Flt/is_zero(f) => Exceptions/none
     | some(d) = Dyadic/try_of(f) =>
@@ -138,7 +138,7 @@ pub let scale(r: Rounding, f: Flt, n: Int) -> Exceptions =
 
 --- What `Flt/remainder(x, y)` raises: invalid for a signaling NaN, an infinite `x` or a zero `y`, and nothing else, since the remainder is exact.
 pub let remainder(x: Flt, y: Flt) -> Exceptions =
-    choose
+    match
     | Flt/is_signaling(x) || Flt/is_signaling(y) => invalid
     | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
     | Flt/is_infinite(x) || Flt/is_zero(y) => invalid
@@ -152,7 +152,7 @@ let summed(
     terms: List(reduction/Term),
     result: Flt,
 ) -> Exceptions =
-    choose
+    match
     | List/any(operands, Flt/is_signaling) => invalid
     | List/any(operands, Flt/is_nan) => Exceptions/none
     | reduction/any_invalid(terms)
@@ -168,7 +168,7 @@ let scaled(
     factors: List(reduction/Term),
     result: {Flt, Int},
 ) -> Exceptions =
-    choose
+    match
     | List/any(operands, Flt/is_signaling) => invalid
     | List/any(operands, Flt/is_nan) => Exceptions/none
     | reduction/any_invalid(factors)
@@ -242,7 +242,7 @@ let augmented(v: Dyadic) -> Exceptions =
 
 --- What `Flt/augmented_add(x, y)` raises: invalid for a signaling NaN or the infinities of both signs, and otherwise what `augmented` says of the exact sum.
 pub let augmented_add(x: Flt, y: Flt) -> Exceptions =
-    choose
+    match
     | Flt/is_signaling(x) || Flt/is_signaling(y) => invalid
     | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
     | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
@@ -257,7 +257,7 @@ pub let augmented_sub(x: Flt, y: Flt) -> Exceptions =
 
 --- What `Flt/augmented_mul(x, y)` raises: invalid for a signaling NaN or an infinity times a zero, and otherwise what `augmented` says of the exact product.
 pub let augmented_mul(x: Flt, y: Flt) -> Exceptions =
-    choose
+    match
     | Flt/is_signaling(x) || Flt/is_signaling(y) => invalid
     | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
     | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>

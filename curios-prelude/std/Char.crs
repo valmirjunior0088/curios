@@ -132,7 +132,7 @@ pub let hex_digit(nibble: Nat) -> Char =
 
 --- The value of a hexadecimal digit in either case, or `none`.
 pub let of_hex_digit(c: Char) -> Option(Nat) =
-    choose
+    match
     | is_ascii_digit(c) => Option/some(c.code - '0')
     | Nat/in_range(c.code, 'a', 'f') => Option/some(c.code - 'a' + 10)
     | Nat/in_range(c.code, 'A', 'F') => Option/some(c.code - 'A' + 10)
@@ -155,7 +155,7 @@ pub let to_ascii(c: Char) -> Option(Byte) =
 --- Each byte is built under the bound it is proved to satisfy, and none is masked. A continuation byte's six bits are below `0x40` by the remainder that selects them, which reduction decides. A lead byte's payload is below its family's width because the code point is below the family's end: the guard says so for the first three families, and for the fourth, which has no guard, `c.valid` does — a scalar value is at most `U+10FFFF`, so its lead byte is at most `F4`.
 pub let to_utf8(c: Char) -> Bytes =
     let code = c.code;
-    choose
+    match
     | code < 0x80 => x[Nat/to_byte(code)]
     | code < 0x800 => x[Nat/to_byte(0xC0 + code / 0x40), Nat/to_byte(0x80 + code % 0x40)]
     | code < 0x10000 =>

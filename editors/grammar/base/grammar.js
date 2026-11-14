@@ -1,6 +1,6 @@
 /// <reference types="tree-sitter-cli/dsl" />
 
-// The surface grammar of `documentation/language.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, a bind's refutability in a `choose` arm or a guard, or the default a match with no head closes with. Core text's grammar, in `core/`, extends this one, as the compiler reads a program and Core text by one grammar under a dialect.
+// The surface grammar of `documentation/language.md`, mirrored from `curios-surface/src/parse/*.rs`. It exists for highlighting, so it is deliberately looser than the compiler where looseness costs nothing a highlighter would notice: it does not enforce whitespace around infix operators, the closed wire vocabulary of a `foreign` signature, a guard bind's refutability, or the default a match with no head closes with. Core text's grammar, in `core/`, extends this one, as the compiler reads a program and Core text by one grammar under a dialect.
 
 const {
   IDENTIFIER,
@@ -409,24 +409,11 @@ module.exports = grammar({
         field("body", $._term),
       ),
 
-    // A bind's pattern is read as a term, as a `choose` bind arm's is: every refutable pattern shape is also a term shape.
+    // A bind's pattern is read as a term: every refutable pattern shape is also a term shape, and a highlighter has no need to tell them apart.
     guard: ($) =>
       seq(
         field("test", $._infix),
         optional(seq("=", field("value", $._infix))),
-      ),
-
-    choose_term: ($) => seq("choose", repeat($.choose_arm), "end"),
-
-    // A bind arm's alternatives are read as terms: every refutable pattern shape is also a term shape, and a highlighter has no need to tell them apart.
-    choose_arm: ($) =>
-      seq(
-        "|",
-        field("test", $._term),
-        repeat(seq("|", field("test", $._term))),
-        optional(seq("=", field("value", $._term))),
-        "=>",
-        field("body", $._term),
       ),
 
     function_type: ($) =>
@@ -507,11 +494,10 @@ module.exports = grammar({
     bang: ($) =>
       prec.left(PRECEDENCE.suffix, seq(field("action", $._applied), "!")),
 
-    // `match` and `choose` are atoms because `end` closes them, so an operator or a suffix may follow one bare.
+    // `match` is an atom because `end` closes it, so an operator or a suffix may follow one bare.
     _atom: ($) =>
       choice(
         $.match_term,
-        $.choose_term,
         $.goal,
         $.struct_literal,
         $.path,

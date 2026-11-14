@@ -117,7 +117,7 @@ fn effectful_match_scrutinee_runs_once() {
     assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }
 
-// Whether a `choose` evaluates its conditions lazily has no test at this layer: a condition is a `Bool`, no function returning one performs an effect, and evaluating a *pure* condition twice, or not at all, is unobservable by any means the language offers. What is observable is the emitted shape, and that is `tests::codegen`'s to state.
+// Whether a match with no head evaluates its guards lazily has no test at this layer: a condition is a `Bool`, no function returning one performs an effect, and evaluating a *pure* condition twice, or not at all, is unobservable by any means the language offers. What is observable is the emitted shape, and that is `tests::codegen`'s to state.
 
 // A headed inductive match with a `| _ =>` catch-all: enumerated constructors take their arm, everything else the default. rand-tainted so it runs as wasm.
 #[test]

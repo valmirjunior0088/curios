@@ -154,18 +154,3 @@ fn a_refusal_under_one_alternative_names_it() {
         "unexpected error: {error}"
     );
 }
-
-#[test]
-fn a_bind_arm_fires_where_any_of_its_alternatives_matches() {
-    let source = r#"
-        use /std/{Nat, Option, print};
-        let small(o: Option(Nat)) -> Nat =
-            choose
-            | some(0) | some(1) = o => 1
-            | _ => 0
-            end;
-        print(Nat/to_str(small(Option/some(1)) + small(Option/some(2)) + small(Option/none())))
-        "#;
-
-    assert_eq!(run(source), b"1");
-}

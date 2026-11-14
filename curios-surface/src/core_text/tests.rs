@@ -742,7 +742,7 @@ fn refused(text: &str) -> (Refusal, Option<usize>) {
 fn a_form_only_a_program_writes_is_refused_by_name_where_it_stands() {
     for (text, form, at) in [
         ("f(a + b)", "an operator", 2),
-        ("f(choose | _ => a end)", "a `choose`", 2),
+        ("f(match | _ => a end)", "a match with no head", 2),
         ("f(\"text\")", "a string", 2),
         ("f(?)", "a goal `?`", 2),
         ("f(-1)", "a signed numeral", 2),

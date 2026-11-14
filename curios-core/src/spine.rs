@@ -142,7 +142,7 @@ pub fn peel_lattice_leaf(left: &Intrinsic, right: &Intrinsic) -> Option<Conclusi
 
 /// A symmetric operation — an equality or an inequality at any carrier the algebra declares one of, the `xor` that `!=` on `Bool` lowers through, the bitwise `and`, `or` and `xor` on ℕ and on ℤ, and a binary64 sum, product, `min` and `max`, a sum or a product in one rounding direction — denotes one value with its operands in either order, so two of one operation are `Equal` when their operand pairs are one pair swapped, and `Undecided` otherwise, never `Impossible`. `None` for any other pair.
 ///
-/// Decided here rather than by spelling the operands in one order at the fold, because a comparison is what a `choose` guard refines on, and a refinement is recorded under the guard's *written* spelling: both checkers canonicalize a probe's operands and never its node, so a fold that swapped them would take `rem == 1` past its own refinement inside `Str/step`. The peel changes no spelling, so every key stays where it was written.
+/// Decided here rather than by spelling the operands in one order at the fold, because a comparison is what a guard refines on, and a refinement is recorded under the guard's *written* spelling: both checkers canonicalize a probe's operands and never its node, so a fold that swapped them would take `rem == 1` past its own refinement inside `Str/step`. The peel changes no spelling, so every key stays where it was written.
 pub fn peel_symmetric(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     let commuting = |intrinsic: &Intrinsic| match intrinsic.algebra() {
         Declaration::Operation {

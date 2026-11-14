@@ -194,7 +194,7 @@
       "patterns": [
         {
           "name": "keyword.control.curios",
-          "match": "(?<![\\w/])(let|match|choose|end)(?![\\w/])"
+          "match": "(?<![\\w/])(let|match|end)(?![\\w/])"
         },
         {
           "name": "keyword.other.curios",

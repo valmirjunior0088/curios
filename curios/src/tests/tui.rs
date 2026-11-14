@@ -554,7 +554,7 @@ const PICKER_PROGRAM: &str = r#"
         Io/pure(0);
 
     let reacted(m: Model, k: Key) -> {Model, Directive(Nat)} =
-        choose
+        match
         | k.code == Key/Code/tab() => (Model { ..m, focus = Focus/handle(m.focus, k) }, Directive/none())
         | k.ctrl && k.code == Key/Code/char('s') =>
             (m, Directive/batch([Directive/perform(save(Listing/selected(m.listing))), Directive/quit()]))

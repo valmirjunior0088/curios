@@ -1,4 +1,4 @@
-//! Guards: the tests an arm writes after its patterns, a match with no head, and what a guard that fails teaches the arms after it.
+//! Guards: the tests an arm writes after its patterns, what a guard that fails teaches the arms after it, and guards at each step of a fold.
 
 use {crate::tests::test_support::*, curios_common::fill};
 
@@ -81,30 +81,6 @@ fn a_failed_lone_condition_is_a_fact_in_the_arms_after_it_and_a_failed_chain_is_
     );
 }
 
-// A match with no head is its guards alone: the arms are tried from the top, a condition that fails as an arm's one guard is a fact in every arm after it, the default included, and a bind that fails teaches it nothing.
-#[test]
-fn a_match_with_no_head_reads_its_arms_from_the_top() {
-    let source = r#"
-        use /std/{Nat, Option, Bytes, rand};
-        let pick(x: Nat, o: Option(Nat)) -> Nat =
-            match
-            | x == 0 => 0
-            | some(y) = o => y + 100 / x
-            | _ => 10 / x
-            end;
-        let entry() -> /std/Io({}) =
-            let z = Bytes/len(rand/bytes(0)!);
-            let a = pick(z, Option/some(1));
-            let b = pick(2 + z, Option/some(1));
-            let c = pick(5 + z, Option/none());
-            /std/print(Nat/to_str(a * 1000 + b + c));
-        entry()
-        "#;
-
-    // x = 0 → 0; x = 2 with some(1) → 1 + 50 = 51; x = 5 with none() → 2.
-    assert_eq!(run(source), b"53");
-}
-
 // A place only guarded arms reach leaves a value their guards refuse with no arm, and the refusal names the last of them.
 #[test]
 fn a_value_only_a_guarded_arm_reaches_is_refused() {
@@ -180,21 +156,6 @@ fn a_guarded_arm_typed_once_for_several_places_falls_through_at_each() {
         "#;
 
     assert_eq!(run(source), b"902");
-}
-
-// A match with no head that closes a program closes it in each arm, at each arm's type, as a headed match does.
-#[test]
-fn a_match_with_no_head_closes_a_program_in_each_arm() {
-    let source = r#"
-        use /std/{Nat, print};
-        let n: Nat = 3;
-        match
-        | n > 2 => print("big")
-        | _ => ()
-        end
-        "#;
-
-    assert_eq!(run(source), b"big");
 }
 
 // A bind whose pattern takes nothing apart matches every value: it is a `let`, and is refused as a guard.

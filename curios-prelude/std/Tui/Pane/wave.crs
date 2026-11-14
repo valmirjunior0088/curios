@@ -15,7 +15,7 @@ let stroke(from: Option(Nat), to: Option(Nat), row: Nat) -> Str =
     | none() => " "
     | some(b) =>
         let a = Option/unwrap_or(from, b);
-        choose
+        match
         | a == b => match row == b | true => "─" | false => " " end
         | row == b => match a < b | true => "╭" | false => "╰" end
         | row == a => match a < b | true => "╯" | false => "╮" end

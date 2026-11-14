@@ -11,7 +11,7 @@ let counter: Tui(Nat, Nat) =
             | input(key(k)) =>
                 match k.code
                 | char(c) =>
-                    choose
+                    match
                     | c == '+' => (model + 1, Directive/none())
                     | c == '-' => (model - 1, Directive/none())
                     | c == 'q' => (model, Directive/quit())

@@ -54,7 +54,7 @@ fn an_inductive_under_a_premise_is_built_and_matched() {
         let find(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K, otherwise: V) -> V =
             match chain
             | done() => otherwise
-            | link(at, value, rest) => choose
+            | link(at, value, rest) => match
                 | Key/same(at, key) => value
                 | _ => find(rest, key, otherwise)
                 end
@@ -277,7 +277,7 @@ fn a_type_naming_another_dictionary_is_read_under_it() {
         let find(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K, otherwise: V) -> V =
             match chain
             | done() => otherwise
-            | link(at, value, rest) => choose
+            | link(at, value, rest) => match
                 | Key/same(at, key) => value
                 | _ => find(rest, key, otherwise)
                 end

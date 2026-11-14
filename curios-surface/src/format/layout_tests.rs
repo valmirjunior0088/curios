@@ -163,15 +163,15 @@ fn an_applied_match_breaks_its_arms_to_keep_the_argument_attached() {
 }
 
 #[test]
-fn an_applied_choose_breaks_its_arms_to_keep_the_argument_attached() {
+fn an_applied_match_with_no_head_breaks_its_arms_to_keep_the_argument_attached() {
     assert_eq!(
         canonical_within_width(
             "let selected: Holds(a) =\n\
-             choose | a => (_) => first_long_function_name() | _ => (h) => second_long_function_name(h) end(p);\n",
+             match | a => (_) => first_long_function_name() | _ => (h) => second_long_function_name(h) end(p);\n",
         ),
         concat!(
             "let selected: Holds(a) =\n",
-            "    choose\n",
+            "    match\n",
             "    | a => (_) => first_long_function_name()\n",
             "    | _ => (h) => second_long_function_name(h)\n",
             "    end(p);\n",

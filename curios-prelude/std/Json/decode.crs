@@ -23,7 +23,7 @@ let int_part() -> Parse(Str, Str) =
     let first = Parse/str/peek!;
     match first
     | some(c) =>
-        choose
+        match
         | c == '0' => Parse/map(Parse/str/char, (_) => "0")
         | Char/is_ascii_digit(c) => Parse/str/take_while(Char/is_ascii_digit)
         | _ => Parse/fail("expected number")

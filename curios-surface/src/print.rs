@@ -10,17 +10,17 @@ mod list_layout_tests;
 
 use {
     super::{
-        Alternative, Apply, Argument, Binder, BytesPattern, BytesSegment, CasePayloadParam, Choose,
-        ChooseArm, ChooseTest, ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic,
-        CoreItem, CoreMember, CoreText, CoreValue, Decorated, DecoratorField, Dialect, Doc, Field,
-        FieldSugarParam, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
-        Guard, HeadlessArm, HeadlessMatch, InductIndex, Infix, Intrinsic, IntrinsicForm, Label,
-        Let, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern, MatchPatternField,
-        Name, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral,
-        Radix, Shown, ShownForm, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase,
-        TopConcept, TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse,
-        TopWitness, Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField,
-        intrinsic_form, intrinsic_path,
+        Alternative, Apply, Argument, Binder, BytesPattern, BytesSegment, CasePayloadParam,
+        ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
+        CoreValue, Decorated, DecoratorField, Dialect, Doc, Field, FieldSugarParam, Func,
+        FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm,
+        HeadlessMatch, InductIndex, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature,
+        ListEntry, ListPattern, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral,
+        NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, Shown,
+        ShownForm, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept,
+        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
+        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField, intrinsic_form,
+        intrinsic_path,
     },
     crate::{ELIDED, Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
@@ -255,7 +255,7 @@ const MAX_FLAT_ARMS: usize = 3;
 fn is_ladder<D: Layout>(body: &Term<D>) -> bool {
     matches!(
         body.as_subterm(),
-        Subterm::Match(_) | Subterm::HeadlessMatch(_) | Subterm::Choose(_)
+        Subterm::Match(_) | Subterm::HeadlessMatch(_)
     )
 }
 
@@ -1013,7 +1013,7 @@ impl<D: Layout> TreePrinter<D> {
         })
     }
 
-    /// The parentheses the grammar demands and the tree does not record. An infix operand parenthesizes when its own operator binds looser than its position requires — the exact mirror of `op_precedence`'s climb, with the right operand one level up for left-associativity — and any whole-term form (a binding, a lambda, an arrow) parenthesizes unconditionally, since the operand grammar cannot produce it bare. A `match` or `choose` does not: `end` closes it, so it is an atom and prints bare in every position.
+    /// The parentheses the grammar demands and the tree does not record. An infix operand parenthesizes when its own operator binds looser than its position requires — the exact mirror of `op_precedence`'s climb, with the right operand one level up for left-associativity — and any whole-term form (a binding, a lambda, an arrow) parenthesizes unconditionally, since the operand grammar cannot produce it bare. A `match` does not, headed or not: `end` closes it, so it is an atom and prints bare in every position.
     fn operand(self, term: Term<D>, min_prec: u8) -> Printer {
         let parenthesized = match term.as_subterm() {
             Subterm::Infix(infix) => op_precedence(infix.op) < min_prec,
@@ -1040,8 +1040,7 @@ impl<D: Layout> TreePrinter<D> {
             | Subterm::Proj(_)
             | Subterm::Bang(_)
             | Subterm::Match(_)
-            | Subterm::HeadlessMatch(_)
-            | Subterm::Choose(_) => self.term_followed(term, suffix),
+            | Subterm::HeadlessMatch(_) => self.term_followed(term, suffix),
             // A decorator takes the call chain after its operand, so under a suffix a decorated head is parenthesized: `(#{…} f)(x)` states the head's fields, where `#{…} f(x)` states the call's.
             Subterm::Core(form) if !D::takes_suffix(form) => flat([
                 pure("("),
@@ -1185,46 +1184,6 @@ impl<D: Layout> TreePrinter<D> {
             // An arm ladder is width-adaptive: `match carry | true => x[\\1] | false => x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
             //
             // Two ladders are broken regardless of width, by [`is_ladder`]. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
-            Subterm::Choose(Choose { arms, default }) => {
-                let forced = arms.len() + 1 > MAX_FLAT_ARMS
-                    || std::iter::once(&default)
-                        .chain(arms.iter().map(|arm| &arm.body))
-                        .any(is_ladder);
-                let separator = match forced {
-                    true => hard_line,
-                    false => line,
-                };
-                return group(flat([
-                    pure("choose"),
-                    flat(
-                        arms.into_iter()
-                            .map(|ChooseArm { test, body }| {
-                                let head = match test {
-                                    ChooseTest::Cond(condition) => {
-                                        flat([pure("| "), self.term(condition)])
-                                    }
-                                    ChooseTest::Bind {
-                                        alternatives,
-                                        value,
-                                    } => flat([
-                                        pure("| "),
-                                        self.alternatives(alternatives),
-                                        pure(" = "),
-                                        self.term(value),
-                                    ]),
-                                };
-                                flat([separator(), head, self.attached_body(" =>", body)])
-                            })
-                            .collect::<Vec<_>>(),
-                    ),
-                    separator(),
-                    pure("| _"),
-                    self.attached_body(" =>", default),
-                    separator(),
-                    pure("end"),
-                    suffix,
-                ]));
-            }
             Subterm::Match(Match { head, motive, arms }) => {
                 let forced =
                     arms.len() > MAX_FLAT_ARMS || arms.iter().map(|arm| &arm.body).any(is_ladder);

@@ -33,14 +33,14 @@ let errors: List({Nat, Io/Error}) =
 
 --- The status `code` names: one of the named statuses, or a failure `other` with the errno the host passed through.
 pub let of_code(code: Nat) -> Status =
-    choose
+    match
     | code == /sys/status/would_block => Status/blocked()
     | _ => Status/settled(settled_of(code))
     end;
 
 --- How an operation that did not wait ended, by its `code`.
 let settled_of(code: Nat) -> Settled =
-    choose
+    match
     | code == /sys/status/ok => Settled/ok()
     | code == /sys/status/eof => Settled/ended()
     | _ =>

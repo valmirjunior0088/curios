@@ -42,7 +42,7 @@ let part(s: Str) -> Parse(Str, Str) =
 let scheme() -> Parse(Str, Scheme) =
     let name = Parse/str/take_while(until([':']))!;
     let _ = Parse/str/literal("://")!;
-    choose
+    match
     | Str/eql_ignoring_ascii_case(name, "http") => Parse/pure(Scheme/http())
     | Str/eql_ignoring_ascii_case(name, "https") => Parse/pure(Scheme/https())
     | _ => Parse/fail(Fmt/render("unknown scheme '%'")(name))
@@ -237,7 +237,7 @@ pub let encode(component: Str) -> Str =
 let hex_value(byte: Byte) -> Option({v: Nat, ok: Bool/Holds(v < 16)}) =
     let n = Byte/to_nat(byte);
     let digit =
-        choose
+        match
         | Nat/in_range(n, '0', '9') => n - '0'
         | Nat/in_range(n, 'a', 'f') => n - 'a' + 10
         | Nat/in_range(n, 'A', 'F') => n - 'A' + 10

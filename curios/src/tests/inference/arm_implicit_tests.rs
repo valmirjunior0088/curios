@@ -191,7 +191,7 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
 
         let step(h: Nat, s: S) -> S =
             let n = h + 1;
-            match s | bad() => S/bad() | ok() => choose | Bool/not(n < 10) => S/bad() | _ => S/ok() end end;
+            match s | bad() => S/bad() | ok() => match | Bool/not(n < 10) => S/bad() | _ => S/ok() end end;
         let run_from(s: S, l: List(Nat)) -> S = match l | [] => s | [h, ..t] => run_from(step(h, s), t) end;
         let fine(s: S) -> Bool = match s | ok() => true | bad() => false end;
         let from_bad(@l: List(Nat), v: Holds(fine(run_from(S/bad(), l)))) -> False =

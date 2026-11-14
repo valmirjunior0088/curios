@@ -145,7 +145,7 @@ let replay(start: Screen, written: Bytes) -> Screen =
                 end
             | 1 => go(s, more, x[], x[], 2)
             | _ =>
-                choose
+                match
                 | n == 'H' =>
                     let p = numbers(params);
                     let at = (k: Nat) => Option/unwrap_or(List/try_get(p, k), 1) - 1;

@@ -67,7 +67,7 @@ let sign_bit(negative: Bool) -> Nat =
 --- The float a significand under `2^53` and its exponent encode: a subnormal when the hidden bit is clear, which leaves the exponent at the grid; otherwise the biased field, past the largest of which an overflow answers what `mode` sends it to.
 let encode(mode: Mode, negative: Bool, m: Nat, e: Int) -> Flt =
     let field = e + +1075;
-    choose
+    match
     | m < pow2(52) => of_bits(sign_bit(negative) + m)
     | field >= +2047 =>
         match overflows_to_infinity(mode, negative)
@@ -81,7 +81,7 @@ let encode(mode: Mode, negative: Bool, m: Nat, e: Int) -> Flt =
 pub let round_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Flt =
     let width = Nat/to_int(bit_len(m));
     let grid = -1074 - e;
-    choose
+    match
     | m == 0 && Bool/not(sticky) => of_bits(sign_bit(negative))
     -- The whole value, a residue included, lies under half the least subnormal.
     | grid > width =>
@@ -125,7 +125,7 @@ pub let ties_toward_zero(mantissa: Int, exponent: Int) -> Flt =
 --- `magnitude · 2^exponent` rounded to 53 bits in `mode` with no ceiling on the exponent, compared with the largest finite value: IEEE's test for overflow (§7.4), which the ceiling a real rounding applies would hide.
 pub let overflows_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Bool =
     let width = bit_len(m);
-    choose
+    match
     | width == 0 => false
     | width <= 53 => e + Nat/to_int(width) > +1024
     | _ =>

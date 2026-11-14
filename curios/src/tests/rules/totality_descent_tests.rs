@@ -502,15 +502,15 @@ fn a_subtraction_by_zero_licenses_no_decrease() {
     });
 }
 
-// A `choose` ladder reaches the same nonzero reader a headed boolean match does, by a different spelling: each condition arm desugars to a boolean match whose true branch is the arm and whose false branch is the rest of the ladder. The arm-scoping `a_nonzero_fact_does_not_escape_the_arm_that_established_it` holds for a `match` must survive that desugaring — a guard that admits zero (`n < 10`) licenses no decrease, and only one that excludes it (`n > 0`) does. The control's guard is `n > 0`, which excludes zero through the same desugaring.
+// A match with no head reaches the same nonzero reader a headed boolean match does, by a different spelling: an arm whose one guard is a condition compiles to a boolean match whose true branch is the arm and whose false branch is the arms after it. The arm-scoping `a_nonzero_fact_does_not_escape_the_arm_that_established_it` holds for a headed `match` must survive that compilation — a guard that admits zero (`n < 10`) licenses no decrease, and only one that excludes it (`n > 0`) does. The control's guard is `n > 0`, which excludes zero through the same compilation.
 #[test]
-fn a_choose_guard_that_does_not_exclude_zero_licenses_no_decrease() {
+fn a_guard_with_no_head_that_does_not_exclude_zero_licenses_no_decrease() {
     control(
         r#"
         use /std/{Nat};
 
         let Down(n : Nat) -> Type =
-            choose
+            match
             | n > 0 => Down(n - 1)
             | _ => {}
             end;

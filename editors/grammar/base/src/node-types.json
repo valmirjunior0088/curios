@@ -32,10 +32,6 @@
           "named": true
         },
         {
-          "type": "choose_term",
-          "named": true
-        },
-        {
           "type": "function_type",
           "named": true
         },
@@ -154,10 +150,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "goal",
             "named": true
           },
@@ -247,10 +239,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -398,10 +386,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "goal",
             "named": true
           },
@@ -520,10 +504,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "goal",
             "named": true
           },
@@ -581,333 +561,6 @@
           }
         ]
       }
-    }
-  },
-  {
-    "type": "choose_arm",
-    "named": true,
-    "fields": {
-      "body": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "bang",
-            "named": true
-          },
-          {
-            "type": "binary",
-            "named": true
-          },
-          {
-            "type": "block_string",
-            "named": true
-          },
-          {
-            "type": "boolean",
-            "named": true
-          },
-          {
-            "type": "call",
-            "named": true
-          },
-          {
-            "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
-            "named": true
-          },
-          {
-            "type": "function_type",
-            "named": true
-          },
-          {
-            "type": "goal",
-            "named": true
-          },
-          {
-            "type": "lambda",
-            "named": true
-          },
-          {
-            "type": "let_term",
-            "named": true
-          },
-          {
-            "type": "list_literal",
-            "named": true
-          },
-          {
-            "type": "match_term",
-            "named": true
-          },
-          {
-            "type": "number",
-            "named": true
-          },
-          {
-            "type": "packed_literal",
-            "named": true
-          },
-          {
-            "type": "parenthesized",
-            "named": true
-          },
-          {
-            "type": "path",
-            "named": true
-          },
-          {
-            "type": "projection",
-            "named": true
-          },
-          {
-            "type": "sort",
-            "named": true
-          },
-          {
-            "type": "string",
-            "named": true
-          },
-          {
-            "type": "struct_literal",
-            "named": true
-          },
-          {
-            "type": "tuple",
-            "named": true
-          },
-          {
-            "type": "tuple_type",
-            "named": true
-          },
-          {
-            "type": "unit",
-            "named": true
-          }
-        ]
-      },
-      "test": {
-        "multiple": true,
-        "required": true,
-        "types": [
-          {
-            "type": "bang",
-            "named": true
-          },
-          {
-            "type": "binary",
-            "named": true
-          },
-          {
-            "type": "block_string",
-            "named": true
-          },
-          {
-            "type": "boolean",
-            "named": true
-          },
-          {
-            "type": "call",
-            "named": true
-          },
-          {
-            "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
-            "named": true
-          },
-          {
-            "type": "function_type",
-            "named": true
-          },
-          {
-            "type": "goal",
-            "named": true
-          },
-          {
-            "type": "lambda",
-            "named": true
-          },
-          {
-            "type": "let_term",
-            "named": true
-          },
-          {
-            "type": "list_literal",
-            "named": true
-          },
-          {
-            "type": "match_term",
-            "named": true
-          },
-          {
-            "type": "number",
-            "named": true
-          },
-          {
-            "type": "packed_literal",
-            "named": true
-          },
-          {
-            "type": "parenthesized",
-            "named": true
-          },
-          {
-            "type": "path",
-            "named": true
-          },
-          {
-            "type": "projection",
-            "named": true
-          },
-          {
-            "type": "sort",
-            "named": true
-          },
-          {
-            "type": "string",
-            "named": true
-          },
-          {
-            "type": "struct_literal",
-            "named": true
-          },
-          {
-            "type": "tuple",
-            "named": true
-          },
-          {
-            "type": "tuple_type",
-            "named": true
-          },
-          {
-            "type": "unit",
-            "named": true
-          }
-        ]
-      },
-      "value": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "bang",
-            "named": true
-          },
-          {
-            "type": "binary",
-            "named": true
-          },
-          {
-            "type": "block_string",
-            "named": true
-          },
-          {
-            "type": "boolean",
-            "named": true
-          },
-          {
-            "type": "call",
-            "named": true
-          },
-          {
-            "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
-            "named": true
-          },
-          {
-            "type": "function_type",
-            "named": true
-          },
-          {
-            "type": "goal",
-            "named": true
-          },
-          {
-            "type": "lambda",
-            "named": true
-          },
-          {
-            "type": "let_term",
-            "named": true
-          },
-          {
-            "type": "list_literal",
-            "named": true
-          },
-          {
-            "type": "match_term",
-            "named": true
-          },
-          {
-            "type": "number",
-            "named": true
-          },
-          {
-            "type": "packed_literal",
-            "named": true
-          },
-          {
-            "type": "parenthesized",
-            "named": true
-          },
-          {
-            "type": "path",
-            "named": true
-          },
-          {
-            "type": "projection",
-            "named": true
-          },
-          {
-            "type": "sort",
-            "named": true
-          },
-          {
-            "type": "string",
-            "named": true
-          },
-          {
-            "type": "struct_literal",
-            "named": true
-          },
-          {
-            "type": "tuple",
-            "named": true
-          },
-          {
-            "type": "tuple_type",
-            "named": true
-          },
-          {
-            "type": "unit",
-            "named": true
-          }
-        ]
-      }
-    }
-  },
-  {
-    "type": "choose_term",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": false,
-      "types": [
-        {
-          "type": "choose_arm",
-          "named": true
-        }
-      ]
     }
   },
   {
@@ -940,10 +593,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -1124,10 +773,6 @@
         },
         {
           "type": "character",
-          "named": true
-        },
-        {
-          "type": "choose_term",
           "named": true
         },
         {
@@ -1339,10 +984,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -1464,10 +1105,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -1595,10 +1232,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -1713,10 +1346,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -1828,10 +1457,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -1954,10 +1579,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "goal",
             "named": true
           },
@@ -2041,10 +1662,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -2137,10 +1754,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -2292,10 +1905,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -2462,10 +2071,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -2599,10 +2204,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -2757,10 +2358,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -2856,10 +2453,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -2992,10 +2585,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -3114,10 +2703,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -3219,10 +2804,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -3337,10 +2918,6 @@
         },
         {
           "type": "character",
-          "named": true
-        },
-        {
-          "type": "choose_term",
           "named": true
         },
         {
@@ -3484,10 +3061,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -3721,10 +3294,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -3820,10 +3389,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -4003,10 +3568,6 @@
           "named": true
         },
         {
-          "type": "choose_term",
-          "named": true
-        },
-        {
           "type": "function_type",
           "named": true
         },
@@ -4172,10 +3733,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -4292,10 +3849,6 @@
         },
         {
           "type": "character",
-          "named": true
-        },
-        {
-          "type": "choose_term",
           "named": true
         },
         {
@@ -4547,10 +4100,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -4658,10 +4207,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -4824,10 +4369,6 @@
           "named": true
         },
         {
-          "type": "choose_term",
-          "named": true
-        },
-        {
           "type": "concept_item",
           "named": true
         },
@@ -4967,10 +4508,6 @@
           "named": true
         },
         {
-          "type": "choose_term",
-          "named": true
-        },
-        {
           "type": "function_type",
           "named": true
         },
@@ -5086,10 +4623,6 @@
         },
         {
           "type": "character",
-          "named": true
-        },
-        {
-          "type": "choose_term",
           "named": true
         },
         {
@@ -5391,10 +4924,6 @@
             "named": true
           },
           {
-            "type": "choose_term",
-            "named": true
-          },
-          {
             "type": "function_type",
             "named": true
           },
@@ -5511,10 +5040,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -5648,10 +5173,6 @@
         },
         {
           "type": "character",
-          "named": true
-        },
-        {
-          "type": "choose_term",
           "named": true
         },
         {
@@ -5896,10 +5417,6 @@
           },
           {
             "type": "character",
-            "named": true
-          },
-          {
-            "type": "choose_term",
             "named": true
           },
           {
@@ -6190,10 +5707,6 @@
   {
     "type": "character",
     "named": true
-  },
-  {
-    "type": "choose",
-    "named": false
   },
   {
     "type": "comment",

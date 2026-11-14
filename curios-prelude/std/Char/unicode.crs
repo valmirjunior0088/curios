@@ -31,7 +31,7 @@ pub let class(table: Bytes, missing: Nat, c: Char) -> Nat =
                 let at = 7 * mid;
                 let inside: Bool/Holds(mid < span.hi) = proved();
                 let room: Bool/Holds(at + 7 <= Bytes/len(table)) = proved();
-                choose
+                match
                 | scalar < number(table, at) =>
                     again(Span(runs) { lo = span.lo, hi = mid }, proved())
                 | number(table, at + 3) < scalar =>

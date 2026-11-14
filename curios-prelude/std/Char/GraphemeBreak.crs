@@ -46,7 +46,7 @@ satisfy Spell(GraphemeBreak) {
 
 -- The class `/sys/grapheme_break` gives `code`.
 let of_code(code: Nat) -> GraphemeBreak =
-    choose
+    match
     | code == /sys/grapheme_break/cr => cr()
     | code == /sys/grapheme_break/lf => lf()
     | code == /sys/grapheme_break/control => control()

@@ -47,7 +47,6 @@ const MEMO_TERM: u32 = 0;
 const MEMO_ATOMIC_TERM: u32 = 1;
 const MEMO_PATTERN: u32 = 2;
 const MEMO_MATCH_PATTERN: u32 = 3;
-const MEMO_TERM_BEFORE_ARROW: u32 = 4;
 
 /// What the grammar reads in one dialect and not the other ([`Dialect`]): the productions of the forms only Core text writes. A program has none, so where Core text reads one the program's grammar fails without consuming, and what stands there is refused as a token it did not expect.
 pub trait Grammar: Dialect {

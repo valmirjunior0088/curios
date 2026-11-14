@@ -651,7 +651,7 @@ fn a_loop_carried_variant_erases_through_the_chain() {
     );
 }
 
-/// A known function whose argument is *itself* a merged flow — tuples of two widths joining at a `choose` before the call.
+/// A known function whose argument is *itself* a merged flow — tuples of two widths joining after a branch before the call.
 fn merged_argument_module() -> (Module, FunctionId, ValueId) {
     let mut module = Module::default();
     let callee_param = module.add_value(Some("callee/param".into()));

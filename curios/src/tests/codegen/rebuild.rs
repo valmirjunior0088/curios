@@ -138,7 +138,7 @@ const SEARCH_TREE: &str = r#"
         match t
         | leaf() => Tree/node(Tree/leaf(), k, Tree/leaf())
         | node(l, x, r) =>
-            choose
+            match
             | k < x => Tree/node(insert(l, k), x, r)
             | x < k => Tree/node(l, x, insert(r, k))
             | _ => Tree/node(l, x, r)
@@ -394,7 +394,7 @@ fn a_constant_leaf_a_fork_holds_is_never_rebuilt() {
             match t
             | leaf() => Tree/node(Tree/leaf(), k, Tree/leaf())
             | node(l, x, r) =>
-                choose
+                match
                 | k < x => Tree/node(insert(l, k), x, r)
                 | x < k => Tree/node(l, x, insert(r, k))
                 | _ => Tree/node(l, x, r)
@@ -647,7 +647,7 @@ fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
             match t
             | leaf() => Tree/node(Tree/leaf(), k, Tree/leaf())
             | node(l, x, r) =>
-                choose
+                match
                 | k < x => Tree/node(insert(l, k), x, r)
                 | x < k => Tree/node(l, x, insert(r, k))
                 | _ => t
@@ -790,7 +790,7 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
         end
         let rank(h: Heap) -> Nat = match h | empty() => 0 | node(r, _, _, _) => r end;
         let make(k: Nat, a: Heap, b: Heap) -> Heap =
-            choose
+            match
             | rank(b) <= rank(a) => Heap/node(rank(b) + 1, k, a, b)
             | _ => Heap/node(rank(a) + 1, k, b, a)
             end;
@@ -801,7 +801,7 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
                 match b
                 | empty() => Heap/node(rank(a), ka, la, ra)
                 | node(_, kb, lb, rb) =>
-                    choose
+                    match
                     | ka <= kb => make(ka, la, merge(ra, Heap/node(rank(b), kb, lb, rb)))
                     | _ => make(kb, lb, merge(Heap/node(rank(a), ka, la, ra), rb))
                     end

@@ -109,7 +109,7 @@ let zero_sum(r: Rounding, terms: List(Term)) -> Flt =
 
 --- The sum of `terms` rounded once in `r`: a NaN term's NaN, the default NaN for an invalid term or the infinities of both signs, an infinity where one stands, and otherwise the exact sum rounded.
 pub let summed(r: Rounding, terms: List(Term)) -> Flt =
-    choose
+    match
     | some(n) = nan_of(terms) => n
     | any_invalid(terms) || any_infinite(terms, false) && any_infinite(terms, true) => +nan.0
     | any_infinite(terms, false) => +inf.0
@@ -134,7 +134,7 @@ pub let scale_of(d: Dyadic) -> Int =
 --- The product of `factors` as `(pr, sf)`, `pr · 2^sf` the product and `pr` rounded once in `r` from between one and two in magnitude, so that neither overflows nor underflows (§9.4 `scaledProd`): a NaN factor's NaN, the default NaN for an invalid factor or an infinity against a zero, and a signed infinity or zero where one stands, each with a scale of zero.
 pub let scaled(r: Rounding, factors: List(Term)) -> {Flt, Int} =
     let negative = negative_product(factors);
-    choose
+    match
     | some(n) = nan_of(factors) => (n, +0)
     | any_invalid(factors) || any_infinity(factors) && any_zero(factors) => (+nan.0, +0)
     | any_infinity(factors) => (match negative | true => -inf.0 | false => +inf.0 end, +0)

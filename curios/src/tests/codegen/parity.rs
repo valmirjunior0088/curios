@@ -40,16 +40,16 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
     assert_eq!(operations(through_concept), operations(direct),);
 }
 
-/// `choose` desugars to exactly the nested boolean matches a user would hand-write: `choose | c0 => b0 | c1 => b1 | _ => d end` is `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`. Both lower through the same core `bool_match` nesting, so they emit the same intrinsic operations — the two forms mint metavars in a slightly different order, which only permutes the emission order of the top-level specialized closures (their bodies are identical), so `operations()` is the exact comparison. A runtime operand (`List/len(/std/Proc/args()!)`) keeps the ladder from folding to a constant.
+/// A match with no head whose arms each take one condition compiles to exactly the nested boolean matches a user would hand-write: `match | c0 => b0 | c1 => b1 | _ => d end` is `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`. Both reach the same core `bool_match` nesting, so they emit the same intrinsic operations — the two forms mint metavars in a slightly different order, which only permutes the emission order of the top-level specialized closures (their bodies are identical), so `operations()` is the exact comparison. A runtime operand (`List/len(/std/Proc/args()!)`) keeps the ladder from folding to a constant.
 #[test]
-fn choose_matches_hand_nested_bool_codegen() {
+fn a_match_with_no_head_matches_hand_nested_bool_codegen() {
     let ladder = r#"
         use /std/{Nat, List, Str, Proc};
         let entry() -> /std/Io({}) =
             let taint = List/len(Proc/args()!);
             let n : Nat = taint;
             let result =
-                choose
+                match
                 | n <= 0 => Nat/add(n, 100)
                 | n <= 1 => Nat/add(n, 200)
                 | _ => Nat/add(n, 300)
@@ -78,13 +78,13 @@ fn choose_matches_hand_nested_bool_codegen() {
     assert_eq!(operations(ladder), operations(nested),);
 }
 
-/// A single-refutation bind arm `| some(x) = o => …` desugars to exactly the headed catch-all `match o | some(x) => … | _ => …` — both a single-row inductive match with the same default — so they emit identical operations.
+/// A match with no head whose one guarded arm binds a single refutation, `| some(x) = o => …`, compiles to exactly the headed catch-all `match o | some(x) => … | _ => …` — both a single-row inductive match with the same default — so they emit identical operations.
 #[test]
-fn choose_bind_arm_matches_headed_catch_all_codegen() {
+fn a_bind_guard_matches_headed_catch_all_codegen() {
     let bind = r#"
         use /std/{Option, Nat, List, Str, Proc};
         let f(o : Option(Nat)) -> Nat =
-            choose
+            match
             | some(x) = o => x + 10
             | _ => 99
             end;

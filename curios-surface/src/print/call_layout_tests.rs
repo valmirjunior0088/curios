@@ -59,8 +59,8 @@ fn a_ladders_call_participates_in_its_flat_layout() {
             "match b\n| true => f\n| false => g\nend",
         ),
         (
-            "choose | b => f | _ => g end",
-            "choose\n| b => f\n| _ => g\nend",
+            "match | b => f | _ => g end",
+            "match\n| b => f\n| _ => g\nend",
         ),
     ] {
         let source = format!("{ladder}(p)");
@@ -79,8 +79,8 @@ fn long_arguments_can_wrap_after_a_ladders_arms_break() {
             "match b\n| true => f\n| false => g\nend",
         ),
         (
-            "choose | b => f | _ => g end",
-            "choose\n| b => f\n| _ => g\nend",
+            "match | b => f | _ => g end",
+            "match\n| b => f\n| _ => g\nend",
         ),
     ] {
         assert_eq!(
@@ -146,8 +146,8 @@ fn every_call_in_a_postfix_chain_participates_in_the_ladders_layout() {
             "match b\n| true => f\n| false => g\nend",
         ),
         (
-            "choose | b => f | _ => g end",
-            "choose\n| b => f\n| _ => g\nend",
+            "match | b => f | _ => g end",
+            "match\n| b => f\n| _ => g\nend",
         ),
     ] {
         for suffix in [
@@ -175,16 +175,16 @@ fn a_forced_ladder_keeps_its_call_attached() {
             "match n\n| 0 => f\n| 1 => g\n| 2 => h\n| _ => i\nend(p)",
         ),
         (
-            "choose | a => f | b => g | c => h | _ => i end(p)",
-            "choose\n| a => f\n| b => g\n| c => h\n| _ => i\nend(p)",
+            "match | a => f | b => g | c => h | _ => i end(p)",
+            "match\n| a => f\n| b => g\n| c => h\n| _ => i\nend(p)",
         ),
         (
             "match b | true => match c | true => f | false => g end | false => h end(p)",
             "match b\n| true => match c | true => f | false => g end\n| false => h\nend(p)",
         ),
         (
-            "choose | b => choose | c => f | _ => g end | _ => h end(p)",
-            "choose\n| b => choose | c => f | _ => g end\n| _ => h\nend(p)",
+            "match | b => match | c => f | _ => g end | _ => h end(p)",
+            "match\n| b => match | c => f | _ => g end\n| _ => h\nend(p)",
         ),
     ] {
         assert_eq!(render(source, 200), expected);

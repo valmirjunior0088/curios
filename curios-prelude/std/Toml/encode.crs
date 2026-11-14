@@ -43,7 +43,7 @@ let int_str(n: Int) -> Str =
 let flt_str(f: Flt) -> Str =
     match Flt/is_finite(f)
     | false =>
-        choose
+        match
         | f > +0.0 => "inf"
         | f < +0.0 => "-inf"
         | Flt/is_sign_minus(f) => "-nan"

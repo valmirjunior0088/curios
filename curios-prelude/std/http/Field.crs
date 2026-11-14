@@ -58,7 +58,7 @@ let pieces(b: Bytes) -> List(Bytes) =
         | none() => List/reverse([Bytes/slice(b, from, at - from), ..found])
         | some(inside) =>
             let n = Byte/to_nat(Bytes/get(b, at, @inside));
-            choose
+            match
             | escaped => go(from, at + 1, quoted, false, found)
             | quoted => go(from, at + 1, n != '"', n == '\\', found)
             | n == ',' =>

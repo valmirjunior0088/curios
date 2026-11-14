@@ -1,11 +1,6 @@
-//! Inductive and matrix matches, motives, patterns, and `choose`.
+//! Inductive and matrix matches, motives, and patterns.
 
-use {
-    crate::parse::test_support::*,
-    crate::*,
-    curios_common::{Plicity, Sign},
-    curios_num::Natural,
-};
+use {crate::*, curios_common::Plicity, curios_num::Natural};
 
 #[test]
 fn inductive_match_nullary_and_unary() {
@@ -236,163 +231,6 @@ fn match_motive_spellings_round_trip() {
     }
 }
 
-// `choose`: no head term, `Bool` condition arms, and a mandatory `| _ =>` default. A bare `_` condition parses as the default (not a `Name` condition arm) — the `flat_map` guard in `parse_cond_arm` sees it and lets `many0` stop.
-#[test]
-fn parse_choose() {
-    assert_eq!(
-        "choose\n| p => 1\n| q => 2\n| _ => 3\nend"
-            .parse::<Term>()
-            .unwrap(),
-        Subterm::Choose(Choose {
-            arms: vec![
-                cond_arm(name("p"), num_lit(1, Sign::Unmarked)),
-                cond_arm(name("q"), num_lit(2, Sign::Unmarked)),
-            ],
-            default: num_lit(3, Sign::Unmarked),
-        })
-        .into()
-    );
-}
-
-/// A condition arm may begin with a qualified name, which the bind arm first reads as a constructor pattern and refuses. The refusal is the pattern grammar's, not this arm's, so it must not escape the arm: the condition arm re-parses the same text as an ordinary term.
-#[test]
-fn a_choose_condition_arm_may_begin_with_a_qualified_name() {
-    assert!(
-        "choose\n| /std/Nat/lt(a, b) => 1\n| _ => 0\nend"
-            .parse::<Term>()
-            .is_ok()
-    );
-}
-
-// An arm-free choose is legal: `choose | _ => d end` is just its default.
-#[test]
-fn a_choose_of_only_a_default_parses() {
-    assert_eq!(
-        "choose\n| _ => 0\nend".parse::<Term>().unwrap(),
-        Subterm::Choose(Choose {
-            arms: vec![],
-            default: num_lit(0, Sign::Unmarked),
-        })
-        .into()
-    );
-}
-
-// A condition whose head merely *begins* with `_` (`_ready`) is an ordinary condition, not the default — the guard rejects only a lone `_`.
-#[test]
-fn choose_leading_underscore_condition() {
-    assert_eq!(
-        "choose\n| _ready => 1\n| _ => 2\nend"
-            .parse::<Term>()
-            .unwrap(),
-        Subterm::Choose(Choose {
-            arms: vec![cond_arm(name("_ready"), num_lit(1, Sign::Unmarked))],
-            default: num_lit(2, Sign::Unmarked),
-        })
-        .into()
-    );
-}
-
-// A bind arm `| pattern = value =>` parses as a `ChooseTest::Bind`; a condition arm sharing a `|` with it stays a `Cond`.
-#[test]
-fn choose_bind_arm() {
-    assert_eq!(
-        "choose\n| some(x) = o => x\n| ready => 1\n| _ => 2\nend"
-            .parse::<Term>()
-            .unwrap(),
-        Subterm::Choose(Choose {
-            arms: vec![
-                ChooseArm {
-                    test: ChooseTest::Bind {
-                        alternatives: vec![Alternative {
-                            pattern: MatchPattern::Variant {
-                                tag: "some".to_string(),
-                                args: vec![(Plicity::Explicit, MatchPattern::Binder("x".into()))],
-                            },
-                            span: None,
-                        }],
-                        value: name("o"),
-                    },
-                    body: name("x"),
-                },
-                cond_arm(name("ready"), num_lit(1, Sign::Unmarked)),
-            ],
-            default: num_lit(2, Sign::Unmarked),
-        })
-        .into()
-    );
-}
-
-#[test]
-fn a_malformed_choose_arm_reports_the_arm_rather_than_the_missing_default() {
-    // `many0` drops the failed arm's error, and the default arm stood in its place: every one of these reported `expected: `_`` at the arm's first token, a default the reader never meant to write.
-    for (source, expected) in [
-        (
-            "choose\n| some(v) = key v\n| _ => 0\nend",
-            "expected: `=>`\n│  obtained: `v`",
-        ),
-        (
-            "choose\n| true 1\n| _ => 0\nend",
-            "expected: `=>`\n│  obtained: `1`",
-        ),
-        // The bind arm is read after the condition arm and so keeps its commitments: the pattern grammar's own refusal is the diagnosis, the same one a `match` arm gives for the same mistake.
-        (
-            "choose\n| Option/some(v) = key => v\n| _ => 0\nend",
-            "a constructor pattern names its constructor bare",
-        ),
-    ] {
-        let report = source.parse::<Term>().unwrap_err().format();
-        assert!(report.contains(expected), "{source:?} reported {report}");
-    }
-    // A genuinely absent default still reports as one, by the rule that asks for it.
-    let report = "choose\n| f => 1\nend"
-        .parse::<Term>()
-        .unwrap_err()
-        .format();
-    assert!(
-        report.contains("a `choose` ends with a default arm"),
-        "reported {report}"
-    );
-}
-
-/// A `choose` that closes with no default arm breaks the rule that it ends with one, and is refused by that rule at the `end` standing in the arm's place.
-#[test]
-fn a_choose_with_no_default_arm_is_refused_by_name() {
-    for source in [
-        "choose | n > 2 => 1 end",
-        "choose end",
-        "choose | some(x) = o => x end",
-    ] {
-        let report = source.parse::<Term>().unwrap_err().format();
-        assert!(
-            report
-                .contains("a `choose` ends with a default arm, taken where no arm above it holds")
-                && report.contains("write `| _ => …` before `end`"),
-            "{source:?} reported {report}"
-        );
-        assert!(report.contains(" ^^^\n"), "{source:?} reported {report}");
-    }
-}
-
-// `choose` survives print → re-parse, including the arm-free form.
-#[test]
-fn choose_round_trips() {
-    for source in [
-        "choose | p => 1 | q => 2 | _ => 3 end",
-        "choose | _ => 0 end",
-        "choose | a <= b => x | _ => y end",
-        // Bind arms, mixed with a condition arm.
-        "choose | some(x) = o => x | _ => y end",
-        "choose | cons(h, t) = xs => h | ready => 1 | _ => 0 end",
-    ] {
-        let term = source.parse::<Term>().unwrap();
-        assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
-            term,
-            "choose round-trip failed for {source:?}"
-        );
-    }
-}
-
 // A nested `Nat` succ pattern requires a space on each side of `+` (mirrors `infix_requires_spaces_and_disambiguates_signs`'s own operator spacing rule). A glued `n+1` is not recognized as `NatPattern::Succ` at all — it falls through to a plain `Binder("n")`, leaving `+1; ih` as trailing garbage the arm grammar rejects, a parse error rather than a silent reinterpretation.
 #[test]
 fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
@@ -461,16 +299,6 @@ fn a_qualified_constructor_pattern_is_refused_by_name() {
 fn a_struct_match_pattern_keeps_its_qualified_head() {
     assert!(
         "match p | Whatever/P { x, y } => x | _ => y end"
-            .parse::<Term>()
-            .is_ok()
-    );
-}
-
-/// A `choose` condition arm is a term, so one beginning with a qualified call is not a pattern that went wrong.
-#[test]
-fn a_choose_condition_arm_still_calls_a_qualified_name() {
-    assert!(
-        "choose | Option/is_some(o) => 1 | _ => 0 end"
             .parse::<Term>()
             .is_ok()
     );
@@ -585,9 +413,9 @@ fn a_match_binder_spans_its_word_alone() {
     assert_eq!(crate::parse::test_support::spelled(x), "x");
 }
 
-/// `end` closes a `match` or a `choose`, so either is an atom: an operator, a call, a projection and a `!` take one bare, where a `let` or a lambda, which extend to the end of the enclosing term, still need parentheses.
+/// `end` closes a `match`, headed or not, so either is an atom: an operator, a call, a projection and a `!` take one bare, where a `let` or a lambda, which extend to the end of the enclosing term, still need parentheses.
 #[test]
-fn a_match_or_choose_takes_operators_and_suffixes_bare() {
+fn a_match_takes_operators_and_suffixes_bare() {
     let sum = "1 + match b | true => 1 | false => 0 end"
         .parse::<Term>()
         .expect("a match is an operand");
@@ -604,13 +432,13 @@ fn a_match_or_choose_takes_operators_and_suffixes_bare() {
     };
     assert!(matches!(apply.head.as_subterm(), Subterm::Match(_)));
 
-    let performed = "choose | c => a | _ => b end!"
+    let performed = "match | c => a | _ => b end!"
         .parse::<Term>()
-        .expect("a choose is an action");
+        .expect("a match with no head is an action");
     let Subterm::Bang(action) = performed.as_subterm() else {
         panic!("expected a bang, got {performed}");
     };
-    assert!(matches!(action.as_subterm(), Subterm::Choose(_)));
+    assert!(matches!(action.as_subterm(), Subterm::HeadlessMatch(_)));
 }
 
 /// An arm writes its alternatives each after a bar, up to the one arrow they share; a term has no bare `|`, so past a pattern a bar is the next alternative.
@@ -651,26 +479,6 @@ fn an_arm_writes_each_alternative_after_a_bar() {
     assert_eq!(matched.arms[1].alternatives.len(), 1);
 }
 
-#[test]
-fn a_bind_arm_writes_its_alternatives_before_its_value() {
-    let term = "choose | left(x) | right(x) = e => x | _ => 0 end"
-        .parse::<Term>()
-        .unwrap();
-    let Subterm::Choose(choose) = term.as_subterm() else {
-        panic!("expected a choose, got {term}");
-    };
-    let ChooseTest::Bind {
-        alternatives,
-        value,
-    } = &choose.arms[0].test
-    else {
-        panic!("expected a bind arm");
-    };
-
-    assert_eq!(alternatives.len(), 2);
-    assert_eq!(*value, name("e"));
-}
-
 /// A pattern holds no alternatives: a bar inside one is refused by name where it stands, in each place a pattern nests, rather than reported as the token the enclosing form did not expect.
 #[test]
 fn an_alternative_inside_a_pattern_is_refused_by_name() {
@@ -692,7 +500,7 @@ fn an_alternative_inside_a_pattern_is_refused_by_name() {
 fn an_arm_of_alternatives_round_trips() {
     for source in [
         "match c | ' ' | '\\t' => true | _ => false end",
-        "choose | left(x) | right(x) = e => x | _ => 0 end",
+        "match o | some(x) | other(_, x) => x | _ => 0 end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(term.to_string(), source);

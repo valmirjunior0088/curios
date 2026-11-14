@@ -8,9 +8,9 @@ use {
     curios_common::{Plicity, Span, recurse},
     curios_num::Binary,
     curios_surface::{
-        Apply, BytesSegment, Choose, ChooseTest, Field, FuncParam, FuncTypeParam, Intrinsic, Label,
-        Let, LetBinding, LetGroup, LetSignature, ListEntry, Literal, Name, NumLit, Pattern,
-        PatternField, ProofLiteral, StructLit, StructLitEntry, Subterm, Term, func_sugar_params,
+        Apply, BytesSegment, Field, FuncParam, FuncTypeParam, Intrinsic, Label, Let, LetBinding,
+        LetGroup, LetSignature, ListEntry, Literal, Name, NumLit, Pattern, PatternField,
+        ProofLiteral, StructLit, StructLitEntry, Subterm, Term, func_sugar_params,
         func_sugar_type_params,
     },
     std::{
@@ -677,35 +677,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     })
                     .collect::<Result<Vec<_>, Error>>()?,
             )?,
-            // A `choose` right-folds into nested `Bool` matches: each `cond => body` becomes `match cond | false => <rest> | true => body end`, the `_` default sitting at the innermost false branch. No motive at any level (a fresh hole each), matching the surface form's absence of one. Arms inherit the definitional refinement of their conditions for free — that is exactly what nesting `Bool` matches buys.
-            Subterm::Choose(Choose { arms, default }) => {
-                let mut acc = self.term(default)?;
-                for arm in arms.iter().rev() {
-                    acc = match &arm.test {
-                        ChooseTest::Cond(condition) => curios_core::Term::bool_match(
-                            self.term(condition)?,
-                            None,
-                            curios_core::Term::hole(self.context.fresh_metavar()),
-                            acc,
-                            self.term(&arm.body)?,
-                        ),
-                        ChooseTest::Bind {
-                            alternatives,
-                            value,
-                        } => {
-                            let value = self.term(value)?;
-                            MatchCompiler::new(self).bind_arm(
-                                alternatives,
-                                value,
-                                &arm.body,
-                                acc,
-                                MatchCompiler::term,
-                            )?
-                        }
-                    };
-                }
-                acc
-            }
             Subterm::Match(match_) => {
                 // A match is handed on as the matrix of its arms, each as it is written — see `MatchCompiler::headed`. Elaboration compiles the patterns, where the scrutinee's type is known.
                 let head = self.term(&match_.head)?;
@@ -727,7 +698,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         })
     }
 
-    /// An error at `term`'s span, where `term` has one and the error is not already placed — the counterpart of the stamping `region` and `collect` perform on the term they return. Without it only [`Self::term`] would place its errors, and a refusal the matrix compiler raises while lowering a `match` or `choose` in a value body — every arm-shape error it has — would reach the reader with no location at all.
+    /// An error at `term`'s span, where `term` has one and the error is not already placed — the counterpart of the stamping `region` and `collect` perform on the term they return. Without it only [`Self::term`] would place its errors, and a refusal the matrix compiler raises while lowering a `match` in a value body — every arm-shape error it has — would reach the reader with no location at all.
     fn located(error: Error, term: &Term) -> Error {
         match term.span() {
             Some(span) => error.at(span.clone()),
@@ -737,7 +708,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Desugars `term` as a single **region**. A region is a stretch of a value body that shares one continuation; each `!` in it hoists to the top of the region, never past a boundary (lambda body, match arm, recursive-group member). Boundaries re-root a region. Every hoisted action is sequenced through `/std/Monad/bind` — see `wrap`.
     ///
-    /// Span stamping happens here for the reason [`Self::collect`] states, and for the arms that are not spines: `Let`, `Match`, `Choose` and `Func` each *rebuild* their node below, so unstamped, a value body rooted at a whole-term form would reach elaboration with no span — its errors unlocated, and the `test` declaration's recorded body empty, since the runner slices that body from this very span. `with_span` is innermost-wins, so the spine arm keeps the one [`Self::collect`] already stamped.
+    /// Span stamping happens here for the reason [`Self::collect`] states, and for the arms that are not spines: `Let`, `Match`, `HeadlessMatch` and `Func` each *rebuild* their node below, so unstamped, a value body rooted at a whole-term form would reach elaboration with no span — its errors unlocated, and the `test` declaration's recorded body empty, since the runner slices that body from this very span. `with_span` is innermost-wins, so the spine arm keeps the one [`Self::collect`] already stamped.
     pub fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
         let lowered = self
             .region_root(term)
@@ -761,12 +732,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             // No scrutinee runs ahead of the arms, so nothing hoists: each guard and each arm is its own region.
             Subterm::HeadlessMatch(headless) => MatchCompiler::new(self).headless_region(headless),
-            // The `choose` head arm's test runs unconditionally (its bangs hoist here); deeper arms and the default are branch-local.
-            Subterm::Choose(choose) => {
-                let mut binds = Vec::new();
-                let choose_term = MatchCompiler::new(self).choose_region(choose, &mut binds)?;
-                self.wrap(binds, choose_term)
-            }
             // A lambda re-roots the region.
             Subterm::Func(func) => {
                 self.abstract_value(&func.params, &self.mint_params(&func.params), &func.body)
@@ -1033,14 +998,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     self.collect(term, binds)
                 })?)
             }
-            // A `let`/`match`/`choose` sub-expression hoists its bound-expression / scrutinee / head-test bangs into the enclosing region (this `binds`).
+            // A `let`/`match` sub-expression hoists its bound-expression / scrutinee bangs into the enclosing region (this `binds`).
             Subterm::Let(let_) => self.build_let(let_, binds)?,
             Subterm::Match(match_) => MatchCompiler::new(self).match_region(match_, binds)?,
             // A match with no head has nothing to hoist.
             Subterm::HeadlessMatch(headless) => {
                 MatchCompiler::new(self).headless_region(headless)?
             }
-            Subterm::Choose(choose) => MatchCompiler::new(self).choose_region(choose, binds)?,
             // A lambda is a value and hoists nothing outward, so it desugars as its own region.
             Subterm::Func(_) => self.region(term)?,
             // Leaves elaborate normally, including the components of type expressions at their own expectations.

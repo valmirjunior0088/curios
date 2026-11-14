@@ -23,7 +23,7 @@
 - **A default held to the end of the declaration**, as Lean's and Rust's are: a value stands in the types after it here, and whatever reads the type before then, a match, a projection, a call, would have to wait in its turn. **The first of two literals at one type synthesized and the second held to it**, which answers a call's literals in the order of its slots.
 - **A `character: bool` beside the numeral's fields**, which admits the bogus pairings.
 - **Matching a `Char` scrutinee by projecting its `code` field in the match compiler**, which would teach pattern compilation a library representation and hide a projection `Char/to_nat` states in the source.
-- **Character spellings for `Bool` and `Flt`**, and **equality-guard or `Str` patterns**, which `choose` with `==` already owns.
+- **Character spellings for `Bool` and `Flt`**, and **equality-guard or `Str` patterns**, which a guard with `==` already owns.
 - **A tight packed spelling**, `b\1\..rest\0`: with no delimiters, operands need a glued grammar and a printer of their own, and whitespace ends the literal.
 - **An escape marking constant atoms beside numerals**, two spellings of one constant whose constancy lowering already guarantees; **bare `[` for every carrier**, which leaves an empty literal's carrier unrecoverable. The price accepted is that postfix `[` is spent.
 - **Named float constants**, as OCaml's `infinity` and Julia's `Inf`, which make each value two spellings and reading back rest on names; **printing a computation such as `Flt/div(+1.0, +0.0)`**, which shows a division where the reader has a value.

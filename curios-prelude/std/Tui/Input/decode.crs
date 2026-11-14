@@ -20,7 +20,7 @@ let low(code: Nat, @below: Bool/Holds(code < 0xD800)) -> Char =
 
 -- The key a control byte is. It is a byte's, which is what puts the letter or the sign it stands beside below the surrogates.
 let control(n: Nat, @byte: Bool/Holds(n <= 255)) -> Key =
-    choose
+    match
     | n == 0x0D => Key/plain(Key/Code/enter())
     | n == 0x09 => Key/plain(Key/Code/tab())
     | n == 0x7F => Key/plain(Key/Code/backspace())
@@ -83,7 +83,7 @@ let final_code(n: Nat) -> Option(Key/Code) =
 
 -- The key the kitty keyboard protocol numbers `code`: a character by its scalar, the named keys by theirs, F13 to F35 and the keypad's keys by the private-use numbers the protocol gives them, a keypad key as the key it stands for. The protocol's other private-use keys — the media keys, the modifiers and the locks — are reported only where a session asks for every key, which none does.
 let kitty(code: Nat) -> Option(Key/Code) =
-    choose
+    match
     | code == 13 => Option/some(Key/Code/enter())
     | code == 27 => Option/some(Key/Code/escape())
     | code == 9 => Option/some(Key/Code/tab())
@@ -135,7 +135,7 @@ let sequence(b: Bytes, i: Nat) -> Option(Sequence) =
         match at(b, j)
         | none() => Option/none()
         | some(n) =>
-            choose
+            match
             | Nat/in_range(n, '0', '9') =>
                 go(
                     j + 1,
@@ -238,7 +238,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
         end;
     -- A sequence with the private marker `?`: the replies to what a session asks.
     let replied(p: Sequence) -> Step =
-        choose
+        match
         | p.intermediate == '$' && p.final == 'y' =>
             match Option/bind(parameter(p, 0), Mode/of_number)
             | none() => Step/skip(p.next)
@@ -256,12 +256,12 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
     -- A sequence with no private marker and no intermediate: a key, a paste's opener, a resize or a change of focus. An omitted modifier is 1, no modifiers; the key a `~` or a `u` names has no default, both being private finals.
     let sent(p: Sequence) -> Step =
         let m = Option/unwrap_or(parameter(p, 1), 1);
-        choose
+        match
         | p.final == '~' =>
             match parameter(p, 0)
             | none() => Step/skip(p.next)
             | some(n) =>
-                choose
+                match
                 | n == 200 => paste(p.next)
                 | some(code) = tilde(n) => key(modified(code, m), p.next)
                 | _ => Step/skip(p.next)
@@ -296,7 +296,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
         match sequence(bytes, j)
         | none() => Step/cut()
         | some(p) =>
-            choose
+            match
             | p.private == '?' => replied(p)
             | p.private == 0 && p.intermediate == 0 => sent(p)
             | _ => Step/skip(p.next)
@@ -316,7 +316,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
         | none() => Step/cut()
         | some(byte) =>
             let second = Byte/to_nat(byte);
-            choose
+            match
             | second == '[' => csi(i + 2)
             | second == 'O' => ss3(i + 2)
             | second == 0x1B => key(Key/plain(Key/Code/escape()), i + 1)
@@ -339,7 +339,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
             let head = Bytes/get(bytes, i, @inside);
             let n = Byte/to_nat(head);
             let step =
-                choose
+                match
                 | n == 0x1B => escape(i)
                 | n < 0x20 || n == 0x7F => key(control(n), i + 1)
                 | _ =>

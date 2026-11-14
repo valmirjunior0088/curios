@@ -51,7 +51,7 @@ let columns(chars: List(Char)) -> Nat =
     | [] => 0
     | [first, .._] =>
         let opening = GraphemeBreak/of_char(first);
-        choose
+        match
         | List/any(chars, wide_in_cluster) => 2
         | opening == GraphemeBreak/extend() || opening == GraphemeBreak/zwj()
             || opening == GraphemeBreak/control() => 0
@@ -83,7 +83,7 @@ let pictured(code: Nat, @block: Bool/Holds(0x2400 <= code && code < 0x2440)) -> 
 --- The glyph a terminal is shown in place of `c` where `c` is a control, since a control written to a terminal is obeyed rather than drawn: its picture from the Control Pictures block for a C0 control and DEL, and the replacement character for a C1 control or any other.
 pub let picture(c: Char) -> Glyph =
     let code = Char/to_nat(c);
-    choose
+    match
     | code < 0x20 => pictured(0x2400 + code)
     | code == 0x7F => pictured(0x2421)
     | _ => Glyph { chars = ['�'], wide = false }

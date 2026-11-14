@@ -189,7 +189,7 @@ pub let balanced(
     combine: (A, A) -> A,
 ) -> A =
     let go(lo: Nat, count: Nat, @bounded: Bool/Holds(lo + count <= n)) -> A =
-        choose
+        match
         | 1 < count =>
             let half = count / 2;
             match half + half < count

@@ -144,7 +144,7 @@ let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse(Str, {Nat, Nat, Nat}
         | none() => flt_digits_stop(sig, count, shift, seen, pend)
         | some(c) =>
             let n = Char/to_nat(c);
-            choose
+            match
             | n == '_' =>
                 match seen && Bool/not(pend)
                 | true =>
@@ -174,7 +174,7 @@ let exp_digits: Parse(Str, Nat) =
         | none() => exp_stop(acc, seen, pend)
         | some(c) =>
             let n = Char/to_nat(c);
-            choose
+            match
             | n == '_' =>
                 match seen && Bool/not(pend)
                 | true =>

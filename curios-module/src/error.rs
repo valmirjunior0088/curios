@@ -72,7 +72,7 @@ pub enum Error {
     },
     /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
-    /// A bind — a `choose` bind arm `| pattern = value =>` or a bind guard `pattern = value` — whose `pattern` takes nothing apart: it always matches, so the arms after it are dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
+    /// A bind guard `pattern = value` whose `pattern` takes nothing apart: it always matches, so the arms after it are dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
     BindCannotFail,
     /// A headed match ended in a *named* catch-all (`| x =>`) among concrete constructor arms. Only a bare `| _ =>` is a catch-all default; a named binder there is almost certainly a mistake (a misspelled constructor, or a binder that silently swallows every remaining case).
     MatchNamedCatchAll {

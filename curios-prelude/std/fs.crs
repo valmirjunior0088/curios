@@ -31,7 +31,7 @@ satisfy Show(Kind) {
 
 --- The kind a code of `file_stat`'s names, where it names one.
 let kind_of(code: Nat) -> Option(Kind) =
-    choose
+    match
     | code == /sys/file_kind/file => Option/some(Kind/file())
     | code == /sys/file_kind/directory => Option/some(Kind/directory())
     | code == /sys/file_kind/symlink => Option/some(Kind/symlink())

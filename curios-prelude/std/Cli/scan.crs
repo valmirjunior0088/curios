@@ -165,7 +165,7 @@ let step(lookup: Map(Str, Claim), raw: Raw, literal: Bool, tokens: List(Str), gr
                     more,
                     group)
             end;
-        choose
+        match
         | literal || token == "-" || numeric(token) => positional()
         | token == "--" => step(lookup, raw, true, more, group)
         | some(body) = Str/strip_prefix(token, "--") =>

@@ -100,7 +100,7 @@ fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {
         use /std/{Nat, Byte, Bool, Eq};
         let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =
             let n = Byte/to_nat(c);
-            choose | Bool/not(Nat/in_range(n, lo, hi)) => false | _ => true end;
+            match | Bool/not(Nat/in_range(n, lo, hi)) => false | _ => true end;
         let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
             match Bool/not(Nat/in_range(Byte/to_nat(c), lo, hi))
             | true => 0
@@ -119,7 +119,7 @@ fn a_guard_over_a_let_meets_itself_spelled_over_the_value() {
         run(r#"
         use /std/{Nat, Byte, Bool, Eq};
         let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =
-            choose | Bool/not(Nat/in_range(Byte/to_nat(c), lo, hi)) => false | _ => true end;
+            match | Bool/not(Nat/in_range(Byte/to_nat(c), lo, hi)) => false | _ => true end;
         let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
             let n = Byte/to_nat(c);
             match Bool/not(Nat/in_range(n, lo, hi))
@@ -140,7 +140,7 @@ fn a_guard_over_a_let_meets_a_definition_that_binds_its_own() {
         use /std/{Nat, Byte, Bool, Eq};
         let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =
             let n = Byte/to_nat(c);
-            choose | Bool/not(Nat/in_range(n, lo, hi)) => false | _ => true end;
+            match | Bool/not(Nat/in_range(n, lo, hi)) => false | _ => true end;
         let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
             let m = Byte/to_nat(c);
             match Bool/not(Nat/in_range(m, lo, hi))

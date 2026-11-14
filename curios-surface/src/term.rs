@@ -316,33 +316,6 @@ pub struct PatternField<D: Dialect = Program> {
     pub value: Pattern<D>,
 }
 
-/// An ordered guarded ladder: `choose | test => body | … | _ => default end`. There is no scrutinee — the arms are tried top-to-bottom and the first that fires selects its body; the mandatory final `| _ =>` supplies the fallthrough. An arm's [`ChooseTest`] is either a `Bool` condition (`| cond =>`) or a refutable bind (`| pattern = value =>`, Rust `if let`). Lowering right-folds the ladder into nested `Bool` matches / single-row matrix matches (`into_core::match_compile`'s `ladder_region`), so each body inherits the definitional refinement of its condition for free (the same `refine_head` keying a hand-written `match cond | true => … | false => …` would get). A dispatch form, not an elimination — it consumes no scrutinee, so it is not a `match` at all: it enumerates no shapes, so the `_` default is mandatory (as in a headed `Nat` literal dispatch). No motive.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Choose<D: Dialect = Program> {
-    /// The arms, in source order; the first whose test fires selects its body. May be empty (then the ladder is just its `default`).
-    pub arms: Vec<ChooseArm<D>>,
-    pub default: Term<D>,
-}
-
-/// One arm of a [`Choose`] ladder: a [`ChooseTest`] and the `body` it selects when the test fires.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ChooseArm<D: Dialect = Program> {
-    pub test: ChooseTest<D>,
-    pub body: Term<D>,
-}
-
-/// What a choose arm dispatches on.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ChooseTest<D: Dialect = Program> {
-    /// `| cond =>` — a `Bool` condition; the arm fires when `cond` is `true`.
-    Cond(Term<D>),
-    /// `| pattern | … = value =>` — a refutable bind (Rust `if let`): the arm fires when `value` matches one of the (refutable, possibly nested) alternatives, binding its sub-patterns in the body. A bare-[`MatchPattern::Binder`] alternative is irrefutable and rejected by lowering — it would be a plain `let`.
-    Bind {
-        alternatives: Vec<Alternative<D>>,
-        value: Term<D>,
-    },
-}
-
 /// A projection names its field either positionally (`p.0`) or by the tuple type's label (`p.status`). Labels are resolved to positions during core elaboration; they never survive past it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Field {
@@ -747,8 +720,6 @@ pub enum Subterm<D: Dialect = Program> {
     Match(Match<D>),
     /// A match with no head (see [`HeadlessMatch`]).
     HeadlessMatch(HeadlessMatch<D>),
-    /// An ordered guarded ladder (see [`Choose`]) — not a match, since it consumes no scrutinee.
-    Choose(Choose<D>),
     Let(Let<D>),
     /// A postfix bang `e!`: extracts the result of monadic action `e` inline. The operand is the action whose result is bound. The `into_core` pass hoists each bang to the top of its enclosing region (a value body, re-rooted at lambda bodies, match arms, and recursive-group members) and sequences it through `/std/Monad/bind`, whose `use` binder resolves the `Monad` witness from the action's type. Exists only between parsing and `into_core`, which eliminates it before core elaboration; a bang in a type is rejected.
     Bang(Term<D>),

@@ -96,7 +96,7 @@ pub let to_integral(r: Rounding, a: Flt) -> Flt =
 
 --- `f · 2^n`, rounded once in the direction `r` names (§5.3.3 `scaleB`). A NaN answers itself quieted; an infinity and a zero are their own scalings.
 pub let scale(r: Rounding, f: Flt, n: Int) -> Flt =
-    choose
+    match
     | Flt/is_nan(f) => f + f
     | Flt/is_zero(f) => f
     | some(d) = Dyadic/try_of(f) => Dyadic/to_flt(r, Dyadic { ..d, exponent = d.exponent + n })

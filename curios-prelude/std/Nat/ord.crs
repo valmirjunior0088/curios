@@ -2,7 +2,7 @@ use /std/{Nat, Bool, Eq, Ordering, Ord, proved};
 
 --- The order of the two.
 pub let ord(x: Nat, y: Nat) -> Ordering =
-    choose | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
+    match | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
 
 -- Of two naturals that differ, the one that is at most the other is below it.
 let below(

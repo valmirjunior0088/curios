@@ -65,7 +65,7 @@ pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> H
 
 let escape_char(c: Char) -> Str =
     let n = Char/to_nat(c);
-    choose
+    match
     | n == '&' => "&amp;"
     | n == '<' => "&lt;"
     | n == '>' => "&gt;"

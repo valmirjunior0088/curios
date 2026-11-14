@@ -17,7 +17,6 @@
   "foreign"
   "test"
   "match"
-  "choose"
 ] @keyword
 
 (sort) @type

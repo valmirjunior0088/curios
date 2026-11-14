@@ -120,7 +120,7 @@ let write_waiting(h: Handle, b: Bytes) -> Io(Result(Error, {})) =
         (reply, settled) =>
             match settled
             | ok() =>
-                choose
+                match
                 | reply.written == 0 && 0 < Bytes/len(b) =>
                     Io/pure(Result/failure(Error/invalid_reply()))
                 | reply.written < Bytes/len(b) => write_waiting(h, Bytes/drop(b, reply.written))

@@ -491,7 +491,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
     })
 }
 
-/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each arm as its alternatives, each pattern over the names its own row's body binds, beside the guards and the body the first row's opening reads back as — the ones the arm was written with. A `choose` bind arm reads back as the match of two arms it stands for, and a match over `()` whose rows write an unnamed `_`, every one but the last guarded, as the match with no head it was lowered from.
+/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each arm as its alternatives, each pattern over the names its own row's body binds, beside the guards and the body the first row's opening reads back as — the ones the arm was written with. A match over `()` whose rows write an unnamed `_`, every one but the last guarded, reads back as the match with no head it was lowered from.
 ///
 /// The motive's binders are opened ahead of the scrutinee's and the arms' after both, the order Core's printer ([`Spellable`](crate::Spellable)) opens them in.
 fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {

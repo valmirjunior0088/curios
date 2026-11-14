@@ -3,9 +3,9 @@ use {
     crate::Error,
     curios_common::Span,
     curios_surface::{
-        Alternative, BytesPattern, Choose, ChooseArm, ChooseTest, Guard, HeadlessArm,
-        HeadlessMatch, ListPattern, Match, MatchPattern, MatchPatternField, MatrixArm, NatLiteral,
-        NatPattern, Pattern, PatternField, Term,
+        Alternative, BytesPattern, Guard, HeadlessArm, HeadlessMatch, ListPattern, Match,
+        MatchPattern, MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField,
+        Term,
     },
     std::{collections::BTreeSet, mem},
 };
@@ -86,101 +86,6 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             None,
             leaf,
         )
-    }
-
-    /// Desugars a `choose` inside a region: the head arm's test mirrors the `subterm` path's right-fold, but only the *first* condition runs unconditionally, so only its bangs hoist into `binds`. Every deeper condition evaluates just when its predecessor is false, so each lowers as its own sub-region inside that false branch (see [`Self::ladder_region`]).
-    pub fn choose_region(
-        &self,
-        choose: &Choose,
-        binds: &mut Vec<RegionFrame>,
-    ) -> Result<curios_core::Term, Error> {
-        self.ladder_region(&choose.arms, &choose.default, binds)
-    }
-
-    /// Lowers a `choose`'s arms inside a region. The head arm's test (a condition or a bind scrutinee) collects its bangs into `binds` (the caller's region — it runs unconditionally at this level); its body is its own region; the rest of the ladder — reached only when this test fails — is lowered as a *fresh* region so deeper tests' bangs stay branch-local. With no arms left, the ladder is just its default, run unconditionally in the current region.
-    fn ladder_region(
-        &self,
-        arms: &[ChooseArm],
-        default: &Term,
-        binds: &mut Vec<RegionFrame>,
-    ) -> Result<curios_core::Term, Error> {
-        let Some((arm, rest)) = arms.split_first() else {
-            return self.collect(default, binds);
-        };
-        let mut rest_binds = Vec::new();
-        let rest_term = self.ladder_region(rest, default, &mut rest_binds)?;
-        let rest_wrapped = self.wrap(rest_binds, rest_term)?;
-        match &arm.test {
-            ChooseTest::Cond(condition) => {
-                let head = self.collect(condition, binds)?;
-                let true_case = self.region(&arm.body)?;
-                Ok(curios_core::Term::bool_match_scoped(
-                    head,
-                    curios_core::Term::match_motive_written(curios_core::Term::hole(
-                        self.context.fresh_metavar(),
-                    )),
-                    rest_wrapped,
-                    true_case,
-                ))
-            }
-            ChooseTest::Bind {
-                alternatives,
-                value,
-            } => {
-                let value = self.collect(value, binds)?;
-                self.bind_arm(
-                    alternatives,
-                    value,
-                    &arm.body,
-                    rest_wrapped,
-                    MatchCompiler::region,
-                )
-            }
-        }
-    }
-
-    /// Lowers a `choose` bind arm `| pattern | … = value => body` — with `value` and `rest`, the rest of its ladder, already lowered — as the matrix of two arms over `value`: its own, and a `_` whose body is `rest`, which a value no alternative matches takes. Refutable alternatives only: a bare binder cannot fail (a plain `let`) and is rejected.
-    pub fn bind_arm(
-        &self,
-        alternatives: &[Alternative],
-        value: curios_core::Term,
-        body: &Term,
-        rest: curios_core::Term,
-        leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
-    ) -> Result<curios_core::Term, Error> {
-        for alternative in alternatives {
-            if let MatchPattern::Binder(name) = &alternative.pattern {
-                return Err(placed(
-                    Error::BindCannotFail,
-                    name.span().or(alternative.span.as_ref()),
-                ));
-            }
-        }
-
-        // The `_` binds nothing its body can name.
-        let (_, unnamed) = self.mint([String::new()]).remove(0);
-        let rest = curios_core::Row {
-            pattern: curios_core::Pattern::Binder,
-            guards: Vec::new(),
-            body: curios_core::Term::func(
-                vec![(
-                    unnamed,
-                    curios_core::Term::hole(self.context.fresh_metavar()),
-                )],
-                rest,
-            ),
-        };
-
-        Ok(curios_core::Term::matrix(curios_core::Matrix {
-            head: value,
-            motive: None,
-            arms: vec![
-                self.arm(alternatives, &[], body, leaf)?,
-                curios_core::Arm {
-                    alternatives: vec![rest],
-                },
-            ],
-        }))
     }
 
     /// Lowers a headed match — its scrutinee already lowered — as the matrix of its arms, each as it is written. `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this, mirroring every other `Match` arm's `term`/`region` split.

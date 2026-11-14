@@ -62,15 +62,42 @@ fn a_bind_guard_reads_a_pattern_no_term_spells_and_a_tuple_value() {
     }
 }
 
+// A condition may begin with a qualified name, which the bind reading would refuse as a constructor pattern: the condition is read first, and no `=` follows it.
+#[test]
+fn a_condition_may_begin_with_a_qualified_name() {
+    for source in [
+        "match\n| /std/Nat/lt(a, b) => 1\n| _ => 0\nend",
+        "match | Option/is_some(o) => 1 | _ => 0 end",
+        "match o | some(n), Nat/lt(n, 2) => 1 | _ => 0 end",
+    ] {
+        assert!(source.parse::<Term>().is_ok(), "{source:?}");
+    }
+}
+
+// A match with no head may be its default alone.
+#[test]
+fn a_match_with_no_head_may_be_its_default_alone() {
+    assert_eq!(
+        "match\n| _ => 0\nend".parse::<Term>().unwrap(),
+        Subterm::HeadlessMatch(HeadlessMatch {
+            arms: Vec::new(),
+            default: num_lit(0, Sign::Unmarked),
+        })
+        .into()
+    );
+}
+
 // A match with no head ends with its default, and one that closes without it is refused by that rule, at the `end` standing in its place.
 #[test]
 fn a_match_with_no_head_and_no_default_is_refused_by_name() {
     for source in ["match | n > 2 => 1 end", "match | some(x) = o => x end"] {
         let report = source.parse::<Term>().unwrap_err().format();
         assert!(
-            report.contains("a `match` with no head ends with a default arm"),
+            report.contains("a `match` with no head ends with a default arm")
+                && report.contains("write `| _ => …` before `end`"),
             "{source:?} reported {report}"
         );
+        assert!(report.contains(" ^^^\n"), "{source:?} reported {report}");
     }
 }
 
@@ -100,6 +127,21 @@ fn a_malformed_guard_reports_the_guard() {
     }
 }
 
+// A guard takes no alternatives: the grammar writes no bar inside one, so a bar after a guard is refused where it stands, as the arm's missing `=>`.
+#[test]
+fn a_guard_written_with_alternatives_is_refused_at_its_bar() {
+    for source in [
+        "match\n| some(0) | some(1) = o => 1\n| _ => 0\nend",
+        "match\n| ready, some(0) | some(1) = o => 1\n| _ => 0\nend",
+    ] {
+        let report = source.parse::<Term>().unwrap_err().format();
+        assert!(
+            report.contains("expected: `=>`\n│  obtained: `|`"),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
 // Guards and a match with no head print back as they are written.
 #[test]
 fn guards_round_trip() {
@@ -107,6 +149,9 @@ fn guards_round_trip() {
         "match o | some(n), n > 1 => n | _ => 0 end",
         "match | p => 1 | some(x) = o, x > 0 => x | _ => 3 end",
         "match | (some(x), some(y)) = (o, p) => x + y | _ => 1 end",
+        "match | _ => 0 end",
+        "match | a <= b => x | _ => y end",
+        "match | cons(h, t) = xs => h | ready => 1 | _ => 0 end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(term.to_string(), source);
