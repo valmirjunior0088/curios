@@ -11,9 +11,10 @@ let bin_digit(n: Nat) -> Option(Nat) =
     match Nat/in_range(n, '0', '1') | true => Option/some(n - '0') | false => Option/none() end;
 
 let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
-    match pend
-    | true => Parse/commit(Parse/fail("malformed underscore"))
-    | false => match seen | true => Parse/pure(acc) | false => Parse/fail("expected digit") end
+    match
+    | pend => Parse/commit(Parse/fail("malformed underscore"))
+    | seen => Parse/pure(acc)
+    | _ => Parse/fail("expected digit")
     end;
 
 --- The largest magnitude a TOML integer has: `2⁶³`, which only the most negative 64-bit integer reaches. TOML 1.0 asks for every 64-bit signed integer and an error past them, and a magnitude is refused the digit it passes this, so no longer numeral is read to its end.
@@ -27,26 +28,23 @@ let magnitude(radix: Nat, digit_of: (Nat) -> Option(Nat)) -> Parse(Str, Nat) =
         | none() => magnitude_stop(acc, seen, pend)
         | some(c) =>
             let n = Char/to_nat(c);
-            match n == '_'
-            | true =>
+            match
+            | n == '_' =>
                 match seen && Bool/not(pend)
                 | true =>
                     let _ = Parse/str/char!;
                     go(acc, seen, true)
                 | false => Parse/commit(Parse/fail("malformed underscore"))
                 end
-            | false =>
-                match digit_of(n)
-                | some(d) =>
-                    let next = acc * radix + d;
-                    match next > magnitude_limit
-                    | true => Parse/fail("integer out of range")
-                    | false =>
-                        let _ = Parse/str/char!;
-                        go(next, true, false)
-                    end
-                | none() => magnitude_stop(acc, seen, pend)
+            | some(d) = digit_of(n) =>
+                let next = acc * radix + d;
+                match next > magnitude_limit
+                | true => Parse/fail("integer out of range")
+                | false =>
+                    let _ = Parse/str/char!;
+                    go(next, true, false)
                 end
+            | _ => magnitude_stop(acc, seen, pend)
             end
         end;
     go(0, false, false);
@@ -106,13 +104,10 @@ pub let int_value() -> Parse(Str, Toml) =
     let (negative, signed) = sign()!;
     let mag = int_magnitude(signed)!;
     -- `magnitude` already refused past `2⁶³`, the most negative integer's magnitude and one past the most positive's.
-    match negative
-    | true => Parse/pure(Toml/int(+0 - Nat/to_int(mag)))
-    | false =>
-        match mag == magnitude_limit
-        | true => Parse/fail("integer out of range")
-        | false => Parse/pure(Toml/int(Nat/to_int(mag)))
-        end
+    match
+    | negative => Parse/pure(Toml/int(+0 - Nat/to_int(mag)))
+    | mag == magnitude_limit => Parse/fail("integer out of range")
+    | _ => Parse/pure(Toml/int(Nat/to_int(mag)))
     end;
 
 let flt_digits_stop(
@@ -122,13 +117,10 @@ let flt_digits_stop(
     seen: Bool,
     pend: Bool,
 ) -> Parse(Str, {Nat, Nat, Nat}) =
-    match pend
-    | true => Parse/commit(Parse/fail("malformed underscore"))
-    | false =>
-        match seen
-        | true => Parse/pure((sig, count, shift))
-        | false => Parse/fail("expected digit")
-        end
+    match
+    | pend => Parse/commit(Parse/fail("malformed underscore"))
+    | seen => Parse/pure((sig, count, shift))
+    | _ => Parse/fail("expected digit")
     end;
 
 let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse(Str, {Nat, Nat, Nat}) =
@@ -162,9 +154,10 @@ let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse(Str, {Nat, Nat, Nat}
     go(sig0, count0, 0, false, false);
 
 let exp_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
-    match pend
-    | true => Parse/commit(Parse/fail("malformed underscore"))
-    | false => match seen | true => Parse/pure(acc) | false => Parse/fail("expected digit") end
+    match
+    | pend => Parse/commit(Parse/fail("malformed underscore"))
+    | seen => Parse/pure(acc)
+    | _ => Parse/fail("expected digit")
     end;
 
 let exp_digits: Parse(Str, Nat) =

@@ -70,11 +70,11 @@ let basic_body(acc: Str) -> Parse(Str, Str) =
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
-        match
-        | c == '"' =>
+        match Char/to_nat(c)
+        | '"' =>
             let _ = Parse/str/char!;
             Parse/pure(here)
-        | c == '\\' =>
+        | '\\' =>
             let _ = Parse/str/char!;
             let piece = escape()!;
             basic_body(Str/concat(here, piece))
@@ -112,17 +112,14 @@ let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
     match next
     | none() => stop
     | some(c) =>
-        match
-        | c == ' ' =>
+        match Char/to_nat(c)
+        | ' ' | '\t' =>
             let _ = Parse/str/char!;
             trim_run(seen_nl)
-        | c == '\t' =>
-            let _ = Parse/str/char!;
-            trim_run(seen_nl)
-        | c == '\n' =>
+        | '\n' =>
             let _ = Parse/str/char!;
             trim_run(true)
-        | c == '\r' =>
+        | '\r' =>
             let pair = crlf!;
             match pair
             | some(_) => trim_run(true)
@@ -159,31 +156,25 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
-        match
-        | c == '"' =>
+        match Char/to_nat(c)
+        | '"' =>
             let (kept, closed) = quote_run('"', here)!;
             match closed | true => Parse/pure(kept) | false => ml_basic_body(kept) end
-        | c == '\\' =>
+        | '\\' =>
             let _ = Parse/str/char!;
             let folded = Parse/str/peek!;
             match folded
-            | some(w) =>
-                match w == ' ' || w == '\t' || w == '\n' || w == '\r'
-                | true =>
-                    let _ = trim_run(false)!;
-                    ml_basic_body(here)
-                | false =>
-                    let piece = escape()!;
-                    ml_basic_body(Str/concat(here, piece))
-                end
-            | none() =>
+            | some(w), w == ' ' || w == '\t' || w == '\n' || w == '\r' =>
+                let _ = trim_run(false)!;
+                ml_basic_body(here)
+            | _ =>
                 let piece = escape()!;
                 ml_basic_body(Str/concat(here, piece))
             end
-        | c == '\n' =>
+        | '\n' =>
             let _ = Parse/str/char!;
             ml_basic_body(Str/concat(here, "\n"))
-        | c == '\r' =>
+        | '\r' =>
             let pair = crlf!;
             match pair
             | some(_) => ml_basic_body(Str/concat(here, "\r\n"))
@@ -200,14 +191,14 @@ let ml_literal_body(acc: Str) -> Parse(Str, Str) =
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
-        match
-        | c == '\'' =>
+        match Char/to_nat(c)
+        | '\'' =>
             let (kept, closed) = quote_run('\'', here)!;
             match closed | true => Parse/pure(kept) | false => ml_literal_body(kept) end
-        | c == '\n' =>
+        | '\n' =>
             let _ = Parse/str/char!;
             ml_literal_body(Str/concat(here, "\n"))
-        | c == '\r' =>
+        | '\r' =>
             let pair = crlf!;
             match pair
             | some(_) => ml_literal_body(Str/concat(here, "\r\n"))
