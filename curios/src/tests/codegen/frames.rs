@@ -92,8 +92,8 @@ fn program(definitions: &str, result: &str) -> String {
     )
 }
 
-/// Each recursion a twin is written for, by the shape that reaches its own part of the rewrite: a frame kept under a constructor, an answer the call's own result feeds, two members calling each other, a first call of two whose answer waits on the second, an answer handed back as a constructor's fields, a list map whose mapper is the recursion, and a closure no analysis resolves.
-const RECURSIONS: [(&str, &str, &str); 8] = [
+/// Each recursion a twin is written for, by the shape that reaches its own part of the rewrite: a frame kept under a constructor, an answer the call's own result feeds, two members calling each other, a first call of two whose answer waits on the second, an answer handed back as a constructor's fields, a list map whose mapper is the recursion, a closure no analysis resolves, and a recursion defined within another. Last is what each answers a million deep, by its own arithmetic.
+const RECURSIONS: [(&str, &str, &str, &str); 8] = [
     (
         "a chain built under a constructor",
         r#"
@@ -107,6 +107,7 @@ const RECURSIONS: [(&str, &str, &str); 8] = [
             match c | stop() => 0 | link(x, rest) => x + total(rest) end;
         "#,
         "total(build(n))",
+        "500000500000",
     ),
     (
         "an affine step on the call's own answer",
@@ -115,6 +116,7 @@ const RECURSIONS: [(&str, &str, &str); 8] = [
             match n | 0 => 0 | m + 1 => (step(m) * 3 + 1) % 1000003 end;
         "#,
         "step(n)",
+        "111111",
     ),
     (
         "two members calling each other",
@@ -125,6 +127,7 @@ const RECURSIONS: [(&str, &str, &str); 8] = [
             match n | 0 => 1 | m + 1 => (ping(m) * 5 + 2) % 1000003 end;
         "#,
         "ping(n)",
+        "266667",
     ),
     (
         "a degenerate tree read by two calls a node",
@@ -139,6 +142,7 @@ const RECURSIONS: [(&str, &str, &str); 8] = [
             match t | leaf() => 0 | node(l, r) => Nat/max(depth(l), depth(r)) + 1 end;
         "#,
         "depth(grow(n))",
+        "1000000",
     ),
     (
         "a pair read apart at every level",
@@ -154,6 +158,7 @@ const RECURSIONS: [(&str, &str, &str); 8] = [
         let first(p: Pair) -> Nat = match p | pair(a, _) => a end;
         "#,
         "first(walk(n))",
+        "3",
     ),
     (
         "a tree read through a map of its children",
@@ -169,6 +174,7 @@ const RECURSIONS: [(&str, &str, &str); 8] = [
             match r | rose(x, children) => (x + sum(List/map(children, total))) % 1000003 end;
         "#,
         "total(grow(n))",
+        "3",
     ),
     (
         "a call through a closure picked from a list",
@@ -182,6 +188,7 @@ const RECURSIONS: [(&str, &str, &str); 8] = [
             end;
         "#,
         "down(n)",
+        "111111",
     ),
     (
         "a recursion defined within a recursion",
@@ -192,6 +199,7 @@ const RECURSIONS: [(&str, &str, &str); 8] = [
             match n | 0 => 0 | k + 1 => (outer(k) + inner(n % 7)) % 1000003 end;
         "#,
         "outer(n)",
+        "571106",
     ),
 ];
 
@@ -222,15 +230,15 @@ fn own_nodes(module: &Module, body: NodeId) -> Vec<NodeId> {
     nodes
 }
 
-/// Every recursion a million calls deep answers what it answers with every call native: past the budget's few thousand frames the rest runs on the heap, and a guest stack a gibibyte deep is what lets the native module answer too.
+/// Every recursion a million calls deep answers what its arithmetic gives, on a guest stack a million native frames do not fit in: past the budget's few thousand frames the rest runs on the heap.
 #[test]
-fn every_recursion_a_million_deep_answers_past_the_budget_what_it_answers_natively() {
-    for (shape, definitions, result) in RECURSIONS {
-        let (heap, native) = modules(&program(definitions, result));
+fn every_recursion_a_million_deep_answers_past_the_budget() {
+    for (shape, definitions, result, answer) in RECURSIONS {
+        let (heap, _) = modules(&program(definitions, result));
         assert_eq!(
             run(&heap, "1000000"),
-            run(&native, "1000000"),
-            "{shape} must answer alike a million deep"
+            (0, format!("{answer}\n").into_bytes()),
+            "{shape} must answer a million deep"
         );
     }
 }
@@ -240,8 +248,8 @@ fn every_recursion_a_million_deep_answers_past_the_budget_what_it_answers_native
 fn every_native_call_a_recursion_makes_of_itself_asks_the_budget() {
     let (definitions, result) = RECURSIONS
         .iter()
-        .find(|(shape, _, _)| *shape == "a recursion defined within a recursion")
-        .map(|(_, definitions, result)| (*definitions, *result))
+        .find(|(shape, _, _, _)| *shape == "a recursion defined within a recursion")
+        .map(|(_, definitions, result, _)| (*definitions, *result))
         .expect("the fixture is among the recursions");
     let (heap, _) = modules(&program(definitions, result));
     for (function, definition) in heap.live_functions() {
@@ -281,7 +289,7 @@ fn every_native_call_a_recursion_makes_of_itself_asks_the_budget() {
 
 #[test]
 fn every_recursion_answers_under_the_budget_and_past_it_what_it_answers_natively() {
-    for (shape, definitions, result) in RECURSIONS {
+    for (shape, definitions, result, _) in RECURSIONS {
         let (heap, native) = modules(&program(definitions, result));
         assert!(
             heap.live_functions()

@@ -456,7 +456,7 @@ fn an_answer_past_a_modules_memory_names_the_module_and_the_export() {
     );
 }
 
-/// A module's recursion with no end stops on the engine's trap wherever in the program it is called from: the module is an instance in the program's own store, so the limit set where the program was entered bounds its frames too. Here it is called from the last element of a walk two million frames deep; in a store of its own it would be handed the whole limit again below that frame, of a stack that holds it once, and the process would abort with no trap.
+/// A module's recursion with no end stops on the engine's trap wherever in the program it is called from: the module is an instance in the program's own store, so the limit set where the program was entered bounds its frames too. Here it is called from the last element of a walk two million long, as deep in the stack as the program's budget lets it go; in a store of its own it would be handed the whole limit again below that frame, of a stack that holds it once.
 #[test]
 fn a_modules_recursion_from_a_deep_frame_stops_on_the_engines_trap() {
     let refusal = run_against(

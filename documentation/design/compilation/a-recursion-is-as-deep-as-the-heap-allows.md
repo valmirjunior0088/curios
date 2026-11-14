@@ -10,20 +10,21 @@
 
 **Rationale.**
 
-- **One cause has two symptoms.** A non-tail call is a native Wasm `call`, so every pending call holds an engine frame, and each engine bounds those frames by a constant unrelated to the program's memory. Natively that is the gibibyte [`curios-native`](../../../curios-native/README.md#a-module-runs-on-a-stack-of-its-own) sets; in a page it is V8's 984 kB, which a page cannot raise. Tuning either constant moves the cliff and keeps it.
+- **One cause has two symptoms.** A non-tail call is a native Wasm `call`, so every pending call holds an engine frame, and each engine bounds those frames by a constant unrelated to the program's memory. Natively that is the stack [`curios-native`](../../../curios-native/README.md#a-module-runs-on-a-stack-of-its-own) sets; in a page it is V8's 984 kB, which a page cannot raise. Tuning either constant moves the cliff and keeps it.
 - **Only a cycle grows the stack with the input.** A chain of calls on no cycle is as deep as the program text allows. So the native stack holds at most the budget's frames of recursion, plus that bounded chain, plus the host's reserve. A tail call keeps no frame, and neither do the loops `curios-anf`'s rebase makes, so heap frames are paid only by a recursion nothing else could make a loop.
 - **The native code is the code as written.** A recursion shallower than the budget runs the function the optimizer left, a guard a few instructions a call, and only the part past the budget runs a twin. A twin is a second version of a function for another calling context, as the rebuild's reuse version is: a call runs one or the other, never both. Its price is size: counted at `f9322f1f9`, the module a page carries grows by 29% for `programs/hello_world.crs` and by 47–91% for the corpus programs that recurse, much of it the `Io` driver's own recursion, which every program links.
 - **The rebuild's proof stays exact.** The rebuild proves a value unshared on the native code, where every flow is a known call or a jump. A twin is a copy of the proved body, and its heap path moves no read past another and adds no reader of any value: a value live across a call is held by the continuation the heap path hands on, which runs once, where the native frame held it. So every rebuild keeps the conditions it was proved under. Proving it after the twins would ask the proof to see through closures it treats as shared.
 - **The budget is an assumption about engines, with its margin.** No stage reads an engine's frame size, so the weight is a model and the budget is calibrated. Counted at `f9322f1f9`, Node 26.4.0:
   - a recursion a million deep, thin or holding sixteen live values, compiled as an optimized page, finishes under `--stack-size=60` (kB) on V8's default tiers and on Liftoff alone;
-  - JSON nested a hundred thousand deep, decoded and encoded, compiled by the bundle and run by its harness, finishes under `--stack-size=250` and stops under `160`.
+  - JSON nested a hundred thousand deep, decoded and encoded, compiled by the bundle and run by its harness, finishes under `--stack-size=250` and stops under `160`;
+  - natively, counted at `994ea2c54` under `curios run`, the thin and the fat recursion, a tree read through a map of its children and a recursion through a closure, each a million deep, and the JSON, finish with the engine's limit set to 64 KiB.
 
-  The fattest of these leaves a page's stack about four times what the budget's frames take. Where an engine's stack holds less, a recursion stops on that engine's own trap, as before.
+  The fattest of these leaves a page's stack about four times what the budget's frames take, and the native stack more than a hundred times. Where an engine's stack holds less, a recursion stops on that engine's own trap, as before.
 - **The heap path is the stand-in for a stack segment.** It is what an engine that cannot switch stacks offers, and it has the shape a switch would take: the guard, the budget and the native code stay as they are.
 
 **Rejected.**
 
-- **A larger stack per target:** the gibibyte raised natively, with nothing a page could do. The reach stays a constant nobody chose, different on each target.
+- **A larger stack per target:** natively a gibibyte, with nothing a page could do. The reach stays a constant nobody chose, different on each target.
 - **A depth cap that fails fast,** as OCaml 5 keeps beside its growable stacks. A recursion past any cap can still terminate, and what is knowingly unproductive is the place to refuse, not a depth.
 - **Heap frames for every call on a cycle,** as Hoot and SML/NJ keep their frames. Every shallow recursion would allocate a closure a call and lose the rebuilds the native code keeps.
 - **One body in two modes,** each member taking the continuation in native mode too. Its native code is no longer the code as written: every return goes through the continuation, a call through an entry, a result of several values through an allocation, and the rest of a body through a call.

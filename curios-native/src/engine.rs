@@ -41,7 +41,7 @@ pub fn validate(bytes: &[u8]) -> Result<(), String> {
 }
 
 /// The stack a module's calls nest on, in bytes.
-const GUEST_STACK: usize = 1 << 30;
+const GUEST_STACK: usize = 8 << 20;
 
 /// The heap a program's live set may grow to, in bytes: the bound every store states to the engine ([`Guest`]), so a program whose live set grows without end stops on the engine's own refusal to grow it. The decision and its reason are this crate's `README.md`, "The heap is sized ahead of its churn".
 pub const GUEST_HEAP: usize = 4 << 30;
@@ -107,7 +107,7 @@ pub fn shared_engine() -> &'static Engine {
         // Thirty-two mebibytes: the decision and its reason are this crate's `README.md`, "The heap is sized ahead of its churn", and the figures and their retake recipes live with `chain_collection_decomposition`, `spines_collection_decomposition` and `spines_key_width_measurements`.
         config.gc_heap_initial_size(32 * 1024 * 1024);
 
-        // One gibibyte: the decision and its reason are this crate's `README.md`, "A module runs on a stack of its own". The limit bounds a stack and reserves none, so [`on_guest_stack`] is where a thread that has it is built. The engine refuses a limit past the stack it would give an asynchronous call, which nothing here makes, so that size is stated as what the thread has.
+        // Eight mebibytes: the decision and its reason are this crate's `README.md`, "A module runs on a stack of its own". The limit bounds a stack and reserves none, so [`on_guest_stack`] is where a thread that has it is built. The engine refuses a limit past the stack it would give an asynchronous call, which nothing here makes, so that size is stated as what the thread has.
         config.max_wasm_stack(GUEST_STACK);
         config.async_stack_size(GUEST_STACK + HOST_RESERVE);
 
