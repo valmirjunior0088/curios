@@ -48,12 +48,8 @@ pub let of_str(s: Str) -> Line =
 -- The longest start of `glyphs` that fits `room` columns.
 let fitting(glyphs: List(Glyph), room: Nat) -> List(Glyph) =
     match glyphs
-    | [] => []
-    | [g, ..rest] =>
-        match Glyph/width(g) <= room
-        | true => [g, ..fitting(rest, room - Glyph/width(g))]
-        | false => []
-        end
+    | [g, ..rest], Glyph/width(g) <= room => [g, ..fitting(rest, room - Glyph/width(g))]
+    | _ => []
     end;
 
 --- The longest start of `l` that fits `w` columns: a wide glyph that would straddle the edge is dropped whole.

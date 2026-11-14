@@ -105,13 +105,10 @@ let put(s: Screen, cluster: Str) -> Screen =
         List/map(
             List/zip(List/range(0, List/len(s.cells)), s.cells),
             (r) =>
-                match r.0 == s.y
-                | false => r.1
-                | true =>
-                    match columns == 2
-                    | true => set(set(r.1, s.x, cluster), s.x + 1, "")
-                    | false => set(r.1, s.x, cluster)
-                    end
+                match
+                | r.0 != s.y => r.1
+                | columns == 2 => set(set(r.1, s.x, cluster), s.x + 1, "")
+                | _ => set(r.1, s.x, cluster)
                 end);
     Screen { cells = written, x = s.x + columns, y = s.y };
 

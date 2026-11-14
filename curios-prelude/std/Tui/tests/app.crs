@@ -11,11 +11,11 @@ let counter: Tui(Nat, Nat) =
             | input(key(k)) =>
                 match k.code
                 | char(c) =>
-                    match
-                    | c == '+' => (model + 1, Directive/none())
-                    | c == '-' => (model - 1, Directive/none())
-                    | c == 'q' => (model, Directive/quit())
-                    | c == '!' => (model, Directive/perform(Io/pure(model * 2)))
+                    match Char/to_nat(c)
+                    | '+' => (model + 1, Directive/none())
+                    | '-' => (model - 1, Directive/none())
+                    | 'q' => (model, Directive/quit())
+                    | '!' => (model, Directive/perform(Io/pure(model * 2)))
                     | _ => (model, Directive/none())
                     end
                 | _ => (model, Directive/none())

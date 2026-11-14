@@ -175,16 +175,11 @@ pub let draw(@w: Nat, @h: Nat, s: Session, v: View(w, h)) -> Try(Io, Io/Error, {
     let kept = taken(s)!;
     let before: Option(Frame(w, h)) =
         match kept.shown
-        | none() => Option/none()
-        | some(p) =>
-            match p.w == w && p.h == h
-            | true =>
-                let as_wide =
-                    Eq/subst((n: Nat) => Frame(n, p.h), Nat/eq_of_eql(p.w, w, proved()), p.frame);
-                Option/some(
-                    Eq/subst((n: Nat) => Frame(w, n), Nat/eq_of_eql(p.h, h, proved()), as_wide))
-            | false => Option/none()
-            end
+        | some(p), p.w == w && p.h == h =>
+            let as_wide =
+                Eq/subst((n: Nat) => Frame(n, p.h), Nat/eq_of_eql(p.w, w, proved()), p.frame);
+            Option/some(Eq/subst((n: Nat) => Frame(w, n), Nat/eq_of_eql(p.h, h, proved()), as_wide))
+        | _ => Option/none()
         end;
     let _ = keep(s, Kept { ..kept, shown = Option/some(Shown { w = w, h = h, frame = frame }) })!;
     let wrote =

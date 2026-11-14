@@ -82,23 +82,22 @@ let word_forth(s: Str, at: Str/At(s)) -> Str/At(s) =
 
 -- What a key with Ctrl does, as readline has it: A and E to either end, B and F a cluster back and on, K and U the text cut to either end, and W the word before the cursor cut.
 let controlled(i: Field, c: Char) -> Field =
-    match
-    | c == 'a' => moved(i, Str/At/start(i.text))
-    | c == 'e' => moved(i, Str/At/finish(i.text))
-    | c == 'b' => moved(i, back(i.text, i.cursor))
-    | c == 'f' => moved(i, forth(i.text, i.cursor))
-    | c == 'k' => of_str(Str/before(i.text, i.cursor))
-    | c == 'u' => joined("", Str/after(i.text, i.cursor))
-    | c == 'w' =>
-        joined(Str/before(i.text, word_back(i.text, i.cursor)), Str/after(i.text, i.cursor))
+    match Char/to_nat(c)
+    | 'a' => moved(i, Str/At/start(i.text))
+    | 'e' => moved(i, Str/At/finish(i.text))
+    | 'b' => moved(i, back(i.text, i.cursor))
+    | 'f' => moved(i, forth(i.text, i.cursor))
+    | 'k' => of_str(Str/before(i.text, i.cursor))
+    | 'u' => joined("", Str/after(i.text, i.cursor))
+    | 'w' => joined(Str/before(i.text, word_back(i.text, i.cursor)), Str/after(i.text, i.cursor))
     | _ => i
     end;
 
 -- What a key with Alt does, as readline has it: B and F a word back and on.
 let alternate(i: Field, c: Char) -> Field =
-    match
-    | c == 'b' => moved(i, word_back(i.text, i.cursor))
-    | c == 'f' => moved(i, word_forth(i.text, i.cursor))
+    match Char/to_nat(c)
+    | 'b' => moved(i, word_back(i.text, i.cursor))
+    | 'f' => moved(i, word_forth(i.text, i.cursor))
     | _ => i
     end;
 
