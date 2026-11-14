@@ -143,10 +143,10 @@ pub let FiniteNonZero(f: Flt) -> Prop =
 
 --- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `Bool/False`.
 let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
-    match -inf.0 < f && f < +inf.0: (d) => (Bool/Holds(d && Bool/not(is_zero(f)))) -> Bool/Holds(d)
-    | true => (_) => Bool/True/qed()
-    | false => (no) => match no end
-    end(ok);
+    match -inf.0 < f && f < +inf.0
+    | true => Bool/True/qed()
+    | false => match ok end
+    end;
 
 --- The procedure that decides `FiniteNonZero(f)`.
 pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
@@ -362,7 +362,7 @@ pub let signaling_nan(p: Flt) -> Flt =
 
 --- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
-    match Bytes/len(b) == 8: (_) => Option(Flt)
+    match Bytes/len(b) == 8
     | true => Option/some(of_le_bytes(b, @Bool/True/qed()))
     | false => Option/none()
     end;

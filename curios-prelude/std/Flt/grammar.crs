@@ -26,7 +26,7 @@ pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) 
     | e < +0 && Nat/to_int(digits) + e <= -324 => clamped(r, negative, true)
     | _ =>
         let spelled: Ratio =
-            match e >= +0: (_) => Ratio
+            match e >= +0
             | true =>
                 (numerator = d * Nat/pow(10, Int/abs(e)), denominator = 1, positive = proved())
             | false => (numerator = d, denominator = Nat/pow(10, Int/abs(e)), positive = proved())
@@ -36,7 +36,7 @@ pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) 
             Nat/to_int(54 + exact/bit_len(spelled.denominator))
                 - Nat/to_int(exact/bit_len(spelled.numerator));
         let aligned: Ratio =
-            match sh >= +0: (_) => Ratio
+            match sh >= +0
             | true =>
                 (
                     numerator = Nat/shl(spelled.numerator, Int/abs(sh)),
@@ -50,7 +50,7 @@ pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) 
             end;
         let top = Nat/shl(aligned.denominator, 54);
         let (n2, sh2) =
-            match aligned.numerator < top: (_) => {Nat, Int}
+            match aligned.numerator < top
             | true => (Nat/shl(aligned.numerator, 1), sh + +1)
             | false => (aligned.numerator, sh)
             end;
