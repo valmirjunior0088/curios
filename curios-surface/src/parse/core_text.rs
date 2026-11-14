@@ -6,9 +6,8 @@ use {
     super::{
         Grammar, clear_comments, parse_and_head, parse_atomic_term, parse_concept_member,
         parse_file_head, parse_foreign_member, parse_held, parse_identifier_raw, parse_keyword,
-        parse_label, parse_let_member, parse_literal, parse_mark, parse_name, parse_sort,
-        parse_struct_member, parse_term, parse_test_member, parse_top_induct_body, take_comments,
-        trimmed, with_span,
+        parse_label, parse_let_member, parse_literal, parse_name, parse_sort, parse_struct_member,
+        parse_term, parse_test_member, parse_top_induct_body, take_comments, trimmed, with_span,
     },
     crate::{
         CoreEntry, CoreFile, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
@@ -127,13 +126,13 @@ fn field_equals<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
         .parse(state)
 }
 
-/// What a field holds and an intrinsic takes: a struct value, where a `{` opens fields or closes at once; a list, each entry under its mark; the root module, a `/` that begins no path; or a term.
+/// What a field holds and an intrinsic takes: a struct value, where a `{` opens fields or closes at once; a list; the root module, a `/` that begins no path; or a term.
 fn parse_value<'a>(state: ParserState<'a>) -> Parsed<'a, CoreValue> {
     parse_struct_value
         .map(CoreValue::Fields)
         .or(parse_literal("[")
             .and_keep(commit(
-                sep_by0_trailing(|| parse_mark.and(parse_value), || parse_literal(","))
+                sep_by0_trailing(|| parse_value, || parse_literal(","))
                     .and_drop(parse_literal("]")),
             ))
             .map(CoreValue::List))

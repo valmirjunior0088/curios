@@ -8,7 +8,7 @@ use {
     super::{
         Fields, ReadError, Reader, Refusal, concept_entry_read, core_read, family_entry_read,
         malformed, record_entry_read, term_global, term_word, universe_context_read, value_bool,
-        value_global, value_module, value_string, value_term, value_unmarked, value_variant,
+        value_global, value_list, value_module, value_string, value_term, value_variant,
         value_word,
     },
     crate::{
@@ -386,14 +386,14 @@ fn nominal_read(
                     declaration.universe_context = universe_context_read(context)?;
                 }
                 if let Some(supers) = own.take("supers") {
-                    declaration.supers = value_unmarked(supers)?
-                        .into_iter()
+                    declaration.supers = value_list(supers)?
+                        .iter()
                         .map(value_global)
                         .collect::<Result<_, _>>()?;
                 }
                 if let Some(labels) = own.take("fields") {
-                    declaration.fields = value_unmarked(labels)?
-                        .into_iter()
+                    declaration.fields = value_list(labels)?
+                        .iter()
                         .map(value_string)
                         .collect::<Result<_, _>>()?;
                 }

@@ -28,10 +28,10 @@ use {
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
     curios_core::{
         Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Definitions,
-        Entrypoint, Free, FuncType, Global, InductDecl, InductParam, Intrinsic, Item, Items, Level,
-        Minted, Names, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm,
-        Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, Universes,
-        Visit, stamp_declaration_instance,
+        Entrypoint, Free, FuncType, Global, InductParam, Intrinsic, Item, Items, Level, Minted,
+        Names, Order, Places, Quality, RecItem, Revised, Sort, StructDecl, Subterm, Telescope,
+        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Visit,
+        stamp_declaration_instance,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -109,7 +109,7 @@ fn check_telescope_entries<B: Bound>(
     ))
 }
 
-/// A case's signature as [`check_telescope_entries`] walks a telescope, but for its leading entries, which are its family's parameters: each is the family's own, as its `arity` was elaborated and at the level `param_levels` read it at, entered under the mark the case binds it at, so only the payload and the targets are checked. Checking the case's copy of a parameter again would read it at levels of its own, which the family would then be generalized over.
+/// A case's signature as [`check_telescope_entries`] walks a telescope, but for its leading entries, which are its family's parameters: each is the family's own, as its `arity` was elaborated and at the level `param_levels` read it at, entered under the mark the case binds it at, so only the payload and the targets are checked. Checking a parameter again would read it at levels of its own, which the family would then be generalized over.
 fn case_telescope_entries(
     context: &mut Context,
     arity: &Telescope<Telescope<()>>,
@@ -198,9 +198,9 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<Vec<
             .map(|label| label.to_string())
             .collect::<Vec<_>>()
     };
-    let param_labels = owned(induct_decl.arity.labels());
+    let param_labels = owned(induct_decl.arity().labels());
     let index_labels = {
-        let mut walk = &induct_decl.arity;
+        let mut walk = induct_decl.arity();
         loop {
             match walk {
                 Telescope::Cons(_, _, rest, ..) => walk = rest.body(),
@@ -213,7 +213,8 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<Vec<
     let (param_entries, param_levels, index_entries) = context.with_frame(|context| {
         // A `use` parameter is in the witness scope of the index types below it, as it is in the type constructor's own function type.
         // A family's arity is typed and not sized, by either checker: its constructors' telescopes, which hold its parameters again, are, at the levels read here.
-        let (params, levels, inner) = check_telescope_entries(context, induct_decl.arity.clone())?;
+        let (params, levels, inner) =
+            check_telescope_entries(context, induct_decl.arity().clone())?;
         let (indices, _, ()) = check_telescope_entries(context, inner)?;
 
         Ok::<_, Error>((params, levels, indices))
@@ -227,19 +228,7 @@ fn elaborate_induct_indices(context: &mut Context, name: &Global) -> Result<Vec<
     )
     .relabel(&param_refs);
 
-    context.update_induct(
-        name,
-        InductDecl {
-            universe_context: induct_decl.universe_context,
-            arity,
-            constructors: induct_decl.constructors,
-            result_sort: induct_decl.result_sort,
-            module: induct_decl.module,
-            rep_public: induct_decl.rep_public,
-            polarities: induct_decl.polarities,
-            variances: induct_decl.variances,
-        },
-    );
+    context.update_induct(name, induct_decl.with_arity(arity));
 
     Ok(param_levels)
 }
@@ -255,8 +244,8 @@ fn elaborate_induct_constructors(
     };
 
     let mut constructors = Vec::new();
-    for (tag, param) in &induct_decl.constructors {
-        let signature = &param.telescope;
+    for (tag, case) in induct_decl.constructors() {
+        let signature = &induct_decl.signature(case);
         let labels = signature
             .labels()
             .iter()
@@ -266,7 +255,7 @@ fn elaborate_induct_constructors(
         let (entries, levels, targets) = context.with_frame(|context| {
             // Under the signature's own marks: a `use` parameter of the family is a witness slot of every constructor, in scope for the payload types after it.
             let (entries, levels, targets) =
-                case_telescope_entries(context, &induct_decl.arity, param_levels, signature)?;
+                case_telescope_entries(context, induct_decl.arity(), param_levels, signature)?;
 
             // The targets are still checked by `elaborate_induct_type`, which is what compares them against the rebuilt index telescope — so the constructed type is rebuilt here from what the declaration fixes (this family, at the constructor's own parameter binders) and the targets the signature states, elaborated, and its indices taken back.
             let params = entries
@@ -291,33 +280,23 @@ fn elaborate_induct_constructors(
             &entries,
             &levels,
             induct_decl.param_count(),
-            &induct_decl.result_sort,
+            induct_decl.result_sort(),
             UniverseConstraintKind::ConstructorSizing,
         )?;
 
+        // Each payload entry is rebuilt under the mark it had, elaboration never changing the calling convention, and the payload held under the parameters it was elaborated over.
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
-        constructors.push((
-            tag.clone(),
-            // Each entry is rebuilt under the mark it had: elaboration never changes the calling convention.
-            InductParam {
-                telescope: Telescope::build_marked(entries, targets).relabel(&label_refs),
-            },
-        ));
+        let (params, payload) = entries.split_at(induct_decl.param_count());
+        let params = params
+            .iter()
+            .map(|(_, binder, _)| binder)
+            .collect::<Vec<_>>();
+        let payload = Telescope::build_marked(payload.to_vec(), targets)
+            .relabel(&label_refs[induct_decl.param_count()..]);
+        constructors.push((tag.clone(), InductParam::over(&params, payload)));
     }
 
-    context.update_induct(
-        name,
-        InductDecl {
-            universe_context: induct_decl.universe_context,
-            arity: induct_decl.arity,
-            constructors: constructors.into(),
-            result_sort: induct_decl.result_sort,
-            module: induct_decl.module,
-            rep_public: induct_decl.rep_public,
-            polarities: induct_decl.polarities,
-            variances: induct_decl.variances,
-        },
-    );
+    context.update_induct(name, induct_decl.with_constructors(constructors.into()));
 
     Ok(())
 }
@@ -697,30 +676,13 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
             continue;
         };
-        context.update_induct(
-            &def.name,
-            InductDecl {
-                universe_context: induct_decl.universe_context,
-                arity: zonk_solved_term_metas(context, &induct_decl.arity),
-                constructors: induct_decl
-                    .constructors
-                    .into_iter()
-                    .map(|(tag, constructor)| {
-                        (
-                            tag,
-                            InductParam {
-                                telescope: zonk_solved_term_metas(context, &constructor.telescope),
-                            },
-                        )
-                    })
-                    .collect(),
-                result_sort: zonk_solved_term_metas(context, &induct_decl.result_sort),
-                module: induct_decl.module,
-                rep_public: induct_decl.rep_public,
-                polarities: induct_decl.polarities,
-                variances: induct_decl.variances,
-            },
-        );
+        let arity = zonk_solved_term_metas(context, induct_decl.arity());
+        let result_sort = zonk_solved_term_metas(context, induct_decl.result_sort());
+        let zonked = induct_decl
+            .with_arity(arity)
+            .with_result_sort(result_sort)
+            .with_cases(|case| case.rewritten(|payload| zonk_solved_term_metas(context, payload)));
+        context.update_induct(&def.name, zonked);
     }
     for def in &defs {
         if let Some(struct_decl) = context.struct_decl(&def.name).cloned() {
@@ -817,33 +779,14 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         let Some(induct_decl) = context.induct_decl(&def.name).cloned() else {
             continue;
         };
-        let constructors = induct_decl
-            .constructors
-            .into_iter()
-            .map(|(tag, constructor)| {
-                Ok((
-                    tag,
-                    InductParam {
-                        telescope: outside.stored(context, &constructor.telescope)?,
-                    },
-                ))
-            })
-            .collect::<Result<_, Error>>()?;
-        let arity = outside.stored(context, &induct_decl.arity)?;
-        let result_sort = outside.stored(context, &induct_decl.result_sort)?;
-        context.update_induct(
-            &def.name,
-            InductDecl {
-                universe_context: universe_context.clone(),
-                arity,
-                constructors,
-                result_sort,
-                module: induct_decl.module,
-                rep_public: induct_decl.rep_public,
-                polarities: induct_decl.polarities,
-                variances: induct_decl.variances,
-            },
-        );
+        let arity = outside.stored(context, induct_decl.arity())?;
+        let result_sort = outside.stored(context, induct_decl.result_sort())?;
+        let stored = induct_decl
+            .with_arity(arity)
+            .with_result_sort(result_sort)
+            .try_with_cases(|case| case.try_rewritten(|payload| outside.stored(context, payload)))?
+            .with_universe_context(universe_context.clone());
+        context.update_induct(&def.name, stored);
     }
     // A struct or concept registry entry is stamped as an inductive's is: stored outside the group, it names a member by its declaration.
     for def in &defs {
@@ -1179,13 +1122,13 @@ fn group_parts(
             let mut frees = vec![type_.mentions(), body.mentions()];
             if let Some(entry) = context.induct_decl(name) {
                 reached.extend(entry.reaches());
-                frees.push(entry.arity.mentions());
-                frees.push(entry.result_sort.mentions());
+                frees.push(entry.arity().mentions());
+                frees.push(entry.result_sort().mentions());
                 frees.extend(
                     entry
-                        .constructors
+                        .constructors()
                         .iter()
-                        .map(|(_, constructor)| constructor.telescope.mentions()),
+                        .map(|(_, constructor)| constructor.payload().mentions()),
                 );
             }
             if let Some(entry) = context.struct_decl(name) {

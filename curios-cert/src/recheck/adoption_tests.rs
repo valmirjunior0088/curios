@@ -389,28 +389,26 @@ fn refining_definitions_at(target: Term, body: Term) -> Definitions {
 /// [`refining_definitions`] with `target` as the index the constructor aims at and `assumed` as the sort the outer variable is assumed at.
 fn refining_definitions_assumed(target: Term, assumed: Term, body: Term) -> Definitions {
     use curios_core::{
-        Atom, Cases, InductArm, InductDecl, InductParam, Many, Scope, Telescope, UniverseContext,
+        Atom, Cases, InductArm, InductDecl, Many, Scope, Telescope, UniverseContext,
         test_support::*,
     };
 
     let family = global("Big");
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::build(
+    let declaration = InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::build(
             [(Free::local(902, Some("i")), type_at(5))],
             (),
         )),
-        constructors: vec![(
+        vec![(
             Atom::from("big"),
-            InductParam::new(Telescope::done(vec![target]), Vec::new()),
+            curios_core::test_support::case(0, Telescope::done(vec![target]), Vec::new()),
         )]
         .into(),
-        result_sort: Term::type_at(Level::constant(6)),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+        Term::type_at(Level::constant(6)),
+        Qualifier::default(),
+        true,
+    );
     let x = Free::local(910, Some("X"));
     let b = Free::local(911, Some("b"));
     let at = Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&x)]);
@@ -525,20 +523,21 @@ fn applying_definitions() -> Definitions {
 /// `induct Levelled.{u} : Type.{u + 1} | mk(x: Type.{u}) end`, whose entry carries `variances`: a payload's type mentions the level, so the walk computes it invariant.
 fn varied_family(variances: Vec<Variance>) -> Definitions {
     use curios_common::Plicity;
-    use curios_core::{Atom, InductDecl, InductParam, Telescope, UniverseContext, test_support::*};
+    use curios_core::{Atom, InductDecl, Telescope, UniverseContext, test_support::*};
 
     let family = global("Levelled");
     let level = Level::param(UniverseParam(0));
-    let declaration = InductDecl {
-        universe_context: UniverseContext {
+    let declaration = InductDecl::new(
+        UniverseContext {
             parameter_count: 1,
             quality_count: 0,
             constraints: Vec::new(),
         },
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
+        Telescope::done(Telescope::done(())),
+        vec![(
             Atom::from("mk"),
-            InductParam::new(
+            curios_core::test_support::case(
+                0,
                 Telescope::build(
                     [(Free::local(930, Some("x")), Term::type_at(level.clone()))],
                     Vec::new(),
@@ -547,12 +546,11 @@ fn varied_family(variances: Vec<Variance>) -> Definitions {
             ),
         )]
         .into(),
-        result_sort: Term::type_at(level.checked_add(1).expect("level admits the offset")),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances,
-    };
+        Term::type_at(level.checked_add(1).expect("level admits the offset")),
+        Qualifier::default(),
+        true,
+    )
+    .with_variances(variances);
     declaring(
         Definitions {
             items: Vec::new().into(),

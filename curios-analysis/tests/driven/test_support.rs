@@ -3,7 +3,7 @@
 use {
     curios_analysis::test_support::*,
     curios_cert::Certifier,
-    curios_common::{Plicity, Qualifier},
+    curios_common::Qualifier,
     curios_core::{Atom, Free, Global, InductDecl, InductParam, Telescope, Term, UniverseContext},
 };
 
@@ -20,24 +20,22 @@ pub fn declare(certifier: &mut Certifier, path: &str, result_sort: Term) -> Glob
     certifier
         .declare_induct(
             &family,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: ["a", "b"]
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                ["a", "b"]
                     .into_iter()
                     .map(|tag| {
                         (
                             Atom::from(tag),
-                            InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+                            InductParam::over(&[], Telescope::done(Vec::new())),
                         )
                     })
                     .collect(),
                 result_sort,
-                module: Qualifier::from([path]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Qualifier::from([path]),
+                true,
+            ),
         )
         .expect("a name is declared once");
 
@@ -48,21 +46,16 @@ pub fn declare(certifier: &mut Certifier, path: &str, result_sort: Term) -> Glob
 pub fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
     let binder = Free::local(0, Some("f"));
 
-    InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
+    InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::done(())),
+        vec![(
             Atom::from("c"),
-            InductParam::new(
-                Telescope::build([(binder, payload_type)], Vec::new()),
-                vec![Plicity::Explicit],
-            ),
+            InductParam::over(&[], Telescope::build([(binder, payload_type)], Vec::new())),
         )]
         .into(),
         result_sort,
-        module: Qualifier::from(["T"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    }
+        Qualifier::from(["T"]),
+        true,
+    )
 }

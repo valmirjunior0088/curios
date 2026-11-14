@@ -105,7 +105,7 @@ fn value_sort(context: &mut Context, definition: &Definition) -> Result<Option<T
     Ok((!sort.has_universe_meta()).then_some(sort))
 }
 
-/// State, on every binder of `published`, whether it binds a proof: each function literal's and each `let`'s in the item's terms, each constructor's payloads in the registry entries the item declares, which an arm then binds under, and each name the item declares, on its definition.
+/// State, on every binder of `published`, whether it binds a proof: each function literal's and each `let`'s in the item's terms, each family's parameters and each constructor's payloads in the registry entries the item declares, which a constructor and an arm then bind under, and each name the item declares, on its definition.
 ///
 /// **Before the item is published**, so no declaration reads a binder that has not said. A recursive item's members are walked under the names they are published as, their bodies closed throughout, as [`curios_core::RecGroup::map_members`] rewrites them.
 ///
@@ -153,9 +153,12 @@ pub fn state_proof_binders(context: &mut Context, published: &mut Published) -> 
     }
 
     for (_, declaration) in &mut published.induct_decls {
-        for constructor in declaration.constructors.signatures_mut() {
-            constructor.telescope = stated_telescope(context, &constructor.telescope)?;
-        }
+        let arity = stated_telescope(context, declaration.arity())?;
+        let stated = declaration.clone().with_arity(arity);
+        *declaration = stated.clone().try_with_cases(|case| {
+            let proofs = stated_telescope(context, &stated.signature(case))?.proofs();
+            Ok::<_, Error>(case.with_proofs(&proofs[stated.param_count()..]))
+        })?;
     }
 
     Ok(())

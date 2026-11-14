@@ -370,23 +370,12 @@ pub fn value_term(value: &CoreValue) -> Result<Term<CoreText>, ReadError> {
     }
 }
 
-/// The entries of a list a field holds, each under its mark.
-pub fn value_list(value: &CoreValue) -> Result<&[(Plicity, CoreValue)], ReadError> {
+/// The entries of a list a field holds.
+pub fn value_list(value: &CoreValue) -> Result<&[CoreValue], ReadError> {
     match value {
         CoreValue::List(entries) => Ok(entries),
         _ => Err(malformed("a list, `[…]`", value)),
     }
-}
-
-/// The entries of a list a field holds, none under a mark.
-pub fn value_unmarked(value: &CoreValue) -> Result<Vec<&CoreValue>, ReadError> {
-    value_list(value)?
-        .iter()
-        .map(|(mark, entry)| match mark {
-            Plicity::Explicit => Ok(entry),
-            _ => Err(malformed("an entry under no mark", entry)),
-        })
-        .collect()
 }
 
 /// The fields of a struct a field holds.

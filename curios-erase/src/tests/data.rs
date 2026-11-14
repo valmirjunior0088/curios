@@ -48,17 +48,22 @@ fn opt_type() -> curios_core::Term {
 // induct Opt : Type | none() | some(x : Nat) end — `none` is tag 0, `some` tag 1 (registry-sorted). Registered on the module so erasure seeds it.
 fn opt_induct() -> curios_core::InductDecl {
     let x = fresh(Some("x"));
-    curios_core::InductDecl {
-        universe_context: curios_core::UniverseContext::empty(),
-        arity: curios_core::Telescope::done(curios_core::Telescope::done(())),
-        constructors: Vec::from([
+    curios_core::InductDecl::new(
+        curios_core::UniverseContext::empty(),
+        curios_core::Telescope::done(curios_core::Telescope::done(())),
+        Vec::from([
             (
                 curios_core::Atom::from("none"),
-                curios_core::InductParam::new(curios_core::Telescope::done(Vec::new()), vec![]),
+                curios_core::test_support::case(
+                    0,
+                    curios_core::Telescope::done(Vec::new()),
+                    vec![],
+                ),
             ),
             (
                 curios_core::Atom::from("some"),
-                curios_core::InductParam::new(
+                curios_core::test_support::case(
+                    0,
                     curios_core::Telescope::build(
                         [(
                             x,
@@ -71,12 +76,10 @@ fn opt_induct() -> curios_core::InductDecl {
             ),
         ])
         .into(),
-        result_sort: curios_core::Term::type_ground(),
-        module: Qualifier::empty(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    }
+        curios_core::Term::type_ground(),
+        Qualifier::empty(),
+        true,
+    )
 }
 
 #[test]
@@ -597,23 +600,22 @@ fn an_effectful_scrutinee_is_erased_once() {
 /// A no-parameter family with the single unary constructor `mk(x: payload)`.
 fn unary_induct(payload: curios_core::Term) -> curios_core::InductDecl {
     let x = fresh(Some("x"));
-    curios_core::InductDecl {
-        universe_context: curios_core::UniverseContext::empty(),
-        arity: curios_core::Telescope::done(curios_core::Telescope::done(())),
-        constructors: Vec::from([(
+    curios_core::InductDecl::new(
+        curios_core::UniverseContext::empty(),
+        curios_core::Telescope::done(curios_core::Telescope::done(())),
+        Vec::from([(
             curios_core::Atom::from("mk"),
-            curios_core::InductParam::new(
+            curios_core::test_support::case(
+                0,
                 curios_core::Telescope::build([(x, payload)], Vec::new()),
                 vec![Plicity::Explicit],
             ),
         )])
         .into(),
-        result_sort: curios_core::Term::type_ground(),
-        module: Qualifier::empty(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    }
+        curios_core::Term::type_ground(),
+        Qualifier::empty(),
+        true,
+    )
 }
 
 /// The payload-shape classifier chases newtype chains and terminates on cycles: a payload wrapped in two single-field structs lands on `Nat` and records `Immediate`; a payload whose struct names itself is `Opaque` because the visited guard cuts the cycle (a self-referential struct elaborates — it is merely uninhabited); a boxed `Flt` payload records its carrier, `Flt`.

@@ -78,13 +78,13 @@ pub fn type_positions(definitions: &Definitions, entry: Option<&Entrypoint>) -> 
     // A declaration's telescopes are types by construction, and its parameter and field types can name anything.
     for (name, declaration) in &definitions.induct_decls() {
         let site = Rc::new(ErasedSite::ParameterOf(*name));
-        entries(&declaration.arity, &site, &mut positions);
-        for (tag, constructor) in &declaration.constructors {
+        entries(declaration.arity(), &site, &mut positions);
+        for (tag, constructor) in declaration.constructors() {
             let site = Rc::new(ErasedSite::PayloadOf {
                 family: *name,
                 constructor: tag.clone(),
             });
-            entries(&constructor.telescope, &site, &mut positions);
+            entries(constructor.payload().body(), &site, &mut positions);
         }
     }
     for (name, declaration) in &definitions.struct_decls() {

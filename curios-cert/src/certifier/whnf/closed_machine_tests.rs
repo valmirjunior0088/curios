@@ -4,8 +4,8 @@ use {
     super::{test_support::*, *},
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Reducer, Scope,
-        Subterm, Telescope, Term, UniverseContext, Universes,
+        Atom, Free, Global, InductDecl, Intrinsic, Level, Many, Reducer, Scope, Subterm, Telescope,
+        Term, UniverseContext, Universes,
     },
     curios_num::Binary,
 };
@@ -534,23 +534,22 @@ fn the_closed_machine_reads_a_stated_proof_payload_as_the_strategy_does() {
     let family = Global::Authored(Qualifier::from(["P"]));
     let index = binder(70, "i");
     let payload = binder(71, "x");
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::build([(index, nat_type())], ())),
-        constructors: vec![(
+    let declaration = InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::build([(index, nat_type())], ())),
+        vec![(
             Atom::from("mk"),
-            InductParam::new(
+            curios_core::test_support::case(
+                0,
                 Telescope::build([(payload, nat_type())], vec![Term::free_var(&payload)]),
                 vec![Plicity::Explicit],
             ),
         )]
         .into(),
-        result_sort: Term::prop(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+        Term::prop(),
+        Qualifier::default(),
+        true,
+    );
 
     let scrutinee = Term::variant(family, Vec::<Term>::new(), "mk", [nat(5)]);
     let stated = Term::induct_type(family, Vec::<Term>::new(), [nat(5)]);

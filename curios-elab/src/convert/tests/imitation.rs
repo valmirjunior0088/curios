@@ -19,16 +19,14 @@ fn register_list(context: &mut Context) {
     context
         .register_induct(
             &nominal("List"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::build([(elem, Term::type_ground())], Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::build([(elem, Term::type_ground())], Telescope::done(())),
+                Vec::new().into(),
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
 }
@@ -40,19 +38,17 @@ fn register_vec(context: &mut Context) {
     context
         .register_induct(
             &nominal("Vec"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::build(
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::build(
                     [(elem, Term::type_ground())],
                     Telescope::build([(length, Term::intrinsic(Intrinsic::NatType))], ()),
                 ),
-                constructors: Vec::new().into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Vec::new().into(),
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
 }
@@ -64,20 +60,19 @@ fn register_wrap(context: &mut Context, variance: Variance) {
     context
         .register_induct(
             &nominal("Wrap"),
-            InductDecl {
-                universe_context: UniverseContext {
+            InductDecl::new(
+                UniverseContext {
                     parameter_count: 1,
                     quality_count: 0,
                     constraints: Vec::new(),
                 },
-                arity: Telescope::build([(elem, sort.clone())], Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: sort,
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: vec![variance],
-            },
+                Telescope::build([(elem, sort.clone())], Telescope::done(())),
+                Vec::new().into(),
+                sort,
+                Qualifier::empty(),
+                true,
+            )
+            .with_variances(vec![variance]),
         )
         .unwrap();
 }

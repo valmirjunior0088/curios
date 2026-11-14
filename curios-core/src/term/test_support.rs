@@ -117,26 +117,25 @@ pub fn shaped(params: usize, indices: usize, variances: &[Variance]) -> InductDe
             .collect::<Vec<_>>()
     };
 
-    InductDecl {
-        universe_context: UniverseContext {
+    InductDecl::new(
+        UniverseContext {
             parameter_count: variances.len(),
             quality_count: 0,
             constraints: Vec::new(),
         },
-        arity: Telescope::build(
+        Telescope::build(
             binders(900, params, Term::type_ground()),
             Telescope::build(
                 binders(950, indices, Term::intrinsic(Intrinsic::NatType)),
                 (),
             ),
         ),
-        constructors: Vec::new().into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: variances.to_vec(),
-    }
+        Vec::new().into(),
+        Term::type_ground(),
+        Qualifier::default(),
+        true,
+    )
+    .with_variances(variances.to_vec())
 }
 
 /// `path`'s former at `level` as its group's projection, applied in full to `Nat`.

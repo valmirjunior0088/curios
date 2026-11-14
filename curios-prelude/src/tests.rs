@@ -382,12 +382,12 @@ fn no_term_of_the_prelude_names_a_type_former() {
 fn entry_mentions(entry: &Nominal) -> BTreeSet<Global> {
     let (arity, result_sort, constructors) = match entry {
         Nominal::Inductive(family) => (
-            &family.arity,
-            &family.result_sort,
+            family.arity(),
+            family.result_sort(),
             family
-                .constructors
+                .constructors()
                 .iter()
-                .map(|(_, constructor)| constructor.telescope.mentions())
+                .map(|(_, constructor)| constructor.payload().mentions())
                 .collect::<Vec<_>>(),
         ),
         Nominal::Struct(record) | Nominal::Concept { record, .. } => {

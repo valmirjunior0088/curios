@@ -5,9 +5,9 @@ use {
     crate::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Cases, Exhaustion, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many,
-        Match, MatchResult, MetavarId, Scope, StructDecl, Subterm, Telescope, Term,
-        UniverseContext, Universes,
+        Atom, Cases, Exhaustion, Free, Global, InductDecl, Intrinsic, Level, Many, Match,
+        MatchResult, MetavarId, Scope, StructDecl, Subterm, Telescope, Term, UniverseContext,
+        Universes,
     },
 };
 
@@ -157,7 +157,7 @@ fn a_constructors_value_is_typed_by_its_declaration() {
         Vec::from(tags.map(|tag| {
             (
                 Atom::from(tag),
-                InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+                curios_core::test_support::case(0, Telescope::done(Vec::new()), Vec::new()),
             )
         }))
     };
@@ -183,7 +183,7 @@ fn a_constructors_value_is_typed_by_its_declaration() {
         Telescope::build([(index, nat_type())], ()),
         Vec::from([(
             Atom::from("zero"),
-            InductParam::new(Telescope::done(vec![nat(0)]), Vec::new()),
+            curios_core::test_support::case(0, Telescope::done(vec![nat(0)]), Vec::new()),
         )]),
         Term::prop(),
     );
@@ -250,7 +250,8 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
             Telescope::done(()),
             Vec::from([(
                 Atom::from("two"),
-                InductParam::new(
+                curios_core::test_support::case(
+                    0,
                     Telescope::build([(a, held.clone()), (b, held.clone())], Vec::new()),
                     vec![Plicity::Explicit, Plicity::Explicit],
                 ),
@@ -361,19 +362,17 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
     context
         .register_induct(
             &nominal("Wit"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::build(
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::build(
                     [(param, Term::prop())],
                     Telescope::build([(index, Term::free_var(&param))], ()),
                 ),
-                constructors: Vec::new().into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Vec::new().into(),
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
     let indexed = declare_family(
@@ -491,16 +490,14 @@ fn a_struct_field_at_a_proposition_is_not_read() {
     context
         .register_induct(
             &nominal("P"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: Term::prop(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(Telescope::done(())),
+                Vec::new().into(),
+                Term::prop(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
     let proposition = Term::induct_type(nominal("P"), Vec::<Term>::new(), Vec::<Term>::new());
@@ -557,28 +554,27 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
     context
         .register_induct(
             &nominal("P"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: Term::prop(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(Telescope::done(())),
+                Vec::new().into(),
+                Term::prop(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
     let proposition = Term::induct_type(nominal("P"), Vec::<Term>::new(), Vec::<Term>::new());
     context
         .register_induct(
             &nominal("Wrap"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::from([(
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(Telescope::done(())),
+                Vec::from([(
                     Atom::from("wrap"),
-                    InductParam::new(
+                    curios_core::test_support::case(
+                        0,
                         Telescope::build(
                             [
                                 (n, Term::intrinsic(Intrinsic::NatType)),
@@ -590,12 +586,10 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                     ),
                 )])
                 .into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
     context.assume(&p, &proposition);
@@ -637,12 +631,13 @@ fn a_constructor_payload_at_the_unit_type_converges_unread() {
     context
         .register_induct(
             &nominal("Wrap"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::from([(
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(Telescope::done(())),
+                Vec::from([(
                     Atom::from("wrap"),
-                    InductParam::new(
+                    curios_core::test_support::case(
+                        0,
                         Telescope::build(
                             [
                                 (x, Term::intrinsic(Intrinsic::NatType)),
@@ -654,12 +649,10 @@ fn a_constructor_payload_at_the_unit_type_converges_unread() {
                     ),
                 )])
                 .into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
 

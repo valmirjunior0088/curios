@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, DefinitionKind, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
+        Atom, DefinitionKind, Global, InductDecl, Intrinsic, Level, Telescope, Term,
         UniverseConstraint, UniverseContext, UniverseParam,
     },
 };
@@ -22,23 +22,22 @@ fn a_constructor_has_the_type_its_signature_ends_in() {
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: vec![(
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                vec![(
                     Atom::from("mk"),
-                    InductParam::new(
+                    curios_core::test_support::case(
+                        0,
                         Telescope::build([(payload, nat_type())], Vec::new()),
                         vec![Plicity::Explicit],
                     ),
                 )]
                 .into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::from(["Wrapped"]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::type_ground(),
+                Qualifier::from(["Wrapped"]),
+                true,
+            ),
         )
         .expect("a name is declared once");
 
@@ -56,23 +55,22 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: vec![(
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                vec![(
                     Atom::from("mk"),
-                    InductParam::new(
+                    curios_core::test_support::case(
+                        0,
                         Telescope::build([(payload, nat_type())], Vec::new()),
                         vec![Plicity::Explicit],
                     ),
                 )]
                 .into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::from(["Wrapped"]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::type_ground(),
+                Qualifier::from(["Wrapped"]),
+                true,
+            ),
         )
         .expect("a name is declared once");
 
@@ -221,16 +219,14 @@ fn a_recursive_proof_that_does_not_descend_is_refused() {
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: Term::prop(),
-                module: Qualifier::from(["False"]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                Vec::new().into(),
+                Term::prop(),
+                Qualifier::from(["False"]),
+                true,
+            ),
         )
         .expect("a name is declared once");
     let false_ = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());

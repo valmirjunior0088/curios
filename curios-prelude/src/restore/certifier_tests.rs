@@ -279,7 +279,7 @@ fn family_variance_inventory() {
             .flat_map(|root| {
                 let core = root.core();
                 let inducts = core.induct_decls().into_iter().map(|(name, declaration)| {
-                    let count = declaration.universe_context.parameter_count;
+                    let count = declaration.universe_context().parameter_count;
                     (name, (0..count).map(|i| declaration.variance(i)).collect())
                 });
                 let structs = core.struct_decls().into_iter().map(|(name, declaration)| {

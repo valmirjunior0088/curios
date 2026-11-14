@@ -168,7 +168,7 @@ impl Writing {
             Subterm::InductType(induct_type) => {
                 let marks = context
                     .induct_decl(&induct_type.name)
-                    .map(|declaration| declaration.arity.marks())
+                    .map(|declaration| declaration.arity().marks())
                     .unwrap_or_default();
                 let callee = CalleeId::Function(Mention::Declaration(induct_type.name));
                 let mut written = induct_type.clone();
@@ -196,7 +196,7 @@ impl Writing {
                     .induct_decl(&variant.name)
                     .and_then(|declaration| {
                         declaration
-                            .constructors
+                            .constructors()
                             .iter()
                             .find(|(tag, _)| *tag == variant.tag)
                             .map(|(_, signature)| signature.plicities())
@@ -208,12 +208,12 @@ impl Writing {
                 let filled =
                     self.filled_again(context, &with_marks(&variant.payload, payload), |context| {
                         let declaration = context.induct_decl(&variant.name)?;
-                        let universe_context = declaration.universe_context.clone();
-                        let signature = declaration.constructor(&variant.tag)?.telescope.clone();
-                        let (signature, _) = context
-                            .instantiate_universe_bound(&universe_context, &signature, None)
+                        let universe_context = declaration.universe_context().clone();
+                        let case = declaration.constructor(&variant.tag)?.clone();
+                        let (payload, _) = context
+                            .instantiate_universe_bound(&universe_context, case.payload(), None)
                             .ok()?;
-                        Some(signature.open_params(&params))
+                        Some(payload.open(&params.iter().collect::<Vec<_>>()))
                     });
                 let mut written = variant.clone();
                 written.params = self.marked(context, &variant.params, leading, &callee);
@@ -1090,7 +1090,7 @@ fn enter_case_of(
     else {
         return false;
     };
-    let telescope = constructor.telescope.open_params(params);
+    let telescope = constructor.open(params);
     let family = InductCase {
         name,
         universes,

@@ -5,8 +5,8 @@ use {
     curios_analysis::{Erased, test_support::*},
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Cost, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Nat, Subterm,
-        Telescope, Term, Totality, UniverseContext, Universes,
+        Atom, Cost, Free, Global, InductDecl, InductType, Intrinsic, Nat, Subterm, Telescope, Term,
+        Totality, UniverseContext, Universes,
     },
 };
 
@@ -45,11 +45,12 @@ fn declare_ix(certifier: &mut Certifier) -> Global {
     let constructors = vec![
         (
             Atom::from("z"),
-            InductParam::new(Telescope::done(vec![nat(0)]), Vec::new()),
+            curios_core::test_support::case(0, Telescope::done(vec![nat(0)]), Vec::new()),
         ),
         (
             Atom::from("s"),
-            InductParam::new(
+            curios_core::test_support::case(
+                0,
                 Telescope::build([(p, nat_type())], vec![succ(Term::free_var(&p))]),
                 vec![Plicity::Explicit],
             ),
@@ -58,16 +59,14 @@ fn declare_ix(certifier: &mut Certifier) -> Global {
     certifier
         .declare_induct(
             &family,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::build([(binder(91, "i"), nat_type())], ())),
-                constructors: constructors.into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::from(["Ix"]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::build([(binder(91, "i"), nat_type())], ())),
+                constructors.into(),
+                Term::type_ground(),
+                Qualifier::from(["Ix"]),
+                true,
+            ),
         )
         .expect("a name is declared once");
 

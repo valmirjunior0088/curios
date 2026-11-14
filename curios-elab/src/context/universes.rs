@@ -163,17 +163,17 @@ impl<'s> Context<'s> {
         universes: &Universes,
     ) -> Result<InductDecl, UniverseError> {
         #[cfg(feature = "profile")]
-        if universes.levels.len() != induct_decl.universe_context.parameter_count {
+        if universes.levels.len() != induct_decl.universe_context().parameter_count {
             curios_profile::note!(
                 target: "curios_elab::universe",
-                module = ?induct_decl.module,
-                expected = induct_decl.universe_context.parameter_count,
+                module = ?induct_decl.module(),
+                expected = induct_decl.universe_context().parameter_count,
                 got = universes.levels.len(),
                 "induct instance arity mismatch",
             );
         }
         self.universes_mut()
-            .instantiate_at(&induct_decl.universe_context, universes, None)?;
+            .instantiate_at(induct_decl.universe_context(), universes, None)?;
         induct_decl.at(universes).whole()
     }
 
@@ -187,7 +187,7 @@ impl<'s> Context<'s> {
         let (universe_context, read) = {
             let induct_decl = self.induct_decl(name)?;
             (
-                induct_decl.universe_context.clone(),
+                induct_decl.universe_context().clone(),
                 read(induct_decl.at(universes)),
             )
         };

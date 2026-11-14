@@ -2399,7 +2399,7 @@ impl Convert {
     ) -> Result<Universes, ReduceError> {
         let scheme = context
             .induct_decl(name)
-            .map(|declaration| declaration.universe_context.clone())
+            .map(|declaration| declaration.universe_context().clone())
             .or_else(|| {
                 context
                     .struct_decl(name)
@@ -3514,7 +3514,7 @@ fn looked_up(
     else {
         return Ok(None);
     };
-    let signature = constructor.telescope.open_params(params);
+    let signature = constructor.open(params);
     if signature.len() != payload.len() {
         return Ok(None);
     }

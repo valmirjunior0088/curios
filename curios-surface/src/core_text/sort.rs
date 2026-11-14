@@ -7,8 +7,8 @@
 use {
     super::{
         Decoration, Fields, ReadError, Refusal, bracketed, called, decorated, malformed, nested,
-        numeral, term_number, term_word, tree, value, value_fields, value_number, value_term,
-        value_unmarked, value_variant, verbatim, word,
+        numeral, term_number, term_word, tree, value, value_fields, value_list, value_number,
+        value_term, value_variant, verbatim, word,
     },
     crate::{
         Apply, CoreForm, CoreText, CoreValue, Decorated, Frame, Infix, Rendered, Spelling, Subterm,
@@ -429,15 +429,15 @@ fn parameter_index(word: &str) -> Option<usize> {
 pub fn universes_read(value: &CoreValue) -> Result<Universes, ReadError> {
     let mut fields = value_fields(value)?;
     let levels = match fields.take("levels") {
-        Some(levels) => value_unmarked(levels)?
-            .into_iter()
+        Some(levels) => value_list(levels)?
+            .iter()
             .map(|level| level_read(&value_term(level)?))
             .collect::<Result<_, _>>()?,
         None => Vec::new(),
     };
     let qualities = match fields.take("qualities") {
-        Some(qualities) => value_unmarked(qualities)?
-            .into_iter()
+        Some(qualities) => value_list(qualities)?
+            .iter()
             .map(quality_read)
             .collect::<Result<_, _>>()?,
         None => Vec::new(),
@@ -458,8 +458,8 @@ pub fn universe_context_read(value: &CoreValue) -> Result<UniverseContext, ReadE
     let parameter_count = count(fields.take("parameter_count"))?;
     let quality_count = count(fields.take("quality_count"))?;
     let constraints = match fields.take("constraints") {
-        Some(constraints) => value_unmarked(constraints)?
-            .into_iter()
+        Some(constraints) => value_list(constraints)?
+            .iter()
             .map(|constraint| {
                 let term = value_term(constraint)?;
                 match term.as_subterm() {

@@ -6,12 +6,33 @@
 
 use {
     crate::*,
-    curios_common::Qualifier,
+    curios_common::{Plicity, Qualifier},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         rc::Rc,
     },
 };
+
+/// The case of a family of `params` parameters whose whole signature is `signature`, its binders under `plicities`: its leading `params` binders the family's parameters, which the case holds no type of, and the rest its payload. How a fixture written as a constructor's whole signature builds a case.
+pub fn case(
+    params: usize,
+    signature: Telescope<Vec<Term>>,
+    plicities: Vec<Plicity>,
+) -> InductParam {
+    let marked = signature.with_marks(&plicities);
+    let mut cursor = marked.cursor();
+    let mut binders = Vec::new();
+    for _ in 0..params {
+        let (hint, _) = cursor
+            .entry()
+            .expect("a signature leads with its family's parameters");
+        let binder = fresh(hint);
+        cursor.advance(Term::free_var(&binder));
+        binders.push(binder);
+    }
+
+    InductParam::over(&binders.iter().collect::<Vec<_>>(), cursor.rest())
+}
 
 /// A match node at an ambient goal — the expected type as it stands where the match is written, inhabited by each arm under that case's specialization, over any scrutinee; see [`MatchResult::Ambient`]. The elaborator builds one where it decides the result, so the node whole is a fixture's to ask for.
 pub fn match_ambient(head: impl Into<Term>, goal: impl Into<Term>, cases: Cases) -> Term {

@@ -174,16 +174,14 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
         Term::type_ground(),
         Term::induct_type(nominal("T"), Vec::<Term>::new(), Vec::<Term>::new()),
     )]);
-    let entry = InductDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::Done(Box::new(Telescope::Done(Box::new(())))),
-        constructors: Vec::new().into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::empty(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+    let entry = InductDecl::new(
+        UniverseContext::empty(),
+        Telescope::Done(Box::new(Telescope::Done(Box::new(())))),
+        Vec::new().into(),
+        Term::type_ground(),
+        Qualifier::empty(),
+        true,
+    );
     let definitions = declaring(definitions, [(nominal("T"), entry)], [], []);
 
     let elaborated =

@@ -296,20 +296,20 @@ pub fn audit_public_exposures(
             }
 
             if let Some(induct_decl) = scope.induct(&nominal) {
-                let nominal_dependencies = globals(&induct_decl.arity.mentions());
+                let nominal_dependencies = globals(&induct_decl.arity().mentions());
                 audit_dependencies(audiences, aliases, &exposure, &item, nominal_dependencies)
                     .map_err(exposed)?;
 
-                if induct_decl.rep_public {
+                if induct_decl.rep_public() {
                     audit_dependencies(
                         audiences,
                         aliases,
                         &exposure,
                         &item,
                         induct_decl
-                            .constructors
+                            .constructors()
                             .iter()
-                            .flat_map(|(_, case)| globals(&case.telescope.mentions())),
+                            .flat_map(|(_, case)| globals(&case.payload().mentions())),
                     )
                     .map_err(exposed)?;
                 }

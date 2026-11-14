@@ -287,10 +287,11 @@ fn induct_metavar(declaration: &InductDecl) -> Option<MetavarId> {
         true
     };
 
-    if !declaration.arity.any_metavar(&mut note) && !declaration.result_sort.any_metavar(&mut note)
+    if !declaration.arity().any_metavar(&mut note)
+        && !declaration.result_sort().any_metavar(&mut note)
     {
         for constructor in declaration.signatures() {
-            if constructor.telescope.any_metavar(&mut note) {
+            if constructor.payload().body().any_metavar(&mut note) {
                 break;
             }
         }
@@ -421,24 +422,24 @@ fn reaches_place(
 
 /// Every kind of elaboration residue an `induct` registry entry can carry.
 fn induct_residue(declaration: &InductDecl) -> Option<Error> {
-    let sorts = declaration.universe_context.quality_count;
+    let sorts = declaration.universe_context().quality_count;
     induct_metavar(declaration)
         .map(|id| Error::NotCore(Term::hole(id)))
-        .or_else(|| universe_residue(&declaration.arity, sorts))
-        .or_else(|| universe_residue(&declaration.result_sort, sorts))
+        .or_else(|| universe_residue(declaration.arity(), sorts))
+        .or_else(|| universe_residue(declaration.result_sort(), sorts))
         .or_else(|| {
             declaration
                 .signatures()
-                .find_map(|constructor| universe_residue(&constructor.telescope, sorts))
+                .find_map(|constructor| universe_residue(constructor.payload(), sorts))
         })
         .or_else(|| {
-            let count = declaration.universe_context.parameter_count;
-            universe_escape(&declaration.arity, count)
-                .or_else(|| universe_escape(&declaration.result_sort, count))
+            let count = declaration.universe_context().parameter_count;
+            universe_escape(declaration.arity(), count)
+                .or_else(|| universe_escape(declaration.result_sort(), count))
                 .or_else(|| {
                     declaration
                         .signatures()
-                        .find_map(|constructor| universe_escape(&constructor.telescope, count))
+                        .find_map(|constructor| universe_escape(constructor.payload(), count))
                 })
         })
 }
@@ -646,7 +647,7 @@ fn verdicts_within<'s>(
 
     // Every universe context this walk will assume, decided before any of it is assumed. An unsatisfiable set makes `entails` answer anything, so a later refusal would be reported against whichever item happened to ask a level question first rather than against the declaration that carries the contradiction.
     let contexts = entries_among(&inducts, &checked)
-        .map(|(name, declaration)| (*name, &declaration.universe_context))
+        .map(|(name, declaration)| (*name, declaration.universe_context()))
         .chain(
             entries_among(&structs, &checked)
                 .map(|(name, declaration)| (*name, &declaration.universe_context)),
@@ -1887,11 +1888,11 @@ fn accept(
         None => {
             let carried = inducts
                 .iter()
-                .map(|(name, declaration)| (name, &declaration.variances))
+                .map(|(name, declaration)| (name, declaration.variances()))
                 .chain(
                     structs
                         .iter()
-                        .map(|(name, declaration)| (name, &declaration.variances)),
+                        .map(|(name, declaration)| (name, declaration.variances.as_slice())),
                 );
             // The carried vector is the one the elaborator of a later unit reads, so an irrelevance it claims past the walk's own is refused where it is declared.
             for (name, carried) in carried {

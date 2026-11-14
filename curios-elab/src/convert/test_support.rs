@@ -69,16 +69,14 @@ pub fn register(
     context
         .register_induct(
             &nominal(path),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(indices),
-                constructors: constructors.into(),
-                result_sort: sort,
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(indices),
+                constructors.into(),
+                sort,
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
 
@@ -90,16 +88,14 @@ pub fn declare_proposition(context: &mut Context, path: &str) -> Term {
     context
         .register_induct(
             &nominal(path),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: Term::prop(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(Telescope::done(())),
+                Vec::new().into(),
+                Term::prop(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
 

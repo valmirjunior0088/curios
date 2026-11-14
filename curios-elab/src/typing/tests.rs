@@ -84,16 +84,14 @@ fn both_checkers_decide_non_informativeness_alike() {
 
     // A `Prop`-sorted family has to be declared: `Prop` itself is `Type`-sorted, so no closed proposition can be built out of intrinsics and type formers alone. Registering it in both checkers is the whole of the setup either one needs.
     let held = Global::Authored(Qualifier::from(["Held"]));
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new().into(),
-        result_sort: Term::prop(),
-        module: Qualifier::from(["Held"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+    let declaration = InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::done(())),
+        Vec::new().into(),
+        Term::prop(),
+        Qualifier::from(["Held"]),
+        true,
+    );
     context
         .register_induct(&held, declaration.clone())
         .expect("the family registers");

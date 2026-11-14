@@ -302,9 +302,9 @@ pub fn elaborate_induct_type(
     // The facets a family's type reads, and no constructor: a family of many cases is typed in its arity's size.
     let Some((universe_context, arity, result_sort)) = context.induct_decl(name).map(|decl| {
         (
-            decl.universe_context.clone(),
-            decl.arity.clone(),
-            decl.result_sort.clone(),
+            decl.universe_context().clone(),
+            decl.arity().clone(),
+            decl.result_sort().clone(),
         )
     }) else {
         return Err(Error::unknown_declaration(*name));
@@ -349,7 +349,7 @@ pub fn elaborate_induct_type(
     ))
 }
 
-/// Type an intrinsic constructor value against its registry signature: the instantiated parameters and the payload are checked through the constructor's full telescope, whose terminal gives the constructed `InductType`. `extent` is where the node is written, as [`elaborate_induct_type`] takes it.
+/// Type an intrinsic constructor value against its registry signature: the instantiated parameters and the payload are checked through the case's whole signature ([`InductDecl::signature`](curios_core::InductDecl::signature)), whose terminal gives the constructed `InductType`. `extent` is where the node is written, as [`elaborate_induct_type`] takes it.
 pub fn elaborate_variant(
     context: &mut Context,
     uc: &Variant,
@@ -367,10 +367,10 @@ pub fn elaborate_variant(
     let Some((rep_public, module, universe_context, signature)) =
         context.induct_decl(name).map(|decl| {
             (
-                decl.rep_public,
-                decl.module,
-                decl.universe_context.clone(),
-                decl.constructor(tag).map(|c| c.telescope.clone()),
+                decl.rep_public(),
+                decl.module(),
+                decl.universe_context().clone(),
+                decl.constructor(tag).map(|case| decl.signature(case)),
             )
         })
     else {
@@ -397,9 +397,7 @@ pub fn elaborate_variant(
     } else {
         let signature = context
             .induct_facet(name, written_universes, |at| {
-                at.constructor(tag)
-                    .expect("the constructor was read above")
-                    .map(|param| param.telescope)
+                at.signature(tag).expect("the constructor was read above")
             })
             .expect("the declaration was read above")?;
         (signature, written_universes.clone())

@@ -20,7 +20,7 @@ mod test_support;
 mod walk_tests;
 
 use {
-    super::{Certifier, Counted, Error, Sort, carries_information, check, convert, infer_type},
+    super::{Certifier, Counted, Error, Sort, carries_information, check, infer_type},
     crate::bears_proof,
     curios_analysis::{blocker, known_to_terminate, yields_a_sort_where},
     curios_core::{
@@ -432,9 +432,8 @@ pub fn state_rec_group(
 /// 4. Every domain of its arity is a type — `check_arity`, which reaches the parameters as well as the indices, and so covers a family with no constructors at all.
 /// 5. No two constructors share a tag — `check_distinct_tags`. Every lookup resolves a tag by first match, so this is what makes `constructors` a set of constructors rather than a list in which some are unreachable.
 /// 6. Every constructor domain is well-sorted and sits at or below the family's declared level, with one rung of slack for the parameters — `check_signature`. This is the clause that keeps an inductive from containing the universe it lives in.
-/// 7. Every constructor's parameter prefix agrees with the arity's, domain by domain — `check_constructed`. See the note below on why that prefix exists at all.
-/// 8. Every constructor states as many index targets as the family declares indices — `check_constructed`.
-/// 9. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. A target is read by inversion and by the arm rule, so this is the judgment that types it.
+/// 7. Every constructor states as many index targets as the family declares indices — `check_case_counts`.
+/// 8. Every index target inhabits the index telescope at the family's parameters — `check_constructed`. A target is read by inversion and by the arm rule, so this is the judgment that types it.
 /// 10. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](curios_analysis::positivity_vectors) rather than per entry.
 /// 11. Its variance vector calls no universe level irrelevant that a constructor payload, index target or index type mentions, except through a position itself irrelevant. Not here either, and for clause 10's reason: a level's variance composes through the families a telescope reaches, so a declaration's vectors are computed together by [`variance_vectors`](curios_analysis::variance_vectors) in `recheck`, which files them, compares two instances by them from then on, and refuses a carried vector that claims an irrelevance past them.
 ///
@@ -442,9 +441,9 @@ pub fn state_rec_group(
 ///
 /// Two agreements need no clause because they cannot be violated. The indices are the terminal of the parameter telescope, so "the index telescope leads with the parameters" cannot fail. And a constructor's signature terminates in its index targets alone, so a terminal naming another family, or standing at parameters other than the declaration's own, cannot be written. And a constructor's marks are its signature's entries' own, so a signature a mark short of its binders cannot be written. A variance vector's length needs no clause either: a position it does not reach reads invariant, which is equality, and an entry past the declaration's parameter count has no recomputed counterpart, so the reconciliation denies it if it claims irrelevance and nothing reads it if it does not.
 ///
-/// # The one repetition kept, and why
+/// # How a case is closed without repeating its parameters
 ///
-/// A constructor telescope still repeats the parameters as its prefix. That is not an oversight: a [`Telescope`] is *closed*, and a constructor's payload types mention the parameters, so the parameters must be bound inside it for the signature to be a self-contained value at all. Removing it needs either nesting the constructors under the arity — which buries tags, declaration order and plicities under binders they do not depend on — or context-relative terms, which is `curios-core`'s whole binder discipline rather than this type. So the repetition is the price of closedness, it is kept deliberately, and clause 7 is what makes it an enforced agreement rather than an assumed one.
+/// A case's payload types mention the family's parameters, so the parameters are bound around it for the case to be a self-contained value: a scope binds them, under the arity's types and marks, and states nothing of them but their count, which the entry's doors hold to the arity's ([`InductDecl::new`]). Nesting the cases under the arity instead would bury tags, declaration order and plicities under binders they do not depend on, and context-relative terms would be `curios-core`'s whole binder discipline rather than this type. So a case standing at other parameters than its family's is unspellable, which is why no clause compares a case's parameters with the arity.
 ///
 /// # A declaration that leaves a sort to its caller
 ///
@@ -454,12 +453,12 @@ pub fn state_rec_group(
 pub fn check_induct_decl(certifier: &mut Certifier, declaration: &InductDecl) -> Result<(), Error> {
     curios_profile::profile!("check_induct_decl");
     check_case_counts(declaration)?;
-    check_declared_sort(&declaration.result_sort)?;
+    check_declared_sort(declaration.result_sort())?;
     check_distinct_tags(declaration)?;
 
     at_every_sort(
         certifier,
-        &declaration.universe_context,
+        declaration.universe_context(),
         |certifier, sorts| {
             let at;
             let declaration = match sorts.is_empty() {
@@ -475,9 +474,9 @@ pub fn check_induct_decl(certifier: &mut Certifier, declaration: &InductDecl) ->
             for constructor in declaration.signatures() {
                 check_signature(
                     certifier,
-                    &constructor.telescope,
+                    &declaration.signature(constructor),
                     declaration.param_count(),
-                    &declaration.result_sort,
+                    declaration.result_sort(),
                     |certifier, entries, targets| {
                         check_constructed(certifier, declaration, entries, targets)
                     },
@@ -534,7 +533,7 @@ fn check_distinct_tags(declaration: &InductDecl) -> Result<(), Error> {
 fn check_arity(certifier: &mut Certifier, declaration: &InductDecl) -> Result<(), Error> {
     walk_arity(
         certifier,
-        &declaration.arity,
+        declaration.arity(),
         |certifier, domain| infer_type(certifier, domain).map(|_| ()),
         |certifier, domain| infer_type(certifier, domain).map(|_| ()),
     )
@@ -567,19 +566,11 @@ fn walk_arity<B: Bound>(
     })
 }
 
-/// Each case of `declaration` states at least its family's parameters and as many index targets as its family has indices, read off its telescope as it stands: every reader of a case opens its parameter prefix at the family's parameters, asserting the prefix is there, so a walk that judges anything of a module counts its cases first (`recheck`).
+/// Each case of `declaration` ends in as many index targets as its family has indices, read off it as it stands: a reader of a case's targets reads one per index, so a walk that judges anything of a module counts its cases first (`recheck`). A case's parameters are its family's by construction ([`InductDecl::new`]).
 pub fn check_case_counts(declaration: &InductDecl) -> Result<(), Error> {
-    let (parameters, indices) = (declaration.param_count(), declaration.index_count());
+    let indices = declaration.index_count();
     for constructor in declaration.signatures() {
-        let stated = constructor.telescope.len();
-        if stated < parameters {
-            return Err(Error::Arity {
-                counted: Counted::Parameters,
-                expected: parameters,
-                actual: stated,
-            });
-        }
-        let targets = constructor.telescope.terminal().len();
+        let targets = constructor.payload().body().terminal().len();
         if targets != indices {
             return Err(Error::Arity {
                 counted: Counted::Indices,
@@ -592,35 +583,21 @@ pub fn check_case_counts(declaration: &InductDecl) -> Result<(), Error> {
     Ok(())
 }
 
-/// A constructor's index targets must inhabit the family's index telescope, and its parameter prefix must be the family's own parameters.
+/// A constructor's index targets must inhabit the family's index telescope.
 ///
-/// The terminal carries the targets and nothing else — the family and its parameters are fixed by the declaration, so a terminal naming another family or standing at other parameters is unspellable rather than refused. What remains is two typing clauses: the targets are checked here, because index inversion and the arm rule both read them.
+/// The terminal carries the targets and nothing else, and a case holds its payload under its family's parameters, whose types are the arity's — so a terminal naming another family, or a case standing at other parameters, is unspellable rather than refused. What remains is one typing clause: the targets are checked here, because index inversion and the arm rule both read them.
 fn check_constructed(
     certifier: &mut Certifier,
     declaration: &InductDecl,
     entries: &[(Free, Term)],
     targets: &[Term],
 ) -> Result<(), Error> {
-    // The prefix must be the declaration's parameters, not merely as many binders. `instantiate` substitutes the family's actual parameters into these slots, so a constructor declaring one at a different domain types its payload against a family this declaration does not describe — and closed telescopes are why the prefix is repeated here at all, which makes the agreement something to enforce rather than something to assume.
-    //
-    // The counts are [`check_case_counts`]'s, so `take` finds the whole prefix and `indices_at` as many targets as the family has indices.
-
-    let mut cursor = declaration.arity.cursor();
-
-    for (binder, domain) in entries.iter().take(declaration.param_count()) {
-        let (_, expected) = cursor
-            .entry()
-            .expect("the arity holds exactly `param_count` binders");
-        if !convert(certifier, &Term::type_ground(), domain, &expected)? {
-            return Err(Error::Mismatch {
-                inferred: Box::new(domain.clone()),
-                expected: Box::new(expected),
-            });
-        }
-
-        cursor.advance(Term::free_var(binder));
-    }
-    let declared = cursor.into_args();
+    // The counts are [`check_case_counts`]'s, so the leading entries are the parameters and `indices_at` finds as many targets as the family has indices.
+    let declared = entries
+        .iter()
+        .take(declaration.param_count())
+        .map(|(binder, _)| Term::free_var(binder))
+        .collect::<Vec<_>>();
 
     let telescope = declaration.indices_at(&declared);
     let mut cursor = telescope.cursor();
@@ -639,7 +616,7 @@ fn check_constructed(
 
 /// What a well-formed `struct` registry entry asserts: its universe context (clause 1), its absence of residue (clause 2), that its `result_sort` is a literal sort (clause 3), the size condition over its field telescope (clause 6), and that a `Prop`-sorted structure carries only proofs — see `check_non_informative`. Positivity and variance are decided over the whole set as they are for an `induct`, a field read as a payload is.
 ///
-/// A `struct` has no constructors and no index targets, so clauses 5 through 9 have nothing to range over — and clause 7 could not be violated even if it did, since a structure's fields are the terminal of its own `arity` rather than a separately-stored telescope repeating the parameters: the same nesting, and the same reason, as [`InductDecl::arity`].
+/// A `struct` has no constructors and no index targets, so clauses 5, 7 and 8 have nothing to range over, and its fields are the terminal of its own `arity`, under its parameters by construction as a case's payload is.
 ///
 /// One that leaves a sort to its caller is read as [`check_induct_decl`] reads an `induct`'s: its own sort off the entry as stated, and its telescopes at every assignment.
 pub fn check_struct_decl(certifier: &mut Certifier, declaration: &StructDecl) -> Result<(), Error> {

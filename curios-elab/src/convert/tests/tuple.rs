@@ -429,16 +429,14 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
         context
             .register_induct(
                 &nominal("F"),
-                InductDecl {
-                    universe_context: UniverseContext::empty(),
-                    arity: Telescope::done(Telescope::done(())),
-                    constructors: Vec::new().into(),
-                    result_sort: sort,
-                    module: Qualifier::empty(),
-                    rep_public: true,
-                    polarities: Vec::new(),
-                    variances: Vec::new(),
-                },
+                InductDecl::new(
+                    UniverseContext::empty(),
+                    Telescope::done(Telescope::done(())),
+                    Vec::new().into(),
+                    sort,
+                    Qualifier::empty(),
+                    true,
+                ),
             )
             .unwrap();
         let family = Term::induct_type(nominal("F"), Vec::<Term>::new(), Vec::<Term>::new());

@@ -1312,14 +1312,6 @@ fn param_name(param: &FuncTypeParam) -> String {
     param.label.clone().unwrap_or_default()
 }
 
-/// What a declaration's parameter binds as at a value constructor: a `use` parameter stays the witness slot it is at the type constructor, and every other is implicit, inferred from the payload or the expected type.
-fn constructor_plicity(declared: Plicity) -> Plicity {
-    match declared {
-        Plicity::Witness => Plicity::Witness,
-        Plicity::Explicit | Plicity::Implicit => Plicity::Implicit,
-    }
-}
-
 /// What `top_item`'s text is anchored as: the declaration of the first name it declares, or one of its module's unnamed declarations where it declares none. `None` for an item no term is lowered from.
 fn anchored(head: &Head, context: &Context) -> Option<curios_core::Anchored> {
     let named = |label: &Label| curios_core::Anchored::Declaration(context.prefixed(label));
@@ -1736,12 +1728,6 @@ fn process_items(
                                 Ok((param.plicity, param_binders[i].1, ty))
                             })
                             .collect::<Result<Vec<_>, Error>>()?;
-                        // The registry's telescope and the `InductType` normal form are positional; the marks ride beside the telescope and on the generated type-constructor function.
-                        let param_tys_unmarked = param_tys
-                            .iter()
-                            .map(|(_, n, t)| (*n, t.clone()))
-                            .collect::<Vec<_>>();
-
                         let param_vars = param_binders
                             .iter()
                             .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
@@ -1765,7 +1751,7 @@ fn process_items(
                             .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(*id)))
                             .collect::<Vec<_>>();
 
-                        // Registry entry: the parameter telescope plus each constructor's full signature `(params..., payload...) -> InductType { name, params, indices }`, where the terminal's indices are that *case's* target expressions over its payload binders. `Telescope::build` captures the parameter and payload labels in the payload types and the terminal, mirroring `func_type`.
+                        // Registry entry: the parameter telescope plus each case's payload under the parameters, ending in that *case's* target expressions over its payload binders. `Telescope::build_marked` captures the payload labels in the payload types and the terminal, and the case's scope the parameters', mirroring `func_type`.
                         let constructors = u
                             .cases
                             .iter()
@@ -1798,23 +1784,20 @@ fn process_items(
                                 })?;
                                 drop(prefixes);
 
-                                // The signature terminates in the index targets alone: the family and its parameters are fixed by the declaration, so a terminal carries nothing else.
-                                let telescope = curios_core::Telescope::build(
-                                    param_tys_unmarked.iter().cloned().chain(fields),
+                                // The payload terminates in the index targets alone: the family and its parameters are fixed by the declaration, so a terminal carries nothing else. Each payload keeps its declared mark, and the parameters are the arity's.
+                                let payload = curios_core::Telescope::build_marked(
+                                    c.payload
+                                        .iter()
+                                        .zip(fields)
+                                        .map(|(param, (binder, ty))| (param.plicity, binder, ty)),
                                     target,
                                 );
-
-                                // The value constructor's calling convention: every leading declaration parameter is hidden, each payload keeps its declared mark — the same source `ctor_type` uses.
-                                let plicities = u
-                                    .params
-                                    .iter()
-                                    .map(|param| constructor_plicity(param.plicity))
-                                    .chain(c.payload.iter().map(|param| param.plicity))
-                                    .collect::<Vec<_>>();
+                                let params =
+                                    param_binders.iter().map(|(_, id)| id).collect::<Vec<_>>();
 
                                 Ok((
                                     curios_core::Atom::from(c.label.as_str()),
-                                    curios_core::InductParam::new(telescope, plicities),
+                                    curios_core::InductParam::over(&params, payload),
                                 ))
                             })
                             // Collected in written order: a constructor's position here is the runtime tag `erase` gives it (`InductDecl::constructors`), so the sequence is the declaration's, not a collation of its labels.
@@ -1825,20 +1808,18 @@ fn process_items(
 
                         lowered.induct_decls.insert(
                             name,
-                            curios_core::InductDecl {
-                                universe_context: curios_core::UniverseContext::empty(),
-                                arity: curios_core::Telescope::build_marked(
+                            // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
+                            curios_core::InductDecl::new(
+                                curios_core::UniverseContext::empty(),
+                                curios_core::Telescope::build_marked(
                                     param_tys.clone(),
                                     curios_core::Telescope::build(index_tys.iter().cloned(), ()),
                                 ),
-                                constructors: constructors.into(),
-                                result_sort: result_sort.clone(),
-                                module: context.island(),
-                                rep_public: u.rep_pub,
-                                // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
-                                polarities: Vec::new(),
-                                variances: Vec::new(),
-                            },
+                                constructors.into(),
+                                result_sort.clone(),
+                                context.island(),
+                                u.rep_pub,
+                            ),
                         );
 
                         let induct_decl =

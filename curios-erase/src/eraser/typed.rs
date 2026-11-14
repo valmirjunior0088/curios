@@ -118,8 +118,7 @@ impl Eraser<'_> {
                     .at(universes)
                     .constructor(tag)
                     .expect("erase: constructor instantiates at its inductive's parameters")?
-                    .telescope
-                    .open_params(params)
+                    .open(params)
                     .open(&payload.iter().collect::<Vec<_>>());
 
                 Ok(curios_core::Subterm::InductType(curios_core::InductType {

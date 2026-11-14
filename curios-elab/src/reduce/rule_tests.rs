@@ -6,9 +6,9 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Apply, Atom, Bound, DefinitionKind, Exhaustion, Free, InductDecl, InductParam, Intrinsic,
-        Level, MetavarId, MetavarOrigin, Nat, Subterm, Telescope, Term, UniverseContext,
-        UniverseParam, Universes,
+        Apply, Atom, Bound, DefinitionKind, Exhaustion, Free, InductDecl, Intrinsic, Level,
+        MetavarId, MetavarOrigin, Nat, Subterm, Telescope, Term, UniverseContext, UniverseParam,
+        Universes,
     },
 };
 
@@ -221,20 +221,18 @@ fn a_proofs_match_stands_while_the_instance_it_states_is_open() {
     context
         .register_induct(
             &zero,
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(Telescope::build([(index, nat_type.clone())], ())),
-                constructors: vec![(
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(Telescope::build([(index, nat_type.clone())], ())),
+                vec![(
                     Atom::from("zero"),
-                    InductParam::new(Telescope::done(vec![nat(0)]), Vec::new()),
+                    curios_core::test_support::case(0, Telescope::done(vec![nat(0)]), Vec::new()),
                 )]
                 .into(),
-                result_sort: Term::prop(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::prop(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
     context.birth_metavar(MetavarId(0), Vec::new(), nat_type.clone());

@@ -431,7 +431,7 @@ impl<B: Bound> Telescope<B> {
         cursor.body().expect("a cursor past every entry")
     }
 
-    /// Open the leading binders at successive `params` — one binder per param — returning the residual telescope. Every caller's telescope leads with the type parameters (constructor payloads, struct fields, inductive indices all follow them), so a telescope that runs out early is an invariant violation.
+    /// Open the leading binders at successive `params` — one binder per param — returning the residual telescope. Every caller's telescope leads with the type parameters (struct fields and inductive indices follow them), so a telescope that runs out early is an invariant violation.
     pub fn open_params(self, params: &[Term]) -> Telescope<B> {
         let mut cursor = self.cursor();
         for param in params {

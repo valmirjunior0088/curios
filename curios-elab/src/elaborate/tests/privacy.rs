@@ -4,7 +4,7 @@ use {
     crate::elaborate::test_support::*,
     crate::*,
     curios_common::Qualifier,
-    curios_core::{Atom, Free, Term},
+    curios_core::{Atom, Free, InductDecl, Term},
 };
 
 // Only the witness lowering mints a `Derive`, always in checked position against a concept application; met in inference, or checked against anything else, the transient has nothing to derive from and refuses rather than passing through.
@@ -28,10 +28,16 @@ fn opt_type() -> Term {
 }
 
 fn make_opt_opaque(context: &mut Context) {
-    let mut induct_decl = context.induct_decl(&nominal("Opt")).unwrap().clone();
-    induct_decl.module = Qualifier::from(["Owner"]);
-    induct_decl.rep_public = false;
-    context.update_induct(&nominal("Opt"), induct_decl);
+    let opt = context.induct_decl(&nominal("Opt")).unwrap();
+    let opaque = InductDecl::new(
+        opt.universe_context().clone(),
+        opt.arity().clone(),
+        opt.constructors().clone(),
+        opt.result_sort().clone(),
+        Qualifier::from(["Owner"]),
+        false,
+    );
+    context.update_induct(&nominal("Opt"), opaque);
 }
 
 #[test]

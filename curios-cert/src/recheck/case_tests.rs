@@ -4,107 +4,8 @@ use {
     super::test_support::*,
     crate::*,
     curios_common::{Qualifier, fill},
-    curios_core::{Atom, Global, Term},
+    curios_core::{Atom, Global},
 };
-
-/// `Box`'s case states its family's parameter as a proposition where the family declares a type, so read off the case as written its payload is a proof and `mk(true)` is `mk(false)`: `cast` carries `Code`'s `True` at the one to its `False` at the other, and the term the module closes with is `False`.
-const A_CASE_STATING_ITS_PARAMETER_AS_A_PROPOSITION: &str = r#"
-induct /Box(A: Type): pub Type
-| #{params = [@Prop]} mk(x: A)
-end
-let /Code : (
-    b:
-        #{node = InductType}
-        /Box(#BoolType)
-) -> Prop =
-    (
-        b:
-            #{node = InductType}
-            /Box(#BoolType)
-    ) =>
-        #{result = Ambient(Prop)}
-        match b
-        | mk(x) =>
-            /std/Bool/Holds(x)
-        end;
-let /cast : (
-    F: (
-        b:
-            #{node = InductType}
-            /Box(#BoolType)
-    ) -> Prop,
-    y: F(
-        #{node = Variant}
-        /Box/mk(@#BoolType, true)
-    )
-) -> F(
-    #{node = Variant}
-    /Box/mk(@#BoolType, false)
-) =
-    (
-        F: (
-            b:
-                #{node = InductType}
-                /Box(#BoolType)
-        ) -> Prop,
-        y: F(
-            #{node = Variant}
-            /Box/mk(@#BoolType, true)
-        )
-    ) =>
-        y;
-/cast(/Code, /std/Bool/True/qed())
-"#;
-
-// A case's parameters are its family's: `check_constructed` holds the prefix a case states to the family's arity, so `Box` is refused where it is formed, and conversion reads `mk`'s payload at the parameters of the value it compares, a `Bool`, so `cast` is refused too. The term the module closes with types at `False` through `cast`'s stated type, so those two refusals are all that stand between the module and `False`.
-#[test]
-fn a_case_whose_parameter_is_stated_a_proposition_is_refused_where_its_family_is_formed() {
-    let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${A_CASE_STATING_ITS_PARAMETER_AS_A_PROPOSITION}",
-        PROPOSITIONS,
-        A_CASE_STATING_ITS_PARAMETER_AS_A_PROPOSITION
-    ));
-
-    assert!(
-        matches!(
-            &verdicts[..],
-            [
-                Verdict { name: Some(family), error: Error::Mismatch { inferred, expected } },
-                Verdict { name: Some(cast), error: Error::Mismatch { .. } },
-            ] if *family == global("Box")
-                && **inferred == Term::prop()
-                && **expected == Term::type_ground()
-                && *cast == global("cast")
-        ),
-        "{verdicts:?}"
-    );
-}
-
-/// `Pair`'s case states one of its family's two parameters and names the other in its payload by the head's word, so its telescope binds `A` and `C` and leaves `B` a local nothing in it binds.
-const A_CASE_NAMING_A_PARAMETER_IT_DOES_NOT_STATE: &str = r#"
-induct /Pair(A: Type, B: Type): pub Type
-| #{params = [@Type]} mk(C: Type, y: B)
-end
-/std/Bool/False
-"#;
-
-// The free local is refused at the boundary every position is scanned at before any rule runs, a registry entry's telescopes among them, where a judgment would have read it as whatever binder a comparison mints next.
-#[test]
-fn a_case_that_names_a_parameter_it_does_not_state_is_refused_at_the_boundary() {
-    let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${A_CASE_NAMING_A_PARAMETER_IT_DOES_NOT_STATE}",
-        PROPOSITIONS,
-        A_CASE_NAMING_A_PARAMETER_IT_DOES_NOT_STATE
-    ));
-
-    assert!(
-        verdicts
-            .iter()
-            .any(|verdict| verdict.name == Some(global("Pair"))
-                && matches!(verdict.error, Error::Unbound(_))),
-        "{verdicts:?}"
-    );
-}
 
 /// `A` and `B` are one group, each with a parameter named `n`, a `Nat` in one and a `Bool` in the other. `mkA`'s payload states `n == 1` of its own family's `n`, so an `A(0)` holds a `Holds(0 == 1)`; read at the sibling's parameter, or at another instance's, the `qed` it is built with would fit, and the match would hand it on at `False`.
 const A_CASE_OF_A_FAMILY_IN_A_GROUP: &str = r#"
@@ -1243,39 +1144,6 @@ fn no_index_holding_a_proof_excuses_the_arm_a_recursion_on_a_propositions_case_o
     }
 }
 
-/// `Short`'s case states none of its family's one parameter.
-const A_CASE_STATING_FEWER_PARAMETERS_THAN_ITS_FAMILY: &str = r#"
-induct /Short(A: Type): pub Type
-| #{params = []} mk()
-end
-/std/Bool/True/qed()
-"#;
-
-/// A case's parameters are counted against its family's before anything reads them: every reader of a case opens its parameter prefix at the family's parameters, positivity and an arm's signature among them, and opening a prefix shorter than that aborted the walk. So `Short` is refused by its count, under its name.
-#[test]
-fn a_case_stating_fewer_parameters_than_its_family_is_refused_by_its_count() {
-    let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${A_CASE_STATING_FEWER_PARAMETERS_THAN_ITS_FAMILY}",
-        PROPOSITIONS,
-        A_CASE_STATING_FEWER_PARAMETERS_THAN_ITS_FAMILY
-    ));
-
-    assert!(
-        verdicts
-            .iter()
-            .any(|verdict| verdict.name == Some(global("Short"))
-                && matches!(
-                    verdict.error,
-                    Error::Arity {
-                        counted: Counted::Parameters,
-                        expected: 1,
-                        actual: 0
-                    }
-                )),
-        "{verdicts:?}"
-    );
-}
-
 /// A value of a case its family does not declare is refused as that case, by the family and the tag: the family is declared, and naming it undeclared would send a reader to look for a declaration that is there. Mutation-checked: with the lookup refusing the family as undeclared, the error is `Undeclared`.
 #[test]
 fn a_value_of_a_case_its_family_does_not_declare_is_refused_by_the_tag() {
@@ -1400,40 +1268,6 @@ fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
         assert!(missing(name, family, tag), "{name}: {verdicts:?}");
     }
     assert_eq!(verdicts.len(), 8, "{verdicts:?}");
-}
-
-/// `Short`'s case states none of its family's one parameter, and an arm of `/reads`, placed ahead of the family, opens it.
-const A_SHORT_CASE_READ_AHEAD_OF_ITS_FAMILY: &str = r#"
-let /reads : (v: #{node = InductType} /Short(#NatType)()) -> #NatType =
-    (v: #{node = InductType} /Short(#NatType)()) =>
-        match v: (w) => #NatType
-        | mk() => 0
-        end;
-induct /Short(A: Type): pub Type
-| #{params = []} mk()
-end
-/std/Bool/True/qed()
-"#;
-
-// The count is the scan's, before any judgment, so an arm judged ahead of the family never opens the short prefix: the module is refused whole, by `Short`'s count, and nothing else is judged.
-#[test]
-fn a_short_case_is_refused_by_its_count_before_an_arm_ahead_of_its_family_reads_it() {
-    let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${A_SHORT_CASE_READ_AHEAD_OF_ITS_FAMILY}",
-        PROPOSITIONS,
-        A_SHORT_CASE_READ_AHEAD_OF_ITS_FAMILY
-    ));
-
-    assert!(
-        matches!(
-            &verdicts[..],
-            [Verdict {
-                name: Some(short),
-                error: Error::Arity { counted: Counted::Parameters, expected: 1, actual: 0 },
-            }] if *short == global("Short")
-        ),
-        "{verdicts:?}"
-    );
 }
 
 /// A value of a case holding one payload past its case's, and an arm binding one past it: read by a zip, the value would type as `mk(true)` and the arm would open its second binder at the `false` reduction carries.

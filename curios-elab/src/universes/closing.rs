@@ -79,11 +79,11 @@ pub fn sort_family_levels(
     let mut telescopes = BTreeSet::new();
     for name in names {
         if let Some(induct_decl) = context.induct_decl(name) {
-            mentioned.extend(parameter_metas(&induct_decl.arity));
-            mentioned.extend(induct_decl.result_sort.universe_metas());
-            telescopes.extend(universe_metas(&induct_decl.arity));
+            mentioned.extend(parameter_metas(induct_decl.arity()));
+            mentioned.extend(induct_decl.result_sort().universe_metas());
+            telescopes.extend(universe_metas(induct_decl.arity()));
             for constructor in induct_decl.signatures() {
-                telescopes.extend(universe_metas(&constructor.telescope));
+                telescopes.extend(universe_metas(constructor.payload()));
             }
         }
         if let Some(struct_decl) = context.struct_decl(name) {

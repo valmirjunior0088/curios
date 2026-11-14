@@ -20,7 +20,7 @@ fn core_formatted(text: &str) -> String {
 fn every_form_of_core_text_is_laid_out_by_the_programs_printer() {
     let written = "\
 induct /Box(A: Type): pub Type
-| #{params = [@Prop]} mk(x: A)
+| mk(x: A)
 end
 #{node = Rec}
 and struct /Pair(A: Type): pub Type { fst: A, snd: A }
@@ -61,7 +61,7 @@ fn a_comment_keeps_its_place_in_core_text() {
     let written = "\
 -- Before the first item.
 induct /Box(A: Type): pub Type
-| #{params = [@Prop]} mk(x: A) -- riding a case
+| mk(x: A) -- riding a case
 end
 let /p : Prop = /q; -- riding a definition
 -- Before the entry.
@@ -73,7 +73,7 @@ let /p : Prop = /q; -- riding a definition
         "\
 -- Before the first item.
 induct /Box(A: Type): pub Type
-| #{params = [@Prop]} mk(x: A) -- riding a case
+| mk(x: A) -- riding a case
 end
 
 let /p: Prop =

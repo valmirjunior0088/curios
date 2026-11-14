@@ -160,7 +160,7 @@ impl Schemes {
                 lets.insert(name, count);
             }
             if let Some(declaration) = definitions.induct_decl(places, &name) {
-                inducts.insert(name, declaration.universe_context.parameter_count);
+                inducts.insert(name, declaration.universe_context().parameter_count);
             }
             if let Some(declaration) = definitions.struct_decl(places, &name) {
                 structs.insert(name, declaration.universe_context.parameter_count);
@@ -186,7 +186,7 @@ impl Schemes {
                     .induct_decls()
                     .iter()
                     .map(|(name, declaration)| {
-                        (*name, declaration.universe_context.parameter_count)
+                        (*name, declaration.universe_context().parameter_count)
                     })
                     .collect(),
             ),
@@ -264,19 +264,19 @@ fn validate_definitions_instance_arities(
     let (inducts, structs, concepts) = entries_of(items);
     for (name, (item, declaration)) in &inducts {
         let shown = name.faithful();
-        validate!(&declaration.arity, &format!("inductive {shown} arity"))?;
+        validate!(declaration.arity(), &format!("inductive {shown} arity"))?;
         validate!(
-            &declaration.result_sort,
+            declaration.result_sort(),
             &format!("inductive {shown} result sort"),
         )?;
-        for (constructor, signature) in &declaration.constructors {
+        for (constructor, signature) in declaration.constructors() {
             validate!(
-                &signature.telescope,
+                signature.payload(),
                 &format!("inductive {shown} constructor {constructor}"),
             )?;
         }
 
-        if scheme_in(item, name).is_some_and(|actual| *actual != declaration.universe_context) {
+        if scheme_in(item, name).is_some_and(|actual| actual != declaration.universe_context()) {
             return Err(Error::UniverseInvariant(format!(
                 "inductive {shown} and its type-former definition have different universe contexts"
             )));
@@ -385,26 +385,26 @@ pub fn validate_universes_in(
     let (inducts, structs, concepts) = entries_of(items);
     for (name, (_, induct_decl)) in &inducts {
         let shown = name.faithful();
-        universe_context_validate(&induct_decl.universe_context).map_err(|error| {
+        universe_context_validate(induct_decl.universe_context()).map_err(|error| {
             Error::UniverseInvariant(format!(
                 "inductive {shown} has an invalid universe context: {}",
                 error.faithful()
             ))
         })?;
-        let parameter_count = induct_decl.universe_context.parameter_count;
+        let parameter_count = induct_decl.universe_context().parameter_count;
         validate_bound_universes(
-            &induct_decl.arity,
+            induct_decl.arity(),
             parameter_count,
             &format!("inductive {shown} arity"),
         )?;
         validate_bound_universes(
-            &induct_decl.result_sort,
+            induct_decl.result_sort(),
             parameter_count,
             &format!("inductive {shown} result sort"),
         )?;
-        for (constructor_name, constructor) in &induct_decl.constructors {
+        for (constructor_name, constructor) in induct_decl.constructors() {
             validate_bound_universes(
-                &constructor.telescope,
+                constructor.payload(),
                 parameter_count,
                 &format!("inductive {shown} constructor {constructor_name}"),
             )?;
@@ -492,10 +492,10 @@ pub fn validate_lowered_universe_seeds(
         }
     }
     for (name, declaration) in &definitions.induct_decls() {
-        collect!(*name, &declaration.arity);
-        collect!(*name, &declaration.result_sort);
+        collect!(*name, declaration.arity());
+        collect!(*name, declaration.result_sort());
         for constructor in declaration.signatures() {
-            collect!(*name, &constructor.telescope);
+            collect!(*name, constructor.payload());
         }
     }
     for (name, declaration) in &definitions.struct_decls() {

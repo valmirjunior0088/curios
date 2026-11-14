@@ -951,7 +951,7 @@ fn singleton_eliminable(
     params: &[Term],
 ) -> Result<bool, Error> {
     let payload = match context.induct_decl(name) {
-        Some(family) => match family.constructors.as_slice() {
+        Some(family) => match family.constructors().as_slice() {
             [(tag, _)] => family.at(universes).payload(tag, params),
             _ => None,
         },
@@ -1033,7 +1033,7 @@ impl NominalSplit {
         let Some(family) = context.induct_decl(&name) else {
             return Err(Error::unknown_declaration(name));
         };
-        let (rep_public, module) = (family.rep_public, family.module);
+        let (rep_public, module) = (family.rep_public(), family.module());
         // The family's constraints instantiated where the scrutinee stands, once, with the facet the motive reads: every later read of the family is of the constructors the arms name, at these universes.
         let indices = context
             .induct_facet(&name, &universes, |at| at.indices_at(&params))
@@ -1197,7 +1197,7 @@ impl NominalSplit {
             .filter(|tag| family.declares(tag))
             .collect::<HashSet<_>>();
         if !self.indexed() {
-            return Ok(named.len() < family.constructors.len());
+            return Ok(named.len() < family.constructors().len());
         }
         let unnamed = family
             .constructor_order()

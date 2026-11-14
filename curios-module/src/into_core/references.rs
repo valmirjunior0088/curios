@@ -174,13 +174,13 @@ pub fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Glo
 
 /// The external references of an inductive registry entry: every declaration its telescopes reference. Binder names (parameters, payload binders) are captured by `Telescope::build` and never appear here; the index types' references also live in the type binding's own signature, but are included for robustness.
 fn induct_references(induct_decl: &curios_core::InductDecl) -> HashSet<curios_core::Global> {
-    globals(&induct_decl.arity.mentions())
+    globals(&induct_decl.arity().mentions())
         .into_iter()
         .chain(
             induct_decl
-                .constructors
+                .constructors()
                 .iter()
-                .flat_map(|(_, param)| globals(&param.telescope.mentions())),
+                .flat_map(|(_, param)| globals(&param.payload().mentions())),
         )
         .collect()
 }

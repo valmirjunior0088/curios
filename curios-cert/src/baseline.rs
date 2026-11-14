@@ -233,12 +233,16 @@ impl Readable<'_> {
         }
 
         // An entry as the certifier reads one: what elaboration alone records is left out.
-        let family = self.family.map(|declaration| InductDecl {
-            module: Qualifier::default(),
-            rep_public: false,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-            ..declaration.shared(&sharing)
+        let family = self.family.map(|declaration| {
+            let shared = declaration.shared(&sharing);
+            InductDecl::new(
+                shared.universe_context().clone(),
+                shared.arity().clone(),
+                shared.constructors().clone(),
+                shared.result_sort().clone(),
+                Qualifier::default(),
+                false,
+            )
         });
         let record = self.record.map(|declaration| StructDecl {
             module: Qualifier::default(),

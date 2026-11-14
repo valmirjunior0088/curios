@@ -601,7 +601,7 @@ fn stated(context: &mut Context, instance: &Term, tag: &Atom) -> Result<Said, Re
     let Some(constructor) = constructor else {
         return Ok(Said::Silent);
     };
-    let signature = constructor.telescope.open_params(&family.params);
+    let signature = constructor.open(&family.params);
 
     let binders = (0..signature.len())
         .map(|_| context.fresh(None))

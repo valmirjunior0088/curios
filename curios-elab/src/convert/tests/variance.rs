@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Definition, DefinitionKind, Free, InductDecl, InductParam, Level, Telescope, Term,
+        Atom, Definition, DefinitionKind, Free, InductDecl, Level, Telescope, Term,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
         UniverseParam, UniverseRole, Variance,
     },
@@ -21,20 +21,19 @@ fn declare_wrap(context: &mut Context, variance: Variance) {
     context
         .register_induct(
             &nominal("Wrap"),
-            InductDecl {
-                universe_context: UniverseContext {
+            InductDecl::new(
+                UniverseContext {
                     parameter_count: 1,
                     quality_count: 0,
                     constraints: Vec::new(),
                 },
-                arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: sort,
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: vec![variance],
-            },
+                Telescope::build([(carrier, sort.clone())], Telescope::done(())),
+                Vec::new().into(),
+                sort,
+                Qualifier::empty(),
+                true,
+            )
+            .with_variances(vec![variance]),
         )
         .unwrap();
 }
@@ -63,23 +62,22 @@ fn declare_held(context: &mut Context) {
     context
         .register_induct(
             &nominal("Held"),
-            InductDecl {
-                universe_context: scheme,
-                arity: Telescope::done(Telescope::done(())),
-                constructors: vec![(
+            InductDecl::new(
+                scheme,
+                Telescope::done(Telescope::done(())),
+                vec![(
                     Atom::from("hold"),
-                    InductParam::new(
+                    curios_core::test_support::case(
+                        0,
                         Telescope::build([(held, payload)], Vec::new()),
                         vec![Plicity::Explicit],
                     ),
                 )]
                 .into(),
-                result_sort: Term::type_at(level()),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::type_at(level()),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
 }
@@ -414,7 +412,7 @@ fn a_family_whose_walk_the_budget_cuts_short_files_no_vector() {
         let recorded = record_variances(&mut context, &[nominal("Held")]);
         let filed = context
             .induct_decl(&nominal("Held"))
-            .map(|declaration| declaration.variances.clone());
+            .map(|declaration| declaration.variances().to_vec());
         match budget {
             0 => {
                 assert!(recorded.is_err(), "with no budget the group is refused");

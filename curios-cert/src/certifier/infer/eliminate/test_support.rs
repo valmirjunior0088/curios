@@ -7,7 +7,7 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nat, Scope, Telescope, Term,
+        Atom, Free, Global, InductDecl, Intrinsic, Many, Nat, Scope, Telescope, Term,
         UniverseContext, Universes,
     },
 };
@@ -102,16 +102,19 @@ pub fn declare_at(
                 None => (Telescope::done(targets), Vec::new()),
             };
 
-            (Atom::from(case.tag), InductParam::new(telescope, plicities))
+            (
+                Atom::from(case.tag),
+                curios_core::test_support::case(0, telescope, plicities),
+            )
         })
         .collect();
 
     certifier
         .declare_induct(
             &family,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::build(
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::build(
                     index_types
                         .into_iter()
                         .enumerate()
@@ -121,13 +124,11 @@ pub fn declare_at(
                         .collect::<Vec<_>>(),
                     (),
                 )),
-                constructors: entries,
+                entries,
                 result_sort,
-                module: Qualifier::from([path]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Qualifier::from([path]),
+                true,
+            ),
         )
         .expect("a name is declared once");
 

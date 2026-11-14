@@ -10,7 +10,6 @@
 
 use {
     crate::{Label, Term, TopConcept, TopForeign, TopInduct, TopLet, TopStruct, TopTest},
-    curios_common::Plicity,
     curios_core::{Global, WitnessId},
     std::fmt,
 };
@@ -210,8 +209,8 @@ pub enum CoreValue<D: Dialect = CoreText> {
     Term(Term<D>),
     /// `{field = value, …}`: a struct-valued field, each field it omits at the template's.
     Fields(Vec<DecoratorField<D>>),
-    /// `[value, @value, use value, …]`: a list, each entry under its mark.
-    List(Vec<(Plicity, CoreValue<D>)>),
+    /// `[value, …]`: a list.
+    List(Vec<CoreValue<D>>),
     /// `/`, the root module.
     Root,
 }

@@ -8,11 +8,11 @@
 
 use {
     super::{
-        Applications, Atom, Bound, ConceptDecl, Cursor, Enter, Free, Func, FuncType, Global,
+        Applications, Arity, Atom, Bound, ConceptDecl, Cursor, Enter, Free, Func, FuncType, Global,
         InductDecl, Items, Level, Lexicon, Marks, Members, Mentions, Place, Places, Polarity,
-        Quality, ReadEntry, ReadTable, RecGroup, Sharing, StructDecl, StructType, Subterm, Symbols,
-        Telescope, Term, UniverseContext, UniverseError, UniverseParam, Universes, Variance,
-        WitnessId, foreign_produced, wire_term,
+        Quality, ReadEntry, ReadTable, RecGroup, Scope, Sharing, StructDecl, StructType, Subterm,
+        Symbols, Telescope, Term, UniverseContext, UniverseError, UniverseParam, Universes,
+        Variance, WitnessId, foreign_produced, wire_term,
     },
     curios_abi::ForeignFunction,
     curios_common::{
@@ -667,7 +667,7 @@ impl DefinitionKind {
         };
 
         declaration
-            .constructors
+            .constructors()
             .iter()
             .map(|(tag, _)| Global::Authored(owner.with(tag.as_str())))
             .collect()
@@ -1071,9 +1071,9 @@ impl Definition {
     pub fn former(name: Global, island: Qualifier, nominal: Nominal) -> Self {
         let (universe_context, arity, result_sort) = match &nominal {
             Nominal::Inductive(declaration) => (
-                &declaration.universe_context,
-                &declaration.arity,
-                &declaration.result_sort,
+                declaration.universe_context(),
+                declaration.arity(),
+                declaration.result_sort(),
             ),
             Nominal::Struct(record) | Nominal::Concept { record, .. } => {
                 (&record.universe_context, &record.arity, &record.result_sort)
@@ -1103,14 +1103,15 @@ impl Definition {
         declaration: &InductDecl,
     ) -> Vec<Self> {
         let family = Global::Authored(owner);
-        let universes = declaration.universe_context.identity_instance();
+        let universes = declaration.universe_context().identity_instance();
         let params = declaration.param_count();
         declaration
-            .constructors
+            .constructors()
             .iter()
-            .map(|(tag, signature)| {
-                let proofs = signature.telescope.proofs();
-                let (binders, indices) = opened(signature.telescope.cursor());
+            .map(|(tag, case)| {
+                let signature = declaration.signature(case);
+                let proofs = signature.proofs();
+                let (binders, indices) = opened(signature.cursor());
                 let variables = variables(&binders);
                 let (leading, payload) = variables.split_at(params.min(variables.len()));
                 let type_ =
@@ -1125,7 +1126,7 @@ impl Definition {
 
                 Self {
                     name: Global::Authored(owner.with(tag.as_str())),
-                    universe_context: declaration.universe_context.clone(),
+                    universe_context: declaration.universe_context().clone(),
                     kind: DefinitionKind::InductiveConstructor {
                         owner,
                         tag: tag.clone(),
@@ -1206,7 +1207,7 @@ impl Definition {
         family: Global,
         declaration: &InductDecl,
     ) -> Self {
-        let context = &declaration.universe_context;
+        let context = declaration.universe_context();
         let universes = Universes {
             levels: vec![Level::zero(); context.parameter_count],
             qualities: vec![Quality::Type; context.quality_count],
@@ -1843,17 +1844,17 @@ impl Item {
 impl InductDecl {
     /// The top-level names this declaration reaches: through its arity, its result sort and its constructors' signatures.
     pub fn reaches(&self) -> BTreeSet<Global> {
-        let mut names = arity_reaches(&self.arity);
-        names.extend(term_reaches(&self.result_sort));
-        for (_, constructor) in &self.constructors {
-            names.extend(payload_reaches(&constructor.telescope));
+        let mut names = arity_reaches(self.arity());
+        names.extend(term_reaches(self.result_sort()));
+        for (_, constructor) in self.constructors() {
+            names.extend(payload_reaches(constructor.payload().body()));
         }
         names
     }
 
     /// The domains its former ranges over: its parameters' types, then its indices'. What the family is indexed by, as against what its constructors hold.
     pub fn former_domains(&self) -> Vec<&Term> {
-        let (params, indices) = entries(&self.arity);
+        let (params, indices) = entries(self.arity());
         params.into_iter().chain(entries(indices).0).collect()
     }
 }
@@ -1983,6 +1984,12 @@ impl Terms for () {
     fn terms(&self, _: &mut dyn FnMut(&Term)) {}
 }
 
+impl<A: Arity, B: Bound + Terms> Terms for Scope<A, B> {
+    fn terms(&self, visit: &mut dyn FnMut(&Term)) {
+        self.body().terms(visit);
+    }
+}
+
 impl<B: Bound + Terms> Terms for Telescope<B> {
     fn terms(&self, visit: &mut dyn FnMut(&Term)) {
         let (types, done) = entries(self);
@@ -2044,10 +2051,10 @@ fn item_positions(
         .filter(|(name, _)| !in_scope(name))
     {
         if let Some(declaration) = nominal.inductive() {
-            visit(Some(name), &declaration.arity);
-            visit(Some(name), &declaration.result_sort);
-            for (_, constructor) in &declaration.constructors {
-                visit(Some(name), &constructor.telescope);
+            visit(Some(name), declaration.arity());
+            visit(Some(name), declaration.result_sort());
+            for (_, constructor) in declaration.constructors() {
+                visit(Some(name), constructor.payload());
             }
         }
         if let Some(record) = nominal.record() {
@@ -2253,9 +2260,12 @@ fn put_members(members: &mut Members, name: &Global, former: &Definition) {
     }
     if let Some(family) = nominal.inductive() {
         let constructors = family
-            .constructors
+            .constructors()
             .iter()
-            .map(|(tag, case)| (tag.clone(), case.telescope.marks()))
+            .map(|(tag, case)| {
+                let marks = family.parameter_marks().into_iter().chain(case.plicities());
+                (tag.clone(), marks.collect())
+            })
             .collect();
         members.payloads.insert(*name, Rc::new(constructors));
     }

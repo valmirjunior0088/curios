@@ -791,6 +791,36 @@ impl<A: Arity + fmt::Debug, B: Bound> fmt::Debug for Scope<A, B> {
     }
 }
 
+/// A body under binders is a value as its body is, read at the depth its binders add: what a family's case is, its payload under the family's parameters ([`InductParam`](crate::InductParam)).
+impl<A: Arity + Eq + Hash + fmt::Debug, B: Bound> Bound for Scope<A, B> {
+    fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
+    where
+        F: FnMut(usize, &Var) -> Option<Subterm>,
+    {
+        visit.visit_scope(self)
+    }
+
+    fn reach(&self) -> usize {
+        self.body.reach().saturating_sub(self.arity.arity())
+    }
+
+    fn mentions(&self) -> Mentions {
+        self.body.mentions()
+    }
+
+    fn has_metavar(&self) -> bool {
+        self.body.has_metavar()
+    }
+
+    fn has_transient(&self) -> bool {
+        self.body.has_transient()
+    }
+
+    fn has_universe_meta(&self) -> bool {
+        self.body.has_universe_meta()
+    }
+}
+
 impl<A: Arity + Clone, B: Bound> Clone for Scope<A, B> {
     fn clone(&self) -> Self {
         Self {

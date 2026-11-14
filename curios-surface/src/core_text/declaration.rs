@@ -1,25 +1,24 @@
 //! A nominal declaration in its form: a family's, a record's and a concept's.
 //!
-//! **A family is `induct /F(params): (indices) -> pub Sort`, a case to a line, `| tag(payload): (targets)`, and `end`**; a record is `struct /R(params): pub Sort { fields }` and a concept `concept /C(params): pub Sort { fields }`, a superclass edge among a concept's fields written `use T`. A form builds its declaration's entry and its former ([`curios_core::Definition::former`]), and a family's its constructors ([`curios_core::Definition::constructors`]), so the module's items those make are written nowhere else. The inner `pub` is the entry's `rep_public`.
+//! **A family is `induct /F(params): (indices) -> pub Sort`, a case to a line, `| tag(payload): (targets)`, and `end`**; a record is `struct /R(params): pub Sort { fields }` and a concept `concept /C(params): pub Sort { fields }`, a superclass edge among a concept's fields written `use T`. A form builds its declaration's entry and its former ([`curios_core::Definition::former`]), a family's declaring its constructors ([`curios_core::Definition::constructors`]), so nothing the module holds is written elsewhere. The inner `pub` is the entry's `rep_public`.
 //!
-//! **Each binder is written by its word, under its mark**, `@n: Nat`, or as its type alone where nothing reads it, and a later type reads it by that word: a family's cases read its parameters by the head's words. A case's parameters are its family's, each hidden as a value constructor takes it, and a case whose parameters are not states them as its signature holds them, under their marks: `| #{params = [@Type, use /Show(A)]} tag(…)`.
+//! **Each binder is written by its word, under its mark**, `@n: Nat`, or as its type alone where nothing reads it, and a later type reads it by that word: a family's cases read its parameters by the head's words, a case holding its payload under its family's parameters and none of its own.
 
 use {
     super::{
         Fields, LabelRead, OpenedEntry, ReadError, Reader, Refusal, TelescopeEntry, core_read,
         malformed, parameter_entry, proving_telescope, telescope_read, universe_context_read,
-        value, value_fields, value_list, value_module, value_term, value_unmarked, value_word,
+        value_fields, value_list, value_module, value_word,
     },
     crate::{
-        CasePayloadParam, CoreHead, CoreText, CoreValue, DecoratorField, Frame, FuncTypeParam,
-        Rendered, Shown, TopCase, TopConcept, TopInduct, TopStruct, decoration_fields, sub,
+        CasePayloadParam, CoreHead, CoreText, DecoratorField, Frame, FuncTypeParam, Rendered,
+        Shown, TopCase, TopConcept, TopInduct, TopStruct, sub,
     },
     curios_common::{Plicity, Qualifier},
     curios_core::{
         Atom, Bound, Cursor, Free, Global, InductDecl, InductParam, Label, Polarity, StructDecl,
         Telescope, Term, UniverseContext, Variance,
     },
-    std::iter,
 };
 
 /// One binder of a declaration's telescope: its mark, its type, the variable a later type reads it by, whether the rest of its own telescope reads it, and whether it has a hint or is so read.
@@ -91,14 +90,6 @@ pub fn binders<D: Rendered, B: Bound>(
     binders
 }
 
-/// What a value constructor takes a family's parameter under: a `use` one a witness slot, every other one hidden.
-pub fn hidden(mark: Plicity) -> Plicity {
-    match mark {
-        Plicity::Witness => Plicity::Witness,
-        Plicity::Explicit | Plicity::Implicit => Plicity::Implicit,
-    }
-}
-
 /// The head a declaration of `name` is written under, its decorator empty: the caller states what it sets.
 fn head_of<D: Rendered>(name: &Global) -> CoreHead<D> {
     CoreHead {
@@ -121,21 +112,25 @@ pub fn family_declared<D: Rendered>(
     entry: &InductDecl,
     frame: Frame<'_, D>,
 ) -> TopInduct<D> {
-    let mut cursor = entry.arity.cursor();
+    let mut cursor = entry.arity().cursor();
     let params = binders(&mut cursor, frame);
     let indices = cursor
         .body()
         .expect("a cursor past every entry holds its payload");
     let indices = binders(&mut indices.cursor(), frame);
     // A parameter a case reads is written by its word, which the case reads it by.
+    let variables = params
+        .iter()
+        .map(|param| param.variable.clone())
+        .collect::<Vec<_>>();
+    let payloads = entry
+        .constructors()
+        .iter()
+        .map(|(_, case)| case.open(&variables))
+        .collect::<Vec<_>>();
     let read = params
         .iter()
-        .map(|param| {
-            entry
-                .constructors
-                .iter()
-                .any(|(_, signature)| reads(&signature.telescope, &params, param))
-        })
+        .map(|param| payloads.iter().any(|payload| reads(payload, param)))
         .collect::<Vec<_>>();
     let written = params
         .iter()
@@ -154,18 +149,19 @@ pub fn family_declared<D: Rendered>(
             )
         })
         .collect();
-    let result_sort = sub(entry.result_sort.clone(), frame);
+    let result_sort = sub(entry.result_sort().clone(), frame);
     let cases = entry
-        .constructors
+        .constructors()
         .iter()
-        .map(|(tag, signature)| case_written(tag, signature, &params, indexed, frame))
+        .zip(payloads)
+        .map(|((tag, _), payload)| case_written(tag, &payload, indexed, frame))
         .collect::<Vec<_>>();
 
     TopInduct {
         doc: None,
         core: head_of(name),
         vis_pub: false,
-        rep_pub: entry.rep_public,
+        rep_pub: entry.rep_public(),
         label: label_of(name),
         params: written,
         indices: index_types,
@@ -174,19 +170,9 @@ pub fn family_declared<D: Rendered>(
     }
 }
 
-/// Whether a case whose signature is `telescope` reads the family's parameter `param` past its own parameters, which are read at `params`.
-fn reads(
-    telescope: &Telescope<Vec<Term>>,
-    params: &[DeclaredBinder],
-    param: &DeclaredBinder,
-) -> bool {
-    let mut cursor = telescope.cursor();
-    for each in params {
-        if cursor.entry().is_none() {
-            return false;
-        }
-        cursor.advance(each.variable.clone());
-    }
+/// Whether a case whose payload, at the family's parameters, is `payload` reads the family's parameter `param`.
+fn reads(payload: &Telescope<Vec<Term>>, param: &DeclaredBinder) -> bool {
+    let mut cursor = payload.cursor();
     while let Some((_, type_)) = cursor.entry() {
         if param.variable_is(&type_) {
             return true;
@@ -199,26 +185,14 @@ fn reads(
         .is_some_and(|targets| targets.iter().any(|target| param.variable_is(target)))
 }
 
-/// A case: its tag over its payload, then its targets where its family has indices, under the parameters it states where they are not its family's.
+/// A case: its tag over its payload, read at its family's parameters, then its targets where its family has indices.
 fn case_written<D: Rendered>(
     tag: &Atom,
-    signature: &InductParam,
-    params: &[DeclaredBinder],
+    payload: &Telescope<Vec<Term>>,
     indexed: bool,
     frame: Frame<'_, D>,
 ) -> TopCase<D> {
-    let mut cursor = signature.telescope.cursor();
-    let mut stated = Vec::with_capacity(params.len());
-    let mut own = true;
-    for param in params {
-        let (Some((_, type_)), Some(mark)) = (cursor.entry(), cursor.mark()) else {
-            own = false;
-            break;
-        };
-        own &= type_ == param.type_ && mark == hidden(param.mark);
-        stated.push((mark, value(sub(type_, frame))));
-        cursor.advance(param.variable.clone());
-    }
+    let mut cursor = payload.cursor();
     let payload = binders(&mut cursor, frame)
         .iter()
         .map(|binder| CasePayloadParam {
@@ -235,14 +209,8 @@ fn case_written<D: Rendered>(
             .map(|target| sub(target, frame))
             .collect()
     });
-    let fields = match own {
-        true => Vec::new(),
-        false => decoration_fields(vec![("params", CoreValue::List(stated))]),
-    };
-
     TopCase {
         doc: None,
-        core: fields,
         label: crate::Label::from(tag.as_string()),
         payload,
         target,
@@ -364,8 +332,8 @@ pub fn entry_fields_read(
         *module = value_module(value)?;
     }
     if let Some(value) = fields.take("polarities") {
-        *polarities = value_unmarked(value)?
-            .into_iter()
+        *polarities = value_list(value)?
+            .iter()
             .map(|polarity| {
                 let word = value_word(polarity)?;
                 [
@@ -382,8 +350,8 @@ pub fn entry_fields_read(
             .collect::<Result<_, _>>()?;
     }
     if let Some(value) = fields.take("variances") {
-        *variances = value_unmarked(value)?
-            .into_iter()
+        *variances = value_list(value)?
+            .iter()
             .map(|variance| match value_word(variance)? {
                 "Irrelevant" => Ok(Variance::Irrelevant),
                 "Invariant" => Ok(Variance::Invariant),
@@ -446,57 +414,39 @@ pub fn family_entry_read(
         (),
     );
 
-    let mut entry = InductDecl {
-        universe_context: scheme.clone(),
-        arity: proving_telescope(
-            Telescope::build_marked(read, proving_telescope(indices_built, &indices)),
-            &params,
-        ),
-        constructors: cases.into(),
-        result_sort: core_read(&family.result_sort, reader)?,
-        module: parent(name),
-        rep_public: family.rep_pub,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+    let arity = proving_telescope(
+        Telescope::build_marked(read, proving_telescope(indices_built, &indices)),
+        &params,
+    );
+    let result_sort = core_read(&family.result_sort, reader)?;
+    let (mut universe_context, mut module) = (scheme.clone(), parent(name));
+    let (mut polarities, mut variances) = (Vec::new(), Vec::new());
     entry_fields_read(
         fields,
-        &mut entry.universe_context,
-        &mut entry.module,
-        &mut entry.polarities,
-        &mut entry.variances,
+        &mut universe_context,
+        &mut module,
+        &mut polarities,
+        &mut variances,
     )?;
 
-    Ok(entry)
+    Ok(InductDecl::new(
+        universe_context,
+        arity,
+        cases.into(),
+        result_sort,
+        module,
+        family.rep_pub,
+    )
+    .with_polarities(polarities)
+    .with_variances(variances))
 }
 
-/// A case: its parameters — its family's, each hidden as a value constructor takes it, or those its decorator states, under the head's words — then its payload by its own words, then its targets.
+/// A case: its payload by its own words, over its family's parameters, which it reads by the head's words, then its targets.
 fn case_read(
     case: &TopCase<CoreText>,
     params: &[OpenedEntry],
     reader: &mut Reader<'_>,
 ) -> Result<(Atom, InductParam), ReadError> {
-    let mut fields = Fields::of(&case.core, case.label.span())?;
-    let own = match fields.take("params") {
-        None => params
-            .iter()
-            .map(|(mark, binder, type_)| (hidden(*mark), *binder, type_.clone()))
-            .collect::<Vec<_>>(),
-        Some(value) => {
-            let stated = value_list(value)?;
-            if stated.len() > params.len() {
-                return Err(malformed("no more parameters than its family's", value));
-            }
-            stated
-                .iter()
-                .zip(params)
-                .map(|((mark, entry), (_, binder, _))| {
-                    Ok((*mark, *binder, core_read(&value_term(entry)?, reader)?))
-                })
-                .collect::<Result<Vec<_>, ReadError>>()?
-        }
-    };
-    fields.finish()?;
     let payload = case
         .payload
         .iter()
@@ -517,19 +467,25 @@ fn case_read(
             .collect::<Result<Vec<_>, _>>()
     })?;
 
-    // A case's parameters are its family's binders, so what its text states of its binders' labels is its payload's alone.
-    let own_count = own.len();
-    let telescope = Telescope::build_marked(own.into_iter().chain(payload_read), targets);
+    let telescope = Telescope::build_marked(payload_read, targets);
     let telescope = match payload.iter().any(|(_, label, _)| label.proof) {
         true => telescope.with_proofs(
-            &iter::repeat_n(false, own_count)
-                .chain(payload.iter().map(|(_, label, _)| label.proof))
+            &payload
+                .iter()
+                .map(|(_, label, _)| label.proof)
                 .collect::<Vec<_>>(),
         ),
         false => telescope,
     };
+    let params = params
+        .iter()
+        .map(|(_, binder, _)| binder)
+        .collect::<Vec<_>>();
 
-    Ok((Atom::from(case.label.as_str()), InductParam { telescope }))
+    Ok((
+        Atom::from(case.label.as_str()),
+        InductParam::over(&params, telescope),
+    ))
 }
 
 /// A record's entry from a structure's form: its parameters by their words, the sort it lands in, and its fields, each plain or under `@` and by its label where it has one.

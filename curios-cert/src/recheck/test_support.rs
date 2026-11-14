@@ -44,16 +44,14 @@ pub fn authored_proof(name: &Global, type_: Term, body: Term) -> Item {
 
 /// A nullary `Prop`-sorted family: `False` itself, and the shape `Box` takes but for its payload.
 pub fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl {
-    InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: constructors.into(),
-        result_sort: Term::prop(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    }
+    InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::done(())),
+        constructors.into(),
+        Term::prop(),
+        Qualifier::default(),
+        true,
+    )
 }
 
 /// `sink : (Nat) -> Nat`, honestly stamped `Partial`: its body projects `rec f : (Nat) -> Nat = (n) => f(n)`, which does not descend.
@@ -258,19 +256,19 @@ pub fn two_registry_entries(varied: Varied) -> Definitions {
         false => Qualifier::default(),
     };
 
-    let family = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new().into(),
-        result_sort: Term::type_ground(),
-        module: owner(),
-        rep_public: !stamped,
-        polarities: polarities(),
-        variances: match varied {
-            Varied::Variance => vec![Variance::Irrelevant],
-            _ => Vec::new(),
-        },
-    };
+    let family = InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::done(())),
+        Vec::new().into(),
+        Term::type_ground(),
+        owner(),
+        !stamped,
+    )
+    .with_polarities(polarities())
+    .with_variances(match varied {
+        Varied::Variance => vec![Variance::Irrelevant],
+        _ => Vec::new(),
+    });
     let record = StructDecl {
         universe_context: UniverseContext::empty(),
         arity: Telescope::done(Telescope::build(

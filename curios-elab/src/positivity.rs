@@ -5,7 +5,7 @@
 use {
     super::{Context, Error, Published},
     curios_analysis::{Declarations, PositivityRefusal, positivity_vectors},
-    curios_core::{InductDecl, StructDecl},
+    curios_core::StructDecl,
     std::collections::BTreeMap,
 };
 
@@ -52,13 +52,7 @@ pub fn decide_polarities(context: &mut Context, published: &Published) -> Result
 
     for (name, vector) in vectors {
         if let Some(declaration) = inducts.get(&name) {
-            context.update_induct(
-                &name,
-                InductDecl {
-                    polarities: vector,
-                    ..declaration.clone()
-                },
-            );
+            context.update_induct(&name, declaration.clone().with_polarities(vector));
         } else if let Some(declaration) = structs.get(&name) {
             context.update_struct(
                 &name,

@@ -685,7 +685,7 @@ pub fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
         .induct_decls()
         .iter()
         .find(|(name, _)| name.faithful().to_string().ends_with(&format!("/{family}")))
-        .map(|(_, declaration)| declaration.variances.clone())
+        .map(|(_, declaration)| declaration.variances().to_vec())
         .unwrap_or_else(|| panic!("{family} is an inductive family of the unit"))
 }
 

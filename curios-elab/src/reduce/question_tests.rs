@@ -38,20 +38,19 @@ fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
         context
             .register_induct(
                 &nominal(family),
-                InductDecl {
-                    universe_context: UniverseContext {
+                InductDecl::new(
+                    UniverseContext {
                         parameter_count: 1,
                         quality_count: 0,
                         constraints: Vec::new(),
                     },
-                    arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
-                    constructors: Vec::new().into(),
-                    result_sort: sort.clone(),
-                    module: Qualifier::empty(),
-                    rep_public: true,
-                    polarities: Vec::new(),
-                    variances: vec![variance],
-                },
+                    Telescope::build([(carrier, sort.clone())], Telescope::done(())),
+                    Vec::new().into(),
+                    sort.clone(),
+                    Qualifier::empty(),
+                    true,
+                )
+                .with_variances(vec![variance]),
             )
             .unwrap();
     }

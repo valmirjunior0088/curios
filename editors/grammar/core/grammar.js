@@ -69,8 +69,6 @@ module.exports = grammar(curios, {
 
     foreign_item: ($, original) => seq(optional($.decorator), original),
 
-    constructor: ($, original) => seq(optional($.decorator), original),
-
     // A declaration is named by its absolute path, a witness by its identity; a local `and` member keeps its word.
     _declared_name: ($) => choice($.path, $.witness_name, $._name),
 

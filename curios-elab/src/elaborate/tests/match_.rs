@@ -5,8 +5,8 @@ use {
     crate::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Cases, Free, InductArm, InductDecl, InductParam, Many, Match, MatchResult, Scope,
-        Subterm, Telescope, Term, UniverseContext,
+        Atom, Cases, Free, InductArm, InductDecl, Many, Match, MatchResult, Scope, Subterm,
+        Telescope, Term, UniverseContext,
     },
 };
 
@@ -53,23 +53,22 @@ fn register_tagged(context: &mut Context) {
     context
         .register_induct(
             &nominal("Tagged"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::from([(
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(Telescope::done(())),
+                Vec::from([(
                     Atom::from("tag"),
-                    InductParam::new(
+                    curios_core::test_support::case(
+                        0,
                         Telescope::build([(hidden, nat()), (plain, nat())], Vec::new()),
                         vec![Plicity::Implicit, Plicity::Explicit],
                     ),
                 )])
                 .into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
 }
@@ -217,26 +216,32 @@ fn register_flag(context: &mut Context) {
     context
         .register_induct(
             &nominal("Flag"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(Telescope::build([(index, nat())], ())),
-                constructors: Vec::from([
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(Telescope::build([(index, nat())], ())),
+                Vec::from([
                     (
                         Atom::from("off"),
-                        InductParam::new(Telescope::done(vec![nat_lit(0)]), vec![]),
+                        curios_core::test_support::case(
+                            0,
+                            Telescope::done(vec![nat_lit(0)]),
+                            vec![],
+                        ),
                     ),
                     (
                         Atom::from("on"),
-                        InductParam::new(Telescope::done(vec![nat_lit(1)]), vec![]),
+                        curios_core::test_support::case(
+                            0,
+                            Telescope::done(vec![nat_lit(1)]),
+                            vec![],
+                        ),
                     ),
                 ])
                 .into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
 }

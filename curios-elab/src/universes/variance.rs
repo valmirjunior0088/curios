@@ -8,9 +8,9 @@ use {
     crate::{Context, Error, Published, zonk_solved_term_metas},
     curios_analysis::{Declarations, VarianceVectors, held_by, held_levels, variance_vectors},
     curios_core::{
-        Bound, Families, Func, FuncType, Global, InductDecl, InductParam, Level, LevelHead,
-        ParameterField, Proj, Struct, StructDecl, Subterm, Term, Tuple, UniverseContext,
-        UniverseMetaId, UniverseParam, Variance, rewrite_universe_levels, universe_params,
+        Bound, Families, Func, FuncType, Global, InductDecl, Level, LevelHead, ParameterField,
+        Proj, Struct, StructDecl, Subterm, Term, Tuple, UniverseContext, UniverseMetaId,
+        UniverseParam, Variance, rewrite_universe_levels, universe_params,
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -97,13 +97,7 @@ pub fn record_variances(context: &mut Context, names: &[Global]) -> Result<(), E
     }
     for (name, vector) in vectors {
         if let Some(declaration) = context.induct_decl(&name).cloned() {
-            context.update_induct(
-                &name,
-                InductDecl {
-                    variances: vector,
-                    ..declaration
-                },
-            );
+            context.update_induct(&name, declaration.with_variances(vector));
         } else if let Some(declaration) = context.struct_decl(&name).cloned() {
             context.update_struct(
                 &name,
@@ -150,22 +144,10 @@ fn spliced(
     let mut structs = BTreeMap::new();
     for name in names {
         if let Some(declaration) = context.induct_decl(name).cloned() {
-            let spliced = InductDecl {
-                arity: zonk_solved_term_metas(context, &declaration.arity),
-                constructors: declaration
-                    .constructors
-                    .iter()
-                    .map(|(tag, constructor)| {
-                        (
-                            tag.clone(),
-                            InductParam {
-                                telescope: zonk_solved_term_metas(context, &constructor.telescope),
-                            },
-                        )
-                    })
-                    .collect(),
-                ..declaration
-            };
+            let arity = zonk_solved_term_metas(context, declaration.arity());
+            let spliced = declaration.with_arity(arity).with_cases(|case| {
+                case.rewritten(|payload| zonk_solved_term_metas(context, payload))
+            });
             inducts.insert(*name, spliced);
         } else if let Some(declaration) = context.struct_decl(name).cloned() {
             let spliced = StructDecl {
@@ -438,8 +420,12 @@ pub fn hold_variances(context: &mut Context, published: &Published) -> Result<()
     let carried = |name: &Global| {
         inducts
             .get(name)
-            .map(|declaration| &declaration.variances)
-            .or_else(|| structs.get(name).map(|declaration| &declaration.variances))
+            .map(|declaration| declaration.variances())
+            .or_else(|| {
+                structs
+                    .get(name)
+                    .map(|declaration| declaration.variances.as_slice())
+            })
     };
 
     for (name, settled) in &vectors {

@@ -184,7 +184,7 @@ impl<'s> Eraser<'s> {
         self.pending_families.insert(name, family);
         // A `Prop`-sorted family is proof-irrelevant, so erasure drops its inhabitants wholesale — payloads included. Classifying each payload on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)` has an abstract `A`, which is neither prop nor universe), leaving a live field inside an erased proof: rebuilding the constructor would then compute that field from binders the same erasure had dropped. `Prop` structures already guarantee this by declaration — their fields must be non-informative — so this aligns inductives with them.
         let proof_family = matches!(
-            &*reduced(context, &induct_decl.result_sort)?,
+            &*reduced(context, induct_decl.result_sort())?,
             curios_core::Subterm::Sort(curios_core::Sort {
                 quality: curios_core::Quality::Prop,
                 level: _
@@ -192,10 +192,10 @@ impl<'s> Eraser<'s> {
         );
         let mut constructors = Vec::new();
         // In declaration order, which is runtime-tag order, each constructor read where the walk stands rather than looked up by its tag again.
-        for (tag, param) in &induct_decl.constructors {
+        for (tag, param) in induct_decl.constructors() {
             let entries = context.scoped(|context| {
-                let params = open_opaque(context, induct_decl.arity.clone());
-                let telescope = param.telescope.clone().open_params(&params);
+                let params = open_opaque(context, induct_decl.arity().clone());
+                let telescope = param.open(&params);
                 constructor_entries(self, context, telescope)
             })?;
             let entries: Vec<(Option<String>, bool, curios_anf::FieldShape)> = entries
@@ -443,8 +443,7 @@ impl<'s> Eraser<'s> {
             .at(&variant.universes)
             .constructor(&variant.tag)
             .expect("erase: constructor tag registered with its inductive")?
-            .telescope
-            .open_params(&variant.params);
+            .open(&variant.params);
         let mask = constructor.mask.clone();
         let id = constructor.id;
         let atoms = match self.masked_fields(context, &mask, telescope, &variant.payload)? {

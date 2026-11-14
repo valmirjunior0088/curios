@@ -5,8 +5,7 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Global, InductDecl, InductParam, Intrinsic, Nat, Subterm, Telescope, Term,
-        UniverseContext,
+        Atom, Global, InductDecl, Intrinsic, Nat, Subterm, Telescope, Term, UniverseContext,
     },
 };
 
@@ -33,17 +32,18 @@ pub fn register_opt(context: &mut Context) {
     context
         .register_induct(
             &nominal("Opt"),
-            InductDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::from([
+            InductDecl::new(
+                UniverseContext::empty(),
+                Telescope::done(Telescope::done(())),
+                Vec::from([
                     (
                         Atom::from("none"),
-                        InductParam::new(Telescope::done(Vec::new()), vec![]),
+                        curios_core::test_support::case(0, Telescope::done(Vec::new()), vec![]),
                     ),
                     (
                         Atom::from("some"),
-                        InductParam::new(
+                        curios_core::test_support::case(
+                            0,
                             Telescope::build(
                                 [(payload, Term::intrinsic(Intrinsic::NatType))],
                                 Vec::new(),
@@ -53,12 +53,10 @@ pub fn register_opt(context: &mut Context) {
                     ),
                 ])
                 .into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .unwrap();
 }

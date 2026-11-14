@@ -145,27 +145,26 @@ fn a_lets_binders_state_what_the_certifier_reads_of_their_types() {
 fn a_constructors_binders_state_what_the_certifier_reads_of_their_types() {
     let (p, h, n) = (binder(0, "P"), binder(1, "h"), binder(2, "n"));
     let hold = Atom::from("hold");
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
+    let declaration = InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::done(())),
+        vec![(
             hold.clone(),
-            InductParam {
-                telescope: Telescope::build(
+            InductParam::over(
+                &[],
+                Telescope::build(
                     [(p, Term::prop()), (h, Term::free_var(&p)), (n, nat_type())],
                     Vec::new(),
                 )
                 .with_marks(&[Plicity::Explicit; 3])
                 .with_proofs(&[true, false, true]),
-            },
+            ),
         )]
         .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::from(["Holder"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+        Term::type_ground(),
+        Qualifier::from(["Holder"]),
+        true,
+    );
 
     let stated = stated_entry(&mut certifier(), &declaration);
 
@@ -173,7 +172,6 @@ fn a_constructors_binders_state_what_the_certifier_reads_of_their_types() {
         stated
             .constructor(&hold)
             .expect("the family declares `hold`")
-            .telescope
             .proofs(),
         [false, true, false]
     );
@@ -199,31 +197,26 @@ fn a_binder_at_a_sort_left_to_the_caller_binds_no_proof() {
     assert_eq!(telescope.proofs(), [false, false]);
 
     let boxed = Atom::from("box");
-    let declaration = InductDecl {
-        universe_context: UniverseContext {
+    let declaration = InductDecl::new(
+        UniverseContext {
             parameter_count: 0,
             quality_count: 1,
             constraints: Vec::new(),
         },
-        arity: Telescope::build([(carrier, left.clone())], Telescope::done(())),
-        constructors: vec![(
+        Telescope::build([(carrier, left.clone())], Telescope::done(())),
+        vec![(
             boxed.clone(),
-            InductParam {
-                telescope: Telescope::build(
-                    [(carrier, left), (held, Term::free_var(&carrier))],
-                    Vec::new(),
-                )
-                .with_marks(&[Plicity::Implicit, Plicity::Explicit])
-                .with_proofs(&[true, true]),
-            },
+            InductParam::over(
+                &[&carrier],
+                Telescope::build([(held, Term::free_var(&carrier))], Vec::new())
+                    .with_proofs(&[true]),
+            ),
         )]
         .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::from(["Box"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+        Term::type_ground(),
+        Qualifier::from(["Box"]),
+        true,
+    );
 
     let stated = stated_entry(&mut certifier(), &declaration);
 

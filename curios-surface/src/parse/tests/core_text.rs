@@ -2,7 +2,7 @@
 
 use {
     crate::*,
-    curios_common::{Plicity, Qualifier, Source},
+    curios_common::{Qualifier, Source},
     curios_core::{Global, HeadKey, WitnessId},
     curios_parse::ParserError,
 };
@@ -88,11 +88,11 @@ fn a_decorator_takes_an_operand_and_nothing_larger() {
     assert!(matches!(decorated(&bound).1.as_subterm(), Subterm::Held));
 }
 
-/// A field holds a struct value, a list whose entries take marks, the root module, or a term — `{}` being a struct value that states nothing.
+/// A field holds a struct value, a list, the root module, or a term — `{}` being a struct value that states nothing.
 #[test]
 fn a_decorator_states_struct_list_and_root_values() {
     let term = core(
-        "#{universes = {levels = [u + 1]}, params = [@Type, use /Show(A)], island = /, empty = {}} f",
+        "#{universes = {levels = [u + 1]}, variances = [Invariant, Irrelevant], island = /, empty = {}} f",
     );
     let (fields, _) = decorated(&term);
     let values = fields
@@ -107,10 +107,7 @@ fn a_decorator_states_struct_list_and_root_values() {
         other => panic!("expected a struct value, got {other:?}"),
     }
     match &values[1] {
-        CoreValue::List(entries) => assert_eq!(
-            entries.iter().map(|(mark, _)| *mark).collect::<Vec<_>>(),
-            [Plicity::Implicit, Plicity::Witness]
-        ),
+        CoreValue::List(entries) => assert_eq!(entries.len(), 2),
         other => panic!("expected a list, got {other:?}"),
     }
     assert_eq!(values[2], CoreValue::Root);
@@ -235,7 +232,7 @@ fn a_program_reads_no_form_of_core_text() {
 /// A file's items: a group of declarations of any kinds joined by `and`, each under its decorator, a `let` member after `and` by its name alone and the `;` owed after a last `let`; a test and a foreign row; then the entry and the type it states.
 #[test]
 fn a_file_reads_its_items_and_its_entry() {
-    let file = "#{totality = partial}\nlet /std/Nat/double(n: Nat) -> Nat = n\n#{proof = true}\nand /Read : Type = Nat;\ninduct /Box: #{level = u} Type\n| #{params = [@Type]} box()\nend\nand struct /Pair: (/T) { x: Nat }\nand /f : Nat = 1;\ntest /t = x;\nforeign /host_echo(Bytes) -> Bytes;\nmain\n: Nat\n"
+    let file = "#{totality = partial}\nlet /std/Nat/double(n: Nat) -> Nat = n\n#{proof = true}\nand /Read : Type = Nat;\ninduct /Box: #{level = u} Type\n| box()\nend\nand struct /Pair: (/T) { x: Nat }\nand /f : Nat = 1;\ntest /t = x;\nforeign /host_echo(Bytes) -> Bytes;\nmain\n: Nat\n"
         .parse::<CoreFile>()
         .unwrap();
     let kinds = file
@@ -272,13 +269,6 @@ fn a_file_reads_its_items_and_its_entry() {
         panic!("expected a let")
     };
     assert_eq!(second.core.fields[0].label.to_string(), "proof");
-    let CoreItem::Group(members) = &file.items[1] else {
-        panic!("expected a group")
-    };
-    let CoreMember::Induct(family) = &members[0] else {
-        panic!("expected an induct")
-    };
-    assert_eq!(family.cases[0].core[0].label.to_string(), "params");
     let entry = file.entry.expect("a program's entry");
     assert_eq!(entry.body, core_name("main"));
     assert!(entry.type_.is_some());

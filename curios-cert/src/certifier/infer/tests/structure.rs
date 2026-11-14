@@ -28,16 +28,14 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: Term::prop(),
-                module: Qualifier::from(["P"]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                Vec::new().into(),
+                Term::prop(),
+                Qualifier::from(["P"]),
+                true,
+            ),
         )
         .expect("a name is declared once");
     let proposition = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());

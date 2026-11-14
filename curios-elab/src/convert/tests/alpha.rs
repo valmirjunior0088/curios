@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, DefinitionKind, Free, InductDecl, InductParam, Intrinsic, Level, ReduceError,
-        Subterm, Telescope, Term, UniverseContext, UniverseMetaId, UniverseRole,
+        Atom, DefinitionKind, Free, InductDecl, Intrinsic, Level, ReduceError, Subterm, Telescope,
+        Term, UniverseContext, UniverseMetaId, UniverseRole,
     },
     curios_num::{Binary, Integer},
 };
@@ -77,12 +77,13 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
         .and_then(|one| one.succ())
         .expect("small levels have successors");
     let three = two.clone().succ().expect("small levels have successors");
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
+    let declaration = InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::done(())),
+        vec![(
             Atom::from("wrap"),
-            InductParam::new(
+            curios_core::test_support::case(
+                0,
                 Telescope::build(
                     [(Free::local(0, Some("T")), Term::type_at(two))],
                     Vec::new(),
@@ -91,12 +92,10 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
             ),
         )]
         .into(),
-        result_sort: Term::type_at(three),
-        module: Qualifier::from(["E"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+        Term::type_at(three),
+        Qualifier::from(["E"]),
+        true,
+    );
 
     let e_type = Term::induct_type(e, Vec::<Term>::new(), Vec::<Term>::new());
     let wrap =

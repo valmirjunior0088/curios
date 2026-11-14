@@ -992,7 +992,7 @@ fn induct_params(
     name: &Global,
     universes: &Universes,
 ) -> Option<Telescope<Telescope<()>>> {
-    let arity = certifier.induct_decl(name)?.arity.clone();
+    let arity = certifier.induct_decl(name)?.arity().clone();
 
     instantiate_universes(&arity, universes).ok()
 }
@@ -1011,7 +1011,7 @@ fn induct_type_args(
     }
 
     let arity = match certifier.induct_decl(name) {
-        Some(declaration) => declaration.arity.clone(),
+        Some(declaration) => declaration.arity().clone(),
         // A declaration the registry seeding refused: keep the grounded comparison rather than inventing types.
         None => {
             return Ok(

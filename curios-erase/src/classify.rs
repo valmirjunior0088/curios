@@ -209,7 +209,7 @@ fn shape_walk(
             };
             match context
                 .induct_decl(&induct_type.name)
-                .map(|induct_decl| induct_decl.constructors.len())
+                .map(|induct_decl| induct_decl.constructors().len())
             {
                 Some(1) => {}
                 Some(_) => return family(lowering, context),
@@ -230,7 +230,7 @@ fn shape_walk(
                         context
                             .induct_decl(&induct_type.name)
                             .and_then(|induct_decl| {
-                                let (tag, _) = induct_decl.constructors.first()?;
+                                let (tag, _) = induct_decl.constructors().first()?;
                                 induct_decl
                                     .at(&induct_type.universes)
                                     .payload(tag, &induct_type.params)

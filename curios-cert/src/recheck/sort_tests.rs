@@ -449,9 +449,7 @@ induct /Bad(
     y: A,
     h: #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y),
 ): pub Type
-|
-    #{params = [@Sort, A, A, #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y)]}
-    c(
+| c(
         f:
             #{cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y)}}
             match h: (x2, x3, x4) => Prop
@@ -491,9 +489,7 @@ induct /Lv(
     y: A,
     h: #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y),
 ): pub #{level = u} Type
-|
-    #{params = [@Sort, A, A, #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y)]}
-    mk(
+| mk(
         f:
             #{cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y)}}
             match h: (x2, x3, x4) => #{level = u} Type | refl(@z) => #NatType end)

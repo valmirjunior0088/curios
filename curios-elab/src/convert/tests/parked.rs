@@ -4,9 +4,7 @@ use {
     crate::convert::{convert_under, test_support::*},
     crate::*,
     curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, InductDecl, InductParam, Level, MetavarId, Telescope, Term, UniverseContext,
-    },
+    curios_core::{Atom, InductDecl, Level, MetavarId, Telescope, Term, UniverseContext},
 };
 
 // === Parked-constraint retries ==============================================
@@ -94,16 +92,14 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
         context
             .register_induct(
                 &nominal(path),
-                InductDecl {
-                    universe_context: UniverseContext::empty(),
-                    arity: Telescope::done(Telescope::done(())),
+                InductDecl::new(
+                    UniverseContext::empty(),
+                    Telescope::done(Telescope::done(())),
                     constructors,
-                    result_sort: sort,
-                    module: Qualifier::empty(),
-                    rep_public: true,
-                    polarities: Vec::new(),
-                    variances: Vec::new(),
-                },
+                    sort,
+                    Qualifier::empty(),
+                    true,
+                ),
             )
             .unwrap();
 
@@ -117,7 +113,8 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
         "Pair",
         Vec::from([(
             Atom::from("two"),
-            InductParam::new(
+            curios_core::test_support::case(
+                0,
                 Telescope::build(
                     [(a, proposition.clone()), (b, proposition.clone())],
                     Vec::new(),

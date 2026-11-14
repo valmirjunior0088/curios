@@ -435,7 +435,7 @@ fn constructor_fits(
                 return;
             };
             let tags: Vec<_> = induct_decl
-                .constructors
+                .constructors()
                 .iter()
                 .map(|(tag, param)| (tag.clone(), param.plicities().to_vec()))
                 .collect();

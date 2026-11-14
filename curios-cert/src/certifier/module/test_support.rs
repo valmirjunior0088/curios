@@ -6,10 +6,7 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, StructDecl, Telescope, Term,
-        UniverseContext,
-    },
+    curios_core::{Atom, Free, Global, InductDecl, StructDecl, Telescope, Term, UniverseContext},
 };
 
 pub fn certifier() -> Certifier<'static> {
@@ -25,23 +22,22 @@ pub fn fam() -> Global {
 pub fn family(certifier: &mut Certifier, result_sort: Term, payload_type: Term) -> InductDecl {
     let payload = Free::local(0, Some("x"));
 
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
+    let declaration = InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::done(())),
+        vec![(
             Atom::from("mk"),
-            InductParam::new(
+            curios_core::test_support::case(
+                0,
                 Telescope::build([(payload, payload_type)], Vec::new()),
                 vec![Plicity::Explicit],
             ),
         )]
         .into(),
         result_sort,
-        module: Qualifier::from(["Fam"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+        Qualifier::from(["Fam"]),
+        true,
+    );
     certifier
         .declare_induct(&fam(), &declaration)
         .expect("a name is declared once");
@@ -66,12 +62,13 @@ pub fn family_holding_a_type(
     let forward = Free::local(1, Some("f"));
     let fam_type = Term::induct_type(fam(), Vec::<Term>::new(), Vec::<Term>::new());
 
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: vec![(
+    let declaration = InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::done(())),
+        vec![(
             Atom::from("mk"),
-            InductParam::new(
+            curios_core::test_support::case(
+                0,
                 Telescope::build(
                     [
                         (carrier, inner),
@@ -89,12 +86,10 @@ pub fn family_holding_a_type(
             ),
         )]
         .into(),
-        result_sort: outer,
-        module: Qualifier::from(["Fam"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+        outer,
+        Qualifier::from(["Fam"]),
+        true,
+    );
     certifier
         .declare_induct(&fam(), &declaration)
         .expect("a name is declared once");
@@ -115,54 +110,20 @@ pub fn holding_itself(fam_type: &Term) -> Term {
     )
 }
 
-/// `Fam(T : Type) | mk(_ : Nat)`, with the constructor telescope's *parameter slot* declared at `prefix` rather than at the family's `Type`.
-pub fn prefixed(certifier: &mut Certifier, prefix: Term) -> InductDecl {
-    let t = Free::local(0, Some("T"));
-    let payload = Free::local(1, Some("n"));
-
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::build([(t, Term::type_ground())], Telescope::done(())),
-        constructors: vec![(
-            Atom::from("mk"),
-            InductParam::new(
-                Telescope::build(
-                    [(t, prefix), (payload, Term::intrinsic(Intrinsic::NatType))],
-                    Vec::new(),
-                ),
-                vec![Plicity::Implicit, Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::from(["Fam"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-    certifier
-        .declare_induct(&fam(), &declaration)
-        .expect("a name is declared once");
-
-    declaration
-}
-
 /// A `Prop`-sorted family with no constructors, so that a field typed by it is a genuine proof rather than a proposition held as data.
 pub fn proposition(certifier: &mut Certifier, path: &str) -> Term {
     let name = Global::Authored(Qualifier::from([path]));
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: Term::prop(),
-                module: Qualifier::from([path]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                Vec::new().into(),
+                Term::prop(),
+                Qualifier::from([path]),
+                true,
+            ),
         )
         .expect("a name is declared once");
 

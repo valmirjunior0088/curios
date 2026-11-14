@@ -5,7 +5,7 @@
 use {
     super::{
         Decoration, Fields, ReadError, Reader, Refusal, bracketed, call, core_read, numeral,
-        term_global, tree, value, value_number, value_term, value_unmarked, word, word_value,
+        term_global, tree, value, value_list, value_number, value_term, word, word_value,
     },
     crate::{
         Alternative, BytesPattern, CoreText, Frame, ListPattern, MatchPattern, MatrixArm,
@@ -278,8 +278,8 @@ pub fn node_transient_read(
                 })
                 .collect::<Result<Vec<_>, ReadError>>()?;
             let counts = match fields.take("arms") {
-                Some(counts) => value_unmarked(counts)?
-                    .into_iter()
+                Some(counts) => value_list(counts)?
+                    .iter()
                     .map(|count| match value_number(count)? {
                         0 => Err(refused("an arm of at least one row")),
                         count => usize::try_from(count)

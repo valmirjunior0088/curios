@@ -5,8 +5,8 @@
 use {
     super::{
         ReadError, Reader, Refusal, bracketed, core_form, core_read, hexadecimal, malformed,
-        numeral, term_word, tree, universes_read, universes_written, value, value_term,
-        value_unmarked, value_word, verbatim, word,
+        numeral, term_word, tree, universes_read, universes_written, value, value_list, value_term,
+        value_word, verbatim, word,
     },
     crate::{
         BytesSegment, CoreForm, CoreIntrinsic, CoreText, CoreValue, Frame, IntrinsicForm, Literal,
@@ -1437,8 +1437,8 @@ fn term(value: &CoreValue, reader: &mut Reader<'_>) -> Result<Term, ReadError> {
 
 /// An operand that is a list of terms, `[a, b]`.
 fn terms(value: &CoreValue, reader: &mut Reader<'_>) -> Result<Vec<Term>, ReadError> {
-    value_unmarked(value)?
-        .into_iter()
+    value_list(value)?
+        .iter()
         .map(|entry| term(entry, reader))
         .collect()
 }

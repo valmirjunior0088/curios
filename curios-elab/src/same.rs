@@ -356,20 +356,21 @@ pub fn entries_alike<D>(
 }
 
 pub fn inducts_alike(this: &InductDecl, that: &InductDecl) -> bool {
-    this.universe_context == that.universe_context
-        && this.module == that.module
-        && this.rep_public == that.rep_public
-        && this.polarities == that.polarities
-        && this.variances == that.variances
-        && this.constructors.len() == that.constructors.len()
-        && arities_alike(&this.arity, &that.arity)
-        && spelled_alike(&this.result_sort, &that.result_sort)
-        && this.constructors.iter().zip(&that.constructors).all(
+    this.universe_context() == that.universe_context()
+        && this.module() == that.module()
+        && this.rep_public() == that.rep_public()
+        && this.polarities() == that.polarities()
+        && this.variances() == that.variances()
+        && this.constructors().len() == that.constructors().len()
+        && arities_alike(this.arity(), that.arity())
+        && spelled_alike(this.result_sort(), that.result_sort())
+        && this.constructors().iter().zip(that.constructors()).all(
             |((this_tag, this_payload), (that_tag, that_payload))| {
                 this_tag == that_tag
+                    && this_payload.payload().arity() == that_payload.payload().arity()
                     && telescopes_alike(
-                        &this_payload.telescope,
-                        &that_payload.telescope,
+                        this_payload.payload().body(),
+                        that_payload.payload().body(),
                         &mut |these: &Vec<Term>, those: &Vec<Term>| {
                             these.len() == those.len()
                                 && these

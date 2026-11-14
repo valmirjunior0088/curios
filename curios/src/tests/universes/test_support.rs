@@ -66,7 +66,7 @@ pub fn family_variances(source: &str) -> BTreeMap<String, String> {
         .iter()
         .map(|(name, declaration)| {
             let spelled = declaration
-                .variances
+                .variances()
                 .iter()
                 .map(|variance| match variance {
                     Variance::Irrelevant => '*',

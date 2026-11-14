@@ -1,12 +1,11 @@
-//! An inductive declaration: its payloads sized against the family's level, the self-applications the known paradoxes need, a uniform parameter's slack, and a constructor's parameter prefix.
+//! An inductive declaration: its payloads sized against the family's level, the self-applications the known paradoxes need, and a uniform parameter's slack.
 
 use {
     super::test_support::*,
     crate::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
-        UniverseContext,
+        Atom, Free, Global, InductDecl, Intrinsic, Level, Telescope, Term, UniverseContext,
     },
 };
 
@@ -148,12 +147,13 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
     let t = Free::local(0, Some("T"));
     let x = Free::local(1, Some("x"));
 
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::build([(t, Term::type_ground())], Telescope::done(())),
-        constructors: vec![(
+    let declaration = InductDecl::new(
+        UniverseContext::default(),
+        Telescope::build([(t, Term::type_ground())], Telescope::done(())),
+        vec![(
             Atom::from("mk"),
-            InductParam::new(
+            curios_core::test_support::case(
+                1,
                 Telescope::build(
                     [(t, Term::type_ground()), (x, Term::free_var(&t))],
                     Vec::new(),
@@ -162,74 +162,13 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
             ),
         )]
         .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::from(["Vec"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+        Term::type_ground(),
+        Qualifier::from(["Vec"]),
+        true,
+    );
     certifier
         .declare_induct(&name, &declaration)
         .expect("a name is declared once");
-
-    assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
-}
-
-/// A constructor's parameter prefix must be the declaration's own parameters, not merely as many binders.
-///
-/// A `Telescope` is closed — it carries its own binders — and a constructor's payload types mention the family's parameters, so the parameters are repeated as the constructor telescope's prefix. That repetition is the price of self-contained telescopes and is kept deliberately; what is *not* optional is that the two agree, because [`InductDecl::instantiate`] substitutes the family's actual parameters into those slots. A prefix declaring one at a different domain types the payload against a family this declaration does not describe.
-///
-/// The family below declares `mk`'s parameter slot at `Nat` while the family declares it at `Type`: a size condition that asks `Sort::of` of each domain alone, or a terminal clause comparing the constructed type's parameters against the *minted binder identities* rather than the arity's domains, would pass it. Its payload is deliberately `Nat` rather than `T`, so that the refusal comes from the prefix clause and not from `Sort::of` tripping over a non-sort.
-///
-/// Its control is [`a_matching_parameter_prefix_is_admitted`], the same declaration with the prefix at `Type`: the clause must refuse a disagreement, not every constructor.
-#[test]
-fn a_parameter_prefix_that_disagrees_with_the_family_is_refused() {
-    let mut certifier = certifier();
-    let declaration = prefixed(&mut certifier, Term::intrinsic(Intrinsic::NatType));
-
-    assert!(matches!(
-        check_induct_decl(&mut certifier, &declaration),
-        Err(Error::Mismatch { .. }),
-    ));
-}
-
-/// A constructor telescope shorter than the family's parameter prefix is refused, not crashed on.
-///
-/// The prefix walk takes `param_count` entries, so a shorter telescope would end the loop early without complaint and hand the short parameter list to `indices_at`, which panics on `Telescope::open`'s arity assert. A malformed registry entry is the program's fault, and the certifier answers for the program's faults with a refusal.
-#[test]
-fn a_constructor_telescope_shorter_than_the_parameter_prefix_is_refused() {
-    let mut certifier = certifier();
-    let t = Free::local(0, Some("T"));
-
-    let declaration = InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::build([(t, Term::type_ground())], Telescope::done(())),
-        constructors: vec![(
-            Atom::from("mk"),
-            InductParam::new(Telescope::done(Vec::new()), Vec::new()),
-        )]
-        .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::from(["Fam"]),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-    certifier
-        .declare_induct(&fam(), &declaration)
-        .expect("a name is declared once");
-
-    assert!(matches!(
-        check_induct_decl(&mut certifier, &declaration),
-        Err(Error::Arity { .. }),
-    ));
-}
-
-/// The control for the fixture above: a prefix that does agree stays admitted.
-#[test]
-fn a_matching_parameter_prefix_is_admitted() {
-    let mut certifier = certifier();
-    let declaration = prefixed(&mut certifier, Term::type_ground());
 
     assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
 }

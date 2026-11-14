@@ -18,7 +18,6 @@ fn top_inductive_single_variant() {
             result_sort: Subterm::Type.into(),
             cases: vec![TopCase {
                 doc: None,
-                core: (),
                 label: "bar".into(),
                 payload: vec![],
                 target: None,

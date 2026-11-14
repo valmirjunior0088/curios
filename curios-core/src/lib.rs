@@ -182,7 +182,7 @@ pub use walk::{ChildResults, Enter};
 mod inductive;
 pub use inductive::{
     ArchivedConstructors, ArchivedInductDecl, ArchivedInductParam, Constructors, InductDecl,
-    InductInstance, InductParam,
+    InductInstance, InductParam, InductParts,
 };
 
 mod structure;

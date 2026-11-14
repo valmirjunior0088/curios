@@ -24,25 +24,23 @@ fn family(owner: &str, tags: &[&str]) -> Item {
     let case = |tag: &&str| {
         (
             Atom::from(*tag),
-            InductParam::new(
+            InductParam::over(
+                &[],
                 Telescope::build(Vec::<(Free, Term)>::new(), Vec::new()),
-                Vec::new(),
             ),
         )
     };
-    let declaration = InductDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::build(
+    let declaration = InductDecl::new(
+        UniverseContext::empty(),
+        Telescope::build(
             Vec::<(Free, Term)>::new(),
             Telescope::build(Vec::<(Free, Term)>::new(), ()),
         ),
-        constructors: tags.iter().map(case).collect(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::empty(),
-        rep_public: false,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
+        tags.iter().map(case).collect(),
+        Term::type_ground(),
+        Qualifier::empty(),
+        false,
+    );
 
     Item::Let(Box::new(Definition::former(
         name(&[owner]),

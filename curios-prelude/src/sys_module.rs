@@ -94,7 +94,6 @@ fn true_prop() -> TopItem {
                 lines: vec!["Its proof, which anything may produce.".to_string()],
                 span: None,
             }),
-            core: (),
             label: "qed".into(),
             payload: Vec::new(),
             target: None,

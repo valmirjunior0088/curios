@@ -22,7 +22,7 @@ end
 
 /// A constructor's *index target* is registry data, which the walk checks rather than believes.
 ///
-/// The sizing check walks a constructor telescope's **domains** — each must sit at or below the family's declared level — and stops there, so the terminal the telescope ends in, `Family(params, indices)`, is typed by clause 9 of [`check_induct_decl`](crate::check_induct_decl). In a module the elaborator built, a constructor wrapper's declared type ends in that terminal too, so checking the wrapper's body types the targets again — but a module need not carry the wrappers.
+/// The sizing check walks a constructor telescope's **domains** — each must sit at or below the family's declared level — and stops there, so the terminal the telescope ends in, `Family(params, indices)`, is typed by clause 8 of [`check_induct_decl`](crate::check_induct_decl). A constructor's declared type ends in that terminal too, but a constructor is made of the entry where it is read and judged by nothing apart from it, so no other judgment types the targets.
 ///
 /// The module below carries the registry entry and no items at all, and its index target is an unsolved metavariable — precisely what the elaborator's strict zonk promises has been eliminated. Relying on the lowering to type it would make the guarantee the elaborator's word rather than the certifier's, which is the dependency the two-checker split exists to remove.
 ///
@@ -63,7 +63,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
 ///
 /// The module below states its constructor's index at `rec p : Held = p`, a closed non-descending inhabitant of a proposition; irrelevance would identify that target with any other proof of `Held`, which is the identification (V) exists to prevent. Reachable from no surface program — the elaborator builds registry and bindings from one declaration and types the targets through the constructor wrappers it lowers — which is why it is built here.
 ///
-/// Clause 9 of `check_induct_decl`, in `check_constructed`, is what refuses it: every index target must inhabit the index telescope at the constructor's own parameters, which *checks* the target instead of scanning past it — partiality is not syntactic, so establishing it takes typing the registry rather than reading it — and typing `rec p : Held = p` against `Held` is what puts `check_group`'s gate in front of it.
+/// Clause 8 of `check_induct_decl`, in `check_constructed`, is what refuses it: every index target must inhabit the index telescope at the family's parameters, which *checks* the target instead of scanning past it — partiality is not syntactic, so establishing it takes typing the registry rather than reading it — and typing `rec p : Held = p` against `Held` is what puts `check_group`'s gate in front of it.
 ///
 /// The control is [`a_real_proof_in_a_registry_index_target_is_accepted`], the same declaration aimed at a genuine `qed()`: what establishes the target must refuse a diverging proof without refusing an ordinary one. The assertion pins the refusing item as well as the diagnostic, because this module declares two families and "does not descend" reaching the verdict list from either would otherwise read as a pass.
 #[test]

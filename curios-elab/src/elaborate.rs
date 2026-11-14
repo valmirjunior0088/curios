@@ -386,9 +386,9 @@ fn spelled_former(
     let spelled = match (context.induct_decl(&global), context.struct_decl(&global)) {
         (Some(family), _) => Some(former_spelling(
             global,
-            &family.universe_context,
-            &family.arity,
-            &family.result_sort,
+            family.universe_context(),
+            family.arity(),
+            family.result_sort(),
             true,
         )),
         (None, Some(record)) => Some(former_spelling(

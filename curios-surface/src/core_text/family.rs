@@ -6,7 +6,7 @@ use {
     super::{
         Decoration, Fields, ReadError, Reader, Refusal, bracketed, call, called, core_read,
         malformed, term_global, term_word, tree, universe_suffix, universes_read,
-        universes_written, value, value_unmarked, value_variant, verbatim, word, word_value,
+        universes_written, value, value_list, value_variant, verbatim, word, word_value,
     },
     crate::{
         CoreText, Frame, Rendered, StructLit, StructLitEntry, TupleField, argument, name_of,
@@ -392,8 +392,8 @@ pub fn literal_read(
         .collect::<Result<_, _>>()?;
     let universes = nominal_universes(fields)?;
     let written = match fields.take("entries") {
-        Some(value) => value_unmarked(value)?
-            .into_iter()
+        Some(value) => value_list(value)?
+            .iter()
             .map(entry_read)
             .collect::<Result<_, _>>()?,
         None => Vec::new(),

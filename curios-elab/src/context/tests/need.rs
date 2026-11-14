@@ -62,16 +62,14 @@ fn unit_of_entries(context: &mut Context) -> [Global; 4] {
     context
         .register_induct(
             &family,
-            InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new().into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::default(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                Vec::new().into(),
+                Term::type_ground(),
+                Qualifier::default(),
+                true,
+            ),
         )
         .expect("a name is registered once");
     context

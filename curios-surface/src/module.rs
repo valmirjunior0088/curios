@@ -147,8 +147,6 @@ pub type InductIndex<D = Program> = (<D as Dialect>::Fields, Option<String>, Ter
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopCase<D: Dialect = Program> {
     pub doc: Option<Doc>,
-    /// What the decorator before the case states: Core text's, and nothing in a program.
-    pub core: D::Fields,
     /// The constructor's name, carrying the span of the word alone. A case is reached as a path segment (`Color/red`), so this is a declaring position: it refuses a keyword, and a refusal about it — a repeated case, above all — points at the word.
     pub label: Label,
     pub payload: Vec<CasePayloadParam<D>>,

@@ -22,8 +22,8 @@ use {
     super::Error,
     crate::Baseline,
     curios_core::{
-        Applications, Certification, Definitions, Global, InductDecl, Item, Place, Places,
-        Polarity, StructDecl, Term, Totality, UniverseContext, Universes, Variance,
+        Applications, Certification, Definitions, Global, InductDecl, InductParts, Item, Place,
+        Places, Polarity, StructDecl, Term, Totality, UniverseContext, Universes, Variance,
     },
     std::collections::{BTreeMap, HashMap, HashSet},
 };
@@ -94,9 +94,9 @@ pub fn held<'a>(
 
 /// Whether two `induct` registry entries are one declaration to the certifier: equal in everything it reads of one.
 ///
-/// That is the declaration's terms — its universe context, its arity, its constructors and its result sort — and the variance vector it carries, which a later unit's elaborator compares two instances by and `accept` holds to the vector the walk computes: an entry carrying another is judged again, as a walk over every declaration would judge it. The polarity vector it carries is elaboration's record, which no judgment here reads: the ones an environment answers a family's polarity and its variance from are the certifier's own, filed by the walk that accepted the entry. The owning module and the representation's privacy are the elaborator's to read. The entry is taken apart in full, so a field added to it is classified here or does not compile.
+/// That is the declaration's terms — its universe context, its arity, its constructors and its result sort — and the variance vector it carries, which a later unit's elaborator compares two instances by and `accept` holds to the vector the walk computes: an entry carrying another is judged again, as a walk over every declaration would judge it. The polarity vector it carries is elaboration's record, which no judgment here reads: the ones an environment answers a family's polarity and its variance from are the certifier's own, filed by the walk that accepted the entry. The owning module and the representation's privacy are the elaborator's to read. The entry is taken apart in full ([`InductDecl::parts`]), so a part added to it is classified here or does not compile.
 pub fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
-    let InductDecl {
+    let InductParts {
         universe_context,
         arity,
         constructors,
@@ -105,13 +105,13 @@ pub fn induct_alike(this: &InductDecl, that: &InductDecl) -> bool {
         rep_public: _,
         polarities: _,
         variances,
-    } = this;
+    } = this.parts();
 
-    *universe_context == that.universe_context
-        && *arity == that.arity
-        && *constructors == that.constructors
-        && *result_sort == that.result_sort
-        && *variances == that.variances
+    universe_context == that.universe_context()
+        && arity == that.arity()
+        && constructors == that.constructors()
+        && result_sort == that.result_sort()
+        && variances == that.variances()
 }
 
 /// [`induct_alike`] for two `struct` registry entries, whose fields its arity ends in.

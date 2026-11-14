@@ -234,26 +234,24 @@ fn bit() -> InductDecl {
     let case = |tag: &str| {
         (
             Atom::from(tag),
-            InductParam::new(
+            InductParam::over(
+                &[],
                 Telescope::build(Vec::<(Free, Term)>::new(), Vec::new()),
-                Vec::new(),
             ),
         )
     };
 
-    InductDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::build(
+    InductDecl::new(
+        UniverseContext::empty(),
+        Telescope::build(
             Vec::<(Free, Term)>::new(),
             Telescope::build(Vec::<(Free, Term)>::new(), ()),
         ),
-        constructors: [case("zero"), case("one")].into_iter().collect(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::empty(),
-        rep_public: false,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    }
+        [case("zero"), case("one")].into_iter().collect(),
+        Term::type_ground(),
+        Qualifier::empty(),
+        false,
+    )
 }
 
 /// A module of `/Bit`'s former, a group of its own as a family's is, beside the `let`s of `beside`, in the order a module is stored in.

@@ -220,7 +220,7 @@ struct Piece {
 impl Split {
     fn of<E: Env>(env: &mut E, declarations: Declarations<'_>, name: &Global) -> Self {
         if let Some(declaration) = declarations.induct(name) {
-            let params = binders(env, &declaration.arity);
+            let params = binders(env, declaration.arity());
             let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
             let mut parts = Vec::new();
 
@@ -229,9 +229,9 @@ impl Split {
             // Nor do they need to guard a self-reference. `induct Foo : (x : Foo) -> Type` does not elaborate: `x : Foo` requires `Foo` to already be a type, and it is a family until applied to the very index being declared. The elaborator rejects it on kinding before positivity ever runs.
             //
             // Index *arguments* at an occurrence site are a different position that shares the word, and stay `Mixed` — see `walk`.
-            for (tag, constructor) in &declaration.constructors {
+            for (tag, constructor) in declaration.constructors() {
                 // The terminal is the constructed type, not a payload: it is *always* a recursive occurrence and is skipped, which `labelled` does by ignoring the telescope's `Done`.
-                let payload = constructor.telescope.clone().open_params(&arguments);
+                let payload = constructor.open(&arguments);
                 for (member, type_) in labelled(env, &payload) {
                     parts.push(Piece {
                         part: DeclaredPart::Payload {

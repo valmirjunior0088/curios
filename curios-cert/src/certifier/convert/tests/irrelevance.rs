@@ -357,16 +357,14 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
     certifier
         .declare_induct(
             &indexed,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::build([(binder(92, "n"), nat_type())], ())),
-                constructors: Vec::new().into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::build([(binder(92, "n"), nat_type())], ())),
+                Vec::new().into(),
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .expect("a name is declared once");
 
@@ -482,7 +480,7 @@ fn a_constructors_value_is_typed_by_its_declaration() {
         Vec::from(tags.map(|tag| {
             (
                 Atom::from(tag),
-                InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+                curios_core::test_support::case(0, Telescope::done(Vec::new()), Vec::new()),
             )
         }))
     };
@@ -494,16 +492,14 @@ fn a_constructors_value_is_typed_by_its_declaration() {
         certifier
             .declare_induct(
                 &name,
-                &InductDecl {
-                    universe_context: UniverseContext::default(),
+                &InductDecl::new(
+                    UniverseContext::default(),
                     arity,
-                    constructors: constructors.into(),
+                    constructors.into(),
                     result_sort,
-                    module: Qualifier::empty(),
-                    rep_public: true,
-                    polarities: Vec::new(),
-                    variances: Vec::new(),
-                },
+                    Qualifier::empty(),
+                    true,
+                ),
             )
             .expect("a name is declared once");
 
@@ -523,7 +519,7 @@ fn a_constructors_value_is_typed_by_its_declaration() {
         Telescope::done(Telescope::build([(binder(90, "n"), nat_type())], ())),
         Vec::from([(
             Atom::from("zero"),
-            InductParam::new(Telescope::done(vec![nat(0)]), Vec::new()),
+            curios_core::test_support::case(0, Telescope::done(vec![nat(0)]), Vec::new()),
         )]),
         Term::prop(),
     );
@@ -593,12 +589,13 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
         certifier
             .declare_induct(
                 &pair,
-                &InductDecl {
-                    universe_context: UniverseContext::default(),
-                    arity: Telescope::done(Telescope::done(())),
-                    constructors: Vec::from([(
+                &InductDecl::new(
+                    UniverseContext::default(),
+                    Telescope::done(Telescope::done(())),
+                    Vec::from([(
                         Atom::from("two"),
-                        InductParam::new(
+                        curios_core::test_support::case(
+                            0,
                             Telescope::build(
                                 [
                                     (binder(60, "a"), held.clone()),
@@ -610,12 +607,10 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
                         ),
                     )])
                     .into(),
-                    result_sort: Term::type_ground(),
-                    module: Qualifier::empty(),
-                    rep_public: true,
-                    polarities: Vec::new(),
-                    variances: Vec::new(),
-                },
+                    Term::type_ground(),
+                    Qualifier::empty(),
+                    true,
+                ),
             )
             .expect("a name is declared once");
         let (typed, untyped) = (binder(0, "t"), binder(1, "u"));
@@ -852,12 +847,13 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::from([(
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                Vec::from([(
                     Atom::from("wrap"),
-                    InductParam::new(
+                    curios_core::test_support::case(
+                        0,
                         Telescope::build(
                             [
                                 (binder(60, "n"), nat_type()),
@@ -869,12 +865,10 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                     ),
                 )])
                 .into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .expect("a name is declared once");
     let (p, q) = (binder(62, "p"), binder(63, "q"));
@@ -1089,16 +1083,14 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
     certifier
         .declare_induct(
             &indexed,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::build([(binder(90, "R"), Term::prop())], ())),
-                constructors: Vec::new().into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::build([(binder(90, "R"), Term::prop())], ())),
+                Vec::new().into(),
+                Term::type_ground(),
+                Qualifier::empty(),
+                true,
+            ),
         )
         .expect("a name is declared once");
     // The names the certifier is not handed sit below the one it is, so no binder it mints meets one of them.

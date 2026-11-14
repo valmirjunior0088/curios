@@ -1,4 +1,4 @@
-//! What the certifier states of a declaration beside its terms, by its own reading of them: which binders a function literal or a `let` binds are proofs, which payloads of the constructors a family declares are, whether each name the declaration declares is a proof, and the sort a type-valued definition's value inhabits.
+//! What the certifier states of a declaration beside its terms, by its own reading of them: which binders a function literal or a `let` binds are proofs, which of a family's parameters and of the payloads of the constructors it declares are, whether each name the declaration declares is a proof, and the sort a type-valued definition's value inhabits.
 //!
 //! **Its own, never elaboration's.** A module arrives with what its elaborator stated of each, and the certifier reads none of it: it states each again, by the reading it judges with, before the closed machine runs on the declaration's terms, so every run reads what this certifier stated ([The closed machine binds a proof unreduced](../../../documentation/design/compilation/the-closed-machine-binds-a-proof-unreduced.md)). The module a walk hands back holds what it stated, and is the one a unit stores, so a walk over a later unit reads a unit in scope by what the walk that certified it stated.
 //!
@@ -13,7 +13,8 @@ use {
     super::Certifier,
     crate::bears_proof,
     curios_core::{
-        Definition, DefinitionKind, Entrypoint, Free, InductDecl, Item, Nominal, ProofBinders, Term,
+        Bound, Definition, DefinitionKind, Entrypoint, Free, InductDecl, Item, Nominal,
+        ProofBinders, Telescope, Term,
     },
     std::{convert::Infallible, rc::Rc},
 };
@@ -77,37 +78,44 @@ pub fn stated_entrypoint(certifier: &mut Certifier, entry: &Entrypoint) -> Entry
     }
 }
 
-/// `declaration` with each binder of each constructor's signature stating whether it binds a proof, each asked at its type under the binders before it.
-pub fn stated_entry(certifier: &mut Certifier, declaration: &InductDecl) -> InductDecl {
-    let mut stated = declaration.clone();
-    for constructor in stated.signatures_mut() {
-        let proofs = certifier.scoped(|certifier| {
-            let mut proofs = Vec::new();
-            let mut cursor = constructor.telescope.cursor();
-            while let Some((_, type_)) = cursor.entry() {
-                proofs.push(bears_proof(certifier, &type_).unwrap_or(false));
-                certifier.advance_assumed(&mut cursor, &type_);
-            }
-
-            proofs
-        });
-        if proofs != constructor.telescope.proofs() {
-            constructor.telescope = constructor.telescope.clone().with_proofs(&proofs);
+/// Whether each binder of `telescope` binds a proof, each asked at its type under the binders before it.
+fn telescope_proofs<B: Bound>(certifier: &mut Certifier, telescope: &Telescope<B>) -> Vec<bool> {
+    certifier.scoped(|certifier| {
+        let mut proofs = Vec::new();
+        let mut cursor = telescope.cursor();
+        while let Some((_, type_)) = cursor.entry() {
+            proofs.push(bears_proof(certifier, &type_).unwrap_or(false));
+            certifier.advance_assumed(&mut cursor, &type_);
         }
-    }
 
-    stated
+        proofs
+    })
 }
 
-/// `declaration` with no binder of any constructor's signature stating that it binds a proof: what a family stands as from where the walk registers it to where the declaration that declares it is judged and states its own.
-pub fn unstated_entry(declaration: &InductDecl) -> InductDecl {
-    let mut unstated = declaration.clone();
-    for constructor in unstated.signatures_mut() {
-        let none = vec![false; constructor.telescope.proofs().len()];
-        constructor.telescope = constructor.telescope.clone().with_proofs(&none);
-    }
+/// `declaration` with each of its parameters and each payload binder of each case stating whether it binds a proof, each asked at its type under the binders before it.
+pub fn stated_entry(certifier: &mut Certifier, declaration: &InductDecl) -> InductDecl {
+    let params = telescope_proofs(certifier, declaration.arity());
 
-    unstated
+    stating_parameters(declaration.clone(), &params).with_cases(|case| {
+        let proofs = telescope_proofs(certifier, &declaration.signature(case));
+        case.with_proofs(&proofs[declaration.param_count()..])
+    })
+}
+
+/// `declaration` with no parameter and no payload binder stating that it binds a proof: what a family stands as from where the walk registers it to where the declaration that declares it is judged and states its own.
+pub fn unstated_entry(declaration: &InductDecl) -> InductDecl {
+    stating_parameters(declaration.clone(), &vec![false; declaration.param_count()])
+        .with_cases(|case| case.with_proofs(&vec![false; case.proofs().len()]))
+}
+
+/// `declaration` with each of its parameters stating whether it binds a proof as `proofs` says: the declaration itself where each states so already.
+fn stating_parameters(declaration: InductDecl, proofs: &[bool]) -> InductDecl {
+    if declaration.arity().proofs() == proofs {
+        return declaration;
+    }
+    let arity = declaration.arity().clone().with_proofs(proofs);
+
+    declaration.with_arity(arity)
 }
 
 /// `kind`, with the family it carries stating its payloads' marks where it carries one.
@@ -190,13 +198,15 @@ fn carried_kind(kind: &DefinitionKind, stated: &DefinitionKind) -> DefinitionKin
         return kind.clone();
     };
 
-    let mut carried = declaration.clone();
-    for (constructor, from) in carried.signatures_mut().zip(from.signatures()) {
-        let proofs = from.telescope.proofs();
-        if proofs != constructor.telescope.proofs() {
-            constructor.telescope = constructor.telescope.clone().with_proofs(&proofs);
-        }
-    }
+    let mut stated = from.signatures();
+    let carried =
+        stating_parameters(declaration.clone(), &from.arity().proofs()).with_cases(|case| {
+            let proofs = stated
+                .next()
+                .expect("an item the baseline holds in another's place is of its shape")
+                .proofs();
+            case.with_proofs(&proofs)
+        });
 
     DefinitionKind::Nominal(Rc::new(Nominal::Inductive(carried)))
 }

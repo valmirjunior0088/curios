@@ -61,7 +61,7 @@ impl InductAt {
             return Ok(None);
         };
 
-        Ok(Some(constructor?.telescope.open_params(&self.params)))
+        Ok(Some(constructor?.open(&self.params)))
     }
 
     /// The family's constructor tags, in declaration order: what the arm rules and the elimination guard walk, having reached the family through this handle, which is what says the occurrence they belong to was checked.
@@ -172,7 +172,7 @@ impl Certifier<'_> {
         let declaration = self
             .induct_decl(name)
             .ok_or_else(|| Error::Undeclared(*name))?;
-        self.check_instance(&declaration.universe_context, universes)?;
+        self.check_instance(declaration.universe_context(), universes)?;
         arity_matches(Counted::Parameters, declaration.param_count(), params.len())?;
 
         let instance = declaration.at(universes);

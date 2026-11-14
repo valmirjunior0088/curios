@@ -8,8 +8,8 @@ use {
     curios_cert::Certifier,
     curios_common::Qualifier,
     curios_core::{
-        Free, Global, InductDecl, Intrinsic, Level, Nat, Polarity, StructDecl, StructType, Subterm,
-        Telescope, Term, UniverseContext, Universes,
+        Free, Global, Intrinsic, Level, Nat, Polarity, StructDecl, StructType, Subterm, Telescope,
+        Term, UniverseContext, Universes,
     },
     std::collections::BTreeMap,
 };
@@ -27,10 +27,7 @@ fn a_negative_self_occurrence_is_refused() {
     let mut inducts = BTreeMap::new();
     inducts.insert(
         false_name,
-        InductDecl {
-            constructors: Vec::new().into(),
-            ..single_payload(Term::type_ground(), Term::prop())
-        },
+        single_payload(Term::type_ground(), Term::prop()).with_constructors(Vec::new().into()),
     );
     inducts.insert(
         bad_name,
@@ -91,10 +88,7 @@ fn a_negative_occurrence_through_an_indirection_is_refused() {
         let mut inducts = BTreeMap::new();
         inducts.insert(
             false_name,
-            InductDecl {
-                constructors: Vec::new().into(),
-                ..single_payload(Term::type_ground(), Term::prop())
-            },
+            single_payload(Term::type_ground(), Term::prop()).with_constructors(Vec::new().into()),
         );
         inducts.insert(
             bad_name,
@@ -142,10 +136,7 @@ fn a_payload_type_the_driver_cannot_reduce_is_refused_not_admitted() {
     let mut inducts = BTreeMap::new();
     inducts.insert(
         false_name,
-        InductDecl {
-            constructors: Vec::new().into(),
-            ..single_payload(Term::type_ground(), Term::prop())
-        },
+        single_payload(Term::type_ground(), Term::prop()).with_constructors(Vec::new().into()),
     );
     inducts.insert(
         bad_name,
@@ -196,10 +187,7 @@ fn a_payload_behind_a_universe_instance_of_an_alias_is_refused_by_the_rule() {
     let mut inducts = BTreeMap::new();
     inducts.insert(
         false_name,
-        InductDecl {
-            constructors: Vec::new().into(),
-            ..single_payload(Term::type_ground(), Term::prop())
-        },
+        single_payload(Term::type_ground(), Term::prop()).with_constructors(Vec::new().into()),
     );
     inducts.insert(
         bad_name,
@@ -435,22 +423,16 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
     let mut inducts = BTreeMap::new();
     inducts.insert(
         false_name,
-        InductDecl {
-            constructors: Vec::new().into(),
-            ..single_payload(Term::type_ground(), Term::prop())
-        },
+        single_payload(Term::type_ground(), Term::prop()).with_constructors(Vec::new().into()),
     );
     inducts.insert(
         bad_name,
-        InductDecl {
-            // The lie: every parameter claimed strictly positive, while the payload below is a function *out of* the family.
-            polarities: vec![Polarity::Strict],
-            variances: Vec::new(),
-            ..single_payload(
-                Term::func_type([(Free::local(0, Some("f")), bad_type)], false_type),
-                Term::type_ground(),
-            )
-        },
+        // The lie: every parameter claimed strictly positive, while the payload below is a function *out of* the family.
+        single_payload(
+            Term::func_type([(Free::local(0, Some("f")), bad_type)], false_type),
+            Term::type_ground(),
+        )
+        .with_polarities(vec![Polarity::Strict]),
     );
 
     for (name, entry) in &inducts {
@@ -482,16 +464,13 @@ fn a_vector_an_entry_is_handed_in_with_is_not_the_certifiers() {
     certifier
         .declare_induct(
             &wrapper_name,
-            &InductDecl {
-                arity: Telescope::build(
+            &single_payload(Term::type_ground(), Term::type_ground())
+                .with_constructors(Vec::new().into())
+                .with_arity(Telescope::build(
                     [(Free::local(2, Some("A")), Term::type_ground())],
                     Telescope::done(()),
-                ),
-                constructors: Vec::new().into(),
-                polarities: vec![Polarity::Strict],
-                variances: Vec::new(),
-                ..single_payload(Term::type_ground(), Term::type_ground())
-            },
+                ))
+                .with_polarities(vec![Polarity::Strict]),
         )
         .expect("a name is declared once");
 
@@ -536,10 +515,7 @@ fn a_tower_of_negations_is_analysed_on_the_default_stack() {
     let mut inducts = BTreeMap::new();
     inducts.insert(
         false_name,
-        InductDecl {
-            constructors: Vec::new().into(),
-            ..single_payload(Term::type_ground(), Term::prop())
-        },
+        single_payload(Term::type_ground(), Term::prop()).with_constructors(Vec::new().into()),
     );
     inducts.insert(bad_name, single_payload(tower, Term::type_ground()));
     for (name, entry) in &inducts {

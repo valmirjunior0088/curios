@@ -339,7 +339,7 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             tag,
             payload,
         }) => {
-            // The handle checks the universe instance and the parameter count before any of the declaration is read at them. `open_params` is tolerant — too few parameters leaves the declaration's own parameter binders unopened, so they read as payload slots and the arity check below would compare against the wrong number.
+            // The handle checks the universe instance and the parameter count before any of the declaration is read at them: a case's payload opens at exactly its family's parameters, asserting their count.
             let at = certifier.induct_at_params(name, universes, params)?;
             check_along(certifier, at.parameters(), params)?;
             let signature = at

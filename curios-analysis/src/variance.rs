@@ -107,7 +107,7 @@ struct Split {
 impl Split {
     fn of<E: Env>(env: &mut E, declarations: Declarations<'_>, name: &Global) -> Self {
         if let Some(declaration) = declarations.induct(name) {
-            let params = binders(env, &declaration.arity);
+            let params = binders(env, declaration.arity());
             let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
 
             // The index types are read here where positivity leaves them out: they store nothing, which is positivity's question, and two instances apart in a level one of them mentions are families over different index types, which is this one's.
@@ -115,8 +115,8 @@ impl Split {
                 .into_iter()
                 .map(|(_, type_)| type_)
                 .collect::<Vec<_>>();
-            for (_, constructor) in &declaration.constructors {
-                let payload = constructor.telescope.clone().open_params(&arguments);
+            for (_, constructor) in declaration.constructors() {
+                let payload = constructor.open(&arguments);
                 let mut cursor = payload.cursor();
                 while let Some((_, type_)) = cursor.entry() {
                     parts.push(type_);
@@ -127,7 +127,7 @@ impl Split {
             }
 
             return Self {
-                parameters: declaration.universe_context.parameter_count,
+                parameters: declaration.universe_context().parameter_count,
                 parts,
             };
         }

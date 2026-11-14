@@ -7,8 +7,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Nat, StructDecl, StructType,
-        Subterm, Telescope, Term, UniverseContext, UniverseParam, Universes, Variance,
+        Atom, Free, Global, InductDecl, Intrinsic, Level, Nat, StructDecl, StructType, Subterm,
+        Telescope, Term, UniverseContext, UniverseParam, Universes, Variance,
     },
 };
 
@@ -35,16 +35,14 @@ pub fn declare(certifier: &mut Certifier, path: &str, result_sort: Term) -> Term
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new().into(),
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                Vec::new().into(),
                 result_sort,
-                module: Qualifier::from([path]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Qualifier::from([path]),
+                true,
+            ),
         )
         .expect("a name is declared once");
 
@@ -160,12 +158,13 @@ pub fn declare_wrap(certifier: &mut Certifier, variances: Vec<Variance>, former:
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: scheme.clone(),
-                arity: Telescope::build([(carrier, sort.clone())], Telescope::done(())),
-                constructors: vec![(
+            &InductDecl::new(
+                scheme.clone(),
+                Telescope::build([(carrier, sort.clone())], Telescope::done(())),
+                vec![(
                     Atom::from("wrap"),
-                    InductParam::new(
+                    curios_core::test_support::case(
+                        1,
                         Telescope::build(
                             [(carrier, sort.clone()), (held, Term::free_var(&carrier))],
                             Vec::new(),
@@ -174,12 +173,11 @@ pub fn declare_wrap(certifier: &mut Certifier, variances: Vec<Variance>, former:
                     ),
                 )]
                 .into(),
-                result_sort: sort.clone(),
-                module: Qualifier::default(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: variances.clone(),
-            },
+                sort.clone(),
+                Qualifier::default(),
+                true,
+            )
+            .with_variances(variances.clone()),
         )
         .expect("a name is declared once");
     // What a comparison reads is the vector the walk that accepted the entry filed, which a fixture declaring one by hand files for it.
@@ -214,20 +212,19 @@ pub fn declare_leaf(certifier: &mut Certifier, variances: Vec<Variance>, former:
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: scheme.clone(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: vec![(
+            &InductDecl::new(
+                scheme.clone(),
+                Telescope::done(Telescope::done(())),
+                vec![(
                     Atom::from("leaf"),
-                    InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+                    curios_core::test_support::case(0, Telescope::done(Vec::new()), Vec::new()),
                 )]
                 .into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::default(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: variances.clone(),
-            },
+                Term::type_ground(),
+                Qualifier::default(),
+                true,
+            )
+            .with_variances(variances.clone()),
         )
         .expect("a name is declared once");
     // What a comparison reads is the vector the walk that accepted the entry filed, which a fixture declaring one by hand files for it.
@@ -256,27 +253,27 @@ pub fn declare_box(certifier: &mut Certifier, variances: Vec<Variance>) -> Globa
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext {
+            &InductDecl::new(
+                UniverseContext {
                     parameter_count: 1,
                     quality_count: 0,
                     constraints: Vec::new(),
                 },
-                arity: Telescope::done(Telescope::done(())),
-                constructors: vec![(
+                Telescope::done(Telescope::done(())),
+                vec![(
                     Atom::from("box"),
-                    InductParam::new(
+                    curios_core::test_support::case(
+                        0,
                         Telescope::build([(held, Term::type_at(level.clone()))], Vec::new()),
                         vec![Plicity::Explicit],
                     ),
                 )]
                 .into(),
-                result_sort: Term::type_at(level.succ().expect("a parameter has a successor")),
-                module: Qualifier::default(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: variances.clone(),
-            },
+                Term::type_at(level.succ().expect("a parameter has a successor")),
+                Qualifier::default(),
+                true,
+            )
+            .with_variances(variances.clone()),
         )
         .expect("a name is declared once");
     // What a comparison reads is the vector the walk that accepted the entry filed, which a fixture declaring one by hand files for it.
@@ -295,19 +292,17 @@ pub fn declare_indexed(certifier: &mut Certifier, path: &str, param_sort: Term) 
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::build(
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::build(
                     [(param, param_sort)],
                     Telescope::build([(binder(91, "p"), Term::free_var(&param))], ()),
                 ),
-                constructors: Vec::new().into(),
-                result_sort: Term::type_ground(),
-                module: Qualifier::from([path]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Vec::new().into(),
+                Term::type_ground(),
+                Qualifier::from([path]),
+                true,
+            ),
         )
         .expect("a name is declared once");
 

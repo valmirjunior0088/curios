@@ -7,7 +7,7 @@ use {
         Decoration, Fields, READ_MINTED, ReadError, Reader, Refusal, bracketed, called, core_read,
         literal_fields, literal_of, literal_variant, malformed, string, term_global, term_number,
         term_string, term_word, universe_suffix, universes_read, universes_written, value,
-        value_number, value_term, value_unmarked, value_variant, verbatim, word, word_value,
+        value_list, value_number, value_term, value_variant, verbatim, word, word_value,
     },
     crate::{Apply, CoreText, CoreValue, Frame, Minting, Rendered, sub},
     curios_common::{InfixOp, Span},
@@ -283,8 +283,8 @@ pub fn metavar_read(
         None => MetavarOrigin::Goal,
     };
     let spine = match fields.take("spine") {
-        Some(value) => value_unmarked(value)?
-            .into_iter()
+        Some(value) => value_list(value)?
+            .iter()
             .map(|entry| core_read(&value_term(entry)?, reader))
             .collect::<Result<Vec<_>, _>>()?,
         None => Vec::new(),

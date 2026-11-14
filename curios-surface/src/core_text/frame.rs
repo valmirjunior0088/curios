@@ -278,14 +278,9 @@ pub fn nested<D: Rendered>(fields: Vec<Decoration<D>>) -> CoreValue<D> {
     CoreValue::Fields(decoration_fields(fields))
 }
 
-/// A list-valued field's value: its entries between brackets, each under no mark.
+/// A list-valued field's value: its entries between brackets.
 pub fn bracketed<D: Rendered>(entries: Vec<CoreValue<D>>) -> CoreValue<D> {
-    CoreValue::List(
-        entries
-            .into_iter()
-            .map(|entry| (Plicity::Explicit, entry))
-            .collect(),
-    )
+    CoreValue::List(entries)
 }
 
 /// The fields a decorator states, each by its label.

@@ -146,20 +146,18 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
 
 // induct Top : Prop | qed() end — a proposition holding nothing, which every arm of the bound above lands in.
 fn top_induct() -> curios_core::InductDecl {
-    curios_core::InductDecl {
-        universe_context: curios_core::UniverseContext::empty(),
-        arity: curios_core::Telescope::done(curios_core::Telescope::done(())),
-        constructors: Vec::from([(
+    curios_core::InductDecl::new(
+        curios_core::UniverseContext::empty(),
+        curios_core::Telescope::done(curios_core::Telescope::done(())),
+        Vec::from([(
             curios_core::Atom::from("qed"),
-            curios_core::InductParam::new(curios_core::Telescope::done(Vec::new()), vec![]),
+            curios_core::test_support::case(0, curios_core::Telescope::done(Vec::new()), vec![]),
         )])
         .into(),
-        result_sort: curios_core::Term::prop(),
-        module: Qualifier::empty(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    }
+        curios_core::Term::prop(),
+        Qualifier::empty(),
+        true,
+    )
 }
 
 /// The erased program `items` and a `need` whose one parameter is at `slot` make, its entry handing `need` the proof `witness`, with what the erased call hands it there: the stand-in of a proof `slot` types. `Top` is declared beside `items`.

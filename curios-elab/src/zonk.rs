@@ -10,9 +10,9 @@ use {
     curios_common::recurse,
     curios_core::{
         Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, Definitions, Entrypoint,
-        Extent, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance, Intrinsic,
-        Item, Let, LetBinding, Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Proj, Rec, Sort,
-        Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Var,
+        Extent, Func, FuncType, Global, InductDecl, InductType, Instance, Intrinsic, Item, Let,
+        LetBinding, Match, Metavar, MetavarId, MetavarOrigin, NodeMemo, Proj, Rec, Sort, Struct,
+        StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes, Var,
         Variant, Visit, project_erased_universes,
     },
     std::{
@@ -50,27 +50,18 @@ impl<'a> Zonk<'a> {
     }
 
     fn zonk_induct_decl(&self, induct_decl: &InductDecl) -> Result<InductDecl, Error> {
-        Ok(InductDecl {
-            universe_context: induct_decl.universe_context.clone(),
-            arity: self.zonk_arity_within(&induct_decl.arity)?,
-            constructors: induct_decl
-                .constructors
-                .iter()
-                .map(|(tag, param)| {
-                    Ok((
-                        tag.clone(),
-                        InductParam {
-                            telescope: self.zonk_signature(&param.telescope)?,
-                        },
-                    ))
+        let arity = self.zonk_arity_within(induct_decl.arity())?;
+        let result_sort = self.zonk_term(induct_decl.result_sort())?;
+
+        induct_decl
+            .clone()
+            .with_arity(arity)
+            .with_result_sort(result_sort)
+            .try_with_cases(|case| {
+                case.try_rewritten(|payload| {
+                    payload.try_map_body(|payload| self.zonk_signature(payload))
                 })
-                .collect::<Result<_, Error>>()?,
-            result_sort: self.zonk_term(&induct_decl.result_sort)?,
-            module: induct_decl.module,
-            rep_public: induct_decl.rep_public,
-            polarities: induct_decl.polarities.clone(),
-            variances: induct_decl.variances.clone(),
-        })
+            })
     }
 
     fn zonk_struct_decl(&self, struct_decl: &StructDecl) -> Result<StructDecl, Error> {
@@ -908,12 +899,12 @@ pub fn goal_sites(
         }
     }
     for induct_decl in definitions.induct_decls().values() {
-        scan(&induct_decl.arity, None, &goals, &seen_goals, &referenced);
-        for (_, param) in &induct_decl.constructors {
-            scan(&param.telescope, None, &goals, &seen_goals, &referenced);
+        scan(induct_decl.arity(), None, &goals, &seen_goals, &referenced);
+        for (_, param) in induct_decl.constructors() {
+            scan(param.payload(), None, &goals, &seen_goals, &referenced);
         }
         scan(
-            &induct_decl.result_sort,
+            induct_decl.result_sort(),
             None,
             &goals,
             &seen_goals,

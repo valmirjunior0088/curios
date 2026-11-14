@@ -599,8 +599,7 @@ pub fn parse_top_induct_case<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'
 
             // A bar in a case list begins a case and nothing else, so past it the case owns its diagnosis; recoverable, a case with no payload list would end the list before it and the list's `end` would complain at the bar.
             bar.and_keep(commit(
-                D::parse_fields
-                    .and(parse_declared_label)
+                parse_declared_label
                     .and(
                         parse_literal("(")
                             .map_err(CASE_STATES_ITS_PAYLOAD)
@@ -624,9 +623,8 @@ pub fn parse_top_induct_case<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'
                             .or(pure(None)),
                     ),
             ))
-            .map(move |(((core, label), payload), target)| TopCase {
+            .map(move |((label, payload), target)| TopCase {
                 doc,
-                core,
                 label,
                 payload,
                 target,

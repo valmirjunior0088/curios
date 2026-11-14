@@ -145,7 +145,7 @@ fn subject(context: &mut Context, site: &Site<'_>) -> Result<Subject, Error> {
             let decl = context
                 .instantiate_induct_decl_at(&decl, universes)
                 .map_err(Error::from)?;
-            transparent(context, site, name, &decl.module, decl.rep_public)?;
+            transparent(context, site, name, &decl.module(), decl.rep_public())?;
             Ok(Subject::Induct {
                 name: *name,
                 decl,
@@ -352,14 +352,16 @@ struct Constructor<'a> {
     owner: &'a Global,
     tag: &'a str,
     signature: &'a InductParam,
-    param_count: usize,
     params: &'a [Term],
 }
 
 impl Constructor<'_> {
     /// One binder per payload, hinted by the written label where there is one.
     fn binders(&self, context: &mut Context) -> Vec<Free> {
-        self.signature.telescope.hints()[self.param_count..]
+        self.signature
+            .payload()
+            .body()
+            .hints()
             .iter()
             .map(|hint| context.fresh(*hint))
             .collect()
@@ -367,7 +369,7 @@ impl Constructor<'_> {
 
     /// The payloads' plicities, one per binder.
     fn plicities(&self) -> Vec<Plicity> {
-        self.signature.plicities()[self.param_count..].to_vec()
+        self.signature.plicities()
     }
 
     /// The payloads that take part, opened at `binders` — one per payload, after the declaration's parameters — each classified under its mark with its type read under the binders before it ([`member`]). `value` is the scrutinee, the one binder in scope above the arm.
@@ -380,40 +382,32 @@ impl Constructor<'_> {
     ) -> Result<Vec<Classified>, Error> {
         let labels = self
             .signature
-            .telescope
+            .payload()
+            .body()
             .labels()
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>();
         let plicities = self.signature.plicities();
-        let args = self
-            .params
-            .iter()
-            .cloned()
-            .chain(binders.iter().map(Term::free_var))
-            .collect::<Vec<_>>();
+        let args = binders.iter().map(Term::free_var).collect::<Vec<_>>();
 
         let mut opened = Opened::default();
         opened.push(*value, site.key.clone());
         let mut parts = Vec::new();
         self.signature
-            .telescope
-            .clone()
-            .walk(&args, |index, _, type_| {
-                if index >= self.param_count {
-                    let position = index - self.param_count;
-                    let label = labels[index].as_str();
-                    let payload = Payload::new(self.owner, Some(self.tag), label, position + 1);
-                    parts.extend(member(
-                        context,
-                        site,
-                        &mut opened,
-                        (position, payload),
-                        type_,
-                        plicities[index],
-                    )?);
-                    opened.push(binders[position], type_.clone());
-                }
+            .open(self.params)
+            .walk(&args, |position, _, type_| {
+                let label = labels[position].as_str();
+                let payload = Payload::new(self.owner, Some(self.tag), label, position + 1);
+                parts.extend(member(
+                    context,
+                    site,
+                    &mut opened,
+                    (position, payload),
+                    type_,
+                    plicities[position],
+                )?);
+                opened.push(binders[position], type_.clone());
                 Ok::<(), Error>(())
             })?;
         Ok(parts)
@@ -568,12 +562,11 @@ fn spell_body(
         }
         Subject::Induct { name, decl, params } => {
             let mut arms = Vec::new();
-            for (tag, signature) in &decl.constructors {
+            for (tag, signature) in decl.constructors() {
                 let constructor = Constructor {
                     owner: name,
                     tag: tag.as_str(),
                     signature,
-                    param_count: decl.param_count(),
                     params,
                 };
                 let binders = constructor.binders(context);
@@ -662,12 +655,11 @@ fn hash_body(
         }
         Subject::Induct { name, decl, params } => {
             let mut arms = Vec::new();
-            for (index, (tag, signature)) in decl.constructors.iter().enumerate() {
+            for (index, (tag, signature)) in decl.constructors().iter().enumerate() {
                 let constructor = Constructor {
                     owner: name,
                     tag: tag.as_str(),
                     signature,
-                    param_count: decl.param_count(),
                     params,
                 };
                 let binders = constructor.binders(context);
@@ -786,12 +778,11 @@ fn compare(
         }
         Subject::Induct { name, decl, params } => {
             let mut arms = Vec::new();
-            for (tag, signature) in &decl.constructors {
+            for (tag, signature) in decl.constructors() {
                 let constructor = Constructor {
                     owner: name,
                     tag: tag.as_str(),
                     signature,
-                    param_count: decl.param_count(),
                     params,
                 };
                 let lefts = constructor.binders(context);
@@ -906,12 +897,11 @@ fn order(
             // One arm per constructor answering its declaration position — the ordinal `by_tag` orders on, and the thing a constant default has no way to carry.
             let ordinal = |context: &mut Context, value: &Free| {
                 let mut arms = Vec::new();
-                for (index, (tag, signature)) in decl.constructors.iter().enumerate() {
+                for (index, (tag, signature)) in decl.constructors().iter().enumerate() {
                     let constructor = Constructor {
                         owner: name,
                         tag: tag.as_str(),
                         signature,
-                        param_count: decl.param_count(),
                         params,
                     };
                     let binders = constructor.binders(context);
@@ -937,12 +927,11 @@ fn order(
             let tags = [ordinal(context, left), ordinal(context, right)];
 
             let mut arms = Vec::new();
-            for (tag, signature) in &decl.constructors {
+            for (tag, signature) in decl.constructors() {
                 let constructor = Constructor {
                     owner: name,
                     tag: tag.as_str(),
                     signature,
-                    param_count: decl.param_count(),
                     params,
                 };
                 let lefts = constructor.binders(context);

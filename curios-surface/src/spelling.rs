@@ -2434,21 +2434,21 @@ fn entry_fields<D: Rendered>(
 ) -> Vec<Decoration<D>> {
     let (universe_context, module, polarities, variances) = match nominal {
         Nominal::Inductive(declaration) => (
-            &declaration.universe_context,
-            &declaration.module,
-            &declaration.polarities,
-            &declaration.variances,
+            declaration.universe_context(),
+            declaration.module(),
+            declaration.polarities(),
+            declaration.variances(),
         ),
         Nominal::Struct(record) | Nominal::Concept { record, .. } => (
             &record.universe_context,
-            &record.module,
-            &record.polarities,
-            &record.variances,
+            record.module,
+            record.polarities.as_slice(),
+            record.variances.as_slice(),
         ),
     };
     let mut fields = Vec::<Decoration<D>>::new();
-    if Some(*module) != definition.name.qualifier().map(Qualifier::without_last) {
-        fields.push(("module", module_written(module, frame.spelling)));
+    if Some(module) != definition.name.qualifier().map(Qualifier::without_last) {
+        fields.push(("module", module_written(&module, frame.spelling)));
     }
     let listed = |values: Vec<String>| bracketed(values.into_iter().map(word_value).collect());
     if !polarities.is_empty() {

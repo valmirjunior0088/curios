@@ -18,19 +18,18 @@ fn family(
     constructors: Vec<(Atom, InductParam)>,
     result_sort: Term,
 ) -> InductDecl {
-    InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::build(
+    InductDecl::new(
+        UniverseContext::default(),
+        Telescope::build(
             (0..parameters).map(|index| (binder(90 + index, "A"), Term::type_ground())),
             Telescope::done(()),
         ),
-        constructors: constructors.into(),
+        constructors.into(),
         result_sort,
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: (0..parameters).map(|_| Polarity::Strict).collect(),
-        variances: Vec::new(),
-    }
+        Qualifier::default(),
+        true,
+    )
+    .with_polarities((0..parameters).map(|_| Polarity::Strict).collect())
 }
 
 /// A certifier holding the vocabulary a bound is stated in, defined as `/sys` defines it — `True` with its one proof, a proposition with none, and `Holds(b)` reducing to one or the other — so a bound is discharged by its decision reducing, as a program's is, rather than assumed.
@@ -47,7 +46,7 @@ fn certifier_with_bounds() -> Certifier<'static> {
                 0,
                 vec![(
                     Atom::from("qed"),
-                    InductParam::new(Telescope::done(Vec::new()), Vec::new()),
+                    curios_core::test_support::case(0, Telescope::done(Vec::new()), Vec::new()),
                 )],
                 Term::prop(),
             ),

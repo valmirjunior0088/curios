@@ -418,16 +418,14 @@ fn a_description_a_cell_and_a_channel_are_taken_apart_by_nothing() {
 
 /// `induct Absurd : Prop end`.
 fn empty_proposition() -> InductDecl {
-    InductDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::done(())),
-        constructors: Vec::new().into(),
-        result_sort: Term::prop(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    }
+    InductDecl::new(
+        UniverseContext::default(),
+        Telescope::done(Telescope::done(())),
+        Vec::new().into(),
+        Term::prop(),
+        Qualifier::default(),
+        true,
+    )
 }
 
 /// The control for both, and it is what a fix by brick would fail: each form at its own carrier is ordinary code and must keep typing.

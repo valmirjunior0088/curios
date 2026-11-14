@@ -22,16 +22,14 @@ pub fn declare(certifier: &mut Certifier, path: &str, result_sort: Term) -> Term
     certifier
         .declare_induct(
             &name,
-            &InductDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::done(())),
-                constructors: Vec::new().into(),
+            &InductDecl::new(
+                UniverseContext::default(),
+                Telescope::done(Telescope::done(())),
+                Vec::new().into(),
                 result_sort,
-                module: Qualifier::from([path]),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
+                Qualifier::from([path]),
+                true,
+            ),
         )
         .expect("a name is declared once");
 

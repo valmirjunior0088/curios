@@ -382,7 +382,7 @@ impl<'f> Unifier<'f> {
                     return Ok(Step::Refuse);
                 };
                 if matches!(
-                    &*declaration.result_sort,
+                    **declaration.result_sort(),
                     Subterm::Sort(Sort {
                         quality: Quality::Prop,
                         level: _

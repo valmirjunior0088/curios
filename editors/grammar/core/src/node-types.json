@@ -1277,10 +1277,6 @@
           "named": true
         },
         {
-          "type": "decorator",
-          "named": true
-        },
-        {
           "type": "function_type",
           "named": true
         },

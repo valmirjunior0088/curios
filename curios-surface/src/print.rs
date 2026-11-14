@@ -587,7 +587,7 @@ pub fn print_wire_signature(signature: &WireSignature) -> Printer {
     ])
 }
 
-/// What a dialect's printer lays out beyond the forms both dialects write: a hook for each production its grammar has of its own ([`Grammar`](crate::Grammar)) — an operand, a case's decorator, a declaration's head — and none of them in a program, whose tree holds no form of Core text.
+/// What a dialect's printer lays out beyond the forms both dialects write: a hook for each production its grammar has of its own ([`Grammar`](crate::Grammar)) — an operand, a binder's decorator, a declaration's head — and none of them in a program, whose tree holds no form of Core text.
 trait Layout: Dialect {
     /// What a render of this dialect is told beside the tree it prints.
     type Options: Copy;
@@ -602,8 +602,6 @@ trait Layout: Dialect {
     fn takes_suffix(form: &Self::Form) -> bool;
 
     /// A case, its label, payload and targets after its bar, under the decorator before it.
-    fn cased(printer: TreePrinter<Self>, fields: Self::Fields, case: Printer) -> Printer;
-
     /// A binder's word under the decorator before it, which states the rest of the label Core keeps for the binder: beside the word, which it is read with.
     fn bound(printer: TreePrinter<Self>, fields: Self::Fields, word: Printer) -> Printer;
 
@@ -630,10 +628,6 @@ impl Layout for Program {
 
     fn takes_suffix(form: &Self::Form) -> bool {
         match *form {}
-    }
-
-    fn cased(_: TreePrinter<Self>, (): (), case: Printer) -> Printer {
-        case
     }
 
     fn bound(_: TreePrinter<Self>, (): (), word: Printer) -> Printer {
@@ -1431,15 +1425,9 @@ impl<D: Layout> TreePrinter<D> {
             hard_line(),
             print_doc(case.doc),
             pure("| "),
-            D::cased(
-                self,
-                case.core,
-                flat([
-                    pure(case.label.to_string()),
-                    self.payload(case.payload),
-                    self.target(case.target),
-                ]),
-            ),
+            pure(case.label.to_string()),
+            self.payload(case.payload),
+            self.target(case.target),
         ])
     }
 
@@ -1732,10 +1720,6 @@ impl Layout for CoreText {
         core_takes_suffix(form)
     }
 
-    fn cased(printer: TreePrinter<Self>, fields: Vec<DecoratorField>, case: Printer) -> Printer {
-        printer.decorated(fields, case)
-    }
-
     fn bound(printer: TreePrinter<Self>, fields: Vec<DecoratorField>, word: Printer) -> Printer {
         printer.beside(fields, word)
     }
@@ -1818,14 +1802,6 @@ impl Layout for Shown {
             | ShownForm::Metavar { .. }
             | ShownForm::Ascribed { .. } => true,
         }
-    }
-
-    fn cased(
-        printer: TreePrinter<Self>,
-        fields: Vec<DecoratorField<Shown>>,
-        case: Printer,
-    ) -> Printer {
-        printer.decorated(fields, case)
     }
 
     fn bound(
@@ -1937,17 +1913,14 @@ impl<D: CoreWritten> TreePrinter<D> {
         )
     }
 
-    /// What a decorator's field holds and an intrinsic takes: a term, fields between braces, a list of values each under its mark, or the root module.
+    /// What a decorator's field holds and an intrinsic takes: a term, fields between braces, a list of values, or the root module.
     fn value(self, value: CoreValue<D>) -> Printer {
         match value {
             CoreValue::Term(term) => self.term(term),
             CoreValue::Fields(fields) => self.decorator_fields("{", fields),
             CoreValue::List(entries) => listed(
                 "[",
-                entries
-                    .into_iter()
-                    .map(|(plicity, value)| flat([print_plicity(plicity), self.value(value)]))
-                    .collect(),
+                entries.into_iter().map(|value| self.value(value)).collect(),
                 "]",
             ),
             CoreValue::Root => pure("/"),

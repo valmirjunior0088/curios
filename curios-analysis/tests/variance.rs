@@ -5,7 +5,7 @@
 use {
     curios_analysis::{Declarations, held_levels, test_support::*, variance_vectors},
     curios_cert::Certifier,
-    curios_common::{Plicity, Qualifier},
+    curios_common::Qualifier,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, LevelHead, StructDecl,
         Telescope, Term, UniverseContext, UniverseMetaId, UniverseParam, Variance,
@@ -62,29 +62,22 @@ fn family(
     let held = (200u32..)
         .zip(payloads.iter().cloned())
         .map(|(index, type_)| (Free::local(u64::from(index), Some("x")), type_));
-    let plicities = binders
-        .iter()
-        .map(|_| Plicity::Implicit)
-        .chain(payloads.iter().map(|_| Plicity::Explicit))
-        .collect();
 
-    InductDecl {
-        universe_context: scheme(levels),
-        arity: Telescope::build(typed.clone(), Telescope::build(indexed, ())),
-        constructors: vec![(
+    InductDecl::new(
+        scheme(levels),
+        Telescope::build(typed.clone(), Telescope::build(indexed, ())),
+        vec![(
             Atom::from("c"),
-            InductParam::new(
-                Telescope::build(typed.into_iter().chain(held), targets),
-                plicities,
+            InductParam::over(
+                &binders.iter().collect::<Vec<_>>(),
+                Telescope::build(held, targets),
             ),
         )]
         .into(),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    }
+        Term::type_ground(),
+        Qualifier::default(),
+        true,
+    )
 }
 
 fn spelled(vector: &[Variance]) -> String {
@@ -190,16 +183,14 @@ fn a_level_a_payloads_type_mentions_is_invariant() {
 // `Over.{u}: (T: Type u) -> Type`, with no constructor: two instances apart in `u` are families over different index types.
 #[test]
 fn a_level_an_index_type_mentions_is_invariant() {
-    let over = InductDecl {
-        constructors: Vec::new().into(),
-        ..family(
-            1,
-            Vec::new(),
-            vec![Term::type_at(level(0))],
-            |_| Vec::new(),
-            vec![nat()],
-        )
-    };
+    let over = family(
+        1,
+        Vec::new(),
+        vec![Term::type_at(level(0))],
+        |_| Vec::new(),
+        vec![nat()],
+    )
+    .with_constructors(Vec::new().into());
 
     assert_eq!(vector("Over", over), "=");
 }
@@ -382,10 +373,7 @@ fn a_level_on_an_instance_that_does_not_unfold_is_invariant() {
 // `Box` analyzed while carrying a vector that calls its `Type`-holding level irrelevant: a name inside the set answers from the fixpoint, never from what it carries.
 #[test]
 fn a_carried_vector_is_recomputed_rather_than_believed() {
-    let lying = InductDecl {
-        variances: vec![Variance::Irrelevant],
-        ..boxed()
-    };
+    let lying = boxed().with_variances(vec![Variance::Irrelevant]);
 
     assert_eq!(vector("Box", lying), "=");
 }
@@ -410,10 +398,7 @@ fn a_family_outside_the_set_answers_as_its_driver_holds_it() {
     ] {
         let mut certifier = certifier();
         if let Some(carried) = carried {
-            let declaration = InductDecl {
-                variances: vec![carried],
-                ..boxed()
-            };
+            let declaration = boxed().with_variances(vec![carried]);
             certifier
                 .declare_induct(&named("Box"), &declaration)
                 .expect("a name is declared once");
@@ -448,19 +433,13 @@ fn with_wrap_and_box() -> Certifier<'static> {
     certifier
         .declare_induct(
             &named("Wrap"),
-            &InductDecl {
-                variances: vec![Variance::Irrelevant],
-                ..wrap()
-            },
+            &wrap().with_variances(vec![Variance::Irrelevant]),
         )
         .expect("a name is declared once");
     certifier
         .declare_induct(
             &named("Box"),
-            &InductDecl {
-                variances: vec![Variance::Invariant],
-                ..boxed()
-            },
+            &boxed().with_variances(vec![Variance::Invariant]),
         )
         .expect("a name is declared once");
 
