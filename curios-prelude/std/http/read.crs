@@ -115,13 +115,10 @@ pub let head(
 
 --- A body of `n` bytes: the bytes held once there are that many. One longer than `limits.content` is refused before any of it is read.
 pub let length(limits: Limits, n: Nat, held: Bytes) -> Reader/Step({}, Refusal, Bytes) =
-    match n <= limits.content
-    | false => Reader/Step/refused(Refusal/content_too_large())
-    | true =>
-        match n <= Bytes/len(held)
-        | true => Reader/Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
-        | false => Reader/Step/more((), held)
-        end
+    match
+    | n > limits.content => Reader/Step/refused(Refusal/content_too_large())
+    | n <= Bytes/len(held) => Reader/Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
+    | _ => Reader/Step/more((), held)
     end;
 
 let hex(byte: Byte) -> Option(Nat) =

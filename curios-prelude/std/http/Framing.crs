@@ -46,12 +46,9 @@ let codings(headers: List(Field)) -> Codings =
     | false => Codings/absent()
     | true =>
         match List/reverse(Field/members(headers, "Transfer-Encoding"))
-        | [] => Codings/other_last()
-        | [last, ..before] =>
-            match is_chunked(last)
-            | false => Codings/other_last()
-            | true => match before | [] => Codings/chunked_alone() | _ => Codings/chunked_last() end
-            end
+        | [last, ..before], is_chunked(last) =>
+            match before | [] => Codings/chunked_alone() | _ => Codings/chunked_last() end
+        | _ => Codings/other_last()
         end
     end;
 

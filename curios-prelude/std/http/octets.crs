@@ -22,12 +22,8 @@ let trim_end(
     @reached: Bool/Holds(stop <= Bytes/len(b)),
 ) -> Bytes =
     match Bool/holds(start < stop)
-    | none() => Bytes/slice(b, start, stop - start)
-    | some(room) =>
-        match is_ows(Bytes/get(b, stop - 1))
-        | true => trim_end(b, start, stop - 1)
-        | false => Bytes/slice(b, start, stop - start)
-        end
+    | some(room), is_ows(Bytes/get(b, stop - 1)) => trim_end(b, start, stop - 1)
+    | _ => Bytes/slice(b, start, stop - start)
     end;
 
 -- `b` from `start` on, without the optional whitespace at either end: the walk that finds where it begins hands the index to the one that finds where it ends, so each cut is made under the bounds its walk kept.

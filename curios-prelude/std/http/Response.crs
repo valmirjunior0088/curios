@@ -179,14 +179,9 @@ pub let framing(method: Method, head: Head) -> Result(Refusal, Framing) =
 
 --- The reply `head` and `body` make. A 205 reply that carries content is malformed, since its server sends none (RFC 9110 §15.3.6), and a 1xx, 204 or 304 reply has no body to be given.
 pub let from_head(head: Head, body: Bytes) -> Result(Refusal, Response) =
-    match Status/carries_content(head.status.code)
+    match Status/carries_content(head.status.code) || Bytes/len(body) == 0
     | true => Result/success(Response { status = head.status, headers = head.headers, body = body })
-    | false =>
-        match Bytes/len(body) == 0
-        | true =>
-            Result/success(Response { status = head.status, headers = head.headers, body = body })
-        | false => Result/failure(Refusal/malformed("a reply of this status carries no content"))
-        end
+    | false => Result/failure(Refusal/malformed("a reply of this status carries no content"))
     end;
 
 --- A whole reply read from `bytes`, as a client that sent a request of `method` reads it within `limits`: every 1xx reply ahead of the final one passed over (RFC 9110 §15.2), then the head, the framing its fields state, and the body that framing delimits — none in reply to `HEAD` or under a 1xx, 204 or 304 status, the chunks where it is chunked, `Content-Length` octets where the field is there, and everything the peer sent otherwise. A reply that has not all arrived is `incomplete`.

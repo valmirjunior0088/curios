@@ -99,16 +99,12 @@ satisfy Spell(Head) {
 -- The method `b` spells: malformed where it is no token, and not implemented where it is one this library does not name.
 let method_of(b: Bytes) -> Result(Refusal, Method) =
     match Str/of_bytes(b)
-    | failure(_) => Result/failure(Refusal/malformed("a method is a token"))
-    | success(spelled) =>
-        match Field/Name/is_token(spelled)
-        | false => Result/failure(Refusal/malformed("a method is a token"))
-        | true =>
-            match Method/of_str(spelled)
-            | some(method) => Result/success(method)
-            | none() => Result/failure(Refusal/not_implemented(Str/concat("the method ", spelled)))
-            end
+    | success(spelled), Field/Name/is_token(spelled) =>
+        match Method/of_str(spelled)
+        | some(method) => Result/success(method)
+        | none() => Result/failure(Refusal/not_implemented(Str/concat("the method ", spelled)))
         end
+    | _ => Result/failure(Refusal/malformed("a method is a token"))
     end;
 
 --- The head `bytes` spell, the bytes of a request line and its field lines: a request line of a method, a target and a version between single spaces, and field lines none of which begins with whitespace (RFC 9112 §3, §5). A method this library does not name is not implemented, a major version other than 1 not supported, and anything else that is no head malformed.
@@ -141,13 +137,8 @@ let is_authority(host: Str) -> Bool =
 let host_of(headers: List(Field)) -> Result(Refusal, Option(Str)) =
     let stated(one: Field) -> Result(Refusal, Option(Str)) =
         match Field/Value/to_str(one.value)
-        | some(host) =>
-            match is_authority(host)
-            | true => Result/success(Option/some(host))
-            | false =>
-                Result/failure(Refusal/malformed("Host is a host and, after a colon, a port"))
-            end
-        | none() => Result/failure(Refusal/malformed("Host is a host and, after a colon, a port"))
+        | some(host), is_authority(host) => Result/success(Option/some(host))
+        | _ => Result/failure(Refusal/malformed("Host is a host and, after a colon, a port"))
         end;
     match List/filter(headers, (f: Field) => Field/Name/is(f.name, "Host"))
     | [] => Result/success(Option/none())

@@ -60,29 +60,22 @@ let port_number(s: Scheme) -> Parse(Str, Nat) =
     let _ = Parse/str/expect(':')!;
     let digits = Parse/str/take_while(Char/is_ascii_digit)!;
     let next = Parse/str/peek!;
-    match ends_authority(next)
-    | false => Parse/fail("a port is a number")
-    | true =>
-        match Str/is_empty(digits)
-        | true => Parse/pure(Scheme/default_port(s))
-        | false =>
-            match Nat/of_str(digits)
-            | some(n) =>
-                match n <= 65535
-                | true => Parse/pure(n)
-                | false => Parse/fail("a port is at most 65535")
-                end
-            | none() => Parse/fail("a port is a number")
-            end
+    match
+    | Bool/not(ends_authority(next)) => Parse/fail("a port is a number")
+    | Str/is_empty(digits) => Parse/pure(Scheme/default_port(s))
+    | some(n) = Nat/of_str(digits) =>
+        match n <= 65535
+        | true => Parse/pure(n)
+        | false => Parse/fail("a port is at most 65535")
         end
+    | _ => Parse/fail("a port is a number")
     end;
 
 let port_of(s: Scheme) -> Parse(Str, Nat) =
     let next = Parse/str/peek!;
     match next
-    | some(c) =>
-        match Char/to_nat(c) | ':' => port_number(s) | _ => Parse/pure(Scheme/default_port(s)) end
-    | none() => Parse/pure(Scheme/default_port(s))
+    | some(c), Char/to_nat(c) == ':' => port_number(s)
+    | _ => Parse/pure(Scheme/default_port(s))
     end;
 
 let path() -> Parse(Str, Str) =
@@ -99,8 +92,8 @@ let query_text() -> Parse(Str, Option(Str)) =
 let query() -> Parse(Str, Option(Str)) =
     let next = Parse/str/peek!;
     match next
-    | some(c) => match Char/to_nat(c) | '?' => query_text() | _ => Parse/pure(Option/none()) end
-    | none() => Parse/pure(Option/none())
+    | some(c), Char/to_nat(c) == '?' => query_text()
+    | _ => Parse/pure(Option/none())
     end;
 
 let url() -> Parse(Str, Url) =
@@ -182,13 +175,10 @@ let escaped_bytes(b: Bytes) -> Field/Value =
             Field/Value/cons(
                 Field/Value/Octet { byte = '%' },
                 Field/Value/cons(hex_octet(n / 16), Field/Value/cons(hex_octet(n % 16), rest)));
-        match Field/Value/admits(h)
-        | false => quoted
-        | true =>
-            match visible(h)
-            | true => Field/Value/cons(Field/Value/Octet { byte = h }, rest)
-            | false => quoted
-            end
+        match
+        | Field/Value/admits(h), visible(h) =>
+            Field/Value/cons(Field/Value/Octet { byte = h }, rest)
+        | _ => quoted
         end
     end;
 

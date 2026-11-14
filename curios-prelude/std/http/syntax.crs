@@ -17,12 +17,8 @@ pub let lines(head: Bytes) -> List(Bytes) =
 -- The digit `b` holds at `i`, or `none`.
 let digit(b: Bytes, i: Nat) -> Option(Nat) =
     match Bytes/try_get(b, i)
-    | none() => Option/none()
-    | some(byte) =>
-        match octets/is_digit(byte)
-        | true => Option/some(Byte/to_nat(byte) - '0')
-        | false => Option/none()
-        end
+    | some(byte), octets/is_digit(byte) => Option/some(Byte/to_nat(byte) - '0')
+    | _ => Option/none()
     end;
 
 --- The version `b` spells, `HTTP/` then a digit, a dot and a digit (RFC 9112 §2.3): malformed where it spells none, and not supported where its major number is not 1.
@@ -34,25 +30,13 @@ pub let version(b: Bytes) -> Result(Refusal, Version) =
             && octets/at(b, 3, 'P')
             && octets/at(b, 4, '/')
             && octets/at(b, 6, '.');
-    match shaped
-    | false => unspelled
-    | true =>
-        match digit(b, 5)
-        | none() => unspelled
-        | some(major) =>
-            match digit(b, 7)
-            | none() => unspelled
-            | some(minor) =>
-                match major == 1
-                | false => Result/failure(Refusal/version_not_supported())
-                | true =>
-                    match minor <= 9
-                    | true => Result/success(Version { minor = minor })
-                    | false => unspelled
-                    end
-                end
-            end
+    match
+    | shaped, some(major) = digit(b, 5), some(minor) = digit(b, 7), minor <= 9 =>
+        match major == 1
+        | true => Result/success(Version { minor = minor })
+        | false => Result/failure(Refusal/version_not_supported())
         end
+    | _ => unspelled
     end;
 
 --- A request line's three parts, as they stand between its two spaces: the method, the target and the version (RFC 9112 §3). A line with fewer or more spaces is malformed, since a target holds none.
@@ -62,21 +46,13 @@ pub let request_line(
     let unspelled: Result(Refusal, {method: Bytes, target: Bytes, version: Bytes}) =
         Result/failure(Refusal/malformed("a request line is a method, a target and a version"));
     match Bytes/split(line, ' ')
-    | [] => unspelled
-    | [method, ..after_method] =>
-        match after_method
-        | [] => unspelled
-        | [target, ..after_target] =>
-            match after_target
-            | [] => unspelled
-            | [version, ..after_version] =>
-                match List/len(after_version) == 0 && Bytes/len(method) != 0
-                    && Bytes/len(target) != 0
-                | true => Result/success((method = method, target = target, version = version))
-                | false => unspelled
-                end
-            end
-        end
+    | [method, ..after_method]
+    , [target, ..after_target] = after_method
+    , [version, ..after_version] = after_target
+    , [] = after_version
+    , Bytes/len(method) != 0 && Bytes/len(target) != 0 =>
+        Result/success((method = method, target = target, version = version))
+    | _ => unspelled
     end;
 
 --- A status line's parts: the version, the code and the reason phrase (RFC 9112 §4). The code is three digits between two spaces, and the phrase is every octet after the second, none of them a control octet but the tab.
@@ -93,24 +69,13 @@ pub let status_line(line: Bytes) -> Result(Refusal, {Version, Status}) =
         end!;
     -- A version, a space, three digits and a space stand ahead of the reason: thirteen octets.
     match Bool/holds(13 <= Bytes/len(line))
-    | none() => unspelled
-    | some(long) =>
-        match octets/at(line, 8, ' ') && octets/at(line, 12, ' ')
-        | false => unspelled
-        | true =>
-            match octets/number(Bytes/slice(line, 9, 3))
-            | none() => unspelled
-            | some(code) =>
-                match Field/Value/of_bytes(Bytes/drop(line, 13))
-                | none() => unspelled
-                | some(reason) =>
-                    match 100 <= code && code <= 999
-                    | true => Result/success((stated, Status { code = code, reason = reason }))
-                    | false => unspelled
-                    end
-                end
-            end
-        end
+    | some(long)
+    , octets/at(line, 8, ' ') && octets/at(line, 12, ' ')
+    , some(code) = octets/number(Bytes/slice(line, 9, 3))
+    , some(reason) = Field/Value/of_bytes(Bytes/drop(line, 13))
+    , 100 <= code && code <= 999 =>
+        Result/success((stated, Status { code = code, reason = reason }))
+    | _ => unspelled
     end;
 
 -- One field line: a name, a colon, and a value trimmed of the optional whitespace around it. No whitespace stands before the colon, since the name it would end is no token.
