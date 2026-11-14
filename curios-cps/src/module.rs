@@ -38,7 +38,7 @@ pub struct Module {
     members: Vec<String>,
     /// The functions no pass copies into a caller — not the inliner, contification or specialization — so a call of one stays a call. What a caller reaches only on a path it rarely takes belongs here: the path it does take stays small enough for the caller itself to be copied where it is called.
     out_of_line: BTreeSet<FunctionId>,
-    /// Each function [`bound_frames`](crate::bound_frames) wrote a twin for, with the twin: what a closure of the function enters where [`IntrinsicCall::HeapApply`](crate::IntrinsicCall::HeapApply) calls it.
+    /// Each entry [`bound_frames`](crate::bound_frames) wrote, with the member it enters, which is its own twin: what a closure of the entry enters where [`IntrinsicCall::HeapApply`](crate::IntrinsicCall::HeapApply) calls it.
     twins: BTreeMap<FunctionId, FunctionId>,
     entry: Option<FunctionId>,
 }
@@ -113,12 +113,12 @@ impl Module {
         self.out_of_line.contains(&function)
     }
 
-    /// Record `twin` as the function that runs `original` on the heap.
-    pub(crate) fn record_twin(&mut self, original: FunctionId, twin: FunctionId) {
-        self.twins.insert(original, twin);
+    /// Record `twin` as the function that runs `entry` on the heap.
+    pub(crate) fn record_twin(&mut self, entry: FunctionId, twin: FunctionId) {
+        self.twins.insert(entry, twin);
     }
 
-    /// The function that runs `function` on the heap, taking its parameters and then the continuation its answer goes to, where one was written.
+    /// The function that runs `function`, an entry, on the heap, taking its parameters and then the continuation its answer goes to, where it is one.
     pub fn twin(&self, function: FunctionId) -> Option<FunctionId> {
         self.twins.get(&function).copied()
     }

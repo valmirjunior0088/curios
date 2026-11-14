@@ -6,8 +6,8 @@
 
 use {
     super::{
-        Atom, Callee, ContinuationId, FunctionId, Lattice, Module, Node, RowId, Solver, ValueExpr,
-        ValueId, analyze_calls,
+        Atom, Callee, ContinuationId, FunctionId, IntrinsicCall, Lattice, Module, Node, RowId,
+        Solver, ValueExpr, ValueId, analyze_calls,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -223,7 +223,12 @@ fn row_facts(module: &Module) -> BTreeMap<RowKey, Rows> {
                         });
                     }
                 }
-                // A host's reply is its wire values, and a mapped list is a list; a cell or a channel holds whatever was put in it.
+                // A host's reply is its wire values, and a mapped list is a list; a heap call answers what its continuation does, which a closure call's answer is; a cell or a channel holds whatever was put in it.
+                Node::Intrinsic {
+                    op: IntrinsicCall::HeapApply,
+                    return_to,
+                    ..
+                } => deliver(solver, *return_to, &|_| Rows::Any),
                 Node::Foreign { return_to, .. } | Node::Intrinsic { return_to, .. } => {
                     deliver(solver, *return_to, &|_| Rows::none())
                 }

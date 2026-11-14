@@ -1287,9 +1287,9 @@ where
 
     let mut cps_optm_module = cps_module;
     curios_cps::optimize(&mut cps_optm_module);
-    // After the optimizer, so every function it settled on a cycle runs on the heap, and before the rebuild, which proves a value unshared from flows that lifting a continuation into a closure moves.
-    curios_cps::bound_frames(&mut cps_optm_module);
     curios_cps::rebuild_in_place(&mut cps_optm_module);
+    // After the rebuild, whose proof reads the native code exactly: putting a recursion's frames on the heap moves no read and adds no reader, so every rebuild it copies into a twin keeps the conditions it was proved under.
+    curios_cps::bound_frames(&mut cps_optm_module);
 
     observe(Stage::CpsOptm(&cps_optm_module));
 

@@ -518,9 +518,9 @@ pub fn wat(source: &str) -> String {
     compile_raw(source).to_string()
 }
 
-/// The lines allocating `needle` that are not the `Io` carrier's own, nor the suspension path's, nor built once in `start`, nor a heap twin's.
+/// The lines allocating `needle` that are not the `Io` carrier's own, nor the suspension path's, nor built once in `start`, nor a heap frame's.
 ///
-/// **A heap twin repeats its function for the frames past the budget** ([`curios_cps::bound_frames`]): it carries the `$heap/` hint, each continuation it lifts allocates its closure, and nothing in it runs while a recursion stays within the budget, so a claim about the native path reads past it whole.
+/// **A heap frame is the rest of a recursion's body past the frame budget** ([`curios_cps::bound_frames`]): the closure a call the budget refuses hands on, built on that call's heap path alone, and named, as every allocation is, for its definition, which carries the `heap/` hint. A claim about what a recursion allocates while the budget admits it reads past it.
 ///
 /// Every program's tail is a description, and a description erases to a zero-argument closure — so an effect boundary allocates a closure and forces it through an indirect call no matter how the *user's* code is written. Those carry the `$io/…` hint their thunk was minted with (`io/pure`, `io/bind`, `io/write`, …), which is what lets a claim about user code stay a claim about user code. A test that dropped the distinction would either fail on every program or assert nothing.
 ///
@@ -535,12 +535,10 @@ pub fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
     let mut found = Vec::new();
     let mut run = Vec::new();
     let mut in_start = false;
-    let mut in_heap = false;
     for line in wat.lines() {
         if line.starts_with("    (func ") {
             found.append(&mut run);
             in_start = line.starts_with("    (func $start");
-            in_heap = line.contains("$heap/");
         }
         let line = line.trim();
         if line.contains("io/carry") && line.contains("call ") {
@@ -550,7 +548,11 @@ pub fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
             .any(|boundary| line.starts_with(boundary))
         {
             found.append(&mut run);
-        } else if line.contains(needle) && !line.contains("$io/") && !in_start && !in_heap {
+        } else if line.contains(needle)
+            && !line.contains("$io/")
+            && !line.contains("$heap/")
+            && !in_start
+        {
             run.push(line);
         }
     }
@@ -560,18 +562,19 @@ pub fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
 
 /// The names of the user's own emitted functions whose bodies contain `needle`.
 ///
-/// The counterpart to [`user_allocations`] for everything an instruction does not name itself, and like it past a heap twin's `$heap/` functions. Two kinds of function are the effect boundary rather than the user's code: one carrying an `$io/…` hint — the thunk of a description, the steps a suspension takes (`$io/carry`, `$io/later`), and a turn of a program that can suspend (`$io/main` and `$io/advance`, which force the description the host hands back, and `$io/turn`, which takes apart what it answered) — and `$func/main`, which forces the program's own description exactly once because a program *is* a description.
+/// The counterpart to [`user_allocations`] for everything an instruction does not name itself. Two kinds of function are the effect boundary rather than the user's code: one carrying an `$io/…` hint — the thunk of a description, the steps a suspension takes (`$io/carry`, `$io/later`), and a turn of a program that can suspend (`$io/main` and `$io/advance`, which force the description the host hands back, and `$io/turn`, which takes apart what it answered) — and `$func/main`, which forces the program's own description exactly once because a program *is* a description.
 pub fn user_functions_with<'a>(functions: &'a [Function<'a>], needle: &str) -> Vec<&'a str> {
     functions
         .iter()
         .filter(|function| function.body.contains(needle))
-        .filter(|function| {
-            !function.name.contains("$io/")
-                && !function.name.contains("$heap/")
-                && function.name != "$func/main"
-        })
+        .filter(|function| !function.name.contains("$io/") && function.name != "$func/main")
         .map(|function| function.name)
         .collect()
+}
+
+/// How many indirect calls in `body` keep a frame: every `call_indirect` but a `return_call_indirect`. A function on a recursion's cycle hands its answer to its continuation by an indirect tail call, which keeps none ([`curios_cps::bound_frames`]), so a claim about indirect dispatch — a witness called, a closure waited on — counts these.
+pub fn kept_indirect_calls(body: &str) -> usize {
+    body.matches("call_indirect").count() - body.matches("return_call_indirect").count()
 }
 
 /// One emitted function: its `$name` and full text.
@@ -618,12 +621,10 @@ pub fn functions(wat: &str) -> Vec<Function<'_>> {
 /// "Exactly one function mentions it" is not that fact, and the gap is what a moved budget walks straight into. Inlining a callee into two callers puts the needle in both, and the count catches it — but inlining those callers into a common ancestor merges the mentions back down to one, and the count passes while handing back the ancestor. Raising `MULTI_SITE_INLINE_LIMIT` does exactly that to `SPLIT_RETURN`: `first` and `second` fold into `main` and `advance` into both, so a count would hand back `main` — the wrong function entirely, and one lucky substring away from passing while asserting nothing.
 ///
 /// Excluding the entry closes that case and reports it in the terms the reader needs, which is what the fixture must change rather than what the assertion saw. A fixture wanting more than this — that the callee is distinct from a *particular* caller rather than merely from the entry — gives each participant its own constant and compares the names, as [`a_returned_constructor_is_delivered_as_its_fields`] does.
-///
-/// A heap twin's `$heap/` functions repeat the native one's body for the frames past the budget, so they are no mention of their own.
 pub fn function_with<'a>(functions: &'a [Function<'a>], needle: &str) -> &'a Function<'a> {
     let hits = functions
         .iter()
-        .filter(|function| function.body.contains(needle) && !function.name.contains("$heap/"))
+        .filter(|function| function.body.contains(needle))
         .collect::<Vec<_>>();
     let names = hits
         .iter()

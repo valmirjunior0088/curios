@@ -159,3 +159,40 @@ fn a_reference_read_out_of_a_value_may_be_any_row() {
 
     assert_eq!(rows_reaching(&module)[&received], Rows::Any);
 }
+
+#[test]
+fn a_heap_call_answers_any_row_its_continuation_may() {
+    let mut module = Module::default();
+    let entry = module.reserve_function();
+    let entry_ret = module.reserve_continuation();
+    let closure = module.add_value(Some("closure".into()));
+    let received = module.add_value(Some("received".into()));
+    let exit = module.add_node(halt_zero());
+    let resume = module.add_continuation(Continuation {
+        debug_name: Some("resume".into()),
+        params: vec![received],
+        body: exit,
+    });
+    let call = module.add_node(Node::Intrinsic {
+        op: IntrinsicCall::HeapApply,
+        args: vec![Atom::Value(closure), Atom::Value(closure)],
+        return_to: resume,
+    });
+    let body = module.add_node(Node::LetCont {
+        continuations: vec![resume],
+        body: call,
+    });
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("entry".into()),
+            params: vec![closure],
+            return_cont: entry_ret,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(entry);
+
+    assert_eq!(rows_reaching(&module)[&received], Rows::Any);
+}
