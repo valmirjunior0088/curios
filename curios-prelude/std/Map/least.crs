@@ -60,24 +60,15 @@ let below_root(
     | some(n) => Option/some(Node/least(n))
     end,
     x) =
-    match root: (r) =>
-        (
-            ground: Grounded(r),
-            i: Member()(x, match r | none() => [] | some(n) => Node/collect(n, []) end)) -> Below(
-            match r
-            | none() => Option/none()
-            | some(n) => Option/some(Node/least(n))
-            end,
-            x)
-    | none() => (_, i) => Member/absent(i)
+    match root
+    | none() => Member/absent(i)
     | some(n) =>
-        (ground, i) =>
-            Node/least_below(
-                n,
-                ground,
-                x,
-                Eq/subst((l: List(K)) => Member()(x, l), Node/collected(n, []), i))
-    end(ground, i);
+        Node/least_below(
+            n,
+            ground,
+            x,
+            Eq/subst((l: List(K)) => Member()(x, l), Node/collected(n, []), i))
+    end;
 
 --- A map's least key is one of its keys.
 pub let among(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Among(least(m), keys(m)) =

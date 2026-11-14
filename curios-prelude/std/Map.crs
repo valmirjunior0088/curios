@@ -49,7 +49,7 @@ let grounded(
     @root: Option(Node(K, V)),
     held: Rooted(K, V)(root),
 ) -> Grounded(root) =
-    match held: (r, _) => Grounded(r)
+    match held
     | none() => Bool/True/qed()
     | some(shaped) => Node/read(shaped).sound
     end;
@@ -204,12 +204,10 @@ pub let map(@K: Type, use Key(K), @V: Type, @W: Type, m: Map(K, V), f: (V) -> W)
     Map {
         root = Option/map(m.root, (n: Node(K, V)) => Node/map(n, f)),
         @rooted =
-            match m.root: (r) =>
-                (ground: Grounded(r)) -> Rooted(K, W)(
-                    Option/map(r, (n: Node(K, V)) => Node/map(n, f)))
-            | none() => (_) => Rooted/none()
-            | some(n) => (ground) => rooted(Node/map(n, f), Node/mapped(n, f, ground))
-            end(grounded(m.rooted)) };
+            match m.root
+            | none() => Rooted/none()
+            | some(n) => rooted(Node/map(n, f), Node/mapped(n, f, grounded(m.rooted)))
+            end };
 
 --- The entries `pred` accepts.
 pub let filter(@K: Type, use Key(K), @V: Type, m: Map(K, V), pred: (K, V) -> Bool) -> Map(K, V) =

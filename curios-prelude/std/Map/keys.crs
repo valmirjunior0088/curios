@@ -16,17 +16,14 @@ let of_root(
     ground: Grounded(root),
 ) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(
     match root | none() => [] | some(n) => Node/collect(n, []) end) =
-    match root: (r) =>
-        (ground: Grounded(r)) -> Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(
-            match r | none() => [] | some(n) => Node/collect(n, []) end)
-    | none() => (_) => Pairwise/empty()
+    match root
+    | none() => Pairwise/empty()
     | some(n) =>
-        (ground) =>
-            Eq/subst(
-                (l: List(K)) => Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(l),
-                Eq/sym(Node/collected(n, [])),
-                Node/ascending(n, ground))
-    end(ground);
+        Eq/subst(
+            (l: List(K)) => Pairwise(Ord/lt((a: K, b: K) => Ord/ord(a, b)))(l),
+            Eq/sym(Node/collected(n, [])),
+            Node/ascending(n, ground))
+    end;
 
 --- The keys of a map are in strict order by their type's own order, each before every one after it.
 ---

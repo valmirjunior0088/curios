@@ -131,7 +131,7 @@ pub let read(
     @p: Option(Nat),
     w: Shaped(K, V)(t, a, p),
 ) -> Read(t, a, p) =
-    match w: (t, a, p, _) => Read(t, a, p)
+    match w
     | leaf() => Read { sound = Bool/True/qed(), first = Eq/refl(), top = Eq/refl() }
     | fork(@c, @_, @o, @a, @_, @_, @_, zero, one, under_zero, under_one, apart, clear) =>
         let rz = read(zero);
@@ -632,33 +632,30 @@ let wedged_at(
     past: Bool/Holds(deeper(t, c)),
     is: Eq()(bit(Hash/hash(key), c), b),
 ) -> Sound(wedge(c, b, key, v, t)) =
-    match b: (m) => (is: Eq()(bit(Hash/hash(key), c), m)) -> Sound(wedge(c, m, key, v, t))
+    match b
     | false =>
-        (is) =>
-            Forked {
-                zero = Bool/True/qed(),
-                one = sound,
-                under_zero = Bool/True/qed(),
-                under_one = past,
-                apart = apart,
-                clear =
-                    Eq/subst((x: Bool) => Bool/Holds(Bool/not(x)), Eq/sym(is), Bool/True/qed()) }
+        Forked {
+            zero = Bool/True/qed(),
+            one = sound,
+            under_zero = Bool/True/qed(),
+            under_one = past,
+            apart = apart,
+            clear = Eq/subst((x: Bool) => Bool/Holds(Bool/not(x)), Eq/sym(is), Bool/True/qed()) }
     | true =>
-        (is) =>
-            Forked {
-                zero = sound,
-                one = Bool/True/qed(),
-                under_zero = past,
-                under_one = Bool/True/qed(),
-                apart = turned(Hash/hash(key), first(t), c, apart),
-                clear =
-                    other_clear(
-                        Hash/hash(key),
-                        first(t),
-                        c,
-                        apart,
-                        Eq/subst((x: Bool) => Bool/Holds(x), Eq/sym(is), Bool/True/qed())) }
-    end(is);
+        Forked {
+            zero = sound,
+            one = Bool/True/qed(),
+            under_zero = past,
+            under_one = Bool/True/qed(),
+            apart = turned(Hash/hash(key), first(t), c, apart),
+            clear =
+                other_clear(
+                    Hash/hash(key),
+                    first(t),
+                    c,
+                    apart,
+                    Eq/subst((x: Bool) => Bool/Holds(x), Eq/sym(is), Bool/True/qed())) }
+    end;
 
 --- A leaf of `key`, whose encoding is `k`, wedged in above a sound node on the side `k`'s bit at `c` says, where `k` parts from the node's first key at `c` and the node forks past it, is sound.
 pub let wedged(
