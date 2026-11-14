@@ -10,10 +10,10 @@ pub let to_nat(b: Bytes) -> Nat =
 ---
 --- What makes [`to_nat`] a bounded reading, so a fixed-width pattern has a fixed range: a float's eight bytes denote a number below `2^64`.
 pub let below(b: Bytes) -> Bool/Holds(to_nat(b) < Nat/pow(256, Bytes/len(b))) =
-    match b: (z) => Bool/Holds(to_nat(z) < Nat/pow(256, Bytes/len(z)))
+    match b
     | x[] => Bool/True/qed()
-    | x[h, ..t]; ih =>
+    | x[h, ..t] =>
         let top: Bool/Holds(Byte/to_nat(h) <= 255) = Bool/True/qed();
-        let _ = ih;
+        let _ = below(t);
         proved()
     end;

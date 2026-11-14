@@ -38,21 +38,19 @@ pub let lt(
     b: Bytes,
     parted: Bool/Holds(below(a, b)),
 ) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
-    match a: (m) =>
-        (b: Bytes, parted: Bool/Holds(below(m, b))) -> Eq()(Bytes/ord(m, b), Ordering/lt())
-    | x[] => (_, parted) => match parted end
-    | x[h, .._]; ih =>
-        (b, parted) =>
-            match b
-            | x[] => match parted end
-            | x[k, ..r] =>
-                match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
-                | eq() => ih(r, parted)
-                | lt() => Eq/refl()
-                | gt() => match parted end
-                end
+    match a
+    | x[] => match parted end
+    | x[h, ..t] =>
+        match b
+        | x[] => match parted end
+        | x[k, ..r] =>
+            match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
+            | eq() => lt(t, r, parted)
+            | lt() => Eq/refl()
+            | gt() => match parted end
             end
-    end(b, parted);
+        end
+    end;
 
 --- Two runs that part at a byte still do with anything after each.
 pub let onto(
@@ -62,21 +60,19 @@ pub let onto(
     u: Bytes,
     parted: Bool/Holds(below(a, b)),
 ) -> Bool/Holds(below(x[..a, ..s], x[..b, ..u])) =
-    match a: (m) =>
-        (b: Bytes, parted: Bool/Holds(below(m, b))) -> Bool/Holds(below(x[..m, ..s], x[..b, ..u]))
-    | x[] => (_, parted) => match parted end
-    | x[h, .._]; ih =>
-        (b, parted) =>
-            match b
-            | x[] => match parted end
-            | x[k, ..r] =>
-                match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
-                | eq() => ih(r, parted)
-                | lt() => Bool/True/qed()
-                | gt() => match parted end
-                end
+    match a
+    | x[] => match parted end
+    | x[h, ..t] =>
+        match b
+        | x[] => match parted end
+        | x[k, ..r] =>
+            match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
+            | eq() => onto(t, r, s, u, parted)
+            | lt() => Bool/True/qed()
+            | gt() => match parted end
             end
-    end(b, parted);
+        end
+    end;
 
 --- Two runs that part at a byte still do behind a shared prefix.
 pub let past(
@@ -85,7 +81,4 @@ pub let past(
     b: Bytes,
     parted: Bool/Holds(below(a, b)),
 ) -> Bool/Holds(below(x[..p, ..a], x[..p, ..b])) =
-    match p: (m) => Bool/Holds(below(x[..m, ..a], x[..m, ..b]))
-    | x[] => parted
-    | x[_, .._]; ih => ih
-    end;
+    match p | x[] => parted | x[_, ..t] => past(t, a, b, parted) end;

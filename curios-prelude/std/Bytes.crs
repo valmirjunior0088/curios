@@ -44,28 +44,23 @@ pub let to_nat_injective(
     same: Eq()(len(a), len(b)),
     e: Eq()(to_nat(a), to_nat(b)),
 ) -> Eq()(a, b) =
-    match a: (z) =>
-        (w: Bytes, same: Eq()(len(z), len(w)), e: Eq()(to_nat(z), to_nat(w))) -> Eq()(z, w)
+    match a
     | x[] =>
-        (w, same, _) =>
-            match w
-            | x[] => Eq/refl()
-            | x[k, ..p] => match no_cons(k, p, same) end
-            end
-    | x[h, ..t]; ih =>
-        (w, same, e) =>
-            match w
-            | x[] => match no_cons(h, t, Eq/sym(same)) end
-            | x[k, ..p] =>
-                let tails: Eq()(to_nat(t), to_nat(p)) = Eq/cong((n: Nat) => n / 256, e);
-                let heads: Eq()(h, k) = Eq/cong((n: Nat) => Nat/to_byte(n % 256), e);
-                let lens: Eq()(len(t), len(p)) = Eq/cong((n: Nat) => n - 1, same);
-                let rest: Eq()(t, p) = ih(p, lens, tails);
-                Eq/trans(
-                    Eq/cong((y: Byte) => x[y, ..t], heads),
-                    Eq/cong((q: Bytes) => x[k, ..q], rest))
-            end
-    end(b, same, e);
+        match b
+        | x[] => Eq/refl()
+        | x[k, ..p] => match no_cons(k, p, same) end
+        end
+    | x[h, ..t] =>
+        match b
+        | x[] => match no_cons(h, t, Eq/sym(same)) end
+        | x[k, ..p] =>
+            let tails: Eq()(to_nat(t), to_nat(p)) = Eq/cong((n: Nat) => n / 256, e);
+            let heads: Eq()(h, k) = Eq/cong((n: Nat) => Nat/to_byte(n % 256), e);
+            let lens: Eq()(len(t), len(p)) = Eq/cong((n: Nat) => n - 1, same);
+            let rest: Eq()(t, p) = to_nat_injective(t, p, lens, tails);
+            Eq/trans(Eq/cong((y: Byte) => x[y, ..t], heads), Eq/cong((q: Bytes) => x[k, ..q], rest))
+        end
+    end;
 
 -- The recursion `of_nat` performs terminates, which is what lets injectivity recurse the same way.
 let high_below(n: Nat, positive: Bool/Holds(0 < n)) -> Bool/Holds(n / 256 < n) =
@@ -99,28 +94,25 @@ pub let cons_injective_tail(
 
 --- A decided equality is an equation: `a == b` gives `Eq()(a, b)`. By recursion on both runs, since the comparison of two conses is their heads' and their tails', and of a cons and no bytes is `false`.
 pub let eq_of_eql(a: Bytes, b: Bytes, h: Bool/Holds(a == b)) -> Eq()(a, b) =
-    match a: (z) => (w: Bytes, h: Bool/Holds(z == w)) -> Eq()(z, w)
+    match a
     | x[] =>
-        (w, h) =>
-            match w: (n) => (h: Bool/Holds(x[] == n)) -> Eq()(x[], n)
-            | x[] => (_) => Eq/refl()
-            | x[_, .._] => (h) => match h end
-            end(h)
-    | x[y, ..t]; ih =>
-        (w, h) =>
-            match w: (n) => (h: Bool/Holds(x[y, ..t] == n)) -> Eq()(x[y, ..t], n)
-            | x[] => (h) => match h end
-            | x[k, ..p] =>
-                (h) =>
-                    match Byte/to_nat(y) == Byte/to_nat(k)
-                    | true =>
-                        Eq/trans(
-                            Eq/cong((c: Byte) => x[c, ..t], Byte/eq_of_eql(y, k, Bool/True/qed())),
-                            Eq/cong((q: Bytes) => x[k, ..q], ih(p, h)))
-                    | false => match h end
-                    end
-            end(h)
-    end(b, h);
+        match b
+        | x[] => Eq/refl()
+        | x[_, .._] => match h end
+        end
+    | x[y, ..t] =>
+        match b
+        | x[] => match h end
+        | x[k, ..p] =>
+            match Byte/to_nat(y) == Byte/to_nat(k)
+            | true =>
+                Eq/trans(
+                    Eq/cong((c: Byte) => x[c, ..t], Byte/eq_of_eql(y, k, Bool/True/qed())),
+                    Eq/cong((q: Bytes) => x[k, ..q], eq_of_eql(t, p, h)))
+            | false => match h end
+            end
+        end
+    end;
 
 -- An empty encoding is no encoding of a positive number: the lengths differ, and a length of zero against a successor is refuted by the comparison that decides it.
 let no_empty(k: Byte, p: Bytes, e: Eq()(x[], x[k, ..p])) -> Bool/False =
@@ -267,9 +259,9 @@ pub let index_of(b: Bytes, x: Byte) -> Option({at: Nat, within: Bool/Holds(at < 
 pub let contains(b: Bytes, x: Byte) -> Bool =
     Option/is_some(index_of(b, x));
 
---- Whether `pred` accepts every byte of `b`, which it does of none. It is the fold over `b` itself, so over a byte and the bytes after it it reduces to the byte's answer and the rest's: what a proof about a byte put in front reads.
+--- Whether `pred` accepts every byte of `b`, which it does of none. It is the recursion over `b` itself, so over a byte and the bytes after it it reduces to the byte's answer and the rest's: what a proof about a byte put in front reads.
 pub let all(b: Bytes, pred: (Byte) -> Bool) -> Bool =
-    match b | x[] => true | x[h, .._]; rest => pred(h) && rest end;
+    match b | x[] => true | x[h, ..t] => pred(h) && all(t, pred) end;
 
 --- `parts` with `sep` between each pair.
 pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
