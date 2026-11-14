@@ -407,6 +407,14 @@ enum Spun {
     Agreed,
 }
 
+/// What two applications of one recursive member came to ([`Convert::compare_same_rec_apply`]).
+enum Settled {
+    /// Decided, or handed on as problems of this run: whether the pair still holds.
+    Decided(bool),
+    /// Undecided until the term that awaits it holds its spines: the pair waits whole, under its raw spelling.
+    Waits,
+}
+
 /// The verdict of a conversion run, distinguishing "provably unequal" from "not yet decidable".
 #[derive(Debug)]
 pub enum Outcome {
@@ -965,7 +973,7 @@ impl Convert {
         Ok(outcome)
     }
 
-    /// Two applications of one global definition decided by their spines, on the raw spellings before either side is reduced. Two calls whose arguments are equal are equal, and reduction, which unfolds a `let`-defined head into its body on both sides, may leave the two where no rule sees it: a proof the calls differ in lands in a stuck match's scrutinee. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds; this is the same rule for a head that does not survive, so what a program's conversion accepts cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and `/std/Bytes/to_nat` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value.
+    /// Two applications of one global definition decided by their spines, on the raw spellings before either side is reduced. Two calls whose arguments are equal are equal, and reduction, which unfolds a `let`-defined head into its body on both sides, may leave the two where no rule sees it: a proof the calls differ in lands in a stuck match's scrutinee. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds and solves nothing by them until its term holds them; this is the same rule for a head that does not survive, so what a program's conversion accepts cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and `/std/Bytes/to_nat` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value.
     ///
     /// **The spines decide a pair only where they agree with no metavariable solved, until its term holds them.** `trim(?t)` against `trim(X)` holds at `?t := X`, and wherever else `trim` takes that value: one answer among those a function that is not injective has, so a choice, and a choice is the pair's term's to take where it has read its parts. Taken where the pair is first met, of two pairs that give one implicit two answers the first would decide the call. So a pair whose spines hold a metavariable and do not agree as they stand answers [`Spun::Open`]: what it reduces to is decided as a run of its own, which solves what it forces — a definition that unfolds to a type former gives its arguments back — and where that is undecided the pair parks whole, under its raw spelling. The term that awaits it asks it again with spines held ([`hold_spines`], [`Context::holding_spines`]), and agreement may then rest on what it solves, under an instance head as under a monomorphic one.
     ///
@@ -1085,55 +1093,115 @@ impl Convert {
         })
     }
 
-    /// Compare applications of the same structural recursive member without assuming that member is injective. Convertible spines establish the result by congruence. A genuinely different spine instead triggers one symmetric delta step: distinct arguments may still produce equal results for a recursive function.
+    /// Compare applications of the same structural recursive member without assuming that member is injective, by the rule [`Self::compare_same_global_apply`] states of a global definition's: so what a program's conversion accepts cannot depend on whether a definition names itself. Spines that convert with nothing solved establish the result by congruence. Spines that agree only by solving a metavariable, or that wait on one, decide nothing until the pair's term holds them ([`hold_spines`]): the pair is decided by its one symmetric delta step as a run of its own, and waits whole where that leaves it undecided ([`Self::open_rec_apply`]). A genuinely different spine triggers the same delta step in this run: distinct arguments may still produce equal results for a recursive function.
     fn compare_same_rec_apply(
         &mut self,
         context: &mut Context,
         this: Apply,
         that: Apply,
         type_: Term,
-    ) -> Result<bool, ReduceError> {
+        relation: Relation,
+    ) -> Result<Settled, ReduceError> {
         if this.arguments.len() != that.arguments.len() {
-            return Ok(false);
+            return Ok(Settled::Decided(false));
         }
 
+        let holding = context.holds_spines();
         let param_types = apply_param_types(context, &self.binders, &this.head, &this.arguments)?;
         let this_params = this.params().cloned().collect::<Vec<_>>();
         let that_params = that.params().cloned().collect::<Vec<_>>();
+        let mark = context.solution_mark();
+        let committed = context.solutions_committed();
         let mut blocked = false;
         for (index, (a, b)) in this_params.iter().zip(&that_params).enumerate() {
             let param_type = param_types
                 .as_ref()
                 .and_then(|types| types.get(index).cloned())
                 .unwrap_or_else(Term::type_ground);
-            match convert_under(context, &self.binders, &self.pairs, &param_type, a, b)? {
-                Outcome::Converts => {}
-                Outcome::Blocked(_) => blocked = true,
-                Outcome::Mismatch(_) => {
+            match convert_under(context, &self.binders, &self.pairs, &param_type, a, b) {
+                Ok(Outcome::Converts) => {}
+                Ok(Outcome::Blocked(_)) => blocked = true,
+                Ok(Outcome::Mismatch(_)) => {
+                    context.rollback_solutions(mark);
+                    context.end_solutions(mark);
                     // A pair of calls is unfolded against itself once: inside its own unfolding it is apart, since unfolded again it poses itself again.
                     if self.pairs.hold(&this.head, &that.head) {
                         context.note_apart();
-                        return Ok(false);
+                        return Ok(Settled::Decided(false));
                     }
                     let (this_head, that_head) = (this.head.clone(), that.head.clone());
                     let this = unfold_rec_apply(context, this)?;
                     let that = unfold_rec_apply(context, that)?;
-                    return match (this, that) {
+                    return Ok(Settled::Decided(match (this, that) {
                         (Some(this), Some(that)) => {
                             self.unfolded(Some(&this_head), Some(&that_head));
                             self.enqueue(type_, this, that);
-                            Ok(true)
+                            true
                         }
-                        _ => Ok(false),
-                    };
+                        _ => false,
+                    }));
+                }
+                Err(error) => {
+                    context.end_solutions(mark);
+                    return Err(error);
                 }
             }
         }
 
-        match blocked {
-            true => self.compare_apply(context, this, that),
-            false => Ok(true),
+        // Agreement reached by solving a metavariable, or spines that wait on one, is one answer among those a recursion that is not injective has: no verdict of conversion's, until the pair's term holds its spines.
+        let solved = context.solutions_committed() != committed;
+        if holding || !(blocked || solved) {
+            context.end_solutions(mark);
+            return Ok(Settled::Decided(match blocked {
+                true => self.compare_apply(context, this, that)?,
+                false => true,
+            }));
         }
+        context.rollback_solutions(mark);
+        context.end_solutions(mark);
+        self.open_rec_apply(context, this, that, type_, relation)
+    }
+
+    /// Two calls of one recursive member whose spines may yet agree, decided by their one symmetric delta step as a run of its own, as an open pair of a global definition's calls is decided by what it reduces to: what the step forces is solved, and where it leaves the pair undecided the pair waits whole, for the term that awaits it to hold its spines. Spines that agree by what a solution would give, or that wait on one, are equal at some solution, so where the step finds the two apart the refusal is reduction's, which reads a recursion stuck on `?a % 3` as no `1`, and the pair waits the same way; and so does a pair met again inside its own unfolding, which a metavariable keeps undecided where it would otherwise be apart.
+    fn open_rec_apply(
+        &mut self,
+        context: &mut Context,
+        this: Apply,
+        that: Apply,
+        type_: Term,
+        relation: Relation,
+    ) -> Result<Settled, ReduceError> {
+        if self.pairs.hold(&this.head, &that.head) {
+            return Ok(Settled::Waits);
+        }
+        let pairs = self.pairs.unfolding(this.head.clone(), that.head.clone());
+        let (Some(this), Some(that)) = (
+            unfold_rec_apply(context, this)?,
+            unfold_rec_apply(context, that)?,
+        ) else {
+            return Ok(Settled::Waits);
+        };
+
+        let mark = context.solution_mark();
+        let committed = context.solutions_committed();
+        let opened = Problem {
+            type_,
+            this,
+            that,
+            binders: self.binders.clone(),
+            pairs,
+            relation,
+        };
+        let outcome = Convert::new(opened, self.extent).outcome(context);
+        if matches!(outcome, Ok(Outcome::Mismatch(_))) {
+            context.rollback_solutions(mark);
+        }
+        context.end_solutions(mark);
+        self.progress |= context.solutions_committed() != committed;
+        Ok(match outcome? {
+            Outcome::Converts => Settled::Decided(true),
+            Outcome::Blocked(_) | Outcome::Mismatch(_) => Settled::Waits,
+        })
     }
 
     fn compare_tuple_type(
@@ -3161,7 +3229,19 @@ impl Convert {
                         (Some(this), Some(that))
                             if this == that || instances == Some(LevelQuestion::Identified) =>
                         {
-                            self.compare_same_rec_apply(context, this_a, that_a, type_.clone())?
+                            match self.compare_same_rec_apply(
+                                context,
+                                this_a,
+                                that_a,
+                                type_.clone(),
+                                relation,
+                            )? {
+                                Settled::Decided(verdict) => verdict,
+                                Settled::Waits => {
+                                    self.blocked.push(raw_problem(&type_));
+                                    true
+                                }
+                            }
                         }
                         _ if matches!(
                             instances,

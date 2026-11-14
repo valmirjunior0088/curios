@@ -266,10 +266,15 @@ pub fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
         Subterm::Match(matched) => stuck_on_metavar(context, &matched.head),
         Subterm::Proj(proj) => stuck_on_metavar(context, &proj.head),
         Subterm::Apply(apply) => {
-            // A folded recursive call is the fourth shape, and it does not wear its blocker on its head: `force_rec` hands the call itself back when unfolding cannot choose an arm, so what reduction is waiting for sits in an *argument*. `Count(?L)` is that term — a description-indexed payload type before its index is known. An argument that is rigid instead blocks on nothing a solution could change, and rightly refuses.
+            // A folded recursive call is the fourth shape, and it does not wear its blocker on its head: `force_rec` hands the call itself back when unfolding cannot choose an arm, so what reduction is waiting for sits in an *argument*. `Count(?L)` is that term — a description-indexed payload type before its index is known. The argument is read as unfolding reads it, after reduction, which its unreduced shape does not foretell, so one mentioning an unsolved metavariable blocks the call; one that mentions none blocks on nothing a solution could change, and rightly refuses.
             stuck_on_metavar(context, &apply.head)
                 || (apply.head.as_rec_proj().is_some()
-                    && apply.params().any(|param| stuck_on_metavar(context, param)))
+                    && apply.params().any(|param| {
+                        param
+                            .metavars()
+                            .iter()
+                            .any(|id| context.metavar_solution(*id).is_none())
+                    }))
         }
         _ => false,
     }

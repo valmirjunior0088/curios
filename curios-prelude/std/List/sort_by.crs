@@ -472,9 +472,7 @@ let push_layered(
         Layered/level(nothing, Layered/bottom())
     | [top, ..rest] =>
         match top
-        | none() =>
-            let over: Across(second, flat(rest), run) = across;
-            Layered/level(over, layered_below(layered))
+        | none() => Layered/level(across, layered_below(layered))
         | some(older) =>
             let merged = merge(ord, older, run, []);
             let nothing: Across(second, flat(push(ord, rest, merged)), []) =

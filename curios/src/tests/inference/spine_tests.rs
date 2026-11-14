@@ -97,3 +97,90 @@ fn two_spines_that_give_an_implicit_two_values_refuse_the_call() {
         );
     }
 }
+
+/// `body` over [`program`]'s declarations and a recursion equal at two lists, `ending([1, 2])` and `ending([9, 2])` both `[2]`, with an argument at each.
+fn recursive(body: &str) -> String {
+    program(&fill!(
+        r#"
+        let ending(xs: List(Nat)) -> List(Nat) =
+            match xs | [] => [] | [h, ..t] => match t | [] => [h] | _ => ending(t) end end;
+        let near: Tagged(ending([1, 2])) = Tagged/tag([2]);
+        let far: Tagged(ending([9, 2])) = Tagged/tag([2]);
+        ${body}
+        "#,
+        body
+    ))
+}
+
+// A recursion's two calls wait as a definition's do: what a program accepts does not depend on whether the definition names itself. The implicit is the other argument's, whichever side of it the argument at `ending` is declared on.
+#[test]
+fn a_recursions_spine_gives_no_implicit_another_argument_states() {
+    let source = recursive(
+        r#"
+        let before(@xs: List(Nat), a: Tagged(ending(xs)), b: Tagged(xs)) -> Nat = head(xs);
+        let after(@xs: List(Nat), b: Tagged(xs), a: Tagged(ending(xs))) -> Nat = head(xs);
+        print(and(Nat/to_str(before(near, Tagged/tag([9, 2]))), Nat/to_str(after(Tagged/tag([9, 2]), near))))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"9 9");
+}
+
+// Where nothing else gives the implicit, the call takes what a recursion's spines give once it has read its arguments.
+#[test]
+fn an_implicit_only_a_recursions_spine_gives_is_taken_where_the_call_completes() {
+    let source = recursive(
+        r#"
+        let lone(@xs: List(Nat), a: Tagged(ending(xs))) -> Nat = head(xs);
+        print(Nat/to_str(lone(near)))
+        "#,
+    );
+
+    assert_eq!(run(&source), b"1");
+}
+
+// Two calls of a recursion that give the implicit two values refuse the call in either order, as two calls of a definition do.
+#[test]
+fn two_recursions_spines_that_give_an_implicit_two_values_refuse_the_call() {
+    for (arguments, one, another) in [
+        ("near, far", "[1, 2]", "[9, 2]"),
+        ("far, near", "[9, 2]", "[1, 2]"),
+    ] {
+        let report = error(&recursive(&format!(
+            r#"
+            let pair(@xs: List(Nat), a: Tagged(ending(xs)), b: Tagged(ending(xs))) -> Nat = head(xs);
+            print(Nat/to_str(pair({arguments})))
+            "#
+        )));
+
+        assert!(
+            report.contains("two types each give the implicit argument `xs` of `pair` a value, and the values differ")
+                && report.contains(&format!("one: {one}"))
+                && report.contains(&format!("another: {another}")),
+            "unexpected report for `pair({arguments})`:\n{report}"
+        );
+    }
+}
+
+// A constructor's index a recursion's call names is the expected type's, where an argument's type spells the same call at a cons the recursion reads past: `flat([none(), ..rest])` is `flat(rest)`, and the other argument and the expected type fix the index at `rest`.
+#[test]
+fn a_constructors_index_is_not_taken_from_a_recursions_spine_at_a_cons() {
+    let source = r#"
+        use /std/{List, Nat, Option, Eq, print};
+        let flat(l: List(Option(Nat))) -> List(Nat) =
+            match l | [] => [] | [o, ..rest] => [..flat(rest), ..match o | none() => [] | some(n) => [n] end] end;
+        induct Lay: (List(Option(Nat))) -> Prop
+        | bottom(): ([])
+        | level(@top: Option(Nat), @rest: List(Option(Nat)), seen: Eq()(flat(rest), flat(rest)), below: Lay(rest)): ([top, ..rest])
+        end
+        let up(
+            rest: List(Option(Nat)),
+            e: Eq()(flat([Option/none(), ..rest]), flat([Option/none(), ..rest])),
+            below: Lay(rest),
+        ) -> Lay([Option/some(1), ..rest]) =
+            Lay/level(e, below);
+        print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
