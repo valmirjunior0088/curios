@@ -2,7 +2,7 @@
 
 use {
     curios_common::fill,
-    curios_cps::{Atom, Edge, IntrinsicCall, Literal, Module, Node},
+    curios_cps::{Atom, Callee, Edge, IntrinsicCall, Literal, Module, Node, NodeId},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, test_support::*},
@@ -93,7 +93,7 @@ fn program(definitions: &str, result: &str) -> String {
 }
 
 /// Each recursion a twin is written for, by the shape that reaches its own part of the rewrite: a frame kept under a constructor, an answer the call's own result feeds, two members calling each other, a first call of two whose answer waits on the second, an answer handed back as a constructor's fields, a list map whose mapper is the recursion, and a closure no analysis resolves.
-const RECURSIONS: [(&str, &str, &str); 7] = [
+const RECURSIONS: [(&str, &str, &str); 8] = [
     (
         "a chain built under a constructor",
         r#"
@@ -183,7 +183,88 @@ const RECURSIONS: [(&str, &str, &str); 7] = [
         "#,
         "down(n)",
     ),
+    (
+        "a recursion defined within a recursion",
+        r#"
+        let outer(n: Nat) -> Nat =
+            let inner(m: Nat) -> Nat =
+                match m | 0 => n | j + 1 => (inner(j) * 3 + 1) % 1000003 end;
+            match n | 0 => 0 | k + 1 => (outer(k) + inner(n % 7)) % 1000003 end;
+        "#,
+        "outer(n)",
+    ),
 ];
+
+/// The nodes a function's body holds from `body`, its continuations' included and the functions defined within it left out.
+fn own_nodes(module: &Module, body: NodeId) -> Vec<NodeId> {
+    let mut nodes = Vec::new();
+    let mut work = vec![body];
+    while let Some(node) = work.pop() {
+        nodes.push(node);
+        match module.node(node) {
+            Some(Node::LetValue { next, .. } | Node::LetIntrinsic { next, .. }) => work.push(*next),
+            Some(Node::LetFun { body, .. }) => work.push(*body),
+            Some(Node::LetCont {
+                continuations,
+                body,
+            }) => {
+                work.push(*body);
+                work.extend(
+                    continuations
+                        .iter()
+                        .filter_map(|continuation| module.continuation(*continuation))
+                        .map(|continuation| continuation.body),
+                );
+            }
+            _ => {}
+        }
+    }
+    nodes
+}
+
+/// Every call a function makes of itself that keeps a frame, outside the twins that run past the budget, asks the budget: it resumes where the weight is handed back. A recursion defined within another is guarded where it is copied into the outer one's twin, as where it stands.
+#[test]
+fn every_native_call_a_recursion_makes_of_itself_asks_the_budget() {
+    let (definitions, result) = RECURSIONS
+        .iter()
+        .find(|(shape, _, _)| *shape == "a recursion defined within a recursion")
+        .map(|(_, definitions, result)| (*definitions, *result))
+        .expect("the fixture is among the recursions");
+    let (heap, _) = modules(&program(definitions, result));
+    for (function, definition) in heap.live_functions() {
+        if definition
+            .debug_name
+            .as_deref()
+            .is_some_and(|name| name.starts_with("heap/"))
+        {
+            continue;
+        }
+        for node in own_nodes(&heap, definition.body) {
+            let Some(Node::ApplyFun {
+                callee: Callee::Known(callee),
+                return_to,
+                ..
+            }) = heap.node(node)
+            else {
+                continue;
+            };
+            if *callee != function || *return_to == definition.return_cont {
+                continue;
+            }
+            let resumed = heap
+                .continuation(*return_to)
+                .map(|resume| heap.node(resume.body));
+            assert!(
+                matches!(
+                    resumed,
+                    Some(Some(Node::LetCont { body, .. }))
+                        if matches!(heap.node(*body), Some(Node::Intrinsic { op: IntrinsicCall::FrameLeave { .. }, .. }))
+                ),
+                "{function} calls itself natively past the budget:\n{heap}"
+            );
+        }
+    }
+}
 
 #[test]
 fn every_recursion_answers_under_the_budget_and_past_it_what_it_answers_natively() {

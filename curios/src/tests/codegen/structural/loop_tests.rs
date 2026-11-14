@@ -316,29 +316,21 @@ fn trees_invariant_arithmetic_propagates_through_scc() {
         sum.body.contains("i32.add"),
         "the summation folded to bare instructions"
     );
-    assert_eq!(
-        kept_indirect_calls(sum.body),
-        0,
+    assert!(
+        !sum.body.contains("call_indirect"),
         "no witness dispatch survives in the recursive arithmetic",
     );
 }
 
-/// The hot recursive code performs no indirect call that keeps a frame. Every call in the trees module is direct except at the effect boundary, where forcing a description *is* an indirect call — `main` forces the program's own description, and `io/bind` forces each of the two it sequences — and where a recursion hands its answer to its continuation, by an indirect tail call ([`kept_indirect_calls`]). The tree recursion calls nothing else indirectly.
+/// The hot recursive code performs no indirect calls. Every call in the trees module is direct except at the effect boundary, where forcing a description *is* an indirect call — `main` forces the program's own description, and `io/bind` forces each of the two it sequences. The tree recursion is not among them.
 ///
-/// A program is a description, so two forces are structural and "the module contains no indirect dispatch" would be false. Pinning `main`'s count keeps that from being a licence: an indirect call that keeps a frame anywhere in user code, or a second one in `main`, still fails.
+/// A program is a description, so two forces are structural and "the module contains no indirect dispatch" would be false. Pinning `main`'s count keeps that from being a licence: an indirect call anywhere in user code, or a second one in `main`, still fails.
 #[test]
 fn trees_hot_arithmetic_has_no_indirect_calls() {
     let wat = wat(TREES);
     let functions = functions(&wat);
 
-    let stray: Vec<&str> = functions
-        .iter()
-        .filter(|function| {
-            user_functions_with(&functions, "call_indirect").contains(&function.name)
-                && kept_indirect_calls(function.body) > 0
-        })
-        .map(|function| function.name)
-        .collect();
+    let stray = user_functions_with(&functions, "call_indirect");
     assert!(
         stray.is_empty(),
         "trees calls indirectly outside the effect boundary: {stray:?}"
@@ -623,7 +615,7 @@ fn a_fold_handed_a_known_step_calls_it_in_place() {
     );
 }
 
-/// `programs/spines` as written: both its calls of `/std/Map/insert` hand the one encoding `Nat/hash`, which is substituted into it and, through the call it hands the parameter on to, into the recursive descent, so a leaf's key is encoded by a direct call. The descent recurses, so its body is its twin, under the `heap/` hint ([`curios_cps::bound_frames`]).
+/// `programs/spines` as written: both its calls of `/std/Map/insert` hand the one encoding `Nat/hash`, which is substituted into it and, through the call it hands the parameter on to, into the recursive descent, so a leaf's key is encoded by a direct call.
 #[test]
 fn a_map_inserts_leaf_key_is_encoded_through_a_direct_call() {
     let source = include_str!(concat!(
@@ -634,14 +626,10 @@ fn a_map_inserts_leaf_key_is_encoded_through_a_direct_call() {
     let functions = functions(&wat);
     let insert = functions
         .iter()
-        .find(|function| {
-            function
-                .name
-                .contains("$heap//std/Map/internal/Node/insert")
-        })
+        .find(|function| function.name.contains("$/std/Map/internal/Node/insert"))
         .expect("the descent survives as a function of its own");
 
-    assert_eq!(kept_indirect_calls(insert.body), 0, "{}", insert.body);
+    assert!(!insert.body.contains("call_indirect"), "{}", insert.body);
     assert!(
         insert.body.contains("$/std/Nat/hash/from"),
         "{}",
