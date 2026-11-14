@@ -74,18 +74,18 @@ let held_once(
     y: Option({}),
     e: Eq()(Option/is_some(x), Option/is_some(y)),
 ) -> Eq()(x, y) =
-    match x: (a) => (Eq()(Option/is_some(a), Option/is_some(y))) -> Eq()(a, y)
+    match x
     | none() =>
-        match y: (b) => (Eq()(false, Option/is_some(b))) -> Eq()(Option/none(), b)
-        | none() => (_) => Eq/refl()
-        | some(_) => (apart) => match Bool/false_neq_true(apart) end
+        match y
+        | none() => Eq/refl()
+        | some(_) => match Bool/false_neq_true(e) end
         end
-    | some(u) =>
-        match y: (b) => (Eq()(true, Option/is_some(b))) -> Eq()(Option/some(u), b)
-        | none() => (apart) => match Bool/false_neq_true(Eq/sym(apart)) end
-        | some(_) => (_) => Eq/refl()
+    | some(_) =>
+        match y
+        | none() => match Bool/false_neq_true(Eq/sym(e)) end
+        | some(_) => Eq/refl()
         end
-    end(e);
+    end;
 
 --- Two sets with the same elements are one set.
 pub let extensional(
