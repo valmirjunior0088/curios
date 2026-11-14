@@ -83,11 +83,11 @@ pub let mul(
 --- The two differences are naturals summing to zero; a successor for the first is a positive sum, which the second hypothesis already refutes.
 pub let antisym(a: Int, b: Int, p: Bool/Holds(a <= b), q: Bool/Holds(b <= a)) -> Eq()(a, b) =
     let other = Int/to_nat(a - b, @q);
-    match Int/to_nat(b - a, @p): (m) => (Eq()(Nat/to_int(m), b - a)) -> Eq()(a, b)
-    | 0 => (e) => Eq/cong((x: Int) => a + x, e)
+    let e: Eq()(Nat/to_int(Int/to_nat(b - a, @p)), b - a) = Eq/refl();
+    match Int/to_nat(b - a, @p)
+    | 0 => Eq/cong((x: Int) => a + x, e)
     | m + 1 =>
-        (e) =>
-            let sum: Bool/Holds(+0 < b - a + Nat/to_int(other)) =
-                Eq/subst((x: Int) => Bool/Holds(+0 < x + Nat/to_int(other)), e, positive(m, other));
-            match sum: (_) => Eq()(a, b) end
-    end(Eq/refl());
+        let sum: Bool/Holds(+0 < b - a + Nat/to_int(other)) =
+            Eq/subst((x: Int) => Bool/Holds(+0 < x + Nat/to_int(other)), e, positive(m, other));
+        match sum end
+    end;

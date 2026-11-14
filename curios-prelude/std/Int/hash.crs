@@ -2,7 +2,7 @@ use /std/{Nat, Int, Byte, Bytes, Eq, Ordering, proved, Bool};
 
 -- A run with every byte complemented, a byte at a time so that conversion carries it across a cons.
 let flipped(b: Bytes) -> Bytes =
-    match b | x[] => x[] | x[h, .._]; rest => x[Byte/not(h), ..rest] end;
+    match b | x[] => x[] | x[h, ..t] => x[Byte/not(h), ..flipped(t)] end;
 
 -- A complement reverses two runs that part at a byte.
 let reversed(
@@ -10,45 +10,37 @@ let reversed(
     b: Bytes,
     parted: Bool/Holds(Bytes/ord/below(a, b)),
 ) -> Bool/Holds(Bytes/ord/below(flipped(b), flipped(a))) =
-    match a: (m) =>
-        (b: Bytes, parted: Bool/Holds(Bytes/ord/below(m, b))) -> Bool/Holds(
-            Bytes/ord/below(flipped(b), flipped(m)))
-    | x[] => (_, parted) => match parted end
-    | x[h, ..t]; ih =>
-        (b, parted) =>
-            match b
-            | x[] => match parted end
-            | x[k, ..r] =>
-                let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
-                match Nat/ord(hn, kn)
-                | gt() => match parted end
-                | lt() =>
-                    let under: Bool/Holds(hn < kn) = Nat/ord/lt(hn, kn, Eq/refl());
-                    Bytes/ord/below/of_heads(
-                        Byte/not(k),
-                        Byte/not(h),
-                        flipped(r),
-                        flipped(t),
-                        proved())
-                | eq() =>
-                    let same: Eq()(hn, kn) = Nat/ord/eq(hn, kn, Eq/refl());
-                    Eq/subst(
-                        (o: Ordering) =>
-                            Bool/Holds(
-                                match o
-                                | eq() => Bytes/ord/below(flipped(r), flipped(t))
-                                | lt() => true
-                                | gt() => false
-                                end),
-                        Eq/sym(
-                            Nat/ord/of_eq(
-                                255 - kn,
-                                255 - hn,
-                                Eq/cong((v: Nat) => 255 - v, Eq/sym(same)))),
-                        ih(r, parted))
-                end
+    match a
+    | x[] => match parted end
+    | x[h, ..t] =>
+        match b
+        | x[] => match parted end
+        | x[k, ..r] =>
+            let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
+            match Nat/ord(hn, kn)
+            | gt() => match parted end
+            | lt() =>
+                let under: Bool/Holds(hn < kn) = Nat/ord/lt(hn, kn, Eq/refl());
+                Bytes/ord/below/of_heads(Byte/not(k), Byte/not(h), flipped(r), flipped(t), proved())
+            | eq() =>
+                let same: Eq()(hn, kn) = Nat/ord/eq(hn, kn, Eq/refl());
+                Eq/subst(
+                    (o: Ordering) =>
+                        Bool/Holds(
+                            match o
+                            | eq() => Bytes/ord/below(flipped(r), flipped(t))
+                            | lt() => true
+                            | gt() => false
+                            end),
+                    Eq/sym(
+                        Nat/ord/of_eq(
+                            255 - kn,
+                            255 - hn,
+                            Eq/cong((v: Nat) => 255 - v, Eq/sym(same)))),
+                    reversed(t, r, parted))
             end
-    end(b, parted);
+        end
+    end;
 
 -- Of two runs that lead with a byte in the upper half, the complement of one is below the other.
 let halves(

@@ -78,19 +78,13 @@ end
 
 --- `i`'s form: the natural it is, or the natural one below its negation is.
 pub let view(i: Int) -> Sign(i) =
-    match i >= +0: (s) => (Eq()(i >= +0, s)) -> Sign(i)
-    | true =>
-        (c) =>
-            let ok: NonNeg(i) = Bool/holds_of_eq(i >= +0, c);
-            Sign/nonneg(to_nat(i, @ok))
-    | false =>
-        (c) =>
-            let ok: NonNeg(-1 - i) = Bool/holds_of_eq(i < +0, Eq/cong(Bool/not, c));
-            Sign/neg(to_nat(-1 - i, @ok))
-    end(Eq/refl());
+    match i >= +0
+    | true => Sign/nonneg(to_nat(i))
+    | false => Sign/neg(to_nat(-1 - i))
+    end;
 
 let absurd_succ(@P: Sort, x: Nat, h: Bool/Holds(+0 == Nat/to_int(x) + 1)) -> P =
-    match h: (_) => P end;
+    match h end;
 
 --- Where `a` stands against `b`, with the evidence.
 pub induct Trichotomy(a: Int, b: Int): pub Type
@@ -104,20 +98,17 @@ end
 
 --- `a` against `b`: below, equal, or above, one of them with its proof.
 pub let trichotomy(a: Int, b: Int) -> Trichotomy(a, b) =
-    match a < b: (r) => (Eq()(a < b, r)) -> Trichotomy(a, b)
-    | true => (c) => Trichotomy/lt(Bool/holds_of_eq(a < b, c))
+    match a < b
+    | true => Trichotomy/lt(Bool/True/qed())
     | false =>
-        (c) =>
-            let ge: Bool/Holds(b <= a) = Bool/holds_of_eq(Bool/not(a < b), Eq/cong(Bool/not, c));
-            match b < a: (s) => (Eq()(b < a, s)) -> Trichotomy(a, b)
-            | true => (d) => Trichotomy/gt(Bool/holds_of_eq(b < a, d))
-            | false =>
-                (d) =>
-                    let le: Bool/Holds(a <= b) =
-                        Bool/holds_of_eq(Bool/not(b < a), Eq/cong(Bool/not, d));
-                    Trichotomy/eq(le/antisym(a, b, le, ge))
-            end(Eq/refl())
-    end(Eq/refl());
+        let ge: Bool/Holds(b <= a) = Bool/True/qed();
+        match b < a
+        | true => Trichotomy/gt(Bool/True/qed())
+        | false =>
+            let le: Bool/Holds(a <= b) = Bool/True/qed();
+            Trichotomy/eq(le/antisym(a, b, le, ge))
+        end
+    end;
 
 --- A decided equality is an equation: `a == b` gives `Eq()(a, b)`.
 pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(a == b)) -> Eq()(a, b) =
