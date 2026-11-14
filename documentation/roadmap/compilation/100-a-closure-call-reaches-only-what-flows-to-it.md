@@ -8,7 +8,7 @@ Its benefit is beyond doubt: every edge it removes is spurious, so what it saves
 
 ## What it costs
 
-The cost is size and guards, never an answer. Counted at `f207e8d07`, as the bytes of the Wasm module `curios compile --target browser` writes, against the same tree with the closure edges left out of the graph:
+The cost is size and guards, never an answer. Counted at `f9322f1f9`, as the bytes of the Wasm module `curios compile --target browser` writes, against the same tree with the closure edges left out of the graph:
 
 - `programs/spines/spines.crs`, `programs/trees/trees.crs`, `programs/monad_io.crs` and `programs/hello_world.crs` grow by 2–7%, `programs/monad_suspend.crs` by 8%;
 - a program decoding and encoding JSON grows by 28%. Much of that is genuine: `Json/decode`'s parser combinators recurse through closures, and an exact analysis keeps their twins.
