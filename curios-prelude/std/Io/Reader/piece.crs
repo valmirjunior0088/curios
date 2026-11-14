@@ -54,13 +54,10 @@ pub let line(limit: Nat, searched: Nat, held: Bytes) -> Step(Nat, Error, Bytes) 
 
 --- `n` bytes and the bytes after them, once there are that many. A count past `limit` is refused before any of it is read.
 pub let exactly(limit: Nat, n: Nat, held: Bytes) -> Step({}, Error, Bytes) =
-    match n <= limit
-    | false => Step/refused(Error/too_long())
-    | true =>
-        match n <= Bytes/len(held)
-        | true => Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
-        | false => Step/more((), held)
-        end
+    match
+    | n > limit => Step/refused(Error/too_long())
+    | n <= Bytes/len(held) => Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
+    | _ => Step/more((), held)
     end;
 
 --- Everything a stream yields: never taken, only its stream's end saying there is no more. More than `limit` bytes are refused.

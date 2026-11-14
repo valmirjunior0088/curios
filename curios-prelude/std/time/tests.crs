@@ -113,15 +113,13 @@ test every_time_reads_back_as_it_was_written =
 
 -- Every day of one 400-year era: each date is the next one's predecessor in the calendar, and the day count reads back from each.
 let follows(prev: Date, next: Date) -> Bool =
-    match prev.day < Date/days_in_month(prev.year, prev.month)
-    | true => next.year == prev.year && next.month == prev.month && next.day == prev.day + 1
-    | false =>
-        match Month/to_nat(prev.month) < 12
-        | true =>
-            next.year == prev.year && Month/to_nat(next.month) == Month/to_nat(prev.month) + 1
-                && next.day == 1
-        | false => next.year == prev.year + +1 && next.month == Month/january() && next.day == 1
-        end
+    match
+    | prev.day < Date/days_in_month(prev.year, prev.month) =>
+        next.year == prev.year && next.month == prev.month && next.day == prev.day + 1
+    | Month/to_nat(prev.month) < 12 =>
+        next.year == prev.year && Month/to_nat(next.month) == Month/to_nat(prev.month) + 1
+            && next.day == 1
+    | _ => next.year == prev.year + +1 && next.month == Month/january() && next.day == 1
     end;
 
 test every_day_of_an_era_follows_the_one_before_and_reads_back_its_count =

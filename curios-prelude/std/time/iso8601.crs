@@ -20,14 +20,10 @@ let fixed(count: Nat, acc: Nat) -> Parse(Str, Nat) =
 let more_digits(acc: Nat, taken: Nat) -> Parse(Str, {value: Nat, taken: Nat}) =
     let next = Parse/str/peek!;
     match next
-    | some(c) =>
-        match Char/is_ascii_digit(c)
-        | true =>
-            let _ = Parse/str/char!;
-            more_digits(acc * 10 + (Char/to_nat(c) - '0'), taken + 1)
-        | false => Parse/pure((value = acc, taken = taken))
-        end
-    | none() => Parse/pure((value = acc, taken = taken))
+    | some(c), Char/is_ascii_digit(c) =>
+        let _ = Parse/str/char!;
+        more_digits(acc * 10 + (Char/to_nat(c) - '0'), taken + 1)
+    | _ => Parse/pure((value = acc, taken = taken))
     end;
 
 --- Exactly `count` decimal digits, as the number they write.
@@ -60,17 +56,13 @@ let fraction(n: Nat) -> Str =
 let fraction_digits(taken: Nat, acc: Nat) -> Parse(Str, Nat) =
     let next = Parse/str/peek!;
     match next
-    | some(c) =>
-        match Char/is_ascii_digit(c)
-        | true =>
-            let _ = Parse/str/char!;
-            match taken < 9
-            | true => fraction_digits(taken + 1, acc * 10 + (Char/to_nat(c) - '0'))
-            | false => fraction_digits(taken, acc)
-            end
-        | false => Parse/pure(acc * Nat/pow(10, 9 - taken))
+    | some(c), Char/is_ascii_digit(c) =>
+        let _ = Parse/str/char!;
+        match taken < 9
+        | true => fraction_digits(taken + 1, acc * 10 + (Char/to_nat(c) - '0'))
+        | false => fraction_digits(taken, acc)
         end
-    | none() => Parse/pure(acc * Nat/pow(10, 9 - taken))
+    | _ => Parse/pure(acc * Nat/pow(10, 9 - taken))
     end;
 
 -- A fraction: a point and one digit at least, or nothing for none.

@@ -70,9 +70,10 @@ satisfy Spell(Bool) {
 
 --- `false` below `true`.
 pub let ord(a: Bool, b: Bool) -> Ordering =
-    match a
-    | false => match b | false => Ordering/eq() | true => Ordering/lt() end
-    | true => match b | false => Ordering/gt() | true => Ordering/eq() end
+    match (a, b)
+    | (false, false) | (true, true) => Ordering/eq()
+    | (false, true) => Ordering/lt()
+    | (true, false) => Ordering/gt()
     end;
 
 satisfy Cmp(Bool) {

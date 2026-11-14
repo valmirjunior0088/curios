@@ -86,17 +86,11 @@ pub let last(@T: Type, l: List(T)) -> Option(T) =
 
 --- The longest prefix `pred` accepts.
 pub let take_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
-    match l
-    | [] => []
-    | [h, ..t] => match pred(h) | true => [h, ..take_while(t, pred)] | false => [] end
-    end;
+    match l | [h, ..t], pred(h) => [h, ..take_while(t, pred)] | _ => [] end;
 
 --- Everything after the longest prefix `pred` accepts.
 pub let drop_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
-    match l
-    | [] => []
-    | [h, ..t] => match pred(h) | true => drop_while(t, pred) | false => l end
-    end;
+    match l | [h, ..t], pred(h) => drop_while(t, pred) | _ => l end;
 
 --- The first `n` elements, or all of them when there are fewer.
 pub let take(@T: Type, l: List(T), n: Nat) -> List(T) =
