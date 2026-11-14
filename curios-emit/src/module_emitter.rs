@@ -845,6 +845,26 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
+    /// Add `$frames/used` where the emitted code guards a call: a mutable word starting at zero, the frame budget's spent weight.
+    fn emit_frames_used(&mut self) {
+        if !self.table.frames_used_reached() {
+            return;
+        }
+
+        let mut expr: curios_wasm::Expr = Default::default();
+        expr.push(curios_wasm::Instr::I32Const { value: 0 });
+        self.module.add_global(
+            self.table.frames_used_global(),
+            curios_wasm::Global {
+                global_type: curios_wasm::GlobalType {
+                    val_type: curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+                    mutability: curios_wasm::Mutability::Var,
+                },
+                expr,
+            },
+        );
+    }
+
     /// Add the rope helpers the emitted code referenced. Helpers whose bodies call other helpers go first: *building* a body references its callees through the table, so the callee used-flags must settle before they are read — deep host-boundary forms, then everything else whose body calls `exact` or `force` (`norm`, `box`, `eql`, `map`, `slice`, `read`), then `exact`, then `force`/`embed`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
@@ -1067,6 +1087,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         self.emit_rope_funcs();
         self.emit_list_empty();
+        self.emit_frames_used();
         self.emit_big_funcs();
         self.emit_flt_funcs();
         // After the rope and big-number helpers, whose bodies refuse too: only now is the set of reached classes complete.

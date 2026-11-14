@@ -1,11 +1,12 @@
-//! Frames on the heap: a program whose recursions run on their twins answers what the same program answers with every call native.
+//! Frames on the heap: a program whose recursions run on their twins answers what the same program answers with every call native, whether the budget admits each call or refuses every one.
 
 use {
     curios_common::fill,
-    curios_cps::Module,
+    curios_cps::{Atom, Edge, IntrinsicCall, Literal, Module, Node},
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, test_support::*},
+    curios_num::Natural,
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
     curios_wasm::to_bytes,
@@ -30,6 +31,34 @@ fn modules(source: &str) -> (Module, Module) {
     curios_cps::optimize(&mut native);
     curios_cps::rebuild_in_place(&mut native);
     (emitted.expect("the pipeline observes cps-optm"), native)
+}
+
+/// `module` with every call the budget guards refused it, so each goes to the heap and everything below it runs there.
+fn refused(module: &Module) -> Module {
+    let mut refused = module.clone();
+    let enters: Vec<_> = refused
+        .live_nodes()
+        .filter_map(|(id, node)| match node {
+            Node::Intrinsic {
+                op: IntrinsicCall::FrameEnter { .. },
+                return_to,
+                ..
+            } => Some((id, *return_to)),
+            _ => None,
+        })
+        .collect();
+    assert!(!enters.is_empty(), "the program guards no call:\n{module}");
+    for (id, chosen) in enters {
+        refused.remove_node(id);
+        refused.define_node(
+            id,
+            Node::ApplyCont(Edge {
+                target: chosen,
+                args: vec![Atom::Literal(Literal::Nat(Natural::zero()))],
+            }),
+        );
+    }
+    refused
 }
 
 /// What `module` exits with and prints, given `n` as its first argument.
@@ -157,7 +186,7 @@ const RECURSIONS: [(&str, &str, &str); 7] = [
 ];
 
 #[test]
-fn every_recursion_answers_on_the_heap_what_it_answers_natively() {
+fn every_recursion_answers_under_the_budget_and_past_it_what_it_answers_natively() {
     for (shape, definitions, result) in RECURSIONS {
         let (heap, native) = modules(&program(definitions, result));
         assert!(
@@ -165,9 +194,15 @@ fn every_recursion_answers_on_the_heap_what_it_answers_natively() {
                 .any(|(function, _)| heap.twin(function).is_some()),
             "{shape} must run on a twin:\n{heap}"
         );
+        let answer = run(&native, "2000");
         assert_eq!(
             run(&heap, "2000"),
-            run(&native, "2000"),
+            answer,
+            "{shape} must answer alike under the budget"
+        );
+        assert_eq!(
+            run(&refused(&heap), "2000"),
+            answer,
             "{shape} must answer alike on the heap"
         );
     }

@@ -381,7 +381,15 @@ impl Printer<'_, '_, '_, '_> {
                     args,
                     return_to,
                 } => {
-                    let call = format!("{}({})", intrinsic_call_name(*op), self.operands(args));
+                    let call = match op {
+                        IntrinsicCall::FrameEnter { weight }
+                        | IntrinsicCall::FrameLeave { weight } => {
+                            format!("{}({weight})", intrinsic_call_name(*op))
+                        }
+                        IntrinsicCall::ListMap | IntrinsicCall::HeapApply => {
+                            format!("{}({})", intrinsic_call_name(*op), self.operands(args))
+                        }
+                    };
                     let transfer = self.transfer(call, *return_to, ret, suffix);
                     return self.line(indent, transfer);
                 }
@@ -646,6 +654,8 @@ fn cell_name(op: CellOp) -> &'static str {
 fn intrinsic_call_name(op: IntrinsicCall) -> &'static str {
     match op {
         IntrinsicCall::ListMap => "List/map",
+        IntrinsicCall::FrameEnter { .. } => "frame/enter",
+        IntrinsicCall::FrameLeave { .. } => "frame/leave",
         IntrinsicCall::HeapApply => "heap/apply",
     }
 }

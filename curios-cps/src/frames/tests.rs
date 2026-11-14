@@ -131,6 +131,27 @@ fn a_non_tail_self_call_runs_on_its_twin_and_its_function_enters_it() {
         matches!(module.node(*body), Some(Node::ApplyFun { callee: Callee::Known(callee), .. }) if *callee == twin),
         "an entry calls its twin"
     );
+    // The call stands in a continuation lifted out of the twin, so it is looked for among every node.
+    let mut operations: Vec<bool> = module
+        .live_nodes()
+        .filter_map(|(_, node)| match node {
+            Node::Intrinsic {
+                op: IntrinsicCall::FrameEnter { .. },
+                ..
+            } => Some(true),
+            Node::Intrinsic {
+                op: IntrinsicCall::FrameLeave { .. },
+                ..
+            } => Some(false),
+            _ => None,
+        })
+        .collect();
+    operations.sort();
+    assert_eq!(
+        operations,
+        [false, true],
+        "the twin's call asks the budget and hands its weight back"
+    );
 }
 
 #[test]
@@ -153,4 +174,11 @@ fn a_call_on_no_cycle_is_left_alone() {
     bound_frames(&mut module);
 
     assert_eq!(module.live_functions().count(), functions);
+}
+
+#[test]
+fn a_weight_is_the_overhead_and_one_for_each_value_its_body_binds() {
+    let (module, count) = counting(false);
+
+    assert_eq!(frame_weight(&module, count), FRAME_OVERHEAD + 2);
 }

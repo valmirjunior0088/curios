@@ -1137,6 +1137,20 @@ impl MachineModule {
                 verify_block_resume(function, *resume, 1)?;
             }
             MachineTerminator::Intrinsic {
+                op:
+                    op @ (curios_cps::IntrinsicCall::FrameEnter { .. }
+                    | curios_cps::IntrinsicCall::FrameLeave { .. }),
+                args,
+                resume,
+            } => {
+                if !args.is_empty() {
+                    return Err(MachineVerifyError(format!(
+                        "{owner} {op:?} takes no operand"
+                    )));
+                }
+                verify_block_resume(function, *resume, op.result_arity())?;
+            }
+            MachineTerminator::Intrinsic {
                 op: curios_cps::IntrinsicCall::HeapApply,
                 args,
                 resume,
@@ -1144,8 +1158,6 @@ impl MachineModule {
                 heap_operands(owner, args)?;
                 verify_block_resume(function, *resume, 1)?;
             }
-            // Every tail position hands its own results straight out of the function, as a tail direct call does, so each is held to the function's result count: a closure call, a `ListMap` and a heap call produce one, a host or cell operation what its row says.
-            MachineTerminator::TailIndirectCall { .. } => tail_returns(owner, function, 1)?,
             MachineTerminator::IntrinsicReturn {
                 op: curios_cps::IntrinsicCall::HeapApply,
                 args,
@@ -1153,6 +1165,8 @@ impl MachineModule {
                 heap_operands(owner, args)?;
                 tail_returns(owner, function, 1)?;
             }
+            // Every tail position hands its own results straight out of the function, as a tail direct call does, so each is held to the function's result count: a closure call and a `ListMap` produce one, a host or cell operation what its row says.
+            MachineTerminator::TailIndirectCall { .. } => tail_returns(owner, function, 1)?,
             MachineTerminator::IntrinsicReturn {
                 op: curios_cps::IntrinsicCall::ListMap,
                 args,
@@ -1161,7 +1175,9 @@ impl MachineModule {
                     "{owner} tail ListMap has the wrong operand count"
                 )));
             }
-            MachineTerminator::IntrinsicReturn { .. } => tail_returns(owner, function, 1)?,
+            MachineTerminator::IntrinsicReturn { op, .. } => {
+                tail_returns(owner, function, op.result_arity())?
+            }
             MachineTerminator::Foreign {
                 function: foreign,
                 args,

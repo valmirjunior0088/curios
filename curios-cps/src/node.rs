@@ -149,12 +149,32 @@ impl ChannelOp {
     }
 }
 
-/// A call-like intrinsic, each answering one value. `ListMap` takes the list then the mapper — the carrier-first order of the whole sequence row, matched by the erased representation so the lowering transcribes without reordering — and runs the mapper once per element, in order.
+/// A call-like intrinsic. `ListMap` takes the list then the mapper — the carrier-first order of the whole sequence row, matched by the erased representation so the lowering transcribes without reordering — and runs the mapper once per element, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntrinsicCall {
     ListMap,
-    /// `(closure, argument…, k)`: the call of `closure` on the arguments run on the heap, its answer handed to the closure `k` ([`bound_frames`](crate::bound_frames)). A closure whose function has a twin ([`Module::twin`](crate::Module::twin)) enters the twin; any other is called natively and hands its answer to `k`. It answers what `k` does, as a closure call does.
+    /// Whether a native call of a frame that weighs `weight` fits the module's frame budget, taking the weight from it where it fits: `1` to call natively, `0` to run on the heap ([`bound_frames`](crate::bound_frames)). It takes no operand.
+    FrameEnter {
+        weight: u32,
+    },
+    /// Hand back the weight a native call took from the frame budget once it returns. It takes no operand and resumes with nothing.
+    FrameLeave {
+        weight: u32,
+    },
+    /// `(closure, argument…, k)`: the call of `closure` on the arguments run on the heap, its answer handed to the closure `k`. A closure whose function has a twin ([`Module::twin`](crate::Module::twin)) enters the twin; any other is called natively and hands its answer to `k`. It answers what `k` does, as a closure call does.
     HeapApply,
+}
+
+impl IntrinsicCall {
+    /// How many values the continuation it resumes takes.
+    pub fn result_arity(self) -> usize {
+        match self {
+            IntrinsicCall::ListMap
+            | IntrinsicCall::FrameEnter { .. }
+            | IntrinsicCall::HeapApply => 1,
+            IntrinsicCall::FrameLeave { .. } => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

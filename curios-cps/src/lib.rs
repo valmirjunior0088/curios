@@ -14,7 +14,7 @@ mod dataflow;
 use dataflow::*;
 
 mod frames;
-pub use frames::bound_frames;
+pub use frames::{FRAME_BUDGET, bound_frames};
 
 mod demand;
 use demand::*;

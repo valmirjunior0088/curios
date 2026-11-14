@@ -969,6 +969,7 @@ impl<'a, 'b> Context<'a, 'b> {
             EmissionTail::Host(host) => self.host_instrs(host),
             EmissionTail::Cell(cell) => self.cell_instrs(cell),
             EmissionTail::Channel(channel) => self.channel_instrs(channel),
+            EmissionTail::Frame(frame) => self.frame_instrs(frame),
             EmissionTail::Panic(panic) => self.table().refuse_instrs(*panic),
             // An arm the theory proved impossible, carried down as `curios_cps::Node::Unreachable`; reaching it is a compiler bug, which is what the refusal reports.
             EmissionTail::Unreachable => self.table().refuse_instrs(curios_cps::Panic::Invariant),
