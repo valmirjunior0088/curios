@@ -129,7 +129,10 @@ let single_digit(d: Nat) -> Str =
 pub let to_str(n: Nat) -> Str =
     match n < 10
     | true => single_digit(n)
-    | false => Str/concat(to_str(n / 10), single_digit(n % 10))
+    | false =>
+        -- The digit ahead of the rest, so no level holds its number across the call: the text of a number of `d` digits would hold all of them at once, and the rebase takes the call onto an accumulator.
+        let digit = single_digit(n % 10);
+        Str/concat(to_str(n / 10), digit)
     end;
 
 --- The number a nonempty run of decimal digits spells, or `none` for any other text.

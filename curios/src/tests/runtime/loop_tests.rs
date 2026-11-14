@@ -442,6 +442,27 @@ fn a_live_set_past_the_heap_it_was_given_stops_on_the_engines_refusal() {
     );
 }
 
+/// A number's decimal text is written without each digit's level holding its own number across the rest: twenty thousand digits under sixty-four mebibytes, where every level holding its number would hold some eighty megabytes at once. The exponent is read from the arguments, so no stage computes the text ahead of the run.
+#[test]
+fn a_numbers_text_holds_no_level_of_the_number_across_the_rest() {
+    let compiled = compile(
+        r#"
+        use /std/{Nat, Str, List, Proc, Io};
+        let entry() -> /std/Io({}) =
+            let arguments = Proc/args()!;
+            let digits = Str/len(Nat/to_str(Nat/pow(10, List/len(arguments) * 20000)));
+            let _ = /std/print(Nat/to_str(digits))!;
+            /std/Io/pure(());
+        entry()
+        "#,
+    )
+    .expect("the text compiles");
+    let (system, io) = MockHost::builder().args(["program"]).build();
+    run_within_heap(&compiled, system, 64 << 20).expect("the text is written within the heap");
+
+    assert_eq!(io.output(), b"20001");
+}
+
 /// A recursion with no end that keeps its frames stops once the heap it was given is spent, on the engine's refusal to grow it: the frames past the budget are heap continuations ([`curios_cps::bound_frames`]), so the stack never decides how deep a recursion goes. The chain is built under a constructor, which no monoid closes, so the recursion keeps a frame a level.
 #[test]
 fn a_recursion_with_no_end_stops_on_the_heap_it_was_given() {

@@ -125,7 +125,10 @@ pub let digits_to_str(ds: List(Nat)) -> Str =
 pub let digits_of(n: Nat) -> List(Nat) =
     match n < 10
     | true => [n]
-    | false => [..digits_of(n / 10), n % 10]
+    | false =>
+        -- The digit ahead of the rest, as `Nat/to_str` takes it.
+        let digit = n % 10;
+        [..digits_of(n / 10), digit]
     end;
 
 pub let normalize(ds: List(Nat)) -> {List(Nat), Bool} =
