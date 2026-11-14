@@ -108,54 +108,40 @@ fn counting(tail: bool) -> (Module, FunctionId) {
     (module, count)
 }
 
-/// The budget operations the live nodes of `module` hold, each by whether it enters.
-fn budget_operations(module: &Module) -> Vec<bool> {
-    module
-        .live_nodes()
-        .filter_map(|(_, node)| match node {
-            Node::Intrinsic {
-                op: IntrinsicCall::FrameEnter { .. },
-                ..
-            } => Some(true),
-            Node::Intrinsic {
-                op: IntrinsicCall::FrameLeave { .. },
-                ..
-            } => Some(false),
-            _ => None,
-        })
-        .collect()
-}
-
 #[test]
-fn a_non_tail_self_call_is_guarded_and_its_function_gains_a_twin() {
+fn a_non_tail_self_call_runs_on_its_twin_and_its_function_enters_it() {
     let (mut module, count) = counting(false);
-    let functions = module.live_functions().count();
 
     bound_frames(&mut module);
 
-    module.verify().expect("a bounded module verifies");
-    let mut operations = budget_operations(&module);
-    operations.sort();
-    assert_eq!(operations, [false, true]);
-    let twin_params = module.function(count).unwrap().params.len() + 1;
-    assert!(
-        module
-            .live_functions()
-            .any(|(id, function)| id != count && function.params.len() == twin_params),
+    module.verify().expect("a module on the heap verifies");
+    let twin = module
+        .twin(count)
+        .expect("a function on a cycle has a twin");
+    assert_eq!(
+        module.function(twin).unwrap().params.len(),
+        module.function(count).unwrap().params.len() + 1,
         "a twin takes its function's parameters and the continuation"
     );
-    assert!(module.live_functions().count() > functions);
+    let entry = module.function(count).unwrap().body;
+    let Some(Node::LetFun { body, .. }) = module.node(entry) else {
+        panic!("an entry binds the continuation that hands its answer back");
+    };
+    assert!(
+        matches!(module.node(*body), Some(Node::ApplyFun { callee: Callee::Known(callee), .. }) if *callee == twin),
+        "an entry calls its twin"
+    );
 }
 
 #[test]
 fn a_tail_self_call_keeps_no_frame_and_is_left_alone() {
-    let (mut module, _) = counting(true);
+    let (mut module, count) = counting(true);
     let functions = module.live_functions().count();
 
     bound_frames(&mut module);
 
     module.verify().expect("the module still verifies");
-    assert!(budget_operations(&module).is_empty());
+    assert_eq!(module.twin(count), None);
     assert_eq!(module.live_functions().count(), functions);
 }
 
@@ -166,13 +152,5 @@ fn a_call_on_no_cycle_is_left_alone() {
 
     bound_frames(&mut module);
 
-    assert!(budget_operations(&module).is_empty());
     assert_eq!(module.live_functions().count(), functions);
-}
-
-#[test]
-fn a_weight_is_the_overhead_and_one_for_each_value_its_body_binds() {
-    let (module, count) = counting(false);
-
-    assert_eq!(frame_weight(&module, count), FRAME_OVERHEAD + 2);
 }

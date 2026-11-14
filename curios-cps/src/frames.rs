@@ -1,12 +1,10 @@
-//! A recursion's frames, bounded on the native stack and continued on the heap: the rule that a recursion is as deep as the heap allows ([`documentation/design/compilation/a-recursion-is-as-deep-as-the-heap-allows.md`](../../documentation/design/compilation/a-recursion-is-as-deep-as-the-heap-allows.md)).
+//! A recursion's frames kept on the heap: the rule that a recursion is as deep as the heap allows ([`documentation/design/compilation/a-recursion-is-as-deep-as-the-heap-allows.md`](../../documentation/design/compilation/a-recursion-is-as-deep-as-the-heap-allows.md)).
 //!
-//! **Only a cycle grows the stack with the input.** A chain of calls on no cycle of the call graph is as deep as the program text allows, so the calls [`bound_frames`] guards are the calls that may close a cycle, a strongly connected component, through the function making them. The graph is the known calls and, for a call through a closure or a list map, an edge to every function a closure of that many parameters may hold, since nothing here tells which one it holds. A tail call keeps no frame and is left alone; a list map keeps its helper's frame under every element, so it is guarded wherever it stands.
+//! **Only a cycle grows the stack with the input.** A chain of calls on no cycle of the call graph is as deep as the program text allows, so the functions [`bound_frames`] rewrites are the members of a strongly connected component one of whose calls may close it without being a tail call. The graph is the known calls and, for a call through a closure or a list map, an edge to every function a closure of that many parameters may hold, since nothing here tells which one it holds. A component whose every call around it is a tail call keeps no frame and is left alone; a list map keeps its helper's frame under every element, so it closes a cycle wherever it stands.
 //!
-//! **A guarded call asks the frame budget first.** [`IntrinsicCall::FrameEnter`] takes the callee's weight from one budget the whole program shares, where it fits, and the call goes native as it was, handing the weight back by [`IntrinsicCall::FrameLeave`] once it returns; where it does not fit, the call goes to the heap with a continuation that hands the answer straight back, so everything deeper runs on the heap inside that one native call. A known callee's heap is its twin; a closure's is the entry [`IntrinsicCall::HeapApply`] reaches, which the emitter dispatches beside the closure's own; a list map's is a loop of those ([`heap_map`]).
+//! **A member runs on the heap.** Its body becomes its heap body, the function's twin: the same body taking one more parameter, the continuation `k` its answer goes to. A call in it that may close the cycle goes to the heap, handing over the rest of the body as a closure; a tail call does where what it may reach has a heap body, handing `k` on; a return becomes a tail call of `k`. Every continuation of the body is lifted to a function bound where its `LetCont` stood, so the rest of the body after any call is a value a closure can carry, its scope the scope the continuation had, and a jump becomes a tail call of what it jumped to. A call that closes no cycle stays native, its frame popped before the body goes on. A known callee's heap body is its twin; a closure's is the entry [`IntrinsicCall::HeapApply`] reaches, which the emitter dispatches beside the closure's own; a list map's is a loop of those ([`heap_map`]).
 //!
-//! **A twin runs its function on the heap.** It is the function's body taking one more parameter, the continuation `k` its answer goes to. A call in it that may close a cycle through its function goes to the heap, handing over the rest of the body as a closure; a tail call does where what it may reach has a twin, handing `k` on; a return becomes a tail call of `k`. Every continuation of the body is lifted to a function bound where its `LetCont` stood, so the rest of the body after any call is a value a closure can carry, its scope the scope the continuation had, and a jump becomes a tail call of what it jumped to. A call that closes no cycle stays native, its frame popped before the twin goes on. [`Module::twin`] names each function's twin, which is what a closure's heap entry enters.
-//!
-//! **A frame's weight is a stand-in for its bytes.** No stage reads an engine's frame size, so a call weighs a fixed overhead plus one for each value its callee's body binds, the slots its locals are allocated from ([`frame_weight`]); a call that may reach several weighs the heaviest.
+//! **The member itself is the entry from native code.** What calls a member from off its cycle — a function on no cycle, a closure call there, the host — calls it as it always did, and the member calls its twin with a continuation that hands the answer back, so a recursion entered from native code holds one native frame however deep it goes. [`Module::twin`] names each member's twin, which is what a closure's heap entry enters.
 
 #[cfg(test)]
 mod tests;
@@ -16,16 +14,11 @@ use {
         Atom, CallAnalysis, Callee, Continuation, ContinuationId, CopyPlan, Edge, Function,
         FunctionId, Intrinsic, IntrinsicCall, Literal, Mapping, Module, Node, NodeId, ValueExpr,
         ValueId, analyze_calls, analyze_sccs, clone_node, copy_bodies, function_nodes,
+        prune_unreachable,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
-
-/// What the native frames of guarded calls may weigh at once, in [`frame_weight`]'s units, across the whole program.
-pub const FRAME_BUDGET: u32 = 65_536;
-
-/// What a frame weighs before the values its body binds.
-const FRAME_OVERHEAD: u32 = 20;
 
 /// What a call may reach: the function it names, any function a closure of that many parameters holds, or, for a list map, any a closure of one parameter holds.
 #[derive(Debug, Clone, Copy)]
@@ -126,13 +119,13 @@ impl Cycles {
     }
 }
 
-/// Bound the native frames a recursion holds: guard each call that may close a cycle of the call graph, and give every member of a guarded cycle its twin.
+/// Keep the frames of every recursion on the heap: each member of a call-graph cycle that one of its calls may close without being a tail call runs as its twin, and the member is left the entry into the twin from native code.
 pub fn bound_frames(module: &mut Module) {
     let calls = analyze_calls(module);
     let cycles = Cycles::of(module, &calls);
 
-    // The guarded sites, read off the module as the optimizer left it, each with what it may reach.
-    let mut guarded: Vec<(FunctionId, NodeId, Reach)> = Vec::new();
+    // The components a call may close other than by a tail call, read off the module as the optimizer left it.
+    let mut closing: BTreeSet<FunctionId> = BTreeSet::new();
     for (owner, _) in module.live_functions() {
         let sentinel = module.function(owner).unwrap().return_cont;
         for node in function_nodes(module, owner) {
@@ -140,12 +133,12 @@ pub fn bound_frames(module: &mut Module) {
                 && (return_to != sentinel || matches!(reach, Reach::Map))
                 && cycles.within(owner, reach)
             {
-                guarded.push((owner, node, reach));
+                closing.insert(owner);
             }
         }
     }
 
-    // A twin is bound beside its original, so a component one of whose members no `LetFun` binds — the entry — keeps its frames native.
+    // A twin is bound beside its member, which every member is but the entry, and nothing calls the entry, so it closes no cycle.
     let binders: BTreeMap<FunctionId, NodeId> = module
         .live_nodes()
         .filter_map(|(node, definition)| match definition {
@@ -154,30 +147,24 @@ pub fn bound_frames(module: &mut Module) {
         })
         .flat_map(|(node, functions)| functions.into_iter().map(move |function| (function, node)))
         .collect();
-    guarded.retain(|(owner, _, _)| {
-        cycles
-            .component(*owner)
-            .iter()
-            .all(|member| binders.contains_key(member))
-    });
-    if guarded.is_empty() {
+    let members: BTreeSet<FunctionId> = closing
+        .iter()
+        .flat_map(|owner| cycles.component(*owner).iter().copied())
+        .collect();
+    if members.is_empty() {
         return;
     }
-
-    let members: BTreeSet<FunctionId> = guarded
-        .iter()
-        .flat_map(|(owner, _, _)| cycles.component(*owner).iter().copied())
-        .collect();
     let arities = module.return_arities();
-    let weights: BTreeMap<FunctionId, u32> = members
-        .iter()
-        .map(|&member| (member, frame_weight(module, member)))
-        .collect();
 
-    // Every twin is copied before any original is guarded, so no twin carries a guard.
+    // Every twin is copied from its member's body before any member is made an entry.
     let twins: BTreeMap<FunctionId, FunctionId> = members
         .iter()
-        .map(|&member| (member, copy_alone(module, member, binders[&member])))
+        .map(|&member| {
+            let binder = binders
+                .get(&member)
+                .expect("a function on a cycle is bound by a group");
+            (member, copy_alone(module, member, *binder))
+        })
         .collect();
     for (&original, &twin) in &twins {
         Twin {
@@ -189,58 +176,56 @@ pub fn bound_frames(module: &mut Module) {
         }
         .lower(twin);
     }
-    for (_, node, reach) in guarded {
-        // A call that may reach several members weighs the heaviest, and a map its helper's frame besides.
-        let weight = cycles
-            .reached(reach)
-            .filter_map(|callee| weights.get(&callee).copied())
-            .max()
-            .unwrap_or(FRAME_OVERHEAD);
-        let weight = match reach {
-            Reach::Map => weight.saturating_add(FRAME_OVERHEAD),
-            Reach::Known(_) | Reach::Closure(_) => weight,
-        };
-        let returns = match reach {
-            Reach::Known(callee) => arities.get(&callee).copied().unwrap_or(1),
-            Reach::Closure(_) | Reach::Map => 1,
-        };
-        guard(
+    for (&member, &twin) in &twins {
+        enter(
             module,
-            node,
-            reach,
-            &twins,
-            weight.min(FRAME_BUDGET / 4),
-            returns,
+            member,
+            twin,
+            arities.get(&member).copied().unwrap_or(1),
         );
     }
-    for (original, twin) in twins {
-        module.record_twin(original, twin);
-    }
-}
 
-/// What a native call of `function` takes from the frame budget: a fixed overhead and one for each value its body binds, its parameters, every `let` and every continuation's parameters, never more than a quarter of the budget.
-fn frame_weight(module: &Module, function: FunctionId) -> u32 {
-    let definition = module.function(function).unwrap();
-    let mut values = definition.params.len();
-    for node in function_nodes(module, function) {
-        match module.node(node).unwrap() {
-            Node::LetValue { .. } | Node::LetIntrinsic { .. } => values += 1,
-            Node::LetCont { continuations, .. } => {
-                for continuation in continuations {
-                    if let Some(continuation) = module.continuation(*continuation) {
-                        values += continuation.params.len();
-                    }
-                }
-            }
-            _ => {}
+    // What a member's own body held is reached from nowhere now.
+    prune_unreachable(module);
+    for (member, twin) in twins {
+        if module.function(member).is_some() {
+            module.record_twin(member, twin);
         }
     }
-
-    let weight = FRAME_OVERHEAD.saturating_add(u32::try_from(values).unwrap_or(u32::MAX));
-    weight.min(FRAME_BUDGET / 4)
 }
 
-/// The hint a function of the heap path carries, `heap/` ahead of the name it was copied or lifted from, so a reader of the emitted module tells the code past the budget from the native code it repeats.
+/// Make `member` the entry into `twin` from native code: its body becomes the call of its twin on its own parameters and a continuation that hands the `returns` values back.
+fn enter(module: &mut Module, member: FunctionId, twin: FunctionId, returns: usize) {
+    let (params, return_cont) = {
+        let definition = module.function(member).unwrap();
+        (definition.params.clone(), definition.return_cont)
+    };
+    let (handed, resumed) = handing_back(module, return_cont, returns);
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(twin),
+        args: params
+            .iter()
+            .copied()
+            .map(Atom::Value)
+            .chain([Atom::Fun(handed)])
+            .collect(),
+        return_to: resumed,
+    });
+    let call = match resumed == return_cont {
+        true => call,
+        false => module.add_node(Node::LetCont {
+            continuations: vec![resumed],
+            body: call,
+        }),
+    };
+    let body = module.add_node(Node::LetFun {
+        functions: vec![handed],
+        body: call,
+    });
+    module.function_mut(member).unwrap().body = body;
+}
+
+/// The hint a function of the heap path carries, `heap/` ahead of the name it was copied or lifted from, so a reader of the emitted module tells a heap body from the entry it is entered by.
 fn heap_named(name: Option<&str>) -> String {
     format!("heap/{}", name.unwrap_or_default())
 }
@@ -449,7 +434,7 @@ impl Twin<'_> {
                 }
                 let arity = match (&call, tail) {
                     (_, true) => returns,
-                    (Node::Intrinsic { op, .. }, false) => op.result_arity(),
+                    (Node::Intrinsic { .. }, false) => 1,
                     (_, false) => self
                         .module
                         .continuation(return_to)
@@ -469,9 +454,7 @@ impl Twin<'_> {
             Node::Channel { op, return_to, .. } => {
                 self.thin(node, return_to, op.result_arity(), &to)
             }
-            Node::Intrinsic { op, return_to, .. } => {
-                self.thin(node, return_to, op.result_arity(), &to)
-            }
+            Node::Intrinsic { return_to, .. } => self.thin(node, return_to, 1, &to),
             other @ (Node::Halt { .. } | Node::Panic(_) | Node::Unreachable) => other,
             Node::LetValue { .. }
             | Node::LetIntrinsic { .. }
@@ -716,106 +699,6 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
         functions: vec![looping],
         body: start,
     }
-}
-
-/// Guard the call at `node`, which may reach `reach` and answers `returns` values, its frame weighing `weight`: native where the budget admits it, handing the weight back once it returns, and otherwise on the heap with a continuation that hands its answer back.
-fn guard(
-    module: &mut Module,
-    node: NodeId,
-    reach: Reach,
-    twins: &BTreeMap<FunctionId, FunctionId>,
-    weight: u32,
-    returns: usize,
-) {
-    let call = module.node(node).unwrap().clone();
-    let (_, return_to) = Reach::of(&call).expect("a guarded site is a call");
-
-    // Native: the call as it was, resuming where the weight is handed back.
-    let answers: Vec<ValueId> = (0..returns).map(|_| module.add_value(None)).collect();
-    let resume = module.add_node(Node::ApplyCont(Edge {
-        target: return_to,
-        args: answers.iter().copied().map(Atom::Value).collect(),
-    }));
-    let back = module.add_continuation(Continuation {
-        debug_name: None,
-        params: Vec::new(),
-        body: resume,
-    });
-    let leave_call = module.add_node(Node::Intrinsic {
-        op: IntrinsicCall::FrameLeave { weight },
-        args: Vec::new(),
-        return_to: back,
-    });
-    let leave_body = module.add_node(Node::LetCont {
-        continuations: vec![back],
-        body: leave_call,
-    });
-    let leave = module.add_continuation(Continuation {
-        debug_name: None,
-        params: answers,
-        body: leave_body,
-    });
-    let native_call = module.add_node(resuming(call.clone(), leave));
-    let native = module.add_continuation(Continuation {
-        debug_name: None,
-        params: Vec::new(),
-        body: native_call,
-    });
-
-    // Heap: handed a continuation that answers what the call would have.
-    let (handed, resumed) = handing_back(module, return_to, returns);
-    let heap_call = on_heap(module, call, reach, twins, Atom::Fun(handed), resumed);
-    let heap_call = module.add_node(heap_call);
-    let heap_call = match resumed == return_to {
-        true => heap_call,
-        false => module.add_node(Node::LetCont {
-            continuations: vec![resumed],
-            body: heap_call,
-        }),
-    };
-    let heap_body = module.add_node(Node::LetFun {
-        functions: vec![handed],
-        body: heap_call,
-    });
-    let heap = module.add_continuation(Continuation {
-        debug_name: None,
-        params: Vec::new(),
-        body: heap_body,
-    });
-
-    // The choice between them, read off the budget.
-    let admitted = module.add_value(Some("admitted".to_string()));
-    let choose = module.add_node(Node::Switch {
-        scrutinee: Atom::Value(admitted),
-        cases: BTreeMap::from([(
-            1,
-            Edge {
-                target: native,
-                args: Vec::new(),
-            },
-        )]),
-        default: Some(Edge {
-            target: heap,
-            args: Vec::new(),
-        }),
-    });
-    let chosen = module.add_continuation(Continuation {
-        debug_name: None,
-        params: vec![admitted],
-        body: choose,
-    });
-    let enter = module.add_node(Node::Intrinsic {
-        op: IntrinsicCall::FrameEnter { weight },
-        args: Vec::new(),
-        return_to: chosen,
-    });
-    module.set_node(
-        node,
-        Node::LetCont {
-            continuations: vec![chosen, native, leave, heap],
-            body: enter,
-        },
-    );
 }
 
 /// The continuation closure a native call hands a twin, and the continuation the call resumes: the closure answers its `returns` values as the one value a closure answers, a tuple of them unless there is one, and the continuation takes that tuple apart into `return_to`.

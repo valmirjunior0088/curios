@@ -1,56 +1,35 @@
-//! Frames past the budget: a program whose every guarded call is refused the budget, and so runs on its callees' twins, answers what it answers with every call native.
+//! Frames on the heap: a program whose recursions run on their twins answers what the same program answers with every call native.
 
 use {
     curios_common::fill,
-    curios_cps::{Atom, Edge, IntrinsicCall, Literal, Module, Node},
+    curios_cps::Module,
     curios_elab::DEFAULT_BUDGET,
     curios_module::RootSource,
     curios_native::{Compiled, ForeignBindings, test_support::*},
-    curios_num::Natural,
     curios_pipeline::{Stage, compile_with_prelude},
     curios_surface::Entrypoint,
     curios_wasm::to_bytes,
 };
 
-/// The module `source` is emitted from.
-fn emitted(source: &str) -> Module {
+/// The module `source` is emitted from, its recursions on the heap, and the one it would be emitted from with every call native: its lowering optimized and rebuilt as the pipeline does, but kept off the heap.
+fn modules(source: &str) -> (Module, Module) {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
-    let mut emitted = None;
-    compile_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none(), |stage| {
-        if let Stage::CpsOptm(module) = stage {
-            emitted = Some(module.clone());
-        }
-    })
+    let (mut lowered, mut emitted) = (None, None);
+    compile_with_prelude(
+        DEFAULT_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |stage| match stage {
+            Stage::Cps(module) => lowered = Some(module.clone()),
+            Stage::CpsOptm(module) => emitted = Some(module.clone()),
+            _ => {}
+        },
+    )
     .expect("fixture compiles");
-    emitted.expect("the pipeline observes cps-optm")
-}
-
-/// `module` with every guarded call refused the budget, so that each goes to its callee's twin and everything below it runs on the heap.
-fn refused(module: &Module) -> Module {
-    let mut refused = module.clone();
-    let enters: Vec<_> = refused
-        .live_nodes()
-        .filter_map(|(id, node)| match node {
-            Node::Intrinsic {
-                op: IntrinsicCall::FrameEnter { .. },
-                return_to,
-                ..
-            } => Some((id, *return_to)),
-            _ => None,
-        })
-        .collect();
-    assert!(!enters.is_empty(), "the program guards no call:\n{module}");
-    for (id, chosen) in enters {
-        refused.remove_node(id);
-        refused.define_node(
-            id,
-            Node::ApplyCont(Edge {
-                target: chosen,
-                args: vec![Atom::Literal(Literal::Nat(Natural::zero()))],
-            }),
-        );
-    }
-    refused
+    let mut native = lowered.expect("the pipeline observes cps");
+    curios_cps::optimize(&mut native);
+    curios_cps::rebuild_in_place(&mut native);
+    (emitted.expect("the pipeline observes cps-optm"), native)
 }
 
 /// What `module` exits with and prints, given `n` as its first argument.
@@ -112,8 +91,8 @@ const RECURSIONS: [(&str, &str, &str); 7] = [
         "two members calling each other",
         r#"
         let ping(n: Nat) -> Nat =
-            match n | 0 => 0 | m + 1 => (pong(m) * 3 + 1) % 1000003 end;
-        let pong(n: Nat) -> Nat =
+            match n | 0 => 0 | m + 1 => (pong(m) * 3 + 1) % 1000003 end
+        and pong(n: Nat) -> Nat =
             match n | 0 => 1 | m + 1 => (ping(m) * 5 + 2) % 1000003 end;
         "#,
         "ping(n)",
@@ -178,12 +157,17 @@ const RECURSIONS: [(&str, &str, &str); 7] = [
 ];
 
 #[test]
-fn every_recursion_answers_on_its_twins_what_it_answers_natively() {
+fn every_recursion_answers_on_the_heap_what_it_answers_natively() {
     for (shape, definitions, result) in RECURSIONS {
-        let module = emitted(&program(definitions, result));
+        let (heap, native) = modules(&program(definitions, result));
+        assert!(
+            heap.live_functions()
+                .any(|(function, _)| heap.twin(function).is_some()),
+            "{shape} must run on a twin:\n{heap}"
+        );
         assert_eq!(
-            run(&refused(&module), "2000"),
-            run(&module, "2000"),
+            run(&heap, "2000"),
+            run(&native, "2000"),
             "{shape} must answer alike on the heap"
         );
     }

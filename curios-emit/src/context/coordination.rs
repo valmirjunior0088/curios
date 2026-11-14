@@ -3,9 +3,8 @@
 use {
     super::{Context, LoadAs},
     crate::{
-        BigHelper, EmissionBlockName, EmissionCellTarget, EmissionChannelTarget,
-        EmissionFrameTarget, Table, branch, call, concrete_val, either, field_get, field_set, get,
-        i32_const, set,
+        BigHelper, EmissionBlockName, EmissionCellTarget, EmissionChannelTarget, Table, branch,
+        call, concrete_val, either, field_get, field_set, get, i32_const, set,
     },
 };
 
@@ -66,55 +65,6 @@ impl<'a> Context<'a, '_> {
             }
         };
         self.coordination_resume(&mut output, resume, arity);
-        output
-    }
-
-    /// A frame-budget operation on `$frames/used`. Entering admits a call of `weight` where what the budget has spent leaves it room, spending it, and answers the admission as the `0`/`1` word every boolean resumes with; leaving hands the weight back and answers nothing.
-    pub(super) fn frame_instrs(&self, frame: &'a EmissionFrameTarget) -> Vec<curios_wasm::Instr> {
-        let used = self.table().frames_used_global();
-        let get = || curios_wasm::Instr::GlobalGet {
-            global_name: used.clone(),
-        };
-        let set = || curios_wasm::Instr::GlobalSet {
-            global_name: used.clone(),
-        };
-        let mut output = Vec::new();
-        let arity = match frame.op {
-            curios_cps::IntrinsicCall::FrameEnter { weight } => {
-                let room = curios_cps::FRAME_BUDGET - weight;
-                output.push(get());
-                output.push(i32_const(
-                    i32::try_from(room).expect("the frame budget is a word"),
-                ));
-                output.push(curios_wasm::Instr::I32LeU);
-                output.push(either(
-                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
-                    vec![
-                        get(),
-                        i32_const(i32::try_from(weight).expect("a weight is a word")),
-                        curios_wasm::Instr::I32Add,
-                        set(),
-                        i32_const(1),
-                    ],
-                    vec![i32_const(0)],
-                ));
-                output.push(curios_wasm::Instr::RefI31);
-                1
-            }
-            curios_cps::IntrinsicCall::FrameLeave { weight } => {
-                output.push(get());
-                output.push(i32_const(
-                    i32::try_from(weight).expect("a weight is a word"),
-                ));
-                output.push(curios_wasm::Instr::I32Sub);
-                output.push(set());
-                0
-            }
-            op @ (curios_cps::IntrinsicCall::ListMap | curios_cps::IntrinsicCall::HeapApply) => {
-                unreachable!("{op:?} is no frame-budget operation")
-            }
-        };
-        self.coordination_resume(&mut output, &frame.resume, arity);
         output
     }
 
