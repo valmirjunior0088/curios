@@ -2,10 +2,11 @@
 
 use {
     crate::certifier::convert::{Pairs, convert_intrinsic, test_support::*},
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
+    curios_common::fill,
     curios_core::{
-        Free, Intrinsic, Level, Term, UniverseConstraint, UniverseContext, UniverseParam,
+        Free, Intrinsic, Level, Subterm, Term, UniverseConstraint, UniverseContext, UniverseParam,
     },
 };
 
@@ -17,13 +18,16 @@ fn between(lower: usize, upper: usize) -> UniverseConstraint {
     }
 }
 
-/// The fold at `Type⟨parameter⟩` applied to `Nat`, a discarded argument, and a symbolic count.
-fn call(parameter: usize, discarded: &Free, count: &Free) -> Term {
-    Term::apply(
-        polymorphic_fold(Level::param(UniverseParam(parameter))),
-        [nat_type(), Term::free_var(discarded), Term::free_var(count)],
-    )
+/// The intrinsic node `term` is, for the rule that compares two of them.
+fn intrinsic(term: &Term) -> Intrinsic {
+    match &**term {
+        Subterm::Intrinsic(node) => node.clone(),
+        _ => panic!("an intrinsic: {term:?}"),
+    }
 }
+
+/// `countdown`, a group descending from its argument to `0`, at a word `${n}`, its motive's `${m}`, its predecessor's `${pred}` and hypothesis's `${ih}`, called at `x`: one recursion under any words.
+const COUNTDOWN: &str = "#{node = Rec} (let ${member}: (${n}: #NatType) -> #NatType = (${n}: #NatType) => match ${n}: (${m}) => #NatType | 0 => 0 | ${pred} + 1; ${ih} => ${member}(${pred}) end; ${member}(${argument}))";
 
 /// Binder *identity* must not leak into conversion. Two `rec` groups written with different minted names are the same group: binder names are display hints, and the bodies are de Bruijn-indexed under their scopes.
 ///
@@ -31,54 +35,30 @@ fn call(parameter: usize, discarded: &Free, count: &Free) -> Term {
 #[test]
 fn two_alpha_variant_recursive_groups_convert() {
     let mut certifier = certifier();
-    let x = binder(90, "x");
-
-    let countdown = |group_binder: Free, param: Free, motive: Free, pred: Free, ih: Free| {
-        let body = Term::func(
-            [(param, nat_type())],
-            Term::nat_match(
-                Term::free_var(&param),
-                Some(&motive),
-                nat_type(),
-                nat(0),
-                &pred,
-                &ih,
-                Term::apply(Term::free_var(&group_binder), [Term::free_var(&pred)]),
-            ),
-        );
-
-        Term::rec(
-            [(
-                group_binder,
-                Term::func_type([(param, nat_type())], nat_type()),
-                body,
-            )],
-            Term::apply(Term::free_var(&group_binder), [Term::free_var(&x)]),
+    let [left, right] = terms(&fill!(
+        "(${left}, ${right})",
+        left = fill!(
+            COUNTDOWN,
+            member = "countdown",
+            n = "n",
+            m = "m",
+            pred = "pred",
+            ih = "ih",
+            argument = "x"
+        ),
+        right = fill!(
+            COUNTDOWN,
+            member = "loop",
+            n = "k",
+            m = "motive",
+            pred = "p",
+            ih = "rest",
+            argument = "x"
         )
-    };
+    ));
 
-    let left = countdown(
-        binder(0, "countdown"),
-        binder(1, "n"),
-        binder(2, "m"),
-        binder(3, "pred"),
-        binder(4, "ih"),
-    );
-    let right = countdown(
-        binder(10, "loop"),
-        binder(11, "k"),
-        binder(12, "motive"),
-        binder(13, "p"),
-        binder(14, "rest"),
-    );
-
-    assert_ne!(
-        format!("{left:?}"),
-        String::new(),
-        "the fixture should render, so a failure names real terms",
-    );
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &left, &right),
+        convert(&mut certifier, &term("#NatType"), &left, &right),
         Ok(true)
     );
 }
@@ -87,93 +67,55 @@ fn two_alpha_variant_recursive_groups_convert() {
 #[test]
 fn a_folded_recursive_call_converts_without_unfolding_forever() {
     let mut certifier = Certifier::new(10_000, SYNTAX);
-
-    let n = binder(0, "n");
-    let motive = binder(1, "m");
-    let pred = binder(2, "pred");
-    let hypothesis = binder(3, "ih");
-    let countdown = binder(4, "countdown");
-    let x = binder(5, "x");
-
-    let body = Term::func(
-        [(n, nat_type())],
-        Term::nat_match(
-            Term::free_var(&n),
-            Some(&motive),
-            nat_type(),
-            nat(0),
-            &pred,
-            &hypothesis,
-            Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
-        ),
-    );
-
-    let group = [(
-        countdown,
-        Term::func_type([(n, nat_type())], nat_type()),
-        body,
-    )];
-
-    let folded = Term::rec(
-        group.clone(),
-        Term::apply(Term::free_var(&countdown), [Term::free_var(&x)]),
-    );
-    let same_shape_other_argument = Term::rec(
-        group,
-        Term::apply(
-            Term::free_var(&countdown),
-            [Term::free_var(&binder(6, "y"))],
-        ),
-    );
+    let called = |argument: &str| {
+        fill!(
+            COUNTDOWN,
+            member = "countdown",
+            n = "n",
+            m = "m",
+            pred = "pred",
+            ih = "ih",
+            argument
+        )
+    };
+    let [folded, same_shape_other_argument] =
+        terms(&fill!("(${x}, ${y})", x = called("x"), y = called("y")));
+    let nat = term("#NatType");
 
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &folded, &folded.clone()),
+        convert(&mut certifier, &nat, &folded, &folded.clone()),
         Ok(true),
     );
     assert_eq!(
-        convert(
-            &mut certifier,
-            &nat_type(),
-            &folded,
-            &same_shape_other_argument,
-        ),
+        convert(&mut certifier, &nat, &folded, &same_shape_other_argument),
         Ok(false),
     );
 }
 
 /// `rec f : (n: Nat) -> Nat = (n) => match n | 0 => base | pred + 1 => f(pred) + by; f`, its step's sum written `f(pred) + by` or, commuted, `by + f(pred)`: one recursion in two spellings no rename relates.
-fn stepping(base: usize, by: usize, commuted: bool) -> Term {
-    let member = binder(60, "f");
-    let (n, motive, pred, ih) = (
-        binder(61, "n"),
-        binder(62, "m"),
-        binder(63, "pred"),
-        binder(64, "ih"),
-    );
-    let call = Term::apply(Term::free_var(&member), [Term::free_var(&pred)]);
+fn stepping(base: usize, by: usize, commuted: bool) -> String {
     let step = match commuted {
-        false => Intrinsic::nat_add(call, nat(by)),
-        true => Intrinsic::nat_add(nat(by), call),
+        false => fill!("#NatAdd(f(pred), ${by})", by),
+        true => fill!("#NatAdd(${by}, f(pred))", by),
     };
 
-    Term::rec(
-        [(
-            member,
-            Term::func_type([(n, nat_type())], nat_type()),
-            Term::func(
-                [(n, nat_type())],
-                Term::nat_match(
-                    Term::free_var(&n),
-                    Some(&motive),
-                    nat_type(),
-                    nat(base),
-                    &pred,
-                    &ih,
-                    Term::intrinsic(step),
-                ),
-            ),
-        )],
-        Term::free_var(&member),
+    fill!(
+        "#{node = Rec} (let f: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => ${base} | pred + 1; ih => ${step} end; f)",
+        base,
+        step
+    )
+}
+
+/// The two groups `left` and `right` written, bare and called at an assumed `x`, opened in `certifier`.
+fn bare_and_called(certifier: &mut Certifier, left: &str, right: &str) -> [Term; 4] {
+    under(
+        certifier,
+        "x: #NatType",
+        &fill!(
+            "${left}, ${right}, (${left})(x), (${right})(x)",
+            left,
+            right
+        ),
     )
 }
 
@@ -183,18 +125,20 @@ fn stepping(base: usize, by: usize, commuted: bool) -> Term {
 #[test]
 fn two_groups_whose_bodies_convert_are_one() {
     let mut certifier = Certifier::new(10_000, SYNTAX);
-    let x = binder(90, "x");
-    certifier.assume(&x, &nat_type());
-    let (left, right) = (stepping(0, 2, false), stepping(0, 2, true));
-    let function = Term::func_type([(binder(91, "n"), nat_type())], nat_type());
+    let [left, right, left_called, right_called] = bare_and_called(
+        &mut certifier,
+        &stepping(0, 2, false),
+        &stepping(0, 2, true),
+    );
+    let function = term("(n: #NatType) -> #NatType");
 
     assert_eq!(convert(&mut certifier, &function, &left, &right), Ok(true));
     assert_eq!(
         convert(
             &mut certifier,
-            &nat_type(),
-            &Term::apply(left, [Term::free_var(&x)]),
-            &Term::apply(right, [Term::free_var(&x)]),
+            &term("#NatType"),
+            &left_called,
+            &right_called
         ),
         Ok(true),
     );
@@ -204,91 +148,33 @@ fn two_groups_whose_bodies_convert_are_one() {
 #[test]
 fn two_groups_whose_bodies_part_are_apart() {
     let mut certifier = Certifier::new(10_000, SYNTAX);
-    let x = binder(90, "x");
-    certifier.assume(&x, &nat_type());
-    let (left, right) = (stepping(0, 2, false), stepping(1, 2, true));
-    let function = Term::func_type([(binder(91, "n"), nat_type())], nat_type());
+    let [left, right, left_called, right_called] = bare_and_called(
+        &mut certifier,
+        &stepping(0, 2, false),
+        &stepping(1, 2, true),
+    );
+    let function = term("(n: #NatType) -> #NatType");
 
     assert_eq!(convert(&mut certifier, &function, &left, &right), Ok(false));
     assert_eq!(
         convert(
             &mut certifier,
-            &nat_type(),
-            &Term::apply(left, [Term::free_var(&x)]),
-            &Term::apply(right, [Term::free_var(&x)]),
+            &term("#NatType"),
+            &left_called,
+            &right_called
         ),
         Ok(false),
     );
 }
 
-/// `rec f : (n: Nat, x: Nat) -> Nat = (n, x) => match n | 0 => x | pred + 1 => f(pred, x); f`, or with its two parameters in the other order where `flipped`: one recursion on `n` that hands `x` back, over two orders of its arguments.
-fn handing_back(flipped: bool) -> Term {
-    let member = binder(110, "f");
-    let (n, x) = (binder(111, "n"), binder(112, "x"));
-    let (motive, pred, ih) = (binder(113, "m"), binder(114, "pred"), binder(115, "ih"));
-    let ordered = |n: Term, x: Term| match flipped {
-        false => [n, x],
-        true => [x, n],
-    };
-    let parameters = match flipped {
-        false => [(n, nat_type()), (x, nat_type())],
-        true => [(x, nat_type()), (n, nat_type())],
-    };
+/// `rec f : (n: Nat, x: Nat) -> Nat = (n, x) => match n | 0 => x | pred + 1 => f(pred, x); f`: a recursion on `n` that hands `x` back.
+const HANDING_BACK: &str = "#{node = Rec} (let f: (n: #NatType, x: #NatType) -> #NatType = (n: #NatType, x: #NatType) => match n: (m) => #NatType | 0 => x | pred + 1; ih => f(pred, x) end; f)";
 
-    Term::rec(
-        [(
-            member,
-            Term::func_type(parameters.clone(), nat_type()),
-            Term::func(
-                parameters,
-                Term::nat_match(
-                    Term::free_var(&n),
-                    Some(&motive),
-                    nat_type(),
-                    Term::free_var(&x),
-                    &pred,
-                    &ih,
-                    Term::apply(
-                        Term::free_var(&member),
-                        ordered(Term::free_var(&pred), Term::free_var(&x)),
-                    ),
-                ),
-            ),
-        )],
-        Term::free_var(&member),
-    )
-}
+/// [`HANDING_BACK`] with its two parameters in the other order: one recursion over two orders of its arguments.
+const HANDING_BACK_FLIPPED: &str = "#{node = Rec} (let f: (x: #NatType, n: #NatType) -> #NatType = (x: #NatType, n: #NatType) => match n: (m) => #NatType | 0 => x | pred + 1; ih => f(x, pred) end; f)";
 
 /// `rec g : (x: Nat, y: Nat, z: Nat) -> Nat = (x, y, z) => match z | 0 => 0 | pred + 1 => g(y, 0, pred); g`: a recursion that discards `x` at its first step and `y` at its second, so two calls apart in `x` are one after one unfolding, and two apart in `y` after two.
-fn shifting() -> Term {
-    let member = binder(120, "g");
-    let (x, y, z) = (binder(121, "x"), binder(122, "y"), binder(123, "z"));
-    let (motive, pred, ih) = (binder(124, "m"), binder(125, "pred"), binder(126, "ih"));
-    let parameters = [(x, nat_type()), (y, nat_type()), (z, nat_type())];
-
-    Term::rec(
-        [(
-            member,
-            Term::func_type(parameters.clone(), nat_type()),
-            Term::func(
-                parameters,
-                Term::nat_match(
-                    Term::free_var(&z),
-                    Some(&motive),
-                    nat_type(),
-                    nat(0),
-                    &pred,
-                    &ih,
-                    Term::apply(
-                        Term::free_var(&member),
-                        [Term::free_var(&y), nat(0), Term::free_var(&pred)],
-                    ),
-                ),
-            ),
-        )],
-        Term::free_var(&member),
-    )
-}
+const SHIFTING: &str = "#{node = Rec} (let g: (x: #NatType, y: #NatType, z: #NatType) -> #NatType = (x: #NatType, y: #NatType, z: #NatType) => match z: (m) => #NatType | 0 => 0 | pred + 1; ih => g(y, 0, pred) end; g)";
 
 /// A pair of calls is unfolded against itself once, and met again inside that unfolding it is apart. The first two are one recursion over two orders of its arguments, which no comparison as binders holds, one binder standing for both members where their calls take their arguments in two orders. Unfolded, they pose their two heads again one binder further in, and would again at every round, in a scope no round has met. The second two are two calls of one member that a second unfolding would reconcile: the first poses the same member against itself at two spines, and that is where it stops. What holds either pair is an induction, which a lemma states, and the calls one unfolding reconciles are still one. The elaborator's twin shares the name.
 ///
@@ -296,36 +182,23 @@ fn shifting() -> Term {
 #[test]
 fn a_pair_met_again_inside_its_own_unfolding_is_apart() {
     let mut certifier = Certifier::new(10_000, SYNTAX);
-    let [a, b, c, d, n] = [
-        binder(92, "a"),
-        binder(93, "b"),
-        binder(94, "c"),
-        binder(95, "d"),
-        binder(96, "n"),
-    ]
-    .map(|local| {
-        certifier.assume(&local, &nat_type());
-        Term::free_var(&local)
-    });
-
-    assert_eq!(
-        convert(
-            &mut certifier,
-            &nat_type(),
-            &Term::apply(handing_back(false), [n.clone(), a.clone()]),
-            &Term::apply(handing_back(true), [a.clone(), n.clone()]),
+    let [handed, flipped, at_a_c, at_b_d, again_at_a_c, at_b_c] = under(
+        &mut certifier,
+        "a: #NatType, b: #NatType, c: #NatType, d: #NatType, n: #NatType",
+        &fill!(
+            "(${handing})(n, a), (${flipped})(a, n), (${shifting})(a, c, n), (${shifting})(b, d, n), (${shifting})(a, c, n), (${shifting})(b, c, n)",
+            handing = HANDING_BACK,
+            flipped = HANDING_BACK_FLIPPED,
+            shifting = SHIFTING
         ),
-        Ok(false),
     );
+    let nat = term("#NatType");
 
-    let call = |x: &Term, y: &Term| Term::apply(shifting(), [x.clone(), y.clone(), n.clone()]);
+    assert_eq!(convert(&mut certifier, &nat, &handed, &flipped), Ok(false));
+    assert_eq!(convert(&mut certifier, &nat, &at_a_c, &at_b_d), Ok(false));
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &call(&a, &c), &call(&b, &d)),
-        Ok(false),
-    );
-    assert_eq!(
-        convert(&mut certifier, &nat_type(), &call(&a, &c), &call(&b, &c)),
-        Ok(true),
+        convert(&mut certifier, &nat, &again_at_a_c, &at_b_c),
+        Ok(true)
     );
 }
 
@@ -335,37 +208,31 @@ fn a_pair_met_again_inside_its_own_unfolding_is_apart() {
 #[test]
 fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
     let mut certifier = Certifier::new(10_000, SYNTAX);
-    let (n, a) = (binder(92, "n"), binder(93, "a"));
-    certifier.assume(&n, &nat_type());
-    certifier.assume(&a, &nat_type());
-    let nat_ = nat_type();
-    let left = Term::apply(
-        handing_back(false),
-        [Term::free_var(&n), Term::free_var(&a)],
+    let [left, right] = under(
+        &mut certifier,
+        "n: #NatType, a: #NatType",
+        &fill!(
+            "(${handing})(n, a), (${flipped})(a, n)",
+            handing = HANDING_BACK,
+            flipped = HANDING_BACK_FLIPPED
+        ),
     );
-    let right = Term::apply(handing_back(true), [Term::free_var(&a), Term::free_var(&n)]);
+    let nat = term("#NatType");
 
-    assert_eq!(convert(&mut certifier, &nat_, &left, &right), Ok(false));
+    assert_eq!(convert(&mut certifier, &nat, &left, &right), Ok(false));
     assert_eq!(
         certifier
-            .convert_hit(&nat_, &left, &right)
+            .convert_hit(&nat, &left, &right)
             .map(|remembered| remembered.verdict),
         None
     );
 
-    let ground = Term::type_ground();
-    let x = binder(40, "x");
-    let redex = Term::apply(
-        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
-        [nat_type()],
-    );
-    assert_eq!(
-        convert(&mut certifier, &ground, &redex, &nat_type()),
-        Ok(true)
-    );
+    let ground = term("Type");
+    let redex = term("((x: Type) => x)(#NatType)");
+    assert_eq!(convert(&mut certifier, &ground, &redex, &nat), Ok(true));
     assert_eq!(
         certifier
-            .convert_hit(&ground, &redex, &nat_type())
+            .convert_hit(&ground, &redex, &nat)
             .map(|remembered| remembered.verdict),
         Some(true)
     );
@@ -373,7 +240,7 @@ fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
     certifier.restore_budget();
     assert_eq!(
         certifier
-            .convert_hit(&ground, &redex, &nat_type())
+            .convert_hit(&ground, &redex, &nat)
             .map(|remembered| remembered.verdict),
         None
     );
@@ -381,19 +248,20 @@ fn a_verdict_that_rested_on_a_pair_left_apart_is_not_remembered() {
 
 /// Conversion keeps the constant function apart from the identity whatever index the local it mentions was minted at.
 ///
-/// A positive control for capture-avoidance. Eta at a function type opens a binder that would alias a free local the certifier could mint again — `(x) => y` and `(x) => x` become the same term the moment the opened binder *is* `y` — so `y` is assumed at each of the first identities a fresh certifier hands out, one of which is the binder the comparison opens. `Certifier::assume` raises the counter past it, so that binder is another. Mutation-checked: an `assume` that leaves the counter alone makes the two convertible.
+/// A positive control for capture-avoidance. Eta at a function type opens a binder that would alias a free local the certifier could mint again — `(x) => y` and `(x) => x` become the same term the moment the opened binder *is* `y` — so `y` is assumed at each of the first identities a fresh certifier hands out, one of which is the binder the comparison opens, the constant naming it by the identity the text states. `Certifier::assume` raises the counter past it, so that binder is another. Mutation-checked: an `assume` that leaves the counter alone makes the two convertible.
 #[test]
 fn conversion_separates_a_constant_from_the_identity_at_every_colliding_index() {
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let parameter = Free::local(9_000, Some("x"));
-    let identity = Term::func([(parameter, nat.clone())], Term::free_var(&parameter));
-    let function = Term::func_type([(parameter, nat.clone())], nat.clone());
+    let nat = term("#NatType");
+    let identity = term("(x: #NatType) => x");
+    let function = term("(x: #NatType) -> #NatType");
 
     for index in 0..16 {
-        let colliding = Free::local(index, Some("y"));
         let mut certifier = Certifier::new(100_000, SYNTAX);
-        certifier.assume(&colliding, &nat);
-        let constant = Term::func([(parameter, nat.clone())], Term::free_var(&colliding));
+        certifier.assume(&Free::local(index, Some("y")), &nat);
+        let constant = term(&fill!(
+            "(x: #NatType) => #{binding = Free(${index})} y",
+            index
+        ));
 
         assert!(
             !convert(&mut certifier, &function, &constant, &identity)
@@ -413,12 +281,24 @@ fn two_groups_of_two_shapes_that_unfold_alike_are_apart() {
     assert_eq!(
         convert(
             &mut certifier,
-            &Term::type_ground(),
-            &equirecursive(binder(20, "a"), binder(21, "x"), false),
-            &equirecursive(binder(30, "b"), binder(31, "y"), true),
+            &term("Type"),
+            &term("#{node = Rec} (let a: Type = (x: a) -> #NatType; a)"),
+            &term("(let b: Type = (y: b) -> #NatType and unused: Type = #NatType; b)"),
         ),
         Ok(false),
     );
+}
+
+/// `rec f : (t: Type⟨${level}⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => 0 | p + 1 => f(t, 0, p); f` — the projection of a one-member group whose only universe data is its level, so two of them differ in nothing but their instance. The recursive call keeps the body restuck, so forcing returns the folded spelling, and it discards `x`, so two calls differing only there converge after one unfolding.
+const POLYMORPHIC_FOLD: &str = "#{node = Rec} (let f: (t: #{level = ${level}} Type, x: #NatType, y: #NatType) -> #NatType = (t: #{level = ${level}} Type, x: #NatType, y: #NatType) => match y: (m) => #NatType | 0 => 0 | pred + 1; ih => f(t, 0, pred) end; f)";
+
+/// [`POLYMORPHIC_FOLD`] at `level` applied to `Nat`, a discarded argument and a symbolic count, each a word over the hypotheses the caller opens.
+fn fold_call(level: &str, discarded: &str) -> String {
+    fill!(
+        "(${fold})(#NatType, ${discarded}, n)",
+        fold = fill!(POLYMORPHIC_FOLD, level),
+        discarded
+    )
 }
 
 /// Two instances of one recursive group are one term when the item's hypotheses force their levels equal: the group is decided by `rec_instances` — as an applied head, and bare at `Type` — with the equation every other level-bearing head already gets, rather than unfolded. The elaborator's twin of this proposition shares the name.
@@ -430,25 +310,27 @@ fn two_instances_of_one_recursive_group_convert_when_their_levels_are_equal_unde
         quality_count: 0,
         constraints: vec![between(0, 1), between(1, 0)],
     });
-    let a = binder(80, "a");
-    let n = binder(81, "n");
+    let [at_u, at_v] = under(
+        &mut certifier,
+        "a: #NatType, n: #NatType",
+        &fill!(
+            "${u}, ${v}",
+            u = fold_call("u", "a"),
+            v = fold_call("v", "a")
+        ),
+    );
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &nat_type(),
-            &call(0, &a, &n),
-            &call(1, &a, &n)
-        ),
+        convert(&mut certifier, &term("#NatType"), &at_u, &at_v),
         Ok(true),
         "the same fold at two levels the hypotheses equate did not converge",
     );
     assert_eq!(
         convert(
             &mut certifier,
-            &Term::type_ground(),
-            &polymorphic_fold(Level::param(UniverseParam(0))),
-            &polymorphic_fold(Level::param(UniverseParam(1))),
+            &term("Type"),
+            &term(&fill!(POLYMORPHIC_FOLD, level = "u")),
+            &term(&fill!(POLYMORPHIC_FOLD, level = "v")),
         ),
         Ok(true),
         "the bare projections were not decided before reduction opened them",
@@ -464,16 +346,18 @@ fn two_instances_of_one_recursive_group_at_unequal_levels_are_refused_without_un
         quality_count: 0,
         constraints: vec![between(0, 1)],
     });
-    let a = binder(80, "a");
-    let n = binder(81, "n");
+    let [at_u, at_v] = under(
+        &mut certifier,
+        "a: #NatType, n: #NatType",
+        &fill!(
+            "${u}, ${v}",
+            u = fold_call("u", "a"),
+            v = fold_call("v", "a")
+        ),
+    );
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &nat_type(),
-            &call(0, &a, &n),
-            &call(1, &a, &n)
-        ),
+        convert(&mut certifier, &term("#NatType"), &at_u, &at_v),
         Ok(false),
         "two instances related only by cumulativity were not refused outright",
     );
@@ -488,17 +372,18 @@ fn two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an
         quality_count: 0,
         constraints: Vec::new(),
     });
-    let a = binder(80, "a");
-    let b = binder(82, "b");
-    let n = binder(81, "n");
+    let [at_a, at_b] = under(
+        &mut certifier,
+        "a: #NatType, n: #NatType, b: #NatType",
+        &fill!(
+            "${a}, ${b}",
+            a = fold_call("u", "a"),
+            b = fold_call("u", "b")
+        ),
+    );
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &nat_type(),
-            &call(0, &a, &n),
-            &call(0, &b, &n)
-        ),
+        convert(&mut certifier, &term("#NatType"), &at_a, &at_b),
         Ok(true),
         "a spine difference the fold discards stopped being reconciled by unfolding",
     );
@@ -510,84 +395,55 @@ fn two_calls_of_one_recursive_group_with_different_spines_still_retry_through_an
 #[test]
 fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
     let mut certifier = Certifier::new(10_000, SYNTAX);
-    let proposition = declare(&mut certifier, "P", Term::prop());
-
-    let countdown = binder(20, "countdown");
-    let (n, p) = (binder(21, "n"), binder(22, "p"));
-    let (motive, pred, ih) = (binder(23, "m"), binder(24, "pred"), binder(25, "ih"));
-    let body = Term::func(
-        [(n, nat_type()), (p, proposition.clone())],
-        Term::nat_match(
-            Term::free_var(&n),
-            Some(&motive),
-            nat_type(),
-            nat(0),
-            &pred,
-            &ih,
-            Term::apply(
-                Term::free_var(&countdown),
-                [Term::free_var(&pred), Term::free_var(&p)],
-            ),
+    declared(&mut certifier, "induct /P: pub Prop\nend");
+    let proposition = "#{node = InductType} /P()";
+    let group = fill!(
+        "#{node = Rec} (let countdown: (n: #NatType, p: ${proposition}) -> #NatType = (n: #NatType, p: ${proposition}) => match n: (m) => #NatType | 0 => 0 | pred + 1; ih => countdown(pred, p) end; countdown)",
+        proposition
+    );
+    let [left, right] = under(
+        &mut certifier,
+        &fill!(
+            "x: #NatType, p: ${proposition}, q: ${proposition}",
+            proposition
         ),
+        &fill!("(${group})(x, p), (${group})(x, q)", group),
     );
-    let group = Term::rec(
-        [(
-            countdown,
-            Term::func_type([(n, nat_type()), (p, proposition.clone())], nat_type()),
-            body,
-        )],
-        Term::free_var(&countdown),
-    );
-
-    let x = binder(26, "x");
-    let (left, right) = (binder(27, "p"), binder(28, "q"));
-    certifier.assume(&x, &nat_type());
-    certifier.assume(&left, &proposition);
-    certifier.assume(&right, &proposition);
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &nat_type(),
-            &Term::apply(group.clone(), [Term::free_var(&x), Term::free_var(&left)]),
-            &Term::apply(group, [Term::free_var(&x), Term::free_var(&right)]),
-        ),
+        convert(&mut certifier, &term("#NatType"), &left, &right),
         Ok(true),
     );
+}
+
+/// `x + g(a, c, n)` and `x + g(b, c, n)`, two sums over two calls of [`SHIFTING`], opened in `certifier`.
+fn sums_over_two_calls(certifier: &mut Certifier) -> [Intrinsic; 2] {
+    under(
+        certifier,
+        "x: #NatType, a: #NatType, b: #NatType, c: #NatType, n: #NatType",
+        &fill!(
+            "#NatAdd(x, (${shifting})(a, c, n)), #NatAdd(x, (${shifting})(b, c, n))",
+            shifting = SHIFTING
+        ),
+    )
+    .map(|sum| intrinsic(&sum))
 }
 
 /// What the intrinsic rule hands on is compared inside the pairs of the goal that produced it, not from none. With `g` against itself already being unfolded, `x + g(a, c, n)` against `x + g(b, c, n)` comes down to the two calls, which one unfolding reconciles and which are apart inside the unfolding they stand in. Compared from no pair, the same two sums are one.
 #[test]
 fn what_the_intrinsic_rule_hands_on_is_compared_inside_the_pairs_of_its_goal() {
     let mut certifier = certifier();
-    let [x, a, b, c, n] = [
-        binder(40, "x"),
-        binder(41, "a"),
-        binder(42, "b"),
-        binder(43, "c"),
-        binder(44, "n"),
-    ]
-    .map(|local| {
-        certifier.assume(&local, &nat_type());
-        Term::free_var(&local)
-    });
-    let call = |first: &Term| Term::apply(shifting(), [first.clone(), c.clone(), n.clone()]);
-    let sum = |summand: Term| Intrinsic::nat_add(x.clone(), summand);
+    let [left, right] = sums_over_two_calls(&mut certifier);
 
     let mut pairs = Pairs::default();
-    assert!(pairs.unfold(&shifting(), &shifting()));
+    assert!(pairs.unfold(&term(SHIFTING), &term(SHIFTING)));
     assert_eq!(
-        convert_intrinsic(&mut certifier, &mut pairs, &sum(call(&a)), &sum(call(&b))),
+        convert_intrinsic(&mut certifier, &mut pairs, &left, &right),
         Ok(false),
         "the two calls were unfolded inside their own unfolding",
     );
     assert_eq!(
-        convert_intrinsic(
-            &mut certifier,
-            &mut Pairs::default(),
-            &sum(call(&a)),
-            &sum(call(&b))
-        ),
+        convert_intrinsic(&mut certifier, &mut Pairs::default(), &left, &right),
         Ok(true),
         "the control: from no pair, the two calls are one after one unfolding",
     );
@@ -599,34 +455,17 @@ fn what_the_intrinsic_rule_hands_on_is_compared_inside_the_pairs_of_its_goal() {
 #[test]
 fn a_verdict_reached_across_a_pair_left_apart_is_no_answer_from_no_pair() {
     for mut certifier in [certifier(), Certifier::uncached(100_000, SYNTAX)] {
-        let [x, a, b, c, n] = [
-            binder(40, "x"),
-            binder(41, "a"),
-            binder(42, "b"),
-            binder(43, "c"),
-            binder(44, "n"),
-        ]
-        .map(|local| {
-            certifier.assume(&local, &nat_type());
-            Term::free_var(&local)
-        });
-        let call = |first: &Term| Term::apply(shifting(), [first.clone(), c.clone(), n.clone()]);
-        let sum = |summand: Term| Intrinsic::nat_add(x.clone(), summand);
+        let [left, right] = sums_over_two_calls(&mut certifier);
 
         let mut pairs = Pairs::default();
-        assert!(pairs.unfold(&shifting(), &shifting()));
+        assert!(pairs.unfold(&term(SHIFTING), &term(SHIFTING)));
         assert_eq!(
-            convert_intrinsic(&mut certifier, &mut pairs, &sum(call(&a)), &sum(call(&b))),
+            convert_intrinsic(&mut certifier, &mut pairs, &left, &right),
             Ok(false),
             "inside the pair's own unfolding the two calls are apart",
         );
         assert_eq!(
-            convert_intrinsic(
-                &mut certifier,
-                &mut Pairs::default(),
-                &sum(call(&a)),
-                &sum(call(&b))
-            ),
+            convert_intrinsic(&mut certifier, &mut Pairs::default(), &left, &right),
             Ok(true),
             "from no pair, one unfolding reconciles them, whatever was asked before",
         );

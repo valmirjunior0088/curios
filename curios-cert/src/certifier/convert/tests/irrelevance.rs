@@ -2,79 +2,56 @@
 
 use {
     crate::certifier::convert::test_support::*,
-    crate::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Cases, Free, Global, InductDecl, InductParam, Intrinsic, Level, Many, Match,
-        MatchResult, Scope, StructDecl, Subterm, Telescope, Term, UniverseContext, Universes,
-    },
+    crate::{test_support::*, *},
+    curios_common::fill,
+    curios_core::{Free, Term},
 };
 
 /// Proof irrelevance: at a `Prop`-sorted type any two terms convert, *without* either being examined. This is what licenses erasure to drop proofs wholesale.
 #[test]
 fn any_two_inhabitants_of_a_proposition_convert() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let (left, right) = (binder(0, "p"), binder(1, "q"));
+    let proposition = declare(&mut certifier, "P", "Prop");
+    let [p, q] = terms("(p, q)");
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &proposition,
-            &Term::free_var(&left),
-            &Term::free_var(&right),
-        ),
-        Ok(true),
+        convert(&mut certifier, &term(&proposition), &p, &q),
+        Ok(true)
     );
 }
+
+/// `${name}(e: ${family}) -> ${result} = match e end`, an elimination with no arm, stuck on a variable.
+const STUCK_ON_ITS_ARGUMENT: &str = "let /${name}: (e: ${family}) -> ${result} = (e: ${family}) => #{result = Ambient(${result})} match e end;";
 
 /// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type, and neither call is opened to say so. `tests::rules`'s row of the same name is the program.
 ///
 /// The control is the same definition over a relevant family: the spines disagree there, the pair unfolds, and the two eliminations stay apart. The proposition's half holds by either rule — unfolded, the two proofs are a stuck elimination's scrutinees, which the type a lookup gives them equates (`two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant`) — so what this holds is the verdict, and that the spines reach it without unfolding is what the comparison costs less by.
 #[test]
 fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
-    let applied_to_two = |sort: Term| {
+    let applied_to_two = |sort: &str| {
         let mut certifier = certifier();
         let family = declare(&mut certifier, "F", sort);
-        let (h, e) = (Global::Authored(Qualifier::from(["h"])), binder(61, "e"));
-        let eliminated = Term::from(Subterm::Match(Match {
-            head: Term::free_var(&e),
-            result: MatchResult::Ambient(nat_type()),
-            cases: Cases::Induct {
-                cases: Vec::new(),
-                default: None,
-                stated: None,
-            },
-        }));
-        certifier
-            .define(
-                &h,
-                &Term::func_type([(e, family.clone())], nat_type()),
-                &Term::func([(e, family.clone())], eliminated),
-                &UniverseContext::default(),
-            )
-            .expect("a name is declared once");
-        let (left, right) = (binder(62, "p"), binder(63, "q"));
-        certifier.assume(&left, &family);
-        certifier.assume(&right, &family);
-
-        convert(
+        declared(
             &mut certifier,
-            &nat_type(),
-            &Term::apply(
-                Term::instance(h, Universes::default()),
-                [Term::free_var(&left)],
+            &fill!(
+                STUCK_ON_ITS_ARGUMENT,
+                name = "h",
+                family,
+                result = "#NatType"
             ),
-            &Term::apply(
-                Term::instance(h, Universes::default()),
-                [Term::free_var(&right)],
-            ),
-        )
+        );
+        let [left, right] = under(
+            &mut certifier,
+            &fill!("p: ${family}, q: ${family}", family),
+            "/h(p), /h(q)",
+        );
+
+        convert(&mut certifier, &term("#NatType"), &left, &right)
     };
 
-    assert_eq!(applied_to_two(Term::prop()), Ok(true));
+    assert_eq!(applied_to_two("Prop"), Ok(true));
     assert_eq!(
-        applied_to_two(Term::type_ground()),
+        applied_to_two("Type"),
         Ok(false),
         "two relevant arguments were identified",
     );
@@ -85,76 +62,48 @@ fn a_definition_applied_to_two_proofs_converts_before_unfolding() {
 /// The control for each is the same definition over a relevant family, where the spines disagree and the pair stays apart. Each held goal holds by either rule: left to eta by the type, both calls unfold and the two proofs are a stuck elimination's scrutinees, which the type a lookup gives them equates. So this holds the verdict at each type, which does not follow where the spine rule sits; trying it first, as the elaborator does, is what keeps the two calls folded.
 #[test]
 fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
-    let judged = |sort: Term| {
+    let (arrow, record) = ("(x: #NatType) -> #NatType", "{a: #NatType, b: #NatType}");
+    let judged = |sort: &str| {
         let mut certifier = certifier();
         let family = declare(&mut certifier, "F", sort);
-        let (e, x) = (binder(61, "e"), binder(64, "x"));
-        let (left, right) = (binder(62, "p"), binder(63, "q"));
-        certifier.assume(&left, &family);
-        certifier.assume(&right, &family);
-
-        // `h(e: F) -> result = match e end`, an elimination with no arm, stuck on a variable.
-        let mut define = |index: u32, result: Term| {
-            let h = Global::Authored(Qualifier::from([format!("h{index}").as_str()]));
-            let eliminated = Term::from(Subterm::Match(Match {
-                head: Term::free_var(&e),
-                result: MatchResult::Ambient(result.clone()),
-                cases: Cases::Induct {
-                    cases: Vec::new(),
-                    default: None,
-                    stated: None,
-                },
-            }));
-            certifier
-                .define(
-                    &h,
-                    &Term::func_type([(e, family.clone())], result),
-                    &Term::func([(e, family.clone())], eliminated),
-                    &UniverseContext::default(),
-                )
-                .expect("a name is declared once");
-
-            move |proof: &Free| {
-                Term::apply(
-                    Term::instance(h, Universes::default()),
-                    [Term::free_var(proof)],
-                )
-            }
-        };
-
-        let arrow = Term::func_type([(x, nat_type())], nat_type());
-        let record =
-            Term::tuple_type([(binder(65, "a"), nat_type()), (binder(66, "b"), nat_type())]);
-        let into_a_function = define(70, arrow.clone());
-        let into_a_record = define(71, record.clone());
+        for (name, result) in [("h70", arrow), ("h71", record)] {
+            declared(
+                &mut certifier,
+                &fill!(STUCK_ON_ITS_ARGUMENT, name, family, result),
+            );
+        }
+        let [
+            into_a_function,
+            again_into_a_function,
+            into_a_record,
+            again_into_a_record,
+            applied,
+            again_applied,
+        ] = under(
+            &mut certifier,
+            &fill!("p: ${family}, q: ${family}", family),
+            "/h70(p), /h70(q), /h71(p), /h71(q), /h70(p)(3), /h70(q)(3)",
+        );
 
         [
             convert(
                 &mut certifier,
-                &arrow,
-                &into_a_function(&left),
-                &into_a_function(&right),
+                &term(arrow),
+                &into_a_function,
+                &again_into_a_function,
             ),
             convert(
                 &mut certifier,
-                &record,
-                &into_a_record(&left),
-                &into_a_record(&right),
+                &term(record),
+                &into_a_record,
+                &again_into_a_record,
             ),
-            convert(
-                &mut certifier,
-                &nat_type(),
-                &Term::apply(into_a_function(&left), [nat(3)]),
-                &Term::apply(into_a_function(&right), [nat(3)]),
-            ),
+            convert(&mut certifier, &term("#NatType"), &applied, &again_applied),
         ]
     };
 
-    assert_eq!(judged(Term::prop()), [Ok(true), Ok(true), Ok(true)]);
-    assert_eq!(
-        judged(Term::type_ground()),
-        [Ok(false), Ok(false), Ok(false)]
-    );
+    assert_eq!(judged("Prop"), [Ok(true), Ok(true), Ok(true)]);
+    assert_eq!(judged("Type"), [Ok(false), Ok(false), Ok(false)]);
 }
 
 /// A spine's arguments are compared at the types its head assigns under every head a lookup types: past a curried head, `f(0)(p)`, and past a projected one, `r.0(p)`, as past a variable's own.
@@ -162,59 +111,32 @@ fn two_calls_of_one_definition_convert_by_their_spines_at_any_type() {
 /// The control is the same two spines over a relevant family. Two proofs of one proposition converge compared at `Type` too, by the type a lookup gives each, so this holds the verdict under each head, and the head's telescope is what reaches it without a lookup of every argument.
 #[test]
 fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
-    let judged = |sort: Term| {
+    let judged = |sort: &str| {
         let mut certifier = certifier();
         let family = declare(&mut certifier, "F", sort);
-        let (f, r) = (binder(60, "f"), binder(61, "r"));
-        let (left, right) = (binder(62, "p"), binder(63, "q"));
-        let (n, e, a, b) = (
-            binder(64, "n"),
-            binder(65, "e"),
-            binder(66, "a"),
-            binder(67, "b"),
-        );
-        certifier.assume(&left, &family);
-        certifier.assume(&right, &family);
-
         // `f : (Nat) -> (F) -> Nat` and `r : {(F) -> Nat, Nat}`.
-        let taking_a_proof = Term::func_type([(e, family.clone())], nat_type());
-        certifier.assume(
-            &f,
-            &Term::func_type([(n, nat_type())], taking_a_proof.clone()),
+        let [curried, again_curried, projected, again_projected] = under(
+            &mut certifier,
+            &fill!(
+                "p: ${family}, q: ${family}, f: (n: #NatType) -> (e: ${family}) -> #NatType, r: {a: (e: ${family}) -> #NatType, b: #NatType}",
+                family
+            ),
+            "f(0)(p), f(0)(q), r.0(p), r.0(q)",
         );
-        certifier.assume(
-            &r,
-            &Term::tuple_type([(a, taking_a_proof), (b, nat_type())]),
-        );
-
-        let curried = |proof: &Free| {
-            Term::apply(
-                Term::apply(Term::free_var(&f), [nat(0)]),
-                [Term::free_var(proof)],
-            )
-        };
-        let projected =
-            |proof: &Free| Term::apply(Term::proj(Term::free_var(&r), 0), [Term::free_var(proof)]);
+        let nat = term("#NatType");
 
         [
-            convert(
-                &mut certifier,
-                &nat_type(),
-                &curried(&left),
-                &curried(&right),
-            ),
-            convert(
-                &mut certifier,
-                &nat_type(),
-                &projected(&left),
-                &projected(&right),
-            ),
+            convert(&mut certifier, &nat, &curried, &again_curried),
+            convert(&mut certifier, &nat, &projected, &again_projected),
         ]
     };
 
-    assert_eq!(judged(Term::prop()), [Ok(true), Ok(true)]);
-    assert_eq!(judged(Term::type_ground()), [Ok(false), Ok(false)]);
+    assert_eq!(judged("Prop"), [Ok(true), Ok(true)]);
+    assert_eq!(judged("Type"), [Ok(false), Ok(false)]);
 }
+
+/// `#{result = Ambient(#NatType)} match ${scrutinee} end`, an elimination with no arm at `Nat`.
+const AT_A_NUMBER: &str = "#{result = Ambient(#NatType)} match ${scrutinee} end";
 
 /// Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both: two proofs of one proposition converge at `Type`, and so do two variables at the empty record, at a record of units, at a function into a unit, at a struct that declares no field, at a struct of a unit and at a recursive definition's call that unfolds to one of these, at whatever depth; and two eliminations of two such proofs, whose scrutinees are compared with no type, are one term. It is what keeps a verdict from following whether a definition's call was unfolded before the pair was posed. The elaborator's twin of this proposition shares the name.
 ///
@@ -224,81 +146,54 @@ fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
 #[test]
 fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let another = declare(&mut certifier, "Q", Term::prop());
-    let field_less = declare_struct(&mut certifier, "U", Telescope::done(()));
-    let unit = Term::tuple_type_unit();
-    let of_a_unit = declare_struct(
+    let proposition = declare(&mut certifier, "P", "Prop");
+    let another = declare(&mut certifier, "Q", "Prop");
+    declared(
         &mut certifier,
-        "W",
-        Telescope::build([(binder(89, "u"), unit.clone())], ()),
+        "struct /U: pub Type {}\nstruct /W: pub Type {\n    u: {},\n}",
     );
-    let record = Term::tuple_type([
-        (binder(90, "a"), nat_type()),
-        (binder(91, "b"), unit.clone()),
-    ]);
-    let units = Term::tuple_type([
-        (binder(90, "a"), unit.clone()),
-        (binder(91, "b"), unit.clone()),
-    ]);
-    let function = Term::func_type([(binder(92, "x"), nat_type())], unit.clone());
     // `rec F : (Nat) -> Type = (n) => match n | 0 => {} | pred + 1 => {a: F(pred)}; F`. `F(0)` unfolds to the unit, and `F(1)` to a record of it.
-    let nested = {
-        let (f, n, motive) = (binder(93, "F"), binder(94, "n"), binder(95, "m"));
-        let (pred, ih) = (binder(96, "pred"), binder(97, "ih"));
-        let again = Term::apply(Term::free_var(&f), [Term::free_var(&pred)]);
-        let family = Term::func_type([(n, nat_type())], Term::type_ground());
-        let body = Term::func(
-            [(n, nat_type())],
-            Term::nat_match(
-                Term::free_var(&n),
-                Some(&motive),
-                Term::type_ground(),
-                unit.clone(),
-                &pred,
-                &ih,
-                Term::tuple_type([(binder(98, "a"), again)]),
-            ),
-        );
-        let definition = Term::rec([(f, family, body)], Term::free_var(&f));
-
-        move |depth: usize| Term::apply(definition.clone(), [nat(depth)])
-    };
-    let (folded, folded_twice) = (nested(0), nested(1));
-
-    let mut assumed = |index: u32, hint: &str, type_: &Term| {
-        let name = binder(index, hint);
-        certifier.assume(&name, type_);
-
-        Term::free_var(&name)
-    };
-    let (p, q) = (assumed(0, "p", &proposition), assumed(1, "q", &proposition));
-    let other = assumed(2, "r", &another);
-    let (u, v) = (assumed(3, "u", &unit), assumed(4, "v", &unit));
-    let (s, t) = (assumed(5, "s", &field_less), assumed(6, "t", &field_less));
-    let (x, y) = (assumed(7, "x", &record), assumed(8, "y", &record));
-    let (f, g) = (assumed(9, "f", &function), assumed(10, "g", &function));
-    let (a, b) = (assumed(11, "a", &nat_type()), assumed(12, "b", &nat_type()));
-    let (c, d) = (assumed(13, "c", &units), assumed(14, "d", &units));
-    let (w, z) = (assumed(15, "w", &of_a_unit), assumed(16, "z", &of_a_unit));
-    let (h, k) = (assumed(17, "h", &folded), assumed(18, "k", &folded));
-    let (i, j) = (
-        assumed(19, "i", &folded_twice),
-        assumed(20, "j", &folded_twice),
+    let nested = "#{node = Rec} (let F: (n: #NatType) -> Type = (n: #NatType) => match n: (m) => Type | 0 => {} | pred + 1; ih => {a: F(pred)} end; F)";
+    let hypotheses = fill!(
+        "p: ${proposition}, q: ${proposition}, r: ${another}, u: {}, v: {}, s: #{node = StructType} /U(), t: #{node = StructType} /U(), x: {a: #NatType, b: {}}, y: {a: #NatType, b: {}}, f: (x: #NatType) -> {}, g: (x: #NatType) -> {}, a: #NatType, b: #NatType, c: {a: {}, b: {}}, d: {a: {}, b: {}}, w: #{node = StructType} /W(), z: #{node = StructType} /W(), h: (${nested})(0), k: (${nested})(0), i: (${nested})(1), j: (${nested})(1)",
+        proposition,
+        another,
+        nested
     );
-
-    let eliminated = |proof: &Term| {
-        Term::from(Subterm::Match(Match {
-            head: proof.clone(),
-            result: MatchResult::Ambient(nat_type()),
-            cases: Cases::Induct {
-                cases: Vec::new(),
-                default: None,
-                stated: None,
-            },
-        }))
-    };
-    let (ground, number) = (Term::type_ground(), nat_type());
+    let [
+        p,
+        q,
+        other,
+        u,
+        v,
+        s,
+        t,
+        x,
+        y,
+        f,
+        g,
+        a,
+        b,
+        c,
+        d,
+        w,
+        z,
+        h,
+        k,
+        i,
+        j,
+        eliminated_p,
+        eliminated_q,
+    ] = under(
+        &mut certifier,
+        &hypotheses,
+        &fill!(
+            "p, q, r, u, v, s, t, x, y, f, g, a, b, c, d, w, z, h, k, i, j, ${p}, ${q}",
+            p = fill!(AT_A_NUMBER, scrutinee = "p"),
+            q = fill!(AT_A_NUMBER, scrutinee = "q")
+        ),
+    );
+    let (ground, number) = (term("Type"), term("#NatType"));
     let mut at =
         |type_: &Term, this: &Term, that: &Term| convert(&mut certifier, type_, this, that);
 
@@ -312,7 +207,7 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
             at(&ground, &w, &z),
             at(&ground, &h, &k),
             at(&ground, &i, &j),
-            at(&number, &eliminated(&p), &eliminated(&q)),
+            at(&number, &eliminated_p, &eliminated_q),
         ],
         [
             Ok(true),
@@ -344,85 +239,66 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
 #[test]
 fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let another = declare(&mut certifier, "Q", Term::prop());
-    let empty = declare(&mut certifier, "E", Term::type_ground());
-    let unit = Term::tuple_type_unit();
-    let units = Term::tuple_type([
-        (binder(90, "a"), unit.clone()),
-        (binder(91, "b"), unit.clone()),
-    ]);
+    let proposition = declare(&mut certifier, "P", "Prop");
+    let another = declare(&mut certifier, "Q", "Prop");
+    let empty = declare(&mut certifier, "E", "Type");
     // `induct Ix : (n : Nat) -> Type`, a family with one index and no constructor.
-    let indexed = Global::Authored(Qualifier::from(["Ix"]));
-    certifier
-        .declare_induct(
-            &indexed,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::build([(binder(92, "n"), nat_type())], ())),
-                Vec::new().into(),
-                Term::type_ground(),
-                Qualifier::empty(),
-                true,
-            ),
+    declared(&mut certifier, "induct /Ix: (n: #NatType) -> pub Type\nend");
+    let units = "{a: {}, b: {}}";
+    let eliminated = |scrutinee: &str, goal: &str| {
+        fill!(
+            "#{result = Ambient(${goal})} match ${scrutinee} end",
+            scrutinee,
+            goal
         )
-        .expect("a name is declared once");
-
-    let mut assumed = |index: u32, hint: &str, type_: &Term| {
-        let name = binder(index, hint);
-        certifier.assume(&name, type_);
-
-        Term::free_var(&name)
     };
-    let (c, d) = (assumed(0, "c", &empty), assumed(1, "d", &empty));
-    let (p, q) = (assumed(2, "p", &proposition), assumed(3, "q", &another));
-    let r = assumed(4, "r", &units);
-    let n = assumed(5, "n", &nat_type());
-    let s = assumed(
-        6,
-        "s",
-        &Term::induct_type(indexed, Vec::<Term>::new(), [nat(3)]),
+    let [
+        c_at_p,
+        p,
+        d_at_p,
+        c_at_units,
+        r,
+        over_its_index,
+        c_at_a_number,
+        n,
+        q,
+    ] = under(
+        &mut certifier,
+        &fill!(
+            "c: ${empty}, d: ${empty}, p: ${proposition}, q: ${another}, r: ${units}, n: #NatType, s: #{node = InductType} /Ix()(3)",
+            empty,
+            proposition,
+            another,
+            units
+        ),
+        &[
+            eliminated("c", &proposition),
+            "p".to_string(),
+            eliminated("d", &proposition),
+            eliminated("c", units),
+            "r".to_string(),
+            // `match s : (i, x) => P end`, whose result is a family over the index and the scrutinee.
+            fill!("match s: (i, x) => ${proposition} end", proposition),
+            eliminated("c", "#NatType"),
+            "n".to_string(),
+            "q".to_string(),
+        ]
+        .join(", "),
     );
-
-    let no_arm = || Cases::Induct {
-        cases: Vec::new(),
-        default: None,
-        stated: None,
-    };
-    let eliminated = |scrutinee: &Term, goal: &Term| {
-        Term::from(Subterm::Match(Match {
-            head: scrutinee.clone(),
-            result: MatchResult::Ambient(goal.clone()),
-            cases: no_arm(),
-        }))
-    };
-    // `match s : (i, x) => P end`, whose result is a family over the index and the scrutinee.
-    let over_its_index = {
-        let (i, x) = (binder(93, "i"), binder(94, "x"));
-
-        Term::from(Subterm::Match(Match {
-            head: s.clone(),
-            result: MatchResult::Family(Scope::close(Many(2), &[&i, &x], proposition.clone())),
-            cases: no_arm(),
-        }))
-    };
-    let ground = Term::type_ground();
+    let ground = term("Type");
     let mut at = |this: &Term, that: &Term| convert(&mut certifier, &ground, this, that);
 
     assert_eq!(
         [
-            at(&eliminated(&c, &proposition), &p),
-            at(&eliminated(&c, &proposition), &eliminated(&d, &proposition)),
-            at(&eliminated(&c, &units), &r),
+            at(&c_at_p, &p),
+            at(&c_at_p, &d_at_p),
+            at(&c_at_units, &r),
             at(&over_its_index, &p),
         ],
         [Ok(true), Ok(true), Ok(true), Ok(true)]
     );
     assert_eq!(
-        [
-            at(&eliminated(&c, &nat_type()), &n),
-            at(&eliminated(&c, &proposition), &q),
-        ],
+        [at(&c_at_a_number, &n), at(&c_at_p, &q)],
         [Ok(false), Ok(false)]
     );
 }
@@ -433,40 +309,51 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
 #[test]
 fn two_eliminations_are_compared_at_the_instance_they_state() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let another = declare(&mut certifier, "Q", Term::prop());
-    let (p, q) = (
-        Term::free_var(&binder(0, "p")),
-        Term::free_var(&binder(1, "q")),
-    );
-    let eliminated = |proof: &Term| {
-        Term::from(Subterm::Match(Match {
-            head: proof.clone(),
-            result: MatchResult::Ambient(nat_type()),
-            cases: Cases::Induct {
-                cases: Vec::new(),
-                default: None,
-                stated: None,
-            },
-        }))
+    let proposition = declare(&mut certifier, "P", "Prop");
+    let another = declare(&mut certifier, "Q", "Prop");
+    let stating = |proof: &str, instance: &str| {
+        fill!(
+            "#{result = Ambient(#NatType), cases = {stated = ${instance}}} match ${proof} end",
+            proof,
+            instance
+        )
     };
-    let stating = |proof: &Term, instance: &Term| eliminated(proof).stating(instance.clone());
-    let number = nat_type();
+    let [p_at_p, q_at_p, q_at_q, p_bare, q_bare] = terms(&fill!(
+        "(${p_at_p}, ${q_at_p}, ${q_at_q}, ${p_bare}, ${q_bare})",
+        p_at_p = stating("p", &proposition),
+        q_at_p = stating("q", &proposition),
+        q_at_q = stating("q", &another),
+        p_bare = fill!(AT_A_NUMBER, scrutinee = "p"),
+        q_bare = fill!(AT_A_NUMBER, scrutinee = "q")
+    ));
+    let number = term("#NatType");
     let mut at = |this: &Term, that: &Term| convert(&mut certifier, &number, this, that);
 
-    assert_eq!(
-        at(&stating(&p, &proposition), &stating(&q, &proposition)),
-        Ok(true)
-    );
+    assert_eq!(at(&p_at_p, &q_at_p), Ok(true));
     assert_eq!(
         [
-            at(&eliminated(&p), &eliminated(&q)),
-            at(&stating(&p, &proposition), &stating(&q, &another)),
-            at(&stating(&p, &proposition), &eliminated(&p)),
+            at(&p_bare, &q_bare),
+            at(&p_at_p, &q_at_q),
+            at(&p_at_p, &p_bare),
         ],
         [Ok(false), Ok(false), Ok(false)]
     );
 }
+
+/// `Or : Prop | left() | right()`, the same two at `Type`, and `Zero : (n : Nat) -> Prop | zero() : (0)`.
+const NULLARY: &str = r#"
+induct /Or: pub Prop
+| left()
+| right()
+end
+induct /Two: pub Type
+| left()
+| right()
+end
+induct /Zero: (n: #NatType) -> pub Prop
+| zero(): (0)
+end
+"#;
 
 /// A constructor's value is typed by its declaration: the family at the value's parameters and at the index targets its constructor states. So where a child is compared with no type, a proof a constructor builds converges with a proof a variable names and with one another constructor builds. The elaborator's twin of this proposition shares the name.
 ///
@@ -476,99 +363,34 @@ fn two_eliminations_are_compared_at_the_instance_they_state() {
 #[test]
 fn a_constructors_value_is_typed_by_its_declaration() {
     let mut certifier = certifier();
-    let nullary = |tags: [&str; 2]| {
-        Vec::from(tags.map(|tag| {
-            (
-                Atom::from(tag),
-                curios_core::test_support::case(0, Telescope::done(Vec::new()), Vec::new()),
-            )
-        }))
-    };
-    let mut family = |path: &str,
-                      arity: Telescope<Telescope<()>>,
-                      constructors: Vec<(Atom, InductParam)>,
-                      result_sort: Term| {
-        let name = Global::Authored(Qualifier::from([path]));
-        certifier
-            .declare_induct(
-                &name,
-                &InductDecl::new(
-                    UniverseContext::default(),
-                    arity,
-                    constructors.into(),
-                    result_sort,
-                    Qualifier::empty(),
-                    true,
-                ),
-            )
-            .expect("a name is declared once");
-
-        name
-    };
-    // `induct Or : Prop | left() | right()`, the same two at `Type`, and `induct Zero : (n : Nat) -> Prop | zero() : (0)`.
-    let unindexed = || Telescope::done(Telescope::done(()));
-    let either = family("Or", unindexed(), nullary(["left", "right"]), Term::prop());
-    let two = family(
-        "Two",
-        unindexed(),
-        nullary(["left", "right"]),
-        Term::type_ground(),
+    declared(&mut certifier, NULLARY);
+    let [
+        left,
+        right,
+        zero,
+        two_left,
+        two_right,
+        p,
+        t,
+        at_zero,
+        at_one,
+    ] = under(
+        &mut certifier,
+        "p: #{node = InductType} /Or(), t: #{node = InductType} /Two(), z: #{node = InductType} /Zero()(0), o: #{node = InductType} /Zero()(1)",
+        "#{node = Variant} /Or/left(), #{node = Variant} /Or/right(), #{node = Variant} /Zero/zero(), #{node = Variant} /Two/left(), #{node = Variant} /Two/right(), p, t, z, o",
     );
-    let zero = family(
-        "Zero",
-        Telescope::done(Telescope::build([(binder(90, "n"), nat_type())], ())),
-        Vec::from([(
-            Atom::from("zero"),
-            curios_core::test_support::case(0, Telescope::done(vec![nat(0)]), Vec::new()),
-        )]),
-        Term::prop(),
-    );
-
-    let built =
-        |name: Global, tag: &str| Term::variant(name, Vec::<Term>::new(), tag, Vec::<Term>::new());
-    let mut assumed = |index: u32, hint: &str, type_: &Term| {
-        let name = binder(index, hint);
-        certifier.assume(&name, type_);
-
-        Term::free_var(&name)
-    };
-    let p = assumed(
-        0,
-        "p",
-        &Term::induct_type(either, Vec::<Term>::new(), Vec::<Term>::new()),
-    );
-    let t = assumed(
-        1,
-        "t",
-        &Term::induct_type(two, Vec::<Term>::new(), Vec::<Term>::new()),
-    );
-    let at_zero = assumed(
-        2,
-        "z",
-        &Term::induct_type(zero, Vec::<Term>::new(), [nat(0)]),
-    );
-    let at_one = assumed(
-        3,
-        "o",
-        &Term::induct_type(zero, Vec::<Term>::new(), [nat(1)]),
-    );
-
-    let ground = Term::type_ground();
+    let ground = term("Type");
     let mut at = |this: &Term, that: &Term| convert(&mut certifier, &ground, this, that);
 
     assert_eq!(
-        [
-            at(&built(either, "left"), &p),
-            at(&built(either, "left"), &built(either, "right")),
-            at(&built(zero, "zero"), &at_zero),
-        ],
+        [at(&left, &p), at(&left, &right), at(&zero, &at_zero)],
         [Ok(true), Ok(true), Ok(true)]
     );
     assert_eq!(
         [
-            at(&built(two, "left"), &built(two, "right")),
-            at(&built(two, "left"), &t),
-            at(&built(zero, "zero"), &at_one),
+            at(&two_left, &two_right),
+            at(&two_left, &t),
+            at(&zero, &at_one),
         ],
         [Ok(false), Ok(false), Ok(false)]
     );
@@ -581,211 +403,106 @@ fn a_constructors_value_is_typed_by_its_declaration() {
 /// Mutation-checked: with every arm at the stand-in the two held goals are refused.
 #[test]
 fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
-    let judged = |sort: Term| {
+    let judged = |sort: &str| {
         let mut certifier = certifier();
         let held = declare(&mut certifier, "F", sort);
         // `induct Pair : Type | two(a : F, b : F)`.
-        let pair = Global::Authored(Qualifier::from(["Pair"]));
-        certifier
-            .declare_induct(
-                &pair,
-                &InductDecl::new(
-                    UniverseContext::default(),
-                    Telescope::done(Telescope::done(())),
-                    Vec::from([(
-                        Atom::from("two"),
-                        curios_core::test_support::case(
-                            0,
-                            Telescope::build(
-                                [
-                                    (binder(60, "a"), held.clone()),
-                                    (binder(61, "b"), held.clone()),
-                                ],
-                                Vec::new(),
-                            ),
-                            vec![Plicity::Explicit, Plicity::Explicit],
-                        ),
-                    )])
-                    .into(),
-                    Term::type_ground(),
-                    Qualifier::empty(),
-                    true,
-                ),
-            )
-            .expect("a name is declared once");
-        let (typed, untyped) = (binder(0, "t"), binder(1, "u"));
-        certifier.assume(
-            &typed,
-            &Term::induct_type(pair, Vec::<Term>::new(), Vec::<Term>::new()),
+        declared(
+            &mut certifier,
+            &fill!(
+                "induct /Pair: pub Type\n| two(a: ${held}, b: ${held})\nend",
+                held
+            ),
         );
-        let in_scope = binder(2, "p");
-        certifier.assume(&in_scope, &held);
-        let list = binder(3, "l");
-        certifier.assume(&list, &Term::intrinsic(Intrinsic::ListType(held.clone())));
-
+        let result = fill!("{x: ${held}, y: #NatType}", held);
         // `match t | two(a, b) => (<chosen>, 1) end`, at the ambient `{F, Nat}`.
-        let handing_on = |scrutinee: &Free, first: bool| {
-            let (a, b, m) = (binder(70, "a"), binder(71, "b"), binder(72, "m"));
-            let chosen = match first {
-                true => a,
-                false => b,
-            };
-
-            Term::induct_match(
-                Term::free_var(scrutinee),
-                Some(&m),
-                Term::tuple_type([
-                    (binder(73, "x"), held.clone()),
-                    (binder(74, "y"), nat_type()),
-                ]),
-                [(
-                    "two",
-                    vec![a, b],
-                    Term::tuple([Term::free_var(&chosen), nat(1)]),
-                )],
+        let handing_on = |scrutinee: &str, chosen: &str| {
+            fill!(
+                "match ${scrutinee}: (m) => ${result} | two(a, b) => (${chosen}, 1) end",
+                scrutinee,
+                result,
+                chosen
             )
         };
         // `match l | [] => (p, 0) | h ++ t; ih => (<chosen>, 1) end`.
-        let folding = |peeled: bool| {
-            let (h, t, ih, m) = (
-                binder(75, "h"),
-                binder(76, "t"),
-                binder(77, "ih"),
-                binder(78, "m"),
-            );
-            let chosen = match peeled {
-                true => h,
-                false => in_scope,
-            };
-
-            Term::list_match(
-                Term::free_var(&list),
-                held.clone(),
-                Some(&m),
-                Term::tuple_type([
-                    (binder(73, "x"), held.clone()),
-                    (binder(74, "y"), nat_type()),
-                ]),
-                Term::tuple([Term::free_var(&in_scope), nat(0)]),
-                &[&h, &t, &ih],
-                Term::tuple([Term::free_var(&chosen), nat(1)]),
+        let folding = |chosen: &str| {
+            fill!(
+                "#{cases = {carrier = {elem = ${held}}}} match l: (m) => ${result} | [] => (p, 0) | [h, ..t]; ih => (${chosen}, 1) end",
+                held,
+                result,
+                chosen
             )
         };
-        let ground = Term::type_ground();
+        // `u` is the scrutinee no lookup types: a word no hypothesis binds.
+        let [
+            typed_first,
+            typed_second,
+            peeled,
+            in_scope,
+            untyped_first,
+            untyped_second,
+        ] = under(
+            &mut certifier,
+            &fill!(
+                "t: #{node = InductType} /Pair(), p: ${held}, l: #ListType(${held})",
+                held
+            ),
+            &[
+                handing_on("t", "a"),
+                handing_on("t", "b"),
+                folding("h"),
+                folding("p"),
+                handing_on("u", "a"),
+                handing_on("u", "b"),
+            ]
+            .join(", "),
+        );
+        let ground = term("Type");
 
         [
-            convert(
-                &mut certifier,
-                &ground,
-                &handing_on(&typed, true),
-                &handing_on(&typed, false),
-            ),
-            convert(&mut certifier, &ground, &folding(true), &folding(false)),
-            convert(
-                &mut certifier,
-                &ground,
-                &handing_on(&untyped, true),
-                &handing_on(&untyped, false),
-            ),
+            convert(&mut certifier, &ground, &typed_first, &typed_second),
+            convert(&mut certifier, &ground, &peeled, &in_scope),
+            convert(&mut certifier, &ground, &untyped_first, &untyped_second),
         ]
     };
 
-    assert_eq!(judged(Term::prop()), [Ok(true), Ok(true), Ok(false)]);
-    assert_eq!(
-        judged(Term::type_ground()),
-        [Ok(false), Ok(false), Ok(false)]
-    );
+    assert_eq!(judged("Prop"), [Ok(true), Ok(true), Ok(false)]);
+    assert_eq!(judged("Type"), [Ok(false), Ok(false), Ok(false)]);
 }
 
 /// The same two terms at a *relevant* type are not interchangeable. Irrelevance is a property of the type, and this is the direction that would be unsound to get wrong.
 #[test]
 fn does_not_leak_into_a_relevant_type() {
     let mut certifier = certifier();
-    let data = declare(&mut certifier, "D", Term::type_ground());
-    let (left, right) = (binder(0, "p"), binder(1, "q"));
+    let data = declare(&mut certifier, "D", "Type");
+    let [p, q] = terms("(p, q)");
 
-    assert_eq!(
-        convert(
-            &mut certifier,
-            &data,
-            &Term::free_var(&left),
-            &Term::free_var(&right),
-        ),
-        Ok(false),
-    );
+    assert_eq!(convert(&mut certifier, &term(&data), &p, &q), Ok(false));
 }
+
+/// `S(c)`, the propositions at `true` and the types at `false`, and `F(c) : S(c)`, `P` at `true` and `Nat` at `false`.
+const SORT_COMPUTED: &str = r#"
+let /S: (c: #BoolType) -> #{level = 1} Type =
+    (c: #BoolType) => match c: (_) => #{level = 1} Type | false => Type | true => Prop end;
+let /F: (c: #BoolType) -> /S(c) =
+    (c: #BoolType) => match c: (d) => /S(d) | false => #NatType | true => ${proposition} end;
+"#;
 
 /// A declaration whose codomain is a sort its argument computes lands in `Prop` where the argument decides one and nowhere else. `F(c) : S(c)`, with `S(true)` the propositions and `S(false)` the types, is known for a proposition at `true` by its declaration, before `F(true)` is reduced, and at `false` its two values stay apart: what the declaration says of an application is read at the arguments the application states. `curios`'s `tests::rules::subsumption_tests` holds the program under this name, where a binder at `F(c)` with `c` open is no type at all.
 #[test]
 fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argument_decides_one() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let bool_type = || Term::intrinsic(Intrinsic::BoolType);
-    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
-    let one = Level::zero().succ().expect("level zero has a successor");
+    let proposition = declare(&mut certifier, "P", "Prop");
+    declared(&mut certifier, &fill!(SORT_COMPUTED, proposition));
+    let [p, q] = under(&mut certifier, "p: /F(true), q: /F(true)", "p, q");
 
-    // S(c) = match c | false => Type | true => Prop end
-    let sorts = Global::Authored(Qualifier::from(["S"]));
-    let c = binder(71, "c");
-    certifier
-        .define(
-            &sorts,
-            &Term::func_type([(binder(72, "c"), bool_type())], Term::type_at(one.clone())),
-            &Term::func(
-                [(c, bool_type())],
-                Term::bool_match(
-                    Term::free_var(&c),
-                    None,
-                    Term::type_at(one),
-                    Term::type_ground(),
-                    Term::prop(),
-                ),
-            ),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-    let sort_at =
-        |argument: Term| Term::apply(Term::instance(sorts, Universes::default()), [argument]);
-
-    // F(c) = match c : (d) => S(d) | false => Nat | true => P end
-    let family = Global::Authored(Qualifier::from(["F"]));
-    let (c, d, stated) = (binder(74, "c"), binder(75, "d"), binder(76, "c"));
-    certifier
-        .define(
-            &family,
-            &Term::func_type([(stated, bool_type())], sort_at(Term::free_var(&stated))),
-            &Term::func(
-                [(c, bool_type())],
-                Term::bool_match(
-                    Term::free_var(&c),
-                    Some(&d),
-                    sort_at(Term::free_var(&d)),
-                    nat_type(),
-                    proposition.clone(),
-                ),
-            ),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-    let family_at =
-        |argument: Term| Term::apply(Term::instance(family, Universes::default()), [argument]);
-
-    let (p, q) = (binder(77, "p"), binder(78, "q"));
-    certifier.assume(&p, &family_at(literal(true)));
-    certifier.assume(&q, &family_at(literal(true)));
     assert_eq!(
-        convert(
-            &mut certifier,
-            &family_at(literal(true)),
-            &Term::free_var(&p),
-            &Term::free_var(&q),
-        ),
+        convert(&mut certifier, &term("/F(true)"), &p, &q),
         Ok(true),
         "two proofs at the argument that decides a proposition stayed apart",
     );
-
     assert_eq!(
-        convert(&mut certifier, &family_at(literal(false)), &nat(0), &nat(1)),
+        convert(&mut certifier, &term("/F(false)"), &term("0"), &term("1")),
         Ok(false),
         "two numbers were identified at the argument that decides a type",
     );
@@ -795,44 +512,30 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
 #[test]
 fn a_struct_field_at_a_proposition_is_not_read() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let name = curios_core::Global::Authored(Qualifier::from(["Wrap"]));
-    certifier
-        .declare_struct(
-            &name,
-            &StructDecl {
-                universe_context: UniverseContext::default(),
-                arity: Telescope::done(Telescope::build(
-                    [
-                        (binder(60, "n"), nat_type()),
-                        (binder(61, "p"), proposition.clone()),
-                    ],
-                    (),
-                )),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
-        )
-        .expect("a name is declared once");
-    let (p, q) = (binder(62, "p"), binder(63, "q"));
-    certifier.assume(&p, &proposition);
-    certifier.assume(&q, &proposition);
+    let proposition = declare(&mut certifier, "P", "Prop");
+    declared(
+        &mut certifier,
+        &fill!(
+            "struct /Wrap: pub Type {\n    n: #NatType,\n    p: ${proposition},\n}",
+            proposition
+        ),
+    );
+    let [this, that, other] = under(
+        &mut certifier,
+        &fill!("p: ${proposition}, q: ${proposition}", proposition),
+        "/Wrap { 1, p }, /Wrap { 1, q }, /Wrap { 2, p }",
+    );
+    let ground = term("Type");
 
-    let this = Term::struct_(name, Vec::<Term>::new(), [nat(1), Term::free_var(&p)]);
-    let that = Term::struct_(name, Vec::<Term>::new(), [nat(1), Term::free_var(&q)]);
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &this, &that),
+        convert(&mut certifier, &ground, &this, &that),
         Ok(true),
         "two literals differing only in a proof field did not convert",
     );
 
     // The control: a relevant field is still compared, so irrelevance did not leak past the proposition.
-    let other = Term::struct_(name, Vec::<Term>::new(), [nat(2), Term::free_var(&p)]);
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &this, &other),
+        convert(&mut certifier, &ground, &this, &other),
         Ok(false),
         "a relevant field stopped being compared",
     );
@@ -842,68 +545,52 @@ fn a_struct_field_at_a_proposition_is_not_read() {
 #[test]
 fn a_constructor_payload_at_a_proposition_is_not_read() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let name = curios_core::Global::Authored(Qualifier::from(["Wrap"]));
-    certifier
-        .declare_induct(
-            &name,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::done(())),
-                Vec::from([(
-                    Atom::from("wrap"),
-                    curios_core::test_support::case(
-                        0,
-                        Telescope::build(
-                            [
-                                (binder(60, "n"), nat_type()),
-                                (binder(61, "p"), proposition.clone()),
-                            ],
-                            Vec::new(),
-                        ),
-                        vec![Plicity::Explicit, Plicity::Explicit],
-                    ),
-                )])
-                .into(),
-                Term::type_ground(),
-                Qualifier::empty(),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
-    let (p, q) = (binder(62, "p"), binder(63, "q"));
-    certifier.assume(&p, &proposition);
-    certifier.assume(&q, &proposition);
+    let proposition = declare(&mut certifier, "P", "Prop");
+    declared(
+        &mut certifier,
+        &fill!(
+            "induct /Wrap: pub Type\n| wrap(n: #NatType, p: ${proposition})\nend",
+            proposition
+        ),
+    );
+    let [this, that, other] = under(
+        &mut certifier,
+        &fill!("p: ${proposition}, q: ${proposition}", proposition),
+        "#{node = Variant} /Wrap/wrap(1, p), #{node = Variant} /Wrap/wrap(1, q), #{node = Variant} /Wrap/wrap(2, p)",
+    );
+    let ground = term("Type");
 
-    let this = Term::variant(
-        name,
-        Vec::<Term>::new(),
-        "wrap",
-        [nat(1), Term::free_var(&p)],
-    );
-    let that = Term::variant(
-        name,
-        Vec::<Term>::new(),
-        "wrap",
-        [nat(1), Term::free_var(&q)],
-    );
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &this, &that),
+        convert(&mut certifier, &ground, &this, &that),
         Ok(true),
         "two constructions differing only in a proof payload did not convert",
     );
-
-    let other = Term::variant(
-        name,
-        Vec::<Term>::new(),
-        "wrap",
-        [nat(2), Term::free_var(&p)],
-    );
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &this, &other),
+        convert(&mut certifier, &ground, &this, &other),
         Ok(false),
         "a relevant payload stopped being compared",
     );
+}
+
+/// Two inhabitants of `match b | false => ${false} | true => ${true} end` at `${sort}`, its motive's sort, over a `Bool` `b`: the type, and the two.
+fn inhabitants_of_a_computed_type(
+    certifier: &mut Certifier,
+    sort: &str,
+    if_false: &str,
+    if_true: &str,
+) -> [Term; 3] {
+    let computed = fill!(
+        "match b: (_) => ${sort} | false => ${if_false} | true => ${if_true} end",
+        sort,
+        if_false,
+        if_true
+    );
+
+    under(
+        certifier,
+        &fill!("b: #BoolType, p: ${computed}, q: ${computed}", computed),
+        &fill!("${computed}, p, q", computed),
+    )
 }
 
 /// Definitional proof irrelevance at a *computed* proposition — the shape every real firing takes.
@@ -916,25 +603,13 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
 #[test]
 fn fires_at_a_computed_proposition() {
     let mut certifier = certifier();
-    let held = declare(&mut certifier, "Held", Term::prop());
-    let empty = declare(&mut certifier, "Empty", Term::prop());
-
-    let scrutinee = binder(40, "b");
-    certifier.assume(&scrutinee, &Term::intrinsic(Intrinsic::BoolType));
-
-    let computed = Term::bool_match(Term::free_var(&scrutinee), None, Term::prop(), empty, held);
-
-    let (left, right) = (binder(41, "p"), binder(42, "q"));
-    certifier.assume(&left, &computed);
-    certifier.assume(&right, &computed);
+    let held = declare(&mut certifier, "Held", "Prop");
+    let empty = declare(&mut certifier, "Empty", "Prop");
+    let [computed, left, right] =
+        inhabitants_of_a_computed_type(&mut certifier, "Prop", &empty, &held);
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &computed,
-            &Term::free_var(&left),
-            &Term::free_var(&right),
-        ),
+        convert(&mut certifier, &computed, &left, &right),
         Ok(true),
         "two inhabitants of a proposition the motive computes did not convert",
     );
@@ -944,31 +619,13 @@ fn fires_at_a_computed_proposition() {
 #[test]
 fn does_not_fire_at_a_computed_relevant_type() {
     let mut certifier = certifier();
-    let one = declare(&mut certifier, "One", Term::type_ground());
-    let two = declare(&mut certifier, "Two", Term::type_ground());
-
-    let scrutinee = binder(50, "b");
-    certifier.assume(&scrutinee, &Term::intrinsic(Intrinsic::BoolType));
-
-    let computed = Term::bool_match(
-        Term::free_var(&scrutinee),
-        None,
-        Term::type_ground(),
-        one,
-        two,
-    );
-
-    let (left, right) = (binder(51, "x"), binder(52, "y"));
-    certifier.assume(&left, &computed);
-    certifier.assume(&right, &computed);
+    let one = declare(&mut certifier, "One", "Type");
+    let two = declare(&mut certifier, "Two", "Type");
+    let [computed, left, right] =
+        inhabitants_of_a_computed_type(&mut certifier, "Type", &one, &two);
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &computed,
-            &Term::free_var(&left),
-            &Term::free_var(&right),
-        ),
+        convert(&mut certifier, &computed, &left, &right),
         Ok(false),
         "irrelevance leaked into a relevant type the motive computes",
     );
@@ -985,84 +642,79 @@ fn does_not_fire_at_a_computed_relevant_type() {
 /// **One row is not a forfeiture, and it is the one to carry forward.** A binder whose real type is not a sort at all leaves `Sort::of` with nothing to decode, and the typed opening refuses the whole certification with `NotASort` — while the stand-in classifies it `Type 0` and goes on to accept. There the stand-in is strictly *more* permissive than the truth. Nothing in the stand-in fences that off; what does is a property of its callers, the same shape as the one `struct_eta`'s neutral restriction rests on. A match motive is typed under its real binders by `infer`'s `check_motive` before any comparison grounds it, so a motive using a `Bool`-typed binder as a type never reaches here. Under the typed opening the row does not arise: the binder carries its real type, and the goal is refused as the typed row is.
 #[test]
 fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
-    let distinct = || {
-        (
-            Term::free_var(&binder(70, "u")),
-            Term::free_var(&binder(71, "v")),
-        )
-    };
+    // Two words nothing is assumed of, and two sides convertible without being syntactically equal, so the goal survives `compare`'s reflexivity fast path and has to be decided by a rule.
+    let (distinct, convertible) = ("u, v", "((x: #NatType) => x)(1), 1");
 
-    // Convertible without being syntactically equal, so the goal survives `compare`'s reflexivity fast path and has to be decided by a rule.
-    let convertible = || {
-        let x = binder(72, "x");
-
-        (
-            Term::apply(Term::func([(x, nat_type())], Term::free_var(&x)), [nat(1)]),
-            nat(1),
-        )
-    };
-
-    let at = |assumed: Term, sides: (Term, Term)| {
+    let at = |assumed: &str, sides: &str| {
         let mut certifier = certifier();
-        let hypothesis = binder(73, "h");
-        certifier.assume(&hypothesis, &assumed);
-
-        convert(
+        let [hypothesis, this, that] = under(
             &mut certifier,
-            &Term::free_var(&hypothesis),
-            &sides.0,
-            &sides.1,
-        )
+            &fill!("h: ${assumed}", assumed),
+            &fill!("h, ${sides}", sides),
+        );
+
+        convert(&mut certifier, &hypothesis, &this, &that)
     };
 
-    let relevant = Term::type_at(Level::constant(3));
-    let stand_in = Term::type_ground();
-    let not_a_sort = || Err(Error::NotASort(nat_type()));
+    let (relevant, stand_in) = ("#{level = 3} Type", "Type");
+    let not_a_sort = || Err(Error::NotASort(term("#NatType")));
 
     // Distinct sides: only a proposition discharges them, and the stand-in is not one.
     assert_eq!(
-        at(Term::prop(), distinct()),
+        at("Prop", distinct),
         Ok(true),
         "a hypothesis really at `Prop` stopped licensing irrelevance",
     );
     assert_eq!(
-        at(relevant.clone(), distinct()),
+        at(relevant, distinct),
         Ok(false),
         "a hypothesis at a relevant sort discharged two distinct inhabitants",
     );
     assert_eq!(
-        at(stand_in.clone(), distinct()),
+        at(stand_in, distinct),
         Ok(false),
         "the stand-in discharged a goal a relevant type refuses",
     );
     assert_eq!(
-        at(nat_type(), distinct()),
+        at("#NatType", distinct),
         not_a_sort(),
         "a hypothesis at a non-sort was classified rather than refused",
     );
 
     // Convertible sides: every sort compares and accepts, and the non-sort still refuses before comparing.
     assert_eq!(
-        at(Term::prop(), convertible()),
+        at("Prop", convertible),
         Ok(true),
         "a proposition stopped discharging its inhabitants",
     );
     assert_eq!(
-        at(relevant, convertible()),
+        at(relevant, convertible),
         Ok(true),
         "a relevant sort refused two convertible terms",
     );
     assert_eq!(
-        at(stand_in, convertible()),
+        at(stand_in, convertible),
         Ok(true),
         "the stand-in refused a goal a relevant type accepts",
     );
     assert_eq!(
-        at(nat_type(), convertible()),
+        at("#NatType", convertible),
         not_a_sort(),
         "the non-sort row stopped being the one place the stand-in is the more permissive of the two",
     );
 }
+
+/// `Wit(P : Prop) : (p : P)`, a family whose index type *is* its own parameter, `Q`, a proposition, and `Ix : (R : Prop) -> Type`, a family indexed by a proposition.
+///
+/// `induct_type_args` compares two index actuals at the type the declaration's telescope assigns, opened at the left instance's preceding actuals, so at `Wit` the index pair is compared at whatever term stands in the parameter position. That makes the parameter's assumed type the whole of what decides the index goal, which is exactly the question a binder opened at a stand-in answers with the stand-in.
+const INDEXED_BY_A_PROPOSITION: &str = r#"
+induct /Wit(P: Prop): (p: P) -> pub Type
+end
+induct /Q: pub Prop
+end
+induct /Ix: (R: Prop) -> pub Type
+end
+"#;
 
 /// A motive's binders are opened at the types its family gives them: the index domains, and the scrutinee at the family over those binders.
 ///
@@ -1072,60 +724,37 @@ fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
 ///
 /// The counterfactual is the last: the name the fallback's binder was opened under, assumed at `Prop` once that binder is closed, is a proposition, and the two bodies compared directly are discharged by irrelevance. So the verdict moves with the binder's type, toward refusal at the stand-in; and a sort read under the closed binder does not answer for the name assumed again.
 ///
+/// The locals are written by the identities they are minted at, which is what the reasoning reads.
+///
 /// Mutation-checked: with every motive binder at the stand-in the first typed goal is refused; and with a remembered sort answering without asking whether its binders stand, the sort the fallback read under its closed binder answers for the name opened again, and a goal after it is refused.
 #[test]
 fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
     let mut certifier = certifier();
-    let wit = declare_indexed(&mut certifier, "Wit", Term::prop());
-    let proposition = declare(&mut certifier, "Q", Term::prop());
-    // `induct Ix : (R : Prop) -> Type`, a family indexed by a proposition.
-    let indexed = Global::Authored(Qualifier::from(["Ix"]));
-    certifier
-        .declare_induct(
-            &indexed,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::build([(binder(90, "R"), Term::prop())], ())),
-                Vec::new().into(),
-                Term::type_ground(),
-                Qualifier::empty(),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
+    declared(&mut certifier, INDEXED_BY_A_PROPOSITION);
+    let local = |index: u32, word: &str| fill!("#{binding = Free(${index})} ${word}", index, word);
     // The names the certifier is not handed sit below the one it is, so no binder it mints meets one of them.
-    let (typed, untyped) = (binder(80, "s"), binder(70, "t"));
     certifier.assume(
-        &typed,
-        &Term::induct_type(indexed, Vec::<Term>::new(), [proposition]),
+        &Free::local(80, Some("s")),
+        &term("#{node = InductType} /Ix()(#{node = InductType} /Q())"),
     );
-    let (u, v) = (binder(71, "u"), binder(72, "v"));
+    let (typed, untyped, u, v) = (
+        local(80, "s"),
+        local(70, "t"),
+        local(71, "u"),
+        local(72, "v"),
+    );
 
     // `match s : (R, x) => Wit(R, <index>) end`.
-    let elimination = |scrutinee: &Free, index: Term| {
-        let (carried, x) = (binder(84, "R"), binder(85, "x"));
-        let body = Term::induct_type(wit, [Term::free_var(&carried)], [index]);
-
-        Term::from(Subterm::Match(Match {
-            head: Term::free_var(scrutinee),
-            result: MatchResult::Family(Scope::close(Many(2), &[&carried, &x], body)),
-            cases: Cases::Induct {
-                cases: Vec::new(),
-                default: None,
-                stated: None,
-            },
-        }))
+    let elimination = |scrutinee: &str, index: &str| {
+        term(&fill!(
+            "match ${scrutinee}: (R, x) => #{node = InductType} /Wit(R)(${index}) end",
+            scrutinee,
+            index
+        ))
     };
-    let redex = |name: &Free| {
-        let x = binder(86, "x");
-
-        Term::apply(
-            Term::func([(x, nat_type())], Term::free_var(&x)),
-            [Term::free_var(name)],
-        )
-    };
-    let ground = Term::type_ground();
-    let mut at = |scrutinee: &Free, this: Term, that: Term| {
+    let redex = |name: &str| fill!("((x: #NatType) => x)(${name})", name);
+    let ground = term("Type");
+    let mut at = |scrutinee: &str, this: &str, that: &str| {
         convert(
             &mut certifier,
             &ground,
@@ -1135,24 +764,22 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
     };
 
     // The fallback's goals are put first, so that the first binder the certifier mints — the name after the scrutinee's — is the motive's, opened at the stand-in.
-    let fallback = [
-        at(&untyped, Term::free_var(&u), Term::free_var(&v)),
-        at(&untyped, Term::free_var(&u), redex(&u)),
-    ];
+    let fallback = [at(&untyped, &u, &v), at(&untyped, &u, &redex(&u))];
     assert_eq!(
-        [
-            at(&typed, Term::free_var(&u), Term::free_var(&v)),
-            at(&typed, Term::free_var(&u), redex(&u)),
-        ],
+        [at(&typed, &u, &v), at(&typed, &u, &redex(&u))],
         [Ok(true), Ok(true)]
     );
     assert_eq!(fallback, [Ok(false), Ok(true)]);
 
     // That binder is closed, and its name is handed in again at `Prop`.
-    let carried = binder(81, "R");
-    certifier.assume(&carried, &Term::prop());
-    let body =
-        |index: &Free| Term::induct_type(wit, [Term::free_var(&carried)], [Term::free_var(index)]);
+    certifier.assume(&Free::local(81, Some("R")), &term("Prop"));
+    let body = |index: &str| {
+        term(&fill!(
+            "#{node = InductType} /Wit(${carried})(${index})",
+            carried = local(81, "R"),
+            index
+        ))
+    };
 
     assert_eq!(
         convert(&mut certifier, &ground, &body(&u), &body(&v)),
@@ -1166,35 +793,23 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
 #[test]
 fn a_struct_parameter_at_a_proposition_is_not_read() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let name = curios_core::Global::Authored(Qualifier::from(["Held"]));
-    certifier
-        .declare_struct(
-            &name,
-            &StructDecl {
-                universe_context: UniverseContext::default(),
-                // One parameter at the proposition, and a field that does not mention it.
-                arity: Telescope::build(
-                    [(binder(70, "p"), proposition.clone())],
-                    Telescope::build([(binder(71, "n"), nat_type())], ()),
-                ),
-                result_sort: Term::type_ground(),
-                module: Qualifier::empty(),
-                rep_public: true,
-                polarities: vec![curios_core::Polarity::Unused],
-                variances: Vec::new(),
-            },
-        )
-        .expect("a name is declared once");
-    let (p, q) = (binder(72, "p"), binder(73, "q"));
-    certifier.assume(&p, &proposition);
-    certifier.assume(&q, &proposition);
-
-    let this = Term::struct_type(name, [Term::free_var(&p)]);
-    let that = Term::struct_type(name, [Term::free_var(&q)]);
+    let proposition = declare(&mut certifier, "P", "Prop");
+    // One parameter at the proposition, and a field that does not mention it.
+    declared(
+        &mut certifier,
+        &fill!(
+            "#{polarities = [Unused]}\nstruct /Held(p: ${proposition}): pub Type {\n    n: #NatType,\n}",
+            proposition
+        ),
+    );
+    let [this, that] = under(
+        &mut certifier,
+        &fill!("p: ${proposition}, q: ${proposition}", proposition),
+        "#{node = StructType} /Held(p), #{node = StructType} /Held(q)",
+    );
 
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &this, &that),
+        convert(&mut certifier, &term("Type"), &this, &that),
         Ok(true),
         "two instances differing only in a proof parameter did not convert",
     );

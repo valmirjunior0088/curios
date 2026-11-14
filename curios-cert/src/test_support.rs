@@ -236,6 +236,44 @@ pub fn components(term: &Term) -> Vec<Term> {
     }
 }
 
+/// The terms the tuple `text` writes, Core text read as [`term`] reads one: several terms over one set of free words, each word one local in every term.
+///
+/// # Panics
+///
+/// Where the text does not read, or writes other than a tuple of `N` terms.
+pub fn terms<const N: usize>(text: &str) -> [Term; N] {
+    components(&term(text))
+        .try_into()
+        .unwrap_or_else(|_| panic!("{N} terms"))
+}
+
+/// The locals the hypotheses `binders` writes open at in `certifier` ([`opened`]), and `terms`, several terms written over them ([`components`]): each, in order. A lone term is written with a trailing comma, a tuple of one.
+///
+/// # Panics
+///
+/// Where the text does not read, or holds other than `N` terms.
+pub fn hypotheses<const N: usize>(
+    certifier: &mut Certifier,
+    binders: &str,
+    terms: &str,
+) -> (Vec<Free>, [Term; N]) {
+    let (locals, opened) = opened(certifier, &format!("({binders}) => ({terms})"));
+    let terms = components(&opened)
+        .try_into()
+        .unwrap_or_else(|_| panic!("{N} terms"));
+
+    (locals, terms)
+}
+
+/// The terms [`hypotheses`] opens, where no test reads the locals themselves.
+///
+/// # Panics
+///
+/// Where the text does not read, or holds other than `N` terms.
+pub fn under<const N: usize>(certifier: &mut Certifier, binders: &str, terms: &str) -> [Term; N] {
+    hypotheses(certifier, binders, terms).1
+}
+
 variants!(Error {
     Reduce,
     Unbound,

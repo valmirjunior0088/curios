@@ -2,29 +2,21 @@
 
 use {
     crate::certifier::convert::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_core::{Free, Intrinsic, Telescope, Term},
+    curios_common::fill,
+    curios_core::Free,
 };
 
-/// `f : (Nat, Nat) -> Nat`, `n : Nat` and `m : Nat` assumed, for the comparisons below.
-fn over_a_function<'s>(
-    mut certifier: Certifier<'s>,
-    f: &Free,
-    n: &Free,
-    m: &Free,
-) -> Certifier<'s> {
-    certifier.assume(
-        f,
-        &Term::func_type(
-            [(binder(10, "a"), nat_type()), (binder(11, "b"), nat_type())],
-            nat_type(),
-        ),
-    );
-    certifier.assume(n, &nat_type());
-    certifier.assume(m, &nat_type());
-
-    certifier
+/// `depth` levels of `f(x, x)` over `base`, each level's operand written once and shared by its second occurrence, under the share keys from `keys` on: a graph whose tree is `2^depth`.
+fn tower(base: &str, depth: usize, keys: usize) -> String {
+    (keys..keys + depth).fold(base.to_string(), |below, key| {
+        fill!(
+            "f(#{share = ${key}} (${below}), #{shared = ${key}} _)",
+            key,
+            below
+        )
+    })
 }
 
 /// Two terms that are equal graphs built apart are compared once per pair of their nodes. Sixty levels of `f(x, x)` over a local function — one tower over `n`, one over a redex that reduces to it — convert in their size, and a tower over another local is refused in its size. At a depth the uncached certifier affords, both give the same verdicts.
@@ -32,37 +24,23 @@ fn over_a_function<'s>(
 /// Mutation-checked: with no remembered verdict answered, the sixty-level comparison runs the budget out.
 #[test]
 fn two_towers_built_apart_are_compared_once_per_pair_of_nodes() {
-    let f = binder(0, "f");
-    let n = binder(1, "n");
-    let m = binder(2, "m");
-    let y = binder(3, "y");
-    let tower = |base: Term, depth: usize| {
-        (0..depth).fold(base, |term, _| {
-            Term::apply(Term::free_var(&f), [term.clone(), term])
-        })
-    };
-    let redex = || {
-        Term::apply(
-            Term::func([(y, nat_type())], Term::free_var(&y)),
-            [Term::free_var(&n)],
-        )
-    };
-    let verdicts = |certifier: Certifier, depth: usize| {
-        let mut certifier = over_a_function(certifier, &f, &n, &m);
+    let verdicts = |mut certifier: Certifier, depth: usize| {
+        let [over_n, over_redex, again_over_n, over_m] = under(
+            &mut certifier,
+            "f: (a: #NatType, b: #NatType) -> #NatType, n: #NatType, m: #NatType",
+            &[
+                tower("n", depth, 0),
+                tower("((y: #NatType) => y)(n)", depth, depth),
+                tower("n", depth, 2 * depth),
+                tower("m", depth, 3 * depth),
+            ]
+            .join(", "),
+        );
+        let nat = term("#NatType");
 
         [
-            convert(
-                &mut certifier,
-                &nat_type(),
-                &tower(Term::free_var(&n), depth),
-                &tower(redex(), depth),
-            ),
-            convert(
-                &mut certifier,
-                &nat_type(),
-                &tower(Term::free_var(&n), depth),
-                &tower(Term::free_var(&m), depth),
-            ),
+            convert(&mut certifier, &nat, &over_n, &over_redex),
+            convert(&mut certifier, &nat, &again_over_n, &over_m),
         ]
     };
 
@@ -79,16 +57,14 @@ fn two_towers_built_apart_are_compared_once_per_pair_of_nodes() {
 #[test]
 fn a_remembered_verdict_does_not_outlive_the_equations_it_was_reached_under() {
     let sequence = |mut certifier: Certifier| {
-        let n = binder(0, "n");
-        certifier.assume(&n, &nat_type());
-        let compared = |certifier: &mut Certifier| {
-            convert(certifier, &nat_type(), &Term::free_var(&n), &nat(0))
-        };
+        let [n] = under(&mut certifier, "n: #NatType", "n,");
+        let compared =
+            |certifier: &mut Certifier| convert(certifier, &term("#NatType"), &n, &term("0"));
 
         let before = compared(&mut certifier);
         let inside = certifier.scoped(|certifier| {
             certifier
-                .refine(Term::free_var(&n), nat(0))
+                .refine(n.clone(), term("0"))
                 .expect("the equation records");
             compared(certifier)
         });
@@ -109,26 +85,18 @@ fn a_remembered_verdict_does_not_outlive_the_equations_it_was_reached_under() {
 #[test]
 fn a_one_inhabitant_verdict_does_not_outlive_the_case_that_shaped_its_type() {
     let sequence = |mut certifier: Certifier| {
-        let w = declare_struct(
+        declared(&mut certifier, "struct /W: pub Type {\n    u: {},\n}");
+        let [c, x, y, shaped] = under(
             &mut certifier,
-            "W",
-            Telescope::build([(binder(1, "u"), Term::tuple_type_unit())], ()),
+            &fill!("c: #BoolType, x: ${shaped}, y: ${shaped}", shaped = SHAPED),
+            &fill!("c, x, y, ${shaped}", shaped = SHAPED),
         );
-        let c = binder(0, "c");
-        certifier.assume(&c, &Term::intrinsic(Intrinsic::BoolType));
-        let shaped = Term::bool_match(Term::free_var(&c), None, Term::type_ground(), nat_type(), w);
-        let x = binder(2, "x");
-        let y = binder(3, "y");
-        certifier.assume(&x, &shaped);
-        certifier.assume(&y, &shaped);
-        let compared = |certifier: &mut Certifier| {
-            convert(certifier, &shaped, &Term::free_var(&x), &Term::free_var(&y))
-        };
+        let compared = |certifier: &mut Certifier| convert(certifier, &shaped, &x, &y);
 
         let before = compared(&mut certifier);
         let inside = certifier.scoped(|certifier| {
             certifier
-                .refine(Term::free_var(&c), Term::intrinsic(Intrinsic::Bool(true)))
+                .refine(c.clone(), term("true"))
                 .expect("the equation records");
             compared(certifier)
         });
@@ -143,31 +111,38 @@ fn a_one_inhabitant_verdict_does_not_outlive_the_case_that_shaped_its_type() {
     assert_eq!(cached, sequence(Certifier::uncached(100_000, SYNTAX)));
 }
 
+/// `match c | false => Nat | true => W end`, over a `Bool` `c`: a type whose shape the case on `c` decides.
+const SHAPED: &str =
+    "match c: (_) => Type | false => #NatType | true => #{node = StructType} /W() end";
+
 /// Nor its binder. `p(a)` and `p(b)` are one where `p` takes a proof — its arguments compare at a proposition — and apart where it takes data, and a name assumed again at another type, once its first binder is closed, is compared at the second.
 ///
 /// Mutation-checked: answering a scoped verdict without asking whether its binders stand calls the two applications under the second `h` one.
 #[test]
 fn a_remembered_verdict_does_not_outlive_its_binder() {
     let mut certifier = certifier();
-    let h = binder(0, "h");
-    let p = binder(1, "p");
-    let a = binder(2, "a");
-    let b = binder(3, "b");
-    let applied = |argument: &Free| Term::apply(Term::free_var(&p), [Term::free_var(argument)]);
-    let mut compared_under = |sort: Term| {
-        certifier.scoped(|certifier| {
-            certifier.assume(&h, &sort);
-            certifier.assume(
-                &p,
-                &Term::func_type([(binder(4, "x"), Term::free_var(&h))], nat_type()),
-            );
-            certifier.assume(&a, &Term::free_var(&h));
-            certifier.assume(&b, &Term::free_var(&h));
+    let nat = term("#NatType");
+    // The first binders opened at a proposition, with the types the second assumes them at written over them.
+    let ((locals, [left, right, function, carrier]), at_a_proof) = certifier.scoped(|certifier| {
+        let opened = hypotheses(
+            certifier,
+            "h: Prop, p: (x: h) -> #NatType, a: h, b: h",
+            "p(a), p(b), (x: h) -> #NatType, h",
+        );
+        let verdict = convert(certifier, &nat, &opened.1[0], &opened.1[1]);
 
-            convert(certifier, &nat_type(), &applied(&a), &applied(&b))
-        })
-    };
+        (opened, verdict)
+    });
+    let at_data = certifier.scoped(|certifier| {
+        let [h, p, a, b] = <[Free; 4]>::try_from(locals).expect("four binders");
+        certifier.assume(&h, &term("Type"));
+        certifier.assume(&p, &function);
+        certifier.assume(&a, &carrier);
+        certifier.assume(&b, &carrier);
 
-    assert_eq!(compared_under(Term::prop()), Ok(true));
-    assert_eq!(compared_under(Term::type_ground()), Ok(false));
+        convert(certifier, &nat, &left, &right)
+    });
+
+    assert_eq!(at_a_proof, Ok(true));
+    assert_eq!(at_data, Ok(false));
 }

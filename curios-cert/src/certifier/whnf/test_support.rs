@@ -6,34 +6,12 @@ use {
     crate::{test_support::*, *},
     curios_analysis::test_support::*,
     curios_common::fill,
-    curios_core::{Free, Reducer, Term},
+    curios_core::{Reducer, Term},
 };
 
 /// The certifier every test starts from.
 pub fn certifier() -> Certifier<'static> {
     Certifier::new(1_000_000, SYNTAX)
-}
-
-/// The locals the hypotheses `binders` writes open at in `certifier` ([`opened`]), and `terms`, several terms written over them: each, in order. A lone term is written with a trailing comma, a tuple of one.
-pub fn hypotheses<const N: usize>(
-    certifier: &mut Certifier,
-    binders: &str,
-    terms: &str,
-) -> (Vec<Free>, [Term; N]) {
-    let (locals, opened) = opened(
-        certifier,
-        &fill!("(${binders}) => (${terms})", binders, terms),
-    );
-    let terms = components(&opened)
-        .try_into()
-        .unwrap_or_else(|_| panic!("{N} terms"));
-
-    (locals, terms)
-}
-
-/// The terms [`hypotheses`] opens, where no test reads the locals themselves.
-pub fn under<const N: usize>(certifier: &mut Certifier, binders: &str, terms: &str) -> [Term; N] {
-    hypotheses(certifier, binders, terms).1
 }
 
 /// What reducing `term` costs `certifier`, read off what its declaration has consumed on either side.

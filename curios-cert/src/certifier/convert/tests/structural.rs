@@ -2,27 +2,18 @@
 
 use {
     crate::certifier::convert::test_support::*,
-    crate::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Free, FuncType, Global, Intrinsic, Level, MetavarId, Subterm, Term, UniverseContext,
-        Universes, Var,
-    },
+    crate::{test_support::*, *},
+    curios_common::fill,
 };
 
 #[test]
 fn a_term_converts_with_itself() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
+    let [x, again] = terms("(x, x)");
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &nat_type(),
-            &Term::free_var(&x),
-            &Term::free_var(&x)
-        ),
-        Ok(true),
+        convert(&mut certifier, &term("#NatType"), &x, &again),
+        Ok(true)
     );
 }
 
@@ -34,9 +25,9 @@ fn two_bound_indices_are_apart_rather_than_aborted_on() {
     assert_eq!(
         convert(
             &mut certifier,
-            &Term::type_ground(),
-            &Term::var(Var::bound(0)),
-            &Term::var(Var::bound(1))
+            &term("Type"),
+            &term("#{binding = Bound(0)} _"),
+            &term("#{binding = Bound(1)} _")
         ),
         Ok(false),
     );
@@ -47,7 +38,7 @@ fn distinct_literals_do_not_convert() {
     let mut certifier = certifier();
 
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &nat(1), &nat(2)),
+        convert(&mut certifier, &term("#NatType"), &term("1"), &term("2")),
         Ok(false)
     );
 }
@@ -56,17 +47,16 @@ fn distinct_literals_do_not_convert() {
 #[test]
 fn like_terms_convert_and_a_stuck_sum_clashes_with_a_literal() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-    let sum = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), Term::free_var(&x)));
-    let scaled = Term::intrinsic(Intrinsic::nat_mul(nat(2), Term::free_var(&x)));
+    let nat = term("#NatType");
+    let [sum, scaled, stuck] = terms("(#NatAdd(x, x), #NatMul(2, x), #NatAdd(x, 1))");
+
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &sum, &scaled),
+        convert(&mut certifier, &nat, &sum, &scaled),
         Ok(true),
         "x + x converts with 2 · x"
     );
-    let stuck = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(1)));
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &stuck, &nat(0)),
+        convert(&mut certifier, &nat, &stuck, &term("0")),
         Ok(false),
         "x + 1 clashes with 0"
     );
@@ -76,12 +66,14 @@ fn like_terms_convert_and_a_stuck_sum_clashes_with_a_literal() {
 #[test]
 fn beta_equal_terms_convert() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-
-    let redex = Term::apply(Term::func([(x, nat_type())], Term::free_var(&x)), [nat(4)]);
 
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &redex, &nat(4)),
+        convert(
+            &mut certifier,
+            &term("#NatType"),
+            &term("((x: #NatType) => x)(4)"),
+            &term("4")
+        ),
         Ok(true)
     );
 }
@@ -89,45 +81,25 @@ fn beta_equal_terms_convert() {
 #[test]
 fn a_definition_converts_with_its_value() {
     let mut certifier = certifier();
-    let f = Global::Authored(Qualifier::from(["f"]));
-    certifier
-        .define(&f, &nat_type(), &nat(3), &UniverseContext::default())
-        .expect("a name is declared once");
+    declared(&mut certifier, "let /f: #NatType = 3;");
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &nat_type(),
-            &Term::instance(f, Universes::default()),
-            &nat(3)
-        ),
+        convert(&mut certifier, &term("#NatType"), &term("/f"), &term("3")),
         Ok(true),
     );
 }
 
 /// An intrinsic is congruent when it is the same operation on convertible operands — decided generically, so no operation can be omitted from the rule.
+///
+/// `m` is defined as a local no binder binds, which two texts name as one local by stating it.
 #[test]
 fn an_intrinsic_is_congruent_in_its_operands() {
     let mut certifier = certifier();
-    let n = binder(0, "n");
-    let m = Global::Authored(Qualifier::from(["m"]));
-    certifier
-        .define(
-            &m,
-            &nat_type(),
-            &Term::free_var(&n),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-
-    let left = Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&n), nat(3)));
-    let right = Term::intrinsic(Intrinsic::nat_mul(
-        Term::instance(m, Universes::default()),
-        nat(3),
-    ));
+    declared(&mut certifier, "let /m: #NatType = #{binding = Free(7)} n;");
+    let [left, right] = terms("(#NatMul(#{binding = Free(7)} n, 3), #NatMul(/m, 3))");
 
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &left, &right),
+        convert(&mut certifier, &term("#NatType"), &left, &right),
         Ok(true)
     );
 }
@@ -135,27 +107,22 @@ fn an_intrinsic_is_congruent_in_its_operands() {
 #[test]
 fn different_operations_do_not_convert() {
     let mut certifier = certifier();
-    let n = binder(0, "n");
+    let [add, mul] = terms("(#NatAdd(n, 3), #NatMul(n, 3))");
 
-    let add = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(3)));
-    let mul = Term::intrinsic(Intrinsic::nat_mul(Term::free_var(&n), nat(3)));
-
-    assert_eq!(convert(&mut certifier, &nat_type(), &add, &mul), Ok(false));
+    assert_eq!(
+        convert(&mut certifier, &term("#NatType"), &add, &mul),
+        Ok(false)
+    );
 }
 
 /// Two stuck operations of one kind are each the whole of their side, so the pair has no atoms to class and is compared operand by operand. Were the pair handed back as its own two atoms, classing them would ask the comparison already in progress: the guard in `curios-analysis`'s `atoms_of` is what hands back none.
 #[test]
 fn two_stuck_operations_on_different_operands_do_not_convert() {
     let mut certifier = certifier();
-    let n = binder(0, "n");
-    let m = binder(1, "m");
-    let k = binder(2, "k");
-
-    let left = Term::intrinsic(Intrinsic::NatSub(Term::free_var(&n), Term::free_var(&k)));
-    let right = Term::intrinsic(Intrinsic::NatSub(Term::free_var(&m), Term::free_var(&k)));
+    let [left, right] = terms("(#NatSub(n, k), #NatSub(m, k))");
 
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &left, &right),
+        convert(&mut certifier, &term("#NatType"), &left, &right),
         Ok(false)
     );
 }
@@ -164,28 +131,13 @@ fn two_stuck_operations_on_different_operands_do_not_convert() {
 #[test]
 fn a_difference_does_not_convert_with_its_operands_swapped() {
     let mut certifier = certifier();
-    let (a, b) = (
-        Term::free_var(&binder(0, "a")),
-        Term::free_var(&binder(1, "b")),
-    );
+    let nat = term("#NatType");
+    let [sum, swapped_sum, difference, swapped_difference] =
+        terms("(#NatAdd(a, b), #NatAdd(b, a), #NatSub(a, b), #NatSub(b, a))");
 
-    let sum = |left: &Term, right: &Term| {
-        Term::intrinsic(Intrinsic::nat_add(left.clone(), right.clone()))
-    };
-    let difference =
-        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::NatSub(left.clone(), right.clone()));
-
+    assert_eq!(convert(&mut certifier, &nat, &sum, &swapped_sum), Ok(true));
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &sum(&a, &b), &sum(&b, &a)),
-        Ok(true)
-    );
-    assert_eq!(
-        convert(
-            &mut certifier,
-            &nat_type(),
-            &difference(&a, &b),
-            &difference(&b, &a)
-        ),
+        convert(&mut certifier, &nat, &difference, &swapped_difference),
         Ok(false)
     );
 }
@@ -194,56 +146,26 @@ fn a_difference_does_not_convert_with_its_operands_swapped() {
 #[test]
 fn a_shared_successor_floor_is_peeled_before_comparing() {
     let mut certifier = certifier();
-    let n = binder(0, "n");
-    let m = binder(1, "m");
-
-    let left = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(2)));
-    let right = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&m), nat(2)));
+    let nat = term("#NatType");
+    let [left, right, same] = terms("(#NatAdd(n, 2), #NatAdd(m, 2), #NatAdd(n, 2))");
 
     // Distinct symbolic bases: the peel exposes the real disagreement.
-    assert_eq!(
-        convert(&mut certifier, &nat_type(), &left, &right),
-        Ok(false)
-    );
+    assert_eq!(convert(&mut certifier, &nat, &left, &right), Ok(false));
 
     // The same base: equal after the shared floor comes off.
-    let same = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(2)));
-    assert_eq!(convert(&mut certifier, &nat_type(), &left, &same), Ok(true));
+    assert_eq!(convert(&mut certifier, &nat, &left, &same), Ok(true));
 }
 
 /// The heads are one number spelled two ways, so the peel cannot strip them, and a peel handing the nesting back intact would leave shape congruence a two-operand concatenation against a three-operand one. Regrouping in the peel is what lets the pair reach the operand comparison that decides `n + m ≡ m + n`.
 #[test]
 fn a_nested_concatenation_converts_with_its_flat_spelling_past_unlike_heads() {
     let mut certifier = certifier();
-    let g = binder(0, "g");
-    let n = binder(1, "n");
-    let m = binder(2, "m");
-    let t = binder(3, "t");
-    let h = binder(4, "h");
-
-    let head = |left: &Free, right: &Free| {
-        Term::apply(
-            Term::free_var(&g),
-            [Term::intrinsic(Intrinsic::nat_add(
-                Term::free_var(left),
-                Term::free_var(right),
-            ))],
-        )
-    };
-    let single = Term::intrinsic(Intrinsic::List {
-        element: nat_type(),
-        items: vec![Term::free_var(&h)],
-    });
-    let cat = |operands: Vec<Term>| Term::intrinsic(Intrinsic::list_concat(nat_type(), operands));
-
-    let nested = cat(vec![
-        cat(vec![head(&n, &m), Term::free_var(&t)]),
-        single.clone(),
-    ]);
-    let flat = cat(vec![head(&m, &n), Term::free_var(&t), single]);
+    let [nested, flat] = terms(
+        "(#ListConcat(#NatType, [#ListConcat(#NatType, [g(#NatAdd(n, m)), t]), #List(#NatType, [h])]), #ListConcat(#NatType, [g(#NatAdd(m, n)), t, #List(#NatType, [h])]))",
+    );
 
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &nested, &flat),
+        convert(&mut certifier, &term("Type"), &nested, &flat),
         Ok(true)
     );
 }
@@ -252,19 +174,14 @@ fn a_nested_concatenation_converts_with_its_flat_spelling_past_unlike_heads() {
 #[test]
 fn plicity_distinguishes_two_function_types() {
     let mut certifier = certifier();
-    let a = binder(0, "a");
-
-    let explicit = Term::func_type([(a, nat_type())], nat_type());
-    let implicit = Term::from(Subterm::FuncType(FuncType::new(
-        match &*explicit {
-            Subterm::FuncType(func) => func.telescope.clone(),
-            _ => unreachable!("built as a function type"),
-        },
-        vec![Plicity::Implicit],
-    )));
 
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &explicit, &implicit),
+        convert(
+            &mut certifier,
+            &term("Type"),
+            &term("(a: #NatType) -> #NatType"),
+            &term("(@a: #NatType) -> #NatType")
+        ),
         Ok(false),
     );
 }
@@ -273,24 +190,25 @@ fn plicity_distinguishes_two_function_types() {
 #[test]
 fn plicity_distinguishes_two_function_literals() {
     let mut certifier = certifier();
-    let (n, x) = (binder(0, "n"), binder(1, "x"));
+    let untyped = term("Type");
+    let identity = term("(@n: #NatType) => n");
 
-    let identity = Term::func_marked([(Plicity::Implicit, n, nat_type())], Term::free_var(&n));
-    let forwarded = Term::func_marked(
-        [(Plicity::Implicit, n, nat_type())],
-        Term::apply(
-            Term::func([(x, nat_type())], Term::free_var(&x)),
-            [Term::free_var(&n)],
-        ),
-    );
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &identity, &forwarded),
+        convert(
+            &mut certifier,
+            &untyped,
+            &identity,
+            &term("(@n: #NatType) => ((x: #NatType) => x)(n)")
+        ),
         Ok(true),
     );
-
-    let shown = Term::func([(n, nat_type())], Term::free_var(&n));
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &identity, &shown),
+        convert(
+            &mut certifier,
+            &untyped,
+            &identity,
+            &term("(n: #NatType) => n")
+        ),
         Ok(false),
     );
 }
@@ -299,8 +217,8 @@ fn plicity_distinguishes_two_function_literals() {
 #[test]
 fn universes_convert_only_at_the_same_level() {
     let mut certifier = certifier();
-    let zero = Term::type_ground();
-    let one = Term::type_at(Level::zero().succ().expect("level zero succeeds"));
+    let zero = term("Type");
+    let one = term("#{level = 1} Type");
 
     assert_eq!(convert(&mut certifier, &zero, &zero, &zero), Ok(true));
     assert_eq!(convert(&mut certifier, &zero, &zero, &one), Ok(false));
@@ -310,15 +228,20 @@ fn universes_convert_only_at_the_same_level() {
 #[test]
 fn a_metavariable_does_not_convert_with_anything_else() {
     let mut certifier = certifier();
-    let left = Term::hole(MetavarId::from(0usize));
-    let right = Term::hole(MetavarId::from(1usize));
+    let untyped = term("Type");
+    let left = term("#{id = 0, origin = Hole} ?");
 
     assert!(matches!(
-        convert(&mut certifier, &Term::type_ground(), &left, &right),
+        convert(
+            &mut certifier,
+            &untyped,
+            &left,
+            &term("#{id = 1, origin = Hole} ?")
+        ),
         Err(Error::NotCore(_)),
     ));
     assert!(matches!(
-        convert(&mut certifier, &Term::type_ground(), &left, &nat(0)),
+        convert(&mut certifier, &untyped, &left, &term("0")),
         Err(Error::NotCore(_)),
     ));
 }
@@ -327,21 +250,13 @@ fn a_metavariable_does_not_convert_with_anything_else() {
 #[test]
 fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
     let mut certifier = certifier();
-    let (b, c) = (
-        Term::free_var(&binder(0, "b")),
-        Term::free_var(&binder(1, "c")),
-    );
-    let bool_type = Term::intrinsic(Intrinsic::BoolType);
-    let or = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolOr(left, right));
-    let absorbed = or(
-        b.clone(),
-        Term::intrinsic(Intrinsic::BoolAnd(b.clone(), c.clone())),
-    );
+    let bool_type = term("#BoolType");
+    let [absorbed, b, disjunction] = terms("(#BoolOr(b, #BoolAnd(b, c)), b, #BoolOr(b, c))");
 
     assert_eq!(convert(&mut certifier, &bool_type, &absorbed, &b), Ok(true));
     assert_eq!(convert(&mut certifier, &bool_type, &b, &absorbed), Ok(true));
     assert_eq!(
-        convert(&mut certifier, &bool_type, &or(b.clone(), c), &b),
+        convert(&mut certifier, &bool_type, &disjunction, &b),
         Ok(false)
     );
 }
@@ -350,48 +265,35 @@ fn a_bool_tree_converts_with_the_bare_term_it_equals_at_every_assignment() {
 #[test]
 fn a_conjunction_does_not_convert_with_the_disjunction_of_its_operands() {
     let mut certifier = certifier();
-    let (a, b) = (
-        Term::free_var(&binder(0, "a")),
-        Term::free_var(&binder(1, "b")),
-    );
-    let bool_type = Term::intrinsic(Intrinsic::BoolType);
-    let and = |left: &Term, right: &Term| {
-        Term::intrinsic(Intrinsic::BoolAnd(left.clone(), right.clone()))
-    };
-    let or =
-        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::BoolOr(left.clone(), right.clone()));
+    let bool_type = term("#BoolType");
+    let [and, swapped, or] = terms("(#BoolAnd(a, b), #BoolAnd(b, a), #BoolOr(a, b))");
 
     assert_eq!(
-        convert(&mut certifier, &bool_type, &and(&a, &b), &and(&b, &a)),
+        convert(&mut certifier, &bool_type, &and, &swapped),
         Ok(true)
     );
-    assert_eq!(
-        convert(&mut certifier, &bool_type, &and(&a, &b), &or(&a, &b)),
-        Ok(false)
-    );
+    assert_eq!(convert(&mut certifier, &bool_type, &and, &or), Ok(false));
 }
 
 /// Two applications of one `Nat`-valued operation that differ only in a universe instance are one number: `len(n<0>)` and `len(n<1>)` meet before their congruence, which would compare the two instances' levels and refuse. A number never depends on a level, which is the licence the cancellation already reads inside a sum. The control is two different operands at one instance, which stay apart. The elaborator's twin of this proposition shares the name.
 #[test]
 fn one_operation_at_two_universe_instances_is_one_number() {
     let mut certifier = certifier();
-    let length = |operand: Global, level: u32| {
-        Term::intrinsic(Intrinsic::bytes_len(Term::instance(
-            operand,
-            vec![Level::constant(level)],
-        )))
+    let nat = term("#NatType");
+    let length = |operand: &str, level: u32| {
+        term(&fill!(
+            "#BytesLen(#{universes = {levels = [${level}]}} /${operand})",
+            level,
+            operand
+        ))
     };
-    let (n, m) = (
-        Global::Authored(Qualifier::from(["n"])),
-        Global::Authored(Qualifier::from(["m"])),
-    );
 
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &length(n, 0), &length(n, 1)),
+        convert(&mut certifier, &nat, &length("n", 0), &length("n", 1)),
         Ok(true)
     );
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &length(n, 0), &length(m, 0)),
+        convert(&mut certifier, &nat, &length("n", 0), &length("m", 0)),
         Ok(false)
     );
 }
@@ -400,21 +302,17 @@ fn one_operation_at_two_universe_instances_is_one_number() {
 #[test]
 fn two_polls_of_one_cell_at_two_ground_levels_do_not_convert() {
     let mut certifier = certifier();
-    let cell = Term::free_var(&binder(62, "cell"));
-    let poll = |level: u32| {
-        Term::intrinsic(Intrinsic::CellPoll {
-            element: nat_type(),
-            cell: cell.clone(),
-            universes: Universes::levels(vec![Level::constant(level)]),
-        })
-    };
+    let untyped = term("Type");
+    let [at_zero, at_one, again_at_zero] = terms(
+        "(#CellPoll(#NatType, cell, {levels = [0]}), #CellPoll(#NatType, cell, {levels = [1]}), #CellPoll(#NatType, cell, {levels = [0]}))",
+    );
 
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &poll(0), &poll(1)),
+        convert(&mut certifier, &untyped, &at_zero, &at_one),
         Ok(false)
     );
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &poll(0), &poll(0)),
+        convert(&mut certifier, &untyped, &at_zero, &again_at_zero),
         Ok(true)
     );
 }
@@ -423,15 +321,14 @@ fn two_polls_of_one_cell_at_two_ground_levels_do_not_convert() {
 #[test]
 fn applications_differing_in_a_mark_alone_convert() {
     let mut certifier = certifier();
-    let f = binder(0, "f");
-    let x = binder(1, "x");
-    certifier.assume(&f, &Term::func_type([(x, nat_type())], nat_type()));
-
-    let plain = Term::apply(Term::free_var(&f), [nat(1)]);
-    let marked = Term::apply_marked(Term::free_var(&f), [(Plicity::Implicit, nat(1))]);
+    let [plain, marked] = under(
+        &mut certifier,
+        "f: (x: #NatType) -> #NatType",
+        "f(1), f(@1)",
+    );
 
     assert_eq!(
-        convert(&mut certifier, &nat_type(), &plain, &marked),
+        convert(&mut certifier, &term("#NatType"), &plain, &marked),
         Ok(true)
     );
 }

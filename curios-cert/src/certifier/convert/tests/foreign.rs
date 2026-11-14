@@ -2,55 +2,31 @@
 
 use {
     crate::certifier::convert::test_support::*,
-    crate::*,
-    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
-    curios_common::Qualifier,
-    curios_core::{Global, Intrinsic, Term},
-    std::sync::Arc,
+    crate::{test_support::*, *},
 };
+
+/// The rows `/probe` and `/other`, two declarations of one host function, the definitions their forms imply beside them, and three calls of them over a word `x`: `probe(x)`, `probe` of a redex reducing to `x`, and `other(x)`.
+const CALLS: &str = r#"
+foreign /probe(Nat) -> Nat;
+let /probe: (n: #NatType) -> #IoType(#NatType) = (n: #NatType) => #{node = Foreign} /probe(n);
+#{name = "/probe"}
+foreign /other(Nat) -> Nat;
+let /other: (n: #NatType) -> #IoType(#NatType) = (n: #NatType) => #{node = Foreign} /other(n);
+(
+    #{node = Foreign} /probe(x),
+    #{node = Foreign} /probe(((n: #NatType) => n)(x)),
+    #{node = Foreign} /other(x),
+)
+"#;
 
 /// Two calls one declaration states convert where their operands do, each at the type its row demands of it, whatever reduction has made of the two sides; and two calls of two declarations are apart whatever they are handed.
 #[test]
 fn two_host_calls_convert_by_their_declaration_and_their_operands() {
     let mut certifier = certifier();
-    let x = Term::free_var(&binder(0, "x"));
-    let n = binder(1, "n");
-    let row = Arc::new(ForeignFunction {
-        name: "/probe".to_string(),
-        signature: WireSignature {
-            params: vec![WireType::Nat],
-            returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
-        },
-    });
-    let call = |declared: &str, operand: Term| {
-        Term::foreign(
-            row.clone(),
-            Global::Authored(Qualifier::from([declared])),
-            vec![operand],
-        )
-    };
-    let respelled = Term::apply(
-        Term::func([(n, nat_type())], Term::free_var(&n)),
-        [x.clone()],
-    );
-    let io = Term::intrinsic(Intrinsic::io_type(nat_type()));
+    let [call, respelled, other] =
+        <[_; 3]>::try_from(components(&closing(CALLS))).expect("three calls");
+    let io = term("#IoType(#NatType)");
 
-    assert_eq!(
-        convert(
-            &mut certifier,
-            &io,
-            &call("probe", x.clone()),
-            &call("probe", respelled)
-        ),
-        Ok(true),
-    );
-    assert_eq!(
-        convert(
-            &mut certifier,
-            &io,
-            &call("probe", x.clone()),
-            &call("other", x)
-        ),
-        Ok(false),
-    );
+    assert_eq!(convert(&mut certifier, &io, &call, &respelled), Ok(true));
+    assert_eq!(convert(&mut certifier, &io, &call, &other), Ok(false));
 }

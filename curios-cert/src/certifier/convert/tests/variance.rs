@@ -2,23 +2,60 @@
 
 use {
     crate::certifier::convert::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::held_levels,
-    curios_common::Qualifier,
-    curios_core::{
-        Global, Intrinsic, Level, LevelHead, Reducer, Term, UniverseContext, UniverseParam,
-        Variance,
-    },
+    curios_common::{Qualifier, fill},
+    curios_core::{Global, LevelHead, Reducer, UniverseParam, Variance},
 };
 
-/// Whether `name` at two instances apart in its one level is one term at `type_`: as written, and reduced first, which leaves a projected former as two projections of one group.
-fn two_instances_convert(certifier: &mut Certifier, name: Global, type_: &Term) -> [bool; 2] {
-    let at = |level: u32| Term::instance(name, vec![Level::constant(level)]);
+/// `induct Wrap.{u}(A: Type u): Type u | wrap(a: A) end`, filed at `${variance}`: a level only its parameter's type mentions.
+const WRAP: &str = r#"
+#{universe_context = {parameter_count = 1}, variances = [${variance}]}
+induct /Wrap(A: #{level = u} Type): pub #{level = u} Type
+| wrap(a: A)
+end
+"#;
+
+/// `induct Box.{u}: Type (u + 1) | box(T: Type u) end`, filed at `${variance}`: a level its payload's `Type` mentions.
+const BOX: &str = r#"
+#{universe_context = {parameter_count = 1}, variances = [${variance}]}
+induct /Box: pub #{level = u + 1} Type
+| box(T: #{level = u} Type)
+end
+"#;
+
+/// `induct Leaf.{u}: Type | leaf() end`, filed at `${variance}`: a family with no parameter, which its bare name applies in full.
+const LEAF: &str = r#"
+#{universe_context = {parameter_count = 1}, variances = [${variance}]}
+induct /Leaf: pub Type
+| leaf()
+end
+"#;
+
+/// The family `text` writes at `variance`, declared in `certifier` with the vector filed for it, and its name: what a comparison reads is the vector the walk that accepted the entry filed, which a fixture declaring one by hand files for it.
+fn filed(certifier: &mut Certifier, text: &str, path: &str, variance: Variance) -> Global {
+    let name = Global::Authored(Qualifier::from([path]));
+    declared(certifier, &fill!(text, variance = format!("{variance:?}")));
+    certifier.file_variances(&name, vec![variance]);
+
+    name
+}
+
+/// Whether `name` at two instances apart in its one level is one term at `type_`: as written, and reduced first.
+fn two_instances_convert(certifier: &mut Certifier, path: &str, type_: &str) -> [bool; 2] {
+    let at = |level: u32| {
+        term(&fill!(
+            "#{universes = {levels = [${level}]}} /${path}",
+            level,
+            path
+        ))
+    };
     let reduced = [0, 1].map(|level| certifier.reduce(at(level)).expect("an instance unfolds"));
+    let type_ = term(type_);
 
     [
-        convert(certifier, type_, &at(0), &at(1)),
-        convert(certifier, type_, &reduced[0], &reduced[1]),
+        convert(certifier, &type_, &at(0), &at(1)),
+        convert(certifier, &type_, &reduced[0], &reduced[1]),
     ]
     .map(|verdict| verdict.expect("a verdict within the budget"))
 }
@@ -27,31 +64,22 @@ fn two_instances_convert(certifier: &mut Certifier, name: Global, type_: &Term) 
 #[test]
 fn a_value_compares_at_its_familys_variance() {
     let mut certifier = certifier();
-    let wrap = declare_wrap(
-        &mut certifier,
-        vec![Variance::Irrelevant],
-        Former::Projected,
-    );
-    let boxed = declare_box(&mut certifier, vec![Variance::Invariant]);
+    filed(&mut certifier, WRAP, "Wrap", Variance::Irrelevant);
+    filed(&mut certifier, BOX, "Box", Variance::Invariant);
     let wrapped = |level: u32, held: usize| {
-        Term::variant_at(
-            wrap,
-            [Level::constant(level)],
-            [nat_type()],
-            "wrap",
-            [nat(held)],
-        )
+        term(&fill!(
+            "#{node = Variant, universes = {levels = [${level}]}} /Wrap/wrap(@#NatType, ${held})",
+            level,
+            held
+        ))
     };
     let boxing = |level: u32| {
-        Term::variant_at(
-            boxed,
-            [Level::constant(level)],
-            Vec::<Term>::new(),
-            "box",
-            [nat_type()],
-        )
+        term(&fill!(
+            "#{node = Variant, universes = {levels = [${level}]}} /Box/box(#NatType)",
+            level
+        ))
     };
-    let untyped = Term::type_ground();
+    let untyped = term("Type");
 
     assert_eq!(
         convert(&mut certifier, &untyped, &wrapped(0, 3), &wrapped(1, 3)),
@@ -67,24 +95,31 @@ fn a_value_compares_at_its_familys_variance() {
     );
 }
 
+/// `Wrap` at the instance `level` over `param`, a type.
+fn wrap_at(level: &str, param: &str) -> String {
+    fill!(
+        "#{node = InductType, universes = {levels = [${level}]}} /Wrap(${param})",
+        level,
+        param
+    )
+}
+
 // Only the level goes uncompared. Either side leads, the arguments being opened at the left side's instance.
 #[test]
 fn an_irrelevant_levels_arguments_are_compared_at_either_instance() {
     let mut certifier = certifier();
-    let wrap = declare_wrap(
-        &mut certifier,
-        vec![Variance::Irrelevant],
-        Former::Projected,
-    );
-    let at = |level: u32, param: Term| {
-        Term::induct_type_at(wrap, [Level::constant(level)], [param], Vec::<Term>::new())
-    };
-    let small = at(0, nat_type());
-    let large = at(1, Term::intrinsic(Intrinsic::BoolType));
-    let untyped = Term::type_ground();
+    filed(&mut certifier, WRAP, "Wrap", Variance::Irrelevant);
+    let small = term(&wrap_at("0", "#NatType"));
+    let large = term(&wrap_at("1", "#BoolType"));
+    let untyped = term("Type");
 
     assert_eq!(
-        convert(&mut certifier, &untyped, &small, &at(1, nat_type())),
+        convert(
+            &mut certifier,
+            &untyped,
+            &small,
+            &term(&wrap_at("1", "#NatType"))
+        ),
         Ok(true)
     );
     assert_eq!(convert(&mut certifier, &untyped, &small, &large), Ok(false));
@@ -95,68 +130,50 @@ fn an_irrelevant_levels_arguments_are_compared_at_either_instance() {
 #[test]
 fn a_definition_applied_at_two_instances_converts_by_unfolding() {
     let mut certifier = certifier();
-    let alias = Global::Authored(Qualifier::from(["Alias"]));
-    let carrier = binder(85, "A");
-    let sort = Term::type_at(Level::param(UniverseParam(0)));
-    certifier
-        .define(
-            &alias,
-            &Term::func_type([(carrier, sort.clone())], sort.clone()),
-            &Term::func([(carrier, sort)], Term::free_var(&carrier)),
-            &UniverseContext {
-                parameter_count: 1,
-                quality_count: 0,
-                constraints: Vec::new(),
-            },
-        )
-        .expect("a name is declared once");
+    declared(
+        &mut certifier,
+        "#{universe_context = {parameter_count = 1}}\nlet /Alias: (A: #{level = u} Type) -> #{level = u} Type = (A: #{level = u} Type) => A;",
+    );
     let at = |level: u32| {
-        Term::apply(
-            Term::instance(alias, vec![Level::constant(level)]),
-            [nat_type()],
-        )
+        term(&fill!(
+            "(#{universes = {levels = [${level}]}} /Alias)(#NatType)",
+            level
+        ))
     };
 
     assert_eq!(
-        convert(&mut certifier, &Term::type_ground(), &at(0), &at(1)),
+        convert(&mut certifier, &term("Type"), &at(0), &at(1)),
         Ok(true)
     );
 }
 
-// A former not yet applied is a function, and eta applies both sides to one binder before either head is read, so the nodes they build are what is compared: by variance, as any two nodes are. Carried invariant, the same pair is two functions. Reduced first, a projected former is two projections of one group, whose levels would refuse the pair before its type was read.
+// A former not yet applied is a function, and eta applies both sides to one binder before either head is read, so the nodes they build are what is compared: by variance, as any two nodes are. Carried invariant, the same pair is two functions, as written and reduced first.
 #[test]
 fn two_bare_formers_apart_in_an_irrelevant_level_convert_at_their_type() {
-    let carrier = binder(83, "A");
-    let family = Term::func_type([(carrier, Term::type_ground())], Term::type_ground());
+    for (variance, converts) in [(Variance::Irrelevant, true), (Variance::Invariant, false)] {
+        let mut certifier = certifier();
+        filed(&mut certifier, WRAP, "Wrap", variance);
 
-    for former in [Former::Projected, Former::Plain] {
-        for (variance, converts) in [(Variance::Irrelevant, true), (Variance::Invariant, false)] {
-            let mut certifier = certifier();
-            let wrap = declare_wrap(&mut certifier, vec![variance], former);
-
-            assert_eq!(
-                two_instances_convert(&mut certifier, wrap, &family),
-                [converts; 2],
-                "{former:?}, {variance:?}"
-            );
-        }
+        assert_eq!(
+            two_instances_convert(&mut certifier, "Wrap", "(A: Type) -> Type"),
+            [converts; 2],
+            "{variance:?}"
+        );
     }
 }
 
-// A family with no parameter is applied in full by its bare name, so two instances of the name apart in an irrelevant level are one type, in either spelling of its former and whether or not the pair was reduced first.
+// A family with no parameter is applied in full by its bare name, so two instances of the name apart in an irrelevant level are one type, whether or not the pair was reduced first.
 #[test]
 fn a_family_with_no_parameter_converts_by_its_name_at_two_instances() {
-    for former in [Former::Projected, Former::Plain] {
-        for (variance, converts) in [(Variance::Irrelevant, true), (Variance::Invariant, false)] {
-            let mut certifier = certifier();
-            let leaf = declare_leaf(&mut certifier, vec![variance], former);
+    for (variance, converts) in [(Variance::Irrelevant, true), (Variance::Invariant, false)] {
+        let mut certifier = certifier();
+        filed(&mut certifier, LEAF, "Leaf", variance);
 
-            assert_eq!(
-                two_instances_convert(&mut certifier, leaf, &Term::type_ground()),
-                [converts; 2],
-                "{former:?}, {variance:?}"
-            );
-        }
+        assert_eq!(
+            two_instances_convert(&mut certifier, "Leaf", "Type"),
+            [converts; 2],
+            "{variance:?}"
+        );
     }
 }
 
@@ -164,49 +181,37 @@ fn a_family_with_no_parameter_converts_by_its_name_at_two_instances() {
 #[test]
 fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
     let mut certifier = certifier();
-    let wrap = declare_wrap(
+    filed(&mut certifier, WRAP, "Wrap", Variance::Irrelevant);
+    filed(&mut certifier, BOX, "Box", Variance::Invariant);
+    let boxing = |level: &str| {
+        fill!(
+            "#{node = InductType, universes = {levels = [${level}]}} /Box()",
+            level
+        )
+    };
+    let [wrapped_at_0, wrapped_at_1, boxing_at_0, boxing_at_1] = under(
         &mut certifier,
-        vec![Variance::Irrelevant],
-        Former::Projected,
-    );
-    let boxed = declare_box(&mut certifier, vec![Variance::Invariant]);
-    let over = binder(90, "over");
-    certifier.assume(
-        &over,
-        &Term::func_type(
-            [(binder(91, "T"), Term::type_at(Level::constant(2)))],
-            nat_type(),
+        "over: (T: #{level = 2} Type) -> #NatType",
+        &fill!(
+            "over(${w0}), over(${w1}), over(${b0}), over(${b1})",
+            w0 = wrap_at("0", "#NatType"),
+            w1 = wrap_at("1", "#NatType"),
+            b0 = boxing("0"),
+            b1 = boxing("1")
         ),
     );
-    let call = |family: Term| Term::apply(Term::free_var(&over), [family]);
-    let wrapped = |level: u32| {
-        call(Term::induct_type_at(
-            wrap,
-            [Level::constant(level)],
-            [nat_type()],
-            Vec::<Term>::new(),
-        ))
-    };
-    let boxing = |level: u32| {
-        call(Term::induct_type_at(
-            boxed,
-            [Level::constant(level)],
-            Vec::<Term>::new(),
-            Vec::<Term>::new(),
-        ))
-    };
 
     certifier.scoped(|certifier| {
         certifier
-            .refine(wrapped(0), nat(1))
+            .refine(wrapped_at_0, term("1"))
             .expect("the equation records");
-        assert_eq!(whnf(certifier, wrapped(1)), Ok(nat(1)));
+        assert_eq!(whnf(certifier, wrapped_at_1), Ok(term("1")));
     });
     certifier.scoped(|certifier| {
         certifier
-            .refine(boxing(0), nat(1))
+            .refine(boxing_at_0, term("1"))
             .expect("the equation records");
-        assert_eq!(whnf(certifier, boxing(1)), Ok(boxing(1)));
+        assert_eq!(whnf(certifier, boxing_at_1.clone()), Ok(boxing_at_1));
     });
 }
 
@@ -214,86 +219,61 @@ fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
 #[test]
 fn a_lambdas_body_is_read_by_the_vector_filed_for_its_family() {
     let mut certifier = certifier();
-    let wrap = declare_wrap(
-        &mut certifier,
-        vec![Variance::Irrelevant],
-        Former::Projected,
-    );
-    let boxed = declare_box(&mut certifier, vec![Variance::Invariant]);
-    let carrier = binder(90, "A");
-    let level = |index: usize| Level::param(UniverseParam(index));
-    let over = |body: Term| Term::func([(carrier, Term::type_at(level(0)))], body);
-    let held = |certifier: &mut Certifier, term: Term| {
-        let found = held_levels(certifier, &[term]);
+    filed(&mut certifier, WRAP, "Wrap", Variance::Irrelevant);
+    filed(&mut certifier, BOX, "Box", Variance::Invariant);
+    let mut held = |body: &str| {
+        let found = held_levels(
+            &mut certifier,
+            &[term(&fill!("(A: #{level = u} Type) => ${body}", body))],
+        );
 
         [0, 1].map(|index| found.holds(LevelHead::Param(UniverseParam(index))))
     };
 
-    let wrapped = Term::induct_type_at(
-        wrap,
-        [level(1)],
-        [Term::free_var(&carrier)],
-        Vec::<Term>::new(),
+    assert_eq!(held(&wrap_at("v", "A")), [true, false]);
+    assert_eq!(
+        held("#{node = InductType, universes = {levels = [v]}} /Box()"),
+        [true, true]
     );
-    assert_eq!(held(&mut certifier, over(wrapped)), [true, false]);
-
-    let boxing = Term::induct_type_at(boxed, [level(1)], Vec::<Term>::new(), Vec::<Term>::new());
-    assert_eq!(held(&mut certifier, over(boxing)), [true, true]);
 }
+
+/// `pair.{u}: {Type u, Nat} = (Nat, 3)` and `held.{u}: {Type (u + 1)} = (Type u,)`.
+const FIELDS: &str = r#"
+#{universe_context = {parameter_count = 1}}
+let /pair: {first: #{level = u} Type, second: #NatType} = (#NatType, 3);
+#{universe_context = {parameter_count = 1}}
+let /held: {first: #{level = u + 1} Type} = (#{level = u} Type,);
+"#;
 
 // `pair.{u}: {Type u, Nat} = (Nat, 3)` and `held.{u}: {Type (u + 1)} = (Type u,)`, each projected at two instances: the certifier forces a projection to its field before it compares heads, so a field whose value drops the level is one term at both, and one whose value holds it is two. The elaborator's twin of this proposition shares the name.
 #[test]
 fn a_field_that_drops_a_level_is_one_term_at_two_instances() {
     let mut certifier = certifier();
-    let level = || Level::param(UniverseParam(0));
-    let scheme = UniverseContext {
-        parameter_count: 1,
-        quality_count: 0,
-        constraints: Vec::new(),
+    declared(&mut certifier, FIELDS);
+    let first = |path: &str, level: u32| {
+        term(&fill!(
+            "(#{universes = {levels = [${level}]}} /${path}).0",
+            path,
+            level
+        ))
     };
-    let pair = Global::Authored(Qualifier::from(["pair"]));
-    let held = Global::Authored(Qualifier::from(["held"]));
-    certifier
-        .define(
-            &pair,
-            &Term::tuple_type([
-                (binder(88, "first"), Term::type_at(level())),
-                (binder(89, "second"), nat_type()),
-            ]),
-            &Term::tuple([nat_type(), nat(3)]),
-            &scheme,
-        )
-        .expect("a name is declared once");
-    certifier
-        .define(
-            &held,
-            &Term::tuple_type([(
-                binder(92, "first"),
-                Term::type_at(level().succ().expect("a parameter has a successor")),
-            )]),
-            &Term::tuple([Term::type_at(level())]),
-            &scheme,
-        )
-        .expect("a name is declared once");
-    let first = |name: Global, level: u32| {
-        Term::proj(Term::instance(name, vec![Level::constant(level)]), 0)
-    };
+    let ground = term("Type");
 
     assert_eq!(
         convert(
             &mut certifier,
-            &Term::type_ground(),
-            &first(pair, 0),
-            &first(pair, 1)
+            &ground,
+            &first("pair", 0),
+            &first("pair", 1)
         ),
         Ok(true)
     );
     assert_eq!(
         convert(
             &mut certifier,
-            &Term::type_ground(),
-            &first(held, 0),
-            &first(held, 1)
+            &ground,
+            &first("held", 0),
+            &first("held", 1)
         ),
         Ok(false)
     );
