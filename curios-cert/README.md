@@ -97,13 +97,13 @@ The Curios certifier, what Lean and Rocq call the kernel: it decides, from a fin
 
 **Rejected.** Judging at the parameter with an answer for each reader, which is the elaborator's own check: the decision's reason. One budget across the assignments, under which what a declaration costs to accept follows how many sorts it leaves.
 
-### A held attack the elaborator refuses first is written as Core text
+### Every candidate put to the certifier is Core text
 
-**Decision.** A module put to the certifier because the elaborator refuses its source before a module exists is written as Core text in the test that puts it, read with nothing in scope and judged under the registry stand-in (`recheck::test_support::core_text_verdicts`, as `recheck::positivity_tests` puts its families): the text declares every name it uses, the propositions the registry names among them.
+**Decision.** Every candidate a test puts to the certifier, a module or a term, is written as Core text in the test that puts it and read with nothing in scope, through the door the soundness board puts a ticket through (`test_support::Put`). A module is put to the walk under the registry stand-in (`recheck::test_support::core_text_verdicts`). Below the walk, a term is read alone (`test_support::term`), the declarations a judgment reads are declared from their text (`test_support::declared`), and the hypotheses it is judged under are the binders of a leading function literal, opened at fresh locals (`test_support::hypotheses`). A text declares every name it uses, the propositions the registry names among them. What stays Rust is the harness: the certifier's budget and memos, the identities a test about identity names, and the readings taken off what the certifier answered.
 
-**Rationale.** A held attack is a refusal and not a proof of `False`, so it needs no prelude, and a text names what it builds the way a reader writes it, where a module spelled in this crate's constructors is read only as Rust and rots with the representation it spells.
+**Rationale.** A held attack is a refusal and not a proof of `False`, so it needs no prelude, and a text names what it builds the way a reader writes it, where a candidate spelled in this crate's constructors is read only as Rust and rots with the representation it spells. One door for the suites and the board makes what the board says of a ticket what a suite would say of its text.
 
-**Rejected.** The prelude in scope, which a refusal does not need and this crate's suites cannot reach. A module built in `curios-core`'s constructors, which rots with the representation it spells.
+**Rejected.** The prelude in scope, which a refusal does not need and this crate's suites cannot reach. A candidate built in `curios-core`'s constructors, which rots with the representation it spells; below the walk too, where an attack is a Rust test of the function it calls and its candidate is still text.
 
 ### The universe decisions are the certifier's
 
