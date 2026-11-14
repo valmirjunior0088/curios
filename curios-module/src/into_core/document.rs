@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    super::{ModuleInfo, PublicInterface, Scoped, visible_binding, visible_child},
+    super::{ModuleInfo, PublicInterface, Scoped, visible_path},
     curios_common::{LINE_WIDTH, Mount, Qualifier, RootKind, Source, Span},
     curios_document::{
         Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
@@ -650,26 +650,16 @@ impl Reader<'_> {
 
     /// The declaration a name the printer wrote — one with no place, so no mention — names from `module`, by the lowering's visibility functions: an absolute path walks the public tree from the root, and a relative one is the module's own declaration or a path through its own children. No `use` brought it into scope, since nobody wrote it. `None` is a name that does not resolve or is out of view, which a page leaves as plain text.
     fn resolve(&self, spelling: &str, module: &Qualifier) -> Option<Qualifier> {
-        let absolute = spelling.starts_with('/');
+        let start = match spelling.starts_with('/') {
+            true => Qualifier::empty(),
+            false => *module,
+        };
         let segments = spelling
             .trim_start_matches('/')
             .split('/')
             .collect::<Vec<_>>();
-        let (last, parents) = segments.split_last()?;
 
-        if absolute {
-            let mut current = Qualifier::empty();
-            for segment in parents {
-                current = visible_child(self.public, self.table, module, &current, segment)?;
-            }
-            return visible_binding(self.public, self.table, module, &current, last);
-        }
-
-        let mut current = *module;
-        for segment in parents {
-            current = visible_child(self.public, self.table, module, &current, segment)?;
-        }
-        visible_binding(self.public, self.table, module, &current, last)
+        visible_path(self.public, self.table, module, start, &segments)
     }
 }
 

@@ -249,6 +249,24 @@ pub const DECLARATIONS: Contract = Contract {
     product: Product::Nothing,
 };
 
+/// A question about a declaration by its path, asked in the scope of a program or a library.
+pub const NAME: Contract = Contract {
+    command: "wonder --name",
+    accepts: Accepts::ProgramOrLibrary,
+    own_file_only: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
+/// A question about a declaration by its path, as [`NAME`] is.
+pub const WITNESSES: Contract = Contract {
+    command: "wonder --witnesses",
+    accepts: Accepts::ProgramOrLibrary,
+    own_file_only: false,
+    access: Access::Write,
+    product: Product::Nothing,
+};
+
 pub const SERVER: Contract = Contract {
     command: "wonder --server",
     accepts: Accepts::Nothing,
@@ -280,6 +298,8 @@ impl Mode {
                 Query::Stage(_) => &STAGE,
                 Query::At(_) => &AT,
                 Query::Declarations => &DECLARATIONS,
+                Query::Name(_) => &NAME,
+                Query::Witnesses(_) => &WITNESSES,
                 Query::Server => &SERVER,
             },
             #[cfg(feature = "profile")]

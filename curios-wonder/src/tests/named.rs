@@ -1,7 +1,8 @@
-//! What `wonder --at` and `wonder --declarations` answer: the names a file writes, read off its subject as it was lowered, each with the declaration it names.
+//! What `wonder --at` and `wonder --declarations` answer — the names a file writes, read off its subject as it was lowered, each with the declaration it names — and what `wonder --name` answers of a declaration by its path.
 
 use {
     crate::*,
+    curios_common::{Qualifier, Span},
     curios_core::Declared,
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
@@ -222,4 +223,142 @@ fn a_library_is_asked_through_one_of_its_files() {
         said(named),
         ("/answers/answer", Declared::Authored, false, Some((2, 9)))
     );
+}
+
+/// What `path` names in the scope of `program`, asked the way the one-shot transport asks of standard input.
+fn described(program: &str, path: &str) -> Option<Described> {
+    crate::described(
+        DEFAULT_BUDGET,
+        Subject::Entry {
+            units: Vec::new(),
+            origin: Origin::Text {
+                label: "<stdin>".to_string(),
+                text: program.to_string(),
+            },
+            declares: None,
+        },
+        &Qualifier::from(path.trim_start_matches('/').split('/')),
+        &Overlay::default(),
+        None,
+        &mut |_| {},
+    )
+    .expect("the program checks")
+}
+
+/// What each witness `described` takes part in says of it, in the order it is answered.
+fn keyed(described: &Described) -> Vec<&str> {
+    described
+        .witnesses
+        .iter()
+        .flatten()
+        .map(|witnessed| witnessed.keyed.as_str())
+        .collect()
+}
+
+const POINT: &str = "use /std/{Nat, Show, print};\nstruct Point: Type {\n    x: Nat,\n}\nsatisfy Show(Point) {\n    show(_) = \"point\",\n}\nprint(\"\")";
+
+/// A definition of the standard library is answered off the unit that declares it: what it is, its type as that unit was elaborated, and its whole text, the prose above it included.
+#[test]
+fn a_library_definition_is_answered_with_its_type_and_text() {
+    let described = described(POINT, "/std/Bool/not").expect("the library declares it");
+
+    assert_eq!(
+        (
+            described.path.as_str(),
+            described.declared,
+            described.public,
+            described.type_.as_deref(),
+        ),
+        (
+            "/std/Bool/not",
+            Declared::Authored,
+            Some(true),
+            Some("(b: Bool) -> Bool")
+        ),
+    );
+    assert_eq!(described.witnesses, None);
+    assert_eq!(
+        described.declaration.as_ref().map(Declaration::written),
+        Some("--- The other value.\npub let not(b: Bool) -> Bool =\n    xor(b, true);"),
+    );
+}
+
+/// A path a module exports a declaration at answers the declaration it exports: `/std` exports `/sys`'s `Option`, which is answered with its constructors and the concepts its witnesses satisfy.
+#[test]
+fn a_re_exported_path_answers_the_declaration_behind_it() {
+    let described = described(POINT, "/std/Option").expect("the library exports it");
+
+    assert_eq!(
+        (
+            described.asked.as_str(),
+            described.path.as_str(),
+            described.declared,
+        ),
+        ("/std/Option", "/sys/Option", Declared::Inductive),
+    );
+    assert_eq!(described.members, ["some", "none"]);
+    assert_eq!(
+        keyed(&described),
+        [
+            "/std/ops/Eql",
+            "/std/Show",
+            "/std/Spell",
+            "/std/Monad",
+            "/std/ops/Cmp",
+            "/std/Ord",
+            "/std/Hash"
+        ]
+    );
+}
+
+/// A concept is answered with its methods and the witnesses in scope, the program's own among them, each by what it is keyed on.
+#[test]
+fn a_concept_is_answered_with_its_witnesses_in_scope() {
+    let described = described(POINT, "/std/Show").expect("the library declares it");
+
+    assert_eq!(described.members, ["show"]);
+    let point = described
+        .witnesses
+        .iter()
+        .flatten()
+        .next_back()
+        .expect("the program's own witness is answered last");
+
+    assert!(keyed(&described).contains(&"Nat"));
+    assert_eq!(
+        (
+            point.keyed.as_str(),
+            point.place.as_ref().map(Span::line_column)
+        ),
+        ("/Point", Some((5, 9)))
+    );
+}
+
+/// A declaration of the program's own is typed by the program's check, and one no module exports is answered by its own path.
+#[test]
+fn a_programs_own_private_declaration_is_answered_by_its_own_path() {
+    let described = described(POINT, "/Point").expect("the program declares it");
+
+    assert_eq!(
+        (
+            described.declared,
+            described.public,
+            described.type_.as_deref(),
+            described.members.as_slice(),
+            keyed(&described).as_slice(),
+        ),
+        (
+            Declared::Struct,
+            Some(false),
+            Some("Type"),
+            ["x".to_string()].as_slice(),
+            ["/std/Show"].as_slice()
+        ),
+    );
+}
+
+/// A path that names nothing in scope answers nothing.
+#[test]
+fn a_path_that_names_nothing_answers_nothing() {
+    assert_eq!(described(POINT, "/std/Bool/nope"), None);
 }

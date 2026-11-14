@@ -115,6 +115,27 @@ fn a_report_is_a_block_closed_by_its_own_place() {
     );
 }
 
+/// A declaration's block closes on its place and shows none of its code, which follows the block whole; its ways out stand above the close as every report's do.
+#[test]
+fn a_declarations_block_closes_on_its_place_with_no_pane() {
+    let source = Source::labelled("lib.crs", "pub let a = 1;\n");
+    let label = Span::new(source, 8, 9);
+
+    let report = Report::at(label, "/lib/a")
+        .stating("public definition")
+        .trying("curios wonder --witnesses /lib/a");
+
+    assert_eq!(
+        report.rendered(Kind::Declaration, &Style::plain()),
+        concat!(
+            "/lib/a\n",
+            "│  public definition\n",
+            "├─ try; curios wonder --witnesses /lib/a\n",
+            "└─ [declaration] lib.crs:1:9",
+        )
+    );
+}
+
 /// Every pane of one report shares a gutter: a line's number ends in the column the widest ends in, so the code of each begins in one column.
 #[test]
 fn the_panes_of_a_report_share_one_gutter() {

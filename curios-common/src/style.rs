@@ -16,6 +16,8 @@ pub enum Kind {
     Lint,
     /// A text the formatter would write otherwise.
     Format,
+    /// A declaration asked about by its path, its whole text following the block.
+    Declaration,
 }
 
 impl Kind {
@@ -26,7 +28,13 @@ impl Kind {
             Kind::Goal => "goal",
             Kind::Lint => "lint",
             Kind::Format => "format",
+            Kind::Declaration => "declaration",
         }
+    }
+
+    /// Whether a report of this kind shows the code at its own place: every kind but a declaration's, whose whole text follows the block.
+    pub fn quotes_its_place(self) -> bool {
+        self != Kind::Declaration
     }
 
     /// Whether the kind says something went wrong, which is what is painted as trouble.

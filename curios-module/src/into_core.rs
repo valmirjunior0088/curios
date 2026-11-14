@@ -813,6 +813,37 @@ impl PreparedText {
             .map(|_| curios_core::Declared::Method)
     }
 
+    /// The declaration the absolute `path` names for a reader at the root, outside every module, over `predecessors` — the units this one was lowered over — and this unit: the walk a written path takes (`visible_path`), so a path some module exports a declaration at names that declaration. `None` where the path names nothing such a reader sees.
+    pub fn named_by(&self, predecessors: &[&PreparedText], path: &Qualifier) -> Option<Qualifier> {
+        let tables = predecessors
+            .iter()
+            .map(|earlier| &earlier.table)
+            .chain([&self.table])
+            .collect::<Vec<_>>();
+        let exports = predecessors
+            .iter()
+            .map(|earlier| &earlier.public)
+            .chain([&self.public])
+            .collect::<Vec<_>>();
+        let segments = path.iter().collect::<Vec<_>>();
+        let root = Qualifier::empty();
+
+        visible_path(
+            &Scoped::over(&exports),
+            &Scoped::over(&tables),
+            &root,
+            root,
+            &segments,
+        )
+    }
+
+    /// Whether `name` is written `pub` where this unit declares it, as a binding of its module. `None` for a name no module of the unit binds.
+    pub fn is_public(&self, name: &Qualifier) -> Option<bool> {
+        self.table
+            .get(&name.without_last())?
+            .get_binding(name.last())
+    }
+
     /// The item this unit's lowering declares `name` by, read out of its bytes now where the unit was restored and nothing has read it before. `None` for a name the unit does not declare.
     pub fn lowered(&self, name: &curios_core::Global) -> Option<&curios_core::Item> {
         self.places()

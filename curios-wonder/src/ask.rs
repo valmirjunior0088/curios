@@ -6,11 +6,11 @@
 
 use {
     crate::{
-        Declaration, DeclaredTest, Diagnosed, Diagnosis, Named, Origin, Reached, Refusal,
-        STDIN_LABEL, Severity, Subject, Uncosted, Written, checked, cost, declared_tests,
-        diagnostics, stage, unit_stage, written,
+        Declaration, DeclaredTest, Described, Diagnosed, Diagnosis, Named, Origin, Reached,
+        Refusal, STDIN_LABEL, Severity, Subject, Uncosted, Written, checked, cost, declared_tests,
+        described, diagnostics, stage, unit_stage, written,
     },
-    curios_common::{About, Kind, Report, Said, Source, Span, Style},
+    curios_common::{About, Kind, LINE_WIDTH, Qualifier, Report, Said, Source, Span, Style},
     curios_core::Declared,
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
@@ -23,6 +23,7 @@ use {
         fmt::Display,
         fs,
         io::{self, Write},
+        mem,
         path::{Path, PathBuf},
         process,
         str::FromStr,
@@ -335,6 +336,27 @@ impl Asked {
 
         texts
     }
+
+    /// What `path` names in the subject's scope ([`described`]).
+    pub fn described(
+        self,
+        budget: u64,
+        overlay: &Overlay,
+        path: &Qualifier,
+        telling: &mut dyn Telling,
+    ) -> Result<Option<Described>, Vec<Diagnosis>> {
+        let (subject, store) = self.taken(telling);
+        let cache = store.as_ref();
+        let described = described(budget, subject, path, overlay, cache, &mut |progress| {
+            telling.step(progress, cache);
+        });
+        telling.ended(match &described {
+            Err(diagnostics) => Ended::of(diagnostics),
+            Ok(_) => Ended::Done,
+        });
+
+        described
+    }
 }
 
 /// `wonder [SUBJECT]`: render every diagnostic of what `selection` selects to stdout, and after them each text of it the formatter would write otherwise, `files` and standard input read within `width`, a blank line between each, `telling` told of each subject's compile as it goes.
@@ -622,6 +644,155 @@ pub fn wonder_declarations(
     })
 }
 
+/// `wonder --name PATH [SUBJECT]`: the declaration `path` names in the scope of what `staged` is, to stdout — a block, then its whole text as its author wrote it, where its unit read one. The block names the command that lists its witnesses where it has any, `subject` as the command line wrote it. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_name(
+    budget: u64,
+    staged: Staged,
+    path: &Qualifier,
+    subject: Option<&str>,
+    telling: &mut dyn Telling,
+) -> Result<(), CompileError> {
+    let reader = telling.reader();
+    let described = declaration(budget, staged, path, telling)?;
+    let listing = match subject {
+        Some(subject) => format!("curios wonder --witnesses {} {subject}", path.join()),
+        None => format!("curios wonder --witnesses {}", path.join()),
+    };
+
+    answer(format_args!(
+        "{}\n",
+        block(&described, Some(listing)).rendered(Kind::Declaration, &reader)
+    ));
+    if let Some(declaration) = &described.declaration {
+        answer(format_args!("\n{}\n", declaration.written()));
+    }
+
+    Ok(())
+}
+
+/// `wonder --witnesses PATH [SUBJECT]`: the witnesses in scope the declaration `path` names takes part in, to stdout — the block `--name` answers with, then a row for each, its place, an arrow, then what it says of the declaration. A path that names nothing in scope is refused. `telling` is told as [`wonder_diagnostics`]' is.
+pub fn wonder_witnesses(
+    budget: u64,
+    staged: Staged,
+    path: &Qualifier,
+    telling: &mut dyn Telling,
+) -> Result<(), CompileError> {
+    let reader = telling.reader();
+    let described = declaration(budget, staged, path, telling)?;
+
+    answer(format_args!(
+        "{}\n",
+        block(&described, None).rendered(Kind::Declaration, &reader)
+    ));
+    let witnesses = described.witnesses.iter().flatten().collect::<Vec<_>>();
+    if !witnesses.is_empty() {
+        answer("\n");
+    }
+    for witnessed in witnesses {
+        let place = match &witnessed.place {
+            Some(place) => place.place(&reader),
+            None => witnessed.module.clone(),
+        };
+
+        answer(format_args!("{place} → {}\n", witnessed.keyed));
+    }
+
+    Ok(())
+}
+
+/// The declaration `path` names in the scope of what `staged` is ([`described`]), an answer about to be written; refused where the path names nothing in scope, and where the subject stops before the answer, as a build stops.
+fn declaration(
+    budget: u64,
+    staged: Staged,
+    path: &Qualifier,
+    telling: &mut dyn Telling,
+) -> Result<Described, CompileError> {
+    let overlay = Overlay::default();
+
+    let asked = match staged {
+        Staged::Program(program) => Asked::about_program(program)?,
+        Staged::Library(library) => Asked::about_library(library),
+    };
+
+    let described = asked.described(budget, &overlay, path, telling);
+    match described {
+        Ok(Some(described)) => {
+            telling.answering();
+            Ok(described)
+        }
+        Ok(None) => Err(Refused::of("unknown declaration")
+            .stating("nothing in scope is declared or exported at this path")
+            .about_named(path.join())
+            .into()),
+        Err(diagnostics) => Err(stopped(diagnostics)),
+    }
+}
+
+/// What `wonder --name` and `wonder --witnesses` say of `described` first, a block: the path asked, then a fact each for what it is declared as and where, its type, its members and how many witnesses in scope it takes part in, then `listing`, the command that lists them, where there are any to list, closed on where its name is written, or on the path it is declared at where no file holds it.
+fn block(described: &Described, listing: Option<String>) -> Report {
+    let declared = declared_as(described.declared);
+    let mut kind = match described.public {
+        Some(true) => format!("public {declared}"),
+        Some(false) => format!("private {declared}"),
+        None => declared.to_string(),
+    };
+    if described.path != described.asked {
+        kind.push_str(&format!(", declared at {}", described.path));
+    }
+    let about = match described.declaration.as_ref().and_then(Declaration::place) {
+        Some(place) => About::Place(place.clone()),
+        None => About::Named(described.path.clone()),
+    };
+    let mut report = Report::about(about, Said::line(&described.asked)).stating(kind);
+
+    if let Some(type_) = &described.type_ {
+        report = report.stating(format!("type: {type_}"));
+    }
+    let members = match described.declared {
+        Declared::Inductive => Some("constructors"),
+        Declared::Struct => Some("fields"),
+        Declared::Concept => Some("methods"),
+        _ => None,
+    };
+    if let Some(members) = members.filter(|_| !described.members.is_empty()) {
+        report = report.stating(listed(&format!("{members}:"), &described.members));
+    }
+    if let Some(witnesses) = &described.witnesses {
+        match witnesses.len() {
+            0 => report = report.stating("witnesses: none in scope"),
+            count => {
+                report = report.stating(format!("witnesses: {count} in scope"));
+                if let Some(listing) = listing {
+                    report = report.trying(listing);
+                }
+            }
+        }
+    }
+
+    report
+}
+
+/// `items` after `lead`, a comma between each, run over as many lines as keep each within what a fact's line holds beside the trunk, each line after the first indented under the first.
+fn listed(lead: &str, items: &[String]) -> String {
+    let width = LINE_WIDTH - "│  ".chars().count();
+    let mut lines = Vec::new();
+    let mut line = lead.to_string();
+    for (position, item) in items.iter().enumerate() {
+        let item = match position + 1 < items.len() {
+            true => format!("{item},"),
+            false => item.clone(),
+        };
+        if !line.trim().is_empty() && line.chars().count() + 1 + item.chars().count() > width {
+            lines.push(mem::replace(&mut line, " ".to_string()));
+        }
+        line.push(' ');
+        line.push_str(&item);
+    }
+    lines.push(line);
+
+    lines.join("\n")
+}
+
 /// What the file `staged` is asked through writes, handed to `answer`: the one it was selected through, a program's own entry, or a library's header. A subject with nothing to read stops as a build does, what stopped it going to stderr.
 fn for_names(
     budget: u64,
@@ -661,7 +832,17 @@ fn for_names(
 
 /// One name as a row: the declaration's path, what it is declared as, and where its name is written, a tab between each — the place left out where no file holds it.
 fn row(named: &Named) -> String {
-    let declared = match named.declared {
+    let declared = declared_as(named.declared);
+
+    match named.declaration.as_ref().and_then(Declaration::place) {
+        Some(place) => format!("{}\t{declared}\t{}", named.name, placed(place)),
+        None => format!("{}\t{declared}", named.name),
+    }
+}
+
+/// The word a declaration is said to be declared as by.
+fn declared_as(declared: Declared) -> &'static str {
+    match declared {
         Declared::Authored => "definition",
         Declared::Inductive => "inductive",
         Declared::Struct => "structure",
@@ -670,11 +851,6 @@ fn row(named: &Named) -> String {
         Declared::Method => "method",
         Declared::Witness => "witness",
         Declared::Test => "test",
-    };
-
-    match named.declaration.as_ref().and_then(Declaration::place) {
-        Some(place) => format!("{}\t{declared}\t{}", named.name, placed(place)),
-        None => format!("{}\t{declared}", named.name),
     }
 }
 

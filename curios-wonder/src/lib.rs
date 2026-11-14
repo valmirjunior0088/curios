@@ -34,7 +34,7 @@ use stage::*;
 
 mod named;
 use named::*;
-pub use named::{Declaration, Named, Written};
+pub use named::{Declaration, Described, Named, Witnessed, Written, described};
 
 mod cost;
 use cost::*;
@@ -43,7 +43,8 @@ mod ask;
 use ask::*;
 pub use ask::{
     Ended, Place, Staged, Telling, answer, file_subject, not_a_program, wonder_at, wonder_cost,
-    wonder_declarations, wonder_diagnostics, wonder_stage, wonder_tests,
+    wonder_declarations, wonder_diagnostics, wonder_name, wonder_stage, wonder_tests,
+    wonder_witnesses,
 };
 
 mod server;

@@ -515,7 +515,9 @@ impl Report {
             ));
         }
         // The report's own code stands under everything said of it, and each way out between that code and the line that closes the block, so the last thing above the place is what to run.
-        if let Some(About::Place(span)) = &self.about {
+        if let Some(About::Place(span)) = &self.about
+            && kind.quotes_its_place()
+        {
             lines.extend(pane(span));
         }
         lines.extend(

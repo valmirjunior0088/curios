@@ -663,6 +663,23 @@ pub fn visible_binding(
     (within && declared).then(|| parent.with(label))
 }
 
+/// The declaration `segments` reach from the module `start` as seen from `consumer`: each but the last a child module of the one before, and the last a binding of the module they reach — the walk a written path takes. `None` where a step is absent or out of view.
+pub fn visible_path(
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
+    consumer: &Qualifier,
+    start: Qualifier,
+    segments: &[&str],
+) -> Option<Qualifier> {
+    let (last, parents) = segments.split_last()?;
+    let mut current = start;
+    for segment in parents {
+        current = visible_child(public, table, consumer, &current, segment)?;
+    }
+
+    visible_binding(public, table, consumer, &current, last)
+}
+
 /// Why `consumer` cannot step from `parent` to `label`, sought as `sought`: the one value every resolution that stops in a module raises, the lowering's and the export view's alike. Private where `parent` declares the label out of the consumer's view, since a consumer inside `parent` would have been answered; absent otherwise. The nearest name is chosen among what the consumer may write there: what `parent` exports, and what it declares where the consumer lies within it.
 pub fn unresolved(
     public: &Scoped<'_, PublicInterface>,

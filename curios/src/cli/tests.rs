@@ -292,6 +292,10 @@ fn a_line_that_does_not_parse_is_refused_as_a_report() {
             "invalid value\n│  written: `12`\n│  a place is a line and a column, each from one, as in `12:5`\n├─ try; curios wonder --help\n└─ [error] --at",
         ),
         (
+            vec!["curios", "wonder", "--name", "std/Bool"],
+            "invalid value\n│  written: `std/Bool`\n│  a declaration is named by its absolute path, as in `/std/Bool/not`\n├─ try; curios wonder --help\n└─ [error] --name",
+        ),
+        (
             vec!["curios", "curate", "extra"],
             "surplus argument\n│  `extra` is no argument `curios curate` takes\n├─ try; curios curate --help\n└─ [error] extra",
         ),

@@ -5,8 +5,8 @@ mod tests;
 
 use {
     crate::{
-        AT, COMPILE, COST, DECLARATIONS, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, RUN, STAGE, TEST,
-        TESTS,
+        AT, COMPILE, COST, DECLARATIONS, DIAGNOSTICS, DOCUMENT, FORMAT, LINT, NAME, RUN, STAGE,
+        TEST, TESTS, WITNESSES,
     },
     clap::{
         Arg, ArgAction, ArgGroup, ArgMatches, Args, Command, CommandFactory, Error, FromArgMatches,
@@ -15,7 +15,7 @@ use {
         error::{ContextKind, ContextValue, ErrorKind},
         value_parser,
     },
-    curios_common::Report,
+    curios_common::{Qualifier, Report},
     curios_elab::DEFAULT_BUDGET,
     curios_package::{FormatSettings, Refused, Target},
     curios_pipeline::Stage,
@@ -421,6 +421,10 @@ pub enum Query {
     /// Asked of the lowering, which resolves a written name, so a file that does not check answers as one that does.
     At(Place),
     Declarations,
+    /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it.
+    Name(Qualifier),
+    /// The witnesses in scope a declaration by its path takes part in, found as [`Query::Name`] finds it.
+    Witnesses(Qualifier),
     /// Every query, asked by an editor over the language server protocol of the documents it hands over: no subject, which the option refuses beside it where the line is parsed.
     Server,
 }
@@ -428,6 +432,18 @@ pub enum Query {
 impl Query {
     /// The group the query options form, which holds them to one.
     const GROUP: &str = "query";
+}
+
+/// A declaration's path as `--name` takes it: absolute, each segment written.
+fn declaration_path(written: &str) -> Result<Qualifier, String> {
+    written
+        .strip_prefix('/')
+        .map(|path| path.split('/').collect::<Vec<_>>())
+        .filter(|segments| segments.iter().all(|segment| !segment.is_empty()))
+        .map(Qualifier::from)
+        .ok_or_else(|| {
+            "a declaration is named by its absolute path, as in `/std/Bool/not`".to_string()
+        })
 }
 
 impl Args for Query {
@@ -485,6 +501,24 @@ impl Args for Query {
                 ),
             ))
             .arg(
+                Arg::new("name")
+                    .long("name")
+                    .value_name("PATH")
+                    .value_parser(declaration_path)
+                    .help(NAME.query_help(
+                        "The declaration an absolute path names in the subject's scope: what it is declared as, its type, its members and how many witnesses it takes part in, where, and its text",
+                    )),
+            )
+            .arg(
+                Arg::new("witnesses")
+                    .long("witnesses")
+                    .value_name("PATH")
+                    .value_parser(declaration_path)
+                    .help(WITNESSES.query_help(
+                        "The witnesses in scope the declaration an absolute path names takes part in, one row each: where it is written, and what it is keyed on or the concept it satisfies",
+                    )),
+            )
+            .arg(
                 flag(
                     "server",
                     "Answer an editor over the language server protocol on standard input and output, of the documents it hands over; takes no subject".to_string(),
@@ -493,7 +527,16 @@ impl Args for Query {
             )
             .group(
                 ArgGroup::new(Self::GROUP)
-                    .args(["tests", "cost", "stage", "at", "declarations", "server"])
+                    .args([
+                        "tests",
+                        "cost",
+                        "stage",
+                        "at",
+                        "declarations",
+                        "name",
+                        "witnesses",
+                        "server",
+                    ])
                     .multiple(false),
             )
             // The heading ends with the queries, so the flags flattened after them stand under the command's own.
@@ -517,6 +560,10 @@ impl FromArgMatches for Query {
             Query::At(*place)
         } else if matches.get_flag("declarations") {
             Query::Declarations
+        } else if let Some(path) = matches.get_one::<Qualifier>("name") {
+            Query::Name(*path)
+        } else if let Some(path) = matches.get_one::<Qualifier>("witnesses") {
+            Query::Witnesses(*path)
         } else if matches.get_flag("server") {
             Query::Server
         } else {

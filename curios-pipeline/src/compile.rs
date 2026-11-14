@@ -26,7 +26,7 @@ use {
         BrokenItem, Lint, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_entry,
         into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
-    curios_surface::{Entrypoint, Spelling},
+    curios_surface::{Entrypoint, ReaderPosition, Spelling},
     curios_unit::{Predecessors, Unit},
     std::{cell::LazyCell, collections::BTreeSet, fmt, rc::Rc},
 };
@@ -346,6 +346,29 @@ fn read_for_report(
     };
 
     report(&reading)
+}
+
+/// How a term of `definitions`, a unit's module kept under `kept` where it keeps one, is spelled for a reader standing at its declaration `owner`: the spelling every report of the unit's terms shares ([`Reading::spelling`]), each unit of `scope` read by the lexicon it keeps, and its reader placed at the declaration. What a question about one declaration prints its type in.
+pub fn spelling_at(
+    definitions: &curios_core::Definitions,
+    kept: Option<(&curios_core::Lexicon, &curios_core::Places)>,
+    scope: &[&curios_core::Lexicon],
+    syntax: &SyntaxRegistry,
+    owner: Global,
+) -> Spelling {
+    let reading = Reading {
+        definitions,
+        kept,
+        scope,
+        syntax,
+        spellings: None,
+        anchors: &[],
+    };
+
+    reading.spelling().for_reader(ReaderPosition {
+        owner: Some(owner),
+        witnesses: Rc::default(),
+    })
 }
 
 /// The certifier's environment for `predecessors`: every unit in scope where it stands, read by the places it keeps for its names, with the record the certifier filed with it. Nothing of a unit is copied.
