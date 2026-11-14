@@ -1,6 +1,6 @@
-//! The hand-built adversarial modules the recheck suites forge, and the declarations they forge them from.
+//! The modules the recheck suites put to the walk, written as Core text, and the walks they put them through.
 //!
-//! Built by hand because a refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program. Reaching it means constructing the finished module here and asking `certify_definitions` directly.
+//! Written as Core text because a refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program. Reaching it means writing the finished module and putting it to the walk directly.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across `recheck`, and nothing outside it.
 
@@ -9,153 +9,11 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_common::{Candidates, Qualifier, SyntaxRegistry, fill},
     curios_core::{
-        Atom, Certification, Certified, Definition, DefinitionKind, Definitions, Entrypoint, Free,
-        Global, InductDecl, InductParam, Intrinsic, Item, Level, Nat, Places, Polarity, Program,
-        Reads, RecGroup, StructDecl, Telescope, Term, UniverseConstraint, UniverseContext,
-        UniverseParam, Universes, Variance, test_support::*,
+        Certification, Certified, Definitions, Entrypoint, Global, Item, Level, Places, Program,
+        Reads, Term,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::collections::BTreeSet,
 };
-
-/// A top-level definition, as `certify_definitions` binds one.
-pub fn authored(name: &Global, type_: Term, body: Term) -> Item {
-    Item::Let(Box::new(Definition {
-        name: *name,
-        kind: DefinitionKind::Authored,
-        universe_context: UniverseContext::empty(),
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_,
-        body,
-    }))
-}
-
-/// [`authored`] marked a proof, as the module a walk hands back marks one its declaration wrote at a proposition: what a unit in scope holds.
-pub fn authored_proof(name: &Global, type_: Term, body: Term) -> Item {
-    match authored(name, type_, body) {
-        Item::Let(definition) => Item::Let(Box::new(Definition {
-            proof: true,
-            ..*definition
-        })),
-        item => item,
-    }
-}
-
-/// A nullary `Prop`-sorted family: `False` itself, and the shape `Box` takes but for its payload.
-pub fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl {
-    InductDecl::new(
-        UniverseContext::default(),
-        Telescope::done(Telescope::done(())),
-        constructors.into(),
-        Term::prop(),
-        Qualifier::default(),
-        true,
-    )
-}
-
-/// `sink : (Nat) -> Nat`, honestly stamped `Partial`: its body projects `rec f : (Nat) -> Nat = (n) => f(n)`, which does not descend.
-pub fn diverging_sink() -> Item {
-    diverging("sink")
-}
-
-/// [`diverging_sink`] under another name.
-pub fn diverging(name: &str) -> Item {
-    let f = Free::local(920, Some("f"));
-    let n = Free::local(921, Some("n"));
-    let nat = Term::intrinsic(Intrinsic::NatType);
-
-    let group = RecGroup::closing(vec![(
-        f,
-        Term::func_type([(n, nat.clone())], nat.clone()),
-        Term::func(
-            [(n, nat.clone())],
-            Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
-        ),
-    )]);
-
-    authored(
-        &Global::Authored(Qualifier::from([name])),
-        Term::func_type([(Free::local(922, Some("n")), nat.clone())], nat),
-        Term::rec_proj(group, 0),
-    )
-}
-
-/// The scheme both universe-occurrence fixtures below are built on: `def A<u, v | u + 1 <= v> : Type v = Type u`.
-///
-/// Its constraint is load-bearing rather than decorative, which is the whole point of the shape: checking the body needs `Type (u + 1) <= Type v`, and that holds under this hypothesis and under nothing else. So an occurrence of `A` is legitimate exactly where it discharges the constraint at its own levels, and [`Certifier::check_instance`](crate::Certifier) is what does that.
-pub fn scheme_context() -> UniverseContext {
-    let ordered = UniverseConstraint {
-        lower: Level::param(UniverseParam(0))
-            .checked_add(1)
-            .expect("level admits the offset"),
-        upper: Level::param(UniverseParam(1)),
-    };
-
-    UniverseContext {
-        parameter_count: 2,
-        quality_count: 0,
-        constraints: vec![ordered],
-    }
-}
-
-/// The same two parameters with the scheme's constraint *not* declared — the context a user of `A` stands in when it has assumed nothing about its own levels.
-pub fn open_context() -> UniverseContext {
-    UniverseContext {
-        parameter_count: 2,
-        quality_count: 0,
-        constraints: Vec::new(),
-    }
-}
-
-/// The scheme above, followed by one `user` that spells an occurrence of it.
-///
-/// `user` is `(its own universe context, the term it is defined as)`, and its declared type is `Type v` throughout — so the two spellings of the occurrence differ in nothing but whether the instance is stated.
-pub fn universe_scheme_definitions(user: Option<(UniverseContext, Term)>) -> Definitions {
-    let scheme = Definition {
-        name: Global::Authored(Qualifier::from(["A"])),
-        kind: DefinitionKind::Authored,
-        universe_context: scheme_context(),
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_: Term::type_at(Level::param(UniverseParam(1))),
-        body: Term::type_at(Level::param(UniverseParam(0))),
-    };
-
-    let mut items = vec![Item::Let(Box::new(scheme))];
-    if let Some((universe_context, body)) = user {
-        items.push(Item::Let(Box::new(Definition {
-            name: Global::Authored(Qualifier::from(["user"])),
-            kind: DefinitionKind::Authored,
-            universe_context,
-            island: Qualifier::default(),
-            proof: false,
-            value_sort: None,
-            type_: Term::type_at(Level::param(UniverseParam(1))),
-            body,
-        })));
-    }
-
-    Definitions {
-        items: items.into(),
-    }
-}
-
-/// `A` alone, and `A` at the using item's own two parameters — the two spellings of one occurrence.
-pub fn scheme_occurrences() -> (Term, Term) {
-    let name = Global::Authored(Qualifier::from(["A"]));
-    let bare = Term::instance(name, Universes::default());
-    let instance = Term::instance(
-        name,
-        vec![
-            Level::param(UniverseParam(0)),
-            Level::param(UniverseParam(1)),
-        ],
-    );
-
-    (bare, instance)
-}
 
 /// A unit a test puts in scope by hand: a module no unit holds, with the places an environment reads it by and the record filed beside it.
 pub struct AlreadyJudged {
@@ -188,31 +46,6 @@ pub fn already_judged(definitions: &Definitions) -> AlreadyJudged {
     AlreadyJudged::with(definitions, &Certification::default())
 }
 
-/// A module carrying `items` and `induct_decls` and nothing else.
-pub fn collision_definitions(
-    items: Vec<Item>,
-    induct_decls: BTreeMap<Global, InductDecl>,
-) -> Definitions {
-    declaring(
-        Definitions {
-            items: items.into(),
-        },
-        induct_decls,
-        [],
-        [],
-    )
-}
-
-/// The definition name the environment and the module both declare.
-pub fn shadowed_name() -> Global {
-    Global::Authored(Qualifier::from(["shadowed"]))
-}
-
-/// The family name the environment and the module both declare.
-pub fn shadowed_family() -> Global {
-    Global::Authored(Qualifier::from(["Shadowed"]))
-}
-
 /// `induct Shadowed : Type 0 end` beside `let shadowed : Nat = 0` — the two entries an earlier walk is taken to have judged.
 pub const JUDGED_ENVIRONMENT: &str = r#"
 induct /Shadowed: pub Type
@@ -225,77 +58,6 @@ let /shadowed: #NatType =
 /// [`JUDGED_ENVIRONMENT`]'s module.
 pub fn judged_environment() -> Definitions {
     core_text_module(JUDGED_ENVIRONMENT)
-}
-
-/// The record [`two_registry_entries`] declares beside [`shadowed_family`].
-pub fn kept_record() -> Global {
-    Global::Authored(Qualifier::from(["Kept"]))
-}
-
-/// What [`two_registry_entries`] varies of the two entries it declares.
-pub enum Varied {
-    /// Nothing: the entries as an environment holds them.
-    Nothing,
-    /// Elaboration's stamps on both: a polarity vector, the owning module and the representation's privacy.
-    Stamps,
-    /// The family's variance vector.
-    Variance,
-    /// The type of the record's field.
-    Field,
-}
-
-/// `induct Shadowed : Type 0 end` and `struct Kept { held : Nat }`, as registry entries with no items lowering them, differing from the unvaried pair in what `varied` names.
-pub fn two_registry_entries(varied: Varied) -> Definitions {
-    let stamped = matches!(varied, Varied::Stamps);
-    let polarities = || match stamped {
-        true => vec![Polarity::Mixed],
-        false => Vec::new(),
-    };
-    let owner = || match stamped {
-        true => Qualifier::from(["elsewhere"]),
-        false => Qualifier::default(),
-    };
-
-    let family = InductDecl::new(
-        UniverseContext::default(),
-        Telescope::done(Telescope::done(())),
-        Vec::new().into(),
-        Term::type_ground(),
-        owner(),
-        !stamped,
-    )
-    .with_polarities(polarities())
-    .with_variances(match varied {
-        Varied::Variance => vec![Variance::Irrelevant],
-        _ => Vec::new(),
-    });
-    let record = StructDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::done(Telescope::build(
-            [(
-                Free::local(940, Some("held")),
-                Term::intrinsic(match varied {
-                    Varied::Field => Intrinsic::BoolType,
-                    _ => Intrinsic::NatType,
-                }),
-            )],
-            (),
-        )),
-        result_sort: Term::type_ground(),
-        module: owner(),
-        rep_public: !stamped,
-        polarities: polarities(),
-        variances: Vec::new(),
-    };
-
-    declaring(
-        Definitions {
-            ..collision_definitions(Vec::new(), BTreeMap::from([(shadowed_family(), family)]))
-        },
-        [],
-        BTreeMap::from([(kept_record(), record)]),
-        [],
-    )
 }
 
 pub trait Walked {
@@ -356,14 +118,6 @@ pub const BUDGET: u64 = 1_000_000;
 
 pub fn global(symbol: &str) -> Global {
     Global::Authored(Qualifier::from([symbol]))
-}
-
-pub fn nat() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
-
-pub fn literal(n: usize) -> Term {
-    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
 /// `alias : Type = ${alias}`, `three : alias = 3`, `identity : (Nat) -> Nat = (x) => ${returned}`, and `five : Nat = identity(5)`: `three` unfolds `alias`, and `five` types `identity` and unfolds nothing.
