@@ -153,6 +153,24 @@ impl ChannelOp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntrinsicCall {
     ListMap,
+    /// Whether a native call of a frame that weighs `weight` fits the module's frame budget, taking the weight from it where it fits: `1` to call natively, `0` to run on the heap ([`bound_frames`](crate::bound_frames)). It takes no operand.
+    FrameEnter {
+        weight: u32,
+    },
+    /// Hand back the weight a native call took from the frame budget once it returns. It takes no operand and resumes with nothing.
+    FrameLeave {
+        weight: u32,
+    },
+}
+
+impl IntrinsicCall {
+    /// How many values the continuation it resumes takes.
+    pub fn result_arity(self) -> usize {
+        match self {
+            IntrinsicCall::ListMap | IntrinsicCall::FrameEnter { .. } => 1,
+            IntrinsicCall::FrameLeave { .. } => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

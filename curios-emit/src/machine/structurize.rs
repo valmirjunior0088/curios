@@ -9,9 +9,9 @@ use {
     crate::{
         EmissionArg, EmissionBinder, EmissionBlock, EmissionBlockName, EmissionBody,
         EmissionCallTarget, EmissionCellTarget, EmissionChannelTarget, EmissionClosure,
-        EmissionClosureName, EmissionCode, EmissionData, EmissionFunction, EmissionFunctionName,
-        EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget, EmissionModule, EmissionTail,
-        EmissionValue, EmissionValueName,
+        EmissionClosureName, EmissionCode, EmissionData, EmissionFrameTarget, EmissionFunction,
+        EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
+        EmissionModule, EmissionTail, EmissionValue, EmissionValueName,
     },
     curios_common::Entropy,
     curios_num::Natural,
@@ -357,6 +357,25 @@ impl<'a> MachineFunctionBridge<'a> {
                 op: curios_cps::IntrinsicCall::ListMap,
                 args,
             } => self.list_map(args, self.resume.clone(), values),
+            MachineTerminator::Intrinsic {
+                op:
+                    op @ (curios_cps::IntrinsicCall::FrameEnter { .. }
+                    | curios_cps::IntrinsicCall::FrameLeave { .. }),
+                resume,
+                ..
+            } => {
+                let resume = self.resume_target(*resume, &vec![None; op.result_arity()], blocks);
+                EmissionTail::Frame(EmissionFrameTarget { op: *op, resume })
+            }
+            MachineTerminator::IntrinsicReturn {
+                op:
+                    op @ (curios_cps::IntrinsicCall::FrameEnter { .. }
+                    | curios_cps::IntrinsicCall::FrameLeave { .. }),
+                ..
+            } => EmissionTail::Frame(EmissionFrameTarget {
+                op: *op,
+                resume: self.resume.clone(),
+            }),
             MachineTerminator::Halt { function, args } => {
                 EmissionTail::Host(EmissionHostTarget::Halt {
                     function: function.clone(),

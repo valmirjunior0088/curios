@@ -137,6 +137,13 @@ impl EmissionCellTarget {
     }
 }
 
+/// A frame-budget operation, performed inline on the module's budget global and delivering its results to `resume`: [`curios_cps::IntrinsicCall::FrameEnter`] answers whether a native call fits, [`curios_cps::IntrinsicCall::FrameLeave`] answers nothing.
+#[derive(Debug, Clone)]
+pub struct EmissionFrameTarget {
+    pub op: curios_cps::IntrinsicCall,
+    pub resume: EmissionBlockName,
+}
+
 /// A bounded guest channel operation, performed inline and delivering its results to `resume`.
 #[derive(Debug, Clone)]
 pub struct EmissionChannelTarget {
@@ -154,6 +161,7 @@ pub enum EmissionTail {
     Host(EmissionHostTarget),
     Cell(EmissionCellTarget),
     Channel(EmissionChannelTarget),
+    Frame(EmissionFrameTarget),
     Panic(curios_cps::Panic),
     Unreachable,
 }
@@ -177,6 +185,7 @@ impl EmissionTail {
             EmissionTail::Host(EmissionHostTarget::Halt { .. }) => vec![],
             EmissionTail::Cell(cell) => vec![cell.resume()],
             EmissionTail::Channel(channel) => vec![&channel.resume],
+            EmissionTail::Frame(frame) => vec![&frame.resume],
             EmissionTail::Panic(_) | EmissionTail::Unreachable => vec![],
         }
     }
@@ -595,6 +604,7 @@ impl EmissionTail {
             | EmissionTail::Host(_)
             | EmissionTail::Cell(_)
             | EmissionTail::Channel(_)
+            | EmissionTail::Frame(_)
             | EmissionTail::Panic(_)
             | EmissionTail::Unreachable => assert!(
                 self.targets()
@@ -637,7 +647,7 @@ impl EmissionTail {
                 rename_name(value, renames);
             }
             EmissionTail::Cell(EmissionCellTarget::Poll { cell, .. }) => rename_name(cell, renames),
-            EmissionTail::Panic(_) | EmissionTail::Unreachable => {}
+            EmissionTail::Frame(_) | EmissionTail::Panic(_) | EmissionTail::Unreachable => {}
         }
     }
 }

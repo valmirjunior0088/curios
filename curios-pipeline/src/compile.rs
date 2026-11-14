@@ -1288,6 +1288,8 @@ where
     let mut cps_optm_module = cps_module;
     curios_cps::optimize(&mut cps_optm_module);
     curios_cps::rebuild_in_place(&mut cps_optm_module);
+    // Last of the CPS rewrites, so every function the optimizer and the rebuild settled has its twin and every guard stands where the representation is decided.
+    curios_cps::bound_frames(&mut cps_optm_module);
 
     observe(Stage::CpsOptm(&cps_optm_module));
 

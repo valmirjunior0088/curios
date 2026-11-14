@@ -1075,6 +1075,31 @@ impl Module {
                     )));
                 }
             }
+            Node::Intrinsic {
+                op: op @ (IntrinsicCall::FrameEnter { .. } | IntrinsicCall::FrameLeave { .. }),
+                args,
+                return_to,
+            } => {
+                if !args.is_empty() {
+                    return Err(VerifyError(format!(
+                        "{id} {op:?} takes no operand, got {}",
+                        args.len()
+                    )));
+                }
+                if self.continuation_arity(
+                    current_function,
+                    return_cont,
+                    facts,
+                    scope,
+                    *return_to,
+                )? != op.result_arity()
+                {
+                    return Err(VerifyError(format!(
+                        "{id} {op:?} continuation must accept {} values",
+                        op.result_arity()
+                    )));
+                }
+            }
             Node::Halt { function, args } => {
                 if !function.diverges() {
                     return Err(VerifyError(format!(

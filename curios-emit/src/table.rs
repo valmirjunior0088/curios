@@ -406,6 +406,7 @@ pub struct Table<'a> {
     list_exact: OnceCell<curios_wasm::FuncName>,
     list_bytes_force: OnceCell<curios_wasm::FuncName>,
     list_empty: OnceCell<curios_wasm::GlobalName>,
+    frames_used: OnceCell<curios_wasm::GlobalName>,
     bytes_embed: OnceCell<curios_wasm::FuncName>,
     bytes_box: OnceCell<curios_wasm::FuncName>,
     bytes_norm: OnceCell<curios_wasm::FuncName>,
@@ -510,6 +511,7 @@ impl<'a> Table<'a> {
             list_exact: OnceCell::new(),
             list_bytes_force: OnceCell::new(),
             list_empty: OnceCell::new(),
+            frames_used: OnceCell::new(),
             bytes_embed: OnceCell::new(),
             bytes_box: OnceCell::new(),
             bytes_norm: OnceCell::new(),
@@ -1062,6 +1064,17 @@ impl<'a> Table<'a> {
 
     pub fn list_empty_used(&self) -> bool {
         self.list_empty.get().is_some()
+    }
+
+    /// `$frames/used`, the weight the native frames of guarded calls hold at once, against [`curios_cps::FRAME_BUDGET`].
+    pub fn frames_used_global(&self) -> curios_wasm::GlobalName {
+        self.frames_used
+            .get_or_init(|| curios_wasm::GlobalName::from("frames/used"))
+            .clone()
+    }
+
+    pub fn frames_used_reached(&self) -> bool {
+        self.frames_used.get().is_some()
     }
 
     /// `$bytes/embed (ref $bytes) -> (ref $rope/bytes)`: embed a host-built flat payload into a fresh leaf on re-entry.

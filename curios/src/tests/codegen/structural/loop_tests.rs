@@ -15,13 +15,14 @@ fn lcg_loop_is_single_entry_recursive_continuation() {
 
     for function in module.functions().iter().flatten() {
         let provenance = function.debug_name.as_deref().unwrap_or_default();
-        // An allowlist rather than a check on the loop's own name, which is only possible because every emitted function carries a hint: a prelude helper its `/std/` path, the description machinery its `io/` tag, the steps a suspension takes among them, and a lifted lambda its owner's name qualified — `/sys/Handle/write/1`, or `main/1`, the program's continuation past the host call that reads its arguments, which a suspension carries. A leaked `loop` matches none of them.
+        // An allowlist rather than a check on the loop's own name, which is only possible because every emitted function carries a hint: a prelude helper its `/std/` path, the description machinery its `io/` tag, the steps a suspension takes among them, a lifted lambda its owner's name qualified — `/sys/Handle/write/1`, or `main/1`, the program's continuation past the host call that reads its arguments, which a suspension carries — and the heap path past the frame budget its `heap/` hint. A leaked `loop` matches none of them.
         assert!(
             provenance == "main"
                 || provenance.starts_with("main/")
                 || provenance.starts_with("/entry/")
                 || provenance.starts_with("/std/")
-                || provenance.starts_with("io/"),
+                || provenance.starts_with("io/")
+                || provenance.starts_with("heap/"),
             "the recursive loop must be contified, not left a top-level function: {provenance}",
         );
     }

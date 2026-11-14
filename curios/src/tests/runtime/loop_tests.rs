@@ -442,11 +442,10 @@ fn a_live_set_past_the_heap_it_was_given_stops_on_the_engines_refusal() {
     );
 }
 
-/// A recursion with no end that keeps its frames still stops, on the engine's own trap, once the stack it was given is spent: the limit is a bound a program meets, never the thread's. The chain is built under a constructor, which no monoid closes, so the recursion keeps a frame a level.
+/// A recursion with no end that keeps its frames stops once the heap it was given is spent, on the engine's refusal to grow it: the frames past the budget are heap continuations ([`curios_cps::bound_frames`]), so the stack never decides how deep a recursion goes. The chain is built under a constructor, which no monoid closes, so the recursion keeps a frame a level.
 #[test]
-fn a_recursion_with_no_end_stops_on_the_stack_it_was_given() {
-    let (system, _io) = MockHost::builder().build();
-    let refusal = run_text(
+fn a_recursion_with_no_end_stops_on_the_heap_it_was_given() {
+    let compiled = compile(
         r#"
         use /std/{Nat, Str, Io};
         induct Chain: Type
@@ -461,12 +460,15 @@ fn a_recursion_with_no_end_stops_on_the_stack_it_was_given() {
             /std/Io/pure(());
         entry()
         "#,
-        system,
     )
-    .expect_err("a recursion with no end cannot answer");
+    .expect("the recursion compiles");
+    let (system, _io) = MockHost::builder().build();
+    let refusal = run_within_heap(&compiled, system, 64 << 20)
+        .expect_err("a recursion with no end cannot answer")
+        .to_string();
 
     assert!(
-        refusal.starts_with("stack exhausted: "),
-        "the program must stop on the engine's trap: {refusal}"
+        refusal.starts_with("heap exhausted: "),
+        "the program must stop on the engine's refusal to grow its heap: {refusal}"
     );
 }

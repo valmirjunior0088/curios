@@ -444,8 +444,8 @@ impl Module {
                     Node::Channel { op, return_to, .. } if *return_to == sentinel => {
                         operation = operation.or(Some(op.result_arity()));
                     }
-                    Node::Intrinsic { return_to, .. } if *return_to == sentinel => {
-                        operation = operation.or(Some(1));
+                    Node::Intrinsic { op, return_to, .. } if *return_to == sentinel => {
+                        operation = operation.or(Some(op.result_arity()));
                     }
                     _ => {}
                 }
