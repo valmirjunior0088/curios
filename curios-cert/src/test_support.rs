@@ -8,7 +8,9 @@ use {
         recheck::verdicts_from,
     },
     curios_common::{Candidates, SyntaxRegistry, variants},
-    curios_core::{Certification, Definitions, Entrypoint, Global, Places, Term, Universes},
+    curios_core::{
+        Certification, Definitions, Entrypoint, Free, Global, Places, Subterm, Term, Universes,
+    },
     curios_surface::{CoreEntry, CoreFile, FormScope, ReadError, to_core},
 };
 
@@ -120,6 +122,106 @@ impl Put<'_> {
             Some(globals) => walk(globals),
             None => walk(&Globals::default()),
         }
+    }
+}
+
+/// What `text` writes, Core text read with nothing in scope, panicking where it does not read.
+fn read_alone(text: &str) -> (Definitions, Option<Entrypoint>) {
+    let file = text
+        .parse::<CoreFile>()
+        .unwrap_or_else(|error| panic!("{}", error.format()));
+
+    to_core(&file, None).unwrap_or_else(|refusal| panic!("{refusal:?}"))
+}
+
+/// The module `text` writes, Core text read with nothing in scope and closing with no term: what a suite below the walk hands a judgment of a whole item or entry.
+///
+/// # Panics
+///
+/// Where the text does not read or closes with a term.
+pub fn read_module(text: &str) -> Definitions {
+    let (definitions, entry) = read_alone(text);
+    assert!(entry.is_none(), "a module's text closes with no term");
+
+    definitions
+}
+
+/// The term `text` closes with, Core text read with nothing in scope and declaring nothing: a candidate a suite below the walk puts to one judgment.
+///
+/// # Panics
+///
+/// Where the text does not read, declares anything, or closes with no term.
+pub fn term(text: &str) -> Term {
+    let (definitions, entry) = read_alone(text);
+    assert!(
+        definitions.items.is_empty(),
+        "a term's text declares nothing"
+    );
+
+    entry.expect("a term's text closes with it").body
+}
+
+/// Declare in `certifier` what `text` declares, Core text read with nothing in scope, judging none of it: each family's and record's entry, and each definition, a family's constructors among them, at its type with its body. What a suite below the walk reads its declarations from.
+///
+/// # Panics
+///
+/// Where the text does not read, closes with a term, or declares a name `certifier` holds.
+pub fn declared(certifier: &mut Certifier, text: &str) {
+    let (definitions, entry) = read_alone(text);
+    assert!(entry.is_none(), "a declarations' text closes with no term");
+    for item in definitions.items.iter() {
+        for (name, nominal) in item.nominals() {
+            if let Some(declaration) = nominal.inductive() {
+                certifier
+                    .declare_induct(name, declaration)
+                    .expect("a name is declared once");
+            }
+            if let Some(record) = nominal.record() {
+                certifier
+                    .declare_struct(name, record)
+                    .expect("a name is declared once");
+            }
+        }
+        for definition in item.definitions().into_iter().chain(item.constructors()) {
+            certifier
+                .define(
+                    &definition.name,
+                    &definition.type_,
+                    &definition.body,
+                    &definition.universe_context,
+                )
+                .expect("a name is declared once");
+        }
+    }
+}
+
+/// The term `text` closes with ([`term`]), its leading function literal opened at fresh locals, each assumed in `certifier` at its domain: the locals, and the body under them. How a suite below the walk puts a term to a judgment under hypotheses, each written as a binder of the literal.
+pub fn opened(certifier: &mut Certifier, text: &str) -> (Vec<Free>, Term) {
+    let term = term(text);
+    let Subterm::Func(function) = &*term else {
+        return (Vec::new(), term);
+    };
+    let mut cursor = function.telescope.cursor();
+    let mut locals = Vec::new();
+    while let Some((_, domain)) = cursor.entry() {
+        locals.push(certifier.advance_assumed(&mut cursor, &domain));
+    }
+    let body = cursor
+        .body()
+        .expect("a cursor past every entry holds its body");
+
+    (locals, body)
+}
+
+/// The terms the tuple `term` holds, in order: how a text puts several terms under one context, the body of a literal [`opened`] opens.
+///
+/// # Panics
+///
+/// Where `term` is no tuple.
+pub fn components(term: &Term) -> Vec<Term> {
+    match &**term {
+        Subterm::Tuple(tuple) => tuple.fields.clone(),
+        _ => panic!("a tuple of the terms put under one context"),
     }
 }
 

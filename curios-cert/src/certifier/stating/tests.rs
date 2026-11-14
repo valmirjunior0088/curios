@@ -2,38 +2,30 @@
 
 use {
     super::*,
+    crate::test_support::*,
     curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Definition, DefinitionKind, Func, Global, InductDecl, InductParam, Intrinsic, Item,
-        Let, Level, Nat, Quality, QualityParam, Subterm, Telescope, Term, UniverseContext,
-    },
+    curios_common::{Qualifier, fill},
+    curios_core::{Func, Global, Item, Subterm},
 };
 
 fn certifier() -> Certifier<'static> {
     Certifier::new(100_000, SYNTAX)
 }
 
-fn binder(index: u64, hint: &str) -> Free {
-    Free::local(index, Some(hint))
-}
+/// `held : Type = ${body}`, under `${context}`: an item whose terms the walk states the binders of. Its type is no part of what is under test.
+const HELD: &str = r#"
+${context}let /held: Type =
+    ${body};
+"#;
 
-fn nat_type() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
-
-/// `held : Type = body`: an item whose terms the walk states the binders of. Its type is no part of what is under test.
-fn defined(body: Term) -> Item {
-    Item::Let(Box::new(Definition {
-        name: Global::Authored(Qualifier::from(["held"])),
-        kind: DefinitionKind::Authored,
-        universe_context: UniverseContext::empty(),
-        island: Qualifier::default(),
-        proof: false,
-        value_sort: None,
-        type_: Term::type_ground(),
-        body,
-    }))
+/// The item [`HELD`] writes at `body`, under no universe context.
+fn defined(body: &str) -> Item {
+    read_module(&fill!(HELD, context = "", body))
+        .items
+        .iter()
+        .next()
+        .cloned()
+        .expect("the text declares `held`")
 }
 
 /// The body `item` holds.
@@ -44,57 +36,19 @@ fn body(item: &Item) -> &Term {
     }
 }
 
-/// `function`, a function literal, saying of its binders what `proofs` says.
-fn saying(function: Term, proofs: &[bool]) -> Term {
-    let Subterm::Func(Func { telescope }) = Term::unwrap_or_clone(function) else {
-        panic!("a function literal");
-    };
-
-    Term::from(Subterm::Func(Func {
-        telescope: telescope.with_proofs(proofs),
-    }))
-}
-
-/// `term`, a `let` block, saying of its binders what `proofs` says.
-fn let_saying(term: Term, proofs: &[bool]) -> Term {
-    let Subterm::Let(block) = Term::unwrap_or_clone(term) else {
-        panic!("a `let`");
-    };
-    let (bindings, tail) = block.into_parts();
-
-    Term::from(Subterm::Let(Let::new(bindings, tail.with_proofs(proofs))))
+/// The entry of the family named `path` that `text` declares.
+fn entry(text: &str, path: &str) -> InductDecl {
+    read_module(text).induct_decls()[&Global::Authored(Qualifier::from([path]))].clone()
 }
 
 /// A function literal's binders state what the certifier reads of their types, each under the binders before it: `P` at a sort binds no proof, `h` at `P` and `lemma` at a function into `P` bind one, `n` at `Nat` and `F` at a function into a sort none — each the opposite of what the module says.
 #[test]
 fn a_function_literals_binders_state_what_the_certifier_reads_of_their_types() {
-    let (p, h, lemma, n, family) = (
-        binder(0, "P"),
-        binder(1, "h"),
-        binder(2, "lemma"),
-        binder(3, "n"),
-        binder(4, "F"),
-    );
-    let function = Term::func(
-        [
-            (p, Term::prop()),
-            (h, Term::free_var(&p)),
-            (
-                lemma,
-                Term::func_type([(binder(5, "k"), nat_type())], Term::free_var(&p)),
-            ),
-            (n, nat_type()),
-            (
-                family,
-                Term::func_type([(binder(6, "k"), nat_type())], Term::type_ground()),
-            ),
-        ],
-        Term::free_var(&n),
-    );
-
     let stated = stated_marks(
         &mut certifier(),
-        &defined(saying(function, &[true, false, false, true, true])),
+        &defined(
+            "(#{proof = true} P: Prop, h: P, lemma: (k: #NatType) -> P, #{proof = true} n: #NatType, #{proof = true} F: (k: #NatType) -> Type) => n",
+        ),
     );
 
     let Subterm::Func(Func { telescope }) = &**body(&stated) else {
@@ -106,29 +60,10 @@ fn a_function_literals_binders_state_what_the_certifier_reads_of_their_types() {
 /// A `let`'s binders state what the certifier reads of their types, each under the binders around it and before it: in `(P: Prop, h: P) => let q : P = h; let m : Nat = 0; m`, one block of two, `q` binds a proof and `m` none, each the opposite of what the module says.
 #[test]
 fn a_lets_binders_state_what_the_certifier_reads_of_their_types() {
-    let (p, h, q, m) = (
-        binder(0, "P"),
-        binder(1, "h"),
-        binder(2, "q"),
-        binder(3, "m"),
+    let stated = stated_marks(
+        &mut certifier(),
+        &defined("(P: Prop, h: P) => let q: P = h; let #{proof = true} m: #NatType = 0; m"),
     );
-    let block = let_saying(
-        Term::let_block(
-            vec![
-                (q, Term::free_var(&p), Term::free_var(&h)),
-                (
-                    m,
-                    nat_type(),
-                    Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-                ),
-            ],
-            Term::free_var(&m),
-        ),
-        &[false, true],
-    );
-    let function = Term::func([(p, Term::prop()), (h, Term::free_var(&p))], block);
-
-    let stated = stated_marks(&mut certifier(), &defined(function));
 
     let Subterm::Func(Func { telescope }) = &**body(&stated) else {
         panic!("a function literal");
@@ -143,34 +78,16 @@ fn a_lets_binders_state_what_the_certifier_reads_of_their_types() {
 /// A constructor's binders state what the certifier reads of their types, each under the binders before it: `hold(P: Prop, h: P, n: Nat)` binds a proof at `h` alone, the opposite of what the module says of each.
 #[test]
 fn a_constructors_binders_state_what_the_certifier_reads_of_their_types() {
-    let (p, h, n) = (binder(0, "P"), binder(1, "h"), binder(2, "n"));
-    let hold = Atom::from("hold");
-    let declaration = InductDecl::new(
-        UniverseContext::default(),
-        Telescope::done(Telescope::done(())),
-        vec![(
-            hold.clone(),
-            InductParam::over(
-                &[],
-                Telescope::build(
-                    [(p, Term::prop()), (h, Term::free_var(&p)), (n, nat_type())],
-                    Vec::new(),
-                )
-                .with_marks(&[Plicity::Explicit; 3])
-                .with_proofs(&[true, false, true]),
-            ),
-        )]
-        .into(),
-        Term::type_ground(),
-        Qualifier::from(["Holder"]),
-        true,
+    let declaration = entry(
+        "induct /Holder: pub Type\n| hold(#{proof = true} P: Prop, h: P, #{proof = true} n: #NatType)\nend",
+        "Holder",
     );
 
     let stated = stated_entry(&mut certifier(), &declaration);
 
     assert_eq!(
         stated
-            .constructor(&hold)
+            .constructor(&"hold".into())
             .expect("the family declares `hold`")
             .proofs(),
         [false, true, false]
@@ -182,43 +99,30 @@ fn a_constructors_binders_state_what_the_certifier_reads_of_their_types() {
 /// Mutation-check: have `as_sort` answer `Prop` for a sort a declaration leaves open, and both state `a` a proof.
 #[test]
 fn a_binder_at_a_sort_left_to_the_caller_binds_no_proof() {
-    let left = Term::sort_at(Quality::Param(QualityParam(0)), Level::zero());
-    let (carrier, held) = (binder(0, "A"), binder(1, "a"));
-    let function = Term::func(
-        [(carrier, left.clone()), (held, Term::free_var(&carrier))],
-        Term::free_var(&held),
-    );
+    let held = read_module(&fill!(
+        HELD,
+        context = "#{universe_context = {quality_count = 1}}\n",
+        body = "(#{proof = true} A: Sort, #{proof = true} a: A) => a"
+    ))
+    .items
+    .iter()
+    .next()
+    .cloned()
+    .expect("the text declares `held`");
 
-    let stated = stated_marks(&mut certifier(), &defined(saying(function, &[true, true])));
+    let stated = stated_marks(&mut certifier(), &held);
 
     let Subterm::Func(Func { telescope }) = &**body(&stated) else {
         panic!("a function literal");
     };
     assert_eq!(telescope.proofs(), [false, false]);
 
-    let boxed = Atom::from("box");
-    let declaration = InductDecl::new(
-        UniverseContext {
-            parameter_count: 0,
-            quality_count: 1,
-            constraints: Vec::new(),
-        },
-        Telescope::build([(carrier, left.clone())], Telescope::done(())),
-        vec![(
-            boxed.clone(),
-            InductParam::over(
-                &[&carrier],
-                Telescope::build([(held, Term::free_var(&carrier))], Vec::new())
-                    .with_proofs(&[true]),
-            ),
-        )]
-        .into(),
-        Term::type_ground(),
-        Qualifier::from(["Box"]),
-        true,
+    let declaration = entry(
+        "#{universe_context = {quality_count = 1}}\ninduct /Box(A: Sort): pub Type\n| box(#{proof = true} a: A)\nend",
+        "Box",
     );
 
     let stated = stated_entry(&mut certifier(), &declaration);
 
-    assert_eq!(stated.payload_proofs(&boxed), Some(vec![false]));
+    assert_eq!(stated.payload_proofs(&"box".into()), Some(vec![false]));
 }

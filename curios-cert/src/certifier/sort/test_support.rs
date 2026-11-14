@@ -1,10 +1,10 @@
-//! What the sort suites share: a certifier, a name, a binder, and a declaration at a stated sort.
+//! What the sort suites share: a certifier, a name and a binder.
 
 use {
     crate::*,
     curios_analysis::test_support::*,
     curios_common::Qualifier,
-    curios_core::{Free, Global, InductDecl, Telescope, Term, UniverseContext},
+    curios_core::{Free, Global},
 };
 
 pub fn certifier() -> Certifier<'static> {
@@ -13,27 +13,6 @@ pub fn certifier() -> Certifier<'static> {
 
 pub fn nominal(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
-}
-
-/// A nominal family with no constructors, declared at `result_sort`. Enough to give the tests below a base type at a known sort — the registry is what says whether a nominal type is a proposition, so there is no way to build one without it.
-pub fn declare(certifier: &mut Certifier, path: &str, result_sort: Term) -> Term {
-    let name = nominal(path);
-
-    certifier
-        .declare_induct(
-            &name,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::done(())),
-                Vec::new().into(),
-                result_sort,
-                Qualifier::from([path]),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
-
-    Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new())
 }
 
 pub fn binder(index: u32, hint: &str) -> Free {

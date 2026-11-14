@@ -3,79 +3,38 @@
 //! A member whose declared type yields a sort is erased, so it must descend — the local gate `check_group` applies — and a group's calls are the only thing that gate reads. A call the recorder missed would be an edge the closure never saw, and a group with no edges is accepted, so every fixture below that refuses is the evidence that the call is recorded at all, and every one that accepts is the evidence that the context it was graded under was built.
 
 use {
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
-    curios_core::{
-        Carrier, Cases, Free, Global, Intrinsic, Nat, Scope, StructDecl, Subterm, Telescope, Term,
-        Totality, Two, UniverseContext, Universes, test_support::*,
-    },
+    curios_common::fill,
+    curios_core::{Subterm, Term, Totality},
 };
 
 fn certifier() -> Certifier<'static> {
     Certifier::new(100_000, SYNTAX)
 }
 
-fn binder(index: u32, hint: &str) -> Free {
-    Free::local(u64::from(index), Some(hint))
+/// The group `rec f(n : Nat) -> Type = ${body}`, as the term that states it and names `f` in its tail: the member every fixture defines.
+const GROUP: &str = "#{node = Rec} (let f: (n: #NatType) -> Type = (n: #NatType) => ${body}; f)";
+
+/// [`GROUP`] at `body`.
+fn group(body: &str) -> Term {
+    term(&fill!(GROUP, body))
 }
 
-fn nat(n: usize) -> Term {
-    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
-}
+/// The two-arm split of `${scrutinee}` at `Type`: `Nat` when it is zero, `${cons}` when it is `pred + 1`.
+const SPLIT: &str =
+    "#{result = Ambient(Type)} match ${scrutinee} | 0 => #NatType | pred + 1; ih => ${cons} end";
 
-fn nat_type() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
-
-/// `f : (Nat) -> Type`, the member every fixture defines.
-fn member() -> (Free, Term) {
-    let f = binder(0, "f");
-    let n = binder(1, "n");
-
-    (f, Term::func_type([(n, nat_type())], Term::type_ground()))
-}
-
-/// The group `rec f(n : Nat) -> Type = body`, as the term that states it and names `f` in its tail.
-fn group(f: &Free, signature: Term, n: &Free, body: Term) -> Term {
-    Term::rec(
-        [(*f, signature, Term::func([(*n, nat_type())], body))],
-        Term::free_var(f),
-    )
-}
-
-/// `f(argument)`.
-fn call(f: &Free, argument: Term) -> Term {
-    Term::apply(Term::free_var(f), [argument])
-}
-
-/// The two-arm split of `n` at `Type`: `Nat` when it is zero, `cons(pred)` when it is `pred + 1`.
-fn split(n: &Free, cons: impl FnOnce(&Free) -> Term) -> Term {
-    let pred = binder(2, "pred");
-    let ih = binder(3, "ih");
-    let body = cons(&pred);
-
-    match_ambient(
-        Term::free_var(n),
-        Term::type_ground(),
-        Cases::FreeMonoid {
-            carrier: Carrier::Nat {
-                empty_case: nat_type(),
-                cons_case: Scope::close(Two, &[&pred, &ih], body),
-            },
-        },
-    )
+/// [`SPLIT`] of `scrutinee` with `cons` in its successor arm.
+fn split(scrutinee: &str, cons: &str) -> String {
+    fill!(SPLIT, scrutinee, cons)
 }
 
 /// The control every accepting fixture below is read against: a call at the caller's own argument is a cycle with nothing decreasing, and the gate refuses it. Mutation-checked: recording no applied call empties the group's calls, and this is then accepted.
 #[test]
 fn a_type_calling_itself_at_its_own_argument_is_refused() {
-    let (f, signature) = member();
-    let n = binder(1, "n");
-    let term = group(&f, signature, &n, call(&f, Term::free_var(&n)));
-
     assert!(matches!(
-        infer(&mut certifier(), &term),
+        infer(&mut certifier(), &group("f(n)")),
         Err(Error::NotDescending { .. }),
     ));
 }
@@ -83,117 +42,44 @@ fn a_type_calling_itself_at_its_own_argument_is_refused() {
 /// A `Nat` arm refines its scrutinee to one successor over the predecessor it binds, so a call at the predecessor is below the caller's argument. Mutation-checked: refining the scrutinee from the arm's typing spelling, `pred + 1`, reads nothing below it, and this is refused.
 #[test]
 fn a_type_descending_through_a_nat_arm_is_accepted() {
-    let (f, signature) = member();
-    let n = binder(1, "n");
-    let term = group(
-        &f,
-        signature,
-        &n,
-        split(&n, |pred| call(&f, Term::free_var(pred))),
-    );
-
-    assert!(infer(&mut certifier(), &term).is_ok());
+    assert!(infer(&mut certifier(), &group(&split("n", "f(pred)"))).is_ok());
 }
 
 /// A lambda applied on the spot is read through its binder: `((m) => f(m))(pred)` calls `f` at what `m` stands for, which is below the caller's argument. Mutation-checked: typing the lambda without its binders standing for the arguments leaves `m` a fresh binder nothing is below, and this is refused.
 #[test]
 fn a_descent_through_an_applied_lambda_is_read_through_its_binder() {
-    let (f, signature) = member();
-    let n = binder(1, "n");
-    let m = binder(4, "m");
-    let term = group(
-        &f,
-        signature,
-        &n,
-        split(&n, |pred| {
-            Term::apply(
-                Term::func([(m, nat_type())], call(&f, Term::free_var(&m))),
-                [Term::free_var(pred)],
-            )
-        }),
-    );
+    let body = split("n", "((m: #NatType) => f(m))(pred)");
 
-    assert!(infer(&mut certifier(), &term).is_ok());
+    assert!(infer(&mut certifier(), &group(&body)).is_ok());
 }
 
 /// A comparison behind a definition is read as a guard before the arm's case equation is assumed: the arm where `is_zero(n)` is false rules zero out for `n`, so `n - 1` is below it. Mutation-checked: read after the equation, the scrutinee reduces to the arm's own `false` and compares nothing, and this is refused.
 #[test]
 fn a_guard_behind_a_definition_establishes_what_its_arm_descends_on() {
     let mut certifier = certifier();
-    let is_zero = Global::Authored(Qualifier::from(["is_zero"]));
-    let x = binder(11, "x");
-    certifier
-        .define(
-            &is_zero,
-            &Term::func_type([(x, nat_type())], Term::intrinsic(Intrinsic::BoolType)),
-            &Term::func(
-                [(x, nat_type())],
-                Term::intrinsic(Intrinsic::NatEql(Term::free_var(&x), nat(0))),
-            ),
-            &UniverseContext::empty(),
-        )
-        .expect("a name is declared once");
-
-    let (f, signature) = member();
-    let n = binder(1, "n");
-    let body = match_ambient(
-        Term::apply(
-            Term::instance(is_zero, Universes::default()),
-            [Term::free_var(&n)],
-        ),
-        Term::type_ground(),
-        Cases::Bool {
-            false_case: call(
-                &f,
-                Term::intrinsic(Intrinsic::NatSub(Term::free_var(&n), nat(1))),
-            ),
-            true_case: nat_type(),
-        },
+    declared(
+        &mut certifier,
+        "let /is_zero: (x: #NatType) -> #BoolType = (x: #NatType) => #NatEql(x, 0);",
     );
-    let term = group(&f, signature, &n, body);
 
-    assert!(infer(&mut certifier, &term).is_ok());
+    let body = "#{result = Ambient(Type)} match /is_zero(n) | false => f(#NatSub(n, 1)) | true => #NatType end";
+
+    assert!(infer(&mut certifier, &group(body)).is_ok());
 }
 
 /// A call standing only in a nominal value's parameter is recorded, because the parameter is typed: `f(n)` sits in `Box(f(n)) { 3 }`, whose field is projected where it is inferred, so no conversion ever reads the value's type. Mutation-checked: counting a value's parameters without typing them leaves the group with no call, and it is accepted.
 #[test]
 fn a_call_in_a_nominal_values_parameter_is_recorded() {
     let mut certifier = certifier();
-    let boxed = Global::Authored(Qualifier::from(["Box"]));
-    certifier
-        .declare_struct(
-            &boxed,
-            &StructDecl {
-                universe_context: UniverseContext::empty(),
-                arity: Telescope::build(
-                    [(binder(20, "A"), Term::type_ground())],
-                    Telescope::build([(binder(21, "x"), nat_type())], ()),
-                ),
-                result_sort: Term::type_ground(),
-                module: Qualifier::default(),
-                rep_public: true,
-                polarities: Vec::new(),
-                variances: Vec::new(),
-            },
-        )
-        .expect("a name is declared once");
-
-    let (f, signature) = member();
-    let n = binder(1, "n");
-    let body = Term::let_(
-        &binder(22, "k"),
-        nat_type(),
-        Term::proj_struct(
-            Term::struct_(boxed, [call(&f, Term::free_var(&n))], [nat(3)]),
-            boxed,
-            0,
-        ),
-        nat_type(),
+    declared(
+        &mut certifier,
+        "struct /Box(A: Type): pub Type {\n    x: #NatType,\n}",
     );
-    let term = group(&f, signature, &n, body);
+
+    let body = "let k: #NatType = #{field = Struct(/Box, 0)} (/Box(f(n)) { 3 }).0; #NatType";
 
     assert!(matches!(
-        infer(&mut certifier, &term),
+        infer(&mut certifier, &group(body)),
         Err(Error::NotDescending { .. }),
     ));
 }
@@ -201,16 +87,11 @@ fn a_call_in_a_nominal_values_parameter_is_recorded() {
 /// A term naming a member is typed wherever it stands, whatever the certifier remembers of it. `rec a : Prop = b, b : Prop = b` states one body twice, and the call it holds is `a`'s to `b` in the first and `b`'s to itself in the second — the cycle the gate refuses. The members are propositions, so the group owes descent and its bodies read it by value, and nothing there classifies `b`: a body that is a type former over `b`, as `List(b)` is, would read `b` by value at its sort and run the budget out before the gate. Mutation-checked: with a remembered judgment answering for a term that names a member, the second body's call is never recorded, and the group is accepted.
 #[test]
 fn a_call_is_recorded_in_every_body_that_states_it() {
-    let a = binder(0, "a");
-    let b = binder(1, "b");
-    let body = || Term::free_var(&b);
-    let term = Term::rec(
-        [(a, Term::prop(), body()), (b, Term::prop(), body())],
-        Term::free_var(&a),
-    );
-
     assert!(matches!(
-        infer(&mut certifier(), &term),
+        infer(
+            &mut certifier(),
+            &term("(let a: Prop = b and b: Prop = b; a)")
+        ),
         Err(Error::NotDescending { .. }),
     ));
 }
@@ -227,27 +108,24 @@ fn spent_inferring(certifier: &mut Certifier, term: &Term) -> u64 {
 /// A typing remembered on one side of what an arm establishes for the recorder does not answer on the other. A group typed inside a term closes under what the arms around it established, and the default arm of a `switch` rules zero out for its scrutinee while assuming no equation and opening no binder, so nothing else stands between a term typed outside it and the same term inside. Mutation-checked: without the clear where the arm's knowledge is entered the term is answered inside the bracket for nothing, and without the one where it is retracted, after it.
 #[test]
 fn a_remembered_type_does_not_outlive_what_an_arm_established() {
-    let (f, signature) = member();
-    let n = binder(1, "n");
-    let stated = group(&f, signature, &n, nat_type());
+    let stated = group("#NatType");
     let Subterm::Rec(rec) = &*stated else {
         unreachable!("a group")
     };
 
     let mut certifier = certifier();
-    let assumed = binder(5, "rec");
-    let k = binder(6, "k");
-    certifier.assume(&assumed, &rec.group().member_type(0));
-    certifier.assume(&k, &nat_type());
-    certifier.open_group(rec.group(), &[assumed]);
+    let (locals, term) = opened(
+        &mut certifier,
+        "(rec: (n: #NatType) -> Type, k: #NatType) => #NatAdd(k, 1)",
+    );
+    certifier.open_group(rec.group(), &[locals[0]]);
     certifier.begin_member(0);
 
-    let term = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&k), nat(1)));
     let first = spent_inferring(&mut certifier, &term);
     let again = spent_inferring(&mut certifier, &term);
     let inside = certifier.scoped(|certifier| {
         certifier
-            .assume_nonzero(k)
+            .assume_nonzero(locals[1])
             .expect("the arm's knowledge enters");
         spent_inferring(certifier, &term)
     });
@@ -264,21 +142,20 @@ fn a_remembered_type_does_not_outlive_what_an_arm_established() {
 fn a_refused_walk_takes_back_the_calls_it_recorded() {
     let closes = |tried: bool| {
         let mut certifier = certifier();
-        let (f, signature) = member();
-        let n = binder(1, "n");
-        let term = group(&f, signature.clone(), &n, nat_type());
+        let term = group("#NatType");
         let Subterm::Rec(rec) = &*term else {
             unreachable!("a group is a `rec`");
         };
+        let (f, n) = (certifier.fresh(Some("f")), certifier.fresh(Some("n")));
 
-        certifier.assume(&f, &signature);
-        certifier.assume(&n, &nat_type());
+        certifier.assume(&f, &rec.group().member_type(0));
+        certifier.assume(&n, &self::term("#NatType"));
         certifier.open_group(rec.group(), &[f]);
         certifier.begin_member(0);
         certifier.bind_parameter(&n);
         let refused = |certifier: &mut Certifier| {
             certifier.record_call(&f, &[Term::free_var(&n)])?;
-            Err::<(), _>(Error::Unclassified(nat(0)))
+            Err::<(), _>(Error::Unclassified(self::term("0")))
         };
         let outcome = match tried {
             true => certifier.tried(refused),
@@ -298,51 +175,23 @@ fn a_refused_walk_takes_back_the_calls_it_recorded() {
 /// Mutation-checked: with what a refused walk recorded kept, the first group holds the call and does not descend.
 #[test]
 fn an_arm_no_reduction_takes_records_no_call() {
-    let closes = |argument: bool| {
-        let (f, signature) = member();
-        let n = binder(1, "n");
-        let c = binder(5, "c");
-        let bool_type = Term::intrinsic(Intrinsic::BoolType);
-        let not = Term::func(
-            [(c, bool_type.clone())],
-            Term::bool_match(
-                Term::free_var(&c),
-                None,
-                bool_type,
-                Term::intrinsic(Intrinsic::Bool(true)),
-                Term::intrinsic(Intrinsic::Bool(false)),
-            ),
-        );
-        let body = match_ambient(
-            Term::apply(not, [Term::intrinsic(Intrinsic::Bool(argument))]),
-            Term::type_ground(),
-            Cases::Bool {
-                false_case: nat_type(),
-                true_case: Term::func_type(
-                    [(binder(6, "x"), call(&f, Term::free_var(&n)))],
-                    Term::apply(nat(0), [nat(0)]),
-                ),
-            },
+    let closes = |argument: &str| {
+        let body = fill!(
+            "#{result = Ambient(Type)} match ((c: #BoolType) => #{result = Ambient(#BoolType)} match c | false => true | true => false end)(${argument}) | false => #NatType | true => (x: f(n)) -> 0(0) end",
+            argument
         );
 
-        infer(&mut certifier(), &group(&f, signature, &n, body))
+        infer(&mut certifier(), &group(&body))
     };
 
-    assert!(closes(true).is_ok());
-    assert!(closes(false).is_err());
+    assert!(closes("true").is_ok());
+    assert!(closes("false").is_err());
 }
 
 /// A group this walk never typed is read in the refusing direction: no verdict is on record, so it does not descend, and each member reads as enclosing a group that does not, which is what the obligations read of an item whose bodies nothing typed. The control is the same group once typed, whose check files the verdict and the enclosure it found.
 #[test]
 fn a_group_this_walk_never_typed_reads_as_one_that_does_not_descend() {
-    let (f, signature) = member();
-    let n = binder(1, "n");
-    let term = group(
-        &f,
-        signature,
-        &n,
-        split(&n, |pred| call(&f, Term::free_var(pred))),
-    );
+    let term = group(&split("n", "f(pred)"));
     let Subterm::Rec(rec) = &*term else {
         panic!("`group` states a group: {term:?}");
     };
@@ -359,21 +208,10 @@ fn a_group_this_walk_never_typed_reads_as_one_that_does_not_descend() {
 /// An arm that splits a lambda's binder splits what the binder stands for: in `((x) => match x | 0 => … | k + 1 => f(k) end)(n)` the lambda's body runs with `x` being `n`, so the arm's `k + 1` is `n`'s case too and `k` is below `n`. Mutation-checked: with the arm refining `x` alone, `k` is below nothing the caller's parameter reads, and this is refused.
 #[test]
 fn an_arm_splitting_an_applied_lambdas_binder_splits_what_the_binder_stands_for() {
-    let (f, signature) = member();
-    let n = binder(1, "n");
-    let x = binder(4, "x");
-    let term = group(
-        &f,
-        signature,
-        &n,
-        Term::apply(
-            Term::func(
-                [(x, nat_type())],
-                split(&x, |pred| call(&f, Term::free_var(pred))),
-            ),
-            [Term::free_var(&n)],
-        ),
+    let body = fill!(
+        "((x: #NatType) => ${split})(n)",
+        split = split("x", "f(pred)")
     );
 
-    assert!(infer(&mut certifier(), &term).is_ok());
+    assert!(infer(&mut certifier(), &group(&body)).is_ok());
 }

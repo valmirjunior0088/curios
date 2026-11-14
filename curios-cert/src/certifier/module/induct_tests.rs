@@ -2,18 +2,16 @@
 
 use {
     super::test_support::*,
-    crate::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Free, Global, InductDecl, Intrinsic, Level, Telescope, Term, UniverseContext,
-    },
+    crate::{test_support::*, *},
+    curios_common::Qualifier,
+    curios_core::Global,
 };
 
 /// `induct Bad : Type 0 | mk(x : Type 0)` contains the universe it lives in. This is the fixture no surface program can spell — levels have no syntax — and the clause the item walk cannot check, because it computes each signature's sort and compares it to nothing.
 #[test]
 fn a_payload_at_the_familys_own_level_is_refused() {
     let mut certifier = certifier();
-    let declaration = family(&mut certifier, Term::type_ground(), Term::type_ground());
+    let declaration = family(&mut certifier, "Type", "Type");
 
     assert!(matches!(
         check_induct_decl(&mut certifier, &declaration),
@@ -25,8 +23,7 @@ fn a_payload_at_the_familys_own_level_is_refused() {
 #[test]
 fn a_payload_below_the_familys_level_is_admitted() {
     let mut certifier = certifier();
-    let one = Level::zero().succ().expect("level zero has a successor");
-    let declaration = family(&mut certifier, Term::type_at(one), Term::type_ground());
+    let declaration = family(&mut certifier, "#{level = 1} Type", "Type");
 
     assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
 }
@@ -35,7 +32,7 @@ fn a_payload_below_the_familys_level_is_admitted() {
 #[test]
 fn a_proposition_family_is_sized_as_a_type_family_is() {
     let mut certifier = certifier();
-    let declaration = family(&mut certifier, Term::prop(), Term::type_ground());
+    let declaration = family(&mut certifier, "Prop", "Type");
 
     assert!(matches!(
         check_induct_decl(&mut certifier, &declaration),
@@ -47,8 +44,7 @@ fn a_proposition_family_is_sized_as_a_type_family_is() {
 #[test]
 fn a_payload_below_a_propositions_level_is_admitted() {
     let mut certifier = certifier();
-    let one = Level::zero().succ().expect("level zero has a successor");
-    let declaration = family(&mut certifier, Term::prop_at(one), Term::type_ground());
+    let declaration = family(&mut certifier, "#{level = 1} Prop", "Type");
 
     assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
 }
@@ -57,7 +53,7 @@ fn a_payload_below_a_propositions_level_is_admitted() {
 #[test]
 fn a_proof_payload_counts_at_its_propositions_level() {
     let mut certifier = certifier();
-    let declaration = family(&mut certifier, Term::type_ground(), large_proposition());
+    let declaration = family(&mut certifier, "Type", LARGE_PROPOSITION);
 
     assert!(matches!(
         check_induct_decl(&mut certifier, &declaration),
@@ -69,8 +65,7 @@ fn a_proof_payload_counts_at_its_propositions_level() {
 #[test]
 fn a_proof_payload_below_the_familys_level_is_admitted() {
     let mut certifier = certifier();
-    let one = Level::zero().succ().expect("level zero has a successor");
-    let declaration = family(&mut certifier, Term::type_at(one), large_proposition());
+    let declaration = family(&mut certifier, "#{level = 1} Type", LARGE_PROPOSITION);
 
     assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
 }
@@ -80,18 +75,17 @@ fn a_proof_payload_below_the_familys_level_is_admitted() {
 /// Mutation-checked at `sort_of_intrinsic`: a carrier pinned at level zero admits the small proposition.
 #[test]
 fn a_proposition_holding_a_list_of_its_own_propositions_is_refused() {
-    let codes = || Term::intrinsic(Intrinsic::ListType(Term::prop()));
+    let codes = "#ListType(Prop)";
 
     let mut certifier = certifier();
-    let declaration = family(&mut certifier, Term::prop(), codes());
+    let declaration = family(&mut certifier, "Prop", codes);
     assert!(matches!(
         check_induct_decl(&mut certifier, &declaration),
         Err(Error::Oversized { .. }),
     ));
 
     let mut certifier = self::certifier();
-    let one = Level::zero().succ().expect("level zero has a successor");
-    let declaration = family(&mut certifier, Term::prop_at(one), codes());
+    let declaration = family(&mut certifier, "#{level = 1} Prop", codes);
     assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
 }
 
@@ -99,13 +93,11 @@ fn a_proposition_holding_a_list_of_its_own_propositions_is_refused() {
 #[test]
 fn a_large_inductive_holding_its_own_type_is_refused_at_the_self_application() {
     let mut certifier = certifier();
-    let one = Level::zero().succ().expect("level zero has a successor");
-    let (fam_type, declaration) =
-        family_holding_a_type(&mut certifier, Term::type_at(one), Term::type_ground());
+    let declaration = family_holding_a_type(&mut certifier, "#{level = 1} Type", "Type");
 
     assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
     assert!(matches!(
-        infer(&mut certifier, &holding_itself(&fam_type)),
+        infer(&mut certifier, &term(HOLDING_ITSELF)),
         Err(Error::Mismatch { .. }),
     ));
 }
@@ -114,13 +106,11 @@ fn a_large_inductive_holding_its_own_type_is_refused_at_the_self_application() {
 #[test]
 fn a_tree_over_every_proposition_is_refused_at_the_self_application() {
     let mut certifier = certifier();
-    let one = Level::zero().succ().expect("level zero has a successor");
-    let (fam_type, declaration) =
-        family_holding_a_type(&mut certifier, Term::prop_at(one), Term::prop());
+    let declaration = family_holding_a_type(&mut certifier, "#{level = 1} Prop", "Prop");
 
     assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
     assert!(matches!(
-        infer(&mut certifier, &holding_itself(&fam_type)),
+        infer(&mut certifier, &term(HOLDING_ITSELF)),
         Err(Error::Mismatch { .. }),
     ));
 }
@@ -129,12 +119,7 @@ fn a_tree_over_every_proposition_is_refused_at_the_self_application() {
 #[test]
 fn an_impredicative_pair_of_a_proposition_and_its_proof_is_a_type() {
     let mut certifier = certifier();
-    let proposition = Free::local(0, Some("P"));
-    let proof = Free::local(1, Some("p"));
-    let pair = Term::tuple_type([
-        (proposition, Term::prop()),
-        (proof, Term::free_var(&proposition)),
-    ]);
+    let pair = term("{P: Prop, p: P}");
 
     assert!(matches!(Sort::of(&mut certifier, &pair), Ok(Sort::Type(_))));
 }
@@ -143,32 +128,14 @@ fn an_impredicative_pair_of_a_proposition_and_its_proof_is_a_type() {
 #[test]
 fn a_uniform_parameter_has_one_rung_of_slack() {
     let mut certifier = certifier();
-    let name = Global::Authored(Qualifier::from(["Vec"]));
-    let t = Free::local(0, Some("T"));
-    let x = Free::local(1, Some("x"));
-
-    let declaration = InductDecl::new(
-        UniverseContext::default(),
-        Telescope::build([(t, Term::type_ground())], Telescope::done(())),
-        vec![(
-            Atom::from("mk"),
-            curios_core::test_support::case(
-                1,
-                Telescope::build(
-                    [(t, Term::type_ground()), (x, Term::free_var(&t))],
-                    Vec::new(),
-                ),
-                vec![Plicity::Implicit, Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        Term::type_ground(),
-        Qualifier::from(["Vec"]),
-        true,
+    declared(
+        &mut certifier,
+        "induct /Vec(T: Type): pub Type\n| mk(x: T)\nend",
     );
-    certifier
-        .declare_induct(&name, &declaration)
-        .expect("a name is declared once");
+    let declaration = certifier
+        .induct_decl(&Global::Authored(Qualifier::from(["Vec"])))
+        .expect("the family is declared")
+        .clone();
 
     assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
 }

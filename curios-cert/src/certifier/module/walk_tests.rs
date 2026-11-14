@@ -2,7 +2,8 @@
 
 use {
     super::test_support::*,
-    curios_core::{Free, Intrinsic, Term},
+    crate::test_support::*,
+    curios_core::{Free, Term},
 };
 
 /// A declaration's binders are opened at identities of its own: the counter the certifier mints them from starts over where the budget is restored, so how many binders the walk opened before a declaration decides nothing of it. The carriers' algebra ranks an atom by a hash that takes a local's identity in, and under a counter that ran on the certifier answered one term two ways by what it had judged before. A binder still open keeps its identity, and the counter starts over past it.
@@ -19,7 +20,7 @@ fn a_restored_budget_starts_the_identities_over() {
     assert_eq!(certifier.fresh(None), first);
 
     let held = Free::local(first.index() + 7, Some("held"));
-    certifier.assume(&held, &Term::intrinsic(Intrinsic::NatType));
+    certifier.assume(&held, &term("#NatType"));
     certifier.restore_budget();
     assert!(certifier.fresh(None).index() > held.index());
 }
@@ -29,7 +30,7 @@ fn a_restored_budget_starts_the_identities_over() {
 fn a_typing_hit_recalls_what_its_own_typing_closed() {
     let mut certifier = certifier();
     let local = certifier.fresh(Some("x"));
-    let nat = Term::intrinsic(Intrinsic::NatType);
+    let nat = term("#NatType");
     certifier.assume(&local, &nat);
     let term = Term::free_var(&local);
 

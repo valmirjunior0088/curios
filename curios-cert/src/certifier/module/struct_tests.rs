@@ -2,12 +2,9 @@
 
 use {
     super::test_support::*,
-    crate::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Free, Global, Intrinsic, Level, StructDecl, StructType, Subterm, Telescope, Term,
-        UniverseContext, Universes,
-    },
+    crate::{test_support::*, *},
+    curios_common::{Qualifier, fill},
+    curios_core::Global,
 };
 
 /// A `Prop`-sorted structure carrying a `Nat`, which is the shape `Prop` non-informativeness exists to forbid.
@@ -18,7 +15,7 @@ use {
 #[test]
 fn a_proposition_may_not_carry_an_informative_field() {
     let mut certifier = certifier();
-    let declaration = proposition_with_field(&mut certifier, Term::intrinsic(Intrinsic::NatType));
+    let declaration = proposition_with_field(&mut certifier, "#NatType");
 
     assert!(matches!(
         check_struct_decl(&mut certifier, &declaration),
@@ -34,7 +31,7 @@ fn a_proposition_may_not_carry_an_informative_field() {
 #[test]
 fn a_proposition_may_not_carry_a_type() {
     let mut certifier = certifier();
-    let declaration = proposition_with_field(&mut certifier, Term::type_ground());
+    let declaration = proposition_with_field(&mut certifier, "Type");
 
     assert!(matches!(
         check_struct_decl(&mut certifier, &declaration),
@@ -49,7 +46,7 @@ fn a_proposition_may_not_carry_a_type() {
 fn a_proposition_may_carry_a_proof() {
     let mut certifier = certifier();
     let held = proposition(&mut certifier, "Held");
-    let declaration = proposition_with_field(&mut certifier, held);
+    let declaration = proposition_with_field(&mut certifier, &held);
 
     assert!(check_struct_decl(&mut certifier, &declaration).is_ok());
 }
@@ -57,66 +54,31 @@ fn a_proposition_may_carry_a_proof() {
 /// A field's mark changes nothing of what it holds: a hidden field at `Nat`, and a concept's superclass edge at a relevant record, are each refused as a written field is. The elaborator refuses both sources before the certifier is asked (`curios`'s `tests::rules::proposition_tests`), so this is the certifier's copy of the rule under each mark a generated record entry carries.
 #[test]
 fn a_proposition_may_not_carry_an_informative_field_under_a_mark() {
-    let dictionary = Global::Authored(Qualifier::from(["Dict"]));
-    let marked = |certifier: &mut Certifier, mark: Plicity, field_type: Term| {
-        let name = Global::Authored(Qualifier::from(["Bad"]));
-        let declaration = StructDecl {
-            universe_context: UniverseContext::default(),
-            arity: Telescope::done(Telescope::build_marked(
-                [(mark, Free::local(0, Some("value")), field_type)],
-                (),
-            )),
-            result_sort: Term::prop(),
-            module: Qualifier::default(),
-            rep_public: true,
-            polarities: Vec::new(),
-            variances: Vec::new(),
-        };
-        certifier
-            .declare_struct(&name, &declaration)
-            .expect("a name is declared once");
+    let bad = Global::Authored(Qualifier::from(["Bad"]));
+    let marked = |certifier: &mut Certifier, text: &str| {
+        declared(certifier, text);
+        let declaration = certifier
+            .struct_decl(&bad)
+            .expect("the structure is declared")
+            .clone();
 
         check_struct_decl(certifier, &declaration)
     };
 
-    let mut hidden = certifier();
     assert!(matches!(
         marked(
-            &mut hidden,
-            Plicity::Implicit,
-            Term::intrinsic(Intrinsic::NatType),
+            &mut certifier(),
+            "struct /Bad: pub Prop {\n    @value: #NatType,\n}"
         ),
         Err(Error::Informative { .. })
     ));
 
     // A relevant record standing for a data concept's dictionary.
-    let mut superclass = certifier();
-    let counted = StructDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::build(
-            [(
-                Free::local(1, Some("count")),
-                Term::intrinsic(Intrinsic::NatType),
-            )],
-            (),
-        )),
-        result_sort: Term::type_ground(),
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-    superclass
-        .declare_struct(&dictionary, &counted)
-        .expect("a name is declared once");
-    let dictionary_type: Term = Subterm::StructType(StructType {
-        name: dictionary,
-        universes: Universes::default(),
-        params: Vec::new(),
-    })
-    .into();
     assert!(matches!(
-        marked(&mut superclass, Plicity::Witness, dictionary_type),
+        marked(
+            &mut certifier(),
+            "struct /Dict: pub Type {\n    count: #NatType,\n}\n\nconcept /Bad: pub Prop {\n    use #{node = StructType} /Dict(),\n}"
+        ),
         Err(Error::Informative { .. })
     ));
 }
@@ -125,7 +87,7 @@ fn a_proposition_may_not_carry_an_informative_field_under_a_mark() {
 #[test]
 fn a_struct_field_at_the_structs_own_level_is_refused() {
     let mut certifier = certifier();
-    let declaration = struct_with_field(&mut certifier, Term::type_ground(), Term::type_ground());
+    let declaration = struct_with_field(&mut certifier, "Type", "Type");
 
     assert!(matches!(
         check_struct_decl(&mut certifier, &declaration),
@@ -137,8 +99,7 @@ fn a_struct_field_at_the_structs_own_level_is_refused() {
 #[test]
 fn a_struct_field_below_the_structs_level_is_admitted() {
     let mut certifier = certifier();
-    let one = Level::zero().succ().expect("level zero has a successor");
-    let declaration = struct_with_field(&mut certifier, Term::type_at(one), Term::type_ground());
+    let declaration = struct_with_field(&mut certifier, "#{level = 1} Type", "Type");
 
     assert_eq!(check_struct_decl(&mut certifier, &declaration), Ok(()));
 }
@@ -148,30 +109,23 @@ fn a_struct_field_below_the_structs_level_is_admitted() {
 /// Mutation-checked at `sort_of_intrinsic`: a carrier pinned at level zero admits the small structure.
 #[test]
 fn a_field_holding_a_carrier_of_the_structs_own_types_is_refused() {
-    let formers: [fn(Term) -> Intrinsic; 4] = [
-        Intrinsic::ListType,
-        Intrinsic::CellType,
-        Intrinsic::ChannelType,
-        Intrinsic::IoType,
-    ];
-    let one = Level::zero().succ().expect("level zero has a successor");
+    let formers = ["#ListType", "#CellType", "#ChannelType", "#IoType"];
 
     for former in formers {
-        let codes = || Term::intrinsic(former(Term::type_ground()));
+        let codes = fill!("${former}(Type)", former);
 
         let mut certifier = certifier();
-        let declaration = struct_with_field(&mut certifier, Term::type_ground(), codes());
+        let declaration = struct_with_field(&mut certifier, "Type", &codes);
         assert!(
             matches!(
                 check_struct_decl(&mut certifier, &declaration),
                 Err(Error::Oversized { .. }),
             ),
-            "a small structure held `{:?}`",
-            codes(),
+            "a small structure held `{codes}`",
         );
 
         let mut certifier = self::certifier();
-        let declaration = struct_with_field(&mut certifier, Term::type_at(one.clone()), codes());
+        let declaration = struct_with_field(&mut certifier, "#{level = 1} Type", &codes);
         assert_eq!(check_struct_decl(&mut certifier, &declaration), Ok(()));
     }
 }

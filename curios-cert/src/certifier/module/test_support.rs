@@ -1,12 +1,12 @@
-//! Fixtures the module suites share: the certifier they start from, and the families, structures and names they declare against it.
+//! Fixtures the module suites share: the certifier they start from, and the families, structures and names they declare against it, each written as Core text.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{Atom, Free, Global, InductDecl, StructDecl, Telescope, Term, UniverseContext},
+    curios_common::{Qualifier, fill},
+    curios_core::{Global, InductDecl, StructDecl, Term},
 };
 
 pub fn certifier() -> Certifier<'static> {
@@ -18,150 +18,92 @@ pub fn fam() -> Global {
     Global::Authored(Qualifier::from(["Fam"]))
 }
 
-/// One single-constructor family whose payload is `payload_type`, declared at `result_sort` with no parameters, registered and returned for checking.
-pub fn family(certifier: &mut Certifier, result_sort: Term, payload_type: Term) -> InductDecl {
-    let payload = Free::local(0, Some("x"));
+/// `Fam : ${sort} | mk(x : ${payload}) end`: one family of one case and no parameter.
+const FAMILY: &str = r#"
+induct /Fam: pub ${sort}
+| mk(x: ${payload})
+end
+"#;
 
-    let declaration = InductDecl::new(
-        UniverseContext::default(),
-        Telescope::done(Telescope::done(())),
-        vec![(
-            Atom::from("mk"),
-            curios_core::test_support::case(
-                0,
-                Telescope::build([(payload, payload_type)], Vec::new()),
-                vec![Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        result_sort,
-        Qualifier::from(["Fam"]),
-        true,
+/// [`FAMILY`] at `result_sort` over `payload_type`, registered and returned for checking.
+pub fn family(certifier: &mut Certifier, result_sort: &str, payload_type: &str) -> InductDecl {
+    declared(
+        certifier,
+        &fill!(FAMILY, sort = result_sort, payload = payload_type),
     );
-    certifier
-        .declare_induct(&fam(), &declaration)
-        .expect("a name is declared once");
 
-    declaration
+    certifier
+        .induct_decl(&fam())
+        .expect("the family is declared")
+        .clone()
 }
 
 /// `(A : Prop) -> A`: a proposition at level one, since it quantifies over the ground propositions.
-pub fn large_proposition() -> Term {
-    let a = Free::local(1, Some("A"));
+pub const LARGE_PROPOSITION: &str = "(A: Prop) -> A";
 
-    Term::func_type([(a, Term::prop())], Term::free_var(&a))
-}
+/// `Fam : ${outer} | mk(A : ${inner}, f : (A) -> Fam) end`, with `outer` a level above `inner`. A family holding a value of any type of `inner` — Russell's `set` at `Type`, the paradox of trees' `node` at `Prop` — takes this shape, and the two sorts a level apart are what make the *declaration* stand: the payload fits under the family. The paradox is the self-application a caller builds from it ([`HOLDING_ITSELF`]), not the declaration.
+const HOLDING_A_TYPE: &str = r#"
+induct /Fam: pub ${outer}
+| mk(A: ${inner}, f: (x: A) -> #{node = InductType} /Fam())
+end
+"#;
 
-/// Declare `Fam : outer | mk(A : inner, f : (A) -> Fam) end`, with `outer` a level above `inner`, and hand back the family-type term and its declaration. A family holding a value of any type of `inner` — Russell's `set` at `Type`, the paradox of trees' `node` at `Prop` — takes this shape, and the two sorts a level apart are what make the *declaration* stand: the payload fits under the family. The paradox is the self-application a caller builds from it, not the declaration.
-pub fn family_holding_a_type(
-    certifier: &mut Certifier,
-    outer: Term,
-    inner: Term,
-) -> (Term, InductDecl) {
-    let carrier = Free::local(0, Some("A"));
-    let forward = Free::local(1, Some("f"));
-    let fam_type = Term::induct_type(fam(), Vec::<Term>::new(), Vec::<Term>::new());
+/// [`HOLDING_A_TYPE`] at `outer` over `inner`, registered and returned for checking.
+pub fn family_holding_a_type(certifier: &mut Certifier, outer: &str, inner: &str) -> InductDecl {
+    declared(certifier, &fill!(HOLDING_A_TYPE, outer, inner));
 
-    let declaration = InductDecl::new(
-        UniverseContext::default(),
-        Telescope::done(Telescope::done(())),
-        vec![(
-            Atom::from("mk"),
-            curios_core::test_support::case(
-                0,
-                Telescope::build(
-                    [
-                        (carrier, inner),
-                        (
-                            forward,
-                            Term::func_type(
-                                [(Free::local(2, Some("x")), Term::free_var(&carrier))],
-                                fam_type.clone(),
-                            ),
-                        ),
-                    ],
-                    Vec::new(),
-                ),
-                vec![Plicity::Explicit, Plicity::Explicit],
-            ),
-        )]
-        .into(),
-        outer,
-        Qualifier::from(["Fam"]),
-        true,
-    );
     certifier
-        .declare_induct(&fam(), &declaration)
-        .expect("a name is declared once");
-
-    (fam_type, declaration)
+        .induct_decl(&fam())
+        .expect("the family is declared")
+        .clone()
 }
 
 /// `mk(Fam, (x) => x)` — the family's own type handed to the field that must sit below it. Russell's and the paradox of trees' self-application both take this shape, and the identity closes the forward field whatever the first argument's fate.
-pub fn holding_itself(fam_type: &Term) -> Term {
-    let bound = Free::local(3, Some("x"));
-    let identity = Term::func([(bound, fam_type.clone())], Term::free_var(&bound));
+pub const HOLDING_ITSELF: &str =
+    "#{node = Variant} /Fam/mk(#{node = InductType} /Fam(), (x: #{node = InductType} /Fam()) => x)";
 
-    Term::variant(
-        fam(),
-        Vec::<Term>::new(),
-        "mk",
-        [fam_type.clone(), identity],
-    )
-}
+/// A `Prop`-sorted family named `path` with no constructors, so that a field typed by it is a genuine proof rather than a proposition held as data: declared, and the text of its type.
+pub fn proposition(certifier: &mut Certifier, path: &str) -> String {
+    declared(certifier, &fill!("induct /${path}: pub Prop\nend", path));
 
-/// A `Prop`-sorted family with no constructors, so that a field typed by it is a genuine proof rather than a proposition held as data.
-pub fn proposition(certifier: &mut Certifier, path: &str) -> Term {
-    let name = Global::Authored(Qualifier::from([path]));
-    certifier
-        .declare_induct(
-            &name,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::done(())),
-                Vec::new().into(),
-                Term::prop(),
-                Qualifier::from([path]),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
-
-    Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new())
+    fill!("#{node = InductType} /${path}()", path)
 }
 
 /// A `Prop`-sorted structure with one field of `field_type` and no parameters, registered and returned for checking.
-pub fn proposition_with_field(certifier: &mut Certifier, field_type: Term) -> StructDecl {
-    struct_with_field(certifier, Term::prop(), field_type)
+pub fn proposition_with_field(certifier: &mut Certifier, field_type: &str) -> StructDecl {
+    struct_with_field(certifier, "Prop", field_type)
 }
 
-/// A structure at `result_sort` with one field of `field_type` and no parameters, registered and returned for checking.
+/// `Bad : ${sort} { value : ${field} }`: one structure of one field and no parameter.
+const STRUCTURE: &str = r#"
+struct /Bad: pub ${sort} {
+    value: ${field},
+}
+"#;
+
+/// [`STRUCTURE`] at `result_sort` with its field at `field_type`, registered and returned for checking.
 pub fn struct_with_field(
     certifier: &mut Certifier,
-    result_sort: Term,
-    field_type: Term,
+    result_sort: &str,
+    field_type: &str,
 ) -> StructDecl {
-    let name = Global::Authored(Qualifier::from(["Bad"]));
-    let declaration = StructDecl {
-        universe_context: UniverseContext::default(),
-        arity: Telescope::done(Telescope::build(
-            [(Free::local(0, Some("value")), field_type)],
-            (),
-        )),
-        result_sort,
-        module: Qualifier::default(),
-        rep_public: true,
-        polarities: Vec::new(),
-        variances: Vec::new(),
-    };
-    certifier
-        .declare_struct(&name, &declaration)
-        .expect("a name is declared once");
+    declared(
+        certifier,
+        &fill!(STRUCTURE, sort = result_sort, field = field_type),
+    );
 
-    declaration
+    certifier
+        .struct_decl(&Global::Authored(Qualifier::from(["Bad"])))
+        .expect("the structure is declared")
+        .clone()
 }
 
 /// The name the definitions below are checked under.
 pub fn lemma() -> Global {
     Global::Authored(Qualifier::from(["lemma"]))
+}
+
+/// The family-type term [`family`] declares.
+pub fn fam_type() -> Term {
+    term("#{node = InductType} /Fam()")
 }

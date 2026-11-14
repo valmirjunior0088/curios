@@ -1,12 +1,12 @@
 //! The reading door: each entry asked of terms the certifier accepted.
 
 use {
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::{Erased, test_support::*},
-    curios_common::{Plicity, Qualifier},
+    curios_common::Qualifier,
     curios_core::{
-        Atom, Cost, Free, Global, InductDecl, InductType, Intrinsic, Nat, Subterm, Telescope, Term,
-        Totality, UniverseContext, Universes,
+        Cost, Global, InductType, Intrinsic, Nat, Subterm, Term, Totality, UniverseContext,
+        Universes,
     },
 };
 
@@ -14,63 +14,19 @@ fn certifier() -> Certifier<'static> {
     Certifier::new(100_000, SYNTAX)
 }
 
-fn binder(index: u32, hint: &str) -> Free {
-    Free::local(u64::from(index), Some(hint))
-}
-
-fn nat(n: usize) -> Term {
-    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
-}
-
-fn nat_type() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
-
-fn boolean(value: bool) -> Term {
-    Term::intrinsic(Intrinsic::Bool(value))
-}
-
-fn bool_type() -> Term {
-    Term::intrinsic(Intrinsic::BoolType)
-}
-
-fn succ(tail: Term) -> Term {
-    Term::intrinsic(Intrinsic::Nat(Nat::Succ(1u32.into(), tail)))
-}
-
 /// `Ix : (Nat) -> Type` with `z : Ix(0)` and `s(p : Nat) : Ix(p + 1)`.
-fn declare_ix(certifier: &mut Certifier) -> Global {
-    let family = Global::Authored(Qualifier::from(["Ix"]));
-    let p = binder(90, "p");
-    let constructors = vec![
-        (
-            Atom::from("z"),
-            curios_core::test_support::case(0, Telescope::done(vec![nat(0)]), Vec::new()),
-        ),
-        (
-            Atom::from("s"),
-            curios_core::test_support::case(
-                0,
-                Telescope::build([(p, nat_type())], vec![succ(Term::free_var(&p))]),
-                vec![Plicity::Explicit],
-            ),
-        ),
-    ];
-    certifier
-        .declare_induct(
-            &family,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::build([(binder(91, "i"), nat_type())], ())),
-                constructors.into(),
-                Term::type_ground(),
-                Qualifier::from(["Ix"]),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
+const IX: &str = r#"
+induct /Ix: (i: #NatType) -> pub Type
+| z(): (0)
+| s(p: #NatType): (#Nat(Succ(1, p)))
+end
+"#;
 
-    family
+/// [`IX`] declared in `certifier`, by its name.
+fn declare_ix(certifier: &mut Certifier) -> Global {
+    declared(certifier, IX);
+
+    Global::Authored(Qualifier::from(["Ix"]))
 }
 
 fn ix(family: Global, index: Term) -> InductType {
@@ -86,29 +42,27 @@ fn ix(family: Global, index: Term) -> InductType {
 #[test]
 fn a_reader_reduces_a_term_to_its_head() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-    let term = Term::apply(Term::func([(x, nat_type())], Term::free_var(&x)), [nat(3)]);
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+    let term = term("((x: #NatType) => x)(3)");
+    assert_eq!(infer(&mut certifier, &term), Ok(self::term("#NatType")));
 
-    assert_eq!(certifier.read(|reader| reader.head(&term)), Ok(nat(3)));
+    assert_eq!(
+        certifier.read(|reader| reader.head(&term)),
+        Ok(self::term("3"))
+    );
 }
 
 /// A neutral's type, and a type former's sort, are what the certifier infers.
 #[test]
 fn a_reader_infers_a_neutrals_type_and_a_types_sort() {
     let mut certifier = certifier();
-    let f = binder(0, "f");
-    let n = binder(1, "n");
-    certifier.assume(
-        &f,
-        &Term::func_type([(binder(2, "m"), nat_type())], bool_type()),
+    let (_, call) = opened(
+        &mut certifier,
+        "(f: (m: #NatType) -> #BoolType, n: #NatType) => f(n)",
     );
-    certifier.assume(&n, &nat_type());
-    let call = Term::apply(Term::free_var(&f), [Term::free_var(&n)]);
 
     certifier.read(|reader| {
-        assert_eq!(reader.infer(&call), Ok(bool_type()));
-        assert_eq!(reader.infer(&nat_type()), Ok(Term::type_ground()));
+        assert_eq!(reader.infer(&call), Ok(term("#BoolType")));
+        assert_eq!(reader.infer(&term("#NatType")), Ok(term("Type")));
     });
 }
 
@@ -116,16 +70,12 @@ fn a_reader_infers_a_neutrals_type_and_a_types_sort() {
 #[test]
 fn a_reader_classifies_a_types_values_as_the_obligations_do() {
     let mut certifier = certifier();
-    let proposition = binder(0, "P");
-    certifier.assume(&proposition, &Term::prop());
+    let (_, proposition) = opened(&mut certifier, "(P: Prop) => P");
 
     certifier.read(|reader| {
-        assert_eq!(
-            reader.erased(&Term::free_var(&proposition)),
-            Ok(Some(Erased::Proof))
-        );
-        assert_eq!(reader.erased(&Term::prop()), Ok(Some(Erased::Type)));
-        assert_eq!(reader.erased(&nat_type()), Ok(None));
+        assert_eq!(reader.erased(&proposition), Ok(Some(Erased::Proof)));
+        assert_eq!(reader.erased(&term("Prop")), Ok(Some(Erased::Type)));
+        assert_eq!(reader.erased(&term("#NatType")), Ok(None));
     });
 }
 
@@ -135,20 +85,17 @@ fn a_reader_classifies_a_types_values_as_the_obligations_do() {
 #[test]
 fn a_reader_records_no_position() {
     let mut certifier = certifier();
-    let proposition = binder(0, "P");
-    let proof = binder(1, "h");
-    certifier.assume(&proposition, &Term::prop());
-    certifier.assume(&proof, &Term::free_var(&proposition));
+    let (locals, proof) = opened(&mut certifier, "(P: Prop, h: P) => h");
 
-    assert!(infer(&mut certifier, &Term::free_var(&proof)).is_ok());
+    assert!(infer(&mut certifier, &proof).is_ok());
     assert_eq!(
         certifier.take_checked().0.len(),
         1,
         "a check records the proof"
     );
 
-    let typed = certifier.read(|reader| reader.infer(&Term::free_var(&proof)));
-    assert_eq!(typed, Ok(Term::free_var(&proposition)));
+    let typed = certifier.read(|reader| reader.infer(&proof));
+    assert_eq!(typed, Ok(Term::free_var(&locals[0])));
     assert!(certifier.take_checked().0.is_empty());
 }
 
@@ -157,19 +104,7 @@ fn a_reader_records_no_position() {
 /// Mutation-checked: with the read's typings kept past it, the walk answers from the reader's and the group stands `Total`.
 #[test]
 fn a_walk_types_again_what_a_reader_typed() {
-    let f = binder(0, "f");
-    let n = binder(1, "n");
-    let group = Term::rec(
-        [(
-            f,
-            Term::func_type([(n, nat_type())], Term::type_ground()),
-            Term::func(
-                [(n, nat_type())],
-                Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
-            ),
-        )],
-        Term::free_var(&f),
-    );
+    let group = term("#{node = Rec} (let f: (n: #NatType) -> Type = (n: #NatType) => f(n); f)");
     let Subterm::Rec(rec) = &*group else {
         panic!("a group is stated: {group:?}");
     };
@@ -193,24 +128,18 @@ fn a_walk_types_again_what_a_reader_typed() {
 #[test]
 fn a_case_stands_for_its_value_within_its_frame() {
     let mut certifier = certifier();
-    let b = binder(0, "b");
-    let f = binder(1, "f");
-    let n = binder(2, "n");
-    certifier.assume(&b, &bool_type());
-    certifier.assume(
-        &f,
-        &Term::func_type([(binder(3, "m"), nat_type())], bool_type()),
+    let (_, both) = opened(
+        &mut certifier,
+        "(b: #BoolType, f: (m: #NatType) -> #BoolType, n: #NatType) => (b, f(n))",
     );
-    certifier.assume(&n, &nat_type());
-    let variable = Term::free_var(&b);
-    let call = Term::apply(Term::free_var(&f), [Term::free_var(&n)]);
+    let [variable, call] = <[Term; 2]>::try_from(components(&both)).expect("two terms");
 
     certifier.read(|reader| {
         reader.scoped(|reader| {
-            assert_eq!(reader.case(&variable, &boolean(true)), Ok(()));
-            assert_eq!(reader.case(&call, &boolean(false)), Ok(()));
-            assert_eq!(reader.head(&variable), Ok(boolean(true)));
-            assert_eq!(reader.head(&call), Ok(boolean(false)));
+            assert_eq!(reader.case(&variable, &term("true")), Ok(()));
+            assert_eq!(reader.case(&call, &term("false")), Ok(()));
+            assert_eq!(reader.head(&variable), Ok(term("true")));
+            assert_eq!(reader.head(&call), Ok(term("false")));
         });
         assert_eq!(reader.head(&variable), Ok(variable.clone()));
         assert_eq!(reader.head(&call), Ok(call.clone()));
@@ -224,49 +153,32 @@ fn a_case_stands_for_its_value_within_its_frame() {
 fn a_reader_enters_an_arm_as_it_is_checked() {
     let mut certifier = certifier();
     let family = declare_ix(&mut certifier);
-    let b = binder(0, "b");
-    let subject = binder(1, "subject");
-    let five = binder(2, "five");
-    let q = binder(3, "q");
-    certifier.assume(&b, &nat_type());
-    certifier.assume(
-        &subject,
-        &Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&b)]),
+    let (_, hypotheses) = opened(
+        &mut certifier,
+        "(b: #NatType, subject: #{node = InductType} /Ix()(b), five: #{node = InductType} /Ix()(5)) => (b, subject, five)",
     );
-    certifier.assume(
-        &five,
-        &Term::induct_type(family, Vec::<Term>::new(), [nat(5)]),
-    );
+    let [b, subject, five] = <[Term; 3]>::try_from(components(&hypotheses)).expect("three terms");
+    let q = certifier.fresh(Some("q"));
 
     certifier.read(|reader| {
         reader.scoped(|reader| {
             let entered = reader
-                .enter_arm(
-                    &ix(family, Term::free_var(&b)),
-                    &Term::free_var(&subject),
-                    &Atom::from("s"),
-                    &[q],
-                )
+                .enter_arm(&ix(family, b.clone()), &subject, &"s".into(), &[q])
                 .expect("the arm is entered");
-            let value = Term::variant(family, Vec::<Term>::new(), "s", vec![Term::free_var(&q)]);
+            let (successor, value) = (
+                Term::intrinsic(Intrinsic::Nat(Nat::Succ(1u32.into(), Term::free_var(&q)))),
+                Term::variant(family, Vec::<Term>::new(), "s", vec![Term::free_var(&q)]),
+            );
 
-            assert_eq!(entered.targets, vec![succ(Term::free_var(&q))]);
+            assert_eq!(entered.targets, vec![successor.clone()]);
             assert_eq!(entered.value, value);
             assert!(!entered.ruled_out);
-            assert_eq!(
-                reader.head(&Term::free_var(&b)),
-                Ok(succ(Term::free_var(&q)))
-            );
-            assert_eq!(reader.head(&Term::free_var(&subject)), Ok(value));
+            assert_eq!(reader.head(&b), Ok(successor));
+            assert_eq!(reader.head(&subject), Ok(value));
         });
         reader.scoped(|reader| {
             let entered = reader
-                .enter_arm(
-                    &ix(family, nat(5)),
-                    &Term::free_var(&five),
-                    &Atom::from("z"),
-                    &[],
-                )
+                .enter_arm(&ix(family, term("5")), &five, &"z".into(), &[])
                 .expect("the arm is entered");
 
             assert!(entered.ruled_out);
@@ -278,15 +190,14 @@ fn a_reader_enters_an_arm_as_it_is_checked() {
 #[test]
 fn a_reader_binds_a_fresh_local_within_its_frame() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-    certifier.assume(&x, &nat_type());
+    let (locals, _) = opened(&mut certifier, "(x: #NatType) => x");
 
     certifier.read(|reader| {
         let y = reader.fresh(Some("y"));
-        assert_ne!(y, x);
+        assert_ne!(y, locals[0]);
         reader.scoped(|reader| {
-            reader.bind(&y, &nat_type(), &nat(2));
-            assert_eq!(reader.head(&Term::free_var(&y)), Ok(nat(2)));
+            reader.bind(&y, &term("#NatType"), &term("2"));
+            assert_eq!(reader.head(&Term::free_var(&y)), Ok(term("2")));
         });
         assert_eq!(reader.head(&Term::free_var(&y)), Ok(Term::free_var(&y)));
     });
@@ -299,16 +210,18 @@ fn a_reader_looks_up_and_notes_what_it_read() {
     let family = declare_ix(&mut certifier);
     let name = Global::Authored(Qualifier::from(["three"]));
     certifier
-        .define(&name, &nat_type(), &nat(3), &UniverseContext::default())
+        .define(
+            &name,
+            &term("#NatType"),
+            &term("3"),
+            &UniverseContext::default(),
+        )
         .expect("a name is defined once");
     let _ = certifier.take_reads();
 
     certifier.read(|reader| {
         assert!(reader.induct_decl(&family).is_some());
-        assert_eq!(
-            reader.head(&Term::instance(name, Universes::default())),
-            Ok(nat(3))
-        );
+        assert_eq!(reader.head(&term("/three")), Ok(term("3")));
         let reads = reader.take_reads();
 
         assert!(reads.signatures.contains(&family));

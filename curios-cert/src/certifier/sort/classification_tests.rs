@@ -2,20 +2,27 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::{Erased, test_support::*},
-    curios_core::{
-        Category, Cost, Free, Intrinsic, Level, Nat, RecGroup, ReduceError, Term, UniverseContext,
-        UniverseParam, Universes, Var,
-    },
+    curios_common::fill,
+    curios_core::{Category, Cost, Level, ReduceError, UniverseContext},
 };
+
+/// `P : Prop` and `D : Type`, each a family with no case: a base type at a known sort, which only the registry can say a nominal type is.
+const BASES: &str = r#"
+induct /P: pub Prop
+end
+
+induct /D: pub Type
+end
+"#;
 
 #[test]
 fn an_intrinsic_type_sits_at_level_zero() {
     let mut certifier = certifier();
 
     assert_eq!(
-        Sort::of(&mut certifier, &Term::intrinsic(Intrinsic::NatType)),
+        Sort::of(&mut certifier, &term("#NatType")),
         Ok(Sort::Type(Level::zero())),
     );
 }
@@ -26,13 +33,13 @@ fn a_universe_is_one_level_above_itself() {
     let mut certifier = certifier();
 
     assert_eq!(
-        Sort::of(&mut certifier, &Term::type_ground()),
+        Sort::of(&mut certifier, &term("Type")),
         Ok(Sort::Type(
             Level::zero().succ().expect("level zero succeeds")
         )),
     );
     assert_eq!(
-        Sort::of(&mut certifier, &Term::prop()),
+        Sort::of(&mut certifier, &term("Prop")),
         Ok(Sort::Type(
             Level::zero().succ().expect("level zero succeeds")
         )),
@@ -42,15 +49,14 @@ fn a_universe_is_one_level_above_itself() {
 #[test]
 fn a_nominal_types_sort_is_the_one_its_declaration_states() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let data = declare(&mut certifier, "D", Term::type_ground());
+    declared(&mut certifier, BASES);
 
     assert_eq!(
-        Sort::of(&mut certifier, &proposition),
+        Sort::of(&mut certifier, &term("#{node = InductType} /P()")),
         Ok(Sort::Prop(Level::zero()))
     );
     assert_eq!(
-        Sort::of(&mut certifier, &data),
+        Sort::of(&mut certifier, &term("#{node = InductType} /D()")),
         Ok(Sort::Type(Level::zero())),
     );
 }
@@ -59,10 +65,9 @@ fn a_nominal_types_sort_is_the_one_its_declaration_states() {
 #[test]
 fn a_function_into_a_proposition_is_a_proposition() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let binder = Free::local(0, Some("n"));
+    declared(&mut certifier, BASES);
 
-    let pi = Term::func_type([(binder, Term::intrinsic(Intrinsic::NatType))], proposition);
+    let pi = term("(n: #NatType) -> #{node = InductType} /P()");
 
     assert_eq!(Sort::of(&mut certifier, &pi), Ok(Sort::Prop(Level::zero())));
 }
@@ -70,12 +75,8 @@ fn a_function_into_a_proposition_is_a_proposition() {
 #[test]
 fn a_function_into_data_takes_the_join_of_its_parts() {
     let mut certifier = certifier();
-    let binder = Free::local(0, Some("n"));
 
-    let pi = Term::func_type(
-        [(binder, Term::intrinsic(Intrinsic::NatType))],
-        Term::intrinsic(Intrinsic::NatType),
-    );
+    let pi = term("(n: #NatType) -> #NatType");
 
     assert_eq!(Sort::of(&mut certifier, &pi), Ok(Sort::Type(Level::zero())));
 }
@@ -84,20 +85,16 @@ fn a_function_into_data_takes_the_join_of_its_parts() {
 #[test]
 fn a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
+    declared(&mut certifier, BASES);
 
-    let all_props = Term::tuple_type([
-        (binder(0, "a"), proposition.clone()),
-        (binder(1, "b"), proposition),
-    ]);
+    let all_props = term("{a: #{node = InductType} /P(), b: #{node = InductType} /P()}");
     assert_eq!(
         Sort::of(&mut certifier, &all_props),
         Ok(Sort::Prop(Level::zero()))
     );
 
-    let unit = Term::tuple_type(Vec::<(Free, Term)>::new());
     assert_eq!(
-        Sort::of(&mut certifier, &unit),
+        Sort::of(&mut certifier, &term("{}")),
         Ok(Sort::Type(Level::zero()))
     );
 }
@@ -106,12 +103,9 @@ fn a_record_of_propositions_is_a_proposition_but_the_empty_one_is_unit() {
 #[test]
 fn one_relevant_field_makes_a_record_relevant() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
+    declared(&mut certifier, BASES);
 
-    let mixed = Term::tuple_type([
-        (binder(0, "a"), proposition),
-        (binder(1, "b"), Term::intrinsic(Intrinsic::NatType)),
-    ]);
+    let mixed = term("{a: #{node = InductType} /P(), b: #NatType}");
 
     assert_eq!(
         Sort::of(&mut certifier, &mixed),
@@ -123,9 +117,9 @@ fn one_relevant_field_makes_a_record_relevant() {
 #[test]
 fn a_list_of_proofs_is_not_a_proposition() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
+    declared(&mut certifier, BASES);
 
-    let list = Term::intrinsic(Intrinsic::ListType(proposition));
+    let list = term("#ListType(#{node = InductType} /P())");
 
     assert_eq!(
         Sort::of(&mut certifier, &list),
@@ -141,14 +135,13 @@ fn a_list_of_proofs_is_not_a_proposition() {
 #[test]
 fn a_groups_claim_about_its_member_does_not_decide_that_members_sort() {
     let mut certifier = certifier();
-    let data = declare(&mut certifier, "Data", Term::type_ground());
-    let member = Free::local(900, Some("T"));
+    declared(&mut certifier, BASES);
 
     // The claim is that the member is a proposition; the body is a family the registry puts at `Type 0`.
-    let group = RecGroup::closing(vec![(member, Term::prop(), data.clone())]);
+    let projected = term("#{node = Rec} (let T: Prop = #{node = InductType} /D(); T)");
 
     assert_eq!(
-        Sort::of(&mut certifier, &Term::rec_proj(group, 0)),
+        Sort::of(&mut certifier, &projected),
         Ok(Sort::Type(Level::zero())),
         "the group's `Prop` claim was trusted over the sort its member actually reduces to",
     );
@@ -158,11 +151,10 @@ fn a_groups_claim_about_its_member_does_not_decide_that_members_sort() {
 #[test]
 fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
     let mut certifier = certifier();
-    let hypothesis = Free::local(0, Some("h"));
 
     // `h : Prop`: the hypothesis names a proposition, so its sort is the universe it was opened at.
-    certifier.assume(&hypothesis, &Term::prop());
-    let sort = Sort::of(&mut certifier, &Term::free_var(&hypothesis));
+    let (_, hypothesis) = opened(&mut certifier, "(h: Prop) => h");
+    let sort = Sort::of(&mut certifier, &hypothesis);
 
     assert_eq!(sort, Ok(Sort::Prop(Level::zero())));
 }
@@ -171,12 +163,10 @@ fn a_hypothesis_takes_the_sort_of_the_type_it_was_opened_at() {
 #[test]
 fn an_unregistered_nominal_type_is_refused_rather_than_guessed() {
     let mut certifier = certifier();
-    let name = nominal("Missing");
-    let type_ = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
 
     assert_eq!(
-        Sort::of(&mut certifier, &type_),
-        Err(Error::Undeclared(name)),
+        Sort::of(&mut certifier, &term("#{node = InductType} /Missing()")),
+        Err(Error::Undeclared(nominal("Missing"))),
     );
 }
 
@@ -186,7 +176,7 @@ fn a_value_in_type_position_is_refused() {
     let mut certifier = certifier();
 
     assert!(matches!(
-        Sort::of(&mut certifier, &Term::intrinsic(Intrinsic::Bool(true))),
+        Sort::of(&mut certifier, &term("true")),
         Err(Error::Unclassified(_)),
     ));
 }
@@ -199,42 +189,27 @@ fn a_value_in_type_position_is_refused() {
 #[test]
 fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level() {
     let mut certifier = certifier();
-    let scheme = nominal("A");
-    let parameter = Level::param(UniverseParam(0));
+    declared(
+        &mut certifier,
+        "#{universe_context = {parameter_count = 1}}\nlet /A: #{level = u + 1} Type = #{level = u} Type;",
+    );
 
-    certifier
-        .define(
-            &scheme,
-            &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
-            &Term::type_at(parameter),
-            &UniverseContext {
-                parameter_count: 1,
-                quality_count: 0,
-                constraints: Vec::new(),
-            },
-        )
-        .expect("a name is declared once");
-
-    let one = Level::zero().succ().expect("level zero succeeds");
-    let two = one.clone().succ().expect("level one succeeds");
+    let two = Level::constant(2);
 
     assert_eq!(
-        Sort::of(&mut certifier, &Term::instance(scheme, vec![one]),),
+        Sort::of(&mut certifier, &term("#{universes = {levels = [1]}} /A")),
         Ok(Sort::Type(two)),
     );
 }
 
-/// The one route that brings a scheme head to the arm — a polymorphic global declared without a body, a permanent neutral — classifies at the instance's level, as [`synth_neutral`](super::synth_neutral) reads the same head inside a spine: `A<u> : Type (u + 1)` is `Type 1` at `u := 0` and `Type 2` at `u := 1`. A classification that dropped the levels would answer the scheme's own sort with its parameter still in it, one answer for both instances. Nothing on the compile path declares a bodiless global — the module walk `define`s every item with its real body, and a unit in scope answers with the body of every `Let` and `Rec` — so only [`Certifier::declare`] builds this state.
+/// The one route that brings a scheme head to the arm — a polymorphic global declared without a body, a permanent neutral — classifies at the instance's level, as [`synth_neutral`](super::synth_neutral) reads the same head inside a spine: `A<u> : Type (u + 1)` is `Type 1` at `u := 0` and `Type 2` at `u := 1`. A classification that dropped the levels would answer the scheme's own sort with its parameter still in it, one answer for both instances. Nothing on the compile path declares a bodiless global — the module walk `define`s every item with its real body, and a unit in scope answers with the body of every `Let` and `Rec` — so only [`Certifier::declare`] builds this state, and no text writes it.
 #[test]
 fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level() {
     let mut certifier = certifier();
-    let scheme = nominal("A");
-    let parameter = Level::param(UniverseParam(0));
-
     certifier
         .declare(
-            &scheme,
-            &Term::type_at(parameter.checked_add(1).expect("level admits the offset")),
+            &nominal("A"),
+            &term("#{level = u + 1} Type"),
             &UniverseContext {
                 parameter_count: 1,
                 quality_count: 0,
@@ -243,16 +218,13 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
         )
         .expect("a name is declared once");
 
-    let one = Level::zero().succ().expect("level zero succeeds");
-    let two = one.clone().succ().expect("level one succeeds");
-
     assert_eq!(
-        Sort::of(&mut certifier, &Term::instance(scheme, vec![Level::zero()]),),
-        Ok(Sort::Type(one.clone())),
+        Sort::of(&mut certifier, &term("#{universes = {levels = [0]}} /A")),
+        Ok(Sort::Type(Level::constant(1))),
     );
     assert_eq!(
-        Sort::of(&mut certifier, &Term::instance(scheme, vec![one])),
-        Ok(Sort::Type(two)),
+        Sort::of(&mut certifier, &term("#{universes = {levels = [1]}} /A")),
+        Ok(Sort::Type(Level::constant(2))),
     );
 }
 
@@ -260,48 +232,30 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
 //
 // `Sort::of` answers `Prop` for an application of a declaration that lands there before it reduces anything, and takes no other head's word. The fixtures below hold the answer, that nothing is run for it, and what it declines.
 
-/// `name: (Nat) -> sort`, defined as a function that decides something of its argument before it answers `body` either way: applied, it is no type former, and reducing the application evaluates the argument. Answered as a term names it.
-fn define_family(certifier: &mut Certifier, path: &str, sort: Term, body: Term) -> Term {
-    let name = nominal(path);
-    let nat_type = Term::intrinsic(Intrinsic::NatType);
-    let n = binder(81, "n");
-    let decided = Term::intrinsic(Intrinsic::nat_lt(
-        Term::free_var(&n),
-        Term::intrinsic(Intrinsic::Nat(Nat::new(10usize))),
-    ));
-
-    certifier
-        .define(
-            &name,
-            &Term::func_type([(binder(80, "n"), nat_type.clone())], sort.clone()),
-            &Term::func(
-                [(n, nat_type)],
-                Term::bool_match(decided, None, sort, body.clone(), body),
-            ),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-
-    Term::instance(name, Universes::default())
-}
+/// `F : (Nat) -> ${sort}`, defined as a function that decides something of its argument before it answers `${body}` either way: applied, it is no type former, and reducing the application evaluates the argument.
+const FAMILY: &str = r#"
+let /F: (n: #NatType) -> ${sort} =
+    (n: #NatType) =>
+        #{result = Ambient(${sort})}
+        match #NatLt(n, 10)
+        | false => ${body}
+        | true => ${body}
+        end;
+"#;
 
 /// An argument no budget this file's certifiers hold could reduce: a tower of powers, which the family's application would evaluate before it applied.
-fn unaffordable() -> Term {
-    let ten = || Term::intrinsic(Intrinsic::Nat(Nat::new(10usize)));
-
-    Term::intrinsic(Intrinsic::NatPow(
-        ten(),
-        Term::intrinsic(Intrinsic::NatPow(ten(), ten())),
-    ))
-}
+const UNAFFORDABLE: &str = "#NatPow(10, #NatPow(10, 10))";
 
 /// An application of a definition declared into `Prop` is a proposition, and nothing is run to learn it: its argument is one the budget cannot reduce, and the question is answered.
 #[test]
 fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
     let mut certifier = certifier();
-    let proposition = declare(&mut certifier, "P", Term::prop());
-    let family = define_family(&mut certifier, "F", Term::prop(), proposition);
-    let applied = Term::apply(family.clone(), [unaffordable()]);
+    declared(&mut certifier, BASES);
+    declared(
+        &mut certifier,
+        &fill!(FAMILY, sort = "Prop", body = "#{node = InductType} /P()"),
+    );
+    let applied = term(&fill!("/F(${UNAFFORDABLE})", UNAFFORDABLE));
 
     assert_eq!(
         Sort::of(&mut certifier, &applied),
@@ -317,18 +271,20 @@ fn an_application_of_a_declaration_into_prop_is_a_proposition_unreduced() {
 #[test]
 fn an_application_of_a_declaration_into_type_is_classified_by_its_reduct() {
     let mut certifier = certifier();
-    let data = declare(&mut certifier, "D", Term::type_ground());
-    let family = define_family(&mut certifier, "F", Term::type_ground(), data);
+    declared(&mut certifier, BASES);
+    declared(
+        &mut certifier,
+        &fill!(FAMILY, sort = "Type", body = "#{node = InductType} /D()"),
+    );
 
-    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
     assert_eq!(
-        Sort::of(&mut certifier, &Term::apply(family.clone(), [three])),
+        Sort::of(&mut certifier, &term("/F(3)")),
         Ok(Sort::Type(Level::zero())),
     );
     assert!(
         Sort::of(
             &mut certifier,
-            &Term::apply(family.clone(), [unaffordable()])
+            &term(&fill!("/F(${UNAFFORDABLE})", UNAFFORDABLE))
         )
         .is_err(),
         "the argument was not run",
@@ -339,22 +295,14 @@ fn an_application_of_a_declaration_into_type_is_classified_by_its_reduct() {
 #[test]
 fn a_groups_claim_does_not_decide_the_sort_of_its_members_application() {
     let mut certifier = certifier();
-    let data = declare(&mut certifier, "Data", Term::type_ground());
-    let nat_type = Term::intrinsic(Intrinsic::NatType);
-    let member = Free::local(900, Some("F"));
+    declared(&mut certifier, BASES);
 
-    let group = RecGroup::closing(vec![(
-        member,
-        Term::func_type([(binder(80, "n"), nat_type.clone())], Term::prop()),
-        Term::func([(binder(81, "n"), nat_type)], data),
-    )]);
-    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
+    let applied = term(
+        "(#{node = Rec} (let F: (n: #NatType) -> Prop = (n: #NatType) => #{node = InductType} /D(); F))(3)",
+    );
 
     assert_eq!(
-        Sort::of(
-            &mut certifier,
-            &Term::apply(Term::rec_proj(group, 0), [three])
-        ),
+        Sort::of(&mut certifier, &applied),
         Ok(Sort::Type(Level::zero())),
         "the group's `Prop` claim was trusted over the sort its member's application reduces to",
     );
@@ -369,15 +317,15 @@ fn a_groups_claim_does_not_decide_the_sort_of_its_members_application() {
 fn a_tower_of_negations_is_classified_on_the_default_stack() {
     const DEPTH: u32 = 5_000;
     let mut certifier = Certifier::new(2 * u64::from(DEPTH) * Cost::FRAME.get(), SYNTAX);
-    let falsehood = declare(&mut certifier, "False", Term::prop());
+    declared(&mut certifier, "induct /False: pub Prop\nend");
 
-    let mut tower = falsehood.clone();
-    for level in 0..DEPTH {
-        tower = Term::func_type([(binder(level, "x"), tower)], falsehood.clone());
-    }
+    let falsehood = "#{node = InductType} /False()";
+    let tower = (0..DEPTH).fold(falsehood.to_string(), |tower, _| {
+        fill!("((x: ${tower}) -> ${falsehood})", tower, falsehood)
+    });
 
     assert!(
-        matches!(Sort::of(&mut certifier, &tower), Ok(Sort::Prop(_))),
+        matches!(Sort::of(&mut certifier, &term(&tower)), Ok(Sort::Prop(_))),
         "a Π into a proposition is a proposition at every depth",
     );
 }
@@ -388,15 +336,12 @@ fn a_tower_of_negations_is_classified_on_the_default_stack() {
 #[test]
 fn a_type_that_unfolds_to_a_list_of_itself_runs_the_budget_out() {
     let mut certifier = certifier();
-    let member = binder(0, "b");
-    let group = RecGroup::closing(vec![(
-        member,
-        Term::type_ground(),
-        Term::intrinsic(Intrinsic::ListType(Term::free_var(&member))),
-    )]);
 
     assert!(matches!(
-        Sort::of(&mut certifier, &Term::rec_proj(group, 0)),
+        Sort::of(
+            &mut certifier,
+            &term("#{node = Rec} (let b: Type = #ListType(b); b)")
+        ),
         Err(Error::Reduce(ReduceError::Exhausted {
             category: Category::Depth,
             ..
@@ -410,7 +355,7 @@ fn a_bound_index_is_refused_rather_than_aborted_on() {
     let mut certifier = certifier();
 
     assert!(matches!(
-        Sort::of(&mut certifier, &Term::var(Var::bound(0))),
+        Sort::of(&mut certifier, &term("#{binding = Bound(0)} _")),
         Err(Error::Unclassified(_)),
     ));
 }

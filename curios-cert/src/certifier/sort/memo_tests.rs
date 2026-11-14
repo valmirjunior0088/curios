@@ -2,18 +2,20 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::{Erased, test_support::*},
-    curios_core::{Free, Intrinsic, Level, Nat, Term, UniverseContext, Universes},
+    curios_common::fill,
+    curios_core::{Level, Term, UniverseContext},
 };
 
-/// A record of two fields at one type, `depth` deep: a graph of `depth + 1` nodes whose tree has `2^depth` fields.
-fn doubled(base: Term, depth: usize) -> Term {
-    (0..depth).fold(base, |type_, level| {
-        let first = Free::local(2 * level as u64 + 100, None);
-        let second = Free::local(2 * level as u64 + 101, None);
-
-        Term::tuple_type([(first, type_.clone()), (second, type_)])
+/// A record of two fields at one type, `depth` deep over `base`, written with each level's type named where it is met again: a graph of `depth + 1` nodes whose tree has `2^depth` fields.
+fn doubled(base: &str, depth: usize) -> String {
+    (0..depth).fold(base.to_string(), |type_, level| {
+        fill!(
+            "{a: #{share = ${level}} (${type_}), b: #{shared = ${level}} _}",
+            level,
+            type_
+        )
     })
 }
 
@@ -22,24 +24,25 @@ fn doubled(base: Term, depth: usize) -> Term {
 /// Mutation-checked: with no remembered sort answered, neither sixty-level row finishes.
 #[test]
 fn a_shared_type_is_classified_once_per_node() {
-    let nat = Term::intrinsic(Intrinsic::NatType);
     assert_eq!(
-        Sort::of(&mut certifier(), &doubled(nat.clone(), 60)),
+        Sort::of(&mut certifier(), &term(&doubled("#NatType", 60))),
         Ok(Sort::Type(Level::zero())),
     );
 
-    let hypothesis = binder(0, "A");
     let mut over_a_local = certifier();
-    over_a_local.assume(&hypothesis, &Term::type_ground());
+    let (_, over) = opened(
+        &mut over_a_local,
+        &fill!("(A: Type) => ${doubled}", doubled = doubled("A", 60)),
+    );
     assert_eq!(
-        Sort::of(&mut over_a_local, &doubled(Term::free_var(&hypothesis), 60)),
+        Sort::of(&mut over_a_local, &over),
         Ok(Sort::Type(Level::zero())),
     );
 
     let mut uncached = Certifier::uncached(100_000, SYNTAX);
     assert_eq!(
-        Sort::of(&mut certifier(), &doubled(nat.clone(), 8)),
-        Sort::of(&mut uncached, &doubled(nat, 8)),
+        Sort::of(&mut certifier(), &term(&doubled("#NatType", 8))),
+        Sort::of(&mut uncached, &term(&doubled("#NatType", 8))),
     );
 }
 
@@ -49,27 +52,21 @@ fn a_shared_type_is_classified_once_per_node() {
 #[test]
 fn a_remembered_sort_does_not_outlive_the_equations_it_was_taken_under() {
     let sequence = |certifier: &mut Certifier| {
-        let universe = binder(0, "u");
-        let hypothesis = binder(1, "A");
-        certifier.assume(
-            &universe,
-            &Term::type_at(Level::zero().succ().expect("one")),
-        );
-        certifier.assume(&hypothesis, &Term::free_var(&universe));
-        let type_ = Term::free_var(&hypothesis);
+        let (locals, type_) = opened(certifier, "(u: #{level = 1} Type, A: u) => A");
+        let universe = Term::free_var(&locals[0]);
 
-        let under = |certifier: &mut Certifier, value: Term| {
+        let under = |certifier: &mut Certifier, value: &str| {
             certifier.scoped(|certifier| {
                 certifier
-                    .refine(Term::free_var(&universe), value)
+                    .refine(universe.clone(), term(value))
                     .expect("the equation records");
                 Sort::of(certifier, &type_)
             })
         };
 
         [
-            under(certifier, Term::prop()),
-            under(certifier, Term::type_ground()),
+            under(certifier, "Prop"),
+            under(certifier, "Type"),
             Sort::of(certifier, &type_),
         ]
     };
@@ -88,22 +85,15 @@ fn a_remembered_sort_does_not_outlive_the_equations_it_was_taken_under() {
 #[test]
 fn a_position_is_classified_under_its_own_arm() {
     let mut certifier = certifier();
-    let universe = binder(0, "u");
-    let hypothesis = binder(1, "A");
-    let inhabitant = binder(2, "a");
-    certifier.assume(
-        &universe,
-        &Term::type_at(Level::zero().succ().expect("one")),
-    );
-    certifier.assume(&hypothesis, &Term::free_var(&universe));
-    certifier.assume(&inhabitant, &Term::free_var(&hypothesis));
+    let (locals, inhabitant) = opened(&mut certifier, "(u: #{level = 1} Type, A: u, a: A) => a");
+    let (universe, hypothesis) = (Term::free_var(&locals[0]), Term::free_var(&locals[1]));
 
-    let recorded = [Term::prop(), Term::type_ground()].map(|value| {
+    let recorded = ["Prop", "Type"].map(|value| {
         certifier.scoped(|certifier| {
             certifier
-                .refine(Term::free_var(&universe), value)
+                .refine(universe.clone(), term(value))
                 .expect("the equation records");
-            certifier.record_checked(&Term::free_var(&inhabitant), &Term::free_var(&hypothesis))
+            certifier.record_checked(&inhabitant, &hypothesis)
         })
     });
     let (positions, failure) = certifier.take_checked();
@@ -125,17 +115,14 @@ fn a_position_is_classified_under_its_own_arm() {
 #[test]
 fn a_remembered_sort_does_not_outlive_the_type_its_local_stands_at() {
     let mut certifier = certifier();
-    let hypothesis = binder(0, "h");
-    let type_ = Term::free_var(&hypothesis);
-
-    certifier.assume(&hypothesis, &Term::type_ground());
+    let (locals, type_) = opened(&mut certifier, "(h: Type) => h");
     assert_eq!(
         Sort::of(&mut certifier, &type_),
         Ok(Sort::Type(Level::zero()))
     );
 
     let shadowed = certifier.scoped(|certifier| {
-        certifier.assume(&hypothesis, &Term::prop());
+        certifier.assume(&locals[0], &term("Prop"));
         Sort::of(certifier, &type_)
     });
 
@@ -156,11 +143,11 @@ fn a_remembered_sort_does_not_outlive_its_binder() {
     let type_ = Term::free_var(&hypothesis);
 
     let first = certifier.scoped(|certifier| {
-        certifier.assume(&hypothesis, &Term::type_ground());
+        certifier.assume(&hypothesis, &term("Type"));
         Sort::of(certifier, &type_)
     });
     let second = certifier.scoped(|certifier| {
-        certifier.assume(&hypothesis, &Term::prop());
+        certifier.assume(&hypothesis, &term("Prop"));
         Sort::of(certifier, &type_)
     });
 
@@ -170,36 +157,27 @@ fn a_remembered_sort_does_not_outlive_its_binder() {
 
 /// A local-free type an arm's equation makes a proposition, beside that equation's scrutinee. `g: (P) -> Nat` has no body, the type is `(x: P) -> match g(x) < 10 | true => Q | false => Nat`, which names no local, and the scrutinee is `g(p) < 10` over a proof `p` in scope. Under its equation `g(x) < 10` is that scrutinee to the certifier's conversion, the two calls differing in a proof, so the type is a proposition inside the arm and data outside it.
 fn family_over_a_proof(certifier: &mut Certifier) -> (Term, Term) {
-    let proposition = declare(certifier, "P", Term::prop());
-    let other = declare(certifier, "Q", Term::prop());
-    let nat_type = Term::intrinsic(Intrinsic::NatType);
-    let g = nominal("g");
+    declared(
+        certifier,
+        "induct /P: pub Prop\nend\n\ninduct /Q: pub Prop\nend",
+    );
     certifier
         .declare(
-            &g,
-            &Term::func_type([(binder(90, "x"), proposition.clone())], nat_type.clone()),
+            &nominal("g"),
+            &term("(x: #{node = InductType} /P()) -> #NatType"),
             &UniverseContext::default(),
         )
         .expect("a name is declared once");
-    let p = binder(1, "p");
-    certifier.assume(&p, &proposition);
-    let guard = |proof: &Free| {
-        Term::intrinsic(Intrinsic::nat_lt(
-            Term::apply(
-                Term::instance(g, Universes::default()),
-                [Term::free_var(proof)],
-            ),
-            Term::intrinsic(Intrinsic::Nat(Nat::new(10usize))),
-        ))
-    };
-    let x = binder(91, "x");
-    let family = Term::func_type(
-        [(x, proposition)],
-        Term::bool_match(guard(&x), None, Term::type_ground(), nat_type, other),
+    let (_, scrutinee) = opened(
+        certifier,
+        "(p: #{node = InductType} /P()) => #NatLt(/g(p), 10)",
+    );
+    let family = term(
+        "(x: #{node = InductType} /P()) -> #{result = Ambient(Type)} match #NatLt(/g(x), 10) | false => #NatType | true => #{node = InductType} /Q() end",
     );
     assert!(!family.has_local_free());
 
-    (family, guard(&p))
+    (family, scrutinee)
 }
 
 /// Nor does a local-free type's: its sort is the declaration's only where no case equation is in force, since an equation answers what the certifier's conversion holds equal to its scrutinee, and a term naming only a proof the classification opened can be that ([`family_over_a_proof`]). Both orders are run, and the uncached certifier agrees.
@@ -215,7 +193,7 @@ fn a_local_free_types_sort_does_not_outlive_the_equations_it_was_read_under() {
         let before = (!inside_first).then(|| is_prop(&mut certifier));
         let inside = certifier.scoped(|certifier| {
             certifier
-                .refine(scrutinee, Term::intrinsic(Intrinsic::Bool(true)))
+                .refine(scrutinee, term("true"))
                 .expect("the equation records");
             is_prop(certifier)
         });
@@ -245,7 +223,7 @@ fn a_position_at_a_local_free_type_is_classified_under_its_own_arm() {
     for inside_first in [false, true] {
         let mut certifier = certifier();
         let (family, scrutinee) = family_over_a_proof(&mut certifier);
-        let inhabitant = binder(2, "f");
+        let inhabitant = certifier.fresh(Some("f"));
         certifier.assume(&inhabitant, &family);
         let record = |certifier: &mut Certifier| {
             certifier.record_checked(&Term::free_var(&inhabitant), &family)
@@ -254,7 +232,7 @@ fn a_position_at_a_local_free_type_is_classified_under_its_own_arm() {
         let before = (!inside_first).then(|| record(&mut certifier));
         let inside = certifier.scoped(|certifier| {
             certifier
-                .refine(scrutinee, Term::intrinsic(Intrinsic::Bool(true)))
+                .refine(scrutinee, term("true"))
                 .expect("the equation records");
             record(certifier)
         });
@@ -282,8 +260,14 @@ fn a_position_at_a_local_free_type_is_classified_under_its_own_arm() {
 #[test]
 fn a_sort_is_remembered_by_the_reduction_that_read_it() {
     let mut certifier = certifier();
-    let read = declare(&mut certifier, "Read", Term::type_ground());
-    let judged = declare(&mut certifier, "Judged", Term::prop());
+    declared(
+        &mut certifier,
+        "induct /Read: pub Type\nend\n\ninduct /Judged: pub Prop\nend",
+    );
+    let (read, judged) = (
+        term("#{node = InductType} /Read()"),
+        term("#{node = InductType} /Judged()"),
+    );
 
     certifier
         .plainly(|certifier| Sort::of(certifier, &read))
