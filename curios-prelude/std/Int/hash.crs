@@ -114,25 +114,22 @@ pub let of_lt(
 
 --- The order of two integers is the order of their encodings.
 pub let monotone(a: Int, b: Int) -> Eq()(Int/ord(a, b), Bytes/ord(hash(a), hash(b))) =
-    match a < b
-    | true => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
-    | false =>
-        match b < a
-        | true =>
-            Eq/trans(
-                Int/ord/of_gt(a, b, Bool/True/qed()),
-                Eq/sym(
-                    Eq/trans(
-                        Bytes/ord/flips(hash(b), hash(a)),
-                        Eq/cong(
-                            Ordering/flip,
-                            Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, Bool/True/qed()))))))
-        | false =>
-            Eq/subst(
-                (y: Int) => Eq()(Int/ord(a, y), Bytes/ord(hash(a), hash(y))),
-                Int/le/antisym(a, b, proved(), proved()),
-                Eq/sym(Bytes/ord/refl(hash(a))))
-        end
+    match
+    | a < b => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
+    | b < a =>
+        Eq/trans(
+            Int/ord/of_gt(a, b, Bool/True/qed()),
+            Eq/sym(
+                Eq/trans(
+                    Bytes/ord/flips(hash(b), hash(a)),
+                    Eq/cong(
+                        Ordering/flip,
+                        Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, Bool/True/qed()))))))
+    | _ =>
+        Eq/subst(
+            (y: Int) => Eq()(Int/ord(a, y), Bytes/ord(hash(a), hash(y))),
+            Int/le/antisym(a, b, proved(), proved()),
+            Eq/sym(Bytes/ord/refl(hash(a))))
     end;
 
 --- Distinct integers have distinct encodings: two with one encoding are `eq` in their order, which is equality.

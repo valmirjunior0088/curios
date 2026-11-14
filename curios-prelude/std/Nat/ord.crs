@@ -35,70 +35,52 @@ pub let of_eq(a: Nat, b: Nat, e: Eq()(a, b)) -> Eq()(ord(a, b), Ordering/eq()) =
 
 --- `b < a` gives `ord(a, b)` as `gt`.
 pub let of_gt(a: Nat, b: Nat, p: Bool/Holds(b < a)) -> Eq()(ord(a, b), Ordering/gt()) =
-    match a < b
-    | true => match proved(@Bool/False) end
-    | false =>
-        match a == b
-        | true => match proved(@Bool/False) end
-        | false => Eq/refl()
-        end
+    match
+    | a < b => match proved(@Bool/False) end
+    | a == b => match proved(@Bool/False) end
+    | _ => Eq/refl()
     end;
 
 --- `ord(a, b)` is `lt` only where `a < b`.
 pub let lt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/lt())) -> Bool/Holds(a < b) =
-    match a < b
-    | true => Bool/True/qed()
-    | false =>
-        match a == b
-        | true => match Ordering/eq_neq_lt(h) end
-        | false => match Ordering/gt_neq_lt(h) end
-        end
+    match
+    | a < b => Bool/True/qed()
+    | a == b => match Ordering/eq_neq_lt(h) end
+    | _ => match Ordering/gt_neq_lt(h) end
     end;
 
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
 pub let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
-    match a < b
-    | true => match Ordering/eq_neq_lt(Eq/sym(h)) end
-    | false =>
-        match a == b
-        | true => Nat/eq_of_eql(a, b, Bool/True/qed())
-        | false => match Ordering/gt_neq_eq(h) end
-        end
+    match
+    | a < b => match Ordering/eq_neq_lt(Eq/sym(h)) end
+    | a == b => Nat/eq_of_eql(a, b, Bool/True/qed())
+    | _ => match Ordering/gt_neq_eq(h) end
     end;
 
 --- `ord(a, b)` is `gt` only where `b < a`.
 pub let gt(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/gt())) -> Bool/Holds(b < a) =
-    match a < b
-    | true => match Ordering/gt_neq_lt(Eq/sym(h)) end
-    | false =>
-        match a == b
-        | true => match Ordering/gt_neq_eq(Eq/sym(h)) end
-        | false => below(a, b, proved(), Bool/True/qed())
-        end
+    match
+    | a < b => match Ordering/gt_neq_lt(Eq/sym(h)) end
+    | a == b => match Ordering/gt_neq_eq(Eq/sym(h)) end
+    | _ => below(a, b, proved(), Bool/True/qed())
     end;
 
 --- `ord(a, b)` is not `gt` only where `a <= b`.
 pub let le(a: Nat, b: Nat, h: Bool/Holds(Ordering/is_le(ord(a, b)))) -> Bool/Holds(a <= b) =
-    match a < b
-    | true => proved()
-    | false =>
-        match a == b
-        | true => Nat/le/of_eq(Nat/eq_of_eql(a, b, Bool/True/qed()))
-        | false => match h end
-        end
+    match
+    | a < b => proved()
+    | a == b => Nat/le/of_eq(Nat/eq_of_eql(a, b, Bool/True/qed()))
+    | _ => match h end
     end;
 
 --- `a <= b` gives `ord(a, b)` as `lt` or `eq`.
 pub let of_le(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(Ordering/is_le(ord(a, b))) =
-    match a < b
-    | true => Bool/True/qed()
-    | false =>
-        match a == b
-        | true => Bool/True/qed()
-        | false =>
-            let strict: Bool/Holds(b < a) = below(a, b, proved(), Bool/True/qed());
-            match proved(@Bool/False) end
-        end
+    match
+    | a < b => Bool/True/qed()
+    | a == b => Bool/True/qed()
+    | _ =>
+        let strict: Bool/Holds(b < a) = below(a, b, proved(), Bool/True/qed());
+        match proved(@Bool/False) end
     end;
 
 --- `ord` answers the flipped answer with its operands swapped.
@@ -106,40 +88,31 @@ pub let of_le(a: Nat, b: Nat, p: Bool/Holds(a <= b)) -> Bool/Holds(Ordering/is_l
 --- By the two guards `ord` reads, taken on each side. The arms no two numbers reach are refuted from the guards, and the two a failed `==` leaves are closed by the equation the other guards give, carried into the comparison that failed.
 pub let flips: Ord/Flips(ord) =
     (a, b) =>
-        match a < b
-        | true =>
-            match b < a
-            | true => match proved(@Bool/False) end
-            | false =>
-                match b == a
-                | true => match proved(@Bool/False) end
-                | false => Eq/refl()
-                end
+        match
+        | a < b =>
+            match
+            | b < a => match proved(@Bool/False) end
+            | b == a => match proved(@Bool/False) end
+            | _ => Eq/refl()
             end
-        | false =>
-            match a == b
-            | true =>
-                match b < a
-                | true => match proved(@Bool/False) end
-                | false =>
-                    match b == a
-                    | true => Eq/refl()
-                    | false =>
-                        let same = Nat/eq_of_eql(a, b, proved());
-                        let held: Bool/Holds(b == a) =
-                            Eq/subst((x: Nat) => Bool/Holds(b == x), Eq/sym(same), Bool/True/qed());
-                        match held end
-                    end
-                end
+        | a == b =>
+            match
+            | b < a => match proved(@Bool/False) end
+            | b == a => Eq/refl()
+            | _ =>
+                let same = Nat/eq_of_eql(a, b, proved());
+                let held: Bool/Holds(b == a) =
+                    Eq/subst((x: Nat) => Bool/Holds(b == x), Eq/sym(same), Bool/True/qed());
+                match held end
+            end
+        | _ =>
+            match b < a
+            | true => Eq/refl()
             | false =>
-                match b < a
-                | true => Eq/refl()
-                | false =>
-                    let same = Nat/le/antisym(a, b, proved(), proved());
-                    let held: Bool/Holds(a == b) =
-                        Eq/subst((x: Nat) => Bool/Holds(a == x), same, Bool/True/qed());
-                    match held end
-                end
+                let same = Nat/le/antisym(a, b, proved(), proved());
+                let held: Bool/Holds(a == b) =
+                    Eq/subst((x: Nat) => Bool/Holds(a == x), same, Bool/True/qed());
+                match held end
             end
         end;
 

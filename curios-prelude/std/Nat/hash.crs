@@ -67,16 +67,13 @@ let rank_mono(a: Nat, b: Nat, le: Bool/Holds(a <= b)) -> Bool/Holds(rank(a) <= r
         (m) => (b: Nat, le: Bool/Holds(m <= b)) -> Bool/Holds(rank(m) <= rank(b)),
         (m, ih) =>
             (b, le) =>
-                match m < 16
-                | true => proved()
-                | false =>
-                    match b < 16
-                    | true => match proved(@Bool/False) end
-                    | false =>
-                        let inner: Bool/Holds(rank(m / 256) <= rank(b / 256)) =
-                            ih(m / 256, proved())(b / 256, proved());
-                        proved()
-                    end
+                match
+                | m < 16 => proved()
+                | b < 16 => match proved(@Bool/False) end
+                | _ =>
+                    let inner: Bool/Holds(rank(m / 256) <= rank(b / 256)) =
+                        ih(m / 256, proved())(b / 256, proved());
+                    proved()
                 end,
         a)(
         b,
@@ -295,36 +292,33 @@ let tails(
                     | false => match ranks end
                     end
                 | false =>
-                    match b < 16
-                    | true => match proved(@Bool/False) end
-                    | false =>
-                        match m / 256 < b / 256
-                        | true =>
-                            Bytes/ord/below/onto(
+                    match
+                    | b < 16 => match proved(@Bool/False) end
+                    | m / 256 < b / 256 =>
+                        Bytes/ord/below/onto(
+                            rest(m / 256),
+                            rest(b / 256),
+                            x[Nat/to_byte(m % 256)],
+                            x[Nat/to_byte(b % 256)],
+                            ih(m / 256, proved())(b / 256, Bool/True/qed(), proved(), tops))
+                    | _ =>
+                        Eq/subst(
+                            (q: Nat) =>
+                                Bool/Holds(
+                                    Bytes/ord/below(
+                                        x[..rest(m / 256), Nat/to_byte(m % 256)],
+                                        x[..rest(q), Nat/to_byte(b % 256)])),
+                            Nat/le/antisym(m / 256, b / 256, proved(), proved()),
+                            Bytes/ord/below/past(
                                 rest(m / 256),
-                                rest(b / 256),
                                 x[Nat/to_byte(m % 256)],
                                 x[Nat/to_byte(b % 256)],
-                                ih(m / 256, proved())(b / 256, Bool/True/qed(), proved(), tops))
-                        | false =>
-                            Eq/subst(
-                                (q: Nat) =>
-                                    Bool/Holds(
-                                        Bytes/ord/below(
-                                            x[..rest(m / 256), Nat/to_byte(m % 256)],
-                                            x[..rest(q), Nat/to_byte(b % 256)])),
-                                Nat/le/antisym(m / 256, b / 256, proved(), proved()),
-                                Bytes/ord/below/past(
-                                    rest(m / 256),
-                                    x[Nat/to_byte(m % 256)],
-                                    x[Nat/to_byte(b % 256)],
-                                    Bytes/ord/below/of_heads(
-                                        Nat/to_byte(m % 256),
-                                        Nat/to_byte(b % 256),
-                                        x[],
-                                        x[],
-                                        proved())))
-                        end
+                                Bytes/ord/below/of_heads(
+                                    Nat/to_byte(m % 256),
+                                    Nat/to_byte(b % 256),
+                                    x[],
+                                    x[],
+                                    proved())))
                     end
                 end,
         a)(
@@ -402,25 +396,22 @@ pub let of_lt(
 
 --- The order of two numbers is the order of their encodings.
 pub let monotone(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(b))) =
-    match a < b
-    | true => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
-    | false =>
-        match b < a
-        | true =>
-            Eq/trans(
-                Nat/ord/of_gt(a, b, Bool/True/qed()),
-                Eq/sym(
-                    Eq/trans(
-                        Bytes/ord/flips(hash(b), hash(a)),
-                        Eq/cong(
-                            Ordering/flip,
-                            Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, Bool/True/qed()))))))
-        | false =>
-            Eq/subst(
-                (y: Nat) => Eq()(Nat/ord(a, y), Bytes/ord(hash(a), hash(y))),
-                Nat/le/antisym(a, b, proved(), proved()),
-                Eq/sym(Bytes/ord/refl(hash(a))))
-        end
+    match
+    | a < b => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, Bool/True/qed())))
+    | b < a =>
+        Eq/trans(
+            Nat/ord/of_gt(a, b, Bool/True/qed()),
+            Eq/sym(
+                Eq/trans(
+                    Bytes/ord/flips(hash(b), hash(a)),
+                    Eq/cong(
+                        Ordering/flip,
+                        Bytes/ord/below/lt(hash(b), hash(a), of_lt(b, a, Bool/True/qed()))))))
+    | _ =>
+        Eq/subst(
+            (y: Nat) => Eq()(Nat/ord(a, y), Bytes/ord(hash(a), hash(y))),
+            Nat/le/antisym(a, b, proved(), proved()),
+            Eq/sym(Bytes/ord/refl(hash(a))))
     end;
 
 --- Distinct numbers have distinct encodings: two with one encoding are `eq` in their order, which is equality.

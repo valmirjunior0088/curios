@@ -382,10 +382,7 @@ let kept(
     found: Option(V),
     rest: Option(V),
 ) -> Option(V) =
-    match found
-    | some(v) => match pred(key, v) | true => Option/some(v) | false => rest end
-    | none() => rest
-    end;
+    match found | some(v), pred(key, v) => Option/some(v) | _ => rest end;
 
 -- Inserting the entries of a sound node `pred` accepts into a map one by one leaves at a key the node's value there where `pred` accepts it, and the map's otherwise.
 let kept_all(

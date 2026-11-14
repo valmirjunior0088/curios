@@ -34,10 +34,7 @@ pub let or_else(@A: Sort, m: Option(A), other: () -> Option(A)) -> Option(A) =
 
 --- The value when `pred` accepts it, `none` otherwise or when there is none.
 pub let filter(@A: Sort, m: Option(A), pred: (A) -> Bool) -> Option(A) =
-    match m
-    | some(a) => match pred(a) | true => some(a) | false => none() end
-    | none() => none()
-    end;
+    match m | some(a), pred(a) => some(a) | _ => none() end;
 
 --- An option of an option collapsed to one.
 pub let flatten(@A: Sort, m: Option(Option(A))) -> Option(A) =

@@ -1650,8 +1650,8 @@ pub let canonical(
         | leaf(k2, v2) =>
             match leaf_not_fork(k2, v2, c1, z1, o1, sound_t, (x) => Eq/sym(same(x))) end
         | fork(c2, z2, o2) =>
-            match c1 < c2
-            | true =>
+            match
+            | c1 < c2 =>
                 match forks_past(
                     c1,
                     z1,
@@ -1662,107 +1662,104 @@ pub let canonical(
                     Bool/True/qed(),
                     same)
                 end
-            | false =>
-                match c2 < c1
-                | true =>
-                    match forks_past(
-                        c2,
-                        z2,
-                        o2,
-                        sound_u,
-                        Node/fork(c1, z1, o1),
-                        sound_t,
-                        Bool/True/qed(),
-                        (x) => Eq/sym(same(x)))
-                    end
-                | false =>
-                    Eq/subst(
-                        (d: Nat) =>
-                            (
-                                sound_d: Sound(Node/fork(d, z2, o2)),
-                                same_d: (x: K) -> Eq()(
-                                    find(Node/fork(c1, z1, o1), Hash/hash(x)),
-                                    find(Node/fork(d, z2, o2), Hash/hash(x)))) -> Eq()(
-                                Node/fork(c1, z1, o1),
-                                Node/fork(d, z2, o2)),
-                        Nat/le/antisym(c1, c2, proved(), proved()),
-                        (sound_d, same_d) =>
-                            let zeros =
-                                canonical(z1, z2, sound_t.zero, sound_d.zero, (x) =>
-                                    match bit(Hash/hash(x), c1)
-                                    | false => same_d(x)
-                                    | true =>
-                                        Eq/trans(
+            | c2 < c1 =>
+                match forks_past(
+                    c2,
+                    z2,
+                    o2,
+                    sound_u,
+                    Node/fork(c1, z1, o1),
+                    sound_t,
+                    Bool/True/qed(),
+                    (x) => Eq/sym(same(x)))
+                end
+            | _ =>
+                Eq/subst(
+                    (d: Nat) =>
+                        (
+                            sound_d: Sound(Node/fork(d, z2, o2)),
+                            same_d: (x: K) -> Eq()(
+                                find(Node/fork(c1, z1, o1), Hash/hash(x)),
+                                find(Node/fork(d, z2, o2), Hash/hash(x)))) -> Eq()(
+                            Node/fork(c1, z1, o1),
+                            Node/fork(d, z2, o2)),
+                    Nat/le/antisym(c1, c2, proved(), proved()),
+                    (sound_d, same_d) =>
+                        let zeros =
+                            canonical(z1, z2, sound_t.zero, sound_d.zero, (x) =>
+                                match bit(Hash/hash(x), c1)
+                                | false => same_d(x)
+                                | true =>
+                                    Eq/trans(
+                                        missing(
+                                            z1,
+                                            sound_t.zero,
+                                            c1,
+                                            sound_t.under_zero,
+                                            Hash/hash(x),
+                                            set_clear(
+                                                bit(Hash/hash(x), c1),
+                                                bit(first(z1), c1),
+                                                Bool/True/qed(),
+                                                sound_t.clear)),
+                                        Eq/sym(
                                             missing(
-                                                z1,
-                                                sound_t.zero,
+                                                z2,
+                                                sound_d.zero,
                                                 c1,
-                                                sound_t.under_zero,
+                                                sound_d.under_zero,
                                                 Hash/hash(x),
                                                 set_clear(
                                                     bit(Hash/hash(x), c1),
-                                                    bit(first(z1), c1),
+                                                    bit(first(z2), c1),
                                                     Bool/True/qed(),
-                                                    sound_t.clear)),
-                                            Eq/sym(
-                                                missing(
-                                                    z2,
-                                                    sound_d.zero,
+                                                    sound_d.clear))))
+                                end);
+                        let ones =
+                            canonical(o1, o2, sound_t.one, sound_d.one, (x) =>
+                                match bit(Hash/hash(x), c1)
+                                | true => same_d(x)
+                                | false =>
+                                    Eq/trans(
+                                        missing(
+                                            o1,
+                                            sound_t.one,
+                                            c1,
+                                            sound_t.under_one,
+                                            Hash/hash(x),
+                                            clear_set(
+                                                bit(Hash/hash(x), c1),
+                                                bit(first(o1), c1),
+                                                Bool/True/qed(),
+                                                other_set(
+                                                    first(z1),
+                                                    first(o1),
                                                     c1,
-                                                    sound_d.under_zero,
-                                                    Hash/hash(x),
-                                                    set_clear(
-                                                        bit(Hash/hash(x), c1),
-                                                        bit(first(z2), c1),
-                                                        Bool/True/qed(),
-                                                        sound_d.clear))))
-                                    end);
-                            let ones =
-                                canonical(o1, o2, sound_t.one, sound_d.one, (x) =>
-                                    match bit(Hash/hash(x), c1)
-                                    | true => same_d(x)
-                                    | false =>
-                                        Eq/trans(
+                                                    sound_t.apart,
+                                                    sound_t.clear))),
+                                        Eq/sym(
                                             missing(
-                                                o1,
-                                                sound_t.one,
+                                                o2,
+                                                sound_d.one,
                                                 c1,
-                                                sound_t.under_one,
+                                                sound_d.under_one,
                                                 Hash/hash(x),
                                                 clear_set(
                                                     bit(Hash/hash(x), c1),
-                                                    bit(first(o1), c1),
+                                                    bit(first(o2), c1),
                                                     Bool/True/qed(),
                                                     other_set(
-                                                        first(z1),
-                                                        first(o1),
+                                                        first(z2),
+                                                        first(o2),
                                                         c1,
-                                                        sound_t.apart,
-                                                        sound_t.clear))),
-                                            Eq/sym(
-                                                missing(
-                                                    o2,
-                                                    sound_d.one,
-                                                    c1,
-                                                    sound_d.under_one,
-                                                    Hash/hash(x),
-                                                    clear_set(
-                                                        bit(Hash/hash(x), c1),
-                                                        bit(first(o2), c1),
-                                                        Bool/True/qed(),
-                                                        other_set(
-                                                            first(z2),
-                                                            first(o2),
-                                                            c1,
-                                                            sound_d.apart,
-                                                            sound_d.clear)))))
-                                    end);
-                            Eq/trans(
-                                Eq/cong((m: Node(K, V)) => Node/fork(c1, m, o1), zeros),
-                                Eq/cong((m: Node(K, V)) => Node/fork(c1, z2, m), ones)))(
-                        sound_u,
-                        same)
-                end
+                                                        sound_d.apart,
+                                                        sound_d.clear)))))
+                                end);
+                        Eq/trans(
+                            Eq/cong((m: Node(K, V)) => Node/fork(c1, m, o1), zeros),
+                            Eq/cong((m: Node(K, V)) => Node/fork(c1, z2, m), ones)))(
+                    sound_u,
+                    same)
             end
         end
     end;

@@ -126,34 +126,15 @@ let seek(x: Nat, y: Nat, k: Nat) -> Nat =
 
 -- The ladder answers the place of the shift `seek` finds, rung by rung.
 let rungs(x: Nat, y: Nat) -> Eq()(place(x, y), 7 - seek(x, y, 8) + 1) =
-    match Nat/shr(x, 7) != Nat/shr(y, 7)
-    | true => Eq/refl()
-    | false =>
-        match Nat/shr(x, 6) != Nat/shr(y, 6)
-        | true => Eq/refl()
-        | false =>
-            match Nat/shr(x, 5) != Nat/shr(y, 5)
-            | true => Eq/refl()
-            | false =>
-                match Nat/shr(x, 4) != Nat/shr(y, 4)
-                | true => Eq/refl()
-                | false =>
-                    match Nat/shr(x, 3) != Nat/shr(y, 3)
-                    | true => Eq/refl()
-                    | false =>
-                        match Nat/shr(x, 2) != Nat/shr(y, 2)
-                        | true => Eq/refl()
-                        | false =>
-                            match Nat/shr(x, 1) != Nat/shr(y, 1)
-                            | true => Eq/refl()
-                            | false =>
-                                match Nat/shr(x, 0) != Nat/shr(y, 0) | true | false => Eq/refl() end
-                            end
-                        end
-                    end
-                end
-            end
-        end
+    match
+    | Nat/shr(x, 7) != Nat/shr(y, 7) => Eq/refl()
+    | Nat/shr(x, 6) != Nat/shr(y, 6) => Eq/refl()
+    | Nat/shr(x, 5) != Nat/shr(y, 5) => Eq/refl()
+    | Nat/shr(x, 4) != Nat/shr(y, 4) => Eq/refl()
+    | Nat/shr(x, 3) != Nat/shr(y, 3) => Eq/refl()
+    | Nat/shr(x, 2) != Nat/shr(y, 2) => Eq/refl()
+    | Nat/shr(x, 1) != Nat/shr(y, 1) => Eq/refl()
+    | _ => match Nat/shr(x, 0) != Nat/shr(y, 0) | true | false => Eq/refl() end
     end;
 
 -- What `seek` finds of two bytes that differ: a shift below eight at which their low bits differ, with every shift above it the same in both.
@@ -577,13 +558,10 @@ let set_of(
     differs: Bool/Holds(a != b),
     clear: Bool/Holds(Bool/not(a)),
 ) -> Bool/Holds(b) =
-    match a
-    | true => match clear end
-    | false =>
-        match b
-        | true => Bool/True/qed()
-        | false => match differs end
-        end
+    match
+    | a => match clear end
+    | b => Bool/True/qed()
+    | _ => match differs end
     end;
 
 -- Two bits that differ are not both clear.
@@ -594,13 +572,10 @@ let not_both_clear(
     clear_a: Bool/Holds(Bool/not(a)),
     clear_b: Bool/Holds(Bool/not(b)),
 ) -> Bool/False =
-    match a
-    | true => match clear_a end
-    | false =>
-        match b
-        | true => match clear_b end
-        | false => match differs end
-        end
+    match
+    | a => match clear_a end
+    | b => match clear_b end
+    | _ => match differs end
     end;
 
 -- Two bits that differ are not both set.
@@ -951,37 +926,34 @@ pub let before(
                                         (v: Bool) => Bool/Holds(bit(x[h, ..t], i + 1) != v),
                                         inward(x[k, ..r], i + 1, under),
                                         apart.differs));
-                            match low(hn, 7 - i) != 0
-                            | true => match off end
-                            | false =>
-                                match low(kn, 7 - i) != 0
-                                | false => match parted end
-                                | true =>
-                                    let zero: Bool/Holds(low(hn, 7 - i) == 0) = Bool/True/qed();
-                                    let up = positive(low(kn, 7 - i), Bool/True/qed());
-                                    let left = split(hn, 7 - i, proved(), proved());
-                                    let right = split(kn, 7 - i, proved(), proved());
-                                    let lower: Bool/Holds(hn < kn) =
-                                        lesser(
-                                            hn,
-                                            kn,
-                                            7 - i,
-                                            proved(),
-                                            proved(),
-                                            proved(),
-                                            proved());
-                                    Eq/subst(
-                                        (o: Ordering) =>
-                                            Eq()(
-                                                match o
-                                                | eq() => Bytes/ord(t, r)
-                                                | lt() => Ordering/lt()
-                                                | gt() => Ordering/gt()
-                                                end,
-                                                Ordering/lt()),
-                                        Eq/sym(Nat/ord/of_lt(hn, kn, lower)),
-                                        Eq/refl())
-                                end
+                            match
+                            | low(hn, 7 - i) != 0 => match off end
+                            | low(kn, 7 - i) != 0 =>
+                                let zero: Bool/Holds(low(hn, 7 - i) == 0) = Bool/True/qed();
+                                let up = positive(low(kn, 7 - i), Bool/True/qed());
+                                let left = split(hn, 7 - i, proved(), proved());
+                                let right = split(kn, 7 - i, proved(), proved());
+                                let lower: Bool/Holds(hn < kn) =
+                                    lesser(
+                                        hn,
+                                        kn,
+                                        7 - i,
+                                        proved(),
+                                        proved(),
+                                        proved(),
+                                        proved());
+                                Eq/subst(
+                                    (o: Ordering) =>
+                                        Eq()(
+                                            match o
+                                            | eq() => Bytes/ord(t, r)
+                                            | lt() => Ordering/lt()
+                                            | gt() => Ordering/gt()
+                                            end,
+                                            Ordering/lt()),
+                                    Eq/sym(Nat/ord/of_lt(hn, kn, lower)),
+                                    Eq/refl())
+                            | _ => match parted end
                             end
                     end(apart, clear, Bool/True/qed())
                 end
