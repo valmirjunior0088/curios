@@ -140,7 +140,10 @@ let walk_final(
         match Map/try_get(m, name)
         | none() =>
             let side2: Map(Bytes, Origin) =
-                match v | table(_) => Map/insert(side, kf, Origin/inline()) | _ => side end;
+                match v
+                | table(_) => Map/insert(side, kf, Origin/inline())
+                | _ => side
+                end;
             Result/success((Map/insert(m, name, v), side2, [Seg/plain(name)]))
         | some(_) => Result/failure(Rule/duplicate_key())
         end
@@ -221,7 +224,10 @@ let walk(
                 match Map/try_get(m, name)
                 | none() =>
                     let created: Origin =
-                        match act | act_value(_) => Origin/dotted() | _ => Origin/implicit() end;
+                        match act
+                        | act_value(_) => Origin/dotted()
+                        | _ => Origin/implicit()
+                        end;
                     match walk(Map/empty(), Map/insert(side, kp, created), kp, rest, 0, act)
                     | success((inner2, side2, res)) =>
                         Result/success((

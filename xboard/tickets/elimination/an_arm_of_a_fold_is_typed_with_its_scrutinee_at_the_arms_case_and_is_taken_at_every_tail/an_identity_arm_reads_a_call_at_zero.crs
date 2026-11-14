@@ -3,6 +3,9 @@ use /std/{Nat};
 use /std/Bool/{True, False, Holds};
 
 let f(g: (Nat) -> Nat, x: Nat, h: Holds(g(x) == 2)) -> False =
-    match g(x): (m) => False | 0 => h | k + 1; ih => ih end;
+    match g(x): (m) => False
+    | 0 => h
+    | k + 1; ih => ih
+    end;
 
 f((y: Nat) => y, 2, True/qed())

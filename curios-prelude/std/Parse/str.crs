@@ -41,7 +41,10 @@ pub let char: Parse(Str, Char) =
 --- The next character when `pred` accepts it; declines otherwise, consuming nothing.
 pub let char_if(pred: (Char) -> Bool) -> Parse(Str, Char) =
     Parse/bind(char, (c) =>
-        match pred(c) | true => Parse/pure(c) | false => Parse/fail("unexpected character") end);
+        match pred(c)
+        | true => Parse/pure(c)
+        | false => Parse/fail("unexpected character")
+        end);
 
 --- The character `expected`; declines on any other.
 pub let expect(expected: Char) -> Parse(Str, Char) =

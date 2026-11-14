@@ -6,11 +6,17 @@ use /std/{Nat, Eq, proved, Bool};
 ---
 --- Conversion decides a sum in an exponent and no product of two, since this law beside `pow(x, 2) = x * x` gives a power of a product, which at two literals factors a base. By induction on `b`, each step the exponent's law at a successor.
 pub let of_pow(x: Nat, a: Nat, b: Nat) -> Eq()(pow(pow(x, a), b), pow(x, a * b)) =
-    match b | 0 => Eq/refl() | bp + 1 => Eq/cong((t: Nat) => pow(x, a) * t, of_pow(x, a, bp)) end;
+    match b
+    | 0 => Eq/refl()
+    | bp + 1 => Eq/cong((t: Nat) => pow(x, a) * t, of_pow(x, a, bp))
+    end;
 
 --- A power of a product is the product of the powers.
 pub let of_mul(x: Nat, y: Nat, a: Nat) -> Eq()(pow(x * y, a), pow(x, a) * pow(y, a)) =
-    match a | 0 => Eq/refl() | ap + 1 => Eq/cong((t: Nat) => x * y * t, of_mul(x, y, ap)) end;
+    match a
+    | 0 => Eq/refl()
+    | ap + 1 => Eq/cong((t: Nat) => x * y * t, of_mul(x, y, ap))
+    end;
 
 --- A power of a positive base is positive.
 ---

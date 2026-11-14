@@ -57,7 +57,10 @@ let drive(
     stack: List(Option(List(T))),
     rest: List(T),
 ) -> List(T) =
-    match rest | [] => flush(ord, stack, []) | [h, ..t] => drive(ord, push(ord, stack, [h]), t) end;
+    match rest
+    | [] => flush(ord, stack, [])
+    | [h, ..t] => drive(ord, push(ord, stack, [h]), t)
+    end;
 
 --- `l` sorted by `ord`, stably: elements `ord` ties keep the order they came in.
 ---
@@ -71,7 +74,10 @@ let held(@T: Type, top: Option(List(T))) -> List(T) =
 
 -- The stack's runs end to end, the oldest first.
 let flat(@T: Type, stack: List(Option(List(T)))) -> List(T) =
-    match stack | [] => [] | [top, .._]; below => [..below, ..held(top)] end;
+    match stack
+    | [] => []
+    | [top, .._]; below => [..below, ..held(top)]
+    end;
 
 -- A merge permutes what it was given.
 let merge_permutes(
@@ -367,7 +373,10 @@ let runs_ordered(@T: Type, le: (T, T) -> Bool, stack: List(Option(List(T)))) -> 
     match stack
     | [] => true
     | [top, ..rest] =>
-        match List/ordered(held(top), le) | true => runs_ordered(le, rest) | false => false end
+        match List/ordered(held(top), le)
+        | true => runs_ordered(le, rest)
+        | false => false
+        end
     end;
 
 let runs_cons(
@@ -425,7 +434,10 @@ let layered_over(
     layered: Layered(second)([top, ..rest]),
 ) -> Across(second, flat(rest), held(top)) =
     match layered: (s, _) =>
-        match s | [] => Bool/True | [t, ..r] => Across(second, flat(r), held(t)) end
+        match s
+        | [] => Bool/True
+        | [t, ..r] => Across(second, flat(r), held(t))
+        end
     | level(over, _) => over
     end;
 

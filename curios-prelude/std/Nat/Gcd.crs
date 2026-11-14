@@ -108,7 +108,9 @@ let common(
 
 -- A divisor scaled divides what it divides, scaled.
 let scale(@d: Nat, @a: Nat, p: Divides(d, a), c: Nat) -> Divides(d * c, a * c) =
-    match p | intro(k, e) => Divides/intro(k, Eq/cong((x: Nat) => x * c, e)) end;
+    match p
+    | intro(k, e) => Divides/intro(k, Eq/cong((x: Nat) => x * c, e))
+    end;
 
 --- `gcd(a * c, b * c)` is `gcd(a, b) * c`: a common factor leaves the greatest common divisor as a factor.
 ---

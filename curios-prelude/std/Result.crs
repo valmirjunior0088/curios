@@ -52,7 +52,10 @@ pub let is_failure(@A: Type, @E: Type, r: Result(E, A)) -> Bool =
 
 --- The value of a success; a failure is `none`, its error dropped.
 pub let to_option(@A: Type, @E: Type, r: Result(E, A)) -> Option(A) =
-    match r | success(a) => Option/some(a) | failure(_) => Option/none() end;
+    match r
+    | success(a) => Option/some(a)
+    | failure(_) => Option/none()
+    end;
 
 --- The value, or what `default` answers to the error.
 pub let unwrap_or_else(@A: Type, @E: Type, r: Result(E, A), default: (E) -> A) -> A =
@@ -89,8 +92,16 @@ pub let ord(
     b: Result(E, A),
 ) -> Ordering =
     match a
-    | failure(e) => match b | failure(f) => Ord/ord(e, f) | success(_) => Ordering/lt() end
-    | success(x) => match b | failure(_) => Ordering/gt() | success(y) => Ord/ord(x, y) end
+    | failure(e) =>
+        match b
+        | failure(f) => Ord/ord(e, f)
+        | success(_) => Ordering/lt()
+        end
+    | success(x) =>
+        match b
+        | failure(_) => Ordering/gt()
+        | success(y) => Ord/ord(x, y)
+        end
     end;
 
 satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Cmp(Result(E, A)) {

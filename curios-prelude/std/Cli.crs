@@ -285,7 +285,10 @@ pub induct Refused: (List(Problem)) -> pub Prop
 end
 
 let Clear(problems: List(Problem)) -> Prop =
-    match problems | [] => Bool/True | [p, ..more] => Refused([p, ..more]) end;
+    match problems
+    | [] => Bool/True
+    | [p, ..more] => Refused([p, ..more])
+    end;
 
 --- That `command`, with `version` where it has one, describes one unambiguous command line, decided by reduction: `Bool/True` where it does, and otherwise `Refused` of every problem it has.
 pub let WellFormed(command: Command, version: Option(Str)) -> Prop =
@@ -387,7 +390,10 @@ let variables(c: Command) -> List(Str) =
             ..variables_of(commands)]
     end
 and variables_of(commands: List(Command)) -> List(Str) =
-    match commands | [] => [] | [c, ..more] => [..variables(c), ..variables_of(more)] end;
+    match commands
+    | [] => []
+    | [c, ..more] => [..variables(c), ..variables_of(more)]
+    end;
 
 let environment(names: List(Str)) -> Io(Map(Str, Str)) =
     match names

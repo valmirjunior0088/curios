@@ -39,7 +39,10 @@ let field_synopsis(f: Field) -> Str =
     | many(v) => Str/concat(bracket(Fmt/render("% <%>")(long)(v.metavar)), "...")
     | choice(_, alternatives, presence) =>
         let spelled = Str/join(" | ", List/map(alternatives, (a) => Str/concat("--", a.long)));
-        match presence | required() => Fmt/render("(%)")(spelled) | _ => bracket(spelled) end
+        match presence
+        | required() => Fmt/render("(%)")(spelled)
+        | _ => bracket(spelled)
+        end
     end;
 
 let required_synopsis(p: Positional) -> Str =
@@ -99,7 +102,10 @@ let notes(f: Field) -> List(Str) =
             end
         | _ => []
         end,
-        ..match f.env | none() => [] | some(n) => [Fmt/render("[env: %]")(n)] end,
+        ..match f.env
+        | none() => []
+        | some(n) => [Fmt/render("[env: %]")(n)]
+        end,
         ..match f.aliases
         | [] => []
         | _ =>
@@ -109,7 +115,11 @@ let notes(f: Field) -> List(Str) =
         end];
 
 let field_rows(f: Field) -> List({Str, Str}) =
-    let short = match f.short | none() => "    " | some(c) => Fmt/render("-%, ")(c) end;
+    let short =
+        match f.short
+        | none() => "    "
+        | some(c) => Fmt/render("-%, ")(c)
+        end;
     let described = words([f.help, ..notes(f)]);
     match f.kind
     | option(v, _) | many(v) => [(Fmt/render("%--% <%>")(short)(f.long)(v.metavar), described)]
@@ -122,13 +132,19 @@ let field_rows(f: Field) -> List({Str, Str}) =
 let builtin_rows(version: Option(Str)) -> List({Str, Str}) =
     [
         ("-h, --help", "Print help"),
-        ..match version | none() => [] | some(_) => [("    --version", "Print version")] end];
+        ..match version
+        | none() => []
+        | some(_) => [("    --version", "Print version")]
+        end];
 
 let positional_rows(ps: Positionals) -> List({Str, Str}) =
     [
         ..List/map(ps.required, (p) => (required_synopsis(p), p.help)),
         ..List/map(ps.optional, (p) => (optional_synopsis(p), p.help)),
-        ..match ps.rest | none() => [] | some(p) => [(rest_synopsis(p), p.help)] end];
+        ..match ps.rest
+        | none() => []
+        | some(p) => [(rest_synopsis(p), p.help)]
+        end];
 
 --- The help of the command `path` names: what it does, its usage line, and its arguments, its options and its commands.
 pub let help(c: Command, version: Option(Str), path: List(Str)) -> Str =

@@ -21,7 +21,11 @@ pub let lexicographic(pieces: List(Ordering)) -> Ordering =
 ---
 --- A derived witness compares the constructors before it looks at payloads and consults `same` only when they match, so a value of a later constructor is above one of an earlier constructor whatever the payloads say.
 pub let by_tag(left: Nat, right: Nat, same: Ordering) -> Ordering =
-    match Nat/ord(left, right) | lt() => Ordering/lt() | eq() => same | gt() => Ordering/gt() end;
+    match Nat/ord(left, right)
+    | lt() => Ordering/lt()
+    | eq() => same
+    | gt() => Ordering/gt()
+    end;
 
 --- The law that `ord` answers the flipped answer with its operands swapped: `gt` one way exactly where `lt` the other, and `eq` both ways or neither.
 ---
@@ -45,4 +49,9 @@ pub let lt(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =
 ---
 --- At a `second` that always holds it is `le(ord)`. It is the order two sorts in a row leave a list in, the later sort's comparator first.
 pub let then(@T: Type, ord: (T, T) -> Ordering, second: (T, T) -> Bool) -> (T, T) -> Bool =
-    (a, b) => match ord(a, b) | lt() => true | eq() => second(a, b) | gt() => false end;
+    (a, b) =>
+        match ord(a, b)
+        | lt() => true
+        | eq() => second(a, b)
+        | gt() => false
+        end;

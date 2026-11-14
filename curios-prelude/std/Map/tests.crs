@@ -326,7 +326,10 @@ test entries_agree_across_insertion_orders =
 -- 300 sequential keys rendered as decimal share long prefixes — "1" against "10" against "100" — exercising deep shared paths and the presence markers that separate a key from its own extensions; deleting the even half exercises collapse at scale. Keys are `Str` because the shared prefixes are what this exercises, and a decimal rendering is how you get them.
 test holds_many_keys_with_shared_prefixes =
     let build(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =
-        match i | 0 => acc | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i))) end;
+        match i
+        | 0 => acc
+        | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i)))
+        end;
     let drop_even(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =
         match i
         | 0 => acc

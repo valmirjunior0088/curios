@@ -92,7 +92,10 @@ let answered(
     match next
     | none() => Try/pure(so_far)
     | some(failure(stop)) =>
-        match stop | failed(_, why) => Try/raise(why) | _ => Try/pure(so_far) end
+        match stop
+        | failed(_, why) => Try/raise(why)
+        | _ => Try/pure(so_far)
+        end
     | some(success(read)) =>
         let all = (inputs = [..inputs, ..read.inputs], replies = [..replies, ..read.replies]);
         match List/contains(read.replies, Reply/attributes())
@@ -204,7 +207,10 @@ let burst(arrived: Bool, held: Bytes) -> Reader/Step(Bool, {}, List(Input)) =
 pub let read(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
     let kept = taken(s)!;
     let _ = keep(s, Kept { ..kept, pending = [] })!;
-    match kept.pending | [_, .._] => Try/pure(Option/some(kept.pending)) | [] => arrived(s) end;
+    match kept.pending
+    | [_, .._] => Try/pure(Option/some(kept.pending))
+    | [] => arrived(s)
+    end;
 
 -- The next burst read from the terminal itself.
 let arrived(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
@@ -214,7 +220,10 @@ let arrived(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
     let got = arrival!;
     match got
     | failure(stop) =>
-        match stop | failed(_, why) => Try/raise(why) | _ => Try/pure(Option/none()) end
+        match stop
+        | failed(_, why) => Try/raise(why)
+        | _ => Try/pure(Option/none())
+        end
     | success(inputs) =>
         let rest = Reader/held(s.input)!;
         match Bytes/len(rest) == 0 || s.support.keyboard: (_) =>

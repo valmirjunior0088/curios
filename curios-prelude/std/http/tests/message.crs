@@ -206,7 +206,11 @@ test a_url_reaches_the_wire_percent_encoded =
 -- The moment `secs` seconds after the epoch as HTTP's `Date` writes it, or why it has none.
 let spelled(secs: Int) -> Str =
     match Field/Value/of_timestamp(Timestamp/of_unix_secs(secs))
-    | some(value) => match Field/Value/to_str(value) | some(s) => s | none() => "not text" end
+    | some(value) =>
+        match Field/Value/to_str(value)
+        | some(s) => s
+        | none() => "not text"
+        end
     | none() => "no year of four digits"
     end;
 

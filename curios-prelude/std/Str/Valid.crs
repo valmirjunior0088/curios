@@ -5,7 +5,11 @@ use /std/{Bool, Byte, Bytes, Char, Eq, Nat, Option, Str, proved};
 
 --- That a class asks its continuation bytes for a range inside `0x80..=0xBF`.
 let class_continues(k: Class) -> Bool =
-    match k | ascii() => true | lead(_, lo, hi, _) => 0x80 <= lo && hi <= 0xBF | bad() => true end;
+    match k
+    | ascii() => true
+    | lead(_, lo, hi, _) => 0x80 <= lo && hi <= 0xBF
+    | bad() => true
+    end;
 
 --- Every lead `classify` reports asks its continuation bytes for a range inside `0x80..=0xBF`. Walked by `classify`'s own guards, each of which fixes the range it reports.
 let classify_continues(c: Byte) -> Bool/Holds(class_continues(classify(c))) =
@@ -92,7 +96,11 @@ pub let from_bad(@x: Bytes, w: from(Scan/bad(), x)) -> Bool/False =
 
 --- That a scan inside a character asks for continuation bytes: true of every state a scan reaches from `lead`.
 let scan_continues(s: Scan) -> Bool =
-    match s | lead() => true | cont(_, lo, hi) => 0x80 <= lo && hi <= 0xBF | bad() => true end;
+    match s
+    | lead() => true
+    | cont(_, lo, hi) => 0x80 <= lo && hi <= 0xBF
+    | bad() => true
+    end;
 
 --- Every step leaves a scan asking for continuation bytes, whatever it began in: a lead's range is `classify`'s, and a continuation's is `0x80..=0xBF` itself.
 let step_continues(c: Byte, s: Scan) -> Bool/Holds(scan_continues(step(c, s))) =

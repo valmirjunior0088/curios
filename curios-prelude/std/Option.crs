@@ -34,7 +34,10 @@ pub let or_else(@A: Sort, m: Option(A), other: () -> Option(A)) -> Option(A) =
 
 --- The value when `pred` accepts it, `none` otherwise or when there is none.
 pub let filter(@A: Sort, m: Option(A), pred: (A) -> Bool) -> Option(A) =
-    match m | some(a), pred(a) => some(a) | _ => none() end;
+    match m
+    | some(a), pred(a) => some(a)
+    | _ => none()
+    end;
 
 --- An option of an option collapsed to one.
 pub let flatten(@A: Sort, m: Option(Option(A))) -> Option(A) =
@@ -42,7 +45,10 @@ pub let flatten(@A: Sort, m: Option(Option(A))) -> Option(A) =
 
 --- The value as a success, or `e` as the failure.
 pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(E, A) =
-    match m | some(a) => Result/success(a) | none() => Result/failure(e) end;
+    match m
+    | some(a) => Result/success(a)
+    | none() => Result/failure(e)
+    end;
 
 --- The value, or what `default` answers when there is none.
 pub let unwrap_or_else(@A: Sort, m: Option(A), default: () -> A) -> A =
@@ -69,13 +75,18 @@ let SameValue(@A: Sort, a: Option(A), b: Option(A)) -> Prop =
     end;
 
 let same_value_refl(@A: Sort, m: Option(A)) -> SameValue(m, m) =
-    match m: (z) => SameValue(z, z) | some(_) => Eq/refl() | none() => Bool/True/qed() end;
+    match m: (z) => SameValue(z, z)
+    | some(_) => Eq/refl()
+    | none() => Bool/True/qed()
+    end;
 
 --- `some` is injective: two equal options that each hold a value hold one value.
 ---
 --- What takes an encoding apart with no value invented. A reader that answers an option is one function of every input, so `Eq/cong` carries an equation between two encodings to one between what it reads from each, and this carries that to the values read.
 pub let some_injective(@A: Sort, @x: A, @y: A, same: Eq()(some(x), some(y))) -> Eq()(x, y) =
-    match same: (s, t, _) => SameValue(s, t) | refl(@value) => same_value_refl(value) end;
+    match same: (s, t, _) => SameValue(s, t)
+    | refl(@value) => same_value_refl(value)
+    end;
 
 satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {
     ..

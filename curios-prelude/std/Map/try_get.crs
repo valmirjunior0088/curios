@@ -7,7 +7,10 @@ use /std/Map/bits/{bit, Apart};
 
 --- The value at `key`, or `none`.
 pub let try_get(@K: Type, use Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
-    match m.root | none() => Option/none() | some(n) => Node/find(n, Hash/hash(key)) end;
+    match m.root
+    | none() => Option/none()
+    | some(n) => Node/find(n, Hash/hash(key))
+    end;
 
 -- Two keys the one is not the other of encode apart.
 let apart_codes(
@@ -215,11 +218,17 @@ pub let of_map(
     f: (V) -> W,
     key: K,
 ) -> Eq()(try_get(map(m, f), key), Option/map(try_get(m, key), f)) =
-    match m.root | none() => Eq/refl() | some(n) => Node/mapped_find(n, f, Hash/hash(key)) end;
+    match m.root
+    | none() => Eq/refl()
+    | some(n) => Node/mapped_find(n, f, Hash/hash(key))
+    end;
 
 -- What a root finds at a key.
 let found_in(@K: Type, use Key(K), @V: Type, r: Option(Node(K, V)), x: K) -> Option(V) =
-    match r | none() => Option/none() | some(n) => Node/find(n, Hash/hash(x)) end;
+    match r
+    | none() => Option/none()
+    | some(n) => Node/find(n, Hash/hash(x))
+    end;
 
 -- A sound root holding a node finds a value at its least key, which no empty root does.
 let held(
@@ -371,7 +380,10 @@ pub let of_union(
     b: Map(K, V),
     key: K,
 ) -> Eq()(try_get(union(a, b), key), Option/or(try_get(b, key), try_get(a, key))) =
-    match b.root | none() => Eq/refl() | some(n) => inserted_all(n, grounded(b.rooted), a, key) end;
+    match b.root
+    | none() => Eq/refl()
+    | some(n) => inserted_all(n, grounded(b.rooted), a, key)
+    end;
 
 -- What `filter`'s step keeps of a value found at `key`, over what the map it began with has there.
 let kept(
@@ -382,7 +394,10 @@ let kept(
     found: Option(V),
     rest: Option(V),
 ) -> Option(V) =
-    match found | some(v), pred(key, v) => Option/some(v) | _ => rest end;
+    match found
+    | some(v), pred(key, v) => Option/some(v)
+    | _ => rest
+    end;
 
 -- Inserting the entries of a sound node `pred` accepts into a map one by one leaves at a key the node's value there where `pred` accepts it, and the map's otherwise.
 let kept_all(
@@ -419,7 +434,10 @@ let kept_all(
                         match pred(key, v0) | true => insert(acc, key, v0) | false => acc end,
                         key),
                     kept(pred, key, Option/some(v0), try_get(acc, key))) =
-                    match pred(key, v0) | true => of_insert(acc, key, v0) | false => Eq/refl() end;
+                    match pred(key, v0)
+                    | true => of_insert(acc, key, v0)
+                    | false => Eq/refl()
+                    end;
                 Eq/subst(
                     (y: K) =>
                         Eq()(
@@ -483,7 +501,10 @@ pub let of_update(
     key: K,
     f: (Option(V)) -> Option(V),
 ) -> Eq()(try_get(update(m, key, f), key), f(try_get(m, key))) =
-    match f(try_get(m, key)) | some(v) => of_insert(m, key, v) | none() => of_remove(m, key) end;
+    match f(try_get(m, key))
+    | some(v) => of_insert(m, key, v)
+    | none() => of_remove(m, key)
+    end;
 
 --- `update` leaves the value at every other key as it was.
 pub let of_update_other(

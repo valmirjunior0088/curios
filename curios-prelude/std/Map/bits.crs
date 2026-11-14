@@ -121,7 +121,11 @@ let spent(x: Nat, small: Bool/Holds(x < 256)) -> Bool/Holds(Nat/shr(x, 8) == 0) 
 let seek(x: Nat, y: Nat, k: Nat) -> Nat =
     match k
     | 0 => 0
-    | j + 1 => match Nat/shr(x, j) != Nat/shr(y, j) | true => j | false => seek(x, y, j) end
+    | j + 1 =>
+        match Nat/shr(x, j) != Nat/shr(y, j)
+        | true => j
+        | false => seek(x, y, j)
+        end
     end;
 
 -- The ladder answers the place of the shift `seek` finds, rung by rung.
@@ -934,14 +938,7 @@ pub let before(
                                 let left = split(hn, 7 - i, proved(), proved());
                                 let right = split(kn, 7 - i, proved(), proved());
                                 let lower: Bool/Holds(hn < kn) =
-                                    lesser(
-                                        hn,
-                                        kn,
-                                        7 - i,
-                                        proved(),
-                                        proved(),
-                                        proved(),
-                                        proved());
+                                    lesser(hn, kn, 7 - i, proved(), proved(), proved(), proved());
                                 Eq/subst(
                                     (o: Ordering) =>
                                         Eq()(

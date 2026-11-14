@@ -82,7 +82,10 @@ let halves(
 ---
 --- At or above zero it is its natural's, [`Nat/hash`]; below zero it is the complement, byte by byte, of the encoding of `-1 - i`. No byte is spent on the sign: a natural's encoding leads with a byte in the upper half and a complement's with one in the lower, so every integer below zero is before every other, and the more negative of two comes first.
 pub let hash(i: Int) -> Bytes =
-    match i >= +0 | true => Nat/hash(Int/abs(i)) | false => flipped(Nat/hash(Int/abs(i) - 1)) end;
+    match i >= +0
+    | true => Nat/hash(Int/abs(i))
+    | false => flipped(Nat/hash(Int/abs(i) - 1))
+    end;
 
 --- `a < b` gives `a`'s encoding below `b`'s at a byte: by the naturals' law where both are at or above zero, by that law reversed where both are below, and by the half each leads in where zero is between them.
 pub let of_lt(

@@ -6,7 +6,10 @@ use /std/Map/least/{Among};
 
 --- The entry of the greatest key, or `none` of the empty map: the one a walk down the trie's one sides ends at.
 pub let greatest(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =
-    match m.root | none() => Option/none() | some(n) => Option/some(Node/greatest(n)) end;
+    match m.root
+    | none() => Option/none()
+    | some(n) => Option/some(Node/greatest(n))
+    end;
 
 --- That `found` is an entry whose key is at or above `x` in the keys' order.
 pub let Above(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
@@ -22,7 +25,10 @@ let among_root(
     @V: Type,
     root: Option(Node(K, V)),
 ) -> Among(
-    match root | none() => Option/none() | some(n) => Option/some(Node/greatest(n)) end,
+    match root
+    | none() => Option/none()
+    | some(n) => Option/some(Node/greatest(n))
+    end,
     match root | none() => [] | some(n) => Node/collect(n, []) end) =
     match root
     | none() => Bool/True/qed()
@@ -42,12 +48,20 @@ let above_root(
     ground: Grounded(root),
     x: K,
     i: Member()(x, match root | none() => [] | some(n) => Node/collect(n, []) end),
-) -> Above(match root | none() => Option/none() | some(n) => Option/some(Node/greatest(n)) end, x) =
+) -> Above(
+    match root
+    | none() => Option/none()
+    | some(n) => Option/some(Node/greatest(n))
+    end,
+    x) =
     match root: (r) =>
         (
             ground: Grounded(r),
             i: Member()(x, match r | none() => [] | some(n) => Node/collect(n, []) end)) -> Above(
-            match r | none() => Option/none() | some(n) => Option/some(Node/greatest(n)) end,
+            match r
+            | none() => Option/none()
+            | some(n) => Option/some(Node/greatest(n))
+            end,
             x)
     | none() => (_, i) => Member/absent(i)
     | some(n) =>

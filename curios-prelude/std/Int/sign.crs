@@ -21,11 +21,15 @@ pub let of_neg(a: Int, p: Bool/Holds(a < +0)) -> Eq()(sign(a), -1) =
 
 --- `sign(a)` is at least `-1`, whatever `a` is.
 pub let at_least(a: Int) -> Bool/Holds(-1 <= sign(a)) =
-    match Int/view(a) | nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed() end;
+    match Int/view(a)
+    | nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed()
+    end;
 
 --- `sign(a)` is at most `+1`, whatever `a` is.
 pub let at_most(a: Int) -> Bool/Holds(sign(a) <= +1) =
-    match Int/view(a) | nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed() end;
+    match Int/view(a)
+    | nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed()
+    end;
 
 --- `sign(a)` is at most zero where `a` is.
 pub let of_not_pos(a: Int, p: Bool/Holds(a <= +0)) -> Bool/Holds(sign(a) <= +0) =

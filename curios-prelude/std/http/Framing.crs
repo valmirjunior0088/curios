@@ -47,7 +47,10 @@ let codings(headers: List(Field)) -> Codings =
     | true =>
         match List/reverse(Field/members(headers, "Transfer-Encoding"))
         | [last, ..before], is_chunked(last) =>
-            match before | [] => Codings/chunked_alone() | _ => Codings/chunked_last() end
+            match before
+            | [] => Codings/chunked_alone()
+            | _ => Codings/chunked_last()
+            end
         | _ => Codings/other_last()
         end
     end;
@@ -72,7 +75,11 @@ pub let of_request(version: Version, headers: List(Field)) -> Result(Refusal, Fr
     match codings(headers)
     | absent() =>
         let length = stated(headers)!;
-        Result/success(match length | some(n) => Framing/length(n) | none() => Framing/none() end)
+        Result/success(
+            match length
+            | some(n) => Framing/length(n)
+            | none() => Framing/none()
+            end)
     | chunked_alone() =>
         match Version/is_1_1(version)
         | true => Result/success(Framing/chunked())
@@ -98,7 +105,10 @@ pub let of_reply(
         | absent() =>
             let length = stated(headers)!;
             Result/success(
-                match length | some(n) => Framing/length(n) | none() => Framing/close() end)
+                match length
+                | some(n) => Framing/length(n)
+                | none() => Framing/close()
+                end)
         | chunked_alone() =>
             match Version/is_1_1(version)
             | true => Result/success(Framing/chunked())

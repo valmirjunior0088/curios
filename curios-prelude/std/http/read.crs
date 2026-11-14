@@ -3,7 +3,10 @@ use /std/http/{Limits, Refusal, Framing, Field};
 use /std/Io/{Reader};
 
 let is(b: Bytes, i: Nat, byte: Nat) -> Bool =
-    match Bytes/try_get(b, i) | some(x) => Byte/to_nat(x) == byte | none() => false end;
+    match Bytes/try_get(b, i)
+    | some(x) => Byte/to_nat(x) == byte
+    | none() => false
+    end;
 
 --- Where a search of `b` from `from` on found what it sought: an index at or after `from`, with `room` bytes of `b` from it on, so a cut there needs no bound decided again.
 pub let Found(b: Bytes, from: Nat, room: Nat) -> Type =
@@ -72,7 +75,11 @@ let head_from(
     | some(inside) =>
         let byte = Byte/to_nat(Bytes/get(held, i));
         match byte == '\r'
-        | true => match s.ending == 2 | true => next(3, s.lined) | false => next(1, s.lined) end
+        | true =>
+            match s.ending == 2
+            | true => next(3, s.lined)
+            | false => next(1, s.lined)
+            end
         | false =>
             match (byte == '\n', s.ending == 3, s.ending == 1)
             | (true, true, _) =>

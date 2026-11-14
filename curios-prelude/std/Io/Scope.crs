@@ -64,7 +64,10 @@ pub let defer(s: Scope, release: (Ended) -> Io({})) -> Io({}) =
 
 -- Each of `releases` told `how`, in its order.
 let each(releases: List((Ended) -> Io({})), how: Ended) -> Io({}) =
-    match releases | [] => Io/pure(()) | [r, ..more] => Io/bind(r(how), (_) => each(more, how)) end;
+    match releases
+    | [] => Io/pure(())
+    | [r, ..more] => Io/bind(r(how), (_) => each(more, how))
+    end;
 
 -- Every release deferred to `s`, the latest first, told `how` it ended.
 let released(s: Scope, how: Ended) -> Io({}) =

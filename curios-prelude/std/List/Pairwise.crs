@@ -26,7 +26,10 @@ pub let head(
     whole: Pairwise(le)([h, ..t]),
 ) -> (y: T, Member()(y, t)) -> Bool/Holds(le(h, y)) =
     match whole: (s, _) =>
-        match s | [] => Bool/True | [k, ..r] => (y: T, Member()(y, r)) -> Bool/Holds(le(k, y)) end
+        match s
+        | [] => Bool/True
+        | [k, ..r] => (y: T, Member()(y, r)) -> Bool/Holds(le(k, y))
+        end
     | cons(head, _) => head
     end;
 

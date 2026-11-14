@@ -130,7 +130,10 @@ pub let eq_of_eql(a: Int, b: Int, h: Bool/Holds(a == b)) -> Eq()(a, b) =
 --- The value with its sign written, `+3` or `-3`, so the text re-parses as an `Int` without context.
 pub let to_str(n: Int) -> Str =
     let mag = Nat/to_str(abs(n));
-    match n >= +0 | true => Str/concat("+", mag) | false => Str/concat("-", mag) end;
+    match n >= +0
+    | true => Str/concat("+", mag)
+    | false => Str/concat("-", mag)
+    end;
 
 --- The bitwise complement.
 pub let not(x: Int) -> Int =
@@ -142,7 +145,10 @@ pub let of_str(s: Str) -> Option(Int) =
         match Str/strip_prefix(s, "-")
         | some(rest) => (true, rest)
         | none() =>
-            match Str/strip_prefix(s, "+") | some(rest) => (false, rest) | none() => (false, s) end
+            match Str/strip_prefix(s, "+")
+            | some(rest) => (false, rest)
+            | none() => (false, s)
+            end
         end;
     let n = Nat/of_str(digits)!;
     match negative

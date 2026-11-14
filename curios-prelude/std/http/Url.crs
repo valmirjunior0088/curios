@@ -81,7 +81,10 @@ let port_of(s: Scheme) -> Parse(Str, Nat) =
 let path() -> Parse(Str, Str) =
     let written = Parse/str/take_while(until(['?', '#']))!;
     let s = part(written)!;
-    match Str/is_empty(s) | true => Parse/pure("/") | false => Parse/pure(s) end;
+    match Str/is_empty(s)
+    | true => Parse/pure("/")
+    | false => Parse/pure(s)
+    end;
 
 let query_text() -> Parse(Str, Option(Str)) =
     let _ = Parse/str/expect('?')!;

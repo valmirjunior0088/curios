@@ -229,7 +229,10 @@ let separated(
                 match e.committed
                 | true => Result/failure(e)
                 | false =>
-                    match owed | true => Result/failure(e) | false => Result/success((at, [])) end
+                    match owed
+                    | true => Result/failure(e)
+                    | false => Result/success((at, []))
+                    end
                 end
             | success((first_end, first)) =>
                 let go(

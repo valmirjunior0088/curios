@@ -44,7 +44,10 @@ pub let new(program: Str, args: List(Str)) -> Proc =
         stderr = Stdio/inherit() };
 
 let drain(o: Option(Input)) -> Io(Result(Io/Error, Bytes)) =
-    match o | some(o) => Try/run(Io/read_all(o)) | none() => Io/pure(Result/success(x[])) end;
+    match o
+    | some(o) => Try/run(Io/read_all(o))
+    | none() => Io/pure(Result/success(x[]))
+    end;
 
 let fed(i: Output, input: Bytes) -> Try(Io, Io/Error, {}) =
     let _ = Io/write(i, input)!;

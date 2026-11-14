@@ -8,7 +8,11 @@ let run(k: Nat, s: Nat, built: List(Nat), acc: Nat) -> Nat =
     | m + 1 =>
         let n = 75 * s % 65537;
         let grown = [..built, n];
-        let peeked = match List/try_get(grown, List/len(built)) | some(x) => x | none() => 0 end;
+        let peeked =
+            match List/try_get(grown, List/len(built))
+            | some(x) => x
+            | none() => 0
+            end;
         run(m, n, grown, (acc + peeked) % 1000003)
     end;
 

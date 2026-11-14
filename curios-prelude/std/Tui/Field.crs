@@ -31,11 +31,17 @@ let moved(i: Field, at: Str/At(i.text)) -> Field =
 
 -- Where the cluster before `at` begins, or `at` where none is before it.
 let back(s: Str, at: Str/At(s)) -> Str/At(s) =
-    match Str/At/try_prev_grapheme(s, at) | some(b) => b.past | none() => at end;
+    match Str/At/try_prev_grapheme(s, at)
+    | some(b) => b.past
+    | none() => at
+    end;
 
 -- Where the cluster at `at` ends, or `at` where none begins there.
 let forth(s: Str, at: Str/At(s)) -> Str/At(s) =
-    match Str/At/try_next_grapheme(s, at) | some(f) => f.past | none() => at end;
+    match Str/At/try_next_grapheme(s, at)
+    | some(f) => f.past
+    | none() => at
+    end;
 
 -- Whether the cluster that begins at `at` is a space between words.
 let spaced(s: Str, at: Str/At(s)) -> Bool =

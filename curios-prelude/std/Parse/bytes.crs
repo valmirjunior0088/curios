@@ -28,7 +28,10 @@ pub let byte: Parse(Bytes, Byte) =
 --- The next byte when `pred` accepts it; declines otherwise, consuming nothing.
 pub let byte_if(pred: (Byte) -> Bool) -> Parse(Bytes, Byte) =
     Parse/bind(byte, (b) =>
-        match pred(b) | true => Parse/pure(b) | false => Parse/fail("unexpected byte") end);
+        match pred(b)
+        | true => Parse/pure(b)
+        | false => Parse/fail("unexpected byte")
+        end);
 
 --- The next byte without consuming it; declines at the end of the input.
 pub let peek_byte: Parse(Bytes, Byte) =
@@ -88,7 +91,10 @@ pub let literal(lit: Str) -> Parse(Bytes, {}) =
 
 --- `taken` and how many bytes at the front of `rest` `pred` accepts: a walk over the bytes it reads, which stops at the first one refused.
 let leading(rest: Bytes, pred: (Byte) -> Bool, taken: Nat) -> Nat =
-    match rest | x[h, ..t], pred(h) => leading(t, pred, taken + 1) | _ => taken end;
+    match rest
+    | x[h, ..t], pred(h) => leading(t, pred, taken + 1)
+    | _ => taken
+    end;
 
 --- The bytes `leading` counts lie within what it read.
 let leading_within(
@@ -99,7 +105,10 @@ let leading_within(
     match rest
     | x[] => proved()
     | x[h, ..t] =>
-        match pred(h) | true => leading_within(t, pred, taken + 1) | false => proved() end
+        match pred(h)
+        | true => leading_within(t, pred, taken + 1)
+        | false => proved()
+        end
     end;
 
 --- The longest run of bytes `pred` accepts, possibly empty.

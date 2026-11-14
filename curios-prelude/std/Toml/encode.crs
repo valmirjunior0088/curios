@@ -51,7 +51,11 @@ let flt_str(f: Flt) -> Str =
         end
     | true =>
         let raw = Flt/to_str(f);
-        let unsigned = match Str/strip_prefix(raw, "+") | some(bare) => bare | none() => raw end;
+        let unsigned =
+            match Str/strip_prefix(raw, "+")
+            | some(bare) => bare
+            | none() => raw
+            end;
         match Str/contains(unsigned, '.') || Str/contains(unsigned, 'e')
         | true => unsigned
         | false => Str/concat(unsigned, ".0")

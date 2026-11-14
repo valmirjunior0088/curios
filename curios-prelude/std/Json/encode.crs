@@ -3,7 +3,10 @@ use /std/{Str, Bool, Char, Flt, Option, List, Json, Fmt};
 --- A finite number as `Flt/to_str` writes its digits, without the sign that marks a positive one: a positional decimal, which the grammar spells.
 let encode_num(n: Flt) -> Str =
     let raw = Flt/to_str(n);
-    match Str/strip_prefix(raw, "+") | some(unsigned) => unsigned | none() => raw end;
+    match Str/strip_prefix(raw, "+")
+    | some(unsigned) => unsigned
+    | none() => raw
+    end;
 
 --- What a character is written as inside a string, when it is not written as itself: the quote, the backslash and the control characters, which JSON escapes.
 let escaped(c: Char) -> Option(Str) =

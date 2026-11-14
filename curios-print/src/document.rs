@@ -53,7 +53,12 @@ pub enum Printer {
         style: FillStyle,
     },
     /// The width-adaptive unit: renders flat — every enclosed [`Printer::Line`] as its flat spelling — when its flat form fits the room left on the line, and broken otherwise. Nested groups measured inside a fitting parent render flat with it; under a broken parent each decides for itself. With no width configured every group fits.
-    Group(Box<Printer>),
+    ///
+    /// `within` holds the group's own flat form to a share of the line width, in percent, where it is held to one: past that share it renders broken however much room the line has left, and so does a group measured flat around it, since it would not be flat inside one.
+    Group {
+        inner: Box<Printer>,
+        within: Option<usize>,
+    },
     /// Mode-dependent text that is *not* itself a break point: `flat` under a fitting group, `broken` under a broken one. The formatter's broken-only trailing comma is `IfBreak { flat: "", broken: "," }`. Measured at its flat spelling, so it never breaks a group by itself.
     IfBreak { flat: String, broken: String },
     /// A zero-width note that the document holds its original up to this offset, for a renderer following that text — see [`Original`](crate::Original).
@@ -78,9 +83,9 @@ impl Printer {
             Printer::Text(_) | Printer::Named { .. } | Printer::Mark(_) | Printer::Ends => true,
             Printer::Concat(parts) => parts.is_empty(),
             Printer::Fill { items, .. } => items.is_empty(),
-            Printer::Indent(inner) | Printer::OwnLineIfBroken(inner) | Printer::Group(inner) => {
-                matches!(**inner, Printer::Text(_))
-            }
+            Printer::Indent(inner)
+            | Printer::OwnLineIfBroken(inner)
+            | Printer::Group { inner, .. } => matches!(**inner, Printer::Text(_)),
             Printer::Line { .. } => true,
             Printer::IfBreak { .. } => true,
         }
@@ -110,7 +115,7 @@ impl Drop for Printer {
                 }
                 Printer::Indent(inner)
                 | Printer::OwnLineIfBroken(inner)
-                | Printer::Group(inner) => pending.push(inner.take()),
+                | Printer::Group { inner, .. } => pending.push(inner.take()),
                 Printer::Line { .. } => {}
                 Printer::IfBreak { .. } => {}
                 Printer::Mark(_) => {}

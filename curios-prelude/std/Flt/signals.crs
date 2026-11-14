@@ -30,7 +30,11 @@ pub let add(r: Rounding, a: Flt, b: Flt) -> Exceptions =
     | (some(x), some(y)) = (Dyadic/try_of(a), Dyadic/try_of(b)) =>
         from_exact(r, x + y, false, rounded/add(r, a, b))
     -- An infinity, exact unless it meets the other one.
-    | _ => match Flt/is_nan(rounded/add(r, a, b)) | true => invalid | false => Exceptions/none end
+    | _ =>
+        match Flt/is_nan(rounded/add(r, a, b))
+        | true => invalid
+        | false => Exceptions/none
+        end
     end;
 
 --- What `rounded/sub(r, a, b)` raises, which is what the sum with `b` negated does.
@@ -57,7 +61,11 @@ pub let div(r: Rounding, a: Flt, b: Flt) -> Exceptions =
     | Flt/is_nan(a) || Flt/is_nan(b) => Exceptions/none
     | (some(x), some(y)) = (Dyadic/try_of(a), Dyadic/try_of(b)) =>
         match y.mantissa != +0
-        | false => match x.mantissa == +0 | true => invalid | false => division_by_zero end
+        | false =>
+            match x.mantissa == +0
+            | true => invalid
+            | false => division_by_zero
+            end
         | true =>
             match x.mantissa == +0
             | true => Exceptions/none
@@ -89,7 +97,10 @@ pub let fma(r: Rounding, a: Flt, b: Flt, c: Flt) -> Exceptions =
         end
     -- An infinity, exact unless the product's meets the other one.
     | _ =>
-        match Flt/is_nan(rounded/fma(r, a, b, c)) | true => invalid | false => Exceptions/none end
+        match Flt/is_nan(rounded/fma(r, a, b, c))
+        | true => invalid
+        | false => Exceptions/none
+        end
     end;
 
 --- What `rounded/sqrt(r, a)` raises: invalid for a signaling NaN and for a negative value other than `-0`, and otherwise inexact exactly when the root squared is not `a`. No root of a finite value overflows or is tiny.
@@ -115,7 +126,10 @@ pub let of_int(r: Rounding, n: Int) -> Exceptions =
 
 --- What `rounded/to_integral(r, a)` raises: invalid for a signaling NaN, and nothing else — IEEE's named roundings to an integral value never signal inexact (§5.3.1).
 pub let to_integral(_: Rounding, a: Flt) -> Exceptions =
-    match Flt/is_signaling(a) | true => invalid | false => Exceptions/none end;
+    match Flt/is_signaling(a)
+    | true => invalid
+    | false => Exceptions/none
+    end;
 
 --- What IEEE's `roundToIntegralExact` in the direction `r` raises (§5.3.1): invalid for a signaling NaN, and inexact when the integral value differs from `a`.
 pub let to_integral_exact(r: Rounding, a: Flt) -> Exceptions =
@@ -247,8 +261,15 @@ pub let augmented_add(x: Flt, y: Flt) -> Exceptions =
     | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
     | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
         let v = a + b;
-        match v.mantissa == +0 | true => Exceptions/none | false => augmented(v) end
-    | _ => match Flt/is_nan(x + y) | true => invalid | false => Exceptions/none end
+        match v.mantissa == +0
+        | true => Exceptions/none
+        | false => augmented(v)
+        end
+    | _ =>
+        match Flt/is_nan(x + y)
+        | true => invalid
+        | false => Exceptions/none
+        end
     end;
 
 --- What `Flt/augmented_sub(x, y)` raises.
@@ -262,6 +283,13 @@ pub let augmented_mul(x: Flt, y: Flt) -> Exceptions =
     | Flt/is_nan(x) || Flt/is_nan(y) => Exceptions/none
     | (some(a), some(b)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
         let v = a * b;
-        match v.mantissa == +0 | true => Exceptions/none | false => augmented(v) end
-    | _ => match Flt/is_nan(x * y) | true => invalid | false => Exceptions/none end
+        match v.mantissa == +0
+        | true => Exceptions/none
+        | false => augmented(v)
+        end
+    | _ =>
+        match Flt/is_nan(x * y)
+        | true => invalid
+        | false => Exceptions/none
+        end
     end;

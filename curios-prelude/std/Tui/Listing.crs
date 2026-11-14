@@ -28,7 +28,11 @@ pub let selected(@A: Type, l: Listing(A)) -> Option(A) =
 
 -- The first row shown once `i` is selected among `rows` of them: `first`, moved as little as keeps `i` among them.
 let kept(first: Nat, i: Nat, rows: Nat) -> Nat =
-    match | i < first => i | first + rows <= i => i + 1 - rows | _ => first end;
+    match
+    | i < first => i
+    | first + rows <= i => i + 1 - rows
+    | _ => first
+    end;
 
 --- What `k` does to the listing shown `rows` high: up and down move the selection an item, page up and page down a page, home and end to either end, and the rows shown scroll so the selection stays among them. A move past either end goes no further than the end; a key with a modifier, and any other, leaves the listing.
 pub let handle(@A: Type, l: Listing(A), k: Key, rows: Nat) -> Listing(A) =
@@ -72,7 +76,11 @@ pub let view(@A: Type, l: Listing(A), show: (A) -> Str, style: Style, highlight:
                     (e) => e.0 < first),
                 h);
         let row(entry: {Nat, A}) -> View(w, 1) =
-            let s = match chosen == Option/some(entry.0) | true => highlight | false => style end;
+            let s =
+                match chosen == Option/some(entry.0)
+                | true => highlight
+                | false => style
+                end;
             View/fit(View/text(s, show(entry.1)), w, 1);
         let none: {h: Nat, view: View(w, h)} = (h = 0, view = View/blank(w, 0));
         let stacked =

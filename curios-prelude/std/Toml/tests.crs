@@ -14,19 +14,31 @@ let canon(input: Str) -> Str =
 
 -- The document decoded and re-encoded, or that it was refused.
 let decoded(input: Str) -> Str =
-    match Toml/decode(input) | failure(_) => "reject" | success(root) => Toml/encode(root) end;
+    match Toml/decode(input)
+    | failure(_) => "reject"
+    | success(root) => Toml/encode(root)
+    end;
 
 -- Why the document was refused, or that it was accepted.
 let reason(input: Str) -> Str =
-    match Toml/decode(input) | failure(e) => Toml/Error/message(e) | success(_) => "accept" end;
+    match Toml/decode(input)
+    | failure(e) => Toml/Error/message(e)
+    | success(_) => "accept"
+    end;
 
 -- The document's refusal rendered whole, or that it was accepted.
 let located(input: Str) -> Str =
-    match Toml/decode(input) | failure(e) => Toml/Error/to_str(e) | success(_) => "accept" end;
+    match Toml/decode(input)
+    | failure(e) => Toml/Error/to_str(e)
+    | success(_) => "accept"
+    end;
 
 -- Whether the document decodes.
 let verdict(input: Str) -> Str =
-    match Toml/decode(input) | failure(_) => "reject" | success(_) => "accept" end;
+    match Toml/decode(input)
+    | failure(_) => "reject"
+    | success(_) => "accept"
+    end;
 
 -- `b` as lowercase hexadecimal, two digits a byte.
 let hexs(b: Bytes) -> Str =

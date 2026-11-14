@@ -3,7 +3,10 @@
 use /std/{Str, Nat, Flt, List, Option, Result, Try, Io, Proc, Fmt};
 
 let run(k: Nat, x: Flt) -> Flt =
-    match k | 0 => x | m + 1 => run(m, Flt/sqrt(x * +1.0000001 + +0.5) / +0.999 + +0.25) end;
+    match k
+    | 0 => x
+    | m + 1 => run(m, Flt/sqrt(x * +1.0000001 + +0.5) / +0.999 + +0.25)
+    end;
 
 let execute() -> Try(Io, Str, {}) =
     let arguments = Proc/args()!;

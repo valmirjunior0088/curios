@@ -5,11 +5,17 @@ use /std/Map/internal/{Node};
 
 --- The entry of the least key, or `none` of the empty map: the one a walk down the trie's zero sides ends at.
 pub let least(@K: Type, use Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =
-    match m.root | none() => Option/none() | some(n) => Option/some(Node/least(n)) end;
+    match m.root
+    | none() => Option/none()
+    | some(n) => Option/some(Node/least(n))
+    end;
 
 --- That `found` is an entry whose key is one of `l`, or no entry at all.
 pub let Among(@K: Type, @V: Type, found: Option({K, V}), l: List(K)) -> Prop =
-    match found | none() => Bool/True | some(entry) => Member()(entry.0, l) end;
+    match found
+    | none() => Bool/True
+    | some(entry) => Member()(entry.0, l)
+    end;
 
 --- That `found` is an entry whose key is at or below `x` in the keys' order.
 pub let Below(@K: Type, use Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
@@ -25,7 +31,10 @@ let among_root(
     @V: Type,
     root: Option(Node(K, V)),
 ) -> Among(
-    match root | none() => Option/none() | some(n) => Option/some(Node/least(n)) end,
+    match root
+    | none() => Option/none()
+    | some(n) => Option/some(Node/least(n))
+    end,
     match root | none() => [] | some(n) => Node/collect(n, []) end) =
     match root
     | none() => Bool/True/qed()
@@ -45,12 +54,20 @@ let below_root(
     ground: Grounded(root),
     x: K,
     i: Member()(x, match root | none() => [] | some(n) => Node/collect(n, []) end),
-) -> Below(match root | none() => Option/none() | some(n) => Option/some(Node/least(n)) end, x) =
+) -> Below(
+    match root
+    | none() => Option/none()
+    | some(n) => Option/some(Node/least(n))
+    end,
+    x) =
     match root: (r) =>
         (
             ground: Grounded(r),
             i: Member()(x, match r | none() => [] | some(n) => Node/collect(n, []) end)) -> Below(
-            match r | none() => Option/none() | some(n) => Option/some(Node/least(n)) end,
+            match r
+            | none() => Option/none()
+            | some(n) => Option/some(Node/least(n))
+            end,
             x)
     | none() => (_, i) => Member/absent(i)
     | some(n) =>

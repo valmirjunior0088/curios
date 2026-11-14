@@ -53,10 +53,17 @@ let picks(seen: List(Seen)) -> List(Nat) =
         List/reverse(seen),
         [],
         (s, held) =>
-            match s | picked(k), Bool/not(List/contains(held, k)) => [k, ..held] | _ => held end);
+            match s
+            | picked(k), Bool/not(List/contains(held, k)) => [k, ..held]
+            | _ => held
+            end);
 
 let present(@A: Type, presence: Presence(A), a: A) -> presented(A, presence) =
-    match presence | required() => a | optional() => Option/some(a) | default(_) => a end;
+    match presence
+    | required() => a
+    | optional() => Option/some(a)
+    | default(_) => a
+    end;
 
 let absent(@A: Type, presence: Presence(A), name: Str) -> Result(Failure, presented(A, presence)) =
     match presence
@@ -73,7 +80,11 @@ let read_field(f: Field, seen: List(Seen), env: Map(Str, Str)) -> Result(Failure
         Result/success(given(seen) > 0 || match set | some(t) => truthy(t) | none() => false end)
     | count() =>
         match given(seen) == 0
-        | true => match set | some(t) => reading(nat, name, t) | none() => Result/success(0) end
+        | true =>
+            match set
+            | some(t) => reading(nat, name, t)
+            | none() => Result/success(0)
+            end
         | false => Result/success(given(seen))
         end
     | toggle(fallback) =>
@@ -88,7 +99,11 @@ let read_field(f: Field, seen: List(Seen), env: Map(Str, Str)) -> Result(Failure
         end
     | many(v) =>
         match texts(seen)
-        | [] => match set | some(t) => readings(v, name, [t]) | none() => Result/success([]) end
+        | [] =>
+            match set
+            | some(t) => readings(v, name, [t])
+            | none() => Result/success([])
+            end
         | _ => readings(v, name, texts(seen))
         end
     | choice(_, alternatives, presence) =>

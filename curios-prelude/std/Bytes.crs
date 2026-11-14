@@ -17,13 +17,19 @@ use /std/ops/{Eql, Cmp};
 
 --- The byte at `i`, or `none` past the end.
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
-    match i < len(b) | true => Option/some(get(b, i)) | false => Option/none() end;
+    match i < len(b)
+    | true => Option/some(get(b, i))
+    | false => Option/none()
+    end;
 
 --- The minimal encoding of `n`, least-significant byte first as the carrier reads: empty for zero, no trailing zero otherwise, so distinct numbers encode distinctly.
 ---
 --- A direct cons, which is the shape `x[h, ..t]` builds and the shape `to_nat` folds back, so taking one apart is the eliminator's own seam rather than the window at the far one a big-endian snoc would need.
 pub let of_nat(n: Nat) -> Bytes =
-    match n == 0 | true => x[] | false => x[Nat/to_byte(n % 256), ..of_nat(n / 256)] end;
+    match n == 0
+    | true => x[]
+    | false => x[Nat/to_byte(n % 256), ..of_nat(n / 256)]
+    end;
 
 -- A cons has no length of zero: the comparison that decides the two lengths refutes the equation.
 let no_cons(k: Byte, p: Bytes, e: Eq()(0, len(x[k, ..p]))) -> Bool/False =
@@ -134,7 +140,8 @@ pub let of_nat_injective(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq
                     match d
                     | 0 => Eq/refl()
                     | dp + 1 =>
-                        match no_empty(Nat/to_byte((dp + 1) % 256), of_nat((dp + 1) / 256), e) end
+                        match no_empty(Nat/to_byte((dp + 1) % 256), of_nat((dp + 1) / 256), e)
+                        end
                     end
                 | np + 1 =>
                     match d

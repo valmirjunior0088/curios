@@ -1,6 +1,9 @@
 //! How a call prints: flat where it fits, an argument a line where it overflows, a trailing literal or lambda hugging it, and a curried call or a ladder breaking at its seams.
 
-use {super::test_support::*, crate::*};
+use {
+    super::{FLAT_MATCH_SHARE, test_support::*},
+    crate::*,
+};
 
 #[test]
 fn a_fitting_application_stays_flat() {
@@ -64,7 +67,8 @@ fn a_ladders_call_participates_in_its_flat_layout() {
         ),
     ] {
         let source = format!("{ladder}(p)");
-        let width = source.len();
+        // The narrowest width whose share holds the whole chain, its call included, so the column short of it breaks the ladder where the ladder alone would still be held.
+        let width = (source.len() * 100).div_ceil(FLAT_MATCH_SHARE);
         assert_eq!(render(&source, width), source);
         assert_eq!(render(&source, width - 1), format!("{broken}(p)"));
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);

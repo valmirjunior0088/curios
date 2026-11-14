@@ -6,6 +6,8 @@ mod body_layout_tests;
 #[cfg(test)]
 mod call_layout_tests;
 #[cfg(test)]
+mod ladder_layout_tests;
+#[cfg(test)]
 mod list_layout_tests;
 
 use {
@@ -28,8 +30,8 @@ use {
     curios_num::{Floating, Natural},
     curios_parse::unseen,
     curios_print::{
-        FillItem, Printer, ends, fill, flat, flow, group, hard_line, if_break, indent, line, named,
-        named_at, own_line_if_broken, pure, reached, sep_flat, soft_line,
+        FillItem, Printer, ends, fill, flat, flow, group, group_within, hard_line, if_break,
+        indent, line, named, named_at, own_line_if_broken, pure, reached, sep_flat, soft_line,
     },
 };
 
@@ -248,6 +250,9 @@ fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> 
 
 /// The most arms a ladder may keep on one line. Beyond this it is a dispatch table rather than a decision, and a table reads as rows.
 const MAX_FLAT_ARMS: usize = 3;
+
+/// The most of the line width, in percent, a match keeps on one line from `match` to `end`. A decision on one line is read as one thing, and past this share the eye loses which arm a body belongs to, however wide the line.
+const FLAT_MATCH_SHARE: usize = 70;
 
 /// Whether a term is itself an arm ladder — the arm body that forces its enclosing ladder to break.
 ///
@@ -1183,7 +1188,7 @@ impl<D: Layout> TreePrinter<D> {
             ]),
             // An arm ladder is width-adaptive: `match carry | true => x[\\1] | false => x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
             //
-            // Two ladders are broken regardless of width, by [`is_ladder`]. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
+            // Two ladders are broken regardless of width, by [`is_ladder`]. Laid out at a width, a ladder stays on one line only within [`FLAT_MATCH_SHARE`] of it, and one with an arm and a motive, or guards after an arm's patterns, never does: each stands between a pattern and its body, crowding a line however short the line is. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
             Subterm::Match(Match { head, motive, arms }) => {
                 let forced =
                     arms.len() > MAX_FLAT_ARMS || arms.iter().map(|arm| &arm.body).any(is_ladder);
@@ -1191,29 +1196,38 @@ impl<D: Layout> TreePrinter<D> {
                     true => hard_line,
                     false => line,
                 };
-                return group(flat([
-                    pure("match "),
-                    self.term(head),
-                    self.motive(motive),
-                    flat(
-                        arms.into_iter()
-                            .map(|arm| {
-                                flat([
-                                    separator(),
-                                    group(flat([
-                                        pure("| "),
-                                        self.alternatives(arm.alternatives),
-                                        self.guards(arm.guards),
-                                    ])),
-                                    self.attached_body(" =>", arm.body),
-                                ])
-                            })
-                            .collect::<Vec<_>>(),
-                    ),
-                    separator(),
-                    pure("end"),
-                    suffix,
-                ]));
+                let crowded = !arms.is_empty()
+                    && (motive.is_some() || arms.iter().any(|arm| !arm.guards.is_empty()));
+                let within = match crowded {
+                    true => 0,
+                    false => FLAT_MATCH_SHARE,
+                };
+                return group_within(
+                    within,
+                    flat([
+                        pure("match "),
+                        self.term(head),
+                        self.motive(motive),
+                        flat(
+                            arms.into_iter()
+                                .map(|arm| {
+                                    flat([
+                                        separator(),
+                                        group(flat([
+                                            pure("| "),
+                                            self.alternatives(arm.alternatives),
+                                            self.guards(arm.guards),
+                                        ])),
+                                        self.attached_body(" =>", arm.body),
+                                    ])
+                                })
+                                .collect::<Vec<_>>(),
+                        ),
+                        separator(),
+                        pure("end"),
+                        suffix,
+                    ]),
+                );
             }
             // A match with no head lays its arms out as a headed one does, its first guard where a headed arm's patterns stand.
             Subterm::HeadlessMatch(HeadlessMatch { arms, default }) => {
@@ -1225,34 +1239,37 @@ impl<D: Layout> TreePrinter<D> {
                     true => hard_line,
                     false => line,
                 };
-                return group(flat([
-                    pure("match"),
-                    flat(
-                        arms.into_iter()
-                            .map(|HeadlessArm { guards, body }| {
-                                let mut guards = guards.into_iter();
-                                let first = guards
-                                    .next()
-                                    .expect("an arm of a match with no head writes a guard");
-                                flat([
-                                    separator(),
-                                    group(flat([
-                                        pure("| "),
-                                        self.guard(first),
-                                        self.guards(guards.collect()),
-                                    ])),
-                                    self.attached_body(" =>", body),
-                                ])
-                            })
-                            .collect::<Vec<_>>(),
-                    ),
-                    separator(),
-                    pure("| _"),
-                    self.attached_body(" =>", default),
-                    separator(),
-                    pure("end"),
-                    suffix,
-                ]));
+                return group_within(
+                    FLAT_MATCH_SHARE,
+                    flat([
+                        pure("match"),
+                        flat(
+                            arms.into_iter()
+                                .map(|HeadlessArm { guards, body }| {
+                                    let mut guards = guards.into_iter();
+                                    let first = guards
+                                        .next()
+                                        .expect("an arm of a match with no head writes a guard");
+                                    flat([
+                                        separator(),
+                                        group(flat([
+                                            pure("| "),
+                                            self.guard(first),
+                                            self.guards(guards.collect()),
+                                        ])),
+                                        self.attached_body(" =>", body),
+                                    ])
+                                })
+                                .collect::<Vec<_>>(),
+                        ),
+                        separator(),
+                        pure("| _"),
+                        self.attached_body(" =>", default),
+                        separator(),
+                        pure("end"),
+                        suffix,
+                    ]),
+                );
             }
             Subterm::Let(Let { groups, tail }) => {
                 let statements = groups

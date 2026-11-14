@@ -84,6 +84,14 @@ The Curios surface language as a tree: the scannerless parser that reads a `.crs
 
 **Rejected.** Measuring only through `end`, which leaves the application out of the decision; adding an outer group while keeping an independent inner ladder group, which still lets the ladder stay flat after the outer group breaks; and forcing argument lists flat, which cannot accommodate long arguments or comments.
 
+### A ladder on one line is short
+
+**Decision.** Laid out at a width, a `match` stays flat only where its postfix chain also takes at most seven tenths of that width, and a headed one with an arm only where it writes no motive and no arm writes a guard. Anything holding a match it lays out flat is held to the same, so a call around a long match breaks too. With no width every ladder stays flat, as every group does, so a term a report prints keeps its one line.
+
+**Rationale.** A ladder on one line is read as one decision. Past a share of the line the eye no longer pairs a body with its pattern, and a motive or a guard puts a second thing between them, whatever room is left: `match n: (_) => Nat | 0 => 1 | k + 1 => 2 * f(k) end` reads as three. The share follows the width a package sets, so a narrower one holds its ladders to as short a line in proportion.
+
+**Rejected.** A budget in columns, which a narrower width would leave wider than the line; a setting of its own, a second number to choose where the width is the one setting; and breaking a match with a motive or a guard in every printing, which would spread a report's one-line term over several.
+
 ### The tree keeps sugar as written
 
 **Decision.** The surface tree is literal: function-definition signatures, infix operators, destructuring patterns, postfix `!`, and string and spread literals are kept as written, and undone only while lowering.

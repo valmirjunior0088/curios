@@ -121,7 +121,11 @@ pub let nan_payload(signaling: Bool) -> Parse(Str, Nat) =
 --- The NaN of one kind, of `negative`'s sign, with the payload written after its name. A payload the kind cannot carry is refused rather than read as zero: text that spells no NaN is not a number here.
 pub let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =
     let payload = nan_payload(signaling)!;
-    let kind = match signaling | true => 0x7FF0000000000000 | false => 0x7FF8000000000000 end;
+    let kind =
+        match signaling
+        | true => 0x7FF0000000000000
+        | false => 0x7FF8000000000000
+        end;
     match payload < pow2(51) && (Bool/not(signaling) || payload >= 1)
     | true =>
         let positive = exact/of_bits(kind + payload);
@@ -155,7 +159,10 @@ pub let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
             | true => match negative | true => -0.0 | false => +0.0 end
             | false =>
                 let mantissa =
-                    match negative | true => +0 - Nat/to_int(h) | false => Nat/to_int(h) end;
+                    match negative
+                    | true => +0 - Nat/to_int(h)
+                    | false => Nat/to_int(h)
+                    end;
                 Dyadic/to_flt(r, Dyadic { mantissa = mantissa, exponent = scaled })
             end)
     end;

@@ -467,6 +467,12 @@ struct Measured<'a> {
     strict: bool,
 }
 
+/// One entry of [`fits`]'s stack: a node to measure, or the end of a group held to a share of the width, which began where `from` characters had been measured and may take `cap` of them.
+enum Scanned<'a> {
+    Node(Measured<'a>),
+    Held { from: usize, cap: usize },
+}
+
 /// What a scan has learned of the comments its group would write past, were it flat.
 struct Arriving<'a> {
     original: &'a Original<'a>,
@@ -555,9 +561,9 @@ fn ahead(rest: &[Step]) -> Option<char> {
             Printer::Fill { items, .. } => {
                 stack.extend(items.iter().rev().map(|item| (&item.printer, flat)));
             }
-            Printer::Indent(inner) | Printer::OwnLineIfBroken(inner) | Printer::Group(inner) => {
-                stack.push((inner, flat))
-            }
+            Printer::Indent(inner)
+            | Printer::OwnLineIfBroken(inner)
+            | Printer::Group { inner, .. } => stack.push((inner, flat)),
             Printer::Line { .. } | Printer::Mark(_) | Printer::Ends => {}
         }
     }
@@ -577,6 +583,7 @@ fn fits(
     inside: bool,
     whole: bool,
     following: Option<(&Original<'_>, Cursor)>,
+    width: Option<usize>,
 ) -> bool {
     let mut used = 0usize;
     // A copy of the cursor, walked through the group as printing would walk the real one.
@@ -586,24 +593,17 @@ fn fits(
         own_line: false,
         riding: false,
     });
-    let mut stack = Vec::from([Measured {
+    let mut stack = Vec::from([Scanned::Node(Measured {
         node: root,
         flat: true,
         inside,
         filling: false,
         strict: false,
-    }]);
+    })]);
     let mut rest_iter = rest.iter().rev();
 
     loop {
-        let Some(Measured {
-            node,
-            flat,
-            inside,
-            filling,
-            strict,
-        }) = stack.pop()
-        else {
+        let Some(scanned) = stack.pop() else {
             match rest_iter.next() {
                 // The whole document fits on this line.
                 None => return true,
@@ -622,26 +622,43 @@ fn fits(
                     if used > available {
                         return true;
                     }
-                    stack.extend(items.iter().rev().map(|item| Measured {
-                        node: &item.printer,
-                        flat: true,
-                        inside: false,
-                        filling: true,
-                        strict: false,
+                    stack.extend(items.iter().rev().map(|item| {
+                        Scanned::Node(Measured {
+                            node: &item.printer,
+                            flat: true,
+                            inside: false,
+                            filling: true,
+                            strict: false,
+                        })
                     }));
                     continue;
                 }
                 Some(Step::Print(printer, mode)) => {
-                    stack.push(Measured {
+                    stack.push(Scanned::Node(Measured {
                         node: printer,
                         flat: *mode,
                         inside: false,
                         filling: false,
                         strict: false,
-                    });
+                    }));
                     continue;
                 }
             }
+        };
+
+        let Measured {
+            node,
+            flat,
+            inside,
+            filling,
+            strict,
+        } = match scanned {
+            Scanned::Node(measured) => measured,
+            // A held group ends here, so what was measured since it began is its flat form.
+            Scanned::Held { from, cap } => match used - from > cap {
+                true => return false,
+                false => continue,
+            },
         };
 
         // Text of either kind, measured a character at a time: within the group each one that is not blank steps the cursor's copy, and the first to follow a comment refuses flatness.
@@ -709,12 +726,14 @@ fn fits(
             Printer::Ends => {}
             // Reversed, because the stack pops last-in first.
             Printer::Concat(parts) => {
-                stack.extend(parts.iter().rev().map(|part| Measured {
-                    node: part,
-                    flat,
-                    inside,
-                    filling,
-                    strict,
+                stack.extend(parts.iter().rev().map(|part| {
+                    Scanned::Node(Measured {
+                        node: part,
+                        flat,
+                        inside,
+                        filling,
+                        strict,
+                    })
                 }));
             }
             // A structural fill must fit in full before its enclosing group can render flat. Its own gap decisions still wrap independently once that group breaks.
@@ -725,29 +744,47 @@ fn fits(
                 if used > available {
                     return filling;
                 }
-                stack.extend(items.iter().rev().map(|item| Measured {
-                    node: &item.printer,
-                    flat: true,
-                    inside,
-                    filling,
-                    strict,
+                stack.extend(items.iter().rev().map(|item| {
+                    Scanned::Node(Measured {
+                        node: &item.printer,
+                        flat: true,
+                        inside,
+                        filling,
+                        strict,
+                    })
                 }));
             }
-            Printer::Indent(inner) => stack.push(Measured {
+            Printer::Indent(inner) => stack.push(Scanned::Node(Measured {
                 node: inner,
                 flat,
                 inside,
                 filling,
                 strict,
-            }),
+            })),
             // A nested group inside a fitting parent must fit wholly flat, including any fills it holds. Only an atomic fill in the measured group itself may wrap without breaking that group. A block that takes its own line only where it breaks is measured as one.
-            Printer::Group(inner) | Printer::OwnLineIfBroken(inner) => stack.push(Measured {
+            Printer::Group { inner, within } => {
+                // One held to a share of the width is flat inside the measured group only where its own flat form is within that share.
+                if inside && let (Some(percent), Some(width)) = (*within, width) {
+                    stack.push(Scanned::Held {
+                        from: used,
+                        cap: width * percent / 100,
+                    });
+                }
+                stack.push(Scanned::Node(Measured {
+                    node: inner,
+                    flat,
+                    inside,
+                    filling,
+                    strict: strict || inside,
+                }));
+            }
+            Printer::OwnLineIfBroken(inner) => stack.push(Scanned::Node(Measured {
                 node: inner,
                 flat,
                 inside,
                 filling,
                 strict: strict || inside,
-            }),
+            })),
         }
     }
 }
@@ -849,6 +886,7 @@ fn run<'b, 'c>(
                                         true,
                                         false,
                                         state.following,
+                                        state.width,
                                     ),
                                     false => fits(
                                         &first.printer,
@@ -857,6 +895,7 @@ fn run<'b, 'c>(
                                         true,
                                         false,
                                         state.following,
+                                        state.width,
                                     ),
                                 }
                             });
@@ -893,6 +932,7 @@ fn run<'b, 'c>(
                                 true,
                                 true,
                                 state.following,
+                                width,
                             ),
                         };
                     match inner_fits || state.should_indent {
@@ -905,7 +945,8 @@ fn run<'b, 'c>(
                         }
                     }
                 }
-                Printer::Group(inner) => {
+                Printer::Group { inner, within } => {
+                    let within = *within;
                     let inner = inner.take();
                     let inner_fits = flat
                         || match state.width {
@@ -913,14 +954,28 @@ fn run<'b, 'c>(
                             None => true,
                             // A comment already taken onto this line ends it, so nothing measured now can render flat over the break it forces. Asked here rather than in the scan because it is a fact about the line already written, not about the document ahead.
                             Some(_) if !state.suffix.is_empty() => false,
-                            Some(width) => fits(
-                                &inner,
-                                &stack,
-                                width.saturating_sub(state.effective_column()),
-                                true,
-                                false,
-                                state.following,
-                            ),
+                            // Held to a share of the width, its flat form is measured alone against that share too.
+                            Some(width) => {
+                                fits(
+                                    &inner,
+                                    &stack,
+                                    width.saturating_sub(state.effective_column()),
+                                    true,
+                                    false,
+                                    state.following,
+                                    state.width,
+                                ) && within.is_none_or(|percent| {
+                                    fits(
+                                        &inner,
+                                        &[],
+                                        width * percent / 100,
+                                        true,
+                                        false,
+                                        None,
+                                        state.width,
+                                    )
+                                })
+                            }
                         };
                     stack.push(Step::Print(inner, inner_fits));
                 }
@@ -952,8 +1007,24 @@ fn run<'b, 'c>(
                             || filling.flat
                             || (filling.previous_compact && item.compact))
                         && match filling.items.is_empty() {
-                            true => fits(&item.printer, &stack, room, true, false, state.following),
-                            false => fits(&item.printer, &[], room, true, false, state.following),
+                            true => fits(
+                                &item.printer,
+                                &stack,
+                                room,
+                                true,
+                                false,
+                                state.following,
+                                state.width,
+                            ),
+                            false => fits(
+                                &item.printer,
+                                &[],
+                                room,
+                                true,
+                                false,
+                                state.following,
+                                state.width,
+                            ),
                         }
                 });
                 let atomic = matches!(filling.style, FillStyle::Atomic);
@@ -1045,9 +1116,9 @@ pub fn each_named(
             Printer::Fill { items, .. } => {
                 stack.extend(items.iter_mut().rev().map(|item| &mut item.printer))
             }
-            Printer::Indent(inner) | Printer::OwnLineIfBroken(inner) | Printer::Group(inner) => {
-                stack.push(inner)
-            }
+            Printer::Indent(inner)
+            | Printer::OwnLineIfBroken(inner)
+            | Printer::Group { inner, .. } => stack.push(inner),
             Printer::Text(_)
             | Printer::Line { .. }
             | Printer::IfBreak { .. }

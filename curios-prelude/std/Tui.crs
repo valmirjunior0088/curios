@@ -203,7 +203,11 @@ let running(
         let a = asked(d);
         let tasks = Io/all(List/map(a.work, performed))!;
         let _ = released(a.released)!;
-        let _ = match a.redraw | true => Session/forget(s) | false => Try/pure(()) end!;
+        let _ =
+            match a.redraw
+            | true => Session/forget(s)
+            | false => Try/pure(())
+            end!;
         Try/pure((tasks = tasks, quit = a.quit));
     -- `events` through `update` from `m`, a size the terminal reported kept as it passes; stopping at the first quit, with the work its update asked for.
     let fold(
@@ -214,7 +218,10 @@ let running(
         | [] => Try/pure((model = m, tasks = [], quit = false))
         | [e, ..more] =>
             let _ =
-                match e | input(resize(now)) => Session/resized(s, now) | _ => Try/pure(()) end!;
+                match e
+                | input(resize(now)) => Session/resized(s, now)
+                | _ => Try/pure(())
+                end!;
             let next = app.update(m, e);
             let issued = issue(next.1)!;
             match issued.quit
@@ -225,7 +232,10 @@ let running(
     -- Every answer already waiting, so a burst draws once.
     let waiting(acc: List(Event(E))) -> Io(List(Event(E))) =
         let more = Channel/try_receive(answers.1)!;
-        match more | item(e) => waiting([..acc, Event/custom(e)]) | _ => Io/pure(acc) end;
+        match more
+        | item(e) => waiting([..acc, Event/custom(e)])
+        | _ => Io/pure(acc)
+        end;
     let draw(m: M) -> Try(Io, Io/Error, {}) =
         let size = Session/size(s)!;
         Session/draw(s, app.view(m)(size.w, size.h));

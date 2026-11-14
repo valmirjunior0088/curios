@@ -2,13 +2,22 @@ use /std/{Nat, Flt, Bool, Char, Str, Option, Parse, Toml};
 use /std/Toml/scan/{hex_val};
 
 let dec_digit(n: Nat) -> Option(Nat) =
-    match Nat/in_range(n, '0', '9') | true => Option/some(n - '0') | false => Option/none() end;
+    match Nat/in_range(n, '0', '9')
+    | true => Option/some(n - '0')
+    | false => Option/none()
+    end;
 
 let oct_digit(n: Nat) -> Option(Nat) =
-    match Nat/in_range(n, '0', '7') | true => Option/some(n - '0') | false => Option/none() end;
+    match Nat/in_range(n, '0', '7')
+    | true => Option/some(n - '0')
+    | false => Option/none()
+    end;
 
 let bin_digit(n: Nat) -> Option(Nat) =
-    match Nat/in_range(n, '0', '1') | true => Option/some(n - '0') | false => Option/none() end;
+    match Nat/in_range(n, '0', '1')
+    | true => Option/some(n - '0')
+    | false => Option/none()
+    end;
 
 let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
     match
@@ -61,7 +70,10 @@ let leading_zero: Parse(Str, Bool) =
 
 let sign() -> Parse(Str, {Bool, Bool}) =
     let s = Parse/optional(Parse/str/char_if((c) => c == '+' || c == '-'))!;
-    match s | some(c) => Parse/pure((c == '-', true)) | none() => Parse/pure((false, false)) end;
+    match s
+    | some(c) => Parse/pure((c == '-', true))
+    | none() => Parse/pure((false, false))
+    end;
 
 let is_radix_marker(c: Char) -> Bool =
     match Char/to_nat(c) | 'x' | 'o' | 'b' => true | _ => false end;
@@ -230,7 +242,10 @@ pub let flt_number() -> Parse(Str, Toml) =
         match has_frac || has_exp
         | true =>
             let exponent =
-                match eneg | true => +0 - Nat/to_int(emag) | false => Nat/to_int(emag) end;
+                match eneg
+                | true => +0 - Nat/to_int(emag)
+                | false => Nat/to_int(emag)
+                end;
             let scale = exponent - Nat/to_int(down2);
             Parse/pure(Toml/flt(Flt/of_decimal(negative, sig2, scale, count2)))
         | false => Parse/fail("expected float")

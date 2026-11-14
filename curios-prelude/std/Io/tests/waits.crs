@@ -13,7 +13,10 @@ let heard(receiver: Channel/Receiver(Io/Ended), finished: Bool) -> Io(Bool) =
     Io/pure(
         match taken
         | item(ended) =>
-            match ended | finished() => finished | cancelled() => Bool/not(finished) end
+            match ended
+            | finished() => finished
+            | cancelled() => Bool/not(finished)
+            end
         | _ => false
         end);
 

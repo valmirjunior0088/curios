@@ -194,7 +194,10 @@ pub let update(
     key: K,
     f: (Option(V)) -> Option(V),
 ) -> Map(K, V) =
-    match f(try_get(m, key)) | some(v) => insert(m, key, v) | none() => remove(m, key) end;
+    match f(try_get(m, key))
+    | some(v) => insert(m, key, v)
+    | none() => remove(m, key)
+    end;
 
 --- `f` on every value. The keys and their dictionary stay, so the trie keeps its shape.
 pub let map(@K: Type, use Key(K), @V: Type, @W: Type, m: Map(K, V), f: (V) -> W) -> Map(K, W) =

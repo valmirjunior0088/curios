@@ -46,7 +46,10 @@ let fraction(n: Nat) -> Str =
             match width
             | 0 => (m, 0)
             | w + 1 =>
-                match w == 0 || m % 10 != 0 | true => (m, width) | false => trimmed(m / 10, w) end
+                match w == 0 || m % 10 != 0
+                | true => (m, width)
+                | false => trimmed(m / 10, w)
+                end
             end;
         let (digits, width) = trimmed(n, 9);
         Str/concat(".", padded(digits, width))
@@ -166,7 +169,10 @@ pub let write_offset(o: Offset) -> Str =
         let mag = Int/abs(seconds);
         let sign = match seconds < +0 | true => "-" | false => "+" end;
         let rest =
-            match mag % 60 == 0 | true => "" | false => Str/concat(":", padded(mag % 60, 2)) end;
+            match mag % 60 == 0
+            | true => ""
+            | false => Str/concat(":", padded(mag % 60, 2))
+            end;
         Str/flatten([sign, padded(mag / 3600, 2), ":", padded(mag % 3600 / 60, 2), rest])
     end;
 
@@ -245,7 +251,10 @@ pub let write_duration(d: Duration) -> Str =
     let minutes = seconds % 3600 / 60;
     let rest = seconds % 60;
     let part(value: Nat, unit: Str) -> Str =
-        match value == 0 | true => "" | false => Str/concat(Nat/to_str(value), unit) end;
+        match value == 0
+        | true => ""
+        | false => Str/concat(Nat/to_str(value), unit)
+        end;
     let secs =
         match rest == 0 && nanos == 0
         | true => ""

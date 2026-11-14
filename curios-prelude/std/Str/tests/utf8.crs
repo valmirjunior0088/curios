@@ -3,7 +3,10 @@ use /std/{Str, Char, Nat, Bool, Bytes, List, Test};
 
 -- Whether `of_bytes` refuses these bytes, which is what every rejection below asks.
 let rejected(bytes: Bytes) -> Bool =
-    match Str/of_bytes(bytes) | success(_) => false | failure(_) => true end;
+    match Str/of_bytes(bytes)
+    | success(_) => false
+    | failure(_) => true
+    end;
 
 test of_bytes_accepts_multibyte_utf8 =
     match Str/of_bytes(x[0xC3, 0xA9]): (_) => Test({})
@@ -38,7 +41,10 @@ test of_bytes_rejects_every_invalid_shape =
 -- Where text stops: `of_bytes` answers the length of the longest valid prefix, which is where the first character that is not text begins, as Rust's `Utf8Error::valid_up_to` does. Each shape — a truncated sequence, two overlong ones, a surrogate, a value past `U+10FFFF` and a stray continuation byte — stands at the start, between two characters and at the end, after a two-byte character; two more cut a four-byte character short and run one byte past it.
 test of_bytes_answers_where_text_stops =
     let stops(bytes: Bytes) -> Str =
-        match Str/of_bytes(bytes) | success(_) => "text" | failure(at) => Nat/to_str(at) end;
+        match Str/of_bytes(bytes)
+        | success(_) => "text"
+        | failure(at) => Nat/to_str(at)
+        end;
     let around(bad: Bytes) -> Str =
         Str/join(",", [stops(bad), stops(x['a', ..bad, 'b']), stops(x[0xC3, 0xA9, 'b', ..bad])]);
     let truncated = around(x[0xE2, 0x82]);
@@ -58,7 +64,10 @@ test of_bytes_answers_where_text_stops =
 -- The surrogate range and everything above `U+10FFFF` are excluded, and the scalars either side of each boundary are admitted.
 test char_of_nat_accepts_exact_unicode_scalar_boundaries =
     let render(n: Nat) -> Str =
-        match Char/of_nat(n) | some(c) => Nat/to_str(Char/to_nat(c)) | none() => "x" end;
+        match Char/of_nat(n)
+        | some(c) => Nat/to_str(Char/to_nat(c))
+        | none() => "x"
+        end;
     Test/equal(
         Str/join(",", List/map([0, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10FFFF, 0x110000], render)),
         "0,55295,x,x,57344,1114111,x");

@@ -162,7 +162,10 @@ let spelled(values: List(Flt)) -> List(Str) =
     List/map(values, Flt/to_str);
 
 let read(text: Str) -> Str =
-    match Flt/of_str(text) | some(value) => Flt/to_str(value) | none() => "none" end;
+    match Flt/of_str(text)
+    | some(value) => Flt/to_str(value)
+    | none() => "none"
+    end;
 
 -- `ord` is IEEE's `totalOrder`: the zeros apart, `-0` first, and a NaN past `+inf` rather than unordered.
 test ord_is_the_ieee_total_order =
@@ -500,7 +503,10 @@ test nan_and_hex_text_spell_as_ieee_writes_them =
 -- Text reads in a direction too: a tenth lands on either side of itself, and a value past the largest finite one stops at it toward zero.
 test text_reads_in_a_direction =
     let read(r: Rounding, s: Str) -> Str =
-        match rounded/of_str(r, s) | some(f) => Flt/to_str(f) | none() => "none" end;
+        match rounded/of_str(r, s)
+        | some(f) => Flt/to_str(f)
+        | none() => "none"
+        end;
     Test/all([
         Test/equal(read(Rounding/toward_positive(), "0.1"), Flt/to_str(+0.1)),
         Test/equal(read(Rounding/toward_negative(), "0.1"), Flt/to_str(Flt/next_down(+0.1))),

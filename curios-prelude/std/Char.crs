@@ -141,7 +141,10 @@ pub let of_hex_digit(c: Char) -> Option(Nat) =
 
 --- The character a byte below 128 encodes, or `none`.
 pub let of_ascii(byte: Byte) -> Option(Char) =
-    match Byte/to_nat(byte) < 0x80 | true => of_nat(Byte/to_nat(byte)) | false => Option/none() end;
+    match Byte/to_nat(byte) < 0x80
+    | true => of_nat(Byte/to_nat(byte))
+    | false => Option/none()
+    end;
 
 --- The byte a character below 128 encodes, or `none`.
 pub let to_ascii(c: Char) -> Option(Byte) =

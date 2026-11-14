@@ -18,7 +18,10 @@ pub let first(@K: Type, use Key(K), @V: Type, t: Node(K, V)) -> Bytes =
 
 --- A node's own bit, where it has one.
 pub let top(@K: Type, @V: Type, t: Node(K, V)) -> Option(Nat) =
-    match t | leaf(_, _) => Option/none() | fork(d, _, _) => Option/some(d) end;
+    match t
+    | leaf(_, _) => Option/none()
+    | fork(d, _, _) => Option/some(d)
+    end;
 
 --- Whether a bit, where there is one, is past `c`.
 pub let past(p: Option(Nat), c: Nat) -> Bool =
@@ -38,7 +41,10 @@ pub let deeper_down(
     past: Bool/Holds(deeper(t, c)),
     le: Bool/Holds(d <= c),
 ) -> Bool/Holds(deeper(t, d)) =
-    match t | leaf(_, _) => Bool/True/qed() | fork(_, _, _) => proved() end;
+    match t
+    | leaf(_, _) => Bool/True/qed()
+    | fork(_, _, _) => proved()
+    end;
 
 --- What a fork states of its two sides: each sound and forking past its bit, and their first keys apart at that bit, which the zero side's has clear.
 ---
@@ -244,7 +250,10 @@ pub let lookup(@K: Type, @V: Type, t: Node(K, V), k: Bytes) -> {K, V} =
 --- The value of the key whose encoding is `k` under `t`: the leaf a walk by `k` ends at holds it where that leaf's key encodes to `k`.
 pub let find(@K: Type, use Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Option(V) =
     let (k0, v0) = lookup(t, k);
-    match Hash/hash(k0) == k | true => Option/some(v0) | false => Option/none() end;
+    match Hash/hash(k0) == k
+    | true => Option/some(v0)
+    | false => Option/none()
+    end;
 
 --- The leaf a walk ends at holds one of the node's keys.
 pub let looked_up(
@@ -330,7 +339,8 @@ pub let hit(
     match Hash/hash(lookup(t, k).0) == k
     | true => Bytes/eq_of_eql(Hash/hash(lookup(t, k).0), k, Bool/True/qed())
     | false =>
-        match Eq/subst((m: Option(V)) => Bool/Holds(Option/is_none(m)), h, Bool/True/qed()) end
+        match Eq/subst((m: Option(V)) => Bool/Holds(Option/is_none(m)), h, Bool/True/qed())
+        end
     end;
 
 --- A walk by an encoding whose bit at `c` is not the one every key of a sound node has there, `c` a bit the node forks past, finds nothing.
@@ -352,7 +362,8 @@ pub let missing(
         let same = Bytes/eq_of_eql(Hash/hash(lookup(t, k).0), k, Bool/True/qed());
         let moved: Bool/Holds(bit(Hash/hash(lookup(t, k).0), c) != bit(first(t), c)) =
             Eq/subst((e: Bytes) => Bool/Holds(bit(e, c) != bit(first(t), c)), Eq/sym(same), apart);
-        match Eq/subst((b: Bool) => Bool/Holds(b != bit(first(t), c)), agree, moved) end
+        match Eq/subst((b: Bool) => Bool/Holds(b != bit(first(t), c)), agree, moved)
+        end
     end;
 
 --- That `n` answers `x` at the encoding `k`, and at every other what `t` answers: what a node that may stand where `t` did says once the key encoding to `k` is set to `x`.
@@ -1163,7 +1174,10 @@ pub let remove(
 
 --- Over the entries in the order of their keys, with `f(key, value, acc)`: the zero side's before the one side's.
 pub let fold(@K: Type, @V: Type, @A: Type, t: Node(K, V), acc: A, f: (K, V, A) -> A) -> A =
-    match t | leaf(k, v) => f(k, v, acc) | fork(_, z, o) => fold(o, fold(z, acc, f), f) end;
+    match t
+    | leaf(k, v) => f(k, v, acc)
+    | fork(_, z, o) => fold(o, fold(z, acc, f), f)
+    end;
 
 --- `f` on every value, the keys and the forks as they were.
 pub let map(@K: Type, @V: Type, @W: Type, t: Node(K, V), f: (V) -> W) -> Node(K, W) =
@@ -1181,7 +1195,10 @@ let map_first(
     t: Node(K, V),
     f: (V) -> W,
 ) -> Eq()(first(map(t, f)), first(t)) =
-    match t | leaf(_, _) => Eq/refl() | fork(_, z, _) => map_first(z, f) end;
+    match t
+    | leaf(_, _) => Eq/refl()
+    | fork(_, z, _) => map_first(z, f)
+    end;
 
 -- A node with its values rewritten forks where it did.
 let map_deeper(
@@ -1230,11 +1247,17 @@ pub let mapped(
 
 --- The keys under a node, the zero side's first.
 pub let keys(@K: Type, @V: Type, t: Node(K, V)) -> List(K) =
-    match t | leaf(k, _) => [k] | fork(_, z, o) => [..keys(z), ..keys(o)] end;
+    match t
+    | leaf(k, _) => [k]
+    | fork(_, z, o) => [..keys(z), ..keys(o)]
+    end;
 
 --- The keys under a node appended to `acc`, the zero side's first: [`keys`] by one walk that builds its answer from the back.
 pub let collect(@K: Type, @V: Type, t: Node(K, V), acc: List(K)) -> List(K) =
-    match t | leaf(k, _) => [..acc, k] | fork(_, z, o) => collect(o, collect(z, acc)) end;
+    match t
+    | leaf(k, _) => [..acc, k]
+    | fork(_, z, o) => collect(o, collect(z, acc))
+    end;
 
 --- The walk leaves the node's keys behind what it began with.
 pub let collected(
@@ -1482,7 +1505,10 @@ pub let mapped_find(
             match b | true | false => Eq/refl() end;
         cases(Hash/hash(k0) == k)
     | fork(c, z, o) =>
-        match bit(k, c) | false => mapped_find(z, f, k) | true => mapped_find(o, f, k) end
+        match bit(k, c)
+        | false => mapped_find(z, f, k)
+        | true => mapped_find(o, f, k)
+        end
     end;
 
 -- A key under the zero side of a sound fork has the fork's bit clear.
@@ -1648,7 +1674,8 @@ pub let canonical(
     | fork(c1, z1, o1) =>
         match u
         | leaf(k2, v2) =>
-            match leaf_not_fork(k2, v2, c1, z1, o1, sound_t, (x) => Eq/sym(same(x))) end
+            match leaf_not_fork(k2, v2, c1, z1, o1, sound_t, (x) => Eq/sym(same(x)))
+            end
         | fork(c2, z2, o2) =>
             match
             | c1 < c2 =>
@@ -1814,7 +1841,10 @@ pub let either_side(
 
 --- The entries under a node, the zero side's first.
 pub let entries(@K: Type, @V: Type, t: Node(K, V)) -> List({K, V}) =
-    match t | leaf(k, v) => [(k, v)] | fork(_, z, o) => [..entries(z), ..entries(o)] end;
+    match t
+    | leaf(k, v) => [(k, v)]
+    | fork(_, z, o) => [..entries(z), ..entries(o)]
+    end;
 
 --- Appending each entry in turn leaves the node's entries behind what the walk began with.
 pub let listed(
@@ -1925,7 +1955,8 @@ pub let found_entry(
         match Hash/hash(lookup(t, Hash/hash(x)).0) == Hash/hash(x)
         | true => Option/some_injective(h)
         | false =>
-            match Eq/subst((m: Option(V)) => Bool/Holds(Option/is_none(m)), h, Bool/True/qed()) end
+            match Eq/subst((m: Option(V)) => Bool/Holds(Option/is_none(m)), h, Bool/True/qed())
+            end
         end;
     Eq/subst(
         (p: {K, V}) => Member()(p, entries(t)),

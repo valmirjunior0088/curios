@@ -18,7 +18,10 @@ pub let of(x: Flt) -> Term =
     match Dyadic/try_of(x)
     | some(d) => Term/number(d, Flt/is_sign_minus(x))
     | none() =>
-        match Flt/is_nan(x) | true => Term/nan(x) | false => Term/infinite(Flt/is_sign_minus(x)) end
+        match Flt/is_nan(x)
+        | true => Term/nan(x)
+        | false => Term/infinite(Flt/is_sign_minus(x))
+        end
     end;
 
 --- The exact product `a · b` as a term: a NaN operand's NaN, invalid for an infinity against a zero, and otherwise signed as the operands are.
@@ -61,7 +64,11 @@ pub let nan_of(terms: List(Term)) -> Option(Flt) =
         Option/none(),
         (t, acc) =>
             match t
-            | nan(n) => match acc | some(m) => Option/some(m + n) | none() => Option/some(n + n) end
+            | nan(n) =>
+                match acc
+                | some(m) => Option/some(m + n)
+                | none() => Option/some(n + n)
+                end
             | _ => acc
             end);
 
@@ -100,7 +107,11 @@ let zero_sum(r: Rounding, terms: List(Term)) -> Flt =
     let negative_zero =
         (t: Term) => match t | number(d, n) => d.mantissa == +0 && n | _ => false end;
     let positive_zero =
-        (t: Term) => match t | number(d, n) => d.mantissa == +0 && Bool/not(n) | _ => false end;
+        (t: Term) =>
+            match t
+            | number(d, n) => d.mantissa == +0 && Bool/not(n)
+            | _ => false
+            end;
     let every_negative = match terms | [] => false | _ => List/all(terms, negative_zero) end;
     let toward_negative = match r | toward_negative() => true | _ => false end;
     match every_negative || toward_negative && Bool/not(List/all(terms, positive_zero))
@@ -118,7 +129,10 @@ pub let summed(r: Rounding, terms: List(Term)) -> Flt =
     -- No NaN, invalid term or infinity: every term is a number.
     | _ =>
         let s = number_sum(terms);
-        match s.mantissa == +0 | true => zero_sum(r, terms) | false => Dyadic/to_flt(r, s) end
+        match s.mantissa == +0
+        | true => zero_sum(r, terms)
+        | false => Dyadic/to_flt(r, s)
+        end
     end;
 
 --- Whether a product of `factors` is negative: an odd count of negative ones.
@@ -126,7 +140,12 @@ let negative_product(factors: List(Term)) -> Bool =
     List/fold(
         factors,
         false,
-        (t, acc) => match t | infinite(n) => acc != n | number(_, n) => acc != n | _ => acc end);
+        (t, acc) =>
+            match t
+            | infinite(n) => acc != n
+            | number(_, n) => acc != n
+            | _ => acc
+            end);
 
 --- The power of two a nonzero `d`'s leading bit stands at.
 pub let scale_of(d: Dyadic) -> Int =

@@ -36,7 +36,10 @@ use /std/ops/{Eql, Cmp};
 
 --- The element at `i`, or `none` past the end.
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
-    match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
+    match i < len(a)
+    | true => Option/some(get(a, i))
+    | false => Option/none()
+    end;
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
 pub let drop(@T: Type, a: List(T), k: Nat, @ok: Bool/Holds(k <= len(a))) -> List(T) =
@@ -86,11 +89,17 @@ pub let last(@T: Type, l: List(T)) -> Option(T) =
 
 --- The longest prefix `pred` accepts.
 pub let take_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
-    match l | [h, ..t], pred(h) => [h, ..take_while(t, pred)] | _ => [] end;
+    match l
+    | [h, ..t], pred(h) => [h, ..take_while(t, pred)]
+    | _ => []
+    end;
 
 --- Everything after the longest prefix `pred` accepts.
 pub let drop_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
-    match l | [h, ..t], pred(h) => drop_while(t, pred) | _ => l end;
+    match l
+    | [h, ..t], pred(h) => drop_while(t, pred)
+    | _ => l
+    end;
 
 --- The first `n` elements, or all of them when there are fewer.
 pub let take(@T: Type, l: List(T), n: Nat) -> List(T) =
@@ -122,7 +131,10 @@ pub let filter_map(@T: Type, @B: Type, l: List(T), f: (T) -> Option(B)) -> List(
 pub let partition(@T: Type, l: List(T), pred: (T) -> Bool) -> {List(T), List(T)} =
     let empty: {List(T), List(T)} = ([], []);
     fold(l, empty, (x, (yes, no)) =>
-        match pred(x) | true => ([..yes, x], no) | false => (yes, [..no, x]) end);
+        match pred(x)
+        | true => ([..yes, x], no)
+        | false => (yes, [..no, x])
+        end);
 
 --- The firsts and the seconds.
 pub let unzip(@A: Type, @B: Type, l: List({A, B})) -> {List(A), List(B)} =
@@ -144,7 +156,10 @@ pub let concat_map(@T: Type, @B: Type, l: List(T), f: (T) -> List(B)) -> List(B)
 
 --- `sep` between each pair of elements.
 pub let intersperse(@T: Type, l: List(T), sep: T) -> List(T) =
-    match l | [] => [] | [h, ..t] => [h, ..fold(t, [], (x, acc) => [..acc, sep, x])] end;
+    match l
+    | [] => []
+    | [h, ..t] => [h, ..fold(t, [], (x, acc) => [..acc, sep, x])]
+    end;
 
 --- `f` on every element in order under the monad, the results collected.
 pub let traverse(

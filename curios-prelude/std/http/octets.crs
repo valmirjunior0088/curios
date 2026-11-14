@@ -11,7 +11,10 @@ pub let is_digit(b: Byte) -> Bool =
 
 --- Whether the byte of `b` at `i` is `byte`; `false` past its end.
 pub let at(b: Bytes, i: Nat, byte: Byte) -> Bool =
-    match Bytes/try_get(b, i) | some(found) => found == byte | none() => false end;
+    match Bytes/try_get(b, i)
+    | some(found) => found == byte
+    | none() => false
+    end;
 
 -- `b` from `start` up to `stop`, without the optional whitespace that ends it.
 let trim_end(

@@ -25,7 +25,10 @@ pub let bind(
 ) -> Try(M, E, B) =
     Try {
         Monad/bind(m.0, (r: Result(E, A)) =>
-            match r | success(a) => f(a).0 | failure(e) => Monad/pure(Result/failure(e)) end) };
+            match r
+            | success(a) => f(a).0
+            | failure(e) => Monad/pure(Result/failure(e))
+            end) };
 
 --- An `M(Result(E, A))` as a `Try`.
 pub let attempt(@M: (Type) -> Type, @E: Type, @A: Type, m: M(Result(E, A))) -> Try(M, E, A) =

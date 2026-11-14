@@ -21,7 +21,10 @@ let env_entry(entry: {Str, Str}) -> Bytes =
 
 --- Whether `key` can name an environment variable: something, and no `=`, which would end the name early in the `NAME=VALUE` entry it crosses as.
 let names_a_variable(key: Str) -> Bool =
-    match Str/is_empty(key) | true => false | false => Bool/not(Str/contains(key, '=')) end;
+    match Str/is_empty(key)
+    | true => false
+    | false => Bool/not(Str/contains(key, '='))
+    end;
 
 --- Nothing, or `EINVAL` for an entry whose key names no variable.
 let env_checked(env: List({Str, Str})) -> Result(Io/Error, {}) =

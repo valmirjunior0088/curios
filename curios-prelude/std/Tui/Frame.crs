@@ -40,7 +40,11 @@ let mended(row: List(Tile)) -> List(Tile) =
     let start: {done: List(Tile), waiting: Option(Tile)} = (done = [], waiting = Option/none());
     let settled =
         List/fold(row, start, (tile, acc) =>
-            let done = match acc.waiting | some(_) => [blank, ..acc.done] | none() => acc.done end;
+            let done =
+                match acc.waiting
+                | some(_) => [blank, ..acc.done]
+                | none() => acc.done
+                end;
             match tile
             | continuation() =>
                 match acc.waiting
@@ -54,7 +58,10 @@ let mended(row: List(Tile)) -> List(Tile) =
                 end
             end);
     List/reverse(
-        match settled.waiting | some(_) => [blank, ..settled.done] | none() => settled.done end);
+        match settled.waiting
+        | some(_) => [blank, ..settled.done]
+        | none() => settled.done
+        end);
 
 -- A row of exactly `w` tiles from `tiles`, cut or padded with blanks, its wide glyphs mended where the cut parted one.
 let row_of(w: Nat, tiles: List(Tile)) -> Vec(Tile, w) =
@@ -115,7 +122,10 @@ let overlay(
 let restyle(@w: Nat, @h: Nat, f: (Style) -> Style, frame: Frame(w, h)) -> Frame(w, h) =
     Vec/map(frame, (row) =>
         Vec/map(row, (tile) =>
-            match tile | glyph(g, s) => Tile/glyph(g, f(s)) | continuation() => tile end));
+            match tile
+            | glyph(g, s) => Tile/glyph(g, f(s))
+            | continuation() => tile
+            end));
 
 --- `v` drawn: the tiles every reading of a view agrees on.
 pub let of_view(@w: Nat, @h: Nat, v: View(w, h)) -> Frame(w, h) =

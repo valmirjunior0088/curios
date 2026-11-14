@@ -16,7 +16,10 @@ let digits_value(run: Str) -> Nat =
 --- A nonempty run of decimal digits, owed once the character before it has been read.
 let digits1() -> Parse(Str, Str) =
     let run = Parse/str/take_while(Char/is_ascii_digit)!;
-    match Str/is_empty(run) | true => Parse/fail("expected digit") | false => Parse/pure(run) end;
+    match Str/is_empty(run)
+    | true => Parse/fail("expected digit")
+    | false => Parse/pure(run)
+    end;
 
 --- The integer part: `0` alone, or a run of digits that does not open with it. A zero ends the part where it stands, so `01` is a zero with a `1` after it, which no document continues with.
 let int_part() -> Parse(Str, Str) =
@@ -34,18 +37,28 @@ let int_part() -> Parse(Str, Str) =
 --- The fraction: the digits after a point, or none where no point is written. A point owes a digit.
 let frac_part() -> Parse(Str, Str) =
     let point = Parse/optional(Parse/str/expect('.'))!;
-    match point | some(_) => Parse/commit(digits1()) | none() => Parse/pure("") end;
+    match point
+    | some(_) => Parse/commit(digits1())
+    | none() => Parse/pure("")
+    end;
 
 let exp_fields() -> Parse(Str, Int) =
     let sign = Parse/optional(Parse/str/char_if((c) => c == '+' || c == '-'))!;
     let run = digits1()!;
     let magnitude = Nat/to_int(digits_value(run));
-    Parse/pure(match sign | some(c), c == '-' => +0 - magnitude | _ => magnitude end);
+    Parse/pure(
+        match sign
+        | some(c), c == '-' => +0 - magnitude
+        | _ => magnitude
+        end);
 
 --- The exponent: what follows an `e` of either case, or zero where none is written. An `e` owes a digit.
 let exp_part() -> Parse(Str, Int) =
     let marker = Parse/optional(Parse/str/char_if((c) => c == 'e' || c == 'E'))!;
-    match marker | some(_) => Parse/commit(exp_fields()) | none() => Parse/pure(+0) end;
+    match marker
+    | some(_) => Parse/commit(exp_fields())
+    | none() => Parse/pure(+0)
+    end;
 
 --- A number as RFC 8259 §6 writes one — `-? (0 | [1-9][0-9]*) (\.[0-9]+)? ([eE][+-]?[0-9]+)?` — converted once, through `Flt/of_decimal`. One past binary64's range is refused; one that rounds to zero is zero of its sign.
 let number() -> Parse(Str, Json) =
@@ -67,7 +80,11 @@ let number() -> Parse(Str, Json) =
 
 --- Whether `c` may stand in a string as written: any but the quote, the backslash and the control characters below `U+0020`, which the grammar has escaped.
 let is_unescaped(c: Char) -> Bool =
-    match Char/to_nat(c) | '"' => false | '\\' => false | _ => Char/to_nat(c) >= 0x20 end;
+    match Char/to_nat(c)
+    | '"' => false
+    | '\\' => false
+    | _ => Char/to_nat(c) >= 0x20
+    end;
 
 let hex_digit() -> Parse(Str, Nat) =
     let c = Parse/str/char!;
@@ -148,7 +165,10 @@ let str_value: Parse(Str, Json) =
     Parse/map(raw_str(), (s) => Json/str(s));
 
 let is_ws(c: Char) -> Bool =
-    match Char/to_nat(c) | ' ' | '\t' | '\n' | '\r' => true | _ => false end;
+    match Char/to_nat(c)
+    | ' ' | '\t' | '\n' | '\r' => true
+    | _ => false
+    end;
 
 let ws: Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws), (_) => ());
@@ -160,7 +180,10 @@ let symbol(c: Char) -> Parse(Str, Char) =
 --- The next character without consuming it; declines at the end of the input.
 let peek_char() -> Parse(Str, Char) =
     let next = Parse/str/peek!;
-    match next | some(c) => Parse/pure(c) | none() => Parse/fail("unexpected end of input") end;
+    match next
+    | some(c) => Parse/pure(c)
+    | none() => Parse/fail("unexpected end of input")
+    end;
 
 let bracketed(
     @A: Type,

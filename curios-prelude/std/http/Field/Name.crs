@@ -44,7 +44,10 @@ satisfy Spell(Name) {
 
 --- The name `s` spells, or `none` where it is no token.
 pub let of_str(s: Str) -> Option(Name) =
-    match is_token(s) | true => Option/some(Name { text = s }) | false => Option/none() end;
+    match is_token(s)
+    | true => Option/some(Name { text = s })
+    | false => Option/none()
+    end;
 
 --- Whether `n` is the name `text` spells, compared without case.
 pub let is(n: Name, text: Str) -> Bool =

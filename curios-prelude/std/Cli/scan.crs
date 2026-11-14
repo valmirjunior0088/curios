@@ -36,7 +36,11 @@ pub struct Raw: pub Type {
 -- Every name the option `f` at `i` answers to, with how each reads.
 let claims_of(f: Field, i: Nat) -> List({Str, Claim}) =
     let names = [f.long, ..f.aliases];
-    let short = match f.short | none() => [] | some(c) => [Str/concat("-", Str/of_char(c))] end;
+    let short =
+        match f.short
+        | none() => []
+        | some(c) => [Str/concat("-", Str/of_char(c))]
+        end;
     let as(spelled: List(Str), claim: Claim) -> List({Str, Claim}) =
         List/map(spelled, (s) => (s, claim));
     match f.kind
@@ -58,7 +62,10 @@ let claims(fields: List(Field), version: Option(Str)) -> Map(Str, Claim) =
     Map/of_list([
         ("--help", Claim/help()),
         ("-h", Claim/help()),
-        ..match version | none() => [] | some(_) => [("--version", Claim/version())] end,
+        ..match version
+        | none() => []
+        | some(_) => [("--version", Claim/version())]
+        end,
         ..List/concat_map(
             List/zip(List/range(0, List/len(fields)), fields),
             (entry) => claims_of(entry.1, entry.0))]);
@@ -73,7 +80,11 @@ let seen(raw: Raw, i: Nat, s: Seen) -> Raw =
 let refuse(raw: Raw, failure: Failure) -> Raw =
     Raw {
         ..raw,
-        failure = match raw.failure | some(_) => raw.failure | none() => Option/some(failure) end };
+        failure =
+            match raw.failure
+            | some(_) => raw.failure
+            | none() => Option/some(failure)
+            end };
 
 let flagged(raw: Raw, claim: Claim) -> Raw =
     match claim
@@ -146,7 +157,11 @@ let cluster(
 -- A token read as a value rather than a cluster: a dash and a digit, as a negative number is, which no short name can be.
 let numeric(token: Str) -> Bool =
     match Str/strip_prefix(token, "-")
-    | some(body) => match Str/to_list(body) | [d, .._] => Char/is_ascii_digit(d) | [] => false end
+    | some(body) =>
+        match Str/to_list(body)
+        | [d, .._] => Char/is_ascii_digit(d)
+        | [] => false
+        end
     | none() => false
     end;
 

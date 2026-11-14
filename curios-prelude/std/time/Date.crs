@@ -77,7 +77,10 @@ pub let try_of(year: Int, month: Month, day: Nat) -> Option(Date) =
 
 -- The days of `months` in `year`, summed.
 let span(year: Int, months: List(Month)) -> Nat =
-    match months | [] => 0 | [m, ..rest] => days_in_month(year, m) + span(year, rest) end;
+    match months
+    | [] => 0
+    | [m, ..rest] => days_in_month(year, m) + span(year, rest)
+    end;
 
 -- The date `r` days into `months` of `year`: the first month whose length exceeds the days left holds it, and that guard is the proof the day is one the month has.
 let in_months(

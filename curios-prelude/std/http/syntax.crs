@@ -96,7 +96,10 @@ let field(line: Bytes) -> Result(Refusal, Field) =
 
 -- Whether `line` begins with a space or a tab: a fold of the line before it, or nothing a head may hold.
 let indented(line: Bytes) -> Bool =
-    match Bytes/try_get(line, 0) | some(byte) => octets/is_ows(byte) | none() => false end;
+    match Bytes/try_get(line, 0)
+    | some(byte) => octets/is_ows(byte)
+    | none() => false
+    end;
 
 -- `f` with the fold `line` read as a space and what follows it, as RFC 9112 §5.2 has a user agent read one.
 let folded(f: Field, line: Bytes) -> Result(Refusal, Field) =

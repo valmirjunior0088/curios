@@ -18,7 +18,10 @@ pub let of(f: Flt, @ok: Flt/Finite(f)) -> Dyadic =
 
 --- The exact value of `f`, or `none` for an infinity or a NaN.
 pub let try_of(f: Flt) -> Option(Dyadic) =
-    match Flt/finite(f) | some(ok) => Option/some(of(f, @ok)) | none() => Option/none() end;
+    match Flt/finite(f)
+    | some(ok) => Option/some(of(f, @ok))
+    | none() => Option/none()
+    end;
 
 --- `d`, rounded once in the direction `r` names: the rounding every operation of `Flt/rounded` performs, stated over the exact value rather than over operands. An exact zero is `+0.0`.
 pub let to_flt(r: Rounding, d: Dyadic) -> Flt =

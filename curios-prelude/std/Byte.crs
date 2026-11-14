@@ -75,7 +75,11 @@ pub let rotr(a: Byte, count: Nat) -> Byte =
 
 --- The order of the two values.
 pub let ord(a: Byte, b: Byte) -> Ordering =
-    match | a < b => Ordering/lt() | a == b => Ordering/eq() | _ => Ordering/gt() end;
+    match
+    | a < b => Ordering/lt()
+    | a == b => Ordering/eq()
+    | _ => Ordering/gt()
+    end;
 
 satisfy Eql(Byte) {
     eql = eql,

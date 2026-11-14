@@ -50,7 +50,10 @@ let of_parity(parity: Parity) -> Nat =
     end;
 
 let of_flow(flow: Flow) -> Nat =
-    match flow | none() => /sys/serial_flow/none | hardware() => /sys/serial_flow/hardware end;
+    match flow
+    | none() => /sys/serial_flow/none
+    | hardware() => /sys/serial_flow/hardware
+    end;
 
 --- Open the serial device at this path at this speed and frame — data bits, a `/sys/serial_parity` code, stop bits and a `/sys/serial_flow` code: `ok` beside the port's handle, or the status of the failure.
 foreign serial_open(Bytes, Nat, Nat, Nat, Nat, Nat) -> {status: Nat, handle: Handle};

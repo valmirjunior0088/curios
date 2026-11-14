@@ -2,7 +2,10 @@ use /std/{Str, Char, Nat, Bool, List, Option, Result, Parse, Html};
 use /std/Html/{Attr};
 
 let is_ws(c: Char) -> Bool =
-    match Char/to_nat(c) | ' ' | '\t' | '\n' | '\r' | '\u{C}' => true | _ => false end;
+    match Char/to_nat(c)
+    | ' ' | '\t' | '\n' | '\r' | '\u{C}' => true
+    | _ => false
+    end;
 
 let ws: Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws), (_) => ());
@@ -100,7 +103,11 @@ let attribute() -> Parse(Str, Attr) =
     | true => Parse/fail("an attribute has a name")
     | false =>
         let value = Parse/optional(attr_value())!;
-        Parse/pure(match value | some(v) => Attr/attr(n, unescape(v)) | none() => Attr/flag(n) end)
+        Parse/pure(
+            match value
+            | some(v) => Attr/attr(n, unescape(v))
+            | none() => Attr/flag(n)
+            end)
     end;
 
 let close_tag() -> Parse(Str, {}) =

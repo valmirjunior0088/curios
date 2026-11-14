@@ -161,7 +161,10 @@ pub let all(h: Html, pred: (Html) -> Bool) -> List(Html) =
     let below = all_in(children(h), pred);
     match pred(h) | true => [h, ..below] | false => below end
 and all_in(trees: List(Html), pred: (Html) -> Bool) -> List(Html) =
-    match trees | [] => [] | [t, ..rest] => List/flatten([all(t, pred), all_in(rest, pred)]) end;
+    match trees
+    | [] => []
+    | [t, ..rest] => List/flatten([all(t, pred), all_in(rest, pred)])
+    end;
 
 --- The first of `h` and the trees beneath it that `pred` accepts.
 pub let find(h: Html, pred: (Html) -> Bool) -> Option(Html) =

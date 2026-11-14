@@ -52,7 +52,10 @@ let read(argv: List(Str), env: Map(Str, Str)) -> Str =
             listed(Cli/get(p, "header")),
             format(Cli/get(p, "format")),
             Cli/get(p, "root"),
-            match Cli/get(p, "shift") | some(n) => Int/to_str(n) | none() => "-" end,
+            match Cli/get(p, "shift")
+            | some(n) => Int/to_str(n)
+            | none() => "-"
+            end,
             listed(Cli/get(p, "extra"))])
     | refused(_, f) =>
         match f

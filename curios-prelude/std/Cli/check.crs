@@ -38,7 +38,10 @@ let builtins(version: Option(Str)) -> List(Spelled) =
     [
         Spelled/long("help"),
         Spelled/short('h'),
-        ..match version | none() => [] | some(_) => [Spelled/long("version")] end];
+        ..match version
+        | none() => []
+        | some(_) => [Spelled/long("version")]
+        end];
 
 -- Each name of `names` a line spells as another before it does, once: a switch's `--no-x` meets an option named `no-x`.
 let clashes(names: List(Spelled)) -> List(Spelled) =
@@ -75,12 +78,18 @@ let field_problems(f: Field) -> List(Problem) =
         end;
     [
         ..List/map(List/filter(longs, (n) => Bool/not(writable(n))), Problem/invalid_name),
-        ..match shown(f.long) | true => [] | false => [Problem/invalid_name(f.long)] end,
+        ..match shown(f.long)
+        | true => []
+        | false => [Problem/invalid_name(f.long)]
+        end,
         ..match f.short
         | some(c), Bool/not(clusterable(c)) => [Problem/invalid_short(c)]
         | _ => []
         end,
-        ..match f.env | some(n), Bool/not(variable(n)) => [Problem/invalid_name(n)] | _ => [] end];
+        ..match f.env
+        | some(n), Bool/not(variable(n)) => [Problem/invalid_name(n)]
+        | _ => []
+        end];
 
 let every(ps: Positionals) -> List(Positional) =
     [..ps.required, ..ps.optional, ..match ps.rest | none() => [] | some(p) => [p] end];
@@ -93,7 +102,10 @@ let own(
     version: Option(Str),
 ) -> List(Problem) =
     [
-        ..match writable(name) | true => [] | false => [Problem/invalid_name(name)] end,
+        ..match writable(name)
+        | true => []
+        | false => [Problem/invalid_name(name)]
+        end,
         ..List/concat_map(options, field_problems),
         ..List/map(
             List/filter(List/map(ps, (p) => p.name), (n) => Bool/not(shown(n))),

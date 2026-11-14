@@ -112,11 +112,25 @@ pub let class(f: Flt) -> Class =
     | is_signaling(f) => Class/signaling_nan()
     | is_nan(f) => Class/quiet_nan()
     | is_infinite(f) =>
-        match minus | true => Class/negative_infinity() | false => Class/positive_infinity() end
-    | is_zero(f) => match minus | true => Class/negative_zero() | false => Class/positive_zero() end
+        match minus
+        | true => Class/negative_infinity()
+        | false => Class/positive_infinity()
+        end
+    | is_zero(f) =>
+        match minus
+        | true => Class/negative_zero()
+        | false => Class/positive_zero()
+        end
     | is_subnormal(f) =>
-        match minus | true => Class/negative_subnormal() | false => Class/positive_subnormal() end
-    | _ => match minus | true => Class/negative_normal() | false => Class/positive_normal() end
+        match minus
+        | true => Class/negative_subnormal()
+        | false => Class/positive_subnormal()
+        end
+    | _ =>
+        match minus
+        | true => Class/negative_normal()
+        | false => Class/positive_normal()
+        end
     end;
 
 --- Whether either is a NaN, so that no order relates them.
@@ -254,7 +268,10 @@ pub let log_b(f: Flt, @ok: FiniteNonZero(f)) -> Int =
 
 --- `log_b(f)`, or `none` for a zero, an infinity or a NaN.
 pub let try_log_b(f: Flt) -> Option(Int) =
-    match finite_non_zero(f) | some(ok) => Option/some(log_b(f, @ok)) | none() => Option/none() end;
+    match finite_non_zero(f)
+    | some(ok) => Option/some(log_b(f, @ok))
+    | none() => Option/none()
+    end;
 
 --- IEEE's `minimumNumber` (§9.6): the lesser of the two, a NaN giving way to a number and `-0` below `+0`; two NaNs answer a NaN.
 pub let minimum_number(a: Flt, b: Flt) -> Flt =
@@ -316,7 +333,10 @@ let payload_room: Nat =
 
 --- IEEE's `getPayload` (§9.7): a NaN's payload as a non-negative integral float, and `-1` for anything else.
 pub let payload(f: Flt) -> Flt =
-    match is_nan(f) | true => Nat/to_flt(exact/bits(f) % payload_room) | false => -1.0 end;
+    match is_nan(f)
+    | true => Nat/to_flt(exact/bits(f) % payload_room)
+    | false => -1.0
+    end;
 
 --- `p` as a payload, when it is an integral float in `[low, 2^51)`.
 let admissible(p: Flt, low: Nat) -> Option(Nat) =
@@ -328,11 +348,17 @@ let admissible(p: Flt, low: Nat) -> Option(Nat) =
 
 --- IEEE's `setPayload` (§9.7): the positive quiet NaN whose payload is `p`, or `+0` when `p` is not an integral float in `[0, 2^51)`.
 pub let quiet_nan(p: Flt) -> Flt =
-    match admissible(p, 0) | some(n) => exact/of_bits(0x7FF8000000000000 + n) | none() => +0.0 end;
+    match admissible(p, 0)
+    | some(n) => exact/of_bits(0x7FF8000000000000 + n)
+    | none() => +0.0
+    end;
 
 --- IEEE's `setPayloadSignaling` (§9.7): the positive signaling NaN whose payload is `p`, or `+0` when `p` is not an integral float in `[1, 2^51)` — a zero payload with the quiet bit clear is an infinity.
 pub let signaling_nan(p: Flt) -> Flt =
-    match admissible(p, 1) | some(n) => exact/of_bits(0x7FF0000000000000 + n) | none() => +0.0 end;
+    match admissible(p, 1)
+    | some(n) => exact/of_bits(0x7FF0000000000000 + n)
+    | none() => +0.0
+    end;
 
 --- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
@@ -351,11 +377,17 @@ pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
 
 --- `f` truncated toward zero, or `none` unless it is a non-negative number.
 pub let try_to_nat(f: Flt) -> Option(Nat) =
-    match non_neg(f) | some(ok) => Option/some(to_nat(f, @ok)) | none() => Option/none() end;
+    match non_neg(f)
+    | some(ok) => Option/some(to_nat(f, @ok))
+    | none() => Option/none()
+    end;
 
 --- `f` truncated toward zero, or `none` unless it is a number.
 pub let try_to_int(f: Flt) -> Option(Int) =
-    match finite(f) | some(ok) => Option/some(to_int(f, @ok)) | none() => Option/none() end;
+    match finite(f)
+    | some(ok) => Option/some(to_int(f, @ok))
+    | none() => Option/none()
+    end;
 
 --- The two in IEEE 754's total order, which tells every `Flt` apart: the negative NaNs, then `-inf` up through `-0`, then `+0` up through `+inf`, then the positive NaNs. NaNs order by their bits outward from the infinity of their sign, so a signaling NaN sits nearer it than a quiet one, as §5.10 orders them.
 ---
@@ -373,7 +405,10 @@ pub let ord(x: Flt, y: Flt) -> Ordering =
 pub let total_key(f: Flt) -> Nat =
     let bits = Bytes/to_nat(to_le_bytes(f));
     let top = pow2(63);
-    match bits >= top | true => pow2(64) - 1 - bits | false => bits + top end;
+    match bits >= top
+    | true => pow2(64) - 1 - bits
+    | false => bits + top
+    end;
 
 --- A float is its bytes: two floats with one encoding are one float.
 ---
@@ -444,7 +479,11 @@ pub let to_str(f: Flt) -> Str =
         Str/flatten([sign, kind, suffix])
     | exp_field == 0 && mant_field == 0 => Str/concat(sign, "0")
     | _ =>
-        let f_mant = match exp_field == 0 | true => mant_field | false => mant_field + pow2(52) end;
+        let f_mant =
+            match exp_field == 0
+            | true => mant_field
+            | false => mant_field + pow2(52)
+            end;
         let even = Nat/is_even(f_mant);
         Str/concat(sign, render(f_mant, exp_field, even))
     end;
@@ -479,7 +518,11 @@ pub let to_hex_str(f: Flt) -> Str =
     | field == 0 && fraction == 0 => Str/concat(sign, "0x0p+0")
     | _ =>
         let lead = match field == 0 | true => "0x0" | false => "0x1" end;
-        let exponent = match field == 0 | true => -1022 | false => Nat/to_int(field) - +1023 end;
+        let exponent =
+            match field == 0
+            | true => -1022
+            | false => Nat/to_int(field) - +1023
+            end;
         let (digits, count) = trimmed(fraction, 13);
         let point =
             match count == 0
@@ -493,7 +536,11 @@ pub let to_hex_str(f: Flt) -> Str =
 let trimmed(n: Nat, count: Nat) -> {Nat, Nat} =
     match count
     | 0 => (n, 0)
-    | pred + 1 => match n % 16 == 0 | true => trimmed(n / 16, pred) | false => (n, count) end
+    | pred + 1 =>
+        match n % 16 == 0
+        | true => trimmed(n / 16, pred)
+        | false => (n, count)
+        end
     end;
 
 --- The float hex text spells, `0x` and all: an optional sign, `0x`, hex digits with an optional point, and an optional `p` exponent, rounded once — and the infinities and NaNs by the names `to_hex_str` writes for them. `none` for any other text.
@@ -573,7 +620,10 @@ satisfy Spell(Flt) {
         | true =>
             let raw = to_str(f);
             let unsigned =
-                match Str/strip_prefix(raw, "+") | some(bare) => bare | none() => raw end;
+                match Str/strip_prefix(raw, "+")
+                | some(bare) => bare
+                | none() => raw
+                end;
             match Str/contains(unsigned, '.') || Str/contains(unsigned, 'e')
             | true => unsigned
             | false => Str/concat(unsigned, ".0")

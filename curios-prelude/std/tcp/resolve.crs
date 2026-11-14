@@ -8,4 +8,7 @@ foreign dns_lookup(Bytes, Nat) -> {status: Nat, addresses: List(Bytes)};
 pub let resolve(host: Str, port: Nat) -> Try(Io, Io/Error, Bytes) =
     let reply = dns_lookup(Str/to_bytes(host), port)!;
     let _ = Status/succeeded(reply.status)!;
-    match reply.addresses | [a, .._] => Try/pure(a) | [] => Try/raise(Io/Error/not_found()) end;
+    match reply.addresses
+    | [a, .._] => Try/pure(a)
+    | [] => Try/raise(Io/Error/not_found())
+    end;

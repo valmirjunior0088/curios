@@ -24,7 +24,10 @@ let first(l: Nat, t: Nat, @fits: Bool/Holds(t < 16)) -> Bytes =
 
 -- The bytes after a number's first, most significant first.
 let rest(n: Nat) -> Bytes =
-    match n < 16 | true => x[] | false => x[..rest(n / 256), Nat/to_byte(n % 256)] end;
+    match n < 16
+    | true => x[]
+    | false => x[..rest(n / 256), Nat/to_byte(n % 256)]
+    end;
 
 -- The encoding in one walk: the rank counted on the way down, the first byte written where the top is left, and the bytes appended on the way back.
 let from(n: Nat, l: Nat) -> Bytes =

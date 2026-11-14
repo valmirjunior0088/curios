@@ -18,7 +18,11 @@ test split_once_takes_the_first_occurrence_and_contains_reads_it =
         | some((k, v)) => Str/flatten(["(", k, ")(", v, ")"])
         | none() => "none"
         end;
-    let missing = match Str/split_once("plain", "=") | some(_) => "some" | none() => "none" end;
+    let missing =
+        match Str/split_once("plain", "=")
+        | some(_) => "some"
+        | none() => "none"
+        end;
     Test/equal(
         Str/join(" ", [
             first, missing,
@@ -129,7 +133,10 @@ test a_piece_is_matched_in_the_stack_it_started_with =
 test a_text_is_taken_apart_over_many_pieces =
     let cells = doubled("7,", 17);
     let spaced(c: Char) -> Option(Str) =
-        match c == ',' | true => Option/some("; ") | false => Option/none() end;
+        match c == ','
+        | true => Option/some("; ")
+        | false => Option/none()
+        end;
     Test/equal(
         Str/join(" ", [
             Nat/to_str(List/len(Str/split(cells, ","))),

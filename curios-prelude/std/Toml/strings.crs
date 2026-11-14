@@ -107,7 +107,10 @@ let literal_str_scan() -> Parse(Str, Str) =
 
 let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
     let stop: Parse(Str, {}) =
-        match seen_nl | true => Parse/pure(()) | false => Parse/fail("invalid escape") end;
+        match seen_nl
+        | true => Parse/pure(())
+        | false => Parse/fail("invalid escape")
+        end;
     let next = Parse/str/peek!;
     match next
     | none() => stop
@@ -159,7 +162,10 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
         match Char/to_nat(c)
         | '"' =>
             let (kept, closed) = quote_run('"', here)!;
-            match closed | true => Parse/pure(kept) | false => ml_basic_body(kept) end
+            match closed
+            | true => Parse/pure(kept)
+            | false => ml_basic_body(kept)
+            end
         | '\\' =>
             let _ = Parse/str/char!;
             let folded = Parse/str/peek!;
@@ -194,7 +200,10 @@ let ml_literal_body(acc: Str) -> Parse(Str, Str) =
         match Char/to_nat(c)
         | '\'' =>
             let (kept, closed) = quote_run('\'', here)!;
-            match closed | true => Parse/pure(kept) | false => ml_literal_body(kept) end
+            match closed
+            | true => Parse/pure(kept)
+            | false => ml_literal_body(kept)
+            end
         | '\n' =>
             let _ = Parse/str/char!;
             ml_literal_body(Str/concat(here, "\n"))

@@ -19,7 +19,10 @@ let cells: Nat =
     10000;
 
 let build(n: Nat, x: Nat, acc: Chain) -> Chain =
-    match n | 0 => acc | m + 1; _ => build(m, 75 * x % 65537, Chain/cons(x, acc)) end;
+    match n
+    | 0 => acc
+    | m + 1; _ => build(m, 75 * x % 65537, Chain/cons(x, acc))
+    end;
 
 let step(rest: Chain, acc: Chain) -> Chain =
     match rest
@@ -31,7 +34,10 @@ let rounds(k: Nat, c: Chain) -> Chain =
     match k | 0 => c | m + 1; _ => rounds(m, step(c, Chain/nil())) end;
 
 let total(c: Chain, acc: Nat) -> Nat =
-    match c | nil() => acc | cons(v, tail) => total(tail, (acc + v) % 1000003) end;
+    match c
+    | nil() => acc
+    | cons(v, tail) => total(tail, (acc + v) % 1000003)
+    end;
 
 let execute() -> Try(Io, Str, {}) =
     let arguments = Proc/args()!;

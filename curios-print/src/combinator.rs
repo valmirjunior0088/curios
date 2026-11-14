@@ -104,7 +104,18 @@ pub fn flow(items: impl IntoIterator<Item = FillItem>) -> Printer {
 
 /// The width-adaptive unit: renders `printer` flat — every enclosed `line` as its flat spelling — when that fits the room left on the line ([`run_printer_within`](crate::run_printer_within)), and broken otherwise. Without a width every group is flat, so grouping is behavior-neutral on the unbounded [`run_printer`](crate::run_printer) path.
 pub fn group(printer: Printer) -> Printer {
-    Printer::Group(Box::new(printer))
+    Printer::Group {
+        inner: Box::new(printer),
+        within: None,
+    }
+}
+
+/// A [`group`] that renders flat only where its own flat form also takes at most `percent` of the line width: past that it renders broken whatever room the line has, and a group measured flat around it breaks with it. A structure that reads as rows once it is long, however wide the line, is held to a share of it.
+pub fn group_within(percent: usize, printer: Printer) -> Printer {
+    Printer::Group {
+        inner: Box::new(printer),
+        within: Some(percent),
+    }
 }
 
 /// Mode-dependent text without being a break point: `flat` under a fitting group, `broken` under a broken one. The broken-only trailing comma is `if_break("", ",")`.

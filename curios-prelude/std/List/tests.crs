@@ -48,7 +48,10 @@ test builders_reshape_a_list =
 -- `traverse` collects under any `Monad`: over `Option` a single `none` sinks the whole list.
 test traverse_collects_under_a_monad =
     let halve(x: Nat) -> Option(Nat) =
-        match Nat/is_even(x) | true => Option/some(x / 2) | false => Option/none() end;
+        match Nat/is_even(x)
+        | true => Option/some(x / 2)
+        | false => Option/none()
+        end;
     Test/all([
         Test/equal(List/traverse([2, 4, 6], halve), Option/some([1, 2, 3])),
         Test/equal(List/traverse([2, 3, 6], halve), Option/none())]);
@@ -111,7 +114,10 @@ let _adjacent_order_reaches_every_pair(
 
 let counted(n: Nat, each: (Nat) -> Nat) -> List(Nat) =
     let go(i: Nat, left: Nat, acc: List(Nat)) -> List(Nat) =
-        match left | 0 => acc | fewer + 1 => go(i + 1, fewer, [..acc, each(i)]) end;
+        match left
+        | 0 => acc
+        | fewer + 1 => go(i + 1, fewer, [..acc, each(i)])
+        end;
     go(0, n, []);
 
 let whole_and_in_order(l: List(Nat)) -> Test({}) =

@@ -2,7 +2,11 @@ use /std/{Nat, Bool, Eq, Ordering, Ord, proved};
 
 --- The order of the two.
 pub let ord(x: Nat, y: Nat) -> Ordering =
-    match | x < y => Ordering/lt() | x == y => Ordering/eq() | _ => Ordering/gt() end;
+    match
+    | x < y => Ordering/lt()
+    | x == y => Ordering/eq()
+    | _ => Ordering/gt()
+    end;
 
 -- Of two naturals that differ, the one that is at most the other is below it.
 let below(
@@ -15,7 +19,8 @@ let below(
     | true => Bool/True/qed()
     | false =>
         let same: Eq()(a, b) = Nat/le/antisym(a, b, proved(), le);
-        match Eq/subst((x: Nat) => Bool/Holds(Bool/not(a == x)), Eq/sym(same), ne) end
+        match Eq/subst((x: Nat) => Bool/Holds(Bool/not(a == x)), Eq/sym(same), ne)
+        end
     end;
 
 --- A number is `eq` to itself.

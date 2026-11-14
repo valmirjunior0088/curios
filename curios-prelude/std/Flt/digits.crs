@@ -123,7 +123,10 @@ pub let digits_to_str(ds: List(Nat)) -> Str =
 
 --- The decimal digits of `n`, most significant first.
 pub let digits_of(n: Nat) -> List(Nat) =
-    match n < 10 | true => [n] | false => [..digits_of(n / 10), n % 10] end;
+    match n < 10
+    | true => [n]
+    | false => [..digits_of(n / 10), n % 10]
+    end;
 
 pub let normalize(ds: List(Nat)) -> {List(Nat), Bool} =
     match ds
@@ -228,7 +231,10 @@ pub let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =
     let down = scale_down(start.r, start.mp, start.mm, up.s, up.k, @start.above, @start.below);
     let digits = generate(down.r, up.s, down.mp, down.mm, even, @up.positive, @down.below);
     let (norm, carry) = normalize(digits);
-    match carry | true => layout([1, ..norm], down.k + 1) | false => layout(norm, down.k) end;
+    match carry
+    | true => layout([1, ..norm], down.k + 1)
+    | false => layout(norm, down.k)
+    end;
 
 --- `m · 2^e / 10^k` rounded to an integer in the direction `r`, of `negative`'s sign.
 pub let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> Nat =
@@ -247,7 +253,10 @@ pub let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> N
 
 --- `to_str_significant` in the direction `r`. The exponent of the last digit is first estimated from the binary exponent — `log₁₀ 2` is `0.30103` to five places, which puts the estimate at most one off — then settled by the digits it gives: too many, and the exponent steps up; too few, and it steps down, answering a carry to `10ⁿ` as one digit at the exponent above.
 pub let to_str_significant_in(r: Rounding, f: Flt, n: Nat) -> Str =
-    match Dyadic/try_of(f) | some(d), d.mantissa != +0 => significant(r, d, n) | _ => to_str(f) end;
+    match Dyadic/try_of(f)
+    | some(d), d.mantissa != +0 => significant(r, d, n)
+    | _ => to_str(f)
+    end;
 
 --- A finite nonzero `d` with `n` significant digits in the direction `r`.
 pub let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
@@ -275,6 +284,9 @@ pub let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
         | _ => (d0, k0)
         end;
     let settled: {Nat, Int} =
-        match first.0 >= high | true => (low, first.1 + +1) | false => first end;
+        match first.0 >= high
+        | true => (low, first.1 + +1)
+        | false => first
+        end;
     let (digits, k) = settled;
     Str/concat(sign, layout(digits_of(digits), k + Nat/to_int(n)));

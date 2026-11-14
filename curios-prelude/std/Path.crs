@@ -71,7 +71,11 @@ pub let parent(p: Path) -> Option(Path) =
     | _ =>
         let above = Bytes/join(x[separator], before);
         Option/some(
-            Path { match Bytes/len(above) == 0 | true => x[separator] | false => above end })
+            Path {
+                match Bytes/len(above) == 0
+                | true => x[separator]
+                | false => above
+                end })
     end;
 
 --- What follows the last `.` of the name, unless that `.` is its first byte: `.bashrc` has none and `archive.tar.gz` has `gz`.
@@ -86,7 +90,10 @@ pub let extension(p: Path) -> Option(Path) =
                 | true => (i + 1, true, x[])
                 | false => (i + 1, seen, x[..current, byte])
                 end);
-    match seen | true => Option/some(Path { current }) | false => Option/none() end;
+    match seen
+    | true => Option/some(Path { current })
+    | false => Option/none()
+    end;
 
 satisfy Eql(Path) {
     eql(a, b) = a.0 == b.0,
@@ -95,7 +102,11 @@ satisfy Eql(Path) {
 
 --- The text when the bytes are UTF-8, the bytes otherwise.
 satisfy Show(Path) {
-    show(p) = match Str/of_bytes(p.0) | success(s) => s | failure(_) => Show/show(p.0) end,
+    show(p) =
+        match Str/of_bytes(p.0)
+        | success(s) => s
+        | failure(_) => Show/show(p.0)
+        end,
 }
 
 satisfy Spell(Path) {

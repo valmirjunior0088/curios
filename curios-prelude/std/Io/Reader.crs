@@ -67,7 +67,11 @@ pub let new(@S: Type, stream: S) -> Io(Reader(S)) =
 -- An empty slot is a reader that has read nothing yet: it holds nothing and has cut nothing.
 let taken(@S: Type, r: Reader(S)) -> Io(Held) =
     let slot = Channel/try_receive(r.get)!;
-    Io/pure(match slot | item(held) => held | _ => Held { cuts = 0, bytes = x[] } end);
+    Io/pure(
+        match slot
+        | item(held) => held
+        | _ => Held { cuts = 0, bytes = x[] }
+        end);
 
 let kept(@S: Type, r: Reader(S), held: Held) -> Io({}) =
     let _ = Channel/try_send(r.put, held)!;

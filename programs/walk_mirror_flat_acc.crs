@@ -74,7 +74,10 @@ let text_of(n: Nat) -> Bytes =
     Str/to_bytes(Str/concat(Nat/to_str(n), "é→𝄞é→𝄞"));
 
 let iterate(k: Nat, b: Bytes, acc: Nat) -> Nat =
-    match k | 0 => acc | m + 1 => iterate(m, b, (acc + walk1(MScan/lead(), b, 0, 0)) % 1000003) end;
+    match k
+    | 0 => acc
+    | m + 1 => iterate(m, b, (acc + walk1(MScan/lead(), b, 0, 0)) % 1000003)
+    end;
 
 let total(n: Nat) -> Nat =
     iterate(n, text_of(n), 0);

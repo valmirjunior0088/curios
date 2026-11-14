@@ -9,10 +9,15 @@ let f(
     h: (Nat) -> Bool,
     n: Nat,
     p: Eq()(g(n), g(g(n))),
-    guard: Holds(match p: (i, j, q) => Bool | refl(@z) => h(z) end),
+    guard: Holds(
+        match p: (i, j, q) => Bool
+        | refl(@z) => h(z)
+        end),
     nonzero: Holds(n != 0),
 ) -> Holds(h(0)) =
-    match match p: (i, j, q) => Bool | refl(@z) => h(z) end
+    match match p: (i, j, q) => Bool
+    | refl(@z) => h(z)
+    end
     | false => match guard end
     | true =>
         match n

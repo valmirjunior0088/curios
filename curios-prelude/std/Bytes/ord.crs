@@ -24,7 +24,10 @@ pub let ord(a: Bytes, b: Bytes) -> Ordering =
 
 --- A run is `eq` to itself.
 pub let refl(a: Bytes) -> Eq()(ord(a, a), Ordering/eq()) =
-    match a: (m) => Eq()(ord(m, m), Ordering/eq()) | x[] => Eq/refl() | x[_, .._]; ih => ih end;
+    match a: (m) => Eq()(ord(m, m), Ordering/eq())
+    | x[] => Eq/refl()
+    | x[_, .._]; ih => ih
+    end;
 
 --- `ord` answers through a shared prefix as it does past it.
 pub let past(p: Bytes, a: Bytes, b: Bytes) -> Eq()(ord(x[..p, ..a], x[..p, ..b]), ord(a, b)) =
@@ -89,7 +92,12 @@ pub let flips: Ord/Flips(ord) =
 
 -- Whether two conses whose heads answer `o` are in order: what `ord` as a relation reduces to once its heads are compared.
 let after(o: Ordering, t: Bytes, r: Bytes) -> Bool =
-    Ordering/is_le(match o | eq() => ord(t, r) | lt() => Ordering/lt() | gt() => Ordering/gt() end);
+    Ordering/is_le(
+        match o
+        | eq() => ord(t, r)
+        | lt() => Ordering/lt()
+        | gt() => Ordering/gt()
+        end);
 
 --- `ord` as a relation carries across a middle run.
 ---

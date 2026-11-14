@@ -192,7 +192,10 @@ let attempt(@A: Type, offers: List(Offer(A))) -> Io(Option(A)) =
     | [] => pure(Option/none())
     | [o, ..more] =>
         let got = o.try!;
-        match got | some(a) => pure(Option/some(a)) | none() => attempt(more) end
+        match got
+        | some(a) => pure(Option/some(a))
+        | none() => attempt(more)
+        end
     end;
 
 -- What every offer of `offers` waits on, in their order.
@@ -207,7 +210,10 @@ let waits(@A: Type, offers: List(Offer(A))) -> Io(List(Waiting)) =
 
 -- Every release of `ws`, in their order.
 let released(ws: List(Waiting)) -> Io({}) =
-    match ws | [] => pure(()) | [w, ..more] => bind(w.release, (_) => released(more)) end;
+    match ws
+    | [] => pure(())
+    | [w, ..more] => bind(w.release, (_) => released(more))
+    end;
 
 --- The value of the first offer to yield one, waiting on what all of them wait on while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing. Which offer answered is the value's to say, through `Offer/map`.
 ---
@@ -277,7 +283,11 @@ let cancel_all(branches: List(Branch)) -> Io({}) =
     match branches
     | [] => pure(())
     | [b, ..more] =>
-        let _ = match b | waiting(_, _, cancel, _) => cancel | fresh(_) => pure(()) end!;
+        let _ =
+            match b
+            | waiting(_, _, cancel, _) => cancel
+            | fresh(_) => pure(())
+            end!;
         cancel_all(more)
     end;
 

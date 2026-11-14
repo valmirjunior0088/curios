@@ -13,12 +13,23 @@ end
         | true => #{node = InductType} /Two()
         end) -> #NatType,
     k: (n: #NatType) -> #BoolType,
-    p: match c: (x3) => Type | false => #NatType | true => #{node = InductType} /Two() end,
-    q: match c: (x4) => Type | false => #NatType | true => #{node = InductType} /Two() end,
+    p: match c: (x3) => Type
+    | false => #NatType
+    | true => #{node = InductType} /Two()
+    end,
+    q: match c: (x4) => Type
+    | false => #NatType
+    | true => #{node = InductType} /Two()
+    end,
     guard: /sys/Bool/Holds(
-        match #NatEql(h(p), h(q)): (x5) => #BoolType | false => k(1) | true => k(0) end)) =>
-    match match #NatEql(h(p), h(q)): (x9) => #BoolType | false => k(1) | true => k(0) end: (x6) =>
-        /sys/Bool/Holds(k(0))
+        match #NatEql(h(p), h(q)): (x5) => #BoolType
+        | false => k(1)
+        | true => k(0)
+        end)) =>
+    match match #NatEql(h(p), h(q)): (x9) => #BoolType
+    | false => k(1)
+    | true => k(0)
+    end: (x6) => /sys/Bool/Holds(k(0))
     | false => match guard: (x7) => /sys/Bool/Holds(k(0)) end
     | true =>
         let w: #{node = InductType} /sys/Bool/True() =

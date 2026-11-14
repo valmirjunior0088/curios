@@ -64,12 +64,18 @@ satisfy (
         bind(
             Monad/lift(Try/run(action)),
             (result) =>
-                match result | success(a) => pure(a) | failure(e) => fail(Show/show(e)) end),
+                match result
+                | success(a) => pure(a)
+                | failure(e) => fail(Show/show(e))
+                end),
 }
 
 --- The test that holds when `condition` is true.
 pub let assert(condition: Bool) -> Test({}) =
-    match condition | true => pure(()) | false => fail("the condition was false") end;
+    match condition
+    | true => pure(())
+    | false => fail("the condition was false")
+    end;
 
 --- The test that holds when the two are equal, reporting both when they are not.
 pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test({}) =
@@ -110,7 +116,10 @@ let finish(@A: Type, test: Test(A)) -> Io(Result(Failure, A)) =
     end;
 
 let from_result(@A: Type, result: Result(Failure, A)) -> Test(A) =
-    match result | success(a) => pure(a) | failure(failure) => Test/failed(failure) end;
+    match result
+    | success(a) => pure(a)
+    | failure(failure) => Test/failed(failure)
+    end;
 
 --- `body` run with a scope, as `Io/Scope/run` runs one: its children cancelled and its releases run after a success or an assertion failure, and when a suspended body is cancelled.
 pub let scope(@A: Type, body: (Io/Scope) -> Test(A)) -> Test(A) =
@@ -120,7 +129,10 @@ pub let scope(@A: Type, body: (Io/Scope) -> Test(A)) -> Test(A) =
 --- Fail if the deadline wins, after cancelling the suspended body and running its releases.
 pub let timeout(@A: Type, d: Duration, body: () -> Test(A)) -> Test(A) =
     let result = Io/timeout(d, finish(body()))!;
-    match result | some(outcome) => from_result(outcome) | none() => fail("the test timed out") end;
+    match result
+    | some(outcome) => from_result(outcome)
+    | none() => fail("the test timed out")
+    end;
 
 let message(failure: Failure) -> Str =
     Str/join(": ", [..failure.contexts, failure.message]);
@@ -153,7 +165,10 @@ satisfy Program(Test({})) {
 }
 
 let parse_index(raw: Bytes) -> Option(Nat) =
-    match Str/of_bytes(raw) | success(s) => Nat/of_str(s) | failure(_) => Option/none() end;
+    match Str/of_bytes(raw)
+    | success(s) => Nat/of_str(s)
+    | failure(_) => Option/none()
+    end;
 
 let run_all(tests: List({Str, () -> Test({})})) -> Io(Bool) =
     List/fold(

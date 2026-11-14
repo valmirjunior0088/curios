@@ -126,7 +126,10 @@ pub let to_int(r: Rounding, f: Flt, @ok: Flt/Finite(f)) -> Int =
 --- `to_int` for a non-negative `f`, as a `Nat`: `Flt/to_nat`'s truncation under the bound, stepped up where the direction says the dropped fraction rounds up.
 pub let to_nat(r: Rounding, f: Flt, @ok: Flt/NonNeg(f)) -> Nat =
     let t = Flt/to_nat(f, @ok);
-    match steps_away(r, false, t, f - Nat/to_flt(t)) | true => t + 1 | false => t end;
+    match steps_away(r, false, t, f - Nat/to_flt(t))
+    | true => t + 1
+    | false => t
+    end;
 
 --- `Flt/of_str` in the direction `r` names: decimal or hex text read exactly and rounded once, the special names read as they are. `none` for text that spells no number.
 pub let of_str(r: Rounding, s: Str) -> Option(Flt) =

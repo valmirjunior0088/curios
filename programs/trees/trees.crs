@@ -16,7 +16,10 @@ let build(d: Nat, v: Nat) -> Tree =
     end;
 
 let sum(t: Tree) -> Nat =
-    match t | leaf(n) => n % 1000003 | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003 end;
+    match t
+    | leaf(n) => n % 1000003
+    | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
+    end;
 
 let execute() -> Try(Io, Str, {}) =
     let arguments = Proc/args()!;
