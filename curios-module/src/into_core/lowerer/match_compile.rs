@@ -3,7 +3,7 @@ use {
     crate::Error,
     curios_common::Span,
     curios_surface::{
-        Alternative, BytesPattern, Guard, HeadlessArm, HeadlessMatch, ListPattern, Match,
+        Alternative, BytesPattern, Guard, HeadlessArm, HeadlessMatch, Label, ListPattern, Match,
         MatchPattern, MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField,
         Term,
     },
@@ -69,18 +69,16 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         }))
     }
 
-    /// One arm of a match with no head as its row: `_` over the `()` the match is over, which binds nothing its guards or body can name.
+    /// One arm of a match with no head as its row: `_` over the `()` the match is over, which binds nothing.
     fn unheaded(
         &self,
         guards: &[Guard],
         body: &Term,
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Row, Error> {
-        let unnamed = self.mint([String::new()]);
-
         self.row(
-            curios_core::Pattern::Binder,
-            unnamed,
+            curios_core::Pattern::Wildcard,
+            Vec::new(),
             guards,
             body,
             None,
@@ -236,6 +234,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         binders: &mut Vec<Binder>,
     ) -> Result<curios_core::Pattern, Error> {
         Ok(match pattern {
+            MatchPattern::Binder(name) if !bindable(name.as_str()) => {
+                curios_core::Pattern::Wildcard
+            }
             MatchPattern::Binder(name) => {
                 binders.push(self.pattern_binder(name));
 
@@ -263,9 +264,12 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             MatchPattern::Char(character) => curios_core::Pattern::Character(*character),
             MatchPattern::Nat(NatPattern::Zero) => curios_core::Pattern::Zero,
             MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
-                binders.push(self.pattern_binder(pred_label));
+                let predecessor = self.slot(pred_label, binders);
 
-                curios_core::Pattern::Succ(self.hypothesis(ih, binders)?)
+                curios_core::Pattern::Succ {
+                    predecessor,
+                    hypothesis: self.hypothesis(ih, binders)?,
+                }
             }
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value, _))) => {
                 curios_core::Pattern::Literal(value.clone())
@@ -275,24 +279,34 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 head_label,
                 tail_label,
                 ih,
-            }) => {
-                binders.push(self.pattern_binder(head_label));
-                binders.push(self.pattern_binder(tail_label));
-
-                curios_core::Pattern::Cons(self.hypothesis(ih, binders)?)
-            }
+            }) => curios_core::Pattern::Cons {
+                head: self.slot(head_label, binders),
+                tail: self.slot(tail_label, binders),
+                hypothesis: self.hypothesis(ih, binders)?,
+            },
             MatchPattern::Bytes(BytesPattern::End) => curios_core::Pattern::End,
             MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
                 tail_label,
                 ih,
-            }) => {
-                binders.push(self.pattern_binder(head_label));
-                binders.push(self.pattern_binder(tail_label));
-
-                curios_core::Pattern::Atom(self.hypothesis(ih, binders)?)
-            }
+            }) => curios_core::Pattern::Atom {
+                head: self.slot(head_label, binders),
+                tail: self.slot(tail_label, binders),
+                hypothesis: self.hypothesis(ih, binders)?,
+            },
         })
+    }
+
+    /// A successor's predecessor or a sequence's head or tail, its name minted onto `binders` where it writes one: a `_` binds nothing.
+    fn slot(&self, name: &Label, binders: &mut Vec<Binder>) -> curios_core::Slot {
+        match bindable(name.as_str()) {
+            true => {
+                binders.push(self.pattern_binder(name));
+
+                curios_core::Slot::Binder
+            }
+            false => curios_core::Slot::Wildcard,
+        }
     }
 
     /// The fields of a tuple or struct pattern, each under the label it is written with.
@@ -325,6 +339,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         binders: &mut Vec<Binder>,
     ) -> Result<curios_core::Bind, Error> {
         Ok(match pattern {
+            Pattern::Binder(name) if !bindable(name.as_str()) => curios_core::Bind::Wildcard,
             Pattern::Binder(name) => {
                 binders.push(self.pattern_binder(name));
 

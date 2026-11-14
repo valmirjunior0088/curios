@@ -7,11 +7,11 @@ use {
     },
     curios_common::{Qualifier, Source},
     curios_core::{
-        Arm, Atom, CalleeId, Cases, Definition, DefinitionKind, Definitions, Field, Free, Func,
-        FuncType, Global, Guard, HeadKey, InductDecl, InductParam, Intrinsic, Item, Let, Level,
-        Match, MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality,
-        QualityParam, RecItem, Row, Sort, StructDecl, Subterm, Telescope, Term, UniverseContext,
-        UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
+        Arm, Atom, Bind, CalleeId, Cases, Definition, DefinitionKind, Definitions, Field, Free,
+        Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam, Intrinsic, Item, Let,
+        Level, Match, MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj,
+        Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm, Telescope, Term,
+        UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -498,6 +498,57 @@ fn every_node_written_reads_back_as_itself() {
                 },
             ],
         }),
+        // A wildcard binds nothing, so its row's function binds nothing for it; a binder with no name is a place all the same, and a successor's predecessor is one whatever its word.
+        Term::matrix(Matrix {
+            head: one(),
+            motive: None,
+            arms: vec![
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Succ {
+                            predecessor: Slot::Binder,
+                            hypothesis: Some(Bind::Fields(vec![
+                                (None, Bind::Wildcard),
+                                (None, Bind::Binder),
+                            ])),
+                        },
+                        guards: Vec::new(),
+                        body: Term::func(
+                            [
+                                (Free::local(1, None), nat_type()),
+                                (Free::local(2, Some("m")), nat_type()),
+                            ],
+                            one(),
+                        ),
+                    }],
+                },
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Binder,
+                        guards: Vec::new(),
+                        body: over(Free::local(1, None), one()),
+                    }],
+                },
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Cons {
+                            head: Slot::Wildcard,
+                            tail: Slot::Binder,
+                            hypothesis: None,
+                        },
+                        guards: Vec::new(),
+                        body: over(Free::local(1, Some("rest")), one()),
+                    }],
+                },
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Wildcard,
+                        guards: Vec::new(),
+                        body: Term::func(Vec::<(Free, Term)>::new(), one()),
+                    }],
+                },
+            ],
+        }),
         Term::metavar_birthed(
             MetavarId(3),
             MetavarOrigin::Witness(WitnessOrigin {
@@ -753,6 +804,43 @@ fn a_form_only_a_program_writes_is_refused_by_name_where_it_stands() {
             "{text}"
         );
     }
+}
+
+/// A row writes each place by the word its function gives the binder, and a bare `_` is a wildcard, which binds nothing: a place whose word is not its binder's is refused.
+#[test]
+fn a_rows_places_are_its_functions_words_and_a_bare_underscore_is_a_wildcard() {
+    let m = Free::local(1, Some("m"));
+    let numeral = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+    let term = Term::matrix(Matrix {
+        head: numeral(1),
+        motive: None,
+        arms: vec![
+            Arm {
+                alternatives: vec![Row {
+                    pattern: Pattern::Binder,
+                    guards: Vec::new(),
+                    body: Term::func([(m, nat_type())], Term::free_var(&m)),
+                }],
+            },
+            Arm {
+                alternatives: vec![Row {
+                    pattern: Pattern::Wildcard,
+                    guards: Vec::new(),
+                    body: Term::func(Vec::<(Free, Term)>::new(), numeral(0)),
+                }],
+            },
+        ],
+    });
+
+    assert_eq!(
+        written(&term),
+        "#{node = Matrix} match 1 | m => (m: #NatType) => m | _ => () => 0 end"
+    );
+    assert_eq!(read_back(&term), term);
+    assert!(matches!(
+        refused("#{node = Matrix} match 1 | m => (n: #NatType) => n | _ => () => 0 end").0,
+        Refusal::Malformed(what) if what.contains("places")
+    ));
 }
 
 /// A lambda's parameter states its domain, which a program's leaves to the elaborator.

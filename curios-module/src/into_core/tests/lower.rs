@@ -66,7 +66,7 @@ fn named_catch_all_is_rejected() {
 
 #[test]
 fn a_match_lowers_to_the_matrix_it_is_written_as() {
-    // A match is handed on as its arms, each a pattern and its body as a function over the names the pattern binds, in the order it writes them: elaboration compiles the patterns, where the scrutinee's type is known. A binder beside a concrete pattern is nothing lowering refuses. (Names need not resolve: lowering precedes name resolution.)
+    // A match is handed on as its arms, each a pattern and its body as a function over the names the pattern binds, in the order it writes them, a `_` binding none: elaboration compiles the patterns, where the scrutinee's type is known. A binder beside a concrete pattern is nothing lowering refuses. (Names need not resolve: lowering precedes name resolution.)
     let term = run("match m | some(some(x)) => x | some(_) => 0 | none() => 1 end");
 
     let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
@@ -78,7 +78,7 @@ fn a_match_lowers_to_the_matrix_it_is_written_as() {
             .rows()
             .map(|row| row.pattern.binders())
             .collect::<Vec<_>>(),
-        [1, 1, 0],
+        [1, 0, 0],
     );
     for row in matrix.rows() {
         let curios_core::Subterm::Func(body) = &*row.body else {
@@ -147,7 +147,7 @@ fn a_match_refusal_stands_at_the_binder_or_the_motive_it_is_about() {
 
 #[test]
 fn an_arm_lowers_to_a_row_for_each_alternative() {
-    // Each alternative is a row of its own arm, the body lowered again under the names it binds, so each is typed apart.
+    // Each alternative is a row of its own arm, the body lowered again under the names it binds, so each is typed apart: `x` alone, the `_` beside it binding nothing.
     let term = run("match m | left(x, _) | right(_, x) => x | none() => 0 end");
 
     let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
@@ -172,7 +172,7 @@ fn an_arm_lowers_to_a_row_for_each_alternative() {
             body.telescope.len()
         })
         .collect::<Vec<_>>();
-    assert_eq!(binders, [2, 2]);
+    assert_eq!(binders, [1, 1]);
 }
 
 #[test]
@@ -214,7 +214,7 @@ fn a_guard_lowers_to_a_function_over_the_names_written_before_it() {
 
 #[test]
 fn a_match_with_no_head_lowers_to_a_matrix_over_the_unit_value() {
-    // A match with no head is the match of no columns: its head is `()`, and every row writes `_`, its guards being all it tests.
+    // A match with no head is the match of no columns: its head is `()`, and every row writes `_`, a wildcard, which binds nothing, its guards being all it tests.
     let term = run("match | p => a | some(x) = o => x | _ => 0 end");
 
     let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
@@ -227,7 +227,7 @@ fn a_match_with_no_head_lowers_to_a_matrix_over_the_unit_value() {
     assert!(
         matrix
             .rows()
-            .all(|row| row.pattern == curios_core::Pattern::Binder)
+            .all(|row| row.pattern == curios_core::Pattern::Wildcard)
     );
     assert_eq!(
         matrix

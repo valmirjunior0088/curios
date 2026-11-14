@@ -127,12 +127,14 @@ impl Guard {
     }
 }
 
-/// A match arm's pattern as it is written. A constructor is the tag it is spelled by, since the scrutinee's type supplies its namespace, and a binder is a place among its row's binders: a pattern's binders are counted left to right, a successor's predecessor and a cons's head and tail ahead of the hypothesis they stand beside.
+/// A match arm's pattern as it is written. A constructor is the tag it is spelled by, since the scrutinee's type supplies its namespace, and a binder is a place among its row's binders: a pattern's binders are counted left to right, a successor's predecessor and a cons's head and tail ahead of the hypothesis they stand beside. A `_` is a wildcard and no binder, so a row binds nothing for it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived(recursive)]
 pub enum Pattern {
-    /// A name or `_`.
+    /// A name, a place among its row's binders.
     Binder,
+    /// `_`, which takes nothing apart and binds nothing: no place among its row's binders stands for it.
+    Wildcard,
     /// A constructor over one pattern for each payload it writes, each under the mark it is written under.
     Variant {
         tag: Atom,
@@ -152,7 +154,10 @@ pub enum Pattern {
     /// `0`.
     Zero,
     /// `predecessor + 1`, with the hypothesis written beside it where one is.
-    Succ(Option<Bind>),
+    Succ {
+        predecessor: Slot,
+        hypothesis: Option<Bind>,
+    },
     /// A dispatch literal spelled as a numeral.
     Literal(Natural),
     /// A dispatch literal spelled as the character whose scalar value it is.
@@ -160,11 +165,37 @@ pub enum Pattern {
     /// `[]`.
     Nil,
     /// `[head, ..tail]`, with the hypothesis written beside it where one is.
-    Cons(Option<Bind>),
+    Cons {
+        head: Slot,
+        tail: Slot,
+        hypothesis: Option<Bind>,
+    },
     /// `x[]`.
     End,
     /// `x[head, ..tail]`, with the hypothesis written beside it where one is.
-    Atom(Option<Bind>),
+    Atom {
+        head: Slot,
+        tail: Slot,
+        hypothesis: Option<Bind>,
+    },
+}
+
+/// A part a successor or a sequence's case always holds, its predecessor, its head or its tail, as a pattern writes it: a name, a place among its row's binders, or `_`, which binds nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum Slot {
+    Binder,
+    Wildcard,
+}
+
+impl Slot {
+    /// How many binders it writes.
+    pub fn binders(self) -> usize {
+        match self {
+            Slot::Binder => 1,
+            Slot::Wildcard => 0,
+        }
+    }
 }
 
 impl Pattern {
@@ -172,6 +203,7 @@ impl Pattern {
     pub fn binders(&self) -> usize {
         match self {
             Pattern::Binder => 1,
+            Pattern::Wildcard => 0,
             Pattern::Variant { args, .. } => args.iter().map(|(_, arg)| arg.binders()).sum(),
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 fields.iter().map(|(_, field)| field.binders()).sum()
@@ -182,19 +214,31 @@ impl Pattern {
             | Pattern::Character(_)
             | Pattern::Nil
             | Pattern::End => 0,
-            Pattern::Succ(hypothesis) => 1 + hypothesis.as_ref().map_or(0, Bind::binders),
-            Pattern::Cons(hypothesis) | Pattern::Atom(hypothesis) => {
-                2 + hypothesis.as_ref().map_or(0, Bind::binders)
+            Pattern::Succ {
+                predecessor,
+                hypothesis,
+            } => predecessor.binders() + hypothesis.as_ref().map_or(0, Bind::binders),
+            Pattern::Cons {
+                head,
+                tail,
+                hypothesis,
             }
+            | Pattern::Atom {
+                head,
+                tail,
+                hypothesis,
+            } => head.binders() + tail.binders() + hypothesis.as_ref().map_or(0, Bind::binders),
         }
     }
 }
 
-/// What a fold's hypothesis is bound by: a name, or a tuple or struct pattern whose leaves take its projections.
+/// What a fold's hypothesis is bound by: a name, `_`, or a tuple or struct pattern whose leaves take its projections.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived(recursive)]
 pub enum Bind {
     Binder,
+    /// `_`, which binds nothing.
+    Wildcard,
     Fields(#[archived_omit_bounds] Vec<(Option<String>, Bind)>),
     /// A structure's fields under the name the structure is written by: `head` as written and `structure` what it resolves to, as [`Pattern::Struct`] holds them. The hypothesis is held to that structure where it is bound.
     Struct {
@@ -210,6 +254,7 @@ impl Bind {
     pub fn binders(&self) -> usize {
         match self {
             Bind::Binder => 1,
+            Bind::Wildcard => 0,
             Bind::Fields(fields) | Bind::Struct { fields, .. } => {
                 fields.iter().map(|(_, field)| field.binders()).sum()
             }

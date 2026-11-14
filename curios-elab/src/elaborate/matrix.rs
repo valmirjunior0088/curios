@@ -24,7 +24,7 @@ use {
     },
     curios_common::{Plicity, recurse},
     curios_core::{
-        Arm, Atom, Bind, Free, Guard, InductArm, Many, Matrix, Mention, Pattern, Row, Scope,
+        Arm, Atom, Bind, Free, Guard, InductArm, Many, Matrix, Mention, Pattern, Row, Scope, Slot,
         StructType, Subterm, Telescope, Term, Tuple,
     },
     curios_num::Natural,
@@ -76,8 +76,23 @@ type Label = (Option<String>, Option<u32>);
 /// What a row writes at one column: a pattern beside the place of the first binder it writes among its row's, or nothing where the compiler put the column under a pattern another row wrote, which the row reads as a binder that binds nothing.
 type Cell<'m> = Option<(&'m Pattern, usize)>;
 
-/// A row under a successor or a cons: the place of its first binder and the hypothesis it writes, where it writes the case, and the row.
-type Peeled<'m> = (Option<(usize, &'m Option<Bind>)>, Line<'m>);
+/// A row under a successor or a cons: what it writes of the case, where it writes it, and the row.
+type Peeled<'m> = (Option<Written<'m>>, Line<'m>);
+
+/// What a row writes of a successor's or a sequence's case: the place of its first binder, the slots ahead of the hypothesis, and the hypothesis.
+#[derive(Clone)]
+struct Written<'m> {
+    place: usize,
+    slots: Vec<Slot>,
+    hypothesis: &'m Option<Bind>,
+}
+
+impl Written<'_> {
+    /// The place of the hypothesis, past the binders the slots write.
+    fn hypothesis_place(&self) -> usize {
+        self.place + self.slots.iter().map(|slot| slot.binders()).sum::<usize>()
+    }
+}
 
 /// One column: the term it is, and the place of the value it holds in the pattern the match's scrutinee is being read as ([`Compiler::seen`]).
 #[derive(Clone)]
@@ -262,12 +277,12 @@ impl<'m> Compiler<'m> {
         let written = lines
             .iter()
             .filter_map(|line| line.cells[0].map(|(pattern, _)| pattern))
-            .filter(|pattern| !matches!(pattern, Pattern::Binder))
+            .filter(|pattern| !matches!(pattern, Pattern::Binder | Pattern::Wildcard))
             .collect::<Vec<_>>();
         let Some(first) = written.first().copied() else {
             let column = columns.remove(0);
             for line in &mut lines {
-                if let Some((_, place)) = line.cells.remove(0) {
+                if let Some((Pattern::Binder, place)) = line.cells.remove(0) {
                     self.named(context, line, place, column.term.clone());
                 }
             }
@@ -317,12 +332,12 @@ impl<'m> Compiler<'m> {
                 self.booleans(context, columns, lines, top, mode)
             }
             // A character is a dispatch case spelled by its scalar value, so it shares a column with the numerals.
-            Pattern::Zero | Pattern::Succ(_) | Pattern::Literal(_) | Pattern::Character(_) => {
+            Pattern::Zero | Pattern::Succ { .. } | Pattern::Literal(_) | Pattern::Character(_) => {
                 if !every(|_, other| {
                     matches!(
                         other,
                         Pattern::Zero
-                            | Pattern::Succ(_)
+                            | Pattern::Succ { .. }
                             | Pattern::Literal(_)
                             | Pattern::Character(_)
                     )
@@ -332,21 +347,23 @@ impl<'m> Compiler<'m> {
 
                 self.naturals(context, columns, lines, top, mode)
             }
-            Pattern::Nil | Pattern::Cons(_) => {
-                if !every(|_, other| matches!(other, Pattern::Nil | Pattern::Cons(_))) {
+            Pattern::Nil | Pattern::Cons { .. } => {
+                if !every(|_, other| matches!(other, Pattern::Nil | Pattern::Cons { .. })) {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
                 self.lists(context, columns, lines, top, mode)
             }
-            Pattern::End | Pattern::Atom(_) => {
-                if !every(|_, other| matches!(other, Pattern::End | Pattern::Atom(_))) {
+            Pattern::End | Pattern::Atom { .. } => {
+                if !every(|_, other| matches!(other, Pattern::End | Pattern::Atom { .. })) {
                     return Err(Error::MatrixInconsistentShape);
                 }
 
                 self.packed(context, columns, lines, top, mode)
             }
-            Pattern::Binder => unreachable!("a binder is no pattern a column is split by"),
+            Pattern::Binder | Pattern::Wildcard => {
+                unreachable!("a binder or a wildcard is no pattern a column is split by")
+            }
         }
     }
 
@@ -365,9 +382,13 @@ impl<'m> Compiler<'m> {
     /// The rows of a column a dispatch is about to split, with the column read by each row that writes a binder there: its name is bound to the column, and the row is under whichever case of the column the compiler puts it, none of which it states.
     fn joined(&mut self, context: &mut Context, lines: &mut [Line<'m>], column: &Column) {
         for line in lines {
-            if let Some((Pattern::Binder, place)) = line.cells[0] {
-                self.named(context, line, place, column.term.clone());
-                line.cells[0] = None;
+            match line.cells[0] {
+                Some((Pattern::Binder, place)) => {
+                    self.named(context, line, place, column.term.clone());
+                    line.cells[0] = None;
+                }
+                Some((Pattern::Wildcard, _)) => line.cells[0] = None,
+                _ => {}
             }
             if line.cells[0].is_none() {
                 self.strays[line.row] = true;
@@ -429,7 +450,7 @@ impl<'m> Compiler<'m> {
             curios_surface::Label::from(hint.clone().unwrap_or_else(|| "_".to_string())).into()
         });
 
-        written_pattern(&self.row(row).pattern, &mut names).to_string()
+        written_pattern(&self.row(row).pattern, &mut names, std::convert::identity).to_string()
     }
 
     /// The rows that reach a place where every column is read: the first written is the arm a value there takes, and it is a case of every other, since nothing else orders two arms that match one value. No two of them are alternatives of one arm, which match no value in common. Where the first has guards, it takes the value only where they pass ([`Compiler::guarded`]).
@@ -670,14 +691,10 @@ impl<'m> Compiler<'m> {
         Ok((rebuilt, type_))
     }
 
-    /// The row that cannot fail as a term over the scrutinee: its body under each name its pattern writes, bound to the part of the scrutinee it stands at. A lone `_` binds nothing its body can name, so its one binder stands for anything.
+    /// The row that cannot fail as a term over the scrutinee: its body under each name its pattern writes, bound to the part of the scrutinee it stands at.
     fn unfailing(&mut self, context: &mut Context, row: usize) -> Term {
         let head = &self.matrix.head;
         let pattern = &self.row(row).pattern;
-        if matches!(pattern, Pattern::Binder) && self.labels[row][0].0.is_none() {
-            return self.body(row).open(&[head]);
-        }
-
         let mut line = self.line(row);
         line.cells.clear();
         self.unfailing_parts(context, &mut line, pattern, 0, head.clone());
@@ -696,6 +713,7 @@ impl<'m> Compiler<'m> {
     ) {
         match pattern {
             Pattern::Binder => self.bind(context, line, place, value),
+            Pattern::Wildcard => {}
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 for (index, (label, field)) in fields.iter().enumerate() {
                     let projected = projection(&value, label.as_deref(), index);
@@ -943,13 +961,13 @@ impl<'m> Compiler<'m> {
 
                     name
                 }
+                Some((Pattern::Wildcard, _)) | None => context.fresh(None),
                 Some(cell) => {
                     slots.push(slot);
                     front.push(Some(cell));
 
                     context.fresh(None)
                 }
-                None => context.fresh(None),
             };
             binders.push(binder);
         }
@@ -1040,7 +1058,7 @@ impl<'m> Compiler<'m> {
                 .iter()
                 .any(|line| line.cells[0].is_some_and(|(pattern, _)| alike(pattern)))
         };
-        let peels = writes(|pattern| matches!(pattern, Pattern::Succ(_)));
+        let peels = writes(|pattern| matches!(pattern, Pattern::Succ { .. }));
         let dispatches =
             writes(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
         if peels && dispatches {
@@ -1051,7 +1069,7 @@ impl<'m> Compiler<'m> {
                     .map(|line| line.row)
                     .expect("a row writes the kind the column was found to hold")
             };
-            let successor = first(|pattern| matches!(pattern, Pattern::Succ(_)));
+            let successor = first(|pattern| matches!(pattern, Pattern::Succ { .. }));
             let literal =
                 first(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
             let place = |row: usize| self.row(row).body.extent();
@@ -1140,9 +1158,20 @@ impl<'m> Compiler<'m> {
         for mut line in lines {
             match line.cells.remove(0) {
                 Some((Pattern::Zero, _)) => zeros.push(line),
-                Some((Pattern::Succ(hypothesis), place)) => {
-                    successors.push((Some((place, hypothesis)), line))
-                }
+                Some((
+                    Pattern::Succ {
+                        predecessor,
+                        hypothesis,
+                    },
+                    place,
+                )) => successors.push((
+                    Some(Written {
+                        place,
+                        slots: vec![*predecessor],
+                        hypothesis,
+                    }),
+                    line,
+                )),
                 _ => {
                     zeros.push(line.clone());
                     successors.push((None, line));
@@ -1153,7 +1182,7 @@ impl<'m> Compiler<'m> {
             return Err(self.uncovered(&column, Seen::Leaf("0".to_string()), false));
         }
 
-        let reads_hypothesis = self.reads_hypothesis(&successors, 1);
+        let reads_hypothesis = self.reads_hypothesis(&successors);
         let scrutinee = Scrutinee::read(context, &column.term)?;
         let motive = self.motive(context, top);
 
@@ -1208,9 +1237,21 @@ impl<'m> Compiler<'m> {
         for mut line in lines {
             match line.cells.remove(0) {
                 Some((Pattern::Nil, _)) => empties.push(line),
-                Some((Pattern::Cons(hypothesis), place)) => {
-                    conses.push((Some((place, hypothesis)), line))
-                }
+                Some((
+                    Pattern::Cons {
+                        head,
+                        tail,
+                        hypothesis,
+                    },
+                    place,
+                )) => conses.push((
+                    Some(Written {
+                        place,
+                        slots: vec![*head, *tail],
+                        hypothesis,
+                    }),
+                    line,
+                )),
                 _ => {
                     empties.push(line.clone());
                     conses.push((None, line));
@@ -1246,9 +1287,21 @@ impl<'m> Compiler<'m> {
         for mut line in lines {
             match line.cells.remove(0) {
                 Some((Pattern::End, _)) => empties.push(line),
-                Some((Pattern::Atom(hypothesis), place)) => {
-                    atoms.push((Some((place, hypothesis)), line));
-                }
+                Some((
+                    Pattern::Atom {
+                        head,
+                        tail,
+                        hypothesis,
+                    },
+                    place,
+                )) => atoms.push((
+                    Some(Written {
+                        place,
+                        slots: vec![*head, *tail],
+                        hypothesis,
+                    }),
+                    line,
+                )),
                 _ => {
                     empties.push(line.clone());
                     atoms.push((None, line));
@@ -1286,7 +1339,7 @@ impl<'m> Compiler<'m> {
             }
         }
 
-        let reads_hypothesis = self.reads_hypothesis(&conses, 2);
+        let reads_hypothesis = self.reads_hypothesis(&conses);
         let scrutinee = Scrutinee::read(context, &column.term)?;
         let motive = self.motive(context, top);
         let term = self.term;
@@ -1339,15 +1392,20 @@ impl<'m> Compiler<'m> {
             .collect::<Vec<_>>();
         if let &[at] = writing.as_slice() {
             let (written, line) = &mut rows[at];
-            let (place, bind) = written.expect("the row that writes the case");
+            let written = written.clone().expect("the row that writes the case");
+            let mut place = written.place;
+            let mut slots = written.slots.iter().copied();
             let binders = std::array::from_fn(|operand| match operand + 1 < N {
                 true => {
-                    let name = self.name(context, line, place + operand);
-                    line.taken[place + operand] = Some(Term::free_var(&name));
+                    let slot = slots
+                        .next()
+                        .expect("a slot for each binder ahead of the hypothesis");
+                    let (name, next) = self.slot(context, line, slot, place);
+                    place = next;
 
                     name
                 }
-                false => self.hypothesis(context, line, bind, place + operand),
+                false => self.hypothesis(context, line, written.hypothesis, place),
             });
             line.cases.extend(binders.iter().copied());
 
@@ -1357,13 +1415,17 @@ impl<'m> Compiler<'m> {
         let binders: [Free; N] = std::array::from_fn(|_| context.fresh(None));
         let mut group = Vec::with_capacity(rows.len());
         for (written, mut line) in rows {
-            if let Some((place, bind)) = written {
-                for (operand, binder) in binders[..N - 1].iter().enumerate() {
-                    self.bind(context, &mut line, place + operand, Term::free_var(binder));
+            if let Some(written) = written {
+                let mut place = written.place;
+                for (slot, binder) in written.slots.iter().zip(&binders[..N - 1]) {
+                    if let Slot::Binder = slot {
+                        self.bind(context, &mut line, place, Term::free_var(binder));
+                        place += 1;
+                    }
                 }
-                if let Some(bind) = bind {
+                if let Some(bind) = written.hypothesis {
                     let hypothesis = Term::free_var(&binders[N - 1]);
-                    self.project(context, &mut line, bind, place + N - 1, hypothesis);
+                    self.project(context, &mut line, bind, place, hypothesis);
                 }
                 line.cases.extend(binders.iter().copied());
             }
@@ -1373,21 +1435,43 @@ impl<'m> Compiler<'m> {
         (binders, group)
     }
 
-    /// Whether the rows of a nonempty case may read its hypothesis, which is what makes their column a fold: `operands` is how many binders the case opens ahead of it. The one row that writes the case reads it where its body names the binder it writes for it, or where it takes it apart; rows that each write the case bind what they write to the one hypothesis, which reads it; and a body holding a written goal may name anything in scope. A row that wrote a binder at the column reads none.
-    fn reads_hypothesis(&self, rows: &[Peeled<'m>], operands: usize) -> bool {
+    /// The local the slot at `place` of the row `line` is entered under, beside the place after it: the row's own binder where the slot is one, read there, and a local nothing reads where it is a wildcard.
+    fn slot(
+        &self,
+        context: &mut Context,
+        line: &mut Line<'m>,
+        slot: Slot,
+        place: usize,
+    ) -> (Free, usize) {
+        match slot {
+            Slot::Binder => {
+                let name = self.name(context, line, place);
+                line.taken[place] = Some(Term::free_var(&name));
+
+                (name, place + 1)
+            }
+            Slot::Wildcard => (context.fresh(None), place),
+        }
+    }
+
+    /// Whether the rows of a nonempty case may read its hypothesis, which is what makes their column a fold. The one row that writes the case reads it where its body names the binder it writes for it, or where it takes it apart; rows that each write the case bind what they write to the one hypothesis, which reads it; and a body holding a written goal may name anything in scope. A row that wrote a binder at the column reads none.
+    fn reads_hypothesis(&self, rows: &[Peeled<'m>]) -> bool {
         let writing = rows
             .iter()
-            .filter_map(|(written, line)| written.map(|written| (written, line)))
+            .filter_map(|(written, line)| written.as_ref().map(|written| (written, line)))
             .collect::<Vec<_>>();
         let written = match writing.as_slice() {
-            [((place, bind), line)] => match bind {
-                Some(Bind::Binder) => self.names(line.row, place + operands),
+            [(written, line)] => match written.hypothesis {
+                Some(Bind::Binder) => self.names(line.row, written.hypothesis_place()),
                 Some(fields) => fields.binders() > 0,
                 None => false,
             },
-            writing => writing
-                .iter()
-                .any(|((_, bind), _)| bind.as_ref().is_some_and(|bind| bind.binders() > 0)),
+            writing => writing.iter().any(|(written, _)| {
+                written
+                    .hypothesis
+                    .as_ref()
+                    .is_some_and(|bind| bind.binders() > 0)
+            }),
         };
 
         written
@@ -1447,7 +1531,8 @@ impl<'m> Compiler<'m> {
         let shape = lines
             .iter()
             .find_map(|line| {
-                line.cells[0].filter(|(pattern, _)| !matches!(pattern, Pattern::Binder))
+                line.cells[0]
+                    .filter(|(pattern, _)| !matches!(pattern, Pattern::Binder | Pattern::Wildcard))
             })
             .map(|(pattern, _)| pattern)
             .expect("a column is flattened for a row that writes its shape");
@@ -1471,6 +1556,7 @@ impl<'m> Compiler<'m> {
 
                     vec![None; canonical.len()]
                 }
+                Some((Pattern::Wildcard, _)) => vec![None; canonical.len()],
                 Some((pattern, mut place)) => {
                     let fields = written(pattern);
                     if labelled(fields) != canonical {
@@ -1535,7 +1621,7 @@ impl<'m> Compiler<'m> {
 
                 name
             }
-            None => context.fresh(None),
+            Some(Bind::Wildcard) | None => context.fresh(None),
             Some(fields) => {
                 let hypothesis = context.fresh(None);
                 self.project(context, line, fields, place, Term::free_var(&hypothesis));
@@ -1556,6 +1642,7 @@ impl<'m> Compiler<'m> {
     ) {
         match bind {
             Bind::Binder => self.bind(context, line, place, value),
+            Bind::Wildcard => {}
             Bind::Fields(fields) | Bind::Struct { fields, .. } => {
                 if let Bind::Struct {
                     head, structure, ..
@@ -1679,8 +1766,7 @@ impl<'m> Compiler<'m> {
                 values.extend(names.iter().map(Term::free_var));
                 let passed = self.passing(context, row, index + 1, values, failed);
                 values.truncate(first);
-                // The `_` binds nothing its body can name: a value the pattern refuses takes it, and learns nothing of the pattern.
-                let unnamed = context.fresh(None);
+                // A value the pattern refuses takes the `_`, and learns nothing of the pattern.
 
                 Term::matrix(Matrix {
                     head: value,
@@ -1701,12 +1787,9 @@ impl<'m> Compiler<'m> {
                         },
                         Arm {
                             alternatives: vec![Row {
-                                pattern: Pattern::Binder,
+                                pattern: Pattern::Wildcard,
                                 guards: Vec::new(),
-                                body: Term::func(
-                                    vec![(unnamed, Term::hole(context.mint_metavar()))],
-                                    failed.clone(),
-                                ),
+                                body: Term::func(Vec::<(Free, Term)>::new(), failed.clone()),
                             }],
                         },
                     ],
@@ -1810,6 +1893,9 @@ impl<'m> Compiler<'m> {
 
                 return recurse(|| self.alone_over(context, columns, line, fold, top, mode));
             }
+            Pattern::Wildcard => {
+                return recurse(|| self.alone_over(context, columns, line, fold, top, mode));
+            }
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 let mut cells = Vec::with_capacity(fields.len() + line.cells.len());
                 let mut projections = Vec::with_capacity(fields.len() + columns.len());
@@ -1854,7 +1940,7 @@ impl<'m> Compiler<'m> {
         };
 
         match pattern {
-            Pattern::Binder | Pattern::Tuple(_) | Pattern::Struct { .. } => {
+            Pattern::Binder | Pattern::Wildcard | Pattern::Tuple(_) | Pattern::Struct { .. } => {
                 unreachable!("a pattern that states no case is read above")
             }
             Pattern::Variant { tag, args } => {
@@ -1934,7 +2020,7 @@ impl<'m> Compiler<'m> {
                     })
                 })?;
             }
-            Pattern::Zero | Pattern::Succ(_) => {
+            Pattern::Zero | Pattern::Succ { .. } => {
                 let split = match shared {
                     // The tree's dispatch is in the form its rows chose: a `0` is a literal's case where no row peels a successor.
                     Some(Outermost::Switch(split)) => {
@@ -1964,10 +2050,13 @@ impl<'m> Compiler<'m> {
                 };
 
                 match pattern {
-                    Pattern::Succ(bind) => {
-                        let predecessor = self.name(context, &line, place);
-                        line.taken[place] = Some(Term::free_var(&predecessor));
-                        let hypothesis = self.hypothesis(context, &mut line, bind, place + 1);
+                    Pattern::Succ {
+                        predecessor,
+                        hypothesis,
+                    } => {
+                        let (predecessor, place) =
+                            self.slot(context, &mut line, *predecessor, place);
+                        let hypothesis = self.hypothesis(context, &mut line, hypothesis, place);
                         line.cases.extend([predecessor, hypothesis]);
 
                         walk_awaited(context, awaits, |context| {
@@ -1990,9 +2079,9 @@ impl<'m> Compiler<'m> {
                     }
                 }
             }
-            Pattern::Nil | Pattern::Cons(_) | Pattern::End | Pattern::Atom(_) => {
+            Pattern::Nil | Pattern::Cons { .. } | Pattern::End | Pattern::Atom { .. } => {
                 let sequence = match pattern {
-                    Pattern::End | Pattern::Atom(_) => Sequence::Bytes,
+                    Pattern::End | Pattern::Atom { .. } => Sequence::Bytes,
                     _ => Sequence::List,
                 };
                 let split = match shared {
@@ -2015,12 +2104,19 @@ impl<'m> Compiler<'m> {
                 };
 
                 match pattern {
-                    Pattern::Cons(bind) | Pattern::Atom(bind) => {
-                        let head = self.name(context, &line, place);
-                        line.taken[place] = Some(Term::free_var(&head));
-                        let tail = self.name(context, &line, place + 1);
-                        line.taken[place + 1] = Some(Term::free_var(&tail));
-                        let hypothesis = self.hypothesis(context, &mut line, bind, place + 2);
+                    Pattern::Cons {
+                        head,
+                        tail,
+                        hypothesis,
+                    }
+                    | Pattern::Atom {
+                        head,
+                        tail,
+                        hypothesis,
+                    } => {
+                        let (head, place) = self.slot(context, &mut line, *head, place);
+                        let (tail, place) = self.slot(context, &mut line, *tail, place);
+                        let hypothesis = self.hypothesis(context, &mut line, hypothesis, place);
                         let binders = [head, tail, hypothesis];
                         line.cases.extend(binders);
 
@@ -2240,7 +2336,7 @@ fn payload_cells<'m>(
 /// How many dispatches a pattern is refuted at: one for each constructor and each carrier leaf it writes, at any depth. A pattern refuted at none takes nothing apart that could fail.
 fn refutations(pattern: &Pattern) -> usize {
     match pattern {
-        Pattern::Binder => 0,
+        Pattern::Binder | Pattern::Wildcard => 0,
         Pattern::Variant { args, .. } => {
             1 + args.iter().map(|(_, arg)| refutations(arg)).sum::<usize>()
         }
@@ -2249,13 +2345,13 @@ fn refutations(pattern: &Pattern) -> usize {
         }
         Pattern::Bool(_)
         | Pattern::Zero
-        | Pattern::Succ(_)
+        | Pattern::Succ { .. }
         | Pattern::Literal(_)
         | Pattern::Character(_)
         | Pattern::Nil
-        | Pattern::Cons(_)
+        | Pattern::Cons { .. }
         | Pattern::End
-        | Pattern::Atom(_) => 1,
+        | Pattern::Atom { .. } => 1,
     }
 }
 
@@ -2288,8 +2384,8 @@ fn payload_places(
 /// Whether every value `this` matches is one `that` matches: `this` is a case of `that`. Two rows that reach one leaf agree wherever both write a case, so what is asked is whether `that` writes a case anywhere `this` writes a binder.
 fn instance(this: &Pattern, that: &Pattern) -> bool {
     match (this, that) {
-        (_, Pattern::Binder) => true,
-        (Pattern::Binder, that) => refutations(that) == 0,
+        (_, Pattern::Binder | Pattern::Wildcard) => true,
+        (Pattern::Binder | Pattern::Wildcard, that) => refutations(that) == 0,
         (
             Pattern::Variant { tag, args },
             Pattern::Variant {
@@ -2303,7 +2399,7 @@ fn instance(this: &Pattern, that: &Pattern) -> bool {
             tag == other_tag
                 && payload_places(others).all(|(place, other)| match written.get(&place) {
                     Some(pattern) => instance(pattern, other),
-                    None => instance(&Pattern::Binder, other),
+                    None => instance(&Pattern::Wildcard, other),
                 })
         }
         (Pattern::Tuple(fields), Pattern::Tuple(others))
@@ -2323,7 +2419,11 @@ fn fold_places<'m>(
     visit: &mut impl FnMut(&[Step], Option<Option<&'m Bind>>),
 ) {
     match pattern {
-        Pattern::Binder | Pattern::Bool(_) | Pattern::Literal(_) | Pattern::Character(_) => {}
+        Pattern::Binder
+        | Pattern::Wildcard
+        | Pattern::Bool(_)
+        | Pattern::Literal(_)
+        | Pattern::Character(_) => {}
         Pattern::Variant { tag, args } => {
             for ((plain, hidden), arg) in payload_places(args) {
                 path.push(Step::Payload(tag.as_string(), plain, hidden));
@@ -2339,9 +2439,15 @@ fn fold_places<'m>(
             }
         }
         Pattern::Zero | Pattern::Nil | Pattern::End => visit(path, None),
-        Pattern::Succ(bind) | Pattern::Cons(bind) | Pattern::Atom(bind) => {
-            visit(path, Some(bind.as_ref()))
+        Pattern::Succ {
+            hypothesis: bind, ..
         }
+        | Pattern::Cons {
+            hypothesis: bind, ..
+        }
+        | Pattern::Atom {
+            hypothesis: bind, ..
+        } => visit(path, Some(bind.as_ref())),
     }
 }
 

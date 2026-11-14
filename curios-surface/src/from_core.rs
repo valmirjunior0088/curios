@@ -491,7 +491,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
     })
 }
 
-/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each arm as its alternatives, each pattern over the names its own row's body binds, beside the guards and the body the first row's opening reads back as — the ones the arm was written with. A match over `()` whose rows write an unnamed `_`, every one but the last guarded, reads back as the match with no head it was lowered from.
+/// A match whose patterns are not yet compiled, as the `match` it was lowered from: each arm as its alternatives, each pattern over the names its own row's body binds, beside the guards and the body the first row's opening reads back as — the ones the arm was written with. A match over `()` whose rows write `_`, every one but the last guarded, reads back as the match with no head it was lowered from.
 ///
 /// The motive's binders are opened ahead of the scrutinee's and the arms' after both, the order Core's printer ([`Spellable`](crate::Spellable)) opens them in.
 fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
@@ -581,7 +581,7 @@ fn written_row(
     };
     let mut names = names.into_iter();
     let mut place = pattern.binders();
-    let written = written_pattern(&pattern, &mut names);
+    let written = written_pattern(&pattern, &mut names, std::convert::identity);
     let mut read = Vec::with_capacity(guards.len());
     for guard in &guards {
         read.push(match guard {
@@ -592,7 +592,7 @@ fn written_row(
 
                 Guard::Binds {
                     pattern: Box::new(Alternative {
-                        pattern: written_pattern(pattern, &mut names),
+                        pattern: written_pattern(pattern, &mut names, std::convert::identity),
                         span: None,
                     }),
                     value,
@@ -604,33 +604,42 @@ fn written_row(
     Some((written, read, body))
 }
 
-/// A row's pattern as a program writes it, each binder under the next of `names`: what a report names an arm by.
+/// A row's pattern as a program writes it, each binder under the next of `names`, a pattern's own binder and a successor's or a sequence's slot — where a bare `_` is a wildcard — as `own` writes it, and a wildcard as `_`: what a report names an arm by.
 pub fn written_pattern<D: Dialect>(
     pattern: &curios_core::Pattern,
     names: &mut dyn Iterator<Item = Binder<D>>,
+    own: fn(Binder<D>) -> Binder<D>,
 ) -> MatchPattern<D> {
     match pattern {
-        curios_core::Pattern::Binder => MatchPattern::Binder(next_name(names)),
+        curios_core::Pattern::Binder => MatchPattern::Binder(own(next_name(names))),
+        curios_core::Pattern::Wildcard => MatchPattern::Binder("_".into()),
         curios_core::Pattern::Variant { tag, args } => MatchPattern::Variant {
             tag: tag.as_string(),
             args: args
                 .iter()
-                .map(|(plicity, arg)| (*plicity, written_pattern(arg, names)))
+                .map(|(plicity, arg)| (*plicity, written_pattern(arg, names, own)))
                 .collect(),
         },
-        curios_core::Pattern::Tuple(fields) => MatchPattern::Tuple(written_fields(fields, names)),
+        curios_core::Pattern::Tuple(fields) => {
+            MatchPattern::Tuple(written_fields(fields, names, own))
+        }
         curios_core::Pattern::Struct { head, fields, .. } => MatchPattern::Struct {
             head: name_of(head),
-            fields: written_fields(fields, names),
+            fields: written_fields(fields, names, own),
         },
         curios_core::Pattern::Bool(value) => MatchPattern::Bool(*value),
         curios_core::Pattern::Zero => MatchPattern::Nat(NatPattern::Zero),
-        curios_core::Pattern::Succ(hypothesis) => {
-            let pred_label = next_name(names);
+        curios_core::Pattern::Succ {
+            predecessor,
+            hypothesis,
+        } => {
+            let pred_label = written_slot(*predecessor, names, own);
 
             MatchPattern::Nat(NatPattern::Succ {
                 pred_label,
-                ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
+                ih: hypothesis
+                    .as_ref()
+                    .map(|bind| written_bind(bind, names, own)),
             })
         }
         curios_core::Pattern::Literal(value) => {
@@ -638,27 +647,51 @@ pub fn written_pattern<D: Dialect>(
         }
         curios_core::Pattern::Character(character) => MatchPattern::Char(*character),
         curios_core::Pattern::Nil => MatchPattern::List(ListPattern::Nil),
-        curios_core::Pattern::Cons(hypothesis) => {
-            let head_label = next_name(names);
-            let tail_label = next_name(names);
+        curios_core::Pattern::Cons {
+            head,
+            tail,
+            hypothesis,
+        } => {
+            let head_label = written_slot(*head, names, own);
+            let tail_label = written_slot(*tail, names, own);
 
             MatchPattern::List(ListPattern::Cons {
                 head_label,
                 tail_label,
-                ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
+                ih: hypothesis
+                    .as_ref()
+                    .map(|bind| written_bind(bind, names, own)),
             })
         }
         curios_core::Pattern::End => MatchPattern::Bytes(BytesPattern::End),
-        curios_core::Pattern::Atom(hypothesis) => {
-            let head_label = next_name(names);
-            let tail_label = next_name(names);
+        curios_core::Pattern::Atom {
+            head,
+            tail,
+            hypothesis,
+        } => {
+            let head_label = written_slot(*head, names, own);
+            let tail_label = written_slot(*tail, names, own);
 
             MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
                 tail_label,
-                ih: hypothesis.as_ref().map(|bind| written_bind(bind, names)),
+                ih: hypothesis
+                    .as_ref()
+                    .map(|bind| written_bind(bind, names, own)),
             })
         }
+    }
+}
+
+/// A successor's or a sequence's slot, as `own` writes the next of `names` where it is a binder, and `_` where it is a wildcard.
+fn written_slot<D: Dialect>(
+    slot: curios_core::Slot,
+    names: &mut dyn Iterator<Item = Binder<D>>,
+    own: fn(Binder<D>) -> Binder<D>,
+) -> Binder<D> {
+    match slot {
+        curios_core::Slot::Binder => own(next_name(names)),
+        curios_core::Slot::Wildcard => "_".into(),
     }
 }
 
@@ -670,27 +703,30 @@ fn next_name<D: Dialect>(names: &mut dyn Iterator<Item = Binder<D>>) -> Binder<D
 fn written_fields<D: Dialect>(
     fields: &[(Option<String>, curios_core::Pattern)],
     names: &mut dyn Iterator<Item = Binder<D>>,
+    own: fn(Binder<D>) -> Binder<D>,
 ) -> Vec<MatchPatternField<D>> {
     fields
         .iter()
         .map(|(label, field)| MatchPatternField {
             label: label.clone(),
-            value: written_pattern(field, names),
+            value: written_pattern(field, names, own),
         })
         .collect()
 }
 
-/// What a fold's hypothesis is bound by, as a program writes it, each binder under the next of `names`.
+/// What a fold's hypothesis is bound by, as a program writes it, each binder under the next of `names` as `own` writes it, and a wildcard as `_`.
 fn written_bind<D: Dialect>(
     bind: &curios_core::Bind,
     names: &mut dyn Iterator<Item = Binder<D>>,
+    own: fn(Binder<D>) -> Binder<D>,
 ) -> Pattern<D> {
     match bind {
-        curios_core::Bind::Binder => Pattern::Binder(next_name(names)),
-        curios_core::Bind::Fields(fields) => Pattern::Tuple(written_binds(fields, names)),
+        curios_core::Bind::Binder => Pattern::Binder(own(next_name(names))),
+        curios_core::Bind::Wildcard => Pattern::Binder("_".into()),
+        curios_core::Bind::Fields(fields) => Pattern::Tuple(written_binds(fields, names, own)),
         curios_core::Bind::Struct { head, fields, .. } => Pattern::Struct {
             head: name_of(head),
-            fields: written_binds(fields, names),
+            fields: written_binds(fields, names, own),
         },
     }
 }
@@ -699,12 +735,13 @@ fn written_bind<D: Dialect>(
 fn written_binds<D: Dialect>(
     fields: &[(Option<String>, curios_core::Bind)],
     names: &mut dyn Iterator<Item = Binder<D>>,
+    own: fn(Binder<D>) -> Binder<D>,
 ) -> Vec<PatternField<D>> {
     fields
         .iter()
         .map(|(label, field)| PatternField {
             label: label.clone(),
-            value: written_bind(field, names),
+            value: written_bind(field, names, own),
         })
         .collect()
 }

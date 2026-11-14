@@ -475,12 +475,13 @@ fn level_parameter_names_stay_alphabetic_past_the_sixth() {
     }
 }
 
-/// A row's guards print after its pattern, each under the names written before it, a bind as its pattern and its value; and a matrix over `()` whose rows all write `_`, which is what a match with no head lowers to, prints as one, its rows' guards alone and its last row the default.
+/// A row's guards print after its pattern, each under the names written before it, a bind as its pattern and its value; and a matrix over `()` whose rows all write the wildcard `_`, which is what a match with no head lowers to, prints as one, its rows' guards alone and its last row the default.
 #[test]
 fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_with_no_head() {
     let nat = || Term::intrinsic(Intrinsic::NatType);
     let numeral = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
     let over = |binder: Free, term: Term| Term::func([(binder, nat())], term);
+    let nothing = |term: Term| Term::func(Vec::<(Free, Term)>::new(), term);
     let row = |pattern: Pattern, guards: Vec<Guard>, body: Term| Arm {
         alternatives: vec![Row {
             pattern,
@@ -488,7 +489,7 @@ fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_
             body,
         }],
     };
-    let (x, unnamed) = (Free::local(0, Some("x")), Free::local(1, None));
+    let x = Free::local(0, Some("x"));
     let flag = Term::intrinsic(Intrinsic::Bool(true));
     let spelling = Rc::new(Spelling::default());
 
@@ -507,7 +508,7 @@ fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_
                 ],
                 over(x, Term::free_var(&x)),
             ),
-            row(Pattern::Binder, Vec::new(), over(unnamed, numeral(1))),
+            row(Pattern::Wildcard, Vec::new(), nothing(numeral(1))),
         ],
     });
     assert_eq!(
@@ -520,11 +521,11 @@ fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_
         motive: None,
         arms: vec![
             row(
-                Pattern::Binder,
-                vec![Guard::Holds(over(unnamed, flag))],
-                over(unnamed, numeral(1)),
+                Pattern::Wildcard,
+                vec![Guard::Holds(nothing(flag))],
+                nothing(numeral(1)),
             ),
-            row(Pattern::Binder, Vec::new(), over(unnamed, numeral(0))),
+            row(Pattern::Wildcard, Vec::new(), nothing(numeral(0))),
         ],
     });
     assert_eq!(

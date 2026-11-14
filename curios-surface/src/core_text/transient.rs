@@ -1,11 +1,12 @@
 //! The forms only elaboration builds, each in the surface spelling it was read from under the node it is.
 //!
-//! An operator is `#{node = Infix} (a + b)`, a numeral elaboration has not settled `#{node = NumLit} 3`, a `!` site the rest of its region called over the action's result, `#{node = Bang} (k)((action)!)`, an ascription `#{node = Ascribed, type_ = T} e`, the body a derived witness asks for `#{node = Derive} ?`, a name resolution has not settled `#{node = Name} /path`, a concept's method named by its path `#{node = Method} /Show/show`, and a match before its patterns are compiled `#{node = Matrix} match head | pattern => body … end`, each row's pattern over places and its body the function over the pattern's binders it is, each row an arm of its own and `#{node = Matrix, arms = [2, 1]}` counting the rows of each arm where one holds more than one. A program writes none of them in Core text, which no elaborator reads; a witness writes one to see it refused. A reader is shown each as it was written, an operator with its operands parenthesized as a reader reads them, an ascription as the term and its type bracketed, and the derived body as `derive`.
+//! An operator is `#{node = Infix} (a + b)`, a numeral elaboration has not settled `#{node = NumLit} 3`, a `!` site the rest of its region called over the action's result, `#{node = Bang} (k)((action)!)`, an ascription `#{node = Ascribed, type_ = T} e`, the body a derived witness asks for `#{node = Derive} ?`, a name resolution has not settled `#{node = Name} /path`, a concept's method named by its path `#{node = Method} /Show/show`, and a match before its patterns are compiled `#{node = Matrix} match head | pattern => body … end`, each row's body the function over its pattern's binders it is and each place of the pattern written by the word that function gives its binder, a bare `_` a wildcard, which is no place, and `#{node = Binder} _` a nameless place, each row an arm of its own and `#{node = Matrix, arms = [2, 1]}` counting the rows of each arm where one holds more than one. A program writes none of them in Core text, which no elaborator reads; a witness writes one to see it refused. A reader is shown each as it was written, an operator with its operands parenthesized as a reader reads them, an ascription as the term and its type bracketed, and the derived body as `derive`.
 
 use {
     super::{
-        Decoration, Fields, ReadError, Reader, Refusal, bracketed, call, core_read, numeral,
-        term_global, tree, value, value_list, value_number, value_term, word, word_value,
+        Decoration, Fields, ReadError, Reader, Refusal, bracketed, call, core_read,
+        decoration_fields, numeral, term_global, tree, value, value_list, value_number, value_term,
+        value_word, word, word_value,
     },
     crate::{
         Alternative, BytesPattern, CoreText, Frame, ListPattern, MatchPattern, MatrixArm,
@@ -14,9 +15,8 @@ use {
     curios_common::{Plicity, Sign},
     curios_core::{
         Arm, Ascribed, Atom, Bang, Bind, Func, Global, Infix, Matrix, Method, NumLit, Pattern, Row,
-        Subterm, Term, Transient,
+        Slot, Subterm, Term, Transient,
     },
-    std::iter,
 };
 
 /// An elaboration-only form under the node it is.
@@ -133,31 +133,37 @@ fn matrix_written<D: Rendered>(
                      guards,
                      body,
                  }| {
-                    let places = &mut iter::repeat_with(|| "_".into());
+                    let guards = guards
+                        .into_iter()
+                        .map(|guard| match guard {
+                            curios_core::Guard::Holds(condition) => (None, sub(condition, frame)),
+                            curios_core::Guard::Binds { pattern, value } => {
+                                (Some(pattern), sub(value, frame))
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    let body = sub(body, frame);
+                    let places = &mut row_places(&body).into_iter();
 
                     MatrixArm {
                         alternatives: vec![Alternative {
-                            pattern: written_pattern(&pattern, places),
+                            pattern: written_pattern(&pattern, places, place),
                             span: None,
                         }],
                         guards: guards
                             .into_iter()
-                            .map(|guard| match guard {
-                                curios_core::Guard::Holds(condition) => {
-                                    crate::Guard::Holds(sub(condition, frame))
-                                }
-                                curios_core::Guard::Binds { pattern, value } => {
-                                    crate::Guard::Binds {
-                                        pattern: Box::new(Alternative {
-                                            pattern: written_pattern(&pattern, places),
-                                            span: None,
-                                        }),
-                                        value: sub(value, frame),
-                                    }
-                                }
+                            .map(|(pattern, term)| match pattern {
+                                None => crate::Guard::Holds(term),
+                                Some(pattern) => crate::Guard::Binds {
+                                    pattern: Box::new(Alternative {
+                                        pattern: written_pattern(&pattern, places, place),
+                                        span: None,
+                                    }),
+                                    value: term,
+                                },
                             })
                             .collect(),
-                        body: sub(body, frame),
+                        body,
                     }
                 },
             )
@@ -205,6 +211,31 @@ fn matrix_written<D: Rendered>(
 }
 
 /// A row as a reader is shown it: its pattern over the names its body binds, each guard over the names written before it, and the body under them all — every binder opened once, under one label, as `lambda_parameters` opens a lambda's, so a guard and the body read one name alike.
+/// The words a row's places are written by in Core text: its function's as the function is written, each parameter's word without its decorator. A function written as no lambda, a node met again under sharing, states none, and the places are written nameless.
+fn row_places<D: Rendered>(body: &crate::Term<D>) -> Vec<crate::Binder<D>> {
+    match body.as_subterm() {
+        crate::Subterm::Func(crate::Func { params, .. }) => params
+            .iter()
+            .map(|param| match &param.pattern {
+                crate::Pattern::Binder(binder) => binder.label.clone().into(),
+                crate::Pattern::Tuple(_) | crate::Pattern::Struct { .. } => "_".into(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// A pattern's own binder as Core text writes its place: by its word, and a nameless one under `#{node = Binder}`, since a bare `_` there is a wildcard.
+fn place<D: Rendered>(binder: crate::Binder<D>) -> crate::Binder<D> {
+    match binder.label.as_str() {
+        "_" => crate::Binder {
+            core: decoration_fields(vec![("node", word_value("Binder"))]),
+            label: binder.label,
+        },
+        _ => binder,
+    }
+}
+
 fn row_read_back<D: Rendered>(
     Row {
         pattern,
@@ -247,7 +278,7 @@ fn row_read_back<D: Rendered>(
     };
     let mut names = names.into_iter();
     let mut place = pattern.binders();
-    let written = written_pattern(&pattern, &mut names);
+    let written = written_pattern(&pattern, &mut names, std::convert::identity);
     let guards = guards
         .iter()
         .map(|guard| match guard {
@@ -258,7 +289,7 @@ fn row_read_back<D: Rendered>(
 
                 crate::Guard::Binds {
                     pattern: Box::new(Alternative {
-                        pattern: written_pattern(pattern, &mut names),
+                        pattern: written_pattern(pattern, &mut names, std::convert::identity),
                         span: None,
                     }),
                     value,
@@ -354,7 +385,8 @@ pub fn node_transient_read(
                             "an arm of one pattern, the rows an arm holds stated by `arms`",
                         ));
                     };
-                    let pattern = pattern_read(&alternative.pattern, operand)?;
+                    let mut places = Vec::new();
+                    let pattern = pattern_read(&alternative.pattern, operand, &mut places)?;
                     let mut over =
                         |term: &crate::Term<CoreText>, binders: usize, what: &'static str| {
                             let read = core_read(term, reader)?;
@@ -381,7 +413,7 @@ pub fn node_transient_read(
                                     binders,
                                     "a guard, the function over the binders written before it",
                                 )?;
-                                let pattern = pattern_read(&pattern.pattern, operand)?;
+                                let pattern = pattern_read(&pattern.pattern, operand, &mut places)?;
                                 binders += pattern.binders();
 
                                 Ok(curios_core::Guard::Binds { pattern, value })
@@ -393,6 +425,11 @@ pub fn node_transient_read(
                         binders,
                         "a row's body, the function over its pattern's and its guards' binders",
                     )?;
+                    if function_words(&arm.body).is_some_and(|words| words != places) {
+                        return Err(refused(
+                            "a row's places, each written as the word the row's function gives its binder",
+                        ));
+                    }
 
                     Ok(Row {
                         pattern,
@@ -439,80 +476,153 @@ pub fn node_transient_read(
     Ok(Term::from(Subterm::Transient(transient)))
 }
 
-/// A row's pattern as Core holds it, each binder a place among the row's.
+/// A row's pattern as Core holds it, each binder a place among the row's whose word `places` gathers in the order the pattern writes them, and a bare `_` a wildcard, which is no place.
 fn pattern_read(
     pattern: &MatchPattern<CoreText>,
     at: &crate::Term<CoreText>,
+    places: &mut Vec<String>,
 ) -> Result<Pattern, ReadError> {
-    let fields = |fields: &[crate::MatchPatternField<CoreText>]| {
-        fields
-            .iter()
-            .map(|field| Ok((field.label.clone(), pattern_read(&field.value, at)?)))
-            .collect::<Result<Vec<_>, ReadError>>()
-    };
     Ok(match pattern {
-        MatchPattern::Binder(binder) => place_read(binder, at).map(|()| Pattern::Binder)?,
+        MatchPattern::Binder(binder) => match own_place_read(binder, at)? {
+            Some(word) => {
+                places.push(word);
+
+                Pattern::Binder
+            }
+            None => Pattern::Wildcard,
+        },
         MatchPattern::Variant { tag, args } => Pattern::Variant {
             tag: Atom::from(tag.as_str()),
             args: args
                 .iter()
-                .map(|(mark, arg)| Ok((*mark, pattern_read(arg, at)?)))
+                .map(|(mark, arg)| Ok((*mark, pattern_read(arg, at, places)?)))
                 .collect::<Result<_, ReadError>>()?,
         },
-        MatchPattern::Tuple(written) => Pattern::Tuple(fields(written)?),
+        MatchPattern::Tuple(fields) => Pattern::Tuple(
+            fields
+                .iter()
+                .map(|field| Ok((field.label.clone(), pattern_read(&field.value, at, places)?)))
+                .collect::<Result<_, ReadError>>()?,
+        ),
         MatchPattern::Struct { .. } => return Err(unresolved(at)),
         MatchPattern::Bool(value) => Pattern::Bool(*value),
         MatchPattern::Char(character) => Pattern::Character(*character),
         MatchPattern::Nat(NatPattern::Zero) => Pattern::Zero,
-        MatchPattern::Nat(NatPattern::Succ { ih, .. }) => {
-            Pattern::Succ(bind_read(ih.as_ref(), at)?)
-        }
+        MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => Pattern::Succ {
+            predecessor: slot_read(pred_label, at, places)?,
+            hypothesis: bind_read(ih.as_ref(), at, places)?,
+        },
         MatchPattern::Nat(NatPattern::Lit(literal)) => Pattern::Literal(literal.0.clone()),
         MatchPattern::List(ListPattern::Nil) => Pattern::Nil,
-        MatchPattern::List(ListPattern::Cons { ih, .. }) => {
-            Pattern::Cons(bind_read(ih.as_ref(), at)?)
-        }
+        MatchPattern::List(ListPattern::Cons {
+            head_label,
+            tail_label,
+            ih,
+        }) => Pattern::Cons {
+            head: slot_read(head_label, at, places)?,
+            tail: slot_read(tail_label, at, places)?,
+            hypothesis: bind_read(ih.as_ref(), at, places)?,
+        },
         MatchPattern::Bytes(BytesPattern::End) => Pattern::End,
-        MatchPattern::Bytes(BytesPattern::Atom { ih, .. }) => {
-            Pattern::Atom(bind_read(ih.as_ref(), at)?)
-        }
+        MatchPattern::Bytes(BytesPattern::Atom {
+            head_label,
+            tail_label,
+            ih,
+        }) => Pattern::Atom {
+            head: slot_read(head_label, at, places)?,
+            tail: slot_read(tail_label, at, places)?,
+            hypothesis: bind_read(ih.as_ref(), at, places)?,
+        },
     })
 }
 
-/// What a fold's hypothesis is bound by, where one is written.
+/// What a fold's hypothesis is bound by, where one is written, each binder a place whose word `places` gathers and a bare `_` a wildcard.
 fn bind_read(
     pattern: Option<&crate::Pattern<CoreText>>,
     at: &crate::Term<CoreText>,
+    places: &mut Vec<String>,
 ) -> Result<Option<Bind>, ReadError> {
     fn bind(
         pattern: &crate::Pattern<CoreText>,
         at: &crate::Term<CoreText>,
+        places: &mut Vec<String>,
     ) -> Result<Bind, ReadError> {
         match pattern {
-            crate::Pattern::Binder(binder) => place_read(binder, at).map(|()| Bind::Binder),
+            crate::Pattern::Binder(binder) => Ok(match own_place_read(binder, at)? {
+                Some(word) => {
+                    places.push(word);
+
+                    Bind::Binder
+                }
+                None => Bind::Wildcard,
+            }),
             crate::Pattern::Tuple(fields) => Ok(Bind::Fields(
                 fields
                     .iter()
-                    .map(|field| Ok((field.label.clone(), bind(&field.value, at)?)))
+                    .map(|field| Ok((field.label.clone(), bind(&field.value, at, places)?)))
                     .collect::<Result<_, ReadError>>()?,
             )),
             crate::Pattern::Struct { .. } => Err(unresolved(at)),
         }
     }
-    pattern.map(|pattern| bind(pattern, at)).transpose()
+    pattern.map(|pattern| bind(pattern, at, places)).transpose()
 }
 
-/// A row's place: a binder whose label the row's body states, its function's own binder, so a decorator before it states nothing the pattern holds and is refused.
-fn place_read(
+/// A pattern's own binder, or a successor's or a sequence's slot, where a bare `_` is a wildcard and no place: a word is a place, and `#{node = Binder} _` a nameless one. A decorator states nothing else of a place, whose label is the row's function's.
+fn own_place_read(
     binder: &crate::Binder<CoreText>,
     at: &crate::Term<CoreText>,
-) -> Result<(), ReadError> {
-    match binder.core.is_empty() {
-        true => Ok(()),
-        false => Err(ReadError::at(
-            Refusal::Malformed("a row's place, whose label the row's body states"),
-            binder.label.span().or(at.span()),
-        )),
+) -> Result<Option<String>, ReadError> {
+    if binder.core.is_empty() {
+        return Ok((binder.label.as_str() != "_").then(|| binder.label.to_string()));
+    }
+    let mut fields = Fields::of(&binder.core, binder.label.span())?;
+    let node = fields.take("node").map(value_word).transpose()?;
+    fields.finish()?;
+
+    match node {
+        Some("Binder") if binder.label.as_str() == "_" => Ok(Some(binder.label.to_string())),
+        _ => Err(misplaced(binder, at)),
+    }
+}
+
+/// A successor's predecessor or a sequence's head or tail, read as a pattern's own binder is: a place whose word `places` gathers, or a wildcard.
+fn slot_read(
+    binder: &crate::Binder<CoreText>,
+    at: &crate::Term<CoreText>,
+    places: &mut Vec<String>,
+) -> Result<Slot, ReadError> {
+    Ok(match own_place_read(binder, at)? {
+        Some(word) => {
+            places.push(word);
+
+            Slot::Binder
+        }
+        None => Slot::Wildcard,
+    })
+}
+
+/// The refusal of a decorator before a place, which states nothing the pattern holds: a place's label is the row's function's.
+fn misplaced(binder: &crate::Binder<CoreText>, at: &crate::Term<CoreText>) -> ReadError {
+    ReadError::at(
+        Refusal::Malformed("a row's place, whose label the row's body states"),
+        binder.label.span().or(at.span()),
+    )
+}
+
+/// The words a row's function, as written, gives its binders: `None` where it is written as no lambda, as a node met again under sharing is.
+fn function_words(body: &crate::Term<CoreText>) -> Option<Vec<String>> {
+    match body.as_subterm() {
+        crate::Subterm::Func(crate::Func { params, .. }) => Some(
+            params
+                .iter()
+                .map(|param| match &param.pattern {
+                    crate::Pattern::Binder(binder) => binder.label.to_string(),
+                    crate::Pattern::Tuple(_) | crate::Pattern::Struct { .. } => "_".to_string(),
+                })
+                .collect(),
+        ),
+        _ => None,
     }
 }
 
