@@ -320,7 +320,15 @@ fn the_per_character_walk_reads_each_character_whole_without_allocating() {
 fn reading_loops(wat: &str) -> Vec<Vec<&str>> {
     let mut open = Vec::<(usize, usize)>::new();
     let mut loops = Vec::<Vec<&str>>::new();
+    let mut in_heap = false;
     for line in wat.lines() {
+        // A heap twin's copy of a walk runs past the frame budget alone, so it is no walk of the native code ([`in_heap_function`]).
+        if line.starts_with("    (func ") {
+            in_heap = line.contains("$heap/");
+        }
+        if in_heap {
+            continue;
+        }
         let indent = line.len() - line.trim_start().len();
         let line = line.trim();
         while open

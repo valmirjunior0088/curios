@@ -17,6 +17,8 @@ pub fn prune_unreachable(module: &mut Module) -> bool {
         while let Some(function) = function_work.pop_front() {
             if functions.insert(function) {
                 node_work.push_back(module.function(function).unwrap().body);
+                // A closure of the function enters its twin from the heap table, which no node names.
+                function_work.extend(module.twin(function));
             }
         }
         let Some(node_id) = node_work.pop_front() else {
@@ -73,6 +75,7 @@ pub fn prune_unreachable(module: &mut Module) -> bool {
         module.value_ids().count(),
     );
     module.retain_functions(&functions);
+    module.retain_twins(&functions);
     module.retain_continuations(&continuations);
     module.retain_nodes(&nodes);
     for (_, node) in module.live_nodes_mut() {

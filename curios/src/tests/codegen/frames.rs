@@ -222,6 +222,19 @@ fn own_nodes(module: &Module, body: NodeId) -> Vec<NodeId> {
     nodes
 }
 
+/// Every recursion a million calls deep answers what it answers with every call native: past the budget's few thousand frames the rest runs on the heap, and a guest stack a gibibyte deep is what lets the native module answer too.
+#[test]
+fn every_recursion_a_million_deep_answers_past_the_budget_what_it_answers_natively() {
+    for (shape, definitions, result) in RECURSIONS {
+        let (heap, native) = modules(&program(definitions, result));
+        assert_eq!(
+            run(&heap, "1000000"),
+            run(&native, "1000000"),
+            "{shape} must answer alike a million deep"
+        );
+    }
+}
+
 /// Every call a function makes of itself that keeps a frame, outside the twins that run past the budget, asks the budget: it resumes where the weight is handed back. A recursion defined within another is guarded where it is copied into the outer one's twin, as where it stands.
 #[test]
 fn every_native_call_a_recursion_makes_of_itself_asks_the_budget() {
@@ -275,6 +288,25 @@ fn every_recursion_answers_under_the_budget_and_past_it_what_it_answers_natively
                 .any(|(function, _)| heap.twin(function).is_some()),
             "{shape} must run on a twin:\n{heap}"
         );
+        // A function a guard stands in is on a cycle, so a closure of it has a twin to enter from the heap; one without would run natively there, frame upon frame.
+        for (function, definition) in heap.live_functions() {
+            let guarded = own_nodes(&heap, definition.body).into_iter().any(|node| {
+                matches!(
+                    heap.node(node),
+                    Some(Node::Intrinsic {
+                        op: IntrinsicCall::FrameEnter { .. },
+                        ..
+                    })
+                )
+            });
+            assert!(
+                !guarded
+                    || heap
+                        .twin(function)
+                        .is_some_and(|twin| heap.function(twin).is_some()),
+                "{shape}: {function} is guarded and has no twin:\n{heap}"
+            );
+        }
         let answer = run(&native, "2000");
         assert_eq!(
             run(&heap, "2000"),

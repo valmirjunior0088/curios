@@ -333,11 +333,18 @@ impl<'m> Census<'m> {
         census
     }
 
-    /// Assign every node and continuation to the function whose body reaches it, record return sentinels, and record parameter homes.
+    /// Assign every node and continuation to the function whose body reaches it, record return sentinels, and record parameter homes. A heap twin's function is a copy of native code a recursion runs past the frame budget alone ([`curios_cps::bound_frames`]), so the survey of what the native code keeps leaves it, and every node its body reaches, unowned.
     fn walk_owners(&mut self) {
         let module = self.module;
         for (index, slot) in module.functions().iter().enumerate() {
             let Some(function) = slot else { continue };
+            if function
+                .debug_name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("heap/"))
+            {
+                continue;
+            }
             let fun = FunctionId::from_index(index);
             self.sentinels.insert(function.return_cont, fun);
             for param in &function.params {
@@ -417,6 +424,10 @@ impl<'m> Census<'m> {
         for (index, slot) in module.nodes().iter().enumerate() {
             let Some(node) = slot else { continue };
             let node_id = NodeId::from_index(index);
+            // A node no surveyed function reaches is a heap twin's.
+            if !self.owner_of_node.contains_key(&node_id) {
+                continue;
+            }
             match node {
                 Node::LetValue { result, value, .. } => {
                     // A family construction is a `Row`, and it is exactly the shape this census counts as a tuple site — its tag sits at slot 0.

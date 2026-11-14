@@ -671,10 +671,19 @@ pub fn row_declaration<'a>(wat: &'a str, family: &str) -> &'a str {
     panic!("the {family} row's declaration closes")
 }
 
-/// The innermost `loop … end` enclosing each occurrence of `needle`, one for every copy of the code that holds it. A loop that follows a host call is held twice — where the call answers at once and in the continuation a suspension carries — and each copy is its own loop.
+/// Whether `offset` of `wat` falls in a heap twin's function, the `$heap/` code a recursion runs past the frame budget ([`curios_cps::bound_frames`]): a copy of native code a claim about the native code reads past, as [`user_functions_with`] does.
+pub fn in_heap_function(wat: &str, offset: usize) -> bool {
+    wat[..offset].rfind("\n    (func ").is_some_and(|header| {
+        let line = &wat[header + 1..];
+        line[..line.find('\n').unwrap_or(line.len())].contains("$heap/")
+    })
+}
+
+/// The innermost `loop … end` enclosing each occurrence of `needle` in the native code, one for every copy of the code that holds it. A loop that follows a host call is held twice — where the call answers at once and in the continuation a suspension carries — and each copy is its own loop; a heap twin's copy runs past the frame budget alone, and is no loop of the native code ([`in_heap_function`]).
 pub fn loops_containing<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
     let loops = wat
         .match_indices(needle)
+        .filter(|(offset, _)| !in_heap_function(wat, *offset))
         .map(|(offset, _)| loop_at(wat, offset))
         .collect::<Vec<_>>();
     assert!(!loops.is_empty(), "`{needle}` is in the module");

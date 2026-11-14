@@ -26,8 +26,8 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// What the native frames of the calls the budget admits may weigh at once, in [`frame_weight`]'s units, across the whole program.
-pub const FRAME_BUDGET: u32 = 65_536;
+/// What the native frames of the calls the budget admits may weigh at once across the whole program, a frame weighing a fixed overhead and one for each value its function's body binds: a small part of a page's stack for the code with the fattest frames a module runs as, the module Binaryen has not optimized, by the protocol and the figures of [A recursion is as deep as the heap allows](../../documentation/design/compilation/a-recursion-is-as-deep-as-the-heap-allows.md).
+pub const FRAME_BUDGET: u32 = 4_096;
 
 /// What a frame weighs before the values its body binds.
 const FRAME_OVERHEAD: u32 = 20;
@@ -202,13 +202,11 @@ pub fn bound_frames(module: &mut Module) {
         }
     }
 
-    // A twin a round copied before it was lowered is reached from nowhere: the copy of its member it stood beside is twinned in a round of its own.
-    prune_unreachable(module);
+    // A twin a round copied before it was lowered is reached from nowhere, the copy of its member it stood beside twinned in a round of its own; a twin only a closure's heap entry enters is reached through its function, which the prune follows.
     for (function, twin) in twins {
-        if module.function(function).is_some() && module.function(twin).is_some() {
-            module.record_twin(function, twin);
-        }
+        module.record_twin(function, twin);
     }
+    prune_unreachable(module);
 }
 
 /// Twin and guard `batch`, members of one component or copies standing for them, all copied before any is lowered or guarded, so no twin carries a guard of its own cycle; and answer the copies of the component's members the twins hold, which the next round takes.

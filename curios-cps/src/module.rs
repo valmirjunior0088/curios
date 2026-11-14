@@ -118,6 +118,12 @@ impl Module {
         self.twins.insert(original, twin);
     }
 
+    /// Forget each twin whose function or twin is not among `live`.
+    pub(crate) fn retain_twins(&mut self, live: &BTreeSet<FunctionId>) {
+        self.twins
+            .retain(|original, twin| live.contains(original) && live.contains(twin));
+    }
+
     /// The function that runs `function` on the heap, taking its parameters and then the continuation its answer goes to, where one was written.
     pub fn twin(&self, function: FunctionId) -> Option<FunctionId> {
         self.twins.get(&function).copied()

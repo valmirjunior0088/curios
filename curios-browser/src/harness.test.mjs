@@ -482,6 +482,31 @@ main()
   assert.equal(stdout, "70000");
 });
 
+test("a recursion a million calls deep finishes on V8's stack, its frames past the budget on the heap", async () => {
+  // The depth is read off the host, so no stage folds the recursion away; a page's stack holds a few thousand of these frames.
+  const { stdout, exitCode, trap } = await execute(`
+use /std/{Bytes, Nat, Str, Json, print};
+let step(n: Nat) -> Nat =
+    match n | 0 => 0 | m + 1 => (step(m) * 3 + 1) % 1000003 end;
+let ping(n: Nat) -> Nat =
+    match n | 0 => 0 | m + 1 => (pong(m) * 3 + 1) % 1000003 end
+and pong(n: Nat) -> Nat =
+    match n | 0 => 1 | m + 1 => (ping(m) * 5 + 2) % 1000003 end;
+let main() -> /std/Io({}) =
+    let n = Bytes/len(/std/rand/bytes(1)!) * 1000000;
+    let nested = Str/concat(Str/repeat("[", n / 10), Str/repeat("]", n / 10));
+    let encoded = match Json/decode(nested) | success(json) => Str/len(Json/encode(json)) | failure(_) => 0 end;
+    let _ = print(Nat/to_str(step(n)))!;
+    let _ = print(" ")!;
+    let _ = print(Nat/to_str(ping(n)))!;
+    let _ = print(" ")!;
+    print(Nat/to_str(encoded));
+main()
+`);
+
+  assert.deepEqual([stdout, exitCode, trap], ["111111 266667 200000", 0, null]);
+});
+
 test("the monotonic clock answers the nanoseconds within a second, a reading just under one included", async (t) => {
   // The engine's clock read twice: at its origin, then a tenth of a nanosecond under two seconds, which rounded would be a billion nanoseconds and the next second's.
   const readings = [0, 1999.9999999];
