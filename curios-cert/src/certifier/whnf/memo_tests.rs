@@ -168,15 +168,11 @@ fn cached_spend_never_exceeds_uncached() {
 /// Mutation-checked: with every hit adding what its computation minted to the counter, the identity minted after the sum is past the identity space.
 #[test]
 fn a_remembered_reducts_hit_mints_nothing() {
-    let sum = (0..40).fold(
-        "((y: #NatType) => #NatAdd(y, n))(n)".to_string(),
-        |below, level| {
-            fill!(
-                "#NatAdd(#{share = ${level}} (${below}), #{shared = ${level}} _)",
-                level,
-                below
-            )
-        },
+    let sum = doubled(
+        "#NatAdd(${below}, ${again})",
+        "((y: #NatType) => #NatAdd(y, n))(n)",
+        40,
+        0,
     );
 
     let mut certifier = certifier();

@@ -2,9 +2,9 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_common::fill,
-    curios_core::{Item, Level, ReduceError, Term, UniverseError},
+    curios_core::{Item, ReduceError, UniverseError},
     curios_surface::Spelling,
 };
 
@@ -667,7 +667,7 @@ let /published: #{level = 7} Type =
         assert_eq!(definition.name, global("published"));
         assert_eq!(
             definition.value_sort,
-            Some(Term::type_at(Level::constant(7))),
+            Some(term("#{level = 7} Type")),
             "{said:?}",
         );
     }

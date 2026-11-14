@@ -2,10 +2,10 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
     curios_common::fill,
-    curios_core::{Item, Quality, Term, UniverseContext},
+    curios_core::{Item, Quality, UniverseContext},
     curios_surface::Spelling,
 };
 
@@ -426,7 +426,7 @@ let /T: Type =
     let Item::Let(definition) = &rechecked.definitions.items[0] else {
         panic!("the module holds one definition");
     };
-    assert_eq!(definition.value_sort, Some(Term::type_ground()));
+    assert_eq!(definition.value_sort, Some(term("Type")));
 }
 
 /// A recursive occurrence that only a sort left to a caller would uncover: at `Prop` the match on `h` is its arm, an equation between two proofs being one, and the arm holds `Bad` left of an arrow. The entry is decided as it is stated, where the match stands, and a match the walk cannot see through is read at `Mixed`, so the occurrence is refused whatever a use states. `curios`'s `tests::rules::positivity_computed_type_tests` puts the same declaration to the elaborator under this name. Rename both or neither.

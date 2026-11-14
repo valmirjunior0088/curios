@@ -1,147 +1,114 @@
 //! Every walk the certifier runs over whole terms, over one doubling term: sixty levels that each hold the one below twice, a tree no walk per path finishes and a graph of sixty-one nodes — a sum of the level below with itself around a local, and a record of two fields at the level below. A walk the certifier adds joins the table here, so one a change makes per-path again stalls its row rather than waiting for a profile; the walks it shares with the elaborator are `curios-core`'s, held by that crate's table. The first conversion row compares two spellings of one graph, which equality answers; the second compares a tower of applications over a local with one over a redex that reduces to it, which only a remembered verdict answers. Inference and checking are rows over a pair of the level below with itself, sixty deep over the same local: the first infers each field and the second checks it against a record of two fields at the level below, so neither is answered by the other's table.
 
 use {
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_core::{Free, Intrinsic, Level, Reducer, Term},
+    curios_common::fill,
+    curios_core::{Level, Reducer, Term},
 };
 
-fn doubled(base: Term) -> Term {
-    let mut term = base;
-    for _ in 0..60 {
-        term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
-    }
-    term
+/// A sum of the level below with itself, sixty levels deep over `base`, under the share keys from `keys` on.
+fn sum(base: &str, keys: usize) -> String {
+    doubled("#NatAdd(${below}, ${again})", base, 60, keys)
 }
 
-/// A record of two fields at `base`, sixty levels deep.
-fn doubled_record(base: Term) -> Term {
-    (0..60u64).fold(base, |type_, level| {
-        let first = Free::local(2 * level + 100, None);
-        let second = Free::local(2 * level + 101, None);
-
-        Term::tuple_type([(first, type_.clone()), (second, type_)])
-    })
+/// A record of two fields at the level below, sixty levels deep over `base`, under the share keys from `keys` on.
+fn record(base: &str, keys: usize) -> String {
+    doubled("{${below}, ${again}}", base, 60, keys)
 }
 
-/// A pair of `base` with itself, sixty levels deep.
-fn doubled_pair(base: Term) -> Term {
-    (0..60).fold(base, |value, _| Term::tuple([value.clone(), value]))
+/// A pair of the level below with itself, sixty levels deep over `base`, under the share keys from `keys` on.
+fn pair(base: &str, keys: usize) -> String {
+    doubled("(${below}, ${again})", base, 60, keys)
 }
 
-/// A certifier with `n: Nat` and `a: Type` assumed, and a fresh budget: each row spends its own, so one row's cost cannot exhaust the next.
-fn certifier(n: &Free, a: &Free) -> Certifier<'static> {
+/// A certifier with `n: Nat`, `a: Type` and the hypotheses `more` assumed, and a fresh budget — each row spends its own, so one row's cost cannot exhaust the next — and `terms` written over them.
+fn over<const N: usize>(more: &str, terms: &str) -> (Certifier<'static>, [Term; N]) {
     let mut certifier = Certifier::new(1_000_000, SYNTAX);
-    certifier.assume(n, &Term::intrinsic(Intrinsic::NatType));
-    certifier.assume(a, &Term::type_ground());
-    certifier
+    let terms = under(
+        &mut certifier,
+        &fill!("n: #NatType, a: Type${more}", more),
+        terms,
+    );
+
+    (certifier, terms)
+}
+
+/// Sixty `let`s, each a match on `g(b)` with the line before in both arms. Every arm holds its own equation, so nothing typed under one answers under the other; the tail is typed over the binders, and each line once.
+fn let_chain() -> String {
+    let lines = (1..=60)
+        .map(|line| {
+            fill!(
+                "let x${line}: #NatType = match g(b): (_) => #NatType | false => x${before} | true => x${before} end; ",
+                line,
+                before = line - 1
+            )
+        })
+        .collect::<String>();
+
+    fill!("(let x0: #NatType = n; ${lines}x60)", lines)
 }
 
 #[test]
 fn every_walk_answers_a_doubling_term_in_its_own_size() {
-    let nat = Term::intrinsic(Intrinsic::NatType);
-    let n = Free::local(0, Some("n"));
-    let a = Free::local(1, Some("a"));
-    let term = doubled(Term::free_var(&n));
+    let nat = term("#NatType");
     let ground = Ok(Sort::Type(Level::zero()));
 
     let rows: Vec<(&str, bool)> = vec![
-        (
-            "weak-head reduction",
-            certifier(&n, &a).reduce_forced(term.clone()).is_ok(),
-        ),
-        (
-            "conversion",
-            convert(
-                &mut certifier(&n, &a),
-                &nat,
-                &term,
-                &doubled(Term::free_var(&n)),
-            )
-            .is_ok_and(|equal| equal),
-        ),
-        ("conversion of two spellings", {
-            let f = Free::local(2, Some("f"));
-            let y = Free::local(3, Some("y"));
-            let applied = |base: Term| {
-                (0..60).fold(base, |term, _| {
-                    Term::apply(Term::free_var(&f), [term.clone(), term])
-                })
-            };
-            let redex = Term::apply(
-                Term::func([(y, nat.clone())], Term::free_var(&y)),
-                [Term::free_var(&n)],
+        ("weak-head reduction", {
+            let (mut certifier, [sum]) = over("", &fill!("${sum},", sum = sum("n", 0)));
+            certifier.reduce_forced(sum).is_ok()
+        }),
+        ("conversion", {
+            let (mut certifier, [sum, again]) = over(
+                "",
+                &fill!("${sum}, ${again}", sum = sum("n", 0), again = sum("n", 60)),
             );
-            let mut certifier = certifier(&n, &a);
-            certifier.assume(
-                &f,
-                &Term::func_type(
-                    [
-                        (Free::local(4, None), nat.clone()),
-                        (Free::local(5, None), nat.clone()),
-                    ],
-                    nat.clone(),
+            convert(&mut certifier, &nat, &sum, &again).is_ok_and(|equal| equal)
+        }),
+        ("conversion of two spellings", {
+            let applied = |base: &str, keys| doubled("f(${below}, ${again})", base, 60, keys);
+            let (mut certifier, [over_n, over_redex]) = over(
+                ", f: (x: #NatType, y: #NatType) -> #NatType",
+                &fill!(
+                    "${over_n}, ${over_redex}",
+                    over_n = applied("n", 0),
+                    over_redex = applied("((y: #NatType) => y)(n)", 60)
                 ),
             );
-
-            convert(
-                &mut certifier,
-                &nat,
-                &applied(Term::free_var(&n)),
-                &applied(redex),
-            )
-            .is_ok_and(|equal| equal)
+            convert(&mut certifier, &nat, &over_n, &over_redex).is_ok_and(|equal| equal)
         }),
-        // Sixty `let`s, each a match on `g(b)` with the line before in both arms. Every arm holds its own equation, so nothing typed under one answers under the other; the tail is typed over the binders, and each line once.
         ("a `let` chain through arms on an expression", {
-            let g = Free::local(6, Some("g"));
-            let b = Free::local(7, Some("b"));
-            let boolean = Term::intrinsic(Intrinsic::BoolType);
-            let mut certifier = certifier(&n, &a);
-            certifier.assume(
-                &g,
-                &Term::func_type([(Free::local(8, None), boolean.clone())], boolean.clone()),
+            let (mut certifier, [chain]) = over(
+                ", g: (x: #BoolType) -> #BoolType, b: #BoolType",
+                &fill!("${chain},", chain = let_chain()),
             );
-            certifier.assume(&b, &boolean);
-
-            let guard = Term::apply(Term::free_var(&g), [Term::free_var(&b)]);
-            let lines = (0..=60)
-                .map(|line| Free::local(20 + line, Some("x")))
-                .collect::<Vec<_>>();
-            let mut items = vec![(lines[0], nat.clone(), Term::free_var(&n))];
-            for line in 1..=60 {
-                let before = Term::free_var(&lines[line - 1]);
-                let arms =
-                    Term::bool_match(guard.clone(), None, nat.clone(), before.clone(), before);
-                items.push((lines[line], nat.clone(), arms));
-            }
-
-            infer(
-                &mut certifier,
-                &Term::let_block(items, Term::free_var(&lines[60])),
-            ) == Ok(nat.clone())
+            infer(&mut certifier, &chain) == Ok(nat.clone())
         }),
-        (
-            "the sort of a closed type",
-            Sort::of(&mut certifier(&n, &a), &doubled_record(nat.clone())) == ground,
-        ),
-        (
-            "the sort of a type over a local",
-            Sort::of(&mut certifier(&n, &a), &doubled_record(Term::free_var(&a))) == ground,
-        ),
-        (
-            "inference",
-            infer(&mut certifier(&n, &a), &doubled_pair(Term::free_var(&n))).is_ok(),
-        ),
-        (
-            "checking",
-            check(
-                &mut certifier(&n, &a),
-                &doubled_pair(Term::free_var(&n)),
-                &doubled_record(nat.clone()),
-            )
-            .is_ok(),
-        ),
+        ("the sort of a closed type", {
+            let (mut certifier, [record]) =
+                over("", &fill!("${record},", record = record("#NatType", 0)));
+            Sort::of(&mut certifier, &record) == ground
+        }),
+        ("the sort of a type over a local", {
+            let (mut certifier, [record]) = over("", &fill!("${record},", record = record("a", 0)));
+            Sort::of(&mut certifier, &record) == ground
+        }),
+        ("inference", {
+            let (mut certifier, [pair]) = over("", &fill!("${pair},", pair = pair("n", 0)));
+            infer(&mut certifier, &pair).is_ok()
+        }),
+        ("checking", {
+            let (mut certifier, [pair, record]) = over(
+                "",
+                &fill!(
+                    "${pair}, ${record}",
+                    pair = pair("n", 0),
+                    record = record("#NatType", 60)
+                ),
+            );
+            check(&mut certifier, &pair, &record).is_ok()
+        }),
     ];
 
     for (walk, answered) in rows {

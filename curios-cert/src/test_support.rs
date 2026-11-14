@@ -7,7 +7,7 @@ use {
         Baseline, Certifier, Error, Globals, Rechecked, Verdict, certify_definitions_over,
         recheck::verdicts_from,
     },
-    curios_common::{Candidates, SyntaxRegistry, variants},
+    curios_common::{Candidates, SyntaxRegistry, fill, variants},
     curios_core::{
         Certification, Definitions, Entrypoint, Free, Global, Places, Subterm, Term, Universes,
     },
@@ -272,6 +272,17 @@ pub fn hypotheses<const N: usize>(
 /// Where the text does not read, or holds other than `N` terms.
 pub fn under<const N: usize>(certifier: &mut Certifier, binders: &str, terms: &str) -> [Term; N] {
     hypotheses(certifier, binders, terms).1
+}
+
+/// `depth` levels of `node` over `base`, the text a doubling graph is written in: each level's operand, which `node` writes at `${below}` and again at `${again}`, written once and shared by its second occurrence under the share keys from `keys` on. A tree of `2^depth` leaves, and a graph of `depth + 1` nodes.
+pub fn doubled(node: &str, base: &str, depth: usize, keys: usize) -> String {
+    (keys..keys + depth).fold(base.to_string(), |operand, key| {
+        fill!(
+            node,
+            below = fill!("#{share = ${key}} (${operand})", key, operand),
+            again = fill!("#{shared = ${key}} _", key)
+        )
+    })
 }
 
 variants!(Error {

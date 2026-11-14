@@ -2,10 +2,9 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
     curios_common::fill,
-    curios_core::{Intrinsic, Term},
     curios_surface::Spelling,
     std::panic::{AssertUnwindSafe, catch_unwind},
 };
@@ -73,7 +72,7 @@ fn held_miscounted(verdicts: &[Verdict], counted: Counted, expected: usize, actu
 fn a_nat_index_at_true(verdicts: &[Verdict], name: &str) -> bool {
     refuses(verdicts, Some(name), |error| {
         matches!(error, Error::Mismatch { inferred, expected }
-            if **inferred == Term::intrinsic(Intrinsic::NatType)
+            if **inferred == term("#NatType")
                 && matches!(&***expected, curios_core::Subterm::InductType(family) if family.name == global("True")))
     })
 }
@@ -186,8 +185,8 @@ fn a_nominal_value_types_its_parameters() {
         assert!(
             refuses(&verdicts, Some("held"), |error| {
                 matches!(error, Error::Mismatch { inferred, expected }
-                    if **inferred == Term::intrinsic(Intrinsic::NatType)
-                        && **expected == Term::intrinsic(Intrinsic::BoolType))
+                    if **inferred == term("#NatType")
+                        && **expected == term("#BoolType"))
             }),
             "{label} was certified at a parameter its declaration does not admit: {verdicts:?}",
         );
@@ -416,7 +415,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         .unwrap_or_else(|unread| panic!("{unread:?}"));
     let refusal = Error::Mismatch {
         inferred: Box::new(entry.expect("the text closes with its term").body),
-        expected: Box::new(Term::intrinsic(Intrinsic::NatType)),
+        expected: Box::new(term("#NatType")),
     };
 
     assert_eq!(

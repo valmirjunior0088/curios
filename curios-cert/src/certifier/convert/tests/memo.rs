@@ -8,15 +8,9 @@ use {
     curios_core::Free,
 };
 
-/// `depth` levels of `f(x, x)` over `base`, each level's operand written once and shared by its second occurrence, under the share keys from `keys` on: a graph whose tree is `2^depth`.
+/// `depth` levels of `f(x, x)` over `base`, under the share keys from `keys` on.
 fn tower(base: &str, depth: usize, keys: usize) -> String {
-    (keys..keys + depth).fold(base.to_string(), |below, key| {
-        fill!(
-            "f(#{share = ${key}} (${below}), #{shared = ${key}} _)",
-            key,
-            below
-        )
-    })
+    doubled("f(${below}, ${again})", base, depth, keys)
 }
 
 /// Two terms that are equal graphs built apart are compared once per pair of their nodes. Sixty levels of `f(x, x)` over a local function — one tower over `n`, one over a redex that reduces to it — convert in their size, and a tower over another local is refused in its size. At a depth the uncached certifier affords, both give the same verdicts.

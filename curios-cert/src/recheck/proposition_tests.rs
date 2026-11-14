@@ -5,7 +5,7 @@ use {
     crate::{test_support::*, *},
     curios_analysis::{Erased, test_support::*},
     curios_common::fill,
-    curios_core::{Definitions, Global, Item, Term},
+    curios_core::{Definitions, Global, Item},
     curios_surface::FormScope,
 };
 
@@ -550,7 +550,7 @@ fn a_proposition_is_no_parameter_a_type_is_wanted_at() {
                 && matches!(
                     &verdict.error,
                     Error::Mismatch { inferred, expected }
-                        if **inferred == Term::prop() && **expected == Term::type_ground()
+                        if **inferred == term("Prop") && **expected == term("Type")
                 )),
         "{verdicts:?}"
     );

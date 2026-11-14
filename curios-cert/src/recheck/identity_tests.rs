@@ -2,9 +2,9 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_common::{Qualifier, fill},
-    curios_core::{Free, Global, Item, Term},
+    curios_core::{Free, Global, Item},
 };
 
 /// The indices a stray local is tried at: every one the certifier mints first, so a walk that let the local through would open a binder carrying the same identity at one of them.
@@ -96,7 +96,7 @@ fn a_stated_value_sort_is_read_by_nothing() {
         let Item::Let(definition) = &rechecked.definitions.items[0] else {
             panic!("the module holds one definition");
         };
-        assert_eq!(definition.value_sort, Some(Term::type_ground()), "{said}");
+        assert_eq!(definition.value_sort, Some(term("Type")), "{said}");
     }
 }
 

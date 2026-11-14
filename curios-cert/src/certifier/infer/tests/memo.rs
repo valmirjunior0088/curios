@@ -8,17 +8,6 @@ use {
     curios_core::Term,
 };
 
-/// `depth` levels of `${node}` over `base`, each level's operand written once and shared by its second occurrence under the share keys from `keys` on, the operand's two places written `${below}` and `${again}`: a graph whose tree is `2^depth`.
-fn doubled(node: &str, base: &str, depth: usize, keys: usize) -> String {
-    (keys..keys + depth).fold(base.to_string(), |operand, key| {
-        fill!(
-            node,
-            below = fill!("#{share = ${key}} (${operand})", key, operand),
-            again = fill!("#{shared = ${key}} _", key)
-        )
-    })
-}
-
 /// A local-free term's type is remembered for the declaration, so a term whose tree is exponential in its depth — a sum adding a shared subterm to itself sixty times over, the shape a reduct takes when each step mentions the one before it more than once — is typed in the size of its graph. At a depth the uncached certifier can afford, both give the same type.
 #[test]
 fn a_shared_closed_term_is_typed_once_per_node() {

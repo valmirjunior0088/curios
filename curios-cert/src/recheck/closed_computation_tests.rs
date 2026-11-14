@@ -2,19 +2,14 @@
 
 use {
     super::test_support::*,
-    crate::*,
-    curios_analysis::test_support::*,
+    crate::{test_support::*, *},
     curios_common::fill,
-    curios_core::{Global, ReduceError, Term},
+    curios_core::{ReduceError, Term},
 };
 
 /// What `qed` is inferred at: `True`, as the registry this crate's suites judge under names it.
 fn true_type() -> Term {
-    Term::induct_type(
-        Global::Authored(SYNTAX.proof.true_type.qualifier()),
-        Vec::<Term>::new(),
-        Vec::<Term>::new(),
-    )
+    term("#{node = InductType} /std/Bool/True()")
 }
 
 /// Whether `verdicts` is the closing term's refusal alone, `qed`'s `True` against an instance that did not reduce to it: the lemma admitted, so the strategy answered `c`, and the machine answering the instance otherwise than `true`.

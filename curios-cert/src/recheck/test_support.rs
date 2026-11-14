@@ -9,8 +9,8 @@ use {
     curios_analysis::test_support::SYNTAX,
     curios_common::{Candidates, Qualifier, SyntaxRegistry, fill},
     curios_core::{
-        Certification, Certified, Definitions, Entrypoint, Global, Item, Level, Places, Program,
-        Reads, Term,
+        Certification, Certified, Definitions, Entrypoint, Global, Item, Places, Program, Reads,
+        Term,
     },
     std::collections::BTreeSet,
 };
@@ -346,9 +346,9 @@ pub fn replaced(definitions: &Definitions, name: &str, item: Item) -> Definition
     Definitions { items }
 }
 
-/// `Type 5`, `Type 4` and `Type 0` as hand-built universes.
+/// `Type ${level}`, a universe at a constant level.
 pub fn type_at(level: u32) -> Term {
-    Term::type_at(Level::constant(level))
+    term(&fill!("#{level = ${level}} Type", level))
 }
 
 /// Three aliases in a chain at `Type 5`, each saying the sort its value inhabits: `H = ${h_body}` saying `${h}`, `K = H` saying `${k}`, and `L = K` saying `${l}`.

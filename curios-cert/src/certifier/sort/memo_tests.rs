@@ -9,14 +9,8 @@ use {
 };
 
 /// A record of two fields at one type, `depth` deep over `base`, written with each level's type named where it is met again: a graph of `depth + 1` nodes whose tree has `2^depth` fields.
-fn doubled(base: &str, depth: usize) -> String {
-    (0..depth).fold(base.to_string(), |type_, level| {
-        fill!(
-            "{a: #{share = ${level}} (${type_}), b: #{shared = ${level}} _}",
-            level,
-            type_
-        )
-    })
+fn record(base: &str, depth: usize) -> String {
+    doubled("{a: ${below}, b: ${again}}", base, depth, 0)
 }
 
 /// A sort is remembered per type, so a record sixty levels deep whose two fields are one type each — a tree no walk per path finishes — is classified in the size of its graph, over a closed base and over a local alike. At a depth the uncached certifier affords, both give the same sort.
@@ -25,14 +19,15 @@ fn doubled(base: &str, depth: usize) -> String {
 #[test]
 fn a_shared_type_is_classified_once_per_node() {
     assert_eq!(
-        Sort::of(&mut certifier(), &term(&doubled("#NatType", 60))),
+        Sort::of(&mut certifier(), &term(&record("#NatType", 60))),
         Ok(Sort::Type(Level::zero())),
     );
 
     let mut over_a_local = certifier();
-    let (_, over) = opened(
+    let [over] = under(
         &mut over_a_local,
-        &fill!("(A: Type) => ${doubled}", doubled = doubled("A", 60)),
+        "A: Type",
+        &fill!("${record},", record = record("A", 60)),
     );
     assert_eq!(
         Sort::of(&mut over_a_local, &over),
@@ -41,8 +36,8 @@ fn a_shared_type_is_classified_once_per_node() {
 
     let mut uncached = Certifier::uncached(100_000, SYNTAX);
     assert_eq!(
-        Sort::of(&mut certifier(), &term(&doubled("#NatType", 8))),
-        Sort::of(&mut uncached, &term(&doubled("#NatType", 8))),
+        Sort::of(&mut certifier(), &term(&record("#NatType", 8))),
+        Sort::of(&mut uncached, &term(&record("#NatType", 8))),
     );
 }
 
@@ -52,8 +47,7 @@ fn a_shared_type_is_classified_once_per_node() {
 #[test]
 fn a_remembered_sort_does_not_outlive_the_equations_it_was_taken_under() {
     let sequence = |certifier: &mut Certifier| {
-        let (locals, type_) = opened(certifier, "(u: #{level = 1} Type, A: u) => A");
-        let universe = Term::free_var(&locals[0]);
+        let [universe, type_] = under(certifier, "u: #{level = 1} Type, A: u", "u, A");
 
         let under = |certifier: &mut Certifier, value: &str| {
             certifier.scoped(|certifier| {
@@ -85,8 +79,11 @@ fn a_remembered_sort_does_not_outlive_the_equations_it_was_taken_under() {
 #[test]
 fn a_position_is_classified_under_its_own_arm() {
     let mut certifier = certifier();
-    let (locals, inhabitant) = opened(&mut certifier, "(u: #{level = 1} Type, A: u, a: A) => a");
-    let (universe, hypothesis) = (Term::free_var(&locals[0]), Term::free_var(&locals[1]));
+    let [universe, hypothesis, inhabitant] = under(
+        &mut certifier,
+        "u: #{level = 1} Type, A: u, a: A",
+        "u, A, a",
+    );
 
     let recorded = ["Prop", "Type"].map(|value| {
         certifier.scoped(|certifier| {
@@ -139,15 +136,15 @@ fn a_remembered_sort_does_not_outlive_the_type_its_local_stands_at() {
 #[test]
 fn a_remembered_sort_does_not_outlive_its_binder() {
     let mut certifier = certifier();
-    let hypothesis = binder(0, "h");
-    let type_ = Term::free_var(&hypothesis);
 
-    let first = certifier.scoped(|certifier| {
-        certifier.assume(&hypothesis, &term("Type"));
-        Sort::of(certifier, &type_)
+    let ((locals, [type_]), first) = certifier.scoped(|certifier| {
+        let opened = hypotheses(certifier, "h: Type", "h,");
+        let first = Sort::of(certifier, &opened.1[0]);
+
+        (opened, first)
     });
     let second = certifier.scoped(|certifier| {
-        certifier.assume(&hypothesis, &term("Prop"));
+        certifier.assume(&locals[0], &term("Prop"));
         Sort::of(certifier, &type_)
     });
 

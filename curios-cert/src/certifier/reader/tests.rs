@@ -3,11 +3,8 @@
 use {
     crate::{test_support::*, *},
     curios_analysis::{Erased, test_support::*},
-    curios_common::Qualifier,
-    curios_core::{
-        Cost, Global, InductType, Intrinsic, Nat, Subterm, Term, Totality, UniverseContext,
-        Universes,
-    },
+    curios_common::{Qualifier, fill},
+    curios_core::{Cost, Free, Global, InductType, Subterm, Term, Totality},
 };
 
 fn certifier() -> Certifier<'static> {
@@ -29,13 +26,21 @@ fn declare_ix(certifier: &mut Certifier) -> Global {
     Global::Authored(Qualifier::from(["Ix"]))
 }
 
-fn ix(family: Global, index: Term) -> InductType {
-    InductType {
-        name: family,
-        universes: Universes::default(),
-        params: Vec::new(),
-        indices: vec![index],
+/// The family occurrence `occurrence` is, as a reader enters an arm of it.
+fn induct_type(occurrence: &Term) -> InductType {
+    match &**occurrence {
+        Subterm::InductType(occurrence) => occurrence.clone(),
+        _ => panic!("a family occurrence: {occurrence:?}"),
     }
+}
+
+/// The term naming `local`, a local the certifier minted, written by its identity under `word`.
+fn named(local: &Free, word: &str) -> String {
+    fill!(
+        "#{binding = Free(${index})} ${word}",
+        index = local.index(),
+        word
+    )
 }
 
 /// Reduction to a head is the certifier's: a function the certifier accepted, applied, reduces to what it returns.
@@ -85,7 +90,7 @@ fn a_reader_classifies_a_types_values_as_the_obligations_do() {
 #[test]
 fn a_reader_records_no_position() {
     let mut certifier = certifier();
-    let (locals, proof) = opened(&mut certifier, "(P: Prop, h: P) => h");
+    let [proposition, proof] = under(&mut certifier, "P: Prop, h: P", "P, h");
 
     assert!(infer(&mut certifier, &proof).is_ok());
     assert_eq!(
@@ -95,7 +100,7 @@ fn a_reader_records_no_position() {
     );
 
     let typed = certifier.read(|reader| reader.infer(&proof));
-    assert_eq!(typed, Ok(Term::free_var(&locals[0])));
+    assert_eq!(typed, Ok(proposition));
     assert!(certifier.take_checked().0.is_empty());
 }
 
@@ -152,33 +157,38 @@ fn a_case_stands_for_its_value_within_its_frame() {
 #[test]
 fn a_reader_enters_an_arm_as_it_is_checked() {
     let mut certifier = certifier();
-    let family = declare_ix(&mut certifier);
-    let (_, hypotheses) = opened(
+    declare_ix(&mut certifier);
+    let [b, subject, five, at_b] = under(
         &mut certifier,
-        "(b: #NatType, subject: #{node = InductType} /Ix()(b), five: #{node = InductType} /Ix()(5)) => (b, subject, five)",
+        "b: #NatType, subject: #{node = InductType} /Ix()(b), five: #{node = InductType} /Ix()(5)",
+        "b, subject, five, #{node = InductType} /Ix()(b)",
     );
-    let [b, subject, five] = <[Term; 3]>::try_from(components(&hypotheses)).expect("three terms");
     let q = certifier.fresh(Some("q"));
+    let (successor, value) = (
+        term(&fill!("#Nat(Succ(1, ${q}))", q = named(&q, "q"))),
+        term(&fill!("#{node = Variant} /Ix/s(${q})", q = named(&q, "q"))),
+    );
 
     certifier.read(|reader| {
         reader.scoped(|reader| {
             let entered = reader
-                .enter_arm(&ix(family, b.clone()), &subject, &"s".into(), &[q])
+                .enter_arm(&induct_type(&at_b), &subject, &"s".into(), &[q])
                 .expect("the arm is entered");
-            let (successor, value) = (
-                Term::intrinsic(Intrinsic::Nat(Nat::Succ(1u32.into(), Term::free_var(&q)))),
-                Term::variant(family, Vec::<Term>::new(), "s", vec![Term::free_var(&q)]),
-            );
 
             assert_eq!(entered.targets, vec![successor.clone()]);
-            assert_eq!(entered.value, value);
+            assert_eq!(entered.value, value.clone());
             assert!(!entered.ruled_out);
             assert_eq!(reader.head(&b), Ok(successor));
             assert_eq!(reader.head(&subject), Ok(value));
         });
         reader.scoped(|reader| {
             let entered = reader
-                .enter_arm(&ix(family, term("5")), &five, &"z".into(), &[])
+                .enter_arm(
+                    &induct_type(&term("#{node = InductType} /Ix()(5)")),
+                    &five,
+                    &"z".into(),
+                    &[],
+                )
                 .expect("the arm is entered");
 
             assert!(entered.ruled_out);
@@ -195,11 +205,12 @@ fn a_reader_binds_a_fresh_local_within_its_frame() {
     certifier.read(|reader| {
         let y = reader.fresh(Some("y"));
         assert_ne!(y, locals[0]);
+        let named_y = term(&named(&y, "y"));
         reader.scoped(|reader| {
             reader.bind(&y, &term("#NatType"), &term("2"));
-            assert_eq!(reader.head(&Term::free_var(&y)), Ok(term("2")));
+            assert_eq!(reader.head(&named_y), Ok(term("2")));
         });
-        assert_eq!(reader.head(&Term::free_var(&y)), Ok(Term::free_var(&y)));
+        assert_eq!(reader.head(&named_y), Ok(named_y.clone()));
     });
 }
 
@@ -208,15 +219,8 @@ fn a_reader_binds_a_fresh_local_within_its_frame() {
 fn a_reader_looks_up_and_notes_what_it_read() {
     let mut certifier = certifier();
     let family = declare_ix(&mut certifier);
+    declared(&mut certifier, "let /three: #NatType = 3;");
     let name = Global::Authored(Qualifier::from(["three"]));
-    certifier
-        .define(
-            &name,
-            &term("#NatType"),
-            &term("3"),
-            &UniverseContext::default(),
-        )
-        .expect("a name is defined once");
     let _ = certifier.take_reads();
 
     certifier.read(|reader| {

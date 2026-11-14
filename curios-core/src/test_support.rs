@@ -34,15 +34,6 @@ pub fn case(
     InductParam::over(&binders.iter().collect::<Vec<_>>(), cursor.rest())
 }
 
-/// A match node at an ambient goal — the expected type as it stands where the match is written, inhabited by each arm under that case's specialization, over any scrutinee; see [`MatchResult::Ambient`]. The elaborator builds one where it decides the result, so the node whole is a fixture's to ask for.
-pub fn match_ambient(head: impl Into<Term>, goal: impl Into<Term>, cases: Cases) -> Term {
-    Term::from(Subterm::Match(Match {
-        head: head.into(),
-        result: MatchResult::Ambient(goal.into()),
-        cases,
-    }))
-}
-
 /// The formers stored at one place, each after the formers of the families its entry reaches, as the order a unit is stored in has them: a walk files what it computes of a family as it accepts it, and reads the next family's entry by what it filed. Two that reach each other keep the order they came in.
 fn after_what_each_reaches(mut pending: Vec<(Global, BTreeSet<Global>, Item)>) -> Vec<Item> {
     let mut stored = Vec::with_capacity(pending.len());

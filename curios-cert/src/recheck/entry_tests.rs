@@ -2,8 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::*,
-    curios_core::{Intrinsic, Term},
+    crate::{test_support::*, *},
 };
 
 /// An entry stating no type is refused rather than inferred: elaboration writes the type it judged the body at, so an entry without one did not come through it, and inferring one would accept a program against a contract nobody checked. Mutation-checked: letting an untyped entry through accepts it.
@@ -27,8 +26,8 @@ fn an_entry_is_checked_against_the_type_it_states() {
     assert!(
         refuses(&verdicts, None, |error| {
             matches!(error, Error::Mismatch { inferred, expected }
-                if **inferred == Term::intrinsic(Intrinsic::NatType)
-                    && **expected == Term::intrinsic(Intrinsic::BoolType))
+                if **inferred == term("#NatType")
+                    && **expected == term("#BoolType"))
         }),
         "a `Nat` entry stated at `Bool` was certified: {verdicts:?}",
     );
