@@ -9,18 +9,23 @@ pub let Frame(w: Nat, h: Nat) -> Type =
 let padded(@T: Type, fill: T, m: Nat) -> (List(T)) -> List(T) =
     match m
     | 0 => (_) => []
-    | _ + 1; ih => (l) => match l | [] => [fill, ..ih([])] | [h, ..t] => [h, ..ih(t)] end
+    | k + 1 =>
+        (l) =>
+            match l
+            | [] => [fill, ..padded(fill, k)([])]
+            | [h, ..t] => [h, ..padded(fill, k)(t)]
+            end
     end;
 
--- Either arm adds exactly one element to a run the hypothesis already counted, so the count is the one asked for whatever the input was.
+-- Either arm adds exactly one element to a run the shorter padding already counted, so the count is the one asked for whatever the input was.
 let padded_len(@T: Type, fill: T, m: Nat) -> (l: List(T)) -> Vec/Counted(padded(fill, m)(l), m) =
     match m
     | 0 => (_) => Eq/refl()
-    | _ + 1; ih =>
+    | k + 1 =>
         (l) =>
             match l
-            | [] => Eq/cong((w: Nat) => w + 1, ih([]))
-            | [_, ..t] => Eq/cong((w: Nat) => w + 1, ih(t))
+            | [] => Eq/cong((w: Nat) => w + 1, padded_len(fill, k)([]))
+            | [_, ..t] => Eq/cong((w: Nat) => w + 1, padded_len(fill, k)(t))
             end
     end;
 
