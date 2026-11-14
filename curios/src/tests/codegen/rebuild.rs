@@ -537,11 +537,13 @@ fn a_branch_of_a_tree_a_loop_hands_on_as_it_took_it_is_inserted_into_by_a_copy()
     assert_eq!(run(&module, "5"), run(&kept, "5"));
 }
 
-/// A loop whose accumulator starts as a literal, the bare number a tip is, and whose result a second loop takes apart: a literal is no row, so the accumulator a link is built on is no less unique for having been one, and the second loop rebuilds the links it takes apart.
+/// A loop whose accumulator starts as a literal, the bare number a tip is, and whose result a second loop takes apart, over a rope built on a tip that is the number the building loop's counter starts at too: neither a literal nor a number handed at two parameters is a row, so the accumulator a link is built on is no less unique for having been one, and each loop rebuilds the links it takes apart — the program collects as often as the one that only builds the rope.
 #[test]
 fn a_loop_started_on_a_literal_rebuilds_the_links_it_takes_apart() {
     let (lowered, module) = modules(&program(ROPE, ROPE_FLIPPED_TWICE));
-    assert!(rebuilds_of(&module, "/Rope") >= 2, "{module}");
+    let (_, built) = modules(&program(ROPE, "total(make(n, Rope/tip(n)), 0)"));
+    let collections = |module: &Module| collected(|| run(module, "600000")).1.collections;
+    assert_eq!(collections(&module), collections(&built), "{module}");
     let mut kept = lowered;
     curios_cps::optimize(&mut kept);
     for n in ["0", "1", "300"] {

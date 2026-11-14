@@ -74,9 +74,9 @@ pub fn routes(module: &Module) -> Routes {
         }
     }
     let arities = module.return_arities();
-    let base = sources(module, &shape, &borrowed, &BTreeMap::new());
-    let reuse = sources(module, &shape, &borrowed, &assumed);
     let aggregates = aggregates(module, &shape);
+    let base = sources(module, &shape, &borrowed, &BTreeMap::new(), &aggregates);
+    let reuse = sources(module, &shape, &borrowed, &assumed, &aggregates);
     let (shape, assumed, arities, base, reuse, aggregates) =
         (&shape, &assumed, &arities, &base, &reuse, &aggregates);
     let world_of = move |value: ValueId, world: World| match shape.home.get(&value) {
@@ -109,6 +109,7 @@ pub fn routes(module: &Module) -> Routes {
         });
         let shared =
             move |solver: &Solver<Shared, (World, Key)>, world: World, atom: &Atom| match atom {
+                Atom::Value(value) if !aggregates.contains(value) => false,
                 Atom::Value(value) => solver
                     .fact(&(world_of(*value, world), Key::Value(*value)))
                     .is_none_or(|fact| fact.0),
@@ -1706,8 +1707,8 @@ impl<'s> Facts<'s> {
         shape: &'s Shape,
         borrowed: &'s BTreeSet<(FunctionId, usize)>,
     ) -> Self {
-        let sources = sources(module, shape, borrowed, &BTreeMap::new());
         let aggregates = &aggregates(module, shape);
+        let sources = sources(module, shape, borrowed, &BTreeMap::new(), aggregates);
         let arities = module.return_arities();
         let keys =
             shape
@@ -1725,8 +1726,9 @@ impl<'s> Facts<'s> {
                 }
             });
             let shared = |solver: &Solver<Shared, Key>, atom: &Atom| match atom {
+                // A filler is null, and a literal and a value that may be neither a row nor a tuple are no row, so nothing shares what a rebuild could write; a function is a closure the module does not see into.
+                Atom::Value(value) if !aggregates.contains(value) => false,
                 Atom::Value(value) => solver.fact(&Key::Value(*value)).is_none_or(|fact| fact.0),
-                // A filler is null and a literal no row, so nothing shares what a rebuild could write; a function is a closure the module does not see into.
                 Atom::Filler | Atom::Literal(_) => false,
                 Atom::Fun(_) => true,
             };
@@ -1920,15 +1922,21 @@ impl<'s> Facts<'s> {
     }
 }
 
-/// The facts that hold whatever the others say: a value's own sharing — an operation's result, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, a captured one, a field another read on its path reads or its own read reads again on a later round — and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it.
+/// The facts that hold whatever the others say: a value's own sharing — an operation's result, a parameter some call hands a value read after it or the module does not see the callers of, a value consumed twice or before its last use, a captured one, a field another read on its path reads or its own read reads again on a later round — and a result a function hands back from where the module cannot follow. A parameter `assumed` lists is the reuse version's, unique as it receives it. What a call or a jump hands a parameter shares it only where it may be a row or a tuple, one of `aggregates`: a number handed at two parameters holds nothing a rebuild writes.
 fn sources(
     module: &Module,
     shape: &Shape,
     borrowed: &BTreeSet<(FunctionId, usize)>,
     assumed: &BTreeMap<FunctionId, BTreeSet<usize>>,
+    aggregates: &BTreeSet<ValueId>,
 ) -> BTreeSet<Key> {
     let arities = module.return_arities();
     let mut sources = BTreeSet::new();
+    let may_hold_a_row = |atom: Option<&Atom>| match atom {
+        Some(Atom::Value(handed)) => aggregates.contains(handed),
+        Some(Atom::Filler | Atom::Literal(_)) => false,
+        Some(Atom::Fun(_)) | None => true,
+    };
     for (value, def) in &shape.defs {
         // Constant data is one object wherever it is named, and its tag keeps it from a rebuild.
         if shape.constant.contains(value) {
@@ -1954,9 +1962,13 @@ fn sources(
                 shape.open.contains(function)
                     || borrowed.contains(&(*function, *index))
                     || shape.calls.get(function).is_none_or(|calls| {
-                        calls
-                            .iter()
-                            .any(|call| !handed_dead(module, shape, *call, *index))
+                        calls.iter().any(|call| {
+                            let handed = match module.node(*call) {
+                                Some(Node::ApplyFun { args, .. }) => args.get(*index),
+                                _ => None,
+                            };
+                            may_hold_a_row(handed) && !handed_dead(module, shape, *call, *index)
+                        })
                     })
             }
             Def::ContParam(continuation, index) => {
@@ -1966,12 +1978,13 @@ fn sources(
                     .into_iter()
                     .flatten()
                     .any(|entry| {
-                        !arg_dead(
-                            shape,
-                            &entry.args[*index],
-                            &entry.args,
-                            Block::Cont(*continuation),
-                        )
+                        may_hold_a_row(entry.args.get(*index))
+                            && !arg_dead(
+                                shape,
+                                &entry.args[*index],
+                                &entry.args,
+                                Block::Cont(*continuation),
+                            )
                     })
                     || shape
                         .resumes

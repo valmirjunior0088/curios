@@ -653,3 +653,113 @@ fn each_arm_of_a_round_rebuilds_what_it_takes_apart_where_the_round_binds_anothe
         "a loop handing its parameter back by a join writes into nothing a round read"
     );
 }
+
+/// `main` enters a loop with one number as both its counter and the accumulator each round builds a `Pair` over, and the loop hands what it built to a continuation that reads its slot and builds a `Pair` of it beside it dying.
+fn built_over_a_number_handed_twice() -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let [x, n, acc, k, l, r, y, m] =
+        ["x", "n", "acc", "k", "l", "r", "y", "m"].map(|name| module.add_value(Some(name.into())));
+    let [build, step, take] = [(); 3].map(|()| module.reserve_continuation());
+    let to = |target, args| Edge { target, args };
+
+    let exit = module.add_node(halt_zero());
+    let rebuilt = module.add_node(Node::LetValue {
+        result: m,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(y)]),
+        next: exit,
+    });
+    let read = module.add_node(Node::LetIntrinsic {
+        result: y,
+        op: Intrinsic::RowGet(pair, 1),
+        args: vec![Atom::Value(r)],
+        next: rebuilt,
+    });
+    module.define_continuation(
+        take,
+        Continuation {
+            debug_name: None,
+            params: vec![r],
+            body: read,
+        },
+    );
+    let again = module.add_node(Node::ApplyCont(to(
+        build,
+        vec![Atom::Value(k), Atom::Value(l)],
+    )));
+    let link = module.add_node(Node::LetValue {
+        result: l,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(acc)]),
+        next: again,
+    });
+    let count = module.add_node(Node::LetIntrinsic {
+        result: k,
+        op: Intrinsic::NatSub,
+        args: vec![Atom::Value(n), nat(1)],
+        next: link,
+    });
+    module.define_continuation(
+        step,
+        Continuation {
+            debug_name: None,
+            params: vec![],
+            body: count,
+        },
+    );
+    let pick = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(n),
+        cases: std::collections::BTreeMap::from([(0, to(take, vec![Atom::Value(acc)]))]),
+        default: Some(to(step, vec![])),
+    });
+    let round = module.add_node(Node::LetCont {
+        continuations: vec![step],
+        body: pick,
+    });
+    module.define_continuation(
+        build,
+        Continuation {
+            debug_name: None,
+            params: vec![n, acc],
+            body: round,
+        },
+    );
+
+    let enter = module.add_node(Node::ApplyCont(to(
+        build,
+        vec![Atom::Value(x), Atom::Value(x)],
+    )));
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![build, take],
+        body: enter,
+    });
+    let body = module.add_node(Node::LetIntrinsic {
+        result: x,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: scope,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// A number handed at two parameters of one entry holds nothing a rebuild writes, so it shares neither: the accumulator each round builds over is a value nothing else holds, and the continuation the loop hands it to rebuilds it.
+#[test]
+fn a_number_handed_at_two_parameters_shares_nothing_built_over_it() {
+    assert_eq!(rebuilds(&built_over_a_number_handed_twice()).len(), 1);
+}
