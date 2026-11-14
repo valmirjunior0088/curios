@@ -1,234 +1,94 @@
-//! The families, motives and opaque type formers the elimination suites eliminate over.
+//! The families, motives and opaque type formers the elimination suites eliminate over, each written as Core text.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across `eliminate`, and nothing outside it.
 
 use {
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Free, Global, InductDecl, Intrinsic, Many, Nat, Scope, Telescope, Term,
-        UniverseContext, Universes,
-    },
+    curios_common::{Qualifier, fill},
+    curios_core::{Global, UniverseContext},
 };
 
 pub fn certifier() -> Certifier<'static> {
     Certifier::new(100_000, SYNTAX)
 }
 
-pub fn binder(index: u32, hint: &str) -> Free {
-    Free::local(u64::from(index), Some(hint))
-}
+/// `z() : (0)`, the case at zero.
+pub const ZERO: &str = "z(): (0)";
 
-pub fn nat(n: usize) -> Term {
-    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
-}
+/// `s(p : Nat) : (p + 1)`, the case at a successor, in the successor-floor form reduction keeps.
+pub const SUCCESSOR: &str = "s(p: #NatType): (#Nat(Succ(1, p)))";
 
-pub fn nat_type() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
+/// The family `path` at `sort` over the indices `indices`, a telescope (`i: #NatType`) or none, with `cases`, each written `tag(payload): (targets)`, declared in `certifier`. A binder named in more than one target is the non-linear target `Eq`'s `refl(@z) : (z, z)` has.
+pub fn declare(certifier: &mut Certifier, path: &str, indices: &str, sort: &str, cases: &[&str]) {
+    let arity = match indices.is_empty() {
+        true => String::new(),
+        false => fill!("(${indices}) -> ", indices),
+    };
+    let cases = cases
+        .iter()
+        .map(|case| fill!("\n| ${case}", case))
+        .collect::<String>();
 
-/// One constructor of a test family: its tag, the payload binder it carries if any, and the index target this case aims at.
-pub struct Case {
-    pub tag: &'static str,
-    pub payload: Option<(Free, Term)>,
-    /// The index targets this constructor produces, one per index of its family — several, because a target that mentions one binder *twice* is the shape the clash rule turns on and a single target cannot spell.
-    pub indices: Vec<Term>,
-}
-
-/// A constructor carrying nothing, aimed at `index` — the one-index spelling of [`nullary_at`].
-pub fn nullary(tag: &'static str, index: Term) -> Case {
-    nullary_at(tag, vec![index])
-}
-
-/// A constructor carrying `binder : type_`, aimed at `index` — the one-index spelling of [`carrying_at`].
-pub fn carrying(tag: &'static str, binder: Free, type_: Term, index: Term) -> Case {
-    carrying_at(tag, binder, type_, vec![index])
-}
-
-/// A constructor carrying nothing, aimed at `indices`.
-pub fn nullary_at(tag: &'static str, indices: Vec<Term>) -> Case {
-    Case {
-        tag,
-        payload: None,
-        indices,
-    }
-}
-
-/// A constructor carrying `binder : type_`, aimed at `indices`. A binder named in more than one of them is the non-linear target `Eq`'s `refl(@z) : (z, z)` has.
-pub fn carrying_at(tag: &'static str, binder: Free, type_: Term, indices: Vec<Term>) -> Case {
-    Case {
-        tag,
-        payload: Some((binder, type_)),
-        indices,
-    }
-}
-
-/// Declare a one-index family from its constructors.
-pub fn declare(
-    certifier: &mut Certifier,
-    path: &str,
-    result_sort: Term,
-    constructors: Vec<Case>,
-) -> Global {
-    declare_at(
+    declared(
         certifier,
-        path,
-        result_sort,
-        vec![Term::intrinsic(Intrinsic::NatType)],
-        constructors,
+        &fill!(
+            "induct /${path}: ${arity}pub ${sort}${cases}\nend",
+            path,
+            arity,
+            sort,
+            cases
+        ),
+    );
+}
+
+/// `path`'s type at `indices`, a family with no parameter: `#{node = InductType} /path()(indices)`, or `/path()` where it takes no index.
+pub fn family_at(path: &str, indices: &str) -> String {
+    match indices.is_empty() {
+        true => fill!("#{node = InductType} /${path}()", path),
+        false => fill!("#{node = InductType} /${path}()(${indices})", path, indices),
+    }
+}
+
+/// `match subject : (${binders}) => ${motive} | arms end`, the elimination of a scrutinee `subject`: its motive written over its index binders and then the scrutinee's, each arm `tag(binders) => body`.
+pub fn eliminating(binders: &str, motive: &str, arms: &[&str]) -> String {
+    let arms = arms
+        .iter()
+        .map(|arm| fill!(" | ${arm}", arm))
+        .collect::<String>();
+
+    fill!(
+        "match subject: (${binders}) => ${motive}${arms} end",
+        binders,
+        motive,
+        arms
     )
 }
 
-/// Declare a family whose indices have the given types, from its constructors.
-pub fn declare_at(
-    certifier: &mut Certifier,
-    path: &str,
-    result_sort: Term,
-    index_types: Vec<Term>,
-    constructors: Vec<Case>,
-) -> Global {
-    let family = Global::Authored(Qualifier::from([path]));
-
-    let entries = constructors
-        .into_iter()
-        .map(|case| {
-            let targets = case.indices;
-            let (telescope, plicities) = match case.payload {
-                Some((field, type_)) => (
-                    Telescope::build([(field, type_)], targets),
-                    vec![Plicity::Explicit],
-                ),
-                None => (Telescope::done(targets), Vec::new()),
-            };
-
-            (
-                Atom::from(case.tag),
-                curios_core::test_support::case(0, telescope, plicities),
-            )
-        })
-        .collect();
-
-    certifier
-        .declare_induct(
-            &family,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::build(
-                    index_types
-                        .into_iter()
-                        .enumerate()
-                        .map(|(position, type_)| {
-                            (Free::local(9_000 + position as u64, Some("i")), type_)
-                        })
-                        .collect::<Vec<_>>(),
-                    (),
-                )),
-                entries,
-                result_sort,
-                Qualifier::from([path]),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
-
-    family
-}
-
-/// `match subject : (i, s) => motive | tag(binders) => body ... end`, over a scrutinee assumed at `family(index)`.
-pub fn eliminate(
-    certifier: &mut Certifier,
-    family: &Global,
-    index: Term,
-    motive: Term,
-    arms: Vec<(&str, Vec<Free>, Term)>,
-) -> Term {
-    eliminate_at(certifier, family, vec![index], motive, arms)
-}
-
-/// [`eliminate`] over a scrutinee assumed at `family(indices)`, for a family carrying more than one.
-pub fn eliminate_at(
-    certifier: &mut Certifier,
-    family: &Global,
-    indices: Vec<Term>,
-    motive: Term,
-    arms: Vec<(&str, Vec<Free>, Term)>,
-) -> Term {
-    let subject = binder(50, "subject");
-    certifier.assume(
-        &subject,
-        &Term::induct_type(*family, Vec::<Term>::new(), indices.clone()),
-    );
-
-    // One motive binder per index, then the scrutinee's.
-    let binders = (0..indices.len())
-        .map(|position| binder(51 + position as u32, "i"))
-        .chain([binder(51 + indices.len() as u32, "s")])
-        .collect::<Vec<_>>();
-    let motive = Scope::close(
-        Many(binders.len()),
-        &binders.iter().collect::<Vec<_>>(),
-        motive,
-    );
-
-    Term::induct_match_scoped_marked(
-        Term::free_var(&subject),
-        motive,
-        arms.into_iter().map(|(tag, binders, body)| {
-            (
-                tag,
-                binders
-                    .into_iter()
-                    .map(|b| (Plicity::Explicit, b))
-                    .collect::<Vec<_>>(),
-                body,
-            )
-        }),
-        None,
-    )
-}
-
-/// A successor over `tail`, in the successor-floor form reduction keeps.
-pub fn succ(tail: Term) -> Term {
-    Term::intrinsic(Intrinsic::Nat(Nat::Succ(1u32.into(), tail)))
-}
-
-/// An opaque `P : (n : Nat, x : family(n)) -> Type`, for observing which *scrutinee* a term checks at as well as which index.
-///
-/// [`opaque_family`] below can only witness the index half of a motive, and a catch-all refines no index — so nothing built from it can tell the scrutinee instances apart.
-pub fn scrutinee_family(certifier: &mut Certifier, name: &str, family: &Global) -> Term {
-    let name = Global::Authored(Qualifier::from([name]));
-    let index = binder(92, "n");
+/// A name `path` at `type_` with no body, declared in `certifier` as a judgment declares one before its body: an opaque type former, for observing which instance a term checks at.
+pub fn opaque(certifier: &mut Certifier, path: &str, type_: &str) {
     certifier
         .declare(
-            &name,
-            &Term::func_type(
-                [
-                    (index, nat_type()),
-                    (
-                        binder(93, "x"),
-                        Term::induct_type(*family, Vec::<Term>::new(), [Term::free_var(&index)]),
-                    ),
-                ],
-                Term::type_ground(),
-            ),
+            &Global::Authored(Qualifier::from([path])),
+            &term(type_),
             &UniverseContext::default(),
         )
         .expect("a name is declared once");
-
-    Term::instance(name, Universes::default())
 }
 
-/// An opaque `P : (Nat) -> Type`, for observing which instance a term checks at.
-pub fn opaque_family(certifier: &mut Certifier, name: &str) -> Term {
-    let name = Global::Authored(Qualifier::from([name]));
-    certifier
-        .declare(
-            &name,
-            &Term::func_type([(binder(90, "n"), nat_type())], Term::type_ground()),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
+/// An opaque `P : (n : Nat, x : ${family}(n)) -> Type`, for observing which *scrutinee* a term checks at as well as which index: a catch-all refines no index, so a former over the index alone cannot tell the scrutinee instances apart.
+pub fn scrutinee_family(certifier: &mut Certifier, family: &str) {
+    opaque(
+        certifier,
+        "P",
+        &fill!(
+            "(n: #NatType, x: ${family}) -> Type",
+            family = family_at(family, "n")
+        ),
+    );
+}
 
-    Term::instance(name, Universes::default())
+/// The name a declaration under `path` has.
+pub fn named(path: &str) -> Global {
+    Global::Authored(Qualifier::from([path]))
 }

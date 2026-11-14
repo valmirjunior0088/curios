@@ -2,132 +2,64 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, Carrier, Cases, Global, InductArm, Intrinsic, Many, ReduceError, Scope, Term, Two,
-        UniverseContext, Universes, test_support::*,
-    },
+    curios_common::fill,
+    curios_core::ReduceError,
 };
 
-/// `F : (Nat) -> Type` with `a : F(0)` and `b(m : Nat) : F(m + 1)`.
-fn family(certifier: &mut Certifier) -> Global {
-    let m = binder(70, "m");
+/// `F : (Nat) -> Type` with `a : F(0)` and `b(m : Nat) : F(m + 1)`, declared in `certifier` with `P : (n : Nat, x : F(n)) -> Type`.
+fn family(certifier: &mut Certifier) {
     declare(
         certifier,
         "F",
-        Term::type_ground(),
-        vec![
-            nullary("a", nat(0)),
-            carrying("b", m, nat_type(), succ(Term::free_var(&m))),
-        ],
+        "i: #NatType",
+        "Type",
+        &["a(): (0)", "b(m: #NatType): (#Nat(Succ(1, m)))"],
+    );
+    scrutinee_family(certifier, "F");
+}
+
+/// `#{result = Ambient(goal)} match scrutinee | a() => body | b(m) => body end`: the two arms of an elimination of `F`, each `body`, at an ambient goal.
+fn ambient(scrutinee: &str, goal: &str, body: &str) -> String {
+    fill!(
+        "#{result = Ambient(${goal})} match ${scrutinee} | a() => ${body} | b(m) => ${body} end",
+        goal,
+        scrutinee,
+        body
     )
 }
 
-/// An opaque `Q : (n : Nat, x : F(n), p : P(n, x)) -> Type`: a type former whose last parameter is typed by the scrutinee and its index, so a goal stating it about a hypothesis can be written where that hypothesis stands and nowhere else.
-fn dependent_family(certifier: &mut Certifier, name: &str, family: &Global, p: &Term) -> Term {
-    let name = Global::Authored(Qualifier::from([name]));
-    let n = binder(94, "n");
-    let x = binder(95, "x");
-    let at = Term::induct_type(*family, Vec::<Term>::new(), [Term::free_var(&n)]);
-    certifier
-        .declare(
-            &name,
-            &Term::func_type(
-                [
-                    (n, nat_type()),
-                    (x, at),
-                    (
-                        binder(96, "p"),
-                        Term::apply(p.clone(), [Term::free_var(&n), Term::free_var(&x)]),
-                    ),
-                ],
-                Term::type_ground(),
-            ),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-
-    Term::instance(name, Universes::default())
-}
-
-/// The two arms of an elimination of `F`, each `body`, as `Cases::Induct` in declaration order.
-fn arms(body: &Term) -> Cases {
-    let m = binder(71, "m");
-    Cases::Induct {
-        cases: vec![
-            (
-                Atom::from("a"),
-                InductArm::new(Scope::close(Many(0), &[], body.clone()), Vec::new()),
-            ),
-            (
-                Atom::from("b"),
-                InductArm::new(
-                    Scope::close(Many(1), &[&m], body.clone()),
-                    vec![Plicity::Explicit],
-                ),
-            ),
-        ],
-        default: None,
-        stated: None,
-    }
-}
-
 /// The reason the form exists. `w : Q(n, x, h)` with `h : P(n, x)`: stated at the ambient goal, each arm inhabits `Q(n, x, h)` specialized — `Q(0, a(), h)` with `h` shadowed at `P(0, a())` — and `w` does so once shadowed itself. The family stating the same result, `(i, s) => Q(i, s, h)`, cannot be typed under its own binders, since `h : P(n, x)` is not a `P(i, s)`, which is what would otherwise force a convoy.
+///
+/// `Q : (n : Nat, x : F(n), p : P(n, x)) -> Type` is opaque: a type former whose last parameter is typed by the scrutinee and its index, so a goal stating it about a hypothesis can be written where that hypothesis stands and nowhere else.
 #[test]
 fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
     let mut certifier = certifier();
-    let family = family(&mut certifier);
-    let p = scrutinee_family(&mut certifier, "P", &family);
-    let q = dependent_family(&mut certifier, "Q", &family, &p);
-
-    let n = binder(62, "n");
-    let x = binder(63, "x");
-    let h = binder(64, "h");
-    let w = binder(65, "w");
-    certifier.assume(&n, &nat_type());
-    certifier.assume(
-        &x,
-        &Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&n)]),
-    );
-    certifier.assume(
-        &h,
-        &Term::apply(p.clone(), [Term::free_var(&n), Term::free_var(&x)]),
-    );
-    let goal = Term::apply(
-        q.clone(),
-        [Term::free_var(&n), Term::free_var(&x), Term::free_var(&h)],
-    );
-    certifier.assume(&w, &goal);
-
-    let ambient = match_ambient(Term::free_var(&x), goal.clone(), arms(&Term::free_var(&w)));
-    assert_eq!(
-        infer(&mut certifier, &ambient).expect("the ambient goal is inhabited by each arm"),
-        goal,
-    );
-
-    let i = binder(66, "i");
-    let s = binder(67, "s");
-    let family_form = Term::induct_match_scoped_marked(
-        Term::free_var(&x),
-        Scope::close(
-            Many(2),
-            &[&i, &s],
-            Term::apply(
-                q,
-                [Term::free_var(&i), Term::free_var(&s), Term::free_var(&h)],
-            ),
+    family(&mut certifier);
+    opaque(
+        &mut certifier,
+        "Q",
+        &fill!(
+            "(n: #NatType, x: ${f}, p: /P(n, x)) -> Type",
+            f = family_at("F", "n")
         ),
-        [
-            ("a", Vec::new(), Term::free_var(&w)),
-            (
-                "b",
-                vec![(Plicity::Explicit, binder(71, "m"))],
-                Term::free_var(&w),
-            ),
-        ],
-        None,
+    );
+    let [ambient_form, family_form, goal] = under(
+        &mut certifier,
+        &fill!(
+            "n: #NatType, x: ${f}, h: /P(n, x), w: /Q(n, x, h)",
+            f = family_at("F", "n")
+        ),
+        &fill!(
+            "${ambient}, match x: (i, s) => /Q(i, s, h) | a() => w | b(m) => w end, /Q(n, x, h)",
+            ambient = ambient("x", "/Q(n, x, h)", "w")
+        ),
+    );
+
+    assert_eq!(
+        infer(&mut certifier, &ambient_form).expect("the ambient goal is inhabited by each arm"),
+        goal,
     );
     assert!(
         matches!(
@@ -142,19 +74,13 @@ fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
 #[test]
 fn a_lying_ambient_goal_is_refused() {
     let mut certifier = certifier();
-    let family = family(&mut certifier);
-    let p = scrutinee_family(&mut certifier, "P", &family);
-
-    let n = binder(62, "n");
-    let x = binder(63, "x");
-    certifier.assume(&n, &nat_type());
-    certifier.assume(
-        &x,
-        &Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&n)]),
+    family(&mut certifier);
+    let [lying] = under(
+        &mut certifier,
+        &fill!("n: #NatType, x: ${f}", f = family_at("F", "n")),
+        &fill!("${lying},", lying = ambient("x", "/P(n, x)", "0")),
     );
-    let goal = Term::apply(p, [Term::free_var(&n), Term::free_var(&x)]);
 
-    let lying = match_ambient(Term::free_var(&x), goal, arms(&nat(0)));
     assert!(matches!(
         infer(&mut certifier, &lying),
         Err(Error::Mismatch { .. })
@@ -165,62 +91,50 @@ fn a_lying_ambient_goal_is_refused() {
 #[test]
 fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     let mut certifier = certifier();
-    let family = family(&mut certifier);
-    let p = scrutinee_family(&mut certifier, "P", &family);
-
+    family(&mut certifier);
     // `f : (Nat) -> F(0)` applied to a parameter is an expression scrutinee typed at index `0`, so only the `a` arm is reachable, and `b`'s targets clash with the actual index.
-    let f = Global::Authored(Qualifier::from(["f"]));
-    let n = binder(63, "n");
-    let at_zero = Term::induct_type(family, Vec::<Term>::new(), [nat(0)]);
-    certifier
-        .declare(
-            &f,
-            &Term::func_type([(binder(64, "k"), nat_type())], at_zero.clone()),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-    certifier.assume(&n, &nat_type());
-    let expression = Term::apply(
-        Term::instance(f, Universes::default()),
-        [Term::free_var(&n)],
+    opaque(
+        &mut certifier,
+        "f",
+        &fill!("(k: #NatType) -> ${f}", f = family_at("F", "0")),
     );
-    let h = binder(65, "h");
-    let goal = Term::apply(p, [nat(0), expression.clone()]);
-    certifier.assume(&h, &goal);
+    let [naming, constant, goal] = under(
+        &mut certifier,
+        "n: #NatType, h: /P(0, /f(n))",
+        &fill!(
+            "${naming}, ${constant}, /P(0, /f(n))",
+            naming = ambient("/f(n)", "/P(0, /f(n))", "h"),
+            constant = ambient("/f(n)", "#NatType", "0")
+        ),
+    );
 
     // The goal names the expression, so the `a` arm is checked at `P(0, a())`, and the elimination's type is the goal as written.
-    let naming = match_ambient(expression.clone(), goal.clone(), arms(&Term::free_var(&h)));
     assert_eq!(
         infer(&mut certifier, &naming).expect("the occurrence stands for the case"),
         goal
     );
 
     // A goal that never names the expression is the same goal in every arm, and the elimination's type is that goal.
-    let constant = match_ambient(expression, nat_type(), arms(&nat(0)));
     assert_eq!(
         infer(&mut certifier, &constant).expect("a constant goal is inhabited by each arm"),
-        nat_type()
+        term("#NatType")
     );
 }
+
+/// `#{result = Ambient(${goal})} match k | 0 => 0 | pred + 1; ih => ${cons} end`, over a `Nat` `k`.
+const AMBIENT_ON_K: &str =
+    "#{result = Ambient(${goal})} match k | 0 => 0 | pred + 1; ih => ${cons} end,";
 
 /// A fold's induction hypothesis is the fold at the tail, typed at the result at the tail, and an ambient goal has no tail to be taken at once the head is substituted away: a fold whose arm reads its hypothesis is refused at one.
 #[test]
 fn an_ambient_fold_that_reads_its_hypothesis_is_refused() {
     let mut certifier = certifier();
-    let k = binder(80, "k");
-    certifier.assume(&k, &nat_type());
-
-    let ih = binder(82, "ih");
-    let fold = match_ambient(
-        Term::free_var(&k),
-        nat_type(),
-        Cases::FreeMonoid {
-            carrier: Carrier::Nat {
-                empty_case: nat(0),
-                cons_case: Scope::close(Two, &[&binder(81, "pred"), &ih], Term::free_var(&ih)),
-            },
-        },
+    let [fold] = under(
+        &mut certifier,
+        "k: #NatType",
+        &fill!(AMBIENT_ON_K, goal = "#NatType", cons = "ih"),
     );
+
     assert!(matches!(
         infer(&mut certifier, &fold),
         Err(Error::AmbientFold(_))
@@ -231,26 +145,15 @@ fn an_ambient_fold_that_reads_its_hypothesis_is_refused() {
 #[test]
 fn an_ambient_case_split_is_checked_at_each_case() {
     let mut certifier = certifier();
-    let k = binder(80, "k");
-    certifier.assume(&k, &nat_type());
-
-    let split = match_ambient(
-        Term::free_var(&k),
-        nat_type(),
-        Cases::FreeMonoid {
-            carrier: Carrier::Nat {
-                empty_case: nat(0),
-                cons_case: Scope::close(
-                    Two,
-                    &[&binder(81, "pred"), &binder(82, "ih")],
-                    Term::free_var(&binder(81, "pred")),
-                ),
-            },
-        },
+    let [split] = under(
+        &mut certifier,
+        "k: #NatType",
+        &fill!(AMBIENT_ON_K, goal = "#NatType", cons = "pred"),
     );
+
     assert_eq!(
         infer(&mut certifier, &split).expect("each arm inhabits the goal at its case"),
-        nat_type()
+        term("#NatType")
     );
 }
 
@@ -258,23 +161,12 @@ fn an_ambient_case_split_is_checked_at_each_case() {
 #[test]
 fn an_ambient_case_split_whose_arm_misses_the_goal_is_refused() {
     let mut certifier = certifier();
-    let k = binder(80, "k");
-    certifier.assume(&k, &nat_type());
-
-    let split = match_ambient(
-        Term::free_var(&k),
-        Term::intrinsic(Intrinsic::BoolType),
-        Cases::FreeMonoid {
-            carrier: Carrier::Nat {
-                empty_case: nat(0),
-                cons_case: Scope::close(
-                    Two,
-                    &[&binder(81, "pred"), &binder(82, "ih")],
-                    Term::intrinsic(Intrinsic::Bool(true)),
-                ),
-            },
-        },
+    let [split] = under(
+        &mut certifier,
+        "k: #NatType",
+        &fill!(AMBIENT_ON_K, goal = "#BoolType", cons = "true"),
     );
+
     assert!(matches!(
         infer(&mut certifier, &split),
         Err(Error::Mismatch { .. })
@@ -286,37 +178,15 @@ fn an_ambient_case_split_whose_arm_misses_the_goal_is_refused() {
 fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
     let attempt = |budget: u64, ambient: bool| {
         let mut certifier = Certifier::new(budget, SYNTAX);
-
-        let (b, t, x) = (binder(80, "b"), binder(81, "T"), binder(82, "x"));
-        let universe = Term::nat_match(
-            nat(50_000),
-            None,
-            Term::type_ground(),
-            Term::type_ground(),
-            &binder(83, "pred"),
-            &binder(84, "ih"),
-            Term::free_var(&binder(84, "ih")),
-        );
-        certifier.assume(&b, &Term::intrinsic(Intrinsic::BoolType));
-        certifier.assume(&t, &universe);
-        certifier.assume(&x, &Term::free_var(&t));
-
         let elimination = match ambient {
-            true => match_ambient(
-                Term::free_var(&b),
-                Term::free_var(&t),
-                Cases::Bool {
-                    false_case: Term::free_var(&x),
-                    true_case: Term::free_var(&x),
-                },
-            ),
-            false => Term::bool_match_scoped(
-                Term::free_var(&b),
-                Scope::close(Many(1), &[&binder(85, "s")], Term::free_var(&t)),
-                Term::free_var(&x),
-                Term::free_var(&x),
-            ),
+            true => "#{result = Ambient(T)} match b | false => x | true => x end,",
+            false => "match b: (s) => T | false => x | true => x end,",
         };
+        let [elimination] = under(
+            &mut certifier,
+            "b: #BoolType, T: match 50000: (_) => Type | 0 => Type | pred + 1; ih => ih end, x: T",
+            elimination,
+        );
 
         infer(&mut certifier, &elimination)
     };
@@ -341,60 +211,36 @@ fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
 #[test]
 fn an_arm_under_a_scrutinee_that_is_another_case_is_not_typed() {
     let mut certifier = certifier();
-    let never = Term::intrinsic(Intrinsic::Bool(true));
-    let term = Term::bool_match(
-        Term::intrinsic(Intrinsic::Bool(false)),
-        None,
-        nat_type(),
-        nat(0),
-        never,
-    );
 
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+    assert_eq!(
+        infer(&mut certifier, &term(&nat_by("false", WRONG))),
+        Ok(term("#NatType"))
+    );
 }
 
 /// The arm a literal scrutinee does take is typed as every arm is: over `true`, a `Bool` in the `true` arm of a `Nat` result is refused.
 #[test]
 fn the_arm_a_literal_scrutinee_takes_is_typed() {
     let mut certifier = certifier();
-    let taken = Term::intrinsic(Intrinsic::Bool(true));
-    let term = Term::bool_match(
-        Term::intrinsic(Intrinsic::Bool(true)),
-        None,
-        nat_type(),
-        nat(0),
-        taken,
-    );
 
-    assert!(infer(&mut certifier, &term).is_err());
+    assert!(infer(&mut certifier, &term(&nat_by("true", WRONG))).is_err());
 }
 
 /// `not : (Bool) -> Bool`, as the function it is.
-fn not() -> Term {
-    let c = binder(86, "c");
-    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+const NOT: &str =
+    "((c: #BoolType) => match c: (_) => #BoolType | false => true | true => false end)";
 
-    Term::func(
-        [(c, bool_type.clone())],
-        Term::bool_match(
-            Term::free_var(&c),
-            None,
-            bool_type,
-            Term::intrinsic(Intrinsic::Bool(true)),
-            Term::intrinsic(Intrinsic::Bool(false)),
-        ),
+/// The `Nat` elimination of `scrutinee` whose `false` arm is `0` and whose `true` arm is `in_true`.
+fn nat_by(scrutinee: &str, in_true: &str) -> String {
+    fill!(
+        "match ${scrutinee}: (_) => #NatType | false => 0 | true => ${in_true} end",
+        scrutinee,
+        in_true
     )
 }
 
-/// The `Nat` elimination of `scrutinee` whose `false` arm is `0` and whose `true` arm is `in_true`.
-fn nat_by(scrutinee: Term, in_true: Term) -> Term {
-    Term::bool_match(scrutinee, None, nat_type(), nat(0), in_true)
-}
-
 /// A `Bool` where a `Nat` is wanted: what an arm holds that no rule types as it is written.
-fn wrong() -> Term {
-    Term::intrinsic(Intrinsic::Bool(true))
-}
+const WRONG: &str = "true";
 
 /// A scrutinee that is no case as it stands has every arm typed, and a refused one is no arm of the elimination only where the scrutinee computes to another case. Over a variable the `Bool` in the `true` arm of a `Nat` result is refused. Over `not(true)`, which computes to `false`, that arm is one no reduction takes. Over `not(false)` it is the arm taken, and its refusal stands.
 ///
@@ -402,20 +248,23 @@ fn wrong() -> Term {
 #[test]
 fn an_arm_refused_under_a_scrutinee_that_computes_to_another_case_is_not_typed() {
     let mut certifier = certifier();
-    let c = binder(80, "c");
-    let applied = |argument: bool| Term::apply(not(), [Term::intrinsic(Intrinsic::Bool(argument))]);
+    let applied = |argument: &str| fill!("${not}(${argument})", not = NOT, argument);
 
     let stuck = certifier.scoped(|certifier| {
-        certifier.assume(&c, &Term::intrinsic(Intrinsic::BoolType));
-        infer(certifier, &nat_by(Term::free_var(&c), wrong()))
+        let [stuck] = under(
+            certifier,
+            "c: #BoolType",
+            &fill!("${stuck},", stuck = nat_by("c", WRONG)),
+        );
+        infer(certifier, &stuck)
     });
     assert!(stuck.is_err());
 
     assert_eq!(
-        infer(&mut certifier, &nat_by(applied(true), wrong())),
-        Ok(nat_type())
+        infer(&mut certifier, &term(&nat_by(&applied("true"), WRONG))),
+        Ok(term("#NatType"))
     );
-    assert!(infer(&mut certifier, &nat_by(applied(false), wrong())).is_err());
+    assert!(infer(&mut certifier, &term(&nat_by(&applied("false"), WRONG))).is_err());
 }
 
 /// An arm is typed under the equations around it as its own case restates them, and one of those may be what computes to another case. The outer arm assumes `not(c)` is `true`; inside it the `true` arm of a split on `c` restates that as `not(true)`, which names no local and computes to `false`, so the inner arm is one no reduction takes and the `Bool` it holds is not typed. The inner `false` arm restates it as `not(false)`, which holds, and the same `Bool` there is refused.
@@ -423,77 +272,61 @@ fn an_arm_refused_under_a_scrutinee_that_computes_to_another_case_is_not_typed()
 /// Mutation-checked: with the restated equations left out of what an arm assumed, the first elimination is refused.
 #[test]
 fn an_arm_refused_under_an_equation_its_case_closed_is_not_typed() {
-    let nested = |in_false: Term, in_true: Term| {
+    let nested = |in_false: &str, in_true: &str| {
         let mut certifier = certifier();
-        let c = binder(80, "c");
-        certifier.assume(&c, &Term::intrinsic(Intrinsic::BoolType));
-        let inner = Term::bool_match(Term::free_var(&c), None, nat_type(), in_false, in_true);
-
-        infer(
+        let inner = fill!(
+            "match c: (_) => #NatType | false => ${in_false} | true => ${in_true} end",
+            in_false,
+            in_true
+        );
+        let [nested] = under(
             &mut certifier,
-            &nat_by(Term::apply(not(), [Term::free_var(&c)]), inner),
-        )
+            "c: #BoolType",
+            &fill!(
+                "${nested},",
+                nested = nat_by(&fill!("${not}(c)", not = NOT), &inner)
+            ),
+        );
+
+        infer(&mut certifier, &nested)
     };
 
-    assert_eq!(nested(nat(0), wrong()), Ok(nat_type()));
-    assert!(nested(wrong(), nat(0)).is_err());
+    assert_eq!(nested("0", WRONG), Ok(term("#NatType")));
+    assert!(nested(WRONG, "0").is_err());
 }
 
 /// A scrutinee that names a local and computes to another case all the same leaves its arm one no reduction takes: `and(not(true), d)` is `false` whatever `d` is, and the `Bool` in its `true` arm is not typed. Its equation is recorded, naming `d`, and answers nothing the arm holds.
 #[test]
 fn an_arm_refused_under_a_scrutinee_that_names_a_local_and_computes_is_not_typed() {
     let mut certifier = certifier();
-    let (a, b, d) = (binder(87, "a"), binder(88, "b"), binder(80, "d"));
-    let bool_type = Term::intrinsic(Intrinsic::BoolType);
-    certifier.assume(&d, &bool_type);
-    let and = Term::func(
-        [(a, bool_type.clone()), (b, bool_type.clone())],
-        Term::bool_match(
-            Term::free_var(&a),
-            None,
-            bool_type,
-            Term::intrinsic(Intrinsic::Bool(false)),
-            Term::free_var(&b),
-        ),
+    let scrutinee = fill!(
+        "((a: #BoolType, b: #BoolType) => match a: (_) => #BoolType | false => false | true => b end)(${not}(true), d)",
+        not = NOT
     );
-    let scrutinee = Term::apply(
-        and,
-        [
-            Term::apply(not(), [Term::intrinsic(Intrinsic::Bool(true))]),
-            Term::free_var(&d),
-        ],
+    let [eliminated] = under(
+        &mut certifier,
+        "d: #BoolType",
+        &fill!("${eliminated},", eliminated = nat_by(&scrutinee, WRONG)),
     );
 
-    assert_eq!(
-        infer(&mut certifier, &nat_by(scrutinee, wrong())),
-        Ok(nat_type())
-    );
+    assert_eq!(infer(&mut certifier, &eliminated), Ok(term("#NatType")));
 }
 
 /// A budget that cannot afford to compute the scrutinee withdraws no refusal: the scrutinee counts a literal down to `false`, its `true` arm holds a `Bool` where the result is `Nat`, and the elimination is refused for the budget where the count is past it and accepted where it is not.
 #[test]
 fn a_budget_that_cannot_compute_the_scrutinee_withdraws_no_refusal() {
+    let counted = "match 50000: (_) => #BoolType | 0 => false | pred + 1; ih => ih end";
     let attempt = |budget: u64| {
         let mut certifier = Certifier::new(budget, SYNTAX);
-        let ih = binder(84, "ih");
-        let counted = Term::nat_match(
-            nat(50_000),
-            None,
-            Term::intrinsic(Intrinsic::BoolType),
-            Term::intrinsic(Intrinsic::Bool(false)),
-            &binder(83, "pred"),
-            &ih,
-            Term::free_var(&ih),
-        );
 
-        infer(&mut certifier, &nat_by(counted, wrong()))
+        infer(&mut certifier, &term(&nat_by(counted, WRONG)))
     };
 
     assert!(matches!(
         attempt(20_000),
         Err(Error::Reduce(ReduceError::Exhausted { .. }))
     ));
-    assert_eq!(attempt(1_000_000_000), Ok(nat_type()));
+    assert_eq!(attempt(1_000_000_000), Ok(term("#NatType")));
 }
 
 /// A term typed in an arm no reduction takes is recorded where it is typed again, as fully as a term typed once: the arm's refusal is withdrawn, and what its walk recorded is taken back with the typings remembered beside it. The `true` arm under `not(true)` applies `fun (x : Nat) => x` to a `Bool`, refused once the lambda is typed; its scrutinee names no local, so no equation is in force and the lambda's typing is one of the declaration's. Typed again after the elimination, the lambda records its domain, a type position, as it does typed alone.
@@ -501,10 +334,9 @@ fn a_budget_that_cannot_compute_the_scrutinee_withdraws_no_refusal() {
 /// Mutation-checked: with the typings kept past a refusal, the lambda typed again records no position.
 #[test]
 fn a_term_typed_in_an_arm_no_reduction_takes_is_recorded_when_typed_again() {
-    let x = binder(97, "x");
-    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
+    let identity = "((x: #NatType) => x)";
     let judged = |certifier: &mut Certifier| {
-        infer(certifier, &identity).expect("the lambda types");
+        infer(certifier, &term(identity)).expect("the lambda types");
         let (positions, failure) = certifier.take_checked();
         assert!(failure.is_none());
 
@@ -512,11 +344,13 @@ fn a_term_typed_in_an_arm_no_reduction_takes_is_recorded_when_typed_again() {
     };
 
     let mut withdrawn = certifier();
-    let scrutinee = Term::apply(not(), [Term::intrinsic(Intrinsic::Bool(true))]);
-    let in_true = Term::apply(identity.clone(), [wrong()]);
+    let eliminated = nat_by(
+        &fill!("${not}(true)", not = NOT),
+        &fill!("${identity}(${wrong})", identity, wrong = WRONG),
+    );
     assert_eq!(
-        infer(&mut withdrawn, &nat_by(scrutinee, in_true)),
-        Ok(nat_type())
+        infer(&mut withdrawn, &term(&eliminated)),
+        Ok(term("#NatType"))
     );
     withdrawn.take_checked();
 
@@ -529,16 +363,7 @@ fn a_term_typed_in_an_arm_no_reduction_takes_is_recorded_when_typed_again() {
 #[test]
 fn every_arm_of_a_fold_over_a_literal_is_typed() {
     let mut certifier = certifier();
-    let ih = binder(82, "ih");
-    let fold = Term::nat_match(
-        nat(3),
-        None,
-        nat_type(),
-        Term::intrinsic(Intrinsic::Bool(true)),
-        &binder(81, "pred"),
-        &ih,
-        Term::free_var(&ih),
-    );
+    let fold = term("match 3: (_) => #NatType | 0 => true | pred + 1; ih => ih end");
 
     assert!(infer(&mut certifier, &fold).is_err());
 }
@@ -547,16 +372,10 @@ fn every_arm_of_a_fold_over_a_literal_is_typed() {
 #[test]
 fn every_arm_of_a_fold_over_a_scrutinee_that_computes_is_typed() {
     let mut certifier = certifier();
-    let ih = binder(82, "ih");
-    let fold = Term::nat_match(
-        Term::intrinsic(Intrinsic::NatMul(nat(3), nat(1))),
-        None,
-        nat_type(),
-        wrong(),
-        &binder(81, "pred"),
-        &ih,
-        Term::free_var(&ih),
-    );
+    let fold = term(&fill!(
+        "match #NatMul(3, 1): (_) => #NatType | 0 => ${wrong} | pred + 1; ih => ih end",
+        wrong = WRONG
+    ));
 
     assert!(infer(&mut certifier, &fold).is_err());
 }

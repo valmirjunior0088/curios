@@ -2,36 +2,37 @@
 
 use {
     super::test_support::*,
-    crate::*,
-    curios_common::Plicity,
-    curios_core::{Free, Intrinsic, Many, Scope, Term},
+    crate::{test_support::*, *},
+    curios_common::fill,
+    curios_core::Term,
 };
+
+/// The elimination over `Ix` at `index` whose motive is `Nat` and whose arms are `arms`, opened in `certifier` with `Ix` declared beside the hypotheses `binders`.
+fn over_ix(certifier: &mut Certifier, binders: &str, index: &str, arms: &[&str]) -> Term {
+    declare(certifier, "Ix", "i: #NatType", "Type", &[ZERO, SUCCESSOR]);
+    let [matched] = under(
+        certifier,
+        &fill!(
+            "${binders}subject: ${ix}",
+            binders,
+            ix = family_at("Ix", index)
+        ),
+        &fill!(
+            "${matched},",
+            matched = eliminating("i, s", "#NatType", arms)
+        ),
+    );
+
+    matched
+}
 
 /// An absent arm whose targets clash with the scrutinee's indices is legitimately absent: no value of that constructor can carry them. `s(p)` aims at `p + 1`, the scrutinee sits at `0`, and the `s` arm may be omitted.
 #[test]
 fn a_clashing_absent_arm_is_legitimately_absent() {
     let mut certifier = certifier();
-    let z_payload = binder(1, "p");
+    let matched = over_ix(&mut certifier, "", "0", &["z() => 1"]);
 
-    let family = declare(
-        &mut certifier,
-        "Ix",
-        Term::type_ground(),
-        vec![
-            nullary("z", nat(0)),
-            carrying("s", z_payload, nat_type(), succ(Term::free_var(&z_payload))),
-        ],
-    );
-
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        nat(0),
-        nat_type(),
-        vec![("z", Vec::new(), nat(1))],
-    );
-
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+    assert_eq!(infer(&mut certifier, &matched), Ok(term("#NatType")));
 }
 
 /// A written arm whose targets clash with the scrutinee's indices is not typed, by the answer that excuses its absence: no value of that constructor carries them, so no reduction takes the arm. `s(p)` aims at `p + 1`, the scrutinee sits at `0`, and the `s` arm holds a `Bool` where the result is `Nat`. At a variable index nothing clashes, and the same arm is refused.
@@ -39,79 +40,30 @@ fn a_clashing_absent_arm_is_legitimately_absent() {
 /// Mutation-checked: with a clashing arm typed as written, the first elimination is refused.
 #[test]
 fn a_clashing_written_arm_is_not_typed() {
-    let over = |index: fn(&mut Certifier) -> Term| {
+    let over = |binders: &str, index: &str| {
         let mut certifier = certifier();
-        let payload = binder(1, "p");
-        let arm_binder = binder(10, "p");
-        let family = declare(
+        let matched = over_ix(
             &mut certifier,
-            "Ix",
-            Term::type_ground(),
-            vec![
-                nullary("z", nat(0)),
-                carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
-            ],
-        );
-        let index = index(&mut certifier);
-        let term = eliminate(
-            &mut certifier,
-            &family,
+            binders,
             index,
-            nat_type(),
-            vec![
-                ("z", Vec::new(), nat(1)),
-                (
-                    "s",
-                    vec![arm_binder],
-                    Term::intrinsic(Intrinsic::Bool(true)),
-                ),
-            ],
+            &["z() => 1", "s(p) => true"],
         );
 
-        infer(&mut certifier, &term)
+        infer(&mut certifier, &matched)
     };
 
-    assert_eq!(over(|_| nat(0)), Ok(nat_type()));
-    assert!(
-        over(|certifier| {
-            let open = binder(0, "b");
-            certifier.assume(&open, &nat_type());
-            Term::free_var(&open)
-        })
-        .is_err()
-    );
+    assert_eq!(over("", "0"), Ok(term("#NatType")));
+    assert!(over("b: #NatType, ", "b").is_err());
 }
 
 /// An absent arm the unifier cannot rule out is a refusal: at a *variable* index nothing clashes, so every constructor must have an arm or a catch-all. Undecided is not absent.
 #[test]
 fn an_undecided_absent_arm_is_refused() {
     let mut certifier = certifier();
-    let b = binder(0, "b");
-    let payload = binder(1, "p");
-    let arm_binder = binder(10, "p");
-
-    certifier.assume(&b, &nat_type());
-
-    let family = declare(
-        &mut certifier,
-        "Ix",
-        Term::type_ground(),
-        vec![
-            nullary("z", nat(0)),
-            carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
-        ],
-    );
-
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        Term::free_var(&b),
-        nat_type(),
-        vec![("s", vec![arm_binder], nat(0))],
-    );
+    let matched = over_ix(&mut certifier, "b: #NatType, ", "b", &["s(p) => 0"]);
 
     assert!(matches!(
-        infer(&mut certifier, &term),
+        infer(&mut certifier, &matched),
         Err(Error::MissingArm { .. }),
     ));
 }
@@ -120,35 +72,29 @@ fn an_undecided_absent_arm_is_refused() {
 #[test]
 fn a_catch_all_covers_absent_arms() {
     let mut certifier = certifier();
-    let b = binder(0, "b");
-    let payload = binder(1, "p");
-    let subject = binder(50, "subject");
+    let matched = over_ix(&mut certifier, "b: #NatType, ", "b", &["_ => 7"]);
 
-    certifier.assume(&b, &nat_type());
+    assert_eq!(infer(&mut certifier, &matched), Ok(term("#NatType")));
+}
 
-    let family = declare(
-        &mut certifier,
-        "Ix",
-        Term::type_ground(),
-        vec![
-            nullary("z", nat(0)),
-            carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
-        ],
-    );
+/// The terms `terms`, over `b : Nat`, `subject : Ix(b)` and the hypotheses `binders`, opened in `certifier` with `Ix` and `P : (n : Nat, x : Ix(n)) -> Type` declared.
+fn over_a_scrutinee<const N: usize>(
+    certifier: &mut Certifier,
+    binders: &str,
+    terms: &str,
+) -> [Term; N] {
+    declare(certifier, "Ix", "i: #NatType", "Type", &[ZERO, SUCCESSOR]);
+    scrutinee_family(certifier, "Ix");
 
-    certifier.assume(
-        &subject,
-        &Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&b)]),
-    );
-    let motive = Scope::close(Many(2), &[&binder(51, "i"), &binder(52, "s")], nat_type());
-    let term = Term::induct_match_scoped_marked(
-        Term::free_var(&subject),
-        motive,
-        Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
-        Some(nat(7)),
-    );
-
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+    under(
+        certifier,
+        &fill!(
+            "b: #NatType, subject: ${ix}, ${binders}",
+            ix = family_at("Ix", "b"),
+            binders
+        ),
+        terms,
+    )
 }
 
 /// A catch-all is checked at the motive's *scrutinee* instance — the instance the elimination is then given.
@@ -161,49 +107,16 @@ fn a_catch_all_covers_absent_arms() {
 #[test]
 fn a_catch_all_sees_its_own_scrutinee() {
     let mut certifier = certifier();
-    let b = binder(0, "b");
-    let payload = binder(1, "p");
-    let subject = binder(50, "subject");
-    let hypothesis = binder(3, "w");
-
-    certifier.assume(&b, &nat_type());
-
-    let family = declare(
+    let [matched, at_the_scrutinee] = over_a_scrutinee(
         &mut certifier,
-        "Ix",
-        Term::type_ground(),
-        vec![
-            nullary("z", nat(0)),
-            carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
-        ],
-    );
-    let p = scrutinee_family(&mut certifier, "P", &family);
-
-    certifier.assume(
-        &subject,
-        &Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&b)]),
-    );
-    let at_the_scrutinee = Term::apply(p.clone(), [Term::free_var(&b), Term::free_var(&subject)]);
-    certifier.assume(&hypothesis, &at_the_scrutinee);
-
-    let term = Term::induct_match_scoped_marked(
-        Term::free_var(&subject),
-        Scope::close(
-            Many(2),
-            &[&binder(51, "i"), &binder(52, "s")],
-            Term::apply(
-                p,
-                [
-                    Term::free_var(&binder(51, "i")),
-                    Term::free_var(&binder(52, "s")),
-                ],
-            ),
+        "w: /P(b, subject)",
+        &fill!(
+            "${matched}, /P(b, subject)",
+            matched = eliminating("i, s", "/P(i, s)", &["_ => w"])
         ),
-        Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
-        Some(Term::free_var(&hypothesis)),
     );
 
-    assert_eq!(infer(&mut certifier, &term), Ok(at_the_scrutinee));
+    assert_eq!(infer(&mut certifier, &matched), Ok(at_the_scrutinee));
 }
 
 /// The control for [`a_catch_all_sees_its_own_scrutinee`]: a catch-all body at *another* inhabitant of the family is refused, and refused against the scrutinee's instance.
@@ -212,84 +125,43 @@ fn a_catch_all_sees_its_own_scrutinee() {
 #[test]
 fn a_catch_all_at_another_value_of_the_family_is_refused() {
     let mut certifier = certifier();
-    let b = binder(0, "b");
-    let payload = binder(1, "p");
-    let subject = binder(50, "subject");
-    let other = binder(53, "other");
-    let hypothesis = binder(3, "w");
-
-    certifier.assume(&b, &nat_type());
-
-    let family = declare(
+    let [matched, at_the_scrutinee] = over_a_scrutinee(
         &mut certifier,
-        "Ix",
-        Term::type_ground(),
-        vec![
-            nullary("z", nat(0)),
-            carrying("s", payload, nat_type(), succ(Term::free_var(&payload))),
-        ],
-    );
-    let p = scrutinee_family(&mut certifier, "P", &family);
-
-    let family_at_b = Term::induct_type(family, Vec::<Term>::new(), [Term::free_var(&b)]);
-    certifier.assume(&subject, &family_at_b);
-    certifier.assume(&other, &family_at_b);
-    certifier.assume(
-        &hypothesis,
-        &Term::apply(p.clone(), [Term::free_var(&b), Term::free_var(&other)]),
-    );
-
-    let term = Term::induct_match_scoped_marked(
-        Term::free_var(&subject),
-        Scope::close(
-            Many(2),
-            &[&binder(51, "i"), &binder(52, "s")],
-            Term::apply(
-                p.clone(),
-                [
-                    Term::free_var(&binder(51, "i")),
-                    Term::free_var(&binder(52, "s")),
-                ],
-            ),
+        &fill!("other: ${ix}, w: /P(b, other)", ix = family_at("Ix", "b")),
+        &fill!(
+            "${matched}, /P(b, subject)",
+            matched = eliminating("i, s", "/P(i, s)", &["_ => w"])
         ),
-        Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
-        Some(Term::free_var(&hypothesis)),
     );
 
-    let Err(Error::Mismatch { expected, .. }) = infer(&mut certifier, &term) else {
+    let Err(Error::Mismatch { expected, .. }) = infer(&mut certifier, &matched) else {
         panic!("expected the catch-all to be refused at the scrutinee's instance");
     };
-    assert_eq!(
-        *expected,
-        Term::apply(p, [Term::free_var(&b), Term::free_var(&subject)]),
-    );
+    assert_eq!(*expected, at_the_scrutinee);
 }
 
 /// An arm is checked against the motive at *its own* constructor's index target, so a body of the wrong type is refused even where the elimination's overall type is fine.
 #[test]
 fn an_arm_body_of_the_wrong_type_is_refused() {
     let mut certifier = certifier();
-
-    let family = declare(
+    declare(
         &mut certifier,
         "Flag",
-        Term::type_ground(),
-        vec![nullary("on", nat(0)), nullary("off", nat(0))],
+        "i: #NatType",
+        "Type",
+        &["on(): (0)", "off(): (0)"],
     );
-
-    let term = eliminate(
+    let [matched] = under(
         &mut certifier,
-        &family,
-        nat(0),
-        nat_type(),
-        vec![
-            ("on", Vec::new(), nat(1)),
-            ("off", Vec::new(), Term::intrinsic(Intrinsic::Bool(true))),
-        ],
+        &fill!("subject: ${flag}", flag = family_at("Flag", "0")),
+        &fill!(
+            "${matched},",
+            matched = eliminating("i, s", "#NatType", &["on() => 1", "off() => true"])
+        ),
     );
 
     assert!(matches!(
-        infer(&mut certifier, &term),
+        infer(&mut certifier, &matched),
         Err(Error::Mismatch { .. }),
     ));
 }
@@ -298,25 +170,24 @@ fn an_arm_body_of_the_wrong_type_is_refused() {
 #[test]
 fn an_arm_of_the_wrong_payload_arity_is_refused() {
     let mut certifier = certifier();
-    let value = binder(0, "value");
-
-    let family = declare(
+    declare(
         &mut certifier,
         "Wrapped",
-        Term::type_ground(),
-        vec![carrying("mk", value, nat_type(), nat(0))],
+        "i: #NatType",
+        "Type",
+        &["mk(value: #NatType): (0)"],
     );
-
-    let term = eliminate(
+    let [matched] = under(
         &mut certifier,
-        &family,
-        nat(0),
-        nat_type(),
-        vec![("mk", Vec::new(), nat(1))],
+        &fill!("subject: ${wrapped}", wrapped = family_at("Wrapped", "0")),
+        &fill!(
+            "${matched},",
+            matched = eliminating("i, s", "#NatType", &["mk() => 1"])
+        ),
     );
 
     assert!(matches!(
-        infer(&mut certifier, &term),
+        infer(&mut certifier, &matched),
         Err(Error::Arity { .. }),
     ));
 }

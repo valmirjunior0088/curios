@@ -2,34 +2,36 @@
 
 use {
     super::test_support::*,
-    crate::*,
-    curios_common::Qualifier,
-    curios_core::{Global, Term, UniverseContext, Universes},
+    crate::{test_support::*, *},
+    curios_common::fill,
+    curios_core::Term,
 };
+
+/// The elimination of a scrutinee at `${family}(0)` into `motive` by `arms`, opened in `certifier`, where the family is declared.
+fn at_zero(certifier: &mut Certifier, family: &str, motive: &str, arms: &[&str]) -> Term {
+    let [matched] = under(
+        certifier,
+        &fill!("subject: ${at}", at = family_at(family, "0")),
+        &fill!("${matched},", matched = eliminating("i, s", motive, arms)),
+    );
+
+    matched
+}
 
 /// A proposition whose single constructor's payload is *pinned* by its index target — the `Eq`/`refl` shape. Matching `(z)` against a value recovers `z`, so eliminating tells a program nothing it did not already know, and the large elimination is admitted, Without this, `Eq/subst` is unstatable.
 #[test]
 fn a_singleton_whose_index_pins_its_payload_eliminates_into_a_type() {
     let mut certifier = certifier();
-    let z = binder(0, "z");
-    let arm_binder = binder(10, "z");
-
-    let family = declare(
+    declare(
         &mut certifier,
         "Pinned",
-        Term::prop(),
-        vec![carrying("refl", z, nat_type(), Term::free_var(&z))],
+        "i: #NatType",
+        "Prop",
+        &["refl(z: #NatType): (z)"],
     );
+    let matched = at_zero(&mut certifier, "Pinned", "#NatType", &["refl(z) => z"]);
 
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        nat(0),
-        nat_type(),
-        vec![("refl", vec![arm_binder], Term::free_var(&arm_binder))],
-    );
-
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+    assert_eq!(infer(&mut certifier, &matched), Ok(term("#NatType")));
 }
 
 /// The same shape with a *non-injective* index target. `blur(a)` mentions `a`, but knowing `blur(a)` recovers nothing — `blur` need not be injective, and in the program this rule exists for it is the constant zero. So the payload is not pinned, the proposition carries something a program could read back, and eliminating it into a relevant type is refused.
@@ -38,44 +40,19 @@ fn a_singleton_whose_index_pins_its_payload_eliminates_into_a_type() {
 #[test]
 fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
     let mut certifier = certifier();
-    let a = binder(0, "a");
-    let blur = Global::Authored(Qualifier::from(["blur"]));
-    let arm_binder = binder(10, "a");
-
-    certifier
-        .declare(
-            &blur,
-            &Term::func_type([(binder(2, "n"), nat_type())], nat_type()),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-
-    let family = declare(
+    opaque(&mut certifier, "blur", "(n: #NatType) -> #NatType");
+    declare(
         &mut certifier,
         "Loose",
-        Term::prop(),
-        vec![carrying(
-            "mk",
-            a,
-            nat_type(),
-            Term::apply(
-                Term::instance(blur, Universes::default()),
-                [Term::free_var(&a)],
-            ),
-        )],
+        "i: #NatType",
+        "Prop",
+        &["mk(a: #NatType): (/blur(a))"],
     );
-
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        nat(0),
-        nat_type(),
-        vec![("mk", vec![arm_binder], Term::free_var(&arm_binder))],
-    );
+    let matched = at_zero(&mut certifier, "Loose", "#NatType", &["mk(a) => a"]);
 
     assert_eq!(
-        infer(&mut certifier, &term),
-        Err(Error::LargeElimination(family)),
+        infer(&mut certifier, &matched),
+        Err(Error::LargeElimination(named("Loose"))),
     );
 }
 
@@ -87,27 +64,18 @@ fn a_singleton_whose_index_merely_mentions_its_payload_does_not() {
 #[test]
 fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
     let mut certifier = certifier();
-    let a = binder(0, "a");
-    let arm_binder = binder(10, "a");
-
-    let family = declare(
+    declare(
         &mut certifier,
         "TypeBox",
-        Term::prop(),
-        vec![carrying("mk", a, Term::type_ground(), nat(0))],
+        "i: #NatType",
+        "Prop",
+        &["mk(a: Type): (0)"],
     );
-
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        nat(0),
-        Term::type_ground(),
-        vec![("mk", vec![arm_binder], Term::free_var(&arm_binder))],
-    );
+    let matched = at_zero(&mut certifier, "TypeBox", "Type", &["mk(a) => a"]);
 
     assert_eq!(
-        infer(&mut certifier, &term),
-        Err(Error::LargeElimination(family)),
+        infer(&mut certifier, &matched),
+        Err(Error::LargeElimination(named("TypeBox"))),
     );
 }
 
@@ -117,27 +85,18 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
 #[test]
 fn a_singleton_carrying_a_proposition_does_not_eliminate_into_a_type() {
     let mut certifier = certifier();
-    let a = binder(0, "a");
-    let arm_binder = binder(10, "a");
-
-    let family = declare(
+    declare(
         &mut certifier,
         "PropBox",
-        Term::prop(),
-        vec![carrying("mk", a, Term::prop(), nat(0))],
+        "i: #NatType",
+        "Prop",
+        &["mk(a: Prop): (0)"],
     );
-
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        nat(0),
-        Term::type_ground(),
-        vec![("mk", vec![arm_binder], Term::free_var(&arm_binder))],
-    );
+    let matched = at_zero(&mut certifier, "PropBox", "Type", &["mk(a) => a"]);
 
     assert_eq!(
-        infer(&mut certifier, &term),
-        Err(Error::LargeElimination(family)),
+        infer(&mut certifier, &matched),
+        Err(Error::LargeElimination(named("PropBox"))),
     );
 }
 
@@ -147,35 +106,25 @@ fn a_singleton_carrying_a_proposition_does_not_eliminate_into_a_type() {
 #[test]
 fn a_singleton_carrying_a_proof_does_not_eliminate_into_a_type() {
     let mut certifier = certifier();
-    let p = binder(0, "p");
-    let arm_binder = binder(10, "p");
-
-    let held = declare(
+    declare(
         &mut certifier,
         "Held",
-        Term::prop(),
-        vec![nullary("qed", nat(0))],
+        "i: #NatType",
+        "Prop",
+        &["qed(): (0)"],
     );
-    let proof = Term::induct_type(held, Vec::<Term>::new(), [nat(0)]);
-
-    let family = declare(
+    declare(
         &mut certifier,
         "ProofBox",
-        Term::prop(),
-        vec![carrying("mk", p, proof, nat(0))],
+        "i: #NatType",
+        "Prop",
+        &[&fill!("mk(p: ${held}): (0)", held = family_at("Held", "0"))],
     );
-
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        nat(0),
-        nat_type(),
-        vec![("mk", vec![arm_binder], nat(0))],
-    );
+    let matched = at_zero(&mut certifier, "ProofBox", "#NatType", &["mk(p) => 0"]);
 
     assert_eq!(
-        infer(&mut certifier, &term),
-        Err(Error::LargeElimination(family)),
+        infer(&mut certifier, &matched),
+        Err(Error::LargeElimination(named("ProofBox"))),
     );
 }
 
@@ -183,36 +132,30 @@ fn a_singleton_carrying_a_proof_does_not_eliminate_into_a_type() {
 #[test]
 fn an_empty_proposition_eliminates_into_a_type() {
     let mut certifier = certifier();
+    declare(&mut certifier, "Absurd", "i: #NatType", "Prop", &[]);
+    let matched = at_zero(&mut certifier, "Absurd", "#NatType", &[]);
 
-    let family = declare(&mut certifier, "Absurd", Term::prop(), Vec::new());
-    let term = eliminate(&mut certifier, &family, nat(0), nat_type(), Vec::new());
-
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+    assert_eq!(infer(&mut certifier, &matched), Ok(term("#NatType")));
 }
+
+/// `Two : (Nat) -> Prop | here : (0) | there : (0)`.
+const TWO: [&str; 2] = ["here(): (0)", "there(): (0)"];
 
 /// Two constructors mean the value says *which*, which is information a relevant result could branch on.
 #[test]
 fn a_proposition_with_two_constructors_does_not_eliminate_into_a_type() {
     let mut certifier = certifier();
-
-    let family = declare(
+    declare(&mut certifier, "Two", "i: #NatType", "Prop", &TWO);
+    let matched = at_zero(
         &mut certifier,
         "Two",
-        Term::prop(),
-        vec![nullary("here", nat(0)), nullary("there", nat(0))],
-    );
-
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        nat(0),
-        nat_type(),
-        vec![("here", Vec::new(), nat(1)), ("there", Vec::new(), nat(2))],
+        "#NatType",
+        &["here() => 1", "there() => 2"],
     );
 
     assert_eq!(
-        infer(&mut certifier, &term),
-        Err(Error::LargeElimination(family)),
+        infer(&mut certifier, &matched),
+        Err(Error::LargeElimination(named("Two"))),
     );
 }
 
@@ -220,33 +163,25 @@ fn a_proposition_with_two_constructors_does_not_eliminate_into_a_type() {
 #[test]
 fn a_proposition_eliminates_into_a_proposition_however_many_constructors() {
     let mut certifier = certifier();
-
-    let target = declare(
+    declare(
         &mut certifier,
         "Target",
-        Term::prop(),
-        vec![nullary("only", nat(0))],
+        "i: #NatType",
+        "Prop",
+        &["only(): (0)"],
     );
-    let target_type = Term::induct_type(target, Vec::<Term>::new(), [nat(0)]);
-
-    let family = declare(
+    declare(&mut certifier, "Two", "i: #NatType", "Prop", &TWO);
+    let target = family_at("Target", "0");
+    let proof = "#{node = Variant} /Target/only()";
+    let matched = at_zero(
         &mut certifier,
         "Two",
-        Term::prop(),
-        vec![nullary("here", nat(0)), nullary("there", nat(0))],
-    );
-
-    let proof = Term::variant(target, Vec::<Term>::new(), "only", Vec::<Term>::new());
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        nat(0),
-        target_type.clone(),
-        vec![
-            ("here", Vec::new(), proof.clone()),
-            ("there", Vec::new(), proof),
+        &target,
+        &[
+            &fill!("here() => ${proof}", proof),
+            &fill!("there() => ${proof}", proof),
         ],
     );
 
-    assert_eq!(infer(&mut certifier, &term), Ok(target_type));
+    assert_eq!(infer(&mut certifier, &matched), Ok(term(&target)));
 }

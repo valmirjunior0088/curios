@@ -2,18 +2,17 @@
 
 use {
     super::test_support::*,
-    crate::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{Free, Global, Intrinsic, Level, Many, Scope, Term, UniverseContext, Universes},
+    crate::{test_support::*, *},
+    curios_common::fill,
+    curios_core::Term,
 };
 
-fn bool_type() -> Term {
-    Term::intrinsic(Intrinsic::BoolType)
-}
-
 /// `match v | true => Nat | false => Bool`: a type `3` inhabits exactly where `v` reduces to `true`.
-fn family(v: Term) -> Term {
-    Term::bool_match(v, None, Term::type_ground(), bool_type(), nat_type())
+fn family(v: &str) -> String {
+    fill!(
+        "match ${v}: (_) => Type | false => #BoolType | true => #NatType end",
+        v
+    )
 }
 
 /// A case value is bound at its own type, which its case's targets give it. `s(p) : Ix(p + 1)` matched against `subject : Ix(a + b)` leaves `a + b ~ p + 1` standing, an index the unifier does not take apart, so `subject` stands for `s(p) : Ix(p + 1)` where its own type is `Ix(a + b)`, and the arm, expected at the targets, reads it at the type the value has.
@@ -22,142 +21,91 @@ fn family(v: Term) -> Term {
 #[test]
 fn a_case_value_is_bound_at_its_own_type() {
     let mut certifier = certifier();
-    let a = binder(0, "a");
-    let b = binder(1, "b");
-    let payload = binder(2, "p");
-    let arm_binder = binder(10, "p");
-    certifier.assume(&a, &nat_type());
-    certifier.assume(&b, &nat_type());
-
-    let family = declare(
+    declare(&mut certifier, "Ix", "i: #NatType", "Type", &[SUCCESSOR]);
+    let [matched, at_the_sum] = under(
         &mut certifier,
-        "Ix",
-        Term::type_ground(),
-        vec![carrying(
-            "s",
-            payload,
-            nat_type(),
-            succ(Term::free_var(&payload)),
-        )],
-    );
-    let at = |index: Term| Term::induct_type(family, Vec::<Term>::new(), [index]);
-    let sum = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&a), Term::free_var(&b)));
-
-    let term = eliminate(
-        &mut certifier,
-        &family,
-        sum.clone(),
-        at(Term::free_var(&binder(51, "i"))),
-        vec![(
-            "s",
-            vec![arm_binder],
-            Term::free_var(&binder(50, "subject")),
-        )],
+        &fill!(
+            "a: #NatType, b: #NatType, subject: ${ix}",
+            ix = family_at("Ix", "#NatAdd(a, b)")
+        ),
+        &fill!(
+            "${matched}, ${at_the_sum}",
+            matched = eliminating("i, s", &family_at("Ix", "i"), &["s(p) => subject"]),
+            at_the_sum = family_at("Ix", "#NatAdd(a, b)")
+        ),
     );
 
-    assert_eq!(infer(&mut certifier, &term), Ok(at(sum)));
+    assert_eq!(infer(&mut certifier, &matched), Ok(at_the_sum));
 }
 
 /// `match c : (_) => Type | false => Nat | true => {}`, the unit type at `unit` and `Nat` at the other case: where a split re-types `p, q` at it, any two of them are one by the type's shape.
-fn carried(c: &Free, unit: bool) -> Term {
+fn carried(unit: bool) -> String {
     let (at_false, at_true) = match unit {
-        true => (nat_type(), Term::tuple_type_unit()),
-        false => (Term::tuple_type_unit(), nat_type()),
+        true => ("#NatType", "{}"),
+        false => ("{}", "#NatType"),
     };
-    Term::bool_match(
-        Term::free_var(c),
-        None,
-        Term::type_ground(),
+
+    fill!(
+        "match c: (_) => Type | false => ${at_false} | true => ${at_true} end",
         at_false,
-        at_true,
+        at_true
     )
 }
 
 /// `family(k(0))`, which the guard below answers only where its spelling was settled as `k(0)`.
-fn claimed(k: &Free) -> Term {
-    family(Term::apply(Term::free_var(k), [nat(0)]))
+fn claimed() -> String {
+    family("k(0)")
 }
 
 /// `let u : family(k(0)) = 3; 0`, typed where the split has made the guard `k(0)`.
-fn settles(k: &Free) -> Term {
-    Term::let_(&binder(60, "u"), claimed(k), nat(3), nat(0))
+fn settles() -> String {
+    fill!("(let u: ${claimed} = 3; 0)", claimed = claimed())
 }
 
 /// `let z : family(k(0)) = 3; 0`, typed where the split no longer stands.
-fn asks(k: &Free) -> Term {
-    Term::let_(&binder(62, "z"), claimed(k), nat(3), nat(0))
+fn asks() -> String {
+    fill!("(let z: ${claimed} = 3; 0)", claimed = claimed())
 }
 
-/// `let w : Nat = split; asks(k)`.
-fn after(k: &Free, split: Term) -> Term {
-    Term::let_(&binder(61, "w"), nat_type(), split, asks(k))
+/// `let w : Nat = split; asks`.
+fn after(split: &str) -> String {
+    fill!(
+        "(let w: #NatType = ${split}; ${asks})",
+        split,
+        asks = asks()
+    )
 }
 
-/// The locals the guard is stated over: the split variable `c`, a second variable `d`, `h : (carried) -> Nat`, `k : (Nat) -> Bool` and `p, q : carried`.
-struct Guarded {
-    c: Free,
-    d: Free,
-    h: Free,
-    k: Free,
-    p: Free,
-    q: Free,
+/// `match left == right : (_) => Bool | false => k(1) | true => k(0) end`: the guard, `k(0)` exactly where its comparison folds to `true`.
+fn read(left: &str, right: &str) -> String {
+    fill!(
+        "match #NatEql(${left}, ${right}): (_) => #BoolType | false => k(1) | true => k(0) end",
+        left,
+        right
+    )
 }
 
-impl Guarded {
-    fn new() -> Self {
-        Self {
-            c: binder(40, "c"),
-            d: binder(41, "d"),
-            h: binder(42, "h"),
-            k: binder(43, "k"),
-            p: binder(44, "p"),
-            q: binder(45, "q"),
-        }
-    }
+/// `(c, d, h, k, p, q) => match read : (_) => Nat | false => 0 | true => arm end`, over the split variable `c`, a second variable `d`, `h : (carried) -> Nat`, `k : (Nat) -> Bool` and `p, q : carried`.
+fn under_the_guard(unit: bool, read: &str, arm: &str) -> Term {
+    term(&fill!(
+        "(c: #BoolType, d: #BoolType, h: (x: ${carried}) -> #NatType, k: (n: #NatType) -> #BoolType, p: ${carried}, q: ${carried}) => match ${read}: (_) => #NatType | false => 0 | true => ${arm} end",
+        carried = carried(unit),
+        read,
+        arm
+    ))
+}
 
-    /// `match left == right : (_) => Bool | false => k(1) | true => k(0) end`: the guard, `k(0)` exactly where its comparison folds to `true`.
-    fn read(&self, left: Term, right: Term) -> Term {
-        let tested = |at: usize| Term::apply(Term::free_var(&self.k), [nat(at)]);
-        Term::bool_match(
-            Term::intrinsic(Intrinsic::NatEql(left, right)),
-            None,
-            bool_type(),
-            tested(1),
-            tested(0),
-        )
-    }
+/// The board's unit guard, `h(p) == h(q)`, over `arm`.
+fn guarding(unit: bool, arm: &str) -> Term {
+    under_the_guard(unit, &read("h(p)", "h(q)"), arm)
+}
 
-    /// `(c, d, h, k, p, q) => match read : (_) => Nat | false => 0 | true => arm end`.
-    fn under(&self, unit: bool, read: Term, arm: Term) -> Term {
-        Term::func(
-            [
-                (self.c, bool_type()),
-                (self.d, bool_type()),
-                (
-                    self.h,
-                    Term::func_type([(binder(46, "x"), carried(&self.c, unit))], nat_type()),
-                ),
-                (
-                    self.k,
-                    Term::func_type([(binder(47, "n"), nat_type())], bool_type()),
-                ),
-                (self.p, carried(&self.c, unit)),
-                (self.q, carried(&self.c, unit)),
-            ],
-            Term::bool_match(read, None, nat_type(), nat(0), arm),
-        )
-    }
-
-    /// The board's unit guard, `h(p) == h(q)`, over `arm`.
-    fn guarding(&self, unit: bool, arm: Term) -> Term {
-        let measured = |x: &Free| Term::apply(Term::free_var(&self.h), [Term::free_var(x)]);
-        self.under(unit, self.read(measured(&self.p), measured(&self.q)), arm)
-    }
-
-    /// `match c : (_) => Nat | false => 0 | true => arm end`.
-    fn split(&self, arm: Term) -> Term {
-        Term::bool_match(Term::free_var(&self.c), None, nat_type(), nat(0), arm)
-    }
+/// `match c : (_) => Nat | false => 0 | true => arm end`.
+fn split(arm: &str) -> String {
+    fill!(
+        "match c: (_) => #NatType | false => 0 | true => ${arm} end",
+        arm
+    )
 }
 
 /// A refusal of the forged term by the mismatch the guard's question leaves unanswered after the split.
@@ -170,18 +118,12 @@ fn refused_after_the_split(verdict: Result<Term, Error>) -> bool {
 /// Mutation-checked: with `Scope::restate` restating only the equations whose spellings name a solved variable, reading no local's type or value, the certifier admits the term asked after the split.
 #[test]
 fn a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split() {
-    let guarded = Guarded::new();
-    let lambda = || {
-        guarded.split(Term::apply(
-            Term::func([(binder(63, "u"), claimed(&guarded.k))], nat(0)),
-            [nat(3)],
-        ))
-    };
+    let lambda = split(&fill!("((u: ${claimed}) => 0)(3)", claimed = claimed()));
 
-    assert!(infer(&mut certifier(), &guarded.guarding(true, lambda())).is_ok());
+    assert!(infer(&mut certifier(), &guarding(true, &lambda)).is_ok());
     assert!(refused_after_the_split(infer(
         &mut certifier(),
-        &guarded.guarding(true, after(&guarded.k, lambda()))
+        &guarding(true, &after(&lambda))
     )));
 }
 
@@ -190,21 +132,15 @@ fn a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split() 
 /// Mutation-checked as [`a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split`] is.
 #[test]
 fn a_guard_settled_under_an_arm_nested_in_a_split_answers_nothing_after_the_split() {
-    let guarded = Guarded::new();
-    let nested = || {
-        guarded.split(Term::bool_match(
-            Term::free_var(&guarded.d),
-            None,
-            nat_type(),
-            nat(0),
-            settles(&guarded.k),
-        ))
-    };
+    let nested = split(&fill!(
+        "match d: (_) => #NatType | false => 0 | true => ${settles} end",
+        settles = settles()
+    ));
 
-    assert!(infer(&mut certifier(), &guarded.guarding(true, nested())).is_ok());
+    assert!(infer(&mut certifier(), &guarding(true, &nested)).is_ok());
     assert!(refused_after_the_split(infer(
         &mut certifier(),
-        &guarded.guarding(true, after(&guarded.k, nested()))
+        &guarding(true, &after(&nested))
     )));
 }
 
@@ -213,20 +149,16 @@ fn a_guard_settled_under_an_arm_nested_in_a_split_answers_nothing_after_the_spli
 /// Mutation-checked as [`a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split`] is.
 #[test]
 fn a_guard_settled_beside_a_let_bound_under_a_split_answers_nothing_after_the_split() {
-    let guarded = Guarded::new();
-    let bound = || {
-        guarded.split(Term::let_(
-            &binder(64, "r"),
-            carried(&guarded.c, true),
-            Term::free_var(&guarded.p),
-            settles(&guarded.k),
-        ))
-    };
+    let bound = split(&fill!(
+        "(let r: ${carried} = p; ${settles})",
+        carried = carried(true),
+        settles = settles()
+    ));
 
-    assert!(infer(&mut certifier(), &guarded.guarding(true, bound())).is_ok());
+    assert!(infer(&mut certifier(), &guarding(true, &bound)).is_ok());
     assert!(refused_after_the_split(infer(
         &mut certifier(),
-        &guarded.guarding(true, after(&guarded.k, bound()))
+        &guarding(true, &after(&bound))
     )));
 }
 
@@ -235,21 +167,18 @@ fn a_guard_settled_beside_a_let_bound_under_a_split_answers_nothing_after_the_sp
 /// Mutation-checked as [`a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split`] is.
 #[test]
 fn a_guard_settled_in_one_arm_of_a_split_answers_nothing_in_the_other() {
-    let guarded = Guarded::new();
-    let both = |sibling: Term| {
-        Term::bool_match(
-            Term::free_var(&guarded.c),
-            None,
-            nat_type(),
-            settles(&guarded.k),
-            sibling,
+    let both = |sibling: &str| {
+        fill!(
+            "match c: (_) => #NatType | false => ${settles} | true => ${sibling} end",
+            settles = settles(),
+            sibling
         )
     };
 
-    assert!(infer(&mut certifier(), &guarded.guarding(false, both(nat(0)))).is_ok());
+    assert!(infer(&mut certifier(), &guarding(false, &both("0"))).is_ok());
     assert!(refused_after_the_split(infer(
         &mut certifier(),
-        &guarded.guarding(false, both(asks(&guarded.k)))
+        &guarding(false, &both(&asks()))
     )));
 }
 
@@ -258,196 +187,84 @@ fn a_guard_settled_in_one_arm_of_a_split_answers_nothing_in_the_other() {
 /// Mutation-checked: with `Scope::restate` restating no equation, the certifier admits the term asked after the split; restating only the equations whose spellings name a solved variable still refuses it.
 #[test]
 fn a_guard_over_eliminations_of_re_typed_binders_answers_nothing_after_the_split() {
-    let guarded = Guarded::new();
-    let measured = |x: &Free| {
-        Term::apply(
-            Term::free_var(&guarded.h),
-            [Term::bool_match(
-                Term::free_var(&guarded.d),
-                None,
-                carried(&guarded.c, true),
-                Term::free_var(x),
-                Term::free_var(x),
-            )],
+    let measured = |x: &str| {
+        fill!(
+            "h(match d: (_) => ${carried} | false => ${x} | true => ${x} end)",
+            carried = carried(true),
+            x
         )
     };
-    let forged = |arm: Term| {
-        guarded.under(
-            true,
-            guarded.read(measured(&guarded.p), measured(&guarded.q)),
-            arm,
-        )
-    };
+    let forged = |arm: &str| under_the_guard(true, &read(&measured("p"), &measured("q")), arm);
 
-    assert!(
-        infer(
-            &mut certifier(),
-            &forged(guarded.split(settles(&guarded.k)))
-        )
-        .is_ok()
-    );
+    assert!(infer(&mut certifier(), &forged(&split(&settles()))).is_ok());
     assert!(refused_after_the_split(infer(
         &mut certifier(),
-        &forged(after(&guarded.k, guarded.split(settles(&guarded.k))))
+        &forged(&after(&split(&settles())))
     )));
 }
 
-/// `Same : (Type, Type) -> Prop | same(z : Type) : (z, z)`.
-fn same_type(certifier: &mut Certifier) -> Global {
-    let z = binder(0, "z");
-    declare_at(
-        certifier,
-        "SameType",
-        Term::prop(),
-        vec![Term::type_ground(), Term::type_ground()],
-        vec![carrying_at(
-            "same",
-            z,
-            Term::type_ground(),
-            vec![Term::free_var(&z), Term::free_var(&z)],
-        )],
-    )
-}
-
-/// `(A, B : Type, p : Same(former(A), former(B))) => match p : (_, _, _) => Same(A, B) | same(z) => same(A) end`.
-fn learned_through(same: Global, former: &dyn Fn(Term) -> Term) -> Term {
-    let (a, b, p, z) = (
-        binder(20, "A"),
-        binder(21, "B"),
-        binder(22, "p"),
-        binder(23, "z"),
-    );
-    let at = |left: Term, right: Term| Term::induct_type(same, Vec::<Term>::new(), [left, right]);
-    let matched = Term::induct_match_scoped_marked(
-        Term::free_var(&p),
-        Scope::constant(Many(3), at(Term::free_var(&a), Term::free_var(&b))),
-        [(
-            "same",
-            vec![(Plicity::Explicit, z)],
-            Term::variant(same, Vec::<Term>::new(), "same", [Term::free_var(&a)]),
-        )],
-        None,
-    );
-
-    Term::func(
-        [
-            (a, Term::type_ground()),
-            (b, Term::type_ground()),
-            (
-                p,
-                at(former(Term::free_var(&a)), former(Term::free_var(&b))),
-            ),
-        ],
-        matched,
-    )
-}
+/// `(A, B : Type, p : SameType(former(A), former(B))) => match p : (_, _, _) => SameType(A, B) | same(z) => same(A) end`, the former applied at `${at_a}` and `${at_b}`.
+const LEARNED_THROUGH: &str = "(A: Type, B: Type, p: #{node = InductType} /SameType()(${at_a}, ${at_b})) => match p: (_, _, _) => #{node = InductType} /SameType()(A, B) | same(z) => #{node = Variant} /SameType/same(A) end";
 
 /// An equation between two types one former builds teaches an arm nothing of what the former was applied to: inversion decomposes literals, a relevant family's values and tuples, and refuses a type former, so an injective type constructor, the half of Hur's route to `False` that excluded middle or impredicativity completes, is nowhere a case's lesson. Asked of an intrinsic former, `List`, of a declared family, of an opaque global and of a function type; the control is the equation between the two variables themselves, which the arm solves.
 #[test]
 fn an_equation_between_two_types_one_former_builds_teaches_an_arm_nothing_of_their_arguments() {
     let mut certifier = certifier();
-    let same = same_type(&mut certifier);
-    let declared = declare_at(
+    // `SameType : (Type, Type) -> Prop | same(z : Type) : (z, z)`.
+    declare(
         &mut certifier,
-        "Former",
-        Term::type_ground(),
-        vec![Term::type_ground()],
-        vec![],
+        "SameType",
+        "i: Type, j: Type",
+        "Prop",
+        &["same(z: Type): (z, z)"],
     );
-    let opaque = Global::Authored(Qualifier::from(["F"]));
-    certifier
-        .declare(
-            &opaque,
-            &Term::func_type(
-                [(binder(31, "x"), Term::type_ground())],
-                Term::type_ground(),
-            ),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
+    declare(&mut certifier, "Former", "i: Type", "Type", &[]);
+    opaque(&mut certifier, "F", "(x: Type) -> Type");
+    let learned_through = |former: &str| {
+        let at = |t: &str| fill!(former, t);
+        term(&fill!(LEARNED_THROUGH, at_a = at("A"), at_b = at("B")))
+    };
 
-    let formers: [(&str, &dyn Fn(Term) -> Term); 4] = [
-        ("List", &|t| Term::intrinsic(Intrinsic::ListType(t))),
-        ("a declared family", &|t| {
-            Term::induct_type(declared, Vec::<Term>::new(), [t])
-        }),
-        ("an opaque global", &|t| {
-            Term::apply(Term::instance(opaque, Universes::default()), [t])
-        }),
-        ("a function type", &|t| {
-            Term::func_type([(binder(32, "x"), t)], nat_type())
-        }),
-    ];
-    for (label, former) in formers {
+    for (label, former) in [
+        ("List", "#ListType(${t})"),
+        ("a declared family", "#{node = InductType} /Former()(${t})"),
+        ("an opaque global", "/F(${t})"),
+        ("a function type", "(x: ${t}) -> #NatType"),
+    ] {
         assert!(
             matches!(
-                infer(&mut certifier, &learned_through(same, former)),
+                infer(&mut certifier, &learned_through(former)),
                 Err(Error::Mismatch { .. })
             ),
             "{label}: the arm learned what the former was applied to"
         );
     }
-    assert!(infer(&mut certifier, &learned_through(same, &|t| t)).is_ok());
+    assert!(infer(&mut certifier, &learned_through("${t}")).is_ok());
 }
 
 /// A type that is a proposition only under an arm is a type there and nowhere else: over `S(c) = match c : (_) => Type 1 | false => Type | true => Prop` and `F(c) = match c : (d) => S(d) | false => Nat | true => Unit`, a binder at `F(c)` with `c` open is refused, its type's sort a stuck elimination, so nothing irrelevance grants a value of it inside the arm reaches a binder, a motive, a field or a result outside it. The control binds one at `c = true`, inside the split.
 #[test]
 fn a_binder_at_a_type_whose_sort_an_arm_decides_is_refused_outside_the_arm() {
     let mut certifier = certifier();
-    let unit = declare_at(
-        &mut certifier,
-        "Unit",
-        Term::prop(),
-        vec![],
-        vec![nullary_at("unit", vec![])],
+    declare(&mut certifier, "Unit", "", "Prop", &["unit()"]);
+    let proposition_at = fill!(
+        "match c: (d) => match d: (_) => #{level = 1} Type | false => Type | true => Prop end | false => #NatType | true => ${unit} end",
+        unit = family_at("Unit", "")
     );
-    let (c, d, x) = (binder(80, "c"), binder(81, "d"), binder(82, "x"));
-    let sort_at = |v: Term| {
-        Term::bool_match(
-            v,
-            None,
-            Term::type_at(Level::zero().succ().expect("level zero has a successor")),
-            Term::type_ground(),
-            Term::prop(),
-        )
-    };
-    let proposition_at = |v: Term| {
-        Term::bool_match(
-            v,
-            Some(&d),
-            sort_at(Term::free_var(&d)),
-            nat_type(),
-            Term::induct_type(unit, Vec::<Term>::new(), Vec::<Term>::new()),
-        )
-    };
 
-    let outside = Term::func(
-        [(c, bool_type()), (x, proposition_at(Term::free_var(&c)))],
-        nat(0),
-    );
+    let outside = term(&fill!(
+        "(c: #BoolType, x: ${proposition_at}) => 0",
+        proposition_at
+    ));
     assert!(matches!(
         infer(&mut certifier, &outside),
         Err(Error::NotASort(_))
     ));
 
-    let inside = Term::func(
-        [(c, bool_type())],
-        Term::bool_match(
-            Term::free_var(&c),
-            None,
-            nat_type(),
-            nat(1),
-            Term::apply(
-                Term::func([(x, proposition_at(Term::free_var(&c)))], nat(0)),
-                [Term::variant(
-                    unit,
-                    Vec::<Term>::new(),
-                    "unit",
-                    Vec::<Term>::new(),
-                )],
-            ),
-        ),
-    );
+    let inside = term(&fill!(
+        "(c: #BoolType) => match c: (_) => #NatType | false => 1 | true => ((x: ${proposition_at}) => 0)(#{node = Variant} /Unit/unit()) end",
+        proposition_at
+    ));
     assert!(infer(&mut certifier, &inside).is_ok());
 }
 
@@ -455,62 +272,32 @@ fn a_binder_at_a_type_whose_sort_an_arm_decides_is_refused_outside_the_arm() {
 #[test]
 fn a_guard_settled_where_inversion_solves_its_operands_type_answers_nothing_after_the_match() {
     let mut certifier = certifier();
-    let is = declare_at(
+    declare(
         &mut certifier,
         "Is",
-        Term::type_ground(),
-        vec![bool_type()],
-        vec![
-            nullary("yes", Term::intrinsic(Intrinsic::Bool(true))),
-            nullary("no", Term::intrinsic(Intrinsic::Bool(false))),
-        ],
+        "i: #BoolType",
+        "Type",
+        &["yes(): (true)", "no(): (false)"],
     );
-    let guarded = Guarded::new();
-    let evidence = binder(48, "e");
-    let measured = |x: &Free| Term::apply(Term::free_var(&guarded.h), [Term::free_var(x)]);
-    let inverted = |arm: Term| {
-        Term::induct_match_scoped_marked(
-            Term::free_var(&evidence),
-            Scope::constant(Many(2), nat_type()),
-            [
-                ("yes", Vec::<(Plicity, Free)>::new(), arm),
-                ("no", Vec::new(), nat(0)),
-            ],
-            None,
+    let inverted = |arm: &str| {
+        fill!(
+            "match e: (_, _) => #NatType | yes() => ${arm} | no() => 0 end",
+            arm
         )
     };
-    let forged = |arm: Term| {
-        Term::func(
-            [
-                (guarded.c, bool_type()),
-                (
-                    guarded.h,
-                    Term::func_type([(binder(46, "x"), carried(&guarded.c, true))], nat_type()),
-                ),
-                (
-                    guarded.k,
-                    Term::func_type([(binder(47, "n"), nat_type())], bool_type()),
-                ),
-                (guarded.p, carried(&guarded.c, true)),
-                (guarded.q, carried(&guarded.c, true)),
-                (
-                    evidence,
-                    Term::induct_type(is, Vec::<Term>::new(), [Term::free_var(&guarded.c)]),
-                ),
-            ],
-            Term::bool_match(
-                guarded.read(measured(&guarded.p), measured(&guarded.q)),
-                None,
-                nat_type(),
-                nat(0),
-                arm,
-            ),
-        )
+    let forged = |arm: &str| {
+        term(&fill!(
+            "(c: #BoolType, h: (x: ${carried}) -> #NatType, k: (n: #NatType) -> #BoolType, p: ${carried}, q: ${carried}, e: ${is}) => match ${read}: (_) => #NatType | false => 0 | true => ${arm} end",
+            carried = carried(true),
+            is = family_at("Is", "c"),
+            read = read("h(p)", "h(q)"),
+            arm
+        ))
     };
 
-    assert!(infer(&mut certifier, &forged(inverted(settles(&guarded.k)))).is_ok());
+    assert!(infer(&mut certifier, &forged(&inverted(&settles()))).is_ok());
     assert!(refused_after_the_split(infer(
         &mut certifier,
-        &forged(after(&guarded.k, inverted(settles(&guarded.k))))
+        &forged(&after(&inverted(&settles())))
     )));
 }
