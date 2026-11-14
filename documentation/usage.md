@@ -693,7 +693,7 @@ Exit status is a tri-state, so tooling can tell "here is your goal batch" from "
 
 | Code | Meaning |
 | --- | --- |
-| `0` | compiled, and for `run`, the program itself exited 0 |
+| `0` | compiled, and for `run`, the program itself exited 0; for [`wonder`](#wonder), the question was answered, an answer that lists errors or goals included |
 | `1` | a hard error, alone or beside written goals; a command line that does not parse; for `lint`, a lint; for `test`, any test that failed, trapped, exited or could not be built, and a `--filter` that matched nothing |
 | `2` | the program contains [written goals](language.md#written-goals) (`?`) and nothing else stopped it, and their report went to stderr — for `wonder --stage`, `--cost` and `--tests` too, when goals alone kept them from answering |
 
