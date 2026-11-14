@@ -3,9 +3,10 @@
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
 use {
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_core::{Free, Intrinsic, Nat, Reducer, Term, UniverseContext},
+    curios_common::fill,
+    curios_core::{Free, Reducer, Term},
 };
 
 /// The certifier every test starts from.
@@ -13,28 +14,26 @@ pub fn certifier() -> Certifier<'static> {
     Certifier::new(1_000_000, SYNTAX)
 }
 
-/// A test binder. Once assumed it is one the certifier mints nothing over ([`Certifier::assume`]), so a binder it opens for eta-contraction cannot alias it.
-pub fn binder(index: u32, hint: &str) -> Free {
-    Free::local(u64::from(index), Some(hint))
+/// The locals the hypotheses `binders` writes open at in `certifier` ([`opened`]), and `terms`, several terms written over them: each, in order. A lone term is written with a trailing comma, a tuple of one.
+pub fn hypotheses<const N: usize>(
+    certifier: &mut Certifier,
+    binders: &str,
+    terms: &str,
+) -> (Vec<Free>, [Term; N]) {
+    let (locals, opened) = opened(
+        certifier,
+        &fill!("(${binders}) => (${terms})", binders, terms),
+    );
+    let terms = components(&opened)
+        .try_into()
+        .unwrap_or_else(|_| panic!("{N} terms"));
+
+    (locals, terms)
 }
 
-pub fn nat(n: usize) -> Term {
-    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
-}
-
-pub fn nat_type() -> Term {
-    Term::intrinsic(Intrinsic::NatType)
-}
-
-pub fn monomorphic() -> UniverseContext {
-    UniverseContext::default()
-}
-
-pub fn polymorphic() -> UniverseContext {
-    UniverseContext {
-        parameter_count: 1,
-        ..Default::default()
-    }
+/// The terms [`hypotheses`] opens, where no test reads the locals themselves.
+pub fn under<const N: usize>(certifier: &mut Certifier, binders: &str, terms: &str) -> [Term; N] {
+    hypotheses(certifier, binders, terms).1
 }
 
 /// What reducing `term` costs `certifier`, read off what its declaration has consumed on either side.
@@ -46,31 +45,39 @@ pub fn spent(certifier: &mut Certifier, term: Term) -> u64 {
     after - before
 }
 
+/// An arithmetic tree `links` deep over `tip`, as text: `#NatAdd(… #NatAdd(tip, 1) …, 1)`.
+pub fn added(tip: &str, links: usize) -> String {
+    [
+        "#NatAdd(".repeat(links),
+        tip.to_string(),
+        ", 1)".repeat(links),
+    ]
+    .concat()
+}
+
 /// A closed arithmetic tree `links` deep. Local-free, so it is a term the `whnf`/`forced` tables may key on — and one the closed machine takes, at machine depth.
 pub fn chain(links: usize) -> Term {
-    (0..links).fold(nat(0), |accumulator, _| {
-        Term::intrinsic(Intrinsic::nat_add(accumulator, nat(1)))
-    })
+    term(&added("0", links))
 }
 
-/// The same tree over an open tip, which the closed machine's gate declines — the term that still exercises the recursive strategy and the depth it prices.
-pub fn open_chain(links: usize, tip: &Free) -> Term {
-    (0..links).fold(Term::free_var(tip), |accumulator, _| {
-        Term::intrinsic(Intrinsic::nat_add(accumulator, nat(1)))
-    })
+/// The same tree over an open tip, a `Nat` assumed in `certifier`, which the closed machine's gate declines — the term that still exercises the recursive strategy and the depth it prices.
+pub fn open_chain(certifier: &mut Certifier, links: usize) -> Term {
+    let (_, chain) = opened(
+        certifier,
+        &fill!("(tip: #NatType) => ${chain}", chain = added("tip", links)),
+    );
+
+    chain
 }
 
-/// Reduce an open term and a closed one inside an arm refining `n` to `0`, then both again after the arm retracts: the two inside reducts followed by the two outside ones.
+/// Reduce an open term and a closed one inside an arm refining a `Nat` `n` to `0`, then both again after the arm retracts: the two inside reducts followed by the two outside ones.
 pub fn across_an_arm(certifier: &mut Certifier) -> [Term; 4] {
-    let n = binder(1, "n");
-    certifier.assume(&n, &nat_type());
-
-    let open = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+    let [n, open] = under(certifier, "n: #NatType", "n, #NatAdd(n, 1)");
     let closed = chain(8);
 
     let (inside_open, inside_closed) = certifier.scoped(|certifier| {
         certifier
-            .refine(Term::free_var(&n), nat(0))
+            .refine(n, term("0"))
             .expect("the equation records");
 
         (

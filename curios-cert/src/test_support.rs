@@ -161,6 +161,17 @@ pub fn term(text: &str) -> Term {
     entry.expect("a term's text closes with it").body
 }
 
+/// The term `text` closes with, Core text read with nothing in scope beside the declarations it names, which no judgment is handed: a row a foreign call is made through, and the definition its form implies, which a text read with no scope states.
+///
+/// # Panics
+///
+/// Where the text does not read or closes with no term.
+pub fn closing(text: &str) -> Term {
+    let (_, entry) = read_alone(text);
+
+    entry.expect("a term's text closes with it").body
+}
+
 /// Declare in `certifier` what `text` declares, Core text read with nothing in scope, judging none of it: each family's and record's entry, and each definition, a family's constructors among them, at its type with its body. What a suite below the walk reads its declarations from.
 ///
 /// # Panics

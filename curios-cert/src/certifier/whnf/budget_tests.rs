@@ -2,7 +2,7 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
     curios_core::{Category, Cost, Exhaustion, ReduceError, Reducer, Term},
 };
@@ -11,17 +11,9 @@ use {
 #[test]
 fn a_non_productive_recursion_exhausts_the_budget() {
     let mut certifier = Certifier::new(1_000, SYNTAX);
-    let loop_ = binder(0, "loop");
-    let n = binder(1, "n");
 
-    let body = Term::func(
-        [(n, nat_type())],
-        Term::apply(Term::free_var(&loop_), [Term::free_var(&n)]),
-    );
-
-    let term = Term::rec(
-        [(loop_, Term::func_type([(n, nat_type())], nat_type()), body)],
-        Term::apply(Term::free_var(&loop_), [nat(1)]),
+    let term = term(
+        "#{node = Rec} (let loop: (n: #NatType) -> #NatType = (n: #NatType) => loop(n); loop(1))",
     );
 
     assert!(
@@ -41,13 +33,13 @@ fn a_non_productive_recursion_exhausts_the_budget() {
 #[test]
 fn restoring_the_budget_refills_it() {
     let mut certifier = Certifier::new(Cost::FRAME.get() + Cost::STEP.get(), SYNTAX);
-    let occurrence = |index: u32| Term::free_var(&binder(index, "x"));
+    let [x, y, z] = <[Term; 3]>::try_from(components(&term("(x, y, z)"))).expect("three locals");
 
-    assert_eq!(whnf(&mut certifier, occurrence(0)), Ok(occurrence(0)));
-    assert!(whnf(&mut certifier, occurrence(1)).is_err_and(|spent| spent.is_exhausted()));
+    assert_eq!(whnf(&mut certifier, x.clone()), Ok(x));
+    assert!(whnf(&mut certifier, y).is_err_and(|spent| spent.is_exhausted()));
 
     certifier.restore_budget();
-    assert_eq!(whnf(&mut certifier, occurrence(2)), Ok(occurrence(2)));
+    assert_eq!(whnf(&mut certifier, z.clone()), Ok(z));
 }
 
 /// Depth is refused by the counter, and the refusal says so. Without the frame row, a reduction driven deep would take real stack the budget observes none of — `recurse` grows rather than aborting, so what bounded depth would be the host's memory rather than anything the program could be told about.
@@ -56,10 +48,10 @@ fn restoring_the_budget_refills_it() {
 #[test]
 fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
     let mut certifier = Certifier::new(Cost::FRAME.get() * 4, SYNTAX);
-    let tip = binder(0, "tip");
+    let chain = open_chain(&mut certifier, 64);
 
     let refusal = certifier
-        .reduce_forced(open_chain(64, &tip))
+        .reduce_forced(chain)
         .expect_err("four frames do not afford sixty-four levels");
 
     assert!(

@@ -2,42 +2,27 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
-    curios_core::{
-        Global, Intrinsic, Level, Reducer, Term, UniverseContext, UniverseParam, Universes,
-    },
+    curios_common::{Qualifier, fill},
+    curios_core::{Global, Reducer, Term, UniverseContext},
 };
 
 /// A remembered reduct is the same answer the term would compute — including across a scope boundary, which a local-free key cannot observe.
 #[test]
 fn a_memoized_unfold_answers_the_same_across_scopes() {
     let mut certifier = certifier();
-    let name = Global::Authored(Qualifier::from(["two"]));
-    certifier
-        .define(
-            &name,
-            &nat_type(),
-            &Term::intrinsic(Intrinsic::nat_add(nat(1), nat(1))),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
+    declared(&mut certifier, "let /two: #NatType = #NatAdd(1, 1);");
 
     let inside = certifier.scoped(|certifier| {
-        let binder_ = binder(1, "x");
-        certifier.assume(&binder_, &nat_type());
+        let (_, two) = opened(certifier, "(x: #NatType) => /two");
 
-        certifier
-            .reduce_forced(Term::instance(name, Universes::default()))
-            .expect("reduces")
+        certifier.reduce_forced(two).expect("reduces")
     });
 
-    let outside = certifier
-        .reduce_forced(Term::instance(name, Universes::default()))
-        .expect("reduces");
+    let outside = certifier.reduce_forced(term("/two")).expect("reduces");
     assert_eq!(inside, outside);
-    assert_eq!(outside, nat(2));
+    assert_eq!(outside, term("2"));
 }
 
 /// A remembered reduct is served only to the spelling it carries to, in either order: a polymorphic declaration's bare occurrence stays its own normal form after its instance has unfolded, and its instance unfolds after the bare occurrence has been remembered stuck.
@@ -47,32 +32,20 @@ fn a_memoized_unfold_answers_the_same_across_scopes() {
 /// Mutation-checked: with `Memos::whnf` and its store keyed through `curios_core::project_erased_universes`, the first instance's reduct answers the bare occurrence and the second assertion fails.
 #[test]
 fn a_remembered_reduct_is_served_only_to_the_spelling_it_carries_to() {
-    let polymorphic = UniverseContext {
-        parameter_count: 1,
-        ..Default::default()
-    };
-    let name = Global::Authored(Qualifier::from(["f"]));
     let define = |certifier: &mut Certifier| {
-        certifier
-            .define(
-                &name,
-                &nat_type(),
-                &Term::type_at(Level::param(UniverseParam(0))),
-                &polymorphic,
-            )
-            .expect("a name is declared once");
+        declared(
+            certifier,
+            "#{universe_context = {parameter_count = 1}}\nlet /f: #NatType = #{level = u} Type;",
+        );
     };
-    let bare = || Term::instance(name, Universes::default());
-    let at = || Term::instance(name, vec![Level::constant(3)]);
+    let bare = || term("/f");
+    let at = || term("#{universes = {levels = [3]}} /f");
     let reduce =
         |certifier: &mut Certifier, term: Term| certifier.reduce_forced(term).expect("reduces");
 
     let mut instance_first = certifier();
     define(&mut instance_first);
-    assert_eq!(
-        reduce(&mut instance_first, at()),
-        Term::type_at(Level::constant(3))
-    );
+    assert_eq!(reduce(&mut instance_first, at()), term("#{level = 3} Type"));
     assert_eq!(
         reduce(&mut instance_first, bare()),
         bare(),
@@ -84,7 +57,7 @@ fn a_remembered_reduct_is_served_only_to_the_spelling_it_carries_to() {
     assert_eq!(reduce(&mut bare_first, bare()), bare());
     assert_eq!(
         reduce(&mut bare_first, at()),
-        Term::type_at(Level::constant(3)),
+        term("#{level = 3} Type"),
         "an instance was served the stuck form of the bare occurrence",
     );
 }
@@ -95,25 +68,24 @@ fn a_redefinition_is_refused() {
     let mut certifier = certifier();
     let name = Global::Authored(Qualifier::from(["n"]));
 
-    certifier
-        .define(&name, &nat_type(), &nat(1), &UniverseContext::default())
-        .expect("a name is declared once");
+    declared(&mut certifier, "let /n: #NatType = 1;");
     assert_eq!(
-        certifier
-            .reduce_forced(Term::instance(name, Universes::default()))
-            .expect("reduces"),
-        nat(1),
+        certifier.reduce_forced(term("/n")).expect("reduces"),
+        term("1"),
     );
 
     assert_eq!(
-        certifier.define(&name, &nat_type(), &nat(2), &UniverseContext::default()),
+        certifier.define(
+            &name,
+            &term("#NatType"),
+            &term("2"),
+            &UniverseContext::default()
+        ),
         Err(Error::Redeclared(name)),
     );
     assert_eq!(
-        certifier
-            .reduce_forced(Term::instance(name, Universes::default()))
-            .expect("reduces"),
-        nat(1),
+        certifier.reduce_forced(term("/n")).expect("reduces"),
+        term("1"),
     );
 }
 
@@ -152,13 +124,11 @@ fn restoring_the_budget_forgets_the_term_keyed_memos() {
 /// Mutation-checked: keeping any reduct table across [`Certifier::restore_budget`] fails it.
 #[test]
 fn what_a_declaration_spends_does_not_depend_on_what_was_reduced_before_it() {
-    let name = Global::Authored(Qualifier::from(["chain"]));
-    let occurrence = Term::instance(name, Universes::default());
+    let occurrence = term("/chain");
+    let definition = fill!("let /chain: #NatType = ${body};", body = added("0", 64));
     let defining = || {
         let mut certifier = certifier();
-        certifier
-            .define(&name, &nat_type(), &chain(64), &monomorphic())
-            .expect("a name is declared once");
+        declared(&mut certifier, &definition);
         certifier
     };
 
@@ -198,16 +168,19 @@ fn cached_spend_never_exceeds_uncached() {
 /// Mutation-checked: with every hit adding what its computation minted to the counter, the identity minted after the sum is past the identity space.
 #[test]
 fn a_remembered_reducts_hit_mints_nothing() {
-    let n = binder(0, "n");
-    let y = binder(1, "y");
-    let added = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&y), Term::free_var(&n)));
-    let mut term = Term::apply(Term::func([(y, nat_type())], added), [Term::free_var(&n)]);
-    for _ in 0..40 {
-        term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
-    }
+    let sum = (0..40).fold(
+        "((y: #NatType) => #NatAdd(y, n))(n)".to_string(),
+        |below, level| {
+            fill!(
+                "#NatAdd(#{share = ${level}} (${below}), #{shared = ${level}} _)",
+                level,
+                below
+            )
+        },
+    );
 
     let mut certifier = certifier();
-    certifier.assume(&n, &nat_type());
+    let (_, term) = opened(&mut certifier, &fill!("(n: #NatType) => ${sum}", sum));
     let before = certifier.fresh(None).index();
     certifier.reduce_forced(term).expect("reduces");
     let after = certifier.fresh(None).index();
@@ -229,19 +202,9 @@ fn spent_classifying(certifier: &mut Certifier, type_: &Term) -> u64 {
 /// Mutation-checked: with `Memos::begin_declaration` leaving the sorts alone, the closed type after the boundary is answered for nothing.
 #[test]
 fn restoring_the_budget_forgets_a_remembered_sort() {
-    let x = binder(0, "x");
-    let closed = Term::apply(
-        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
-        [nat_type()],
-    );
-    let alias = Global::Authored(Qualifier::from(["alias"]));
-    let scoped = Term::instance(alias, Universes::default());
-
-    for type_ in [closed, scoped] {
+    for type_ in [term("((x: Type) => x)(#NatType)"), term("/alias")] {
         let mut certifier = certifier();
-        certifier
-            .define(&alias, &Term::type_ground(), &nat_type(), &monomorphic())
-            .expect("a name is declared once");
+        declared(&mut certifier, "let /alias: Type = #NatType;");
 
         let first = spent_classifying(&mut certifier, &type_);
         let second = spent_classifying(&mut certifier, &type_);
@@ -274,22 +237,14 @@ fn restoring_the_budget_forgets_a_remembered_type_and_a_remembered_check() {
         infer(certifier, term).expect("is typed");
     };
     let checking: Judge =
-        |certifier, term| check(certifier, term, &Term::type_ground()).expect("checks");
+        |certifier, term| check(certifier, term, &self::term("Type")).expect("checks");
 
-    let x = binder(0, "x");
-    let closed = Term::apply(
-        Term::func([(x, Term::type_ground())], Term::free_var(&x)),
-        [nat_type()],
-    );
-    let alias = Global::Authored(Qualifier::from(["alias"]));
-    let scoped = Term::instance(alias, Universes::default());
+    let (closed, scoped) = (term("((x: Type) => x)(#NatType)"), term("/alias"));
 
     for judge in [inferring, checking] {
         for term in [&closed, &scoped] {
             let mut certifier = certifier();
-            certifier
-                .define(&alias, &Term::type_ground(), &nat_type(), &monomorphic())
-                .expect("a name is declared once");
+            declared(&mut certifier, "let /alias: Type = #NatType;");
 
             let first = spent_judging(&mut certifier, judge, term);
             let second = spent_judging(&mut certifier, judge, term);

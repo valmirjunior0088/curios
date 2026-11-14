@@ -2,10 +2,10 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
-    curios_core::{Cost, Exhaustion, Global, Intrinsic, Reducer, Term, Universes},
+    curios_common::{Qualifier, fill},
+    curios_core::{Cost, Exhaustion, Global, Reducer, UniverseContext},
 };
 
 /// A case equation lives exactly as long as its arm.
@@ -14,16 +14,14 @@ use {
 #[test]
 fn a_case_equation_does_not_outlive_its_scope() {
     let mut certifier = certifier();
-    let scrutinee = binder(1, "n");
-    certifier.assume(&scrutinee, &nat_type());
     // Local-free scrutinees are deliberately not recorded, so the key has to mention a local.
-    let stuck = Term::free_var(&scrutinee);
+    let [stuck] = under(&mut certifier, "n: #NatType", "n,");
 
     certifier.scoped(|certifier| {
         certifier
-            .refine(stuck.clone(), nat(0))
+            .refine(stuck.clone(), term("0"))
             .expect("the equation records");
-        assert_eq!(certifier.refinement_of(&stuck), Some(nat(0)));
+        assert_eq!(certifier.refinement_of(&stuck), Some(term("0")));
     });
     assert_eq!(certifier.refinement_of(&stuck), None);
 }
@@ -42,19 +40,13 @@ fn a_case_equation_reaches_the_reduct_and_not_the_memos() {
     let mut cached = certifier();
     let [inside_open, inside_closed, outside_open, outside_closed] = across_an_arm(&mut cached);
 
-    // The control: the same two terms under a certifier that never assumed an equation, which is what both outside reducts have to be.
+    // The control: the same two terms under a certifier that never assumed an equation, which is what both outside reducts have to be. Its `n` is the first local it opens, as the arm's is.
     let mut control = certifier();
-    let n = binder(1, "n");
-    control.assume(&n, &nat_type());
-    let untouched_open = control
-        .reduce_forced(Term::intrinsic(Intrinsic::nat_add(
-            Term::free_var(&n),
-            nat(1),
-        )))
-        .expect("reduces");
+    let [open] = under(&mut control, "n: #NatType", "#NatAdd(n, 1),");
+    let untouched_open = control.reduce_forced(open).expect("reduces");
     let untouched_closed = control.reduce_forced(chain(8)).expect("reduces");
 
-    assert_eq!(inside_open, nat(1), "the equation answers the open term");
+    assert_eq!(inside_open, term("1"), "the equation answers the open term");
     assert_ne!(
         inside_open, untouched_open,
         "the equation has to change the open term, or the retraction below proves nothing"
@@ -84,14 +76,12 @@ fn a_case_equation_reaches_the_reduct_and_not_the_memos() {
 #[test]
 fn a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under() {
     let sequence = |certifier: &mut Certifier| {
-        let n = binder(1, "n");
-        certifier.assume(&n, &nat_type());
-        let open = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+        let [n, open] = under(certifier, "n: #NatType", "n, #NatAdd(n, 1)");
 
         let before = certifier.reduce_forced(open.clone()).expect("reduces");
         let inside = certifier.scoped(|certifier| {
             certifier
-                .refine(Term::free_var(&n), nat(0))
+                .refine(n, term("0"))
                 .expect("the equation records");
             certifier.reduce_forced(open.clone()).expect("reduces")
         });
@@ -109,7 +99,7 @@ fn a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under() {
     );
     assert_eq!(
         inside,
-        nat(1),
+        term("1"),
         "the equation answers inside the arm, whatever was remembered before it"
     );
     assert_eq!(after, before, "and its answer does not outlive it");
@@ -128,20 +118,12 @@ fn a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under() {
 #[test]
 fn a_quotient_naming_a_local_only_in_its_bound_is_refined_within_its_arm_alone() {
     let sequence = |certifier: &mut Certifier| {
-        let bound = binder(1, "bound");
-        let p = binder(2, "p");
-        certifier.assume(&bound, &Term::prop());
-        certifier.assume(&p, &Term::free_var(&bound));
-        let quotient = Term::intrinsic(Intrinsic::NatDiv {
-            dividend: nat(6),
-            divisor: nat(2),
-            non_zero: Term::free_var(&p),
-        });
+        let [quotient] = under(certifier, "bound: Prop, p: bound", "#NatDiv(6, 2, p),");
 
         let before = certifier.reduce_forced(quotient.clone()).expect("reduces");
         let inside = certifier.scoped(|certifier| {
             certifier
-                .refine(quotient.clone(), nat(0))
+                .refine(quotient.clone(), term("0"))
                 .expect("the equation records");
             certifier.reduce_forced(quotient.clone()).expect("reduces")
         });
@@ -153,10 +135,10 @@ fn a_quotient_naming_a_local_only_in_its_bound_is_refined_within_its_arm_alone()
     let mut cached = certifier();
     let [before, inside, after] = sequence(&mut cached);
 
-    assert_eq!(before, nat(3), "a fold reads no proof");
+    assert_eq!(before, term("3"), "a fold reads no proof");
     assert_eq!(
         inside,
-        nat(0),
+        term("0"),
         "the proof's local makes the quotient a term an equation answers"
     );
     assert_eq!(after, before, "and its answer does not outlive the arm");
@@ -173,9 +155,11 @@ fn a_quotient_naming_a_local_only_in_its_bound_is_refined_within_its_arm_alone()
 #[test]
 fn a_local_bearing_reduct_is_a_free_hit_within_its_span() {
     let mut certifier = certifier();
-    let n = binder(1, "n");
-    certifier.assume(&n, &nat_type());
-    let open = Term::intrinsic(Intrinsic::nat_add(chain(64), Term::free_var(&n)));
+    let [open] = under(
+        &mut certifier,
+        "n: #NatType",
+        &fill!("#NatAdd(${chain}, n),", chain = added("0", 64)),
+    );
 
     let first = spent(&mut certifier, open.clone());
     let second = spent(&mut certifier, open);
@@ -192,43 +176,39 @@ fn a_local_bearing_reduct_is_a_free_hit_within_its_span() {
 #[test]
 fn a_case_equation_answers_a_term_the_budget_cannot_reduce() {
     let budget = Cost::FRAME.get() * 4;
-    let n = binder(1, "n");
-    let key = Term::intrinsic(Intrinsic::nat_add(chain(100_000), Term::free_var(&n)));
+    let key = fill!("#NatAdd(${chain}, n),", chain = added("0", 100_000));
 
     let mut control = Certifier::new(budget, SYNTAX);
-    control.assume(&n, &nat_type());
+    let [unaffordable] = under(&mut control, "n: #NatType", &key);
     assert!(
-        whnf(&mut control, key.clone()).is_err_and(|spent| spent.is_exhausted()),
+        whnf(&mut control, unaffordable).is_err_and(|spent| spent.is_exhausted()),
         "the fold has to be unaffordable, or the subject's answer proves nothing"
     );
 
     let mut subject = Certifier::new(budget, SYNTAX);
-    subject.assume(&n, &nat_type());
+    let [key] = under(&mut subject, "n: #NatType", &key);
     let answered = subject.scoped(|certifier| {
         certifier
-            .refine(key.clone(), nat(0))
+            .refine(key.clone(), term("0"))
             .expect("the equation records");
         whnf(certifier, key.clone())
     });
 
-    assert_eq!(answered, Ok(nat(0)));
+    assert_eq!(answered, Ok(term("0")));
 }
+
+/// `n + (30 + 34)`, over a `Nat` `n`: a written term whose inner operand folds, so its reduct is a spelling that exists only as a reduct.
+const FOLDING: &str = "#NatAdd(n, #NatAdd(30, 34)),";
 
 /// The two consultation points answer one equation alike, and the match between them is structural — universe instances included, since the key is not a universe-erased projection.
 ///
-/// The key is taken as the certifier's own reduct of a written term whose inner operand folds, so it is a spelling that exists only as a reduct: the written form can reach it through reduction alone, which is what makes the ask at the stuck value the only probe that can see it. The control certifier — the same two reductions with no equation assumed — pins the two premises the subject rests on: the key differs from the written spelling, so the two probes below genuinely take different routes to it, and the key re-reduces to itself, which is the idempotence argument for merging the points in executable form.
+/// The key is taken as the certifier's own reduct of a written term whose inner operand folds, so it is a spelling that exists only as a reduct: the written form can reach it through reduction alone, which is what makes the ask at the stuck value the only probe that can see it. The control certifier — the same two reductions with no equation assumed — pins the two premises the subject rests on: the key differs from the written spelling, so the two probes below genuinely take different routes to it, and the key re-reduces to itself, which is the idempotence argument for merging the points in executable form. Each certifier's `n` is the first local it opens, so the control's key is a term the subject reads.
 ///
 /// Mutation-checked the other way around from `a_case_equation_answers_a_term_the_budget_cannot_reduce`: with the ask at the stuck reduct removed from `whnf_within`, the written probe handed back the unrefined key, so this is the fixture that distinguishes that point; with the ask before decomposition removed instead, both probes still answered, the key's own spelling being re-derived by decomposition and caught at the reduct. Neither other case-equation fixture moved under either mutation, which is why this pair exists.
 #[test]
 fn the_two_consultation_points_answer_one_equation_alike() {
-    let n = binder(1, "n");
-    let written = Term::intrinsic(Intrinsic::nat_add(
-        Term::free_var(&n),
-        Term::intrinsic(Intrinsic::nat_add(nat(30), nat(34))),
-    ));
-
     let mut control = certifier();
-    control.assume(&n, &nat_type());
+    let [written] = under(&mut control, "n: #NatType", FOLDING);
     let key = whnf(&mut control, written.clone()).expect("reduces");
     assert_ne!(
         key, written,
@@ -241,22 +221,19 @@ fn the_two_consultation_points_answer_one_equation_alike() {
     );
 
     let mut subject = certifier();
-    subject.assume(&n, &nat_type());
+    let [written] = under(&mut subject, "n: #NatType", FOLDING);
     let (at_key, at_written) = subject.scoped(|certifier| {
         certifier
-            .refine(key.clone(), nat(0))
+            .refine(key.clone(), term("0"))
             .expect("the equation records");
 
-        (
-            whnf(certifier, key.clone()),
-            whnf(certifier, written.clone()),
-        )
+        (whnf(certifier, key.clone()), whnf(certifier, written))
     });
 
-    assert_eq!(at_key, Ok(nat(0)), "the term is the key: the early ask");
+    assert_eq!(at_key, Ok(term("0")), "the term is the key: the early ask");
     assert_eq!(
         at_written,
-        Ok(nat(0)),
+        Ok(term("0")),
         "reduction reaches the key: the ask at the stuck reduct"
     );
 }
@@ -270,14 +247,8 @@ fn the_two_consultation_points_answer_one_equation_alike() {
 /// Mutation-checked three ways, all of which return the unrefined `n + 64`. Removing the escalation from `refined_reduct` leaves only the written spelling, which does not match. Narrowing `Scope::hide_refinements_from` to withhold nothing — or to withhold the equations inside the settling one but not it — makes the settlement meet its own equation at the reducer's first probe and settle the reduced spelling to the case value it was assuming, which no reduct will ever equal. None of the three moved [`a_local_free_term_is_never_refined`], [`a_case_equation_reaches_the_reduct_and_not_the_memos`] or either consultation-point fixture.
 #[test]
 fn a_case_equation_answers_a_spelling_only_reduction_reaches() {
-    let n = binder(1, "n");
-    let written = Term::intrinsic(Intrinsic::nat_add(
-        Term::free_var(&n),
-        Term::intrinsic(Intrinsic::nat_add(nat(30), nat(34))),
-    ));
-
     let mut control = certifier();
-    control.assume(&n, &nat_type());
+    let [written] = under(&mut control, "n: #NatType", FOLDING);
     let reduct = whnf(&mut control, written.clone()).expect("reduces");
     assert_ne!(
         reduct, written,
@@ -285,16 +256,16 @@ fn a_case_equation_answers_a_spelling_only_reduction_reaches() {
     );
 
     let mut subject = certifier();
-    subject.assume(&n, &nat_type());
+    let [written] = under(&mut subject, "n: #NatType", FOLDING);
     let answered = subject.scoped(|certifier| {
         certifier
-            .refine(written.clone(), nat(0))
+            .refine(written, term("0"))
             .expect("the equation records");
 
         whnf(certifier, reduct.clone())
     });
 
-    assert_eq!(answered, Ok(nat(0)));
+    assert_eq!(answered, Ok(term("0")));
 }
 
 /// Settling an equation's reduced spelling withholds every equation assumed *inside* it, and not only the equation itself.
@@ -306,15 +277,10 @@ fn a_case_equation_answers_a_spelling_only_reduction_reaches() {
 /// Mutation-checked with the mutation that moves this fixture and nothing else: leaving `Scope::unasked_refinement`'s reading of the limit alone — so the loop still terminates — while the two probes skip only the equation being settled. The inner equation then fires inside the outer's reduction, which answers `5 + 64` and settles the outer spelling to `69`, so the probe misses and the unrefined reduct comes back. The three coarser mutations recorded on [`a_case_equation_answers_a_spelling_only_reduction_reaches`] move this fixture too, and none of them separates the two halves of what withholding does; this one does. Relaxing *both* readings instead sends the settlement back into the entry it is already settling, which is `Scope::unasked_refinement`'s second job and not this fixture's.
 #[test]
 fn settling_a_reduced_spelling_withholds_the_equations_inside_it() {
-    let n = binder(1, "n");
-    let inner = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
-    let outer = Term::intrinsic(Intrinsic::nat_add(
-        inner.clone(),
-        Term::intrinsic(Intrinsic::nat_add(nat(30), nat(34))),
-    ));
+    let nested = "#NatAdd(n, 1), #NatAdd(#NatAdd(n, 1), #NatAdd(30, 34))";
 
     let mut control = certifier();
-    control.assume(&n, &nat_type());
+    let [_, outer] = under(&mut control, "n: #NatType", nested);
     let reduct = whnf(&mut control, outer.clone()).expect("reduces");
     assert_ne!(
         reduct, outer,
@@ -322,23 +288,26 @@ fn settling_a_reduced_spelling_withholds_the_equations_inside_it() {
     );
 
     let mut subject = certifier();
-    subject.assume(&n, &nat_type());
+    let [inner, outer] = under(&mut subject, "n: #NatType", nested);
     let answered = subject.scoped(|certifier| {
         certifier
-            .refine(outer.clone(), nat(0))
+            .refine(outer, term("0"))
             .expect("the equation records");
 
         certifier.scoped(|certifier| {
             certifier
-                .refine(inner.clone(), nat(5))
+                .refine(inner, term("5"))
                 .expect("the equation records");
 
             whnf(certifier, reduct.clone())
         })
     });
 
-    assert_eq!(answered, Ok(nat(0)));
+    assert_eq!(answered, Ok(term("0")));
 }
+
+/// `konst`, the function answering `7` whatever it is handed.
+const KONST: &str = "let /konst: (x: #NatType) -> #NatType = (x: #NatType) => 7;";
 
 /// A local-free term is never refined, however an equation's reduced spelling settles.
 ///
@@ -349,38 +318,25 @@ fn settling_a_reduced_spelling_withholds_the_equations_inside_it() {
 /// Mutation-checked: dropping the gate settles `konst(n)`'s reduced spelling to `7` and refines the local-free `konst(1)` to `0`, inside the arm and — through the memo entry that reduction stores — outside it as well. It is the only mutation in this module's set that moves this fixture, it moves no other new one, and it also moves [`a_case_equation_answers_a_term_the_budget_cannot_reduce`], whose deliberately tiny budget then goes on a settlement no probe asked for.
 #[test]
 fn a_local_free_term_is_never_refined() {
-    let n = binder(1, "n");
-    let konst = Global::Authored(Qualifier::from(["konst"]));
-    let x = binder(3, "x");
-
     let mut certifier = certifier();
-    certifier
-        .define(
-            &konst,
-            &Term::func_type([(x, nat_type())], nat_type()),
-            &Term::func([(x, nat_type())], nat(7)),
-            &monomorphic(),
-        )
-        .expect("a name is declared once");
-    certifier.assume(&n, &nat_type());
-
-    let open = Term::apply(
-        Term::instance(konst, Universes::default()),
-        [Term::free_var(&n)],
-    );
-    let closed = Term::apply(Term::instance(konst, Universes::default()), [nat(1)]);
+    declared(&mut certifier, KONST);
+    let [open, closed] = under(&mut certifier, "n: #NatType", "/konst(n), /konst(1)");
 
     let inside = certifier.scoped(|certifier| {
         certifier
-            .refine(open.clone(), nat(0))
+            .refine(open, term("0"))
             .expect("the equation records");
 
         whnf(certifier, closed.clone())
     });
     let outside = whnf(&mut certifier, closed);
 
-    assert_eq!(inside, Ok(nat(7)), "the equation is not this term's");
-    assert_eq!(outside, Ok(nat(7)), "and nothing remembered says otherwise");
+    assert_eq!(inside, Ok(term("7")), "the equation is not this term's");
+    assert_eq!(
+        outside,
+        Ok(term("7")),
+        "and nothing remembered says otherwise"
+    );
 }
 
 /// A closed term remembered before an arm answers inside it as a certifier with no memo would, which is the precondition of `whnf_within` asking the memo before the equations.
@@ -391,23 +347,14 @@ fn a_local_free_term_is_never_refined() {
 #[test]
 fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_certifier_does() {
     let sequence = |certifier: &mut Certifier| {
-        // A global, as a top-level definition is: a name `binder` mints is a local, and a term mentioning one is local-bearing however closed it reads.
-        let konst = Global::Authored(Qualifier::from(["konst"]));
-        let x = binder(3, "x");
-        certifier
-            .define(
-                &konst,
-                &Term::func_type([(x, nat_type())], nat_type()),
-                &Term::func([(x, nat_type())], nat(7)),
-                &monomorphic(),
-            )
-            .expect("a name is declared once");
-        let closed = Term::apply(Term::instance(konst, Universes::default()), [nat(1)]);
+        // A global, as a top-level definition is: a term naming a local is local-bearing however closed it reads.
+        declared(certifier, KONST);
+        let closed = term("/konst(1)");
 
         let before = whnf(certifier, closed.clone());
         let inside = certifier.scoped(|certifier| {
             certifier
-                .refine(closed.clone(), nat(0))
+                .refine(closed.clone(), term("0"))
                 .expect("asking to record a local-free equation is not an error");
             whnf(certifier, closed.clone())
         });
@@ -418,7 +365,7 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_certifier_does(
     let cached = sequence(&mut certifier());
     let mut uncached = Certifier::uncached(1_000_000, SYNTAX);
 
-    assert_eq!(cached, [Ok(nat(7)), Ok(nat(7))]);
+    assert_eq!(cached, [Ok(term("7")), Ok(term("7"))]);
     assert_eq!(
         sequence(&mut uncached),
         cached,
@@ -435,38 +382,26 @@ fn a_remembered_closed_term_answers_inside_an_arm_as_an_uncached_certifier_does(
 /// Mutation-checked with the tightening itself — the subset read as set equality — which moves this fixture and no other. Relaxing the filter the other way, to admit everything, moves nothing at all: it is a cost filter, and what says it is doing its job is `curios`' `scrutinee_refinement_measurements` rather than any assertion here.
 #[test]
 fn a_reduct_that_drops_a_local_is_still_reached() {
-    let n = binder(1, "n");
-    let m = binder(2, "m");
-    let second = Global::Authored(Qualifier::from(["second"]));
-    let x = binder(4, "x");
-    let y = binder(5, "y");
-
     let mut certifier = certifier();
-    certifier
-        .define(
-            &second,
-            &Term::func_type([(x, nat_type()), (y, nat_type())], nat_type()),
-            &Term::func([(x, nat_type()), (y, nat_type())], Term::free_var(&y)),
-            &monomorphic(),
-        )
-        .expect("a name is declared once");
-    certifier.assume(&n, &nat_type());
-    certifier.assume(&m, &nat_type());
-
-    let written = Term::apply(
-        Term::instance(second, Universes::default()),
-        [Term::free_var(&n), Term::free_var(&m)],
+    declared(
+        &mut certifier,
+        "let /second: (x: #NatType, y: #NatType) -> #NatType = (x: #NatType, y: #NatType) => y;",
+    );
+    let [written, m] = under(
+        &mut certifier,
+        "n: #NatType, m: #NatType",
+        "/second(n, m), m",
     );
 
     let answered = certifier.scoped(|certifier| {
         certifier
-            .refine(written.clone(), nat(0))
+            .refine(written, term("0"))
             .expect("the equation records");
 
-        whnf(certifier, Term::free_var(&m))
+        whnf(certifier, m)
     });
 
-    assert_eq!(answered, Ok(nat(0)));
+    assert_eq!(answered, Ok(term("0")));
 }
 
 /// An arm that records no equation changes nothing a remembered answer read. A scrutinee naming no local records none — and an arm on a variable substitutes its case through its body, so every match beneath it on that variable scrutinizes a literal — so what was reduced before such an arm answers inside it and after it, for nothing.
@@ -475,14 +410,12 @@ fn a_reduct_that_drops_a_local_is_still_reached() {
 #[test]
 fn an_arm_that_records_no_equation_leaves_what_was_remembered() {
     let mut certifier = certifier();
-    let n = binder(1, "n");
-    certifier.assume(&n, &nat_type());
-    let open = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+    let [open] = under(&mut certifier, "n: #NatType", "#NatAdd(n, 1),");
 
     let before = spent(&mut certifier, open.clone());
     let inside = certifier.scoped(|certifier| {
         certifier
-            .refine(nat(0), nat(0))
+            .refine(term("0"), term("0"))
             .expect("a literal scrutinee resolves nothing");
         spent(certifier, open.clone())
     });
@@ -500,25 +433,16 @@ fn an_arm_that_records_no_equation_leaves_what_was_remembered() {
 /// Mutation-checked three ways. With `Scope::restate` assuming nothing the instance stays stuck inside the arm. With the recorded equation left answering beside its restatement, the recorded spelling still answers there. With `Scope::retract` reviving nothing, the recorded spelling answers nothing after the arm.
 #[test]
 fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
-    let n = binder(1, "n");
-    let f = binder(2, "f");
-    let x = binder(3, "x");
-    let guard = |argument: Term| {
-        Term::intrinsic(Intrinsic::nat_lt(
-            Term::apply(Term::free_var(&f), [argument]),
-            nat(5),
-        ))
-    };
-    let written = guard(Term::free_var(&n));
-    let at_zero = guard(nat(0));
-
     let mut certifier = certifier();
-    certifier.assume(&n, &nat_type());
-    certifier.assume(&f, &Term::func_type([(x, nat_type())], nat_type()));
+    let (locals, [written, at_zero]) = hypotheses(
+        &mut certifier,
+        "n: #NatType, f: (x: #NatType) -> #NatType",
+        "#NatLt(f(n), 5), #NatLt(f(0), 5)",
+    );
 
     certifier.scoped(|certifier| {
         certifier
-            .refine(written.clone(), Term::intrinsic(Intrinsic::Bool(true)))
+            .refine(written.clone(), term("true"))
             .expect("the equation records");
         assert_eq!(
             whnf(certifier, at_zero.clone()).expect("reduces").as_bool(),
@@ -527,7 +451,7 @@ fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
         );
 
         certifier.scoped(|certifier| {
-            certifier.restate_refinements(&[(n, nat(0))]);
+            certifier.restate_refinements(&[(locals[0], term("0"))]);
 
             assert_eq!(
                 whnf(certifier, at_zero.clone()).expect("reduces").as_bool(),
@@ -556,40 +480,37 @@ fn a_case_equation_follows_the_solution_an_arm_is_checked_under() {
     });
 }
 
+/// `g`, a name with a type and no body, declared in `certifier`: no text writes a definition without one, so the entry is declared as a judgment declares one before its body.
+fn declare_g(certifier: &mut Certifier) {
+    certifier
+        .declare(
+            &Global::Authored(Qualifier::from(["g"])),
+            &term("(x: #NatType) -> #NatType"),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
+}
+
 /// A restated equation is recorded by the rule every equation is: one the solution leaves naming no local is not.
 ///
 /// `g` is a name with no body and no local in it, so `g(n) < 5` at `n := 0` is local-free, and an equation about a local-free term would leave the evaluation memos an entry resting on an equation the arm's exit retracts (`curios_analysis::records_case_equation`). The instance therefore stays the stuck term it is.
 #[test]
 fn a_restated_equation_naming_no_local_is_not_recorded() {
-    let n = binder(1, "n");
-    let g = Global::Authored(Qualifier::from(["g"]));
-    let x = binder(3, "x");
-    let guard = |argument: Term| {
-        Term::intrinsic(Intrinsic::nat_lt(
-            Term::apply(Term::instance(g, Universes::default()), [argument]),
-            nat(5),
-        ))
-    };
-    let written = guard(Term::free_var(&n));
-    let at_zero = guard(nat(0));
-
     let mut certifier = certifier();
-    certifier.assume(&n, &nat_type());
-    certifier
-        .declare(
-            &g,
-            &Term::func_type([(x, nat_type())], nat_type()),
-            &monomorphic(),
-        )
-        .expect("a name is declared once");
+    declare_g(&mut certifier);
+    let (locals, [written, at_zero]) = hypotheses(
+        &mut certifier,
+        "n: #NatType",
+        "#NatLt(/g(n), 5), #NatLt(/g(0), 5)",
+    );
 
     certifier.scoped(|certifier| {
         certifier
-            .refine(written.clone(), Term::intrinsic(Intrinsic::Bool(true)))
+            .refine(written, term("true"))
             .expect("the equation records");
 
         certifier.scoped(|certifier| {
-            certifier.restate_refinements(&[(n, nat(0))]);
+            certifier.restate_refinements(&[(locals[0], term("0"))]);
 
             assert_eq!(
                 whnf(certifier, at_zero.clone()).expect("reduces").as_bool(),
@@ -604,38 +525,21 @@ fn a_restated_equation_naming_no_local_is_not_recorded() {
 /// Filed against the equation stack's depth, the restatement was revived by the first bracket the arm closed, its mark being that same depth, and `g(n) < 5` answered inside the arm, where `n` is bound by value.
 #[test]
 fn a_restated_equation_steps_aside_until_its_arm_closes() {
-    let n = binder(1, "n");
-    let g = Global::Authored(Qualifier::from(["g"]));
-    let x = binder(3, "x");
-    let z = binder(4, "z");
-    let written = Term::intrinsic(Intrinsic::nat_lt(
-        Term::apply(
-            Term::instance(g, Universes::default()),
-            [Term::free_var(&n)],
-        ),
-        nat(5),
-    ));
-
     let mut certifier = certifier();
-    certifier.assume(&n, &nat_type());
-    certifier
-        .declare(
-            &g,
-            &Term::func_type([(x, nat_type())], nat_type()),
-            &monomorphic(),
-        )
-        .expect("a name is declared once");
+    declare_g(&mut certifier);
+    let (locals, [written]) = hypotheses(&mut certifier, "n: #NatType", "#NatLt(/g(n), 5),");
+    let (n, z) = (locals[0], certifier.fresh(Some("z")));
 
     certifier.scoped(|certifier| {
         certifier
-            .refine(written.clone(), Term::intrinsic(Intrinsic::Bool(true)))
+            .refine(written.clone(), term("true"))
             .expect("the equation records");
 
         certifier.scoped(|certifier| {
-            certifier.restate_refinements(&[(n, nat(0))]);
-            certifier.bind(&n, &nat_type(), &nat(0), false);
+            certifier.restate_refinements(&[(n, term("0"))]);
+            certifier.bind(&n, &term("#NatType"), &term("0"), false);
 
-            certifier.scoped(|certifier| certifier.assume(&z, &nat_type()));
+            certifier.scoped(|certifier| certifier.assume(&z, &term("#NatType")));
             assert_eq!(
                 certifier.refinement_of(&written),
                 None,
@@ -659,28 +563,14 @@ fn a_restated_equation_steps_aside_until_its_arm_closes() {
 #[test]
 fn a_remembered_reduct_does_not_outlive_the_types_a_binding_re_assumed_its_locals_at() {
     let sequence = |mut certifier: Certifier| {
-        let b = binder(1, "b");
-        let (f, p, q) = (binder(2, "f"), binder(3, "p"), binder(4, "q"));
-        let bool_type = Term::intrinsic(Intrinsic::BoolType);
-        let shaped = Term::bool_match(
-            Term::free_var(&b),
-            None,
-            Term::type_ground(),
-            nat_type(),
-            Term::tuple_type_unit(),
+        let (locals, [compared]) = hypotheses(
+            &mut certifier,
+            &fill!(
+                "b: #BoolType, f: (z: ${shaped}) -> #NatType, p: ${shaped}, q: ${shaped}",
+                shaped = "match b: (_) => Type | false => #NatType | true => {} end"
+            ),
+            "#NatEql(#NatAdd(f(p), f(q)), #NatAdd(f(p), f(p))),",
         );
-        certifier.assume(&b, &bool_type);
-        certifier.assume(
-            &f,
-            &Term::func_type([(binder(5, "z"), shaped.clone())], nat_type()),
-        );
-        certifier.assume(&p, &shaped);
-        certifier.assume(&q, &shaped);
-        let applied = |argument| Term::apply(Term::free_var(&f), [Term::free_var(argument)]);
-        let compared = Term::intrinsic(Intrinsic::nat_eql(
-            Term::intrinsic(Intrinsic::nat_add(applied(&p), applied(&q))),
-            Term::intrinsic(Intrinsic::nat_add(applied(&p), applied(&p))),
-        ));
         let decided = |certifier: &mut Certifier| {
             certifier
                 .reduce_forced(compared.clone())
@@ -689,12 +579,7 @@ fn a_remembered_reduct_does_not_outlive_the_types_a_binding_re_assumed_its_local
 
         let before = decided(&mut certifier);
         let inside = certifier.scoped(|certifier| {
-            certifier.bind(
-                &b,
-                &bool_type,
-                &Term::intrinsic(Intrinsic::Bool(true)),
-                false,
-            );
+            certifier.bind(&locals[0], &term("#BoolType"), &term("true"), false);
             decided(certifier)
         });
         let after = decided(&mut certifier);

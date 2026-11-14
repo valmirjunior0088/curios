@@ -2,29 +2,28 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::{RESOLVED_SPELLING_LAYERS, test_support::*},
-    curios_common::Qualifier,
-    curios_core::{
-        Cost, Exhaustion, Free, Global, Intrinsic, Level, Term, UniverseContext, UniverseParam,
-        Universes,
-    },
+    curios_common::fill,
+    curios_core::{Cost, Exhaustion, Term},
 };
+
+/// `witness`, a structure of one method comparing two numbers by `${compared}`: the stand-in for a dispatch, projected and applied as elaboration spells a concept call.
+const WITNESS: &str = "let /witness: {le: (a: #NatType, b: #NatType) -> #BoolType} = ((a: #NatType, b: #NatType) => ${compared},);";
 
 /// A guard's equation is recorded on the guard's written spelling, and the false arm of `n < m` is the fact `m <= n` read the other way: the reducer asks the dual spelling with the literal negated, and the record stays as written.
 #[test]
 fn a_comparison_refined_answers_its_dual_negated() {
     let mut certifier = certifier();
-    let n = binder(1, "n");
-    let m = binder(2, "m");
-    certifier.assume(&n, &nat_type());
-    certifier.assume(&m, &nat_type());
-    let guard = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), Term::free_var(&m)));
-    let dual = Term::intrinsic(Intrinsic::NatLe(Term::free_var(&m), Term::free_var(&n)));
+    let [guard, dual] = under(
+        &mut certifier,
+        "n: #NatType, m: #NatType",
+        "#NatLt(n, m), #NatLe(m, n)",
+    );
 
     certifier.scoped(|certifier| {
         certifier
-            .refine(guard.clone(), Term::intrinsic(Intrinsic::Bool(false)))
+            .refine(guard.clone(), term("false"))
             .expect("the equation records");
         let reduced = whnf(certifier, dual.clone()).expect("a dual probe reduces");
         assert_eq!(reduced.as_bool(), Some(true));
@@ -43,28 +42,12 @@ fn a_comparison_refined_answers_its_dual_negated() {
 /// **Both operands are spelled as a program spells them, which is what the retry has to survive.** The guard's own operand is the *unreduced* call — a real one records `List/len(l)`, the application the author wrote, and the bound arrives with that call already folded to its intrinsic — so the seam is asked of the key's settled reduct rather than of the record. Asking the written spelling alone answers this fixture while a surface program is still refused, the certifier refusing what the elaborator accepts. The stand-in here is a definition the key mentions and the probe does not, which is the same asymmetry with nothing else in it.
 #[test]
 fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
-    let index = binder(1, "i");
-    let length = binder(2, "len");
-
-    // The operand as a program writes it: a term reduction folds, standing for the `List/len(l)` call a guard records and the bound meets already folded.
-    let written_length = Term::intrinsic(Intrinsic::nat_add(
-        Term::free_var(&length),
-        Term::intrinsic(Intrinsic::nat_add(nat(30), nat(34))),
-    ));
-
-    let below = Term::intrinsic(Intrinsic::nat_lt(
-        Term::free_var(&index),
-        written_length.clone(),
-    ));
-    // The bound as a signature instantiates it: `i + 1 <= len`, the successor written as the sum it is before reduction folds it into a floor.
-    let within = Term::intrinsic(Intrinsic::nat_lte(
-        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&index), nat(1))),
-        written_length.clone(),
-    ));
+    // The operand as a program writes it, `len + (30 + 34)`: a term reduction folds, standing for the `List/len(l)` call a guard records and the bound meets already folded. The bound as a signature instantiates it is `i + 1 <= len`, the successor written as the sum it is before reduction folds it into a floor.
+    let hypotheses = "i: #NatType, len: #NatType";
+    let terms = "#NatAdd(len, #NatAdd(30, 34)), #NatLt(i, #NatAdd(len, #NatAdd(30, 34))), #NatLe(#NatAdd(i, 1), #NatAdd(len, #NatAdd(30, 34)))";
 
     let mut control = certifier();
-    control.assume(&index, &nat_type());
-    control.assume(&length, &nat_type());
+    let [written_length, _, _] = under(&mut control, hypotheses, terms);
     let folded = whnf(&mut control, written_length.clone()).expect("the operand reduces");
     assert_ne!(
         folded, written_length,
@@ -72,18 +55,17 @@ fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
     );
 
     let mut certifier = certifier();
-    certifier.assume(&index, &nat_type());
-    certifier.assume(&length, &nat_type());
+    let [_, below, within] = under(&mut certifier, hypotheses, terms);
 
     certifier.scoped(|certifier| {
         certifier
-            .refine(below.clone(), Term::intrinsic(Intrinsic::Bool(true)))
+            .refine(below.clone(), term("true"))
             .expect("the equation records");
 
         let reduced = whnf(certifier, within.clone()).expect("the bound reduces");
         assert_eq!(
             reduced,
-            Term::intrinsic(Intrinsic::Bool(true)),
+            term("true"),
             "the guard `i < len` did not answer the bound `i + 1 <= len`",
         );
     });
@@ -105,55 +87,29 @@ fn a_guard_answers_a_bound_spelled_across_the_successor_seam() {
 /// Mutation-checked: recording no resolved spelling in `Certifier::refine` answers the probe `false` — the procedure's fold, with the equation never met — and moves no other fixture in this module.
 #[test]
 fn a_dispatched_guard_answers_its_dual_before_the_procedure_folds_it() {
-    let n = binder(1, "n");
-    let witness = Global::Authored(Qualifier::from(["witness"]));
-    let method = binder(3, "le");
-    let a = binder(4, "a");
-    let b = binder(5, "b");
-    let positive = binder(6, "positive");
-
-    let comparison = [(a, nat_type()), (b, nat_type())];
-    let method_type = Term::func_type(comparison.clone(), Term::intrinsic(Intrinsic::BoolType));
     let mut certifier = certifier();
-    certifier
-        .define(
-            &witness,
-            &Term::tuple_type([(method, method_type)]),
-            &Term::tuple([Term::func(
-                comparison,
-                Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&a), Term::free_var(&b))),
-            )]),
-            &monomorphic(),
-        )
-        .expect("a name is declared once");
-    certifier.assume(&n, &nat_type());
-
-    let subject = Term::intrinsic(Intrinsic::nat_rem(
-        Term::free_var(&n),
-        nat(64),
-        Term::free_var(&positive),
-    ));
-    let guard = Term::apply(
-        Term::proj(Term::instance(witness, Universes::default()), 0),
-        [subject.clone(), nat(63)],
+    declared(&mut certifier, &fill!(WITNESS, compared = "#NatLe(a, b)"));
+    let [guard, dual] = under(
+        &mut certifier,
+        "n: #NatType, positive: /std/Bool/Holds(#NatLt(0, 64))",
+        "/witness.0(#NatRem(n, 64, positive), 63), #NatLt(63, #NatRem(n, 64, positive))",
     );
-    let dual = Term::intrinsic(Intrinsic::nat_lt(nat(63), subject));
 
     assert_eq!(
         whnf(&mut certifier, dual.clone()),
-        Ok(Term::intrinsic(Intrinsic::Bool(false))),
+        Ok(term("false")),
         "the procedure has to decide the probe, or the arm is not dead"
     );
 
     let answered = certifier.scoped(|certifier| {
         certifier
-            .refine(guard, Term::intrinsic(Intrinsic::Bool(false)))
+            .refine(guard, term("false"))
             .expect("the equation records");
 
         whnf(certifier, dual)
     });
 
-    assert_eq!(answered, Ok(Term::intrinsic(Intrinsic::Bool(true))));
+    assert_eq!(answered, Ok(term("true")));
 }
 
 /// A resolved spelling that drops the scrutinee's locals is not recorded, so no local-free term is refined through it.
@@ -165,80 +121,49 @@ fn a_dispatched_guard_answers_its_dual_before_the_procedure_folds_it() {
 /// Mutation-checked: recording the resolved spelling unfiltered in `Scope::refine` refines `5 <= 63` to `false` inside the arm and outside it, and moves no other fixture in this module.
 #[test]
 fn a_resolved_spelling_that_drops_its_locals_is_never_recorded() {
-    let n = binder(1, "n");
-    let witness = Global::Authored(Qualifier::from(["witness"]));
-    let method = binder(3, "le");
-    let a = binder(4, "a");
-    let b = binder(5, "b");
-
-    let comparison = [(a, nat_type()), (b, nat_type())];
-    let method_type = Term::func_type(comparison.clone(), Term::intrinsic(Intrinsic::BoolType));
     let mut certifier = certifier();
     // The method reads only its second operand, so the local the guard passes as the first is gone once it is opened.
-    certifier
-        .define(
-            &witness,
-            &Term::tuple_type([(method, method_type)]),
-            &Term::tuple([Term::func(
-                comparison,
-                Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&b), nat(63))),
-            )]),
-            &monomorphic(),
-        )
-        .expect("a name is declared once");
-    certifier.assume(&n, &nat_type());
-
-    let guard = Term::apply(
-        Term::proj(Term::instance(witness, Universes::default()), 0),
-        [Term::free_var(&n), nat(5)],
-    );
-    let closed = Term::intrinsic(Intrinsic::nat_lte(nat(5), nat(63)));
+    declared(&mut certifier, &fill!(WITNESS, compared = "#NatLe(b, 63)"));
+    let [guard] = under(&mut certifier, "n: #NatType", "/witness.0(n, 5),");
+    let closed = term("#NatLe(5, 63)");
 
     let inside = certifier.scoped(|certifier| {
         certifier
-            .refine(guard, Term::intrinsic(Intrinsic::Bool(false)))
+            .refine(guard, term("false"))
             .expect("the equation records");
 
         whnf(certifier, closed.clone())
     });
     let outside = whnf(&mut certifier, closed);
 
-    let true_ = Term::intrinsic(Intrinsic::Bool(true));
-    assert_eq!(inside, Ok(true_.clone()), "the equation is not this term's");
-    assert_eq!(outside, Ok(true_), "and nothing remembered says otherwise");
+    assert_eq!(inside, Ok(term("true")), "the equation is not this term's");
+    assert_eq!(
+        outside,
+        Ok(term("true")),
+        "and nothing remembered says otherwise"
+    );
 }
 
-/// A guard over `subject` dispatched through `layers` functions, two or more: the innermost compares its two operands, and each one over it applies the one before it to its first operand twice. No layer is an eta-redex of the next, so `resolved_spelling` opens them one at a time, down to `subject <= subject`.
-fn dispatched_through(certifier: &mut Certifier, layers: usize, subject: &Free) -> Term {
-    let (first, second) = (binder(100, "first"), binder(101, "second"));
-    let signature = [(first, nat_type()), (second, nat_type())];
-    let type_ = Term::func_type(signature.clone(), Term::intrinsic(Intrinsic::BoolType));
-    let mut body = Term::intrinsic(Intrinsic::nat_lte(
-        Term::free_var(&first),
-        Term::free_var(&second),
-    ));
-    let mut head = None;
-
+/// A guard over a `Nat` `n` dispatched through `layers` functions, two or more, declared in `certifier`: the innermost compares its two operands, and each one over it applies the one before it to its first operand twice. No layer is an eta-redex of the next, so `resolved_spelling` opens them one at a time, down to `n <= n`. The guard, with `n` opened, and `n <= n`.
+fn dispatched_through(certifier: &mut Certifier, layers: usize) -> [Term; 2] {
+    let mut body = "#NatLe(first, second)".to_string();
     for layer in 0..layers {
-        let name = Global::Authored(Qualifier::from([format!("layer{layer}").as_str()]));
-        certifier
-            .define(
-                &name,
-                &type_,
-                &Term::func(signature.clone(), body),
-                &monomorphic(),
-            )
-            .expect("a name is declared once");
-        body = Term::apply(
-            Term::instance(name, Universes::default()),
-            [Term::free_var(&first), Term::free_var(&first)],
+        declared(
+            certifier,
+            &fill!(
+                "let /layer${layer}: (first: #NatType, second: #NatType) -> #BoolType = (first: #NatType, second: #NatType) => ${body};",
+                layer,
+                body
+            ),
         );
-        head = Some(name);
+        body = fill!("/layer${layer}(first, first)", layer);
     }
+    let last = layers - 1;
 
-    Term::apply(
-        Term::instance(head.expect("a dispatch has a layer"), Universes::default()),
-        [Term::free_var(subject), nat(63)],
+    under(
+        certifier,
+        "n: #NatType",
+        &fill!("/layer${last}(n, 63), #NatLe(n, n)", last),
     )
 }
 
@@ -247,24 +172,22 @@ fn dispatched_through(certifier: &mut Certifier, layers: usize, subject: &Free) 
 /// Mutation-checked against the bound: handing back what the last layer opened to once the layers run out resolves the deeper dispatch too.
 #[test]
 fn a_dispatch_deeper_than_the_layers_opened_resolves_to_nothing() {
-    let n = binder(1, "n");
-    let comparison = Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&n), Term::free_var(&n)));
     let resolved_through = |layers: usize| {
         let mut certifier = certifier();
-        certifier.assume(&n, &nat_type());
-        let guard = dispatched_through(&mut certifier, layers, &n);
+        let [guard, comparison] = dispatched_through(&mut certifier, layers);
 
-        resolved_spelling(&mut certifier, &guard)
+        (resolved_spelling(&mut certifier, &guard), comparison)
     };
 
     // A function is one layer, and seeing that what the last one opened to is no application is one more.
+    let (resolved, comparison) = resolved_through(RESOLVED_SPELLING_LAYERS - 1);
     assert_eq!(
-        resolved_through(RESOLVED_SPELLING_LAYERS - 1),
+        resolved,
         Ok(Some(comparison)),
         "inside the bound the dispatch resolves to the comparison it ends in",
     );
     assert_eq!(
-        resolved_through(RESOLVED_SPELLING_LAYERS),
+        resolved_through(RESOLVED_SPELLING_LAYERS).0,
         Ok(None),
         "past it the dispatch is not one",
     );
@@ -280,90 +203,58 @@ fn a_dispatch_deeper_than_the_layers_opened_resolves_to_nothing() {
 #[test]
 fn resolving_a_dispatched_guard_forces_none_of_its_operands() {
     let budget = Cost::FRAME.get() * 4;
-    let n = binder(1, "n");
-    let witness = Global::Authored(Qualifier::from(["witness"]));
-    let method = binder(3, "le");
-    let a = binder(4, "a");
-    let b = binder(5, "b");
-
-    let comparison = [(a, nat_type()), (b, nat_type())];
-    let method_type = Term::func_type(comparison.clone(), Term::intrinsic(Intrinsic::BoolType));
+    let expensive = added("0", 100_000);
+    let terms = fill!(
+        "/witness.0(n, ${expensive}), #NatLt(${expensive}, n)",
+        expensive
+    );
     let certifier_over = |budget| {
         let mut certifier = Certifier::new(budget, SYNTAX);
-        certifier
-            .define(
-                &witness,
-                &Term::tuple_type([(method, method_type.clone())]),
-                &Term::tuple([Term::func(
-                    comparison.clone(),
-                    Term::intrinsic(Intrinsic::nat_lte(Term::free_var(&a), Term::free_var(&b))),
-                )]),
-                &monomorphic(),
-            )
-            .expect("a name is declared once");
-        certifier.assume(&n, &nat_type());
-        certifier
+        declared(&mut certifier, &fill!(WITNESS, compared = "#NatLe(a, b)"));
+        let [guard, dual] = under(&mut certifier, "n: #NatType", &terms);
+
+        (certifier, guard, dual)
     };
 
-    let expensive = chain(100_000);
-    let guard = Term::apply(
-        Term::proj(Term::instance(witness, Universes::default()), 0),
-        [Term::free_var(&n), expensive.clone()],
-    );
-    let dual = Term::intrinsic(Intrinsic::nat_lt(expensive, Term::free_var(&n)));
-
-    let mut control = certifier_over(budget);
+    let (mut control, _, dual) = certifier_over(budget);
     assert!(
-        whnf(&mut control, dual.clone()).is_err_and(|spent| spent.is_exhausted()),
+        whnf(&mut control, dual).is_err_and(|spent| spent.is_exhausted()),
         "the operand has to be unaffordable, or the subject's answer proves nothing"
     );
 
-    let mut subject = certifier_over(budget);
+    let (mut subject, guard, dual) = certifier_over(budget);
     let answered = subject.scoped(|certifier| {
         certifier
-            .refine(guard, Term::intrinsic(Intrinsic::Bool(false)))
+            .refine(guard, term("false"))
             .expect("resolving reduces no operand");
 
         whnf(certifier, dual)
     });
 
-    assert_eq!(answered, Ok(Term::intrinsic(Intrinsic::Bool(true))));
+    assert_eq!(answered, Ok(term("true")));
 }
 
 /// The reduced spelling a refinement probe compares in reads each operand as a probe, as the elaborator's twin does: an operand with no value at the type level is kept as written, so the probe misses rather than refusing the judgment it serves. The operand here is an instance whose body, read at the level it states, asks for a successor no offset holds.
 #[test]
 fn an_operand_with_no_value_is_compared_as_written() {
     let mut certifier = certifier();
-    let x = binder(1, "x");
-    certifier.assume(&x, &nat_type());
-    let lifted = Global::Authored(Qualifier::from(["lifted"]));
-    let above = Level::param(UniverseParam(0))
-        .succ()
-        .expect("one past a parameter");
-    certifier
-        .define(
-            &lifted,
-            &Term::type_at(above.succ().expect("two past a parameter")),
-            &Term::type_at(above),
-            &UniverseContext {
-                parameter_count: 1,
-                quality_count: 0,
-                constraints: Vec::new(),
-            },
-        )
-        .expect("a name is declared once");
-    let undefined = Term::instance(
-        lifted,
-        Universes {
-            levels: vec![Level::constant(u32::MAX)],
-            qualities: Vec::new(),
-        },
+    declared(
+        &mut certifier,
+        "#{universe_context = {parameter_count = 1}}\nlet /lifted: #{level = u + 2} Type = #{level = u + 1} Type;",
+    );
+    let max = u32::MAX;
+    let [undefined, probe] = under(
+        &mut certifier,
+        "x: #NatType",
+        &fill!(
+            "#{universes = {levels = [${max}]}} /lifted, #NatEql(#{universes = {levels = [${max}]}} /lifted, x)",
+            max
+        ),
     );
     assert!(
-        whnf(&mut certifier, undefined.clone()).is_err_and(|error| !error.is_exhausted()),
+        whnf(&mut certifier, undefined).is_err_and(|error| !error.is_exhausted()),
         "the operand has a value, so the probe is not put to the question"
     );
-    let probe = Term::intrinsic(Intrinsic::NatEql(undefined, Term::free_var(&x)));
 
     assert_eq!(super::canonical_operands(&mut certifier, &probe), Ok(probe));
 }

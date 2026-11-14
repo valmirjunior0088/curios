@@ -2,46 +2,39 @@
 
 use {
     super::{test_support::*, *},
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Apply, Free, Global, Intrinsic, Level, Reducer, Subterm, Term, UniverseParam, Var,
-    },
+    crate::test_support::*,
+    curios_common::fill,
+    curios_core::{Apply, Reducer, Subterm, Term},
 };
+
+/// `f`, a definition of `3` generalized over one universe parameter.
+const POLYMORPHIC: &str = "#{universe_context = {parameter_count = 1}}\nlet /f: #NatType = 3;";
 
 #[test]
 fn beta_opens_a_function_over_its_arguments() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
 
-    let term = Term::apply(Term::func([(x, nat_type())], Term::free_var(&x)), [nat(7)]);
-
-    assert_eq!(whnf(&mut certifier, term), Ok(nat(7)));
+    assert_eq!(
+        whnf(&mut certifier, term("((x: #NatType) => x)(7)")),
+        Ok(term("7"))
+    );
 }
 
 #[test]
 fn delta_unfolds_a_monomorphic_definition() {
     let mut certifier = certifier();
-    let f = Global::Authored(Qualifier::from(["f"]));
-    certifier
-        .define(&f, &nat_type(), &nat(3), &monomorphic())
-        .expect("a name is declared once");
+    declared(&mut certifier, "let /f: #NatType = 3;");
 
-    assert_eq!(
-        whnf(&mut certifier, Term::instance(f, Universes::default())),
-        Ok(nat(3))
-    );
+    assert_eq!(whnf(&mut certifier, term("/f")), Ok(term("3")));
 }
 
 /// A definition generalized over universe parameters denotes no particular instance, so a reference to it stating none is a normal form. Unfolding it here would silently pick an instance nobody stated.
 #[test]
 fn delta_withholds_a_universe_polymorphic_definition() {
     let mut certifier = certifier();
-    let f = Global::Authored(Qualifier::from(["f"]));
-    certifier
-        .define(&f, &nat_type(), &nat(3), &polymorphic())
-        .expect("a name is declared once");
+    declared(&mut certifier, POLYMORPHIC);
 
-    let occurrence = Term::instance(f, Universes::default());
+    let occurrence = term("/f");
     assert_eq!(whnf(&mut certifier, occurrence.clone()), Ok(occurrence));
 }
 
@@ -49,21 +42,19 @@ fn delta_withholds_a_universe_polymorphic_definition() {
 #[test]
 fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
     let mut certifier = certifier();
-    let f = Global::Authored(Qualifier::from(["f"]));
-    certifier
-        .define(&f, &nat_type(), &nat(3), &polymorphic())
-        .expect("a name is declared once");
+    declared(&mut certifier, POLYMORPHIC);
 
-    let instance = Term::instance(f, vec![Level::zero()]);
-    assert_eq!(whnf(&mut certifier, instance), Ok(nat(3)));
+    assert_eq!(
+        whnf(&mut certifier, term("#{universes = {levels = [0]}} /f")),
+        Ok(term("3"))
+    );
 }
 
 #[test]
 fn an_undefined_variable_is_its_own_normal_form() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
 
-    let occurrence = Term::free_var(&x);
+    let occurrence = term("x");
     assert_eq!(whnf(&mut certifier, occurrence.clone()), Ok(occurrence));
 }
 
@@ -71,206 +62,113 @@ fn an_undefined_variable_is_its_own_normal_form() {
 #[test]
 fn zeta_substitutes_let_bindings_left_to_right() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-    let y = binder(1, "y");
 
-    let term = Term::let_(
-        &x,
-        nat_type(),
-        nat(2),
-        Term::let_(
-            &y,
-            nat_type(),
-            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(3))),
-            Term::free_var(&y),
-        ),
-    );
+    let block = term("(let x: #NatType = 2; let y: #NatType = #NatAdd(x, 3); y)");
 
-    assert_eq!(whnf(&mut certifier, term), Ok(nat(5)));
+    assert_eq!(whnf(&mut certifier, block), Ok(term("5")));
 }
 
 /// The intrinsic folds are shared with the elaborator through `Reducer`; this is the certifier reaching them with its own strategy underneath.
 #[test]
 fn intrinsics_fold_through_the_reducer_seam() {
     let mut certifier = certifier();
-    let x = Global::Authored(Qualifier::from(["x"]));
-    certifier
-        .define(&x, &nat_type(), &nat(2), &monomorphic())
-        .expect("a name is declared once");
+    declared(&mut certifier, "let /x: #NatType = 2;");
 
-    let term = Term::intrinsic(Intrinsic::nat_add(
-        Term::instance(x, Universes::default()),
-        nat(2),
-    ));
-
-    assert_eq!(whnf(&mut certifier, term), Ok(nat(4)));
+    assert_eq!(whnf(&mut certifier, term("#NatAdd(/x, 2)")), Ok(term("4")));
 }
 
 #[test]
 fn iota_selects_an_inductive_arm_and_binds_its_payload() {
     let mut certifier = certifier();
-    let motive = binder(0, "m");
-    let payload = binder(1, "a");
 
-    let term = Term::induct_match(
-        Term::variant(
-            Global::Authored(Qualifier::from(["E"])),
-            Vec::<Term>::new(),
-            "some",
-            [nat(42)],
-        ),
-        Some(&motive),
-        nat_type(),
-        [
-            ("none", Vec::<Free>::new(), nat(0)),
-            ("some", vec![payload], Term::free_var(&payload)),
-        ],
+    let matched = term(
+        "match #{node = Variant} /E/some(42): (m) => #NatType | none() => 0 | some(a) => a end",
     );
 
-    assert_eq!(whnf(&mut certifier, term), Ok(nat(42)));
+    assert_eq!(whnf(&mut certifier, matched), Ok(term("42")));
 }
 
 #[test]
 fn iota_peels_one_successor_off_a_nat() {
     let mut certifier = certifier();
-    let motive = binder(0, "m");
-    let pred = binder(1, "pred");
-    let hypothesis = binder(2, "ih");
 
     // `match 3 { 0 => 0 | succ(pred, _) => pred }` peels exactly one layer.
-    let term = Term::nat_match(
-        nat(3),
-        Some(&motive),
-        nat_type(),
-        nat(0),
-        &pred,
-        &hypothesis,
-        Term::free_var(&pred),
-    );
+    let matched = term("match 3: (m) => #NatType | 0 => 0 | pred + 1; ih => pred end");
 
-    assert_eq!(whnf(&mut certifier, term), Ok(nat(2)));
+    assert_eq!(whnf(&mut certifier, matched), Ok(term("2")));
+}
+
+/// The switch of `scrutinee` over the literals `1` and `2`, falling through to `99`.
+fn switch(scrutinee: &str) -> Term {
+    term(&fill!(
+        "match ${scrutinee}: (m) => #NatType | 1 => 10 | 2 => 20 | _ => 99 end",
+        scrutinee
+    ))
 }
 
 #[test]
 fn a_switch_takes_the_case_a_literal_names() {
     let mut certifier = certifier();
-    let motive = binder(0, "m");
 
-    let term = Term::switch(
-        nat(2),
-        Some(&motive),
-        nat_type(),
-        [(1u32, nat(10)), (2, nat(20))],
-        nat(99),
-    );
-
-    assert_eq!(whnf(&mut certifier, term), Ok(nat(20)));
+    assert_eq!(whnf(&mut certifier, switch("2")), Ok(term("20")));
 }
 
 #[test]
 fn a_switch_falls_through_to_its_default() {
     let mut certifier = certifier();
-    let motive = binder(0, "m");
 
-    let term = Term::switch(
-        nat(7),
-        Some(&motive),
-        nat_type(),
-        [(1u32, nat(10)), (2, nat(20))],
-        nat(99),
-    );
-
-    assert_eq!(whnf(&mut certifier, term), Ok(nat(99)));
+    assert_eq!(whnf(&mut certifier, switch("7")), Ok(term("99")));
 }
 
 /// A symbolic scrutinee decides nothing, so the switch rebuilds as the neutral term it is rather than guessing an arm.
 #[test]
 fn a_switch_on_a_symbolic_scrutinee_stays_stuck() {
     let mut certifier = certifier();
-    let motive = binder(0, "m");
-    let n = binder(1, "n");
 
-    let term = Term::switch(
-        Term::free_var(&n),
-        Some(&motive),
-        nat_type(),
-        [(1u32, nat(10))],
-        nat(99),
-    );
-
-    let reduced = whnf(&mut certifier, term).expect("a stuck term still reduces");
+    let reduced = whnf(&mut certifier, switch("n")).expect("a stuck term still reduces");
     assert!(matches!(&*reduced, Subterm::Match(_)));
 }
 
 #[test]
 fn a_bool_match_dispatches_on_a_literal() {
     let mut certifier = certifier();
-    let motive = binder(0, "m");
 
-    let term = Term::bool_match(
-        Term::intrinsic(Intrinsic::Bool(true)),
-        Some(&motive),
-        nat_type(),
-        nat(0),
-        nat(1),
-    );
+    let matched = term("match true: (m) => #NatType | false => 0 | true => 1 end");
 
-    assert_eq!(whnf(&mut certifier, term), Ok(nat(1)));
+    assert_eq!(whnf(&mut certifier, matched), Ok(term("1")));
 }
 
 #[test]
 fn projection_selects_a_tuple_field() {
     let mut certifier = certifier();
 
-    let term = Term::proj(Term::tuple([nat(10), nat(20), nat(30)]), 1);
-
-    assert_eq!(whnf(&mut certifier, term), Ok(nat(20)));
+    assert_eq!(whnf(&mut certifier, term("(10, 20, 30).1")), Ok(term("20")));
 }
 
 /// A constructor is projected through the flat runtime view `(tag, payload...)`, so field 1 is payload component 0 — unlike a struct, which has no tag to skip.
 #[test]
 fn projection_skips_a_variants_tag_but_not_a_structs() {
     let mut certifier = certifier();
-    let name = Global::Authored(Qualifier::from(["E"]));
 
-    let variant = Term::proj(
-        Term::variant(name, Vec::<Term>::new(), "some", [nat(42)]),
-        1,
-    );
-    assert_eq!(whnf(&mut certifier, variant), Ok(nat(42)));
+    let variant = term("(#{node = Variant} /E/some(42)).1");
+    assert_eq!(whnf(&mut certifier, variant), Ok(term("42")));
 
-    let struct_ = Term::proj_struct(Term::struct_(name, Vec::<Term>::new(), [nat(42)]), name, 0);
-    assert_eq!(whnf(&mut certifier, struct_), Ok(nat(42)));
+    let struct_ = term("#{field = Struct(/E, 0)} /E { 42 }.0");
+    assert_eq!(whnf(&mut certifier, struct_), Ok(term("42")));
 }
 
+/// Under the binder's own mark a forwarding contracts, and across one it stays as written: `(@x) => f(x)` is a function at `(@x: Nat) -> …`, and `f` one at another type. `f` is assumed, so no binder a probe mints is `f` again.
 #[test]
 fn eta_contracts_a_function_that_only_forwards() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-    let f = binder(1, "f");
-
-    let term = Term::func(
-        [(x, nat_type())],
-        Term::apply(Term::free_var(&f), [Term::free_var(&x)]),
+    let [f, forwarding, hidden, across] = under(
+        &mut certifier,
+        "f: (x: #NatType) -> #NatType",
+        "f, (x: #NatType) => f(x), (@x: #NatType) => f(@x), (@x: #NatType) => f(x)",
     );
 
-    assert_eq!(whnf(&mut certifier, term), Ok(Term::free_var(&f)));
-
-    // Under the binder's own mark a forwarding contracts, and across one it stays as written: `(@x) => f(x)` is a function at `(@x: Nat) -> …`, and `f` one at another type. `f` is assumed, so no binder a later probe mints is `f` again.
-    certifier.assume(&f, &Term::func_type([(x, nat_type())], nat_type()));
-    let hidden = Term::func_marked(
-        [(Plicity::Implicit, x, nat_type())],
-        Term::apply_marked(
-            Term::free_var(&f),
-            [(Plicity::Implicit, Term::free_var(&x))],
-        ),
-    );
-    assert_eq!(whnf(&mut certifier, hidden), Ok(Term::free_var(&f)));
-
-    let across = Term::func_marked(
-        [(Plicity::Implicit, x, nat_type())],
-        Term::apply(Term::free_var(&f), [Term::free_var(&x)]),
-    );
+    assert_eq!(whnf(&mut certifier, forwarding), Ok(f.clone()));
+    assert_eq!(whnf(&mut certifier, hidden), Ok(f));
     assert_eq!(whnf(&mut certifier, across.clone()), Ok(across));
 }
 
@@ -278,28 +176,20 @@ fn eta_contracts_a_function_that_only_forwards() {
 #[test]
 fn eta_declines_when_the_head_mentions_the_binder() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
 
-    let term = Term::func(
-        [(x, nat_type())],
-        Term::apply(Term::free_var(&x), [Term::free_var(&x)]),
-    );
+    let function = term("(x: #NatType) => x(x)");
 
-    assert_eq!(whnf(&mut certifier, term.clone()), Ok(term));
+    assert_eq!(whnf(&mut certifier, function.clone()), Ok(function));
 }
 
 /// A forwarding's argument may be an index no binder of the term binds — one the boundary refuses, which reduction takes all the same: the lambda's own binder is no identity it can be compared with, so the lambda is its own normal form rather than an abort.
 #[test]
 fn an_eta_probes_argument_may_be_a_bound_index() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
 
-    let term = Term::func(
-        [(x, nat_type())],
-        Term::apply(Term::var(Var::bound(3)), [Term::var(Var::bound(2))]),
-    );
+    let function = term("(x: #NatType) => (#{binding = Bound(3)} _)(#{binding = Bound(2)} _)");
 
-    assert_eq!(whnf(&mut certifier, term.clone()), Ok(term));
+    assert_eq!(whnf(&mut certifier, function.clone()), Ok(function));
 }
 
 /// Eta hands back the head as the occurrence spells it, and a reference to a declaration is its instance: `(x) => f@{3}(x)` contracts to `f@{3}`, which unfolds at level 3, where the bare `f` the contraction must not invent stays stuck.
@@ -314,46 +204,39 @@ fn an_eta_probes_argument_may_be_a_bound_index() {
 #[test]
 fn eta_contracts_to_the_instance_the_occurrence_states() {
     let mut certifier = certifier();
-    let (x, y) = (binder(0, "x"), binder(1, "y"));
-    certifier.assume(&y, &nat_type());
-    let f = Global::Authored(Qualifier::from(["f"]));
-    certifier
-        .define(
-            &f,
-            &nat_type(),
-            &Term::type_at(Level::param(UniverseParam(0))),
-            &polymorphic(),
-        )
-        .expect("a name is declared once");
-    let at = |level: u32| Term::instance(f, vec![Level::constant(level)]);
-    // The domain carries the assumed local in the open case, which is what the machine's gate reads, and plays no part in the probe.
-    let forwarding = |head: Term, domain: Term| {
-        Term::func([(x, domain)], Term::apply(head, [Term::free_var(&x)]))
-    };
-    let open = || Term::intrinsic(Intrinsic::nat_add(Term::free_var(&y), nat(1)));
+    declared(
+        &mut certifier,
+        "#{universe_context = {parameter_count = 1}}\nlet /f: #NatType = #{level = u} Type;",
+    );
+    let at = |level: u32| fill!("(#{universes = {levels = [${level}]}} /f)", level);
 
-    for (label, domain) in [("open", open()), ("local-free", nat_type())] {
+    // The domain carries the assumed local in the open case, which is what the machine's gate reads, and plays no part in the probe.
+    for (label, domain) in [("open", "#NatAdd(y, 1)"), ("local-free", "#NatType")] {
+        let [three, one, bare, across] = under(
+            &mut certifier,
+            "y: #NatType",
+            &fill!(
+                "(x: ${domain}) => ${three}(x), (x: ${domain}) => ${one}(x), (x: ${domain}) => /f(x), (@x: ${domain}) => ${three}(x)",
+                domain,
+                three = at(3),
+                one = at(1)
+            ),
+        );
+
         assert_eq!(
-            whnf(&mut certifier, forwarding(at(3), domain.clone())),
-            Ok(Term::type_at(Level::constant(3))),
+            whnf(&mut certifier, three),
+            Ok(term("#{level = 3} Type")),
             "{label}: the contraction did not keep the instance's levels",
         );
         assert_eq!(
-            whnf(&mut certifier, forwarding(at(1), domain.clone())),
-            Ok(Term::type_at(Level::constant(1))),
+            whnf(&mut certifier, one),
+            Ok(term("#{level = 1} Type")),
             "{label}: the contraction read another occurrence's levels",
         );
-
-        let bare = Term::instance(f, Universes::default());
         assert_eq!(
-            whnf(&mut certifier, forwarding(bare.clone(), domain.clone())),
-            Ok(bare),
+            whnf(&mut certifier, bare),
+            Ok(term("/f")),
             "{label}: the contraction invented an instance the occurrence does not state",
-        );
-
-        let across = Term::func_marked(
-            [(Plicity::Implicit, x, domain)],
-            Term::apply(at(3), [Term::free_var(&x)]),
         );
         assert_eq!(
             whnf(&mut certifier, across.clone()),
@@ -367,39 +250,16 @@ fn eta_contracts_to_the_instance_the_occurrence_states() {
 #[test]
 fn a_recursive_application_stays_folded_until_forced() {
     let mut certifier = certifier();
-    let n = binder(0, "n");
-    let motive = binder(1, "m");
-    let pred = binder(2, "pred");
-    let hypothesis = binder(3, "ih");
-    let countdown = binder(4, "countdown");
-    let x = binder(5, "x");
-
-    let body = Term::func(
-        [(n, nat_type())],
-        Term::nat_match(
-            Term::free_var(&n),
-            Some(&motive),
-            nat_type(),
-            nat(0),
-            &pred,
-            &hypothesis,
-            Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
-        ),
-    );
-
-    let group = [(
-        countdown,
-        Term::func_type([(n, nat_type())], nat_type()),
-        body,
-    )];
+    let countdown = |argument: &str| {
+        term(&fill!(
+            "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1; ih => countdown(pred) end; countdown(${argument}))",
+            argument
+        ))
+    };
 
     // Applied to a symbolic argument, it reduces to a folded recursive call.
-    let symbolic = Term::rec(
-        group.clone(),
-        Term::apply(Term::free_var(&countdown), [Term::free_var(&x)]),
-    );
-    let Subterm::Rec(rec) = Term::unwrap_or_clone(symbolic) else {
-        unreachable!("built as a rec")
+    let Subterm::Rec(rec) = Term::unwrap_or_clone(countdown("x")) else {
+        unreachable!("written as a rec")
     };
     let reduced = whnf(&mut certifier, unfold_rec(rec)).expect("ordinary reduction terminates");
     assert!(matches!(
@@ -408,73 +268,40 @@ fn a_recursive_application_stays_folded_until_forced() {
     ));
 
     // Applied to a literal, forcing runs it to the end.
-    let concrete = Term::rec(group, Term::apply(Term::free_var(&countdown), [nat(3)]));
-    assert_eq!(certifier.reduce_forced(concrete), Ok(nat(0)));
+    assert_eq!(certifier.reduce_forced(countdown("3")), Ok(term("0")));
 }
 
 /// A member whose result is a function, forced where it is applied past its own parameters: `f(2)(y)` is the call `f(2)` applied to `y`, so the force reaches through the outer application to the call, and `y`, symbolic, rides along to the answer. Read one level deep, the outer application would be a neutral the force hands back folded.
 #[test]
 fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     let mut certifier = certifier();
-    let n = binder(0, "n");
-    let motive = binder(1, "m");
-    let pred = binder(2, "pred");
-    let hypothesis = binder(3, "ih");
-    let f = binder(4, "f");
-    let x = binder(5, "x");
-    let y = binder(6, "y");
-    let arrow = Term::func_type([(x, nat_type())], nat_type());
-
-    let body = Term::func(
-        [(n, nat_type())],
-        Term::nat_match(
-            Term::free_var(&n),
-            Some(&motive),
-            arrow.clone(),
-            Term::func([(x, nat_type())], Term::free_var(&x)),
-            &pred,
-            &hypothesis,
-            Term::func(
-                [(x, nat_type())],
-                Term::apply(
-                    Term::apply(Term::free_var(&f), [Term::free_var(&pred)]),
-                    [Term::free_var(&x)],
-                ),
-            ),
-        ),
+    let [y, applied] = under(
+        &mut certifier,
+        "y: #NatType",
+        "y, #{node = Rec} (let f: (n: #NatType) -> (x: #NatType) -> #NatType = (n: #NatType) => match n: (m) => (x: #NatType) -> #NatType | 0 => (x: #NatType) => x | pred + 1; ih => (x: #NatType) => f(pred)(x) end; f(2)(y))",
     );
 
-    let term = Term::rec(
-        [(f, Term::func_type([(n, nat_type())], arrow), body)],
-        Term::apply(
-            Term::apply(Term::free_var(&f), [nat(2)]),
-            [Term::free_var(&y)],
-        ),
-    );
-
-    assert_eq!(certifier.reduce_forced(term), Ok(Term::free_var(&y)));
+    assert_eq!(certifier.reduce_forced(applied), Ok(y));
 }
 
 /// A boolean operation reduces its right operand only once its left is a literal. The left here is a local, so the right — a fold that would answer `true` — is handed back as written; with the left `true`, the same right folds and so does the whole. This is the rule that keeps weak-head reduction of a `&&`/`||` tree from being its full normalization, which on a web of predicate definitions naming each other twice would be `2^n` under every demand — see `reduce_bool_binary`.
 #[test]
 fn a_stuck_left_operand_leaves_the_right_as_written() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-    certifier.assume(&x, &Term::intrinsic(Intrinsic::BoolType));
-    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
-    let folds = Term::intrinsic(Intrinsic::BoolAnd(literal(true), literal(true)));
+    let [stuck, open] = under(
+        &mut certifier,
+        "x: #BoolType",
+        "#BoolAnd(x, #BoolAnd(true, true)), #BoolAnd(true, #BoolAnd(true, true))",
+    );
 
-    let stuck = Term::intrinsic(Intrinsic::BoolAnd(Term::free_var(&x), folds.clone()));
     assert_eq!(
         whnf(&mut certifier, stuck.clone()),
         Ok(stuck),
         "a stuck left settles the fold, and the right is not reduced for an answer it cannot change"
     );
-
-    let open = Term::intrinsic(Intrinsic::BoolAnd(literal(true), folds));
     assert_eq!(
         whnf(&mut certifier, open),
-        Ok(literal(true)),
+        Ok(term("true")),
         "a literal left reads the right and folds"
     );
 }
@@ -483,15 +310,15 @@ fn a_stuck_left_operand_leaves_the_right_as_written() {
 #[test]
 fn an_equality_reads_its_right_operand() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-    certifier.assume(&x, &Term::intrinsic(Intrinsic::BoolType));
-    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
-    let folds = Term::intrinsic(Intrinsic::BoolAnd(literal(true), literal(true)));
+    let [x, equality] = under(
+        &mut certifier,
+        "x: #BoolType",
+        "x, #BoolEql(x, #BoolAnd(true, true))",
+    );
 
-    let equality = Term::intrinsic(Intrinsic::BoolEql(Term::free_var(&x), folds));
     assert_eq!(
         whnf(&mut certifier, equality),
-        Ok(Term::free_var(&x)),
+        Ok(x),
         "the right folds to `true`, and `x == true` is `x`"
     );
 }
@@ -499,29 +326,15 @@ fn an_equality_reads_its_right_operand() {
 #[test]
 fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
     let mut certifier = certifier();
-    let n = binder(0, "n");
-    let unused = binder(1, "unused");
-    let value = binder(2, "value");
-    let identity = Term::func([(n, nat_type())], Term::free_var(&n));
-
     // The elaborator's twin, put to the certifier: a group whose member never mentions itself has no fixed point to keep, so opening its tail reduces past the projection and leaves the member's own `Func`. Declining every head that is not still a projection would keep the folded spelling with that `Func` in hand, and the two checkers would read one declaration two ways.
-    let term: Term = Term::apply(
-        Term::rec(
-            [(
-                unused,
-                Term::func_type([(n, nat_type())], nat_type()),
-                identity.clone(),
-            )],
-            identity,
-        ),
-        [Term::free_var(&value)],
+    let [value, applied] = under(
+        &mut certifier,
+        "value: #NatType",
+        "value, (#{node = Rec} (let unused: (n: #NatType) -> #NatType = (n: #NatType) => n; (n: #NatType) => n))(value)",
     );
-    let Subterm::Apply(apply) = Term::unwrap_or_clone(term) else {
-        unreachable!()
+    let Subterm::Apply(apply) = Term::unwrap_or_clone(applied) else {
+        unreachable!("written as an application")
     };
 
-    assert_eq!(
-        unfold_rec_apply(&mut certifier, apply),
-        Ok(Some(Term::free_var(&value)))
-    );
+    assert_eq!(unfold_rec_apply(&mut certifier, apply), Ok(Some(value)));
 }

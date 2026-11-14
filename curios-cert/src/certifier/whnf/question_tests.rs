@@ -2,10 +2,25 @@
 
 use {
     super::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::{Env, test_support::*},
-    curios_core::{Free, Intrinsic, Reducer, Term},
+    curios_common::fill,
+    curios_core::{Reducer, Term},
 };
+
+/// Assume `guard` holds, for the arm `inside` runs in.
+fn guarded<T>(
+    certifier: &mut Certifier,
+    guard: &Term,
+    inside: impl FnOnce(&mut Certifier) -> T,
+) -> T {
+    certifier.scoped(|certifier| {
+        certifier
+            .refine(guard.clone(), term("true"))
+            .expect("the equation records");
+        inside(certifier)
+    })
+}
 
 /// A guard answers a term the carriers' readers hold equal to it: its sum commuted, and its dual with the sum commuted, neither a spelling the key is held under.
 ///
@@ -14,27 +29,14 @@ use {
 /// Mutation-checked: with `answers` holding only a term identical to its key, both respellings stay stuck.
 #[test]
 fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
-    let a = binder(1, "a");
-    let b = binder(2, "b");
-    let sum = |left: &Free, right: &Free| {
-        Term::intrinsic(Intrinsic::nat_add(
-            Term::free_var(left),
-            Term::free_var(right),
-        ))
-    };
-    let guard = Term::intrinsic(Intrinsic::nat_lt(sum(&a, &b), nat(10)));
-    let commuted = Term::intrinsic(Intrinsic::nat_lt(sum(&b, &a), nat(10)));
-    let dual = Term::intrinsic(Intrinsic::NatLe(nat(10), sum(&b, &a)));
-
     let mut certifier = certifier();
-    certifier.assume(&a, &nat_type());
-    certifier.assume(&b, &nat_type());
+    let [guard, commuted, dual] = under(
+        &mut certifier,
+        "a: #NatType, b: #NatType",
+        "#NatLt(#NatAdd(a, b), 10), #NatLt(#NatAdd(b, a), 10), #NatLe(10, #NatAdd(b, a))",
+    );
 
-    certifier.scoped(|certifier| {
-        certifier
-            .refine(guard.clone(), Term::intrinsic(Intrinsic::Bool(true)))
-            .expect("the equation records");
-
+    guarded(&mut certifier, &guard, |certifier| {
         assert_eq!(
             whnf(certifier, commuted.clone())
                 .expect("reduces")
@@ -42,7 +44,7 @@ fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
             Some(true)
         );
         assert_eq!(
-            whnf(certifier, dual.clone()).expect("reduces").as_bool(),
+            whnf(certifier, dual).expect("reduces").as_bool(),
             Some(false)
         );
     });
@@ -54,76 +56,27 @@ fn a_guard_answers_a_term_the_readers_hold_equal_to_it() {
     );
 }
 
-/// The binders and terms the tests of what reduction asks conversion share: `a`, `b`, `c` at `Nat`, `f: (Nat) -> Nat` and `h: (Bool) -> Nat`.
-struct Asked {
-    a: Free,
-    b: Free,
-    c: Free,
-    f: Free,
-    h: Free,
-}
+/// The hypotheses the tests of what reduction asks conversion share: `a`, `b`, `c` at `Nat`, `f: (Nat) -> Nat` and `h: (Bool) -> Nat`.
+const ASKED: &str = "a: #NatType, b: #NatType, c: #NatType, f: (x: #NatType) -> #NatType, h: (flag: #BoolType) -> #NatType";
 
-impl Asked {
-    fn over(certifier: &mut Certifier) -> Self {
-        let asked = Asked {
-            a: binder(1, "a"),
-            b: binder(2, "b"),
-            c: binder(3, "c"),
-            f: binder(4, "f"),
-            h: binder(5, "h"),
-        };
-        for binder in [&asked.a, &asked.b, &asked.c] {
-            certifier.assume(binder, &nat_type());
-        }
-        certifier.assume(
-            &asked.f,
-            &Term::func_type([(binder(6, "x"), nat_type())], nat_type()),
-        );
-        let bool_type = Term::intrinsic(Intrinsic::BoolType);
-        certifier.assume(
-            &asked.h,
-            &Term::func_type([(binder(7, "flag"), bool_type)], nat_type()),
-        );
-        asked
-    }
+/// `f(a + b) < 10`, the guard.
+const GUARD: &str = "#NatLt(f(#NatAdd(a, b)), 10)";
 
-    /// `h(flag) < 5`.
-    fn over_flag(&self, flag: Term) -> Term {
-        Term::intrinsic(Intrinsic::nat_lt(
-            Term::apply(Term::free_var(&self.h), [flag]),
-            nat(5),
-        ))
-    }
+/// `f(b + a) < 10`, which conversion holds equal to [`GUARD`] and no reader of the carriers' algebra does: its one atom is another term.
+const RESPELLED: &str = "#NatLt(f(#NatAdd(b, a)), 10)";
 
-    /// `f(left + right)`.
-    fn call(&self, left: &Free, right: &Free) -> Term {
-        Term::apply(
-            Term::free_var(&self.f),
-            [Term::intrinsic(Intrinsic::nat_add(
-                Term::free_var(left),
-                Term::free_var(right),
-            ))],
-        )
-    }
-
-    /// `f(a + b) < 10`, the guard, and `f(b + a) < 10`, which conversion holds equal to it and no reader of the carriers' algebra does: its one atom is another term.
-    fn guard(&self) -> Term {
-        Term::intrinsic(Intrinsic::nat_lt(self.call(&self.a, &self.b), nat(10)))
-    }
-
-    fn respelled(&self) -> Term {
-        Term::intrinsic(Intrinsic::nat_lt(self.call(&self.b, &self.a), nat(10)))
-    }
-
-    /// Assume the guard holds, for the arm `inside` runs in.
-    fn under<T>(&self, certifier: &mut Certifier, inside: impl FnOnce(&mut Certifier) -> T) -> T {
-        certifier.scoped(|certifier| {
-            certifier
-                .refine(self.guard(), Term::intrinsic(Intrinsic::Bool(true)))
-                .expect("the equation records");
-            inside(certifier)
-        })
-    }
+/// [`GUARD`], [`RESPELLED`] and then `terms`, each written over [`ASKED`]'s hypotheses opened in `certifier`.
+fn asked<const N: usize>(certifier: &mut Certifier, terms: &str) -> [Term; N] {
+    under(
+        certifier,
+        ASKED,
+        &fill!(
+            "${guard}, ${respelled}, ${terms}",
+            guard = GUARD,
+            respelled = RESPELLED,
+            terms
+        ),
+    )
 }
 
 /// A guard answers a term the certifier's own conversion holds equal to its scrutinee: a call respelled in its argument, the guard's dual over that call, and — where the scrutinee is no operation of the algebra — the call itself. The control is a call on another argument.
@@ -132,32 +85,30 @@ impl Asked {
 #[test]
 fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
     let mut certifier = certifier();
-    let asked = Asked::over(&mut certifier);
+    let [guard, respelled, dual, other, key, call, other_call] = asked(
+        &mut certifier,
+        "#NatLe(10, f(#NatAdd(b, a))), #NatLt(f(#NatAdd(a, c)), 10), f(#NatAdd(a, b)), f(#NatAdd(b, a)), f(#NatAdd(a, c))",
+    );
 
-    asked.under(&mut certifier, |certifier| {
+    guarded(&mut certifier, &guard, |certifier| {
         assert_eq!(
-            whnf(certifier, asked.respelled())
-                .expect("reduces")
-                .as_bool(),
+            whnf(certifier, respelled).expect("reduces").as_bool(),
             Some(true)
         );
-        let dual = Term::intrinsic(Intrinsic::NatLe(nat(10), asked.call(&asked.b, &asked.a)));
         assert_eq!(
             whnf(certifier, dual).expect("reduces").as_bool(),
             Some(false)
         );
-        let other = Term::intrinsic(Intrinsic::nat_lt(asked.call(&asked.a, &asked.c), nat(10)));
         assert_eq!(whnf(certifier, other).expect("reduces").as_bool(), None);
     });
 
     certifier.scoped(|certifier| {
         certifier
-            .refine(asked.call(&asked.a, &asked.b), nat(0))
+            .refine(key, term("0"))
             .expect("the equation records");
 
-        assert_eq!(whnf(certifier, asked.call(&asked.b, &asked.a)), Ok(nat(0)));
-        let other = asked.call(&asked.a, &asked.c);
-        assert_eq!(whnf(certifier, other.clone()), Ok(other));
+        assert_eq!(whnf(certifier, call), Ok(term("0")));
+        assert_eq!(whnf(certifier, other_call.clone()), Ok(other_call));
     });
 }
 
@@ -167,15 +118,13 @@ fn a_guard_answers_a_term_conversion_holds_equal_to_it() {
 #[test]
 fn a_shared_analysis_reads_a_term_by_reduction_that_asks_nothing() {
     let mut certifier = certifier();
-    let asked = Asked::over(&mut certifier);
+    let [guard, respelled] = asked(&mut certifier, "");
 
-    asked.under(&mut certifier, |certifier| {
-        let read = Env::force(certifier, &asked.respelled()).expect("reduces");
+    guarded(&mut certifier, &guard, |certifier| {
+        let read = Env::force(certifier, &respelled).expect("reduces");
         assert_eq!(read.as_bool(), None);
         assert_eq!(
-            whnf(certifier, asked.respelled())
-                .expect("reduces")
-                .as_bool(),
+            whnf(certifier, respelled).expect("reduces").as_bool(),
             Some(true),
             "the judgment's own reduction answers it, or the reading above proves nothing"
         );
@@ -188,22 +137,26 @@ fn a_shared_analysis_reads_a_term_by_reduction_that_asks_nothing() {
 #[test]
 fn a_reduct_is_remembered_by_the_reduction_that_took_it() {
     let orders = |certifier: &mut Certifier| {
-        let asked = Asked::over(certifier);
+        let [guard, respelled] = asked(certifier, "");
         // Through the forced entry point on both sides, which reads and writes the forced table and, beneath it, the unforced one.
         let judged = |certifier: &mut Certifier| {
             certifier
-                .reduce_forced(asked.respelled())
+                .reduce_forced(respelled.clone())
                 .expect("reduces")
                 .as_bool()
         };
         let read = |certifier: &mut Certifier| {
-            Env::force(certifier, &asked.respelled())
+            Env::force(certifier, &respelled)
                 .expect("reduces")
                 .as_bool()
         };
 
-        let judged_first = asked.under(certifier, |certifier| [judged(certifier), read(certifier)]);
-        let read_first = asked.under(certifier, |certifier| [read(certifier), judged(certifier)]);
+        let judged_first = guarded(certifier, &guard, |certifier| {
+            [judged(certifier), read(certifier)]
+        });
+        let read_first = guarded(certifier, &guard, |certifier| {
+            [read(certifier), judged(certifier)]
+        });
         [judged_first, read_first]
     };
 
@@ -222,76 +175,32 @@ fn a_reduct_is_remembered_by_the_reduction_that_took_it() {
 #[test]
 fn a_question_is_answered_by_reduction_that_asks_nothing() {
     let mut certifier = certifier();
-    let asked = Asked::over(&mut certifier);
+    let [guard, respelled, over_guard, nested] = asked(
+        &mut certifier,
+        &fill!(
+            "#NatLt(h(${guard}), 5), #NatLt(h(${respelled}), 5)",
+            guard = GUARD,
+            respelled = RESPELLED
+        ),
+    );
 
-    asked.under(&mut certifier, |certifier| {
+    guarded(&mut certifier, &guard, |certifier| {
         certifier
-            .refine(
-                asked.over_flag(asked.guard()),
-                Term::intrinsic(Intrinsic::Bool(true)),
-            )
+            .refine(over_guard, term("true"))
             .expect("the equation records");
 
         assert_eq!(
-            whnf(certifier, asked.respelled())
-                .expect("reduces")
-                .as_bool(),
+            whnf(certifier, respelled).expect("reduces").as_bool(),
             Some(true),
             "one question deep the argument is decided, or the refusal below proves nothing"
         );
-        let nested = asked.over_flag(asked.respelled());
         assert_eq!(whnf(certifier, nested).expect("reduces").as_bool(), None);
     });
 }
 
-/// The binders the tests of a call under two proofs share: `a` at `Nat`, a proposition `bound`, two proofs of it, and `w: (n: Nat, at: bound) -> Nat`.
-struct Proved {
-    a: Free,
-    w: Free,
-    p1: Free,
-    p2: Free,
-}
-
-impl Proved {
-    fn over(certifier: &mut Certifier) -> Self {
-        let proved = Proved {
-            a: binder(1, "a"),
-            w: binder(2, "w"),
-            p1: binder(3, "p1"),
-            p2: binder(4, "p2"),
-        };
-        let bound = binder(5, "bound");
-        let proposition = Term::free_var(&bound);
-        certifier.assume(&proved.a, &nat_type());
-        certifier.assume(&bound, &Term::prop());
-        certifier.assume(
-            &proved.w,
-            &Term::func_type(
-                [
-                    (binder(6, "n"), nat_type()),
-                    (binder(7, "at"), proposition.clone()),
-                ],
-                nat_type(),
-            ),
-        );
-        certifier.assume(&proved.p1, &proposition);
-        certifier.assume(&proved.p2, &proposition);
-        proved
-    }
-
-    /// `w(a, proof)`.
-    fn call(&self, proof: &Free) -> Term {
-        Term::apply(
-            Term::free_var(&self.w),
-            [Term::free_var(&self.a), Term::free_var(proof)],
-        )
-    }
-
-    /// `w(a, proof) < 10`.
-    fn below(&self, proof: &Free) -> Term {
-        Term::intrinsic(Intrinsic::nat_lt(self.call(proof), nat(10)))
-    }
-}
+/// The hypotheses the tests of a call under two proofs share: `a` at `Nat`, a proposition `bound`, two proofs of it, and `w: (n: Nat, at: bound) -> Nat`.
+const PROVED: &str =
+    "a: #NatType, bound: Prop, w: (n: #NatType, at: bound) -> #NatType, p1: bound, p2: bound";
 
 /// A guard answers a call under another proof of its bound, and so does a match on the call itself. `w(a, p2) < 10` is the scrutinee `w(a, p1) < 10` to the certifier's conversion, which reads no proof, and it names a proof the key does not: so it is no reduct of the key. The filter that keeps settlement rare (`curios_analysis::could_reduce_to`) counts the binders a form names that the key does not, and passes over one that is itself a proof.
 ///
@@ -299,17 +208,15 @@ impl Proved {
 #[test]
 fn a_guard_answers_a_call_under_another_proof_of_its_bound() {
     let mut certifier = certifier();
-    let proved = Proved::over(&mut certifier);
+    let [below_first, below_second, call_first, call_second] = under(
+        &mut certifier,
+        PROVED,
+        "#NatLt(w(a, p1), 10), #NatLt(w(a, p2), 10), w(a, p1), w(a, p2)",
+    );
 
-    certifier.scoped(|certifier| {
-        certifier
-            .refine(
-                proved.below(&proved.p1),
-                Term::intrinsic(Intrinsic::Bool(true)),
-            )
-            .expect("the equation records");
+    guarded(&mut certifier, &below_first, |certifier| {
         assert_eq!(
-            whnf(certifier, proved.below(&proved.p2))
+            whnf(certifier, below_second.clone())
                 .expect("reduces")
                 .as_bool(),
             Some(true)
@@ -317,13 +224,13 @@ fn a_guard_answers_a_call_under_another_proof_of_its_bound() {
     });
     certifier.scoped(|certifier| {
         certifier
-            .refine(proved.call(&proved.p1), nat(0))
+            .refine(call_first, term("0"))
             .expect("the equation records");
-        assert_eq!(whnf(certifier, proved.call(&proved.p2)), Ok(nat(0)));
+        assert_eq!(whnf(certifier, call_second), Ok(term("0")));
     });
 
     assert_eq!(
-        whnf(&mut certifier, proved.below(&proved.p2))
+        whnf(&mut certifier, below_second)
             .expect("reduces")
             .as_bool(),
         None,
@@ -337,32 +244,18 @@ fn a_guard_answers_a_call_under_another_proof_of_its_bound() {
 #[test]
 fn a_form_naming_another_binder_outside_a_proof_is_put_to_no_equation() {
     let mut certifier = certifier();
-    let asked = Asked::over(&mut certifier);
-    let below = |argument: Term| {
-        let call = Term::apply(Term::free_var(&asked.f), [argument]);
-        Term::intrinsic(Intrinsic::nat_lt(call, nat(10)))
-    };
-    let erased = Intrinsic::NatMul(nat(0), Term::free_var(&asked.c));
-    let guard = below(Term::free_var(&asked.b));
-    let respelled = below(Term::intrinsic(Intrinsic::nat_add(
-        Term::free_var(&asked.b),
-        Term::intrinsic(erased),
-    )));
+    let [guard, respelled] = under(
+        &mut certifier,
+        ASKED,
+        "#NatLt(f(b), 10), #NatLt(f(#NatAdd(b, #NatMul(0, c))), 10)",
+    );
 
     assert_eq!(
-        convert(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::BoolType),
-            &guard,
-            &respelled
-        ),
+        convert(&mut certifier, &term("#BoolType"), &guard, &respelled),
         Ok(true),
         "the two convert, or the miss below is no limit of the filter"
     );
-    certifier.scoped(|certifier| {
-        certifier
-            .refine(guard, Term::intrinsic(Intrinsic::Bool(true)))
-            .expect("the equation records");
+    guarded(&mut certifier, &guard, |certifier| {
         assert_eq!(whnf(certifier, respelled).expect("reduces").as_bool(), None);
     });
 }
@@ -373,20 +266,23 @@ fn a_form_naming_another_binder_outside_a_proof_is_put_to_no_equation() {
 #[test]
 fn a_verdict_is_remembered_by_the_reduction_that_reached_it() {
     let orders = |certifier: &mut Certifier| {
-        let asked = Asked::over(certifier);
-        let bool_type = Term::intrinsic(Intrinsic::BoolType);
-        let truth = Term::intrinsic(Intrinsic::Bool(true));
+        let [guard, respelled] = asked(certifier, "");
+        let (bool_type, truth) = (term("#BoolType"), term("true"));
         let judged = |certifier: &mut Certifier| {
-            convert(certifier, &bool_type, &asked.respelled(), &truth).expect("compares")
+            convert(certifier, &bool_type, &respelled, &truth).expect("compares")
         };
         let read = |certifier: &mut Certifier| {
             certifier
-                .plainly(|certifier| convert(certifier, &bool_type, &asked.respelled(), &truth))
+                .plainly(|certifier| convert(certifier, &bool_type, &respelled, &truth))
                 .expect("compares")
         };
 
-        let judged_first = asked.under(certifier, |certifier| [judged(certifier), read(certifier)]);
-        let read_first = asked.under(certifier, |certifier| [read(certifier), judged(certifier)]);
+        let judged_first = guarded(certifier, &guard, |certifier| {
+            [judged(certifier), read(certifier)]
+        });
+        let read_first = guarded(certifier, &guard, |certifier| {
+            [read(certifier), judged(certifier)]
+        });
         [judged_first, read_first]
     };
 
@@ -405,9 +301,13 @@ fn a_verdict_is_remembered_by_the_reduction_that_reached_it() {
 #[test]
 fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
     let orders = |certifier: &mut Certifier| {
-        let asked = Asked::over(certifier);
-        let probe = Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&asked.c), nat(3)));
-        let inner = Term::intrinsic(Intrinsic::BoolAnd(asked.respelled(), probe.clone()));
+        let [guard, _, probe, inner] = asked(
+            certifier,
+            &fill!(
+                "#NatLt(c, 3), #BoolAnd(${respelled}, #NatLt(c, 3))",
+                respelled = RESPELLED
+            ),
+        );
         let judged = |certifier: &mut Certifier| {
             certifier
                 .reduce_forced(probe.clone())
@@ -416,19 +316,19 @@ fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
         };
         let read =
             |certifier: &mut Certifier| Env::force(certifier, &probe).expect("reduces").as_bool();
-        let under = |certifier: &mut Certifier,
-                     inside: &dyn Fn(&mut Certifier) -> [Option<bool>; 2]| {
-            asked.under(certifier, |certifier| {
+        let both = |certifier: &mut Certifier,
+                    inside: &dyn Fn(&mut Certifier) -> [Option<bool>; 2]| {
+            guarded(certifier, &guard, |certifier| {
                 certifier
-                    .refine(inner.clone(), Term::intrinsic(Intrinsic::Bool(true)))
+                    .refine(inner.clone(), term("true"))
                     .expect("the equation records");
                 inside(certifier)
             })
         };
 
         [
-            under(certifier, &|certifier| [judged(certifier), read(certifier)]),
-            under(certifier, &|certifier| [read(certifier), judged(certifier)]),
+            both(certifier, &|certifier| [judged(certifier), read(certifier)]),
+            both(certifier, &|certifier| [read(certifier), judged(certifier)]),
         ]
     };
 
@@ -447,29 +347,28 @@ fn a_reduced_spelling_is_settled_by_the_reduction_that_asks_for_it() {
 #[test]
 fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
     let mut certifier = certifier();
-    let asked = Asked::over(&mut certifier);
-    let left = asked.call(&asked.a, &asked.b);
-    let right = asked.call(&asked.b, &asked.a);
+    let [equal, at_most, difference, other, undecided] = under(
+        &mut certifier,
+        ASKED,
+        &fill!(
+            "#NatEql(${left}, ${right}), #NatLe(${left}, ${right}), #NatSub(${left}, ${right}), #NatEql(${left}, f(#NatAdd(a, c))), #NatLt(${left}, #NatMul(${right}, c))",
+            left = "f(#NatAdd(a, b))",
+            right = "f(#NatAdd(b, a))"
+        ),
+    );
 
-    let equal = Term::intrinsic(Intrinsic::nat_eql(left.clone(), right.clone()));
     assert_eq!(
         whnf(&mut certifier, equal.clone())
             .expect("reduces")
             .as_bool(),
         Some(true)
     );
-    let at_most = Term::intrinsic(Intrinsic::nat_lte(left.clone(), right.clone()));
     assert_eq!(
         whnf(&mut certifier, at_most).expect("reduces").as_bool(),
         Some(true)
     );
-    let difference = Term::intrinsic(Intrinsic::nat_sub(left.clone(), right.clone()));
-    assert_eq!(whnf(&mut certifier, difference), Ok(nat(0)));
+    assert_eq!(whnf(&mut certifier, difference), Ok(term("0")));
 
-    let other = Term::intrinsic(Intrinsic::nat_eql(
-        left.clone(),
-        asked.call(&asked.a, &asked.c),
-    ));
     assert_eq!(
         whnf(&mut certifier, other).expect("reduces").as_bool(),
         None
@@ -483,10 +382,6 @@ fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
         "plain reduction takes no fold again"
     );
 
-    let undecided = Term::intrinsic(Intrinsic::nat_lt(
-        left,
-        Term::intrinsic(Intrinsic::NatMul(right, Term::free_var(&asked.c))),
-    ));
     let plain = Env::force(&mut certifier, &undecided).expect("reduces");
     assert_eq!(whnf(&mut certifier, undecided), Ok(plain));
 }
@@ -497,16 +392,14 @@ fn a_stuck_fold_is_taken_again_over_atoms_conversion_holds_one() {
 #[test]
 fn a_fold_inside_a_question_is_not_taken_again() {
     let mut certifier = certifier();
-    let asked = Asked::over(&mut certifier);
-    let h = &asked.h;
-    let equal = Term::intrinsic(Intrinsic::nat_eql(
-        asked.call(&asked.a, &asked.b),
-        asked.call(&asked.b, &asked.a),
-    ));
-    let nested = Term::intrinsic(Intrinsic::nat_eql(
-        Term::apply(Term::free_var(h), [equal.clone()]),
-        Term::apply(Term::free_var(h), [Term::intrinsic(Intrinsic::Bool(true))]),
-    ));
+    let [equal, nested] = under(
+        &mut certifier,
+        ASKED,
+        &fill!(
+            "${equal}, #NatEql(h(${equal}), h(true))",
+            equal = "#NatEql(f(#NatAdd(a, b)), f(#NatAdd(b, a)))"
+        ),
+    );
 
     assert_eq!(
         whnf(&mut certifier, equal).expect("reduces").as_bool(),
@@ -519,45 +412,32 @@ fn a_fold_inside_a_question_is_not_taken_again() {
     );
 }
 
+/// A `Bool` match on `${scrutinee}` at `Nat`: `2` where it is false, `1` where it is true.
+const ON_BOOL: &str = "match ${scrutinee}: (_) => #NatType | false => 2 | true => 1 end";
+
 /// A stuck elimination takes the arm the carriers' algebra reads its scrutinee as, in both reductions: a `Bool` match on `(a < b && c < b) && ¬(a < b)`, a contradiction across connectives no fold sees, is its false arm, and a structural `Nat` match on `(a + b + 1) * (b + a + 1)`, whose distribution has a floor, is its successor arm. Plain reduction takes both, the theory asking no judgment. The controls are a connective the decision diagram leaves open and a product with no floor, whose matches stand. `curios-elab`'s `reduce::question_tests` holds this proposition under this name.
 #[test]
 fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     let mut certifier = certifier();
-    let asked = Asked::over(&mut certifier);
-    let [a, b, c] = [&asked.a, &asked.b, &asked.c].map(Term::free_var);
-    let less =
-        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::nat_lt(left.clone(), right.clone()));
-    let and = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolAnd(left, right));
-    let not = |term: Term| {
-        Term::intrinsic(Intrinsic::BoolXor(
-            term,
-            Term::intrinsic(Intrinsic::Bool(true)),
-        ))
-    };
-    let add = |left: &Term, right: &Term| {
-        Term::intrinsic(Intrinsic::nat_add(left.clone(), right.clone()))
-    };
-    let product = |floor: usize| {
-        Term::intrinsic(Intrinsic::nat_mul(
-            Term::intrinsic(Intrinsic::nat_add(add(&a, &b), nat(floor))),
-            Term::intrinsic(Intrinsic::nat_add(add(&b, &a), nat(floor))),
-        ))
-    };
-    let on_bool = |scrutinee: Term| Term::bool_match(scrutinee, None, nat_type(), nat(2), nat(1));
-    let on_nat = |scrutinee: Term| {
-        Term::nat_match(
-            scrutinee,
-            None,
-            nat_type(),
-            nat(10),
-            &binder(20, "pred"),
-            &binder(21, "hypothesis"),
-            nat(20),
+    let on_bool = |scrutinee: &str| fill!(ON_BOOL, scrutinee);
+    let on_product = |floor: usize| {
+        fill!(
+            "match #NatMul(#NatAdd(#NatAdd(a, b), ${floor}), #NatAdd(#NatAdd(b, a), ${floor})): (_) => #NatType | 0 => 10 | pred + 1; hypothesis => 20 end",
+            floor
         )
     };
+    let [contradiction, successor, open_connective, open_product] = under(
+        &mut certifier,
+        ASKED,
+        &[
+            on_bool("#BoolAnd(#BoolAnd(#NatLt(a, b), #NatLt(c, b)), #BoolXor(#NatLt(a, b), true))"),
+            on_product(1),
+            on_bool("#BoolAnd(#NatLt(a, b), #NatLt(c, b))"),
+            on_product(0),
+        ]
+        .join(", "),
+    );
 
-    let contradiction = on_bool(and(and(less(&a, &b), less(&c, &b)), not(less(&a, &b))));
-    let successor = on_nat(product(1));
     for decided in [&contradiction, &successor] {
         let arm = whnf(&mut certifier, decided.clone()).expect("reduces");
         assert!(arm.as_nat().is_some(), "{decided:?} stands as {arm:?}");
@@ -567,10 +447,10 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
             "plain reduction takes the arm too"
         );
     }
-    assert_eq!(whnf(&mut certifier, contradiction), Ok(nat(2)));
-    assert_eq!(whnf(&mut certifier, successor), Ok(nat(20)));
+    assert_eq!(whnf(&mut certifier, contradiction), Ok(term("2")));
+    assert_eq!(whnf(&mut certifier, successor), Ok(term("20")));
 
-    for open in [on_bool(and(less(&a, &b), less(&c, &b))), on_nat(product(0))] {
+    for open in [open_connective, open_product] {
         let stuck = whnf(&mut certifier, open.clone()).expect("reduces");
         assert!(stuck.as_nat().is_none(), "{open:?} takes an arm: {stuck:?}");
     }
@@ -580,34 +460,33 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
 #[test]
 fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alone() {
     let mut certifier = certifier();
-    let asked = Asked::over(&mut certifier);
-    let [b, c] = [&asked.b, &asked.c].map(Term::free_var);
-    let less =
-        |left: &Term, right: &Term| Term::intrinsic(Intrinsic::nat_lt(left.clone(), right.clone()));
-    let and = |left: Term, right: Term| Term::intrinsic(Intrinsic::BoolAnd(left, right));
-    let not = |term: Term| {
-        Term::intrinsic(Intrinsic::BoolXor(
-            term,
-            Term::intrinsic(Intrinsic::Bool(true)),
-        ))
+    let on = |other: &str| {
+        fill!(
+            ON_BOOL,
+            scrutinee = fill!(
+                "#BoolAnd(#BoolAnd(#NatLt(f(#NatAdd(a, b)), c), #NatLt(b, c)), #BoolXor(#NatLt(${other}, c), true))",
+                other
+            )
+        )
     };
-    let on = |other: Term| {
-        let scrutinee = and(
-            and(less(&asked.call(&asked.a, &asked.b), &c), less(&b, &c)),
-            not(less(&other, &c)),
-        );
-        Term::bool_match(scrutinee, None, nat_type(), nat(2), nat(1))
-    };
+    let [classed, other] = under(
+        &mut certifier,
+        ASKED,
+        &fill!(
+            "${classed}, ${other}",
+            classed = on("f(#NatAdd(b, a))"),
+            other = on("f(#NatAdd(a, c))")
+        ),
+    );
 
-    let classed = on(asked.call(&asked.b, &asked.a));
-    assert_eq!(whnf(&mut certifier, classed.clone()), Ok(nat(2)));
+    assert_eq!(whnf(&mut certifier, classed.clone()), Ok(term("2")));
     let plain = Env::force(&mut certifier, &classed).expect("reduces");
     assert!(
         plain.as_nat().is_none(),
         "plain reduction classed {classed:?}"
     );
 
-    let other = whnf(&mut certifier, on(asked.call(&asked.a, &asked.c))).expect("reduces");
+    let other = whnf(&mut certifier, other).expect("reduces");
     assert!(
         other.as_nat().is_none(),
         "a call on another argument classed: {other:?}"
