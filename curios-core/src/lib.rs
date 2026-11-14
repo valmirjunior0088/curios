@@ -171,10 +171,10 @@ pub use term::{
     Ascribed, Bang, Bind, Carrier, Cases, Field, Foreign, FormerEta, Func, FuncType, Guard,
     HeadTag, ImplicitOrigin, InductArm, InductType, Infix, Instance, Let, LetBinding,
     LevelDifferences, Match, MatchResult, Matrix, MentionCache, Mentions, MentionsIter,
-    MetaRenaming, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Method, Names, NumLit, Pattern,
-    Proj, Ranked, Rec, RecGroup, RecMemberScopes, Row, ScalarCache, Scalars, Slot, Sort,
+    MetaRenaming, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Method, Names, NumLit, Paired,
+    Pattern, Proj, Ranked, Rec, RecGroup, RecMemberScopes, Row, ScalarCache, Scalars, Slot, Sort,
     SpineEntries, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, TupleType,
-    Variant, WitnessOrigin, former_eta,
+    Variant, WitnessOrigin, former_eta, paired,
 };
 
 mod walk;

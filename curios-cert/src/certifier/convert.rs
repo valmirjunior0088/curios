@@ -29,16 +29,16 @@ mod test_support;
 mod tests;
 
 use {
-    super::{Certifier, Converted, Counted, Error, Sort, synth_neutral, unfold_spelling},
+    super::{Certifier, Converted, Counted, Error, InductAt, Sort, synth_neutral, unfold_spelling},
     curios_analysis::{
         Classes, Within, case_target_indices, pinned_instance, struct_reaches_itself,
     },
     curios_common::recurse,
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Func, FuncType, Global, InductType,
-        Instance, Lockstep, Many, Match, MatchResult, Probe, Proj, Quality, ReduceError, Reducer,
-        Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Universes,
-        Variant, instantiate_universes,
+        Instance, Lockstep, Many, Match, MatchResult, Paired, Probe, Proj, Quality, ReduceError,
+        Reducer, Scope, Step, Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        Universes, Variant, instantiate_universes, paired,
     },
 };
 
@@ -887,7 +887,7 @@ fn structural(
             // Forced, so each is stuck: one declaration at one instance.
         ) => Ok(left == right && certifier.universes_eq(left_universes, right_universes)),
 
-        // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
+        // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape is compared case by case ([`ground_cases`]): at each case the two arms agree in arity, a catch-all standing for every case its own arms do not write, and a case one side takes an arm at and the other has neither an arm nor a catch-all for parts them, because two eliminations that take different arms at a case compute differently on some input even where they agree on this one.
         (Subterm::Match(left), Subterm::Match(right)) => {
             // The two scrutinees are one term past this, so one type is theirs: what the motive's and the arms' binders are opened at. Where the matches state the instance they eliminate, the two instances are compared, the scrutinees at the instance, a typed position where two proofs are one unread, and the instance is that type with no lookup. One that states an instance and one that states none are two terms.
             let scrutinee = match (left.cases.stated(), right.cases.stated()) {
@@ -1370,21 +1370,33 @@ fn cons_binders(certifier: &mut Certifier, carrier: &Carrier, result: &MatchResu
     opened
 }
 
-/// Open both scopes at one shared set of opaque binders and compare the bodies at `Type`: what an arm keeps where no lookup typed its scrutinee, or its family states no constructor of its arity. The binders are assumed at the stand-in `Type`, which `Sort::of` reads like any recorded type: it is the least informative answer it can give a binder, so the stand-in can only lose an accepting rule, never gain one — `tests::irrelevance`'s `a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does` holds that, and the one exception it records.
-fn ground_scope(
+/// What `compare` reads of an arm of `tag`'s case opened at its payload: the payload at the constructor's telescope over the scrutinee's parameters, where a lookup typed the scrutinee as `family` and the family states a constructor of the arm's `arity`, and opaque binders otherwise. Those are assumed at the stand-in `Type`, which `Sort::of` reads like any recorded type: it is the least informative answer it can give a binder, so the stand-in can only lose an accepting rule, never gain one — `tests::irrelevance`'s `a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does` holds that, and the one exception it records.
+fn ground_arm(
     certifier: &mut Certifier,
     pairs: &mut Pairs,
-    this: &Scope<Many>,
-    that: &Scope<Many>,
+    family: Option<&InductAt>,
+    tag: &Atom,
+    arity: usize,
+    compare: impl FnOnce(&mut Certifier, &mut Pairs, &[&Term]) -> Result<bool, Error>,
 ) -> Result<bool, Error> {
-    if this.arity() != that.arity() {
-        return Ok(false);
-    }
+    let signature = family
+        .and_then(|at| at.signature(certifier, tag).ok().flatten())
+        .filter(|signature| signature.len() == arity);
 
     certifier.scoped(|certifier| {
-        let occurrences = opaque_binders(certifier, this.arity());
-        let refs = occurrences.iter().collect::<Vec<_>>();
-        ground(certifier, pairs, &this.open(&refs), &that.open(&refs))
+        let payload = match signature {
+            Some(signature) => {
+                let mut cursor = signature.cursor();
+                while let Some((_, field)) = cursor.entry() {
+                    certifier.advance_assumed(&mut cursor, &field);
+                }
+                cursor.into_args()
+            }
+            None => opaque_binders(certifier, arity),
+        };
+        let refs = payload.iter().collect::<Vec<_>>();
+
+        compare(certifier, pairs, &refs)
     })
 }
 
@@ -1394,9 +1406,9 @@ fn opaque_binders(certifier: &mut Certifier, arity: usize) -> Vec<Term> {
         .collect()
 }
 
-/// Compare two stuck eliminations' arm sets up to conversion, shape held rigid: matching variants, tags in the same canonical order, equal plicities, and agreeing default presence.
+/// Compare two stuck eliminations' arm sets up to conversion: matching variants and, case by case, the arm each takes there, a catch-all standing for every case its own arms do not write ([`paired`]).
 ///
-/// Each arm's binders are opened at the types its position gives them, read off the left elimination, whose scrutinee and result the right one's have just been compared with: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains and its hypothesis ([`cons_binders`]). So a proof an arm binds is one where the arm's body is compared, as it is where the arm was typed. Where no lookup typed the scrutinee, or its family states no constructor of the arm's arity, the arm keeps the stand-in ([`ground_scope`]). An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
+/// Each arm's binders are opened at the types its position gives them, read off the left elimination, whose scrutinee and result the right one's have just been compared with: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains and its hypothesis ([`cons_binders`]). So a proof an arm binds is one where the arm's body is compared, as it is where the arm was typed. Where no lookup typed the scrutinee, or its family states no constructor of the arm's arity, the arm keeps the stand-in ([`ground_arm`]). An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
 fn ground_cases(
     certifier: &mut Certifier,
     pairs: &mut Pairs,
@@ -1417,6 +1429,7 @@ fn ground_cases(
         ) => Ok(ground(certifier, pairs, this_false, that_false)?
             && ground(certifier, pairs, this_true, that_true)?),
 
+        // A key one side writes no arm for is its catch-all's there, and every key neither writes is both catch-alls' ([`paired`]).
         (
             Cases::Switch {
                 cases: this_cases,
@@ -1427,18 +1440,24 @@ fn ground_cases(
                 default: that_default,
             },
         ) => {
-            if this_cases.len() != that_cases.len() {
+            let Some(compared) = paired(
+                (this_cases, Some(this_default)),
+                (that_cases, Some(that_default)),
+                || None,
+            ) else {
                 return Ok(false);
-            }
-            for ((this_key, this_body), (that_key, that_body)) in this_cases.iter().zip(that_cases)
-            {
-                if this_key != that_key || !ground(certifier, pairs, this_body, that_body)? {
+            };
+            for pair in compared {
+                let (this, that) = pair.bodies();
+                if !ground(certifier, pairs, this, that)? {
                     return Ok(false);
                 }
             }
-            ground(certifier, pairs, this_default, that_default)
+
+            Ok(true)
         }
 
+        // A catch-all stands for each constructor its own arms do not name, so it is compared with the arm the other writes for it ([`paired`]).
         (
             Cases::Induct {
                 cases: this_cases,
@@ -1451,50 +1470,64 @@ fn ground_cases(
                 ..
             },
         ) => {
-            if this_cases.len() != that_cases.len() {
-                return Ok(false);
-            }
             let family = match scrutinee.map(|type_| &**type_) {
                 Some(Subterm::InductType(family)) => certifier.induct_at(family).ok(),
                 _ => None,
             };
-            for ((this_tag, this_arm), (that_tag, that_arm)) in this_cases.iter().zip(that_cases) {
-                if this_tag != that_tag || this_arm.body().arity() != that_arm.body().arity() {
-                    return Ok(false);
-                }
-                let signature = family
-                    .as_ref()
-                    .and_then(|at| at.signature(certifier, this_tag).ok().flatten())
-                    .filter(|signature| signature.len() == this_arm.body().arity());
-                let converge = match signature {
-                    Some(signature) => certifier.scoped(|certifier| {
-                        let mut cursor = signature.cursor();
-                        while let Some((_, field)) = cursor.entry() {
-                            certifier.advance_assumed(&mut cursor, &field);
+            let Some(compared) = paired(
+                (this_cases, this_default.as_ref()),
+                (that_cases, that_default.as_ref()),
+                || Some(family.as_ref()?.tags(certifier).len()),
+            ) else {
+                return Ok(false);
+            };
+            for pair in compared {
+                let family = family.as_ref();
+                let converge = match pair {
+                    Paired::Arms(tag, this_arm, that_arm) => {
+                        let (this, that) = (this_arm.body(), that_arm.body());
+                        if this.arity() != that.arity() {
+                            return Ok(false);
                         }
-                        let payload = cursor.into_args();
-                        let refs = payload.iter().collect::<Vec<_>>();
-
-                        ground(
+                        ground_arm(
                             certifier,
                             pairs,
-                            &this_arm.body().open(&refs),
-                            &that_arm.body().open(&refs),
-                        )
-                    })?,
-                    None => ground_scope(certifier, pairs, this_arm.body(), that_arm.body())?,
+                            family,
+                            tag,
+                            this.arity(),
+                            |c, p, payload| ground(c, p, &this.open(payload), &that.open(payload)),
+                        )?
+                    }
+                    Paired::ArmAndDefault(tag, arm, default) => {
+                        let arm = arm.body();
+                        ground_arm(
+                            certifier,
+                            pairs,
+                            family,
+                            tag,
+                            arm.arity(),
+                            |c, p, payload| ground(c, p, &arm.open(payload), default),
+                        )?
+                    }
+                    Paired::DefaultAndArm(tag, default, arm) => {
+                        let arm = arm.body();
+                        ground_arm(
+                            certifier,
+                            pairs,
+                            family,
+                            tag,
+                            arm.arity(),
+                            |c, p, payload| ground(c, p, default, &arm.open(payload)),
+                        )?
+                    }
+                    Paired::Defaults(this, that) => ground(certifier, pairs, this, that)?,
                 };
                 if !converge {
                     return Ok(false);
                 }
             }
-            match (this_default, that_default) {
-                (None, None) => Ok(true),
-                (Some(this_default), Some(that_default)) => {
-                    ground(certifier, pairs, this_default, that_default)
-                }
-                _ => Ok(false),
-            }
+
+            Ok(true)
         }
 
         (Cases::FreeMonoid { carrier: this }, Cases::FreeMonoid { carrier: that }) => {

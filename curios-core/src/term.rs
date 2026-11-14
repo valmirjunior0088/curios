@@ -17,6 +17,9 @@ pub use rank::Ranked;
 mod shape;
 pub use shape::*;
 
+mod paired;
+pub use paired::*;
+
 mod former;
 use former::*;
 pub use former::{FormerEta, former_eta};

@@ -40,12 +40,12 @@ use {
     curios_analysis::{Classes, foreign_congruence},
     curios_common::{Keyed, Plicity, recurse},
     curios_core::{
-        Advance, Apply, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families, Free,
-        Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level, Lockstep,
-        Many, Match, MatchResult, Mentions, Metavar, MetavarId, MetavarOrigin, Probe, Proj,
-        Quality, Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm, Telescope, Term,
-        Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseError, Universes, Variance, Variant,
+        Advance, Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families,
+        Free, Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level,
+        Lockstep, Many, Match, MatchResult, Mentions, Metavar, MetavarId, MetavarOrigin, Paired,
+        Probe, Proj, Quality, Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseError, Universes, Variance, Variant, paired,
     },
     std::{
         collections::{HashMap, HashSet, VecDeque},
@@ -1362,6 +1362,33 @@ impl Convert {
         Ok(true)
     }
 
+    /// The binders an arm of `tag`'s case is opened at: its constructor's telescope over the scrutinee's parameters, where a lookup typed the scrutinee as `family` and the family states a constructor of the arm's `arity`, and binders with no type otherwise.
+    fn arm_payload(
+        &mut self,
+        context: &mut Context,
+        family: Option<(&Global, &Universes, &[Term])>,
+        tag: &Atom,
+        arity: usize,
+    ) -> Result<Vec<Term>, ReduceError> {
+        let signature = match family {
+            Some((name, universes, params)) => {
+                declared_facet(context, name, universes, params, |at| {
+                    at.payload(tag, params).transpose()
+                })?
+                .flatten()
+            }
+            None => None,
+        }
+        .filter(|signature| signature.len() == arity);
+
+        Ok(match signature {
+            Some(signature) => self.open_telescope(context, &signature)?.0,
+            None => (0..arity)
+                .map(|_| Term::free_var(&self.opening(context, None, None)))
+                .collect(),
+        })
+    }
+
     /// Two stuck eliminations, part by part. The motive's and the arms' binders are opened at the types their position gives them, read off the left elimination's scrutinee, which the right one's is posed as equal to: a constructor's arm at its telescope over the scrutinee's parameters, a cons arm at its carrier's domains and its hypothesis ([`Convert::cons_binders`]), a motive's as [`Convert::motive_binders`] opens them. So a proof an arm binds is one where the arm's body is compared, as it is in the certifier. Where no lookup types the scrutinee, or its family states no constructor of the arm's arity, the binders carry no type. An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
     fn compare_match(
         &mut self,
@@ -1435,6 +1462,7 @@ impl Convert {
                 Ok(true)
             }
 
+            // A key one side writes no arm for is its catch-all's there, and every key neither writes is both catch-alls' ([`paired`]).
             (
                 Cases::Switch {
                     cases: this_cases,
@@ -1445,22 +1473,22 @@ impl Convert {
                     default: that_default,
                 },
             ) => {
-                if this_cases.len() != that_cases.len() {
+                let Some(compared) = paired(
+                    (&this_cases, Some(&this_default)),
+                    (&that_cases, Some(&that_default)),
+                    || None,
+                ) else {
                     return Ok(false);
+                };
+                for pair in compared {
+                    let (this, that) = pair.bodies();
+                    self.enqueue(Term::type_ground(), this.clone(), that.clone());
                 }
 
-                for ((kl, vl), (kr, vr)) in this_cases.into_iter().zip(that_cases) {
-                    if kl != kr {
-                        return Ok(false);
-                    }
-                    self.enqueue(Term::type_ground(), vl, vr);
-                }
-
-                self.enqueue(Term::type_ground(), this_default, that_default);
                 Ok(true)
             }
 
-            // The pattern is elaboration-time data, fully reflected in the motive scope once checked — convertibility ignores it. The default, though, is a real arm: two matches convert only if their catch-alls agree in presence and body.
+            // The pattern is elaboration-time data, fully reflected in the motive scope once checked — convertibility ignores it. A catch-all stands for each constructor its own arms do not name, so it is compared with the arm the other writes for it ([`paired`]).
             (
                 Cases::Induct {
                     cases: this_cases,
@@ -1473,56 +1501,54 @@ impl Convert {
                     ..
                 },
             ) => {
-                if this_cases.len() != that_cases.len() {
-                    return Ok(false);
-                }
                 let family = match scrutinee.as_deref() {
                     Some(Subterm::InductType(InductType {
                         name,
                         universes,
                         params,
                         ..
-                    })) => Some((name, universes, params)),
+                    })) => Some((name, universes, params.as_slice())),
                     _ => None,
                 };
+                let Some(compared) = paired(
+                    (&this_cases, this_default.as_ref()),
+                    (&that_cases, that_default.as_ref()),
+                    || {
+                        let (name, ..) = family?;
+                        Some(context.induct_decl(name)?.constructors().len())
+                    },
+                ) else {
+                    return Ok(false);
+                };
 
-                for ((this_atom, this_scope), (that_atom, that_scope)) in
-                    this_cases.into_iter().zip(that_cases)
-                {
-                    if this_atom != that_atom || this_scope.arity() != that_scope.arity() {
-                        return Ok(false);
-                    }
-
-                    // Each arm's one constructor of the family, at the scrutinee's universes and parameters.
-                    let signature = match family {
-                        Some((name, universes, params)) => {
-                            declared_facet(context, name, universes, params, |at| {
-                                at.payload(&this_atom, params).transpose()
-                            })?
-                            .flatten()
+                for pair in compared {
+                    let (this, that) = match pair {
+                        Paired::Arms(tag, this_arm, that_arm) => {
+                            if this_arm.arity() != that_arm.arity() {
+                                return Ok(false);
+                            }
+                            let payload =
+                                self.arm_payload(context, family, tag, this_arm.arity())?;
+                            let payload = payload.iter().collect::<Vec<_>>();
+                            (this_arm.open(&payload), that_arm.open(&payload))
                         }
-                        None => None,
-                    }
-                    .filter(|signature| signature.len() == this_scope.arity());
-                    let binders = match signature {
-                        Some(signature) => self.open_telescope(context, &signature)?.0,
-                        None => (0..this_scope.arity())
-                            .map(|_| Term::free_var(&self.opening(context, None, None)))
-                            .collect::<Vec<_>>(),
+                        Paired::ArmAndDefault(tag, arm, default) => {
+                            let payload = self.arm_payload(context, family, tag, arm.arity())?;
+                            (
+                                arm.open(&payload.iter().collect::<Vec<_>>()),
+                                default.clone(),
+                            )
+                        }
+                        Paired::DefaultAndArm(tag, default, arm) => {
+                            let payload = self.arm_payload(context, family, tag, arm.arity())?;
+                            (
+                                default.clone(),
+                                arm.open(&payload.iter().collect::<Vec<_>>()),
+                            )
+                        }
+                        Paired::Defaults(this, that) => (this.clone(), that.clone()),
                     };
-                    let binder_refs = binders.iter().collect::<Vec<_>>();
-
-                    self.enqueue(
-                        Term::type_ground(),
-                        this_scope.open(&binder_refs),
-                        that_scope.open(&binder_refs),
-                    );
-                }
-
-                match (this_default, that_default) {
-                    (None, None) => {}
-                    (Some(this), Some(that)) => self.enqueue(Term::type_ground(), this, that),
-                    _ => return Ok(false),
+                    self.enqueue(Term::type_ground(), this, that);
                 }
 
                 Ok(true)

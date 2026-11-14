@@ -1,4 +1,4 @@
-//! The seeds: one equation for each rule of conversion no law table states — beta, delta, zeta, iota at each elimination, eta at a function, a record, a struct and a unit, and irrelevance — and the near miss beside it.
+//! The seeds: one equation for each rule of conversion no law table states — beta, delta, zeta, iota at each elimination, a catch-all against the arms it stands for, eta at a function, a record, a struct and a unit, and irrelevance — and the near miss beside it.
 //!
 //! A seed is two sides at one type, under one list of binders. A held seed's right side is a neutral of that type, a binder or a call of one, so two held seeds at one type meet at it and chain, and a seed placed under a context keeps a side the context cannot reduce. A near miss differs from the held seed beside it in the one thing its rule must not let pass: a binder dropped, two components swapped, the other arm taken.
 //!
@@ -226,6 +226,44 @@ pub const SEEDS: &[Seeds] = &[
                 "struct eta, its fields swapped",
                 "Record { a = s.b, b = s.a }",
                 "s",
+            ),
+        ],
+    },
+    // Two eliminations of one stuck scrutinee, case by case: a catch-all is the arm of every case its own arms do not write, so it meets the arm the other writes there, and two catch-alls meet each other only where a case neither writes is left. Each near miss takes another arm at one case.
+    Seeds {
+        type_: "(Nat) -> Nat",
+        binders: "o: Option(Nat), n: Nat, g: (Nat) -> Nat, k: (Nat) -> Nat",
+        compound: None,
+        seeds: &[
+            held(
+                "a catch-all as a constructor's arm",
+                "match o: (_) => (Nat) -> Nat | some(v) => g | _ => k end",
+                "match o: (_) => (Nat) -> Nat | some(v) => g | none() => k end",
+            ),
+            miss(
+                "a catch-all as a constructor's arm, the other arm",
+                "match o: (_) => (Nat) -> Nat | some(v) => g | _ => g end",
+                "match o: (_) => (Nat) -> Nat | some(v) => g | none() => k end",
+            ),
+            held(
+                "two catch-alls, each the arm of the constructor the other names",
+                "match o: (_) => (Nat) -> Nat | some(v) => g | _ => k end",
+                "match o: (_) => (Nat) -> Nat | none() => k | _ => g end",
+            ),
+            miss(
+                "two catch-alls, each the arm of the constructor the other names, the other arm",
+                "match o: (_) => (Nat) -> Nat | some(v) => g | _ => k end",
+                "match o: (_) => (Nat) -> Nat | none() => g | _ => g end",
+            ),
+            held(
+                "a catch-all as a key's arm",
+                "match n: (_) => (Nat) -> Nat | 3 => g | 4 => k | _ => k end",
+                "match n: (_) => (Nat) -> Nat | 3 => g | _ => k end",
+            ),
+            miss(
+                "a catch-all as a key's arm, the other arm",
+                "match n: (_) => (Nat) -> Nat | 3 => g | 4 => g | _ => k end",
+                "match n: (_) => (Nat) -> Nat | 3 => g | _ => k end",
             ),
         ],
     },

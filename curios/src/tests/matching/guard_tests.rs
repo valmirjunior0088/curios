@@ -463,6 +463,26 @@ fn conversion_runs_a_fold_whose_arms_take_guards() {
     assert!(report.contains("type mismatch"), "{report}");
 }
 
+// A match its guards flatten converts with the nested match it was written as: the catch-all the guard falls through to is the arm of `none()`, which the nested match writes, and the function of no argument it is bound to, called where `pred(a)` fails, is the nested `false` arm.
+#[test]
+fn a_match_its_guards_flatten_converts_with_the_nested_one() {
+    let source = r#"
+        use /std/{Bool, Nat, Option, Eq};
+        let nested(m: Option(Nat), pred: (Nat) -> Bool) -> Option(Nat) =
+            match m
+            | some(a) => match pred(a) | true => Option/some(a) | false => Option/none() end
+            | none() => Option/none()
+            end;
+        let guarded(m: Option(Nat), pred: (Nat) -> Bool) -> Option(Nat) =
+            match m | some(a), pred(a) => Option/some(a) | _ => Option/none() end;
+        let same(m: Option(Nat), pred: (Nat) -> Bool) -> Eq()(nested(m, pred), guarded(m, pred)) =
+            Eq/refl();
+        /std/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
 // A fold is held to the rules of guards as any match is: a base case only a guarded arm reaches is refused, and so is a guarded arm written before a case of it.
 #[test]
 fn a_fold_with_guards_is_held_to_coverage_and_order() {
