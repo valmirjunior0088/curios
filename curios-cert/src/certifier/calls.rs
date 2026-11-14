@@ -405,7 +405,7 @@ impl Certifier<'_> {
 
     /// Whether some group's body is being checked, so that what an arm establishes may grade a call — and is worth reading.
     ///
-    /// Outside every body there is no call to grade, and reading an arm's value or a comparison as a size forces it, and typing a lambda applied on the spot through its binders passes the memo by — which an ordinary match elsewhere in a program should not pay for. That includes the tail a group scopes over, typed while its frame is still open: a recursive `let` opens one over the whole rest of a program, and reading every arm of a program's own dispatch as a size would run the certifier out of binders (`curios`'s `tests::toml::every_document_prints_what_its_table_expects`).
+    /// Outside every body there is no call to grade, and reading an arm's value or a comparison as a size forces it, and typing a lambda applied on the spot through its binders passes the memo by — which an ordinary match elsewhere in a program should not pay for. That includes the tail a group scopes over, typed while its frame is still open: a recursive `let` opens one over the whole rest of a program, whose own dispatch would otherwise have every arm read as a size.
     pub(super) fn recording(&self) -> bool {
         self.calls.frames.iter().any(|frame| frame.caller.is_some())
     }

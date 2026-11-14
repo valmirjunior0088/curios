@@ -55,7 +55,6 @@ mod runtime;
 mod strings;
 mod structs;
 mod test_support;
-mod toml;
 mod towers;
 // Only the tower measurement builds the shapes the fixtures compile.
 #[cfg(feature = "profile")]

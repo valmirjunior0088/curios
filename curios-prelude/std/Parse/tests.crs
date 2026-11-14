@@ -1,5 +1,5 @@
 -- Parsing through `Parse`: a text parser reads characters and pieces of its input by position, a refusal says the byte offset it stopped at, and of two refusals open to an alternative the one that reached further is reported.
-use /std/{Parse, Str, Char, List, Result, Test};
+use /std/{Parse, Str, Char, List, Result, Test, Byte, Bytes, Nat};
 
 let shown(@A: Type, r: Result(Parse/Error, A), f: (A) -> Str) -> Str =
     match r | success(a) => f(a) | failure(e) => Parse/Error/to_str(e) end;
@@ -129,3 +129,17 @@ test until_reads_the_piece_before_a_literal =
             read("→", "→x"),
             read("-->", "")]),
         "é → ü|-->𝄞 / no end -- > here| / |→x / |");
+
+let one_byte() -> Parse(Bytes, Byte) =
+    let b = Parse/bytes/byte!;
+    let _ = Parse/eof()!;
+    Parse/pure(b);
+
+-- `eof` accepts only where the input has ended: a parser that reads one byte and then `eof` accepts exactly one byte, and refuses a second byte and an empty input alike.
+test eof_accepts_only_the_end_of_the_input =
+    let one(input: Bytes) -> Str =
+        match Parse/run(one_byte(), input)
+        | success(b) => Str/concat("ok:", Nat/to_str(Byte/to_nat(b)))
+        | failure(_) => "rejected"
+        end;
+    Test/equal([one(x[0x41]), one(x[0x41, 0x42]), one(x[])], ["ok:65", "rejected", "rejected"]);

@@ -42,6 +42,7 @@ claims! {
     str => ["Str"],
     char => ["Char"],
     json => ["Json"],
+    toml => ["Toml"],
     html => ["Html"],
     parse => ["Parse"],
     map => ["Map"],

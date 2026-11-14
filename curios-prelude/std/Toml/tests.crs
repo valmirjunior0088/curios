@@ -1,0 +1,268 @@
+-- The TOML codec: documents decoded and re-encoded, the refusals pinned to their reasons and their places, and floats pinned to their bits.
+use /std/{Toml, Str, Map, Flt, Bool, Bytes, Byte, Char, Nat, Result, Test};
+
+-- `ch` repeated `k` times: a digit run too long for a reader to count.
+let run_of(ch: Str, k: Nat) -> Str =
+    match k | 0 => "" | j + 1 => Str/concat(ch, run_of(ch, j)) end;
+
+-- The document decoded and re-encoded, or the reason it was refused.
+let canon(input: Str) -> Str =
+    match Toml/decode(input)
+    | failure(e) => Str/concat("reject:", Toml/Error/message(e))
+    | success(root) => Toml/encode(root)
+    end;
+
+-- The document decoded and re-encoded, or that it was refused.
+let decoded(input: Str) -> Str =
+    match Toml/decode(input) | failure(_) => "reject" | success(root) => Toml/encode(root) end;
+
+-- Why the document was refused, or that it was accepted.
+let reason(input: Str) -> Str =
+    match Toml/decode(input) | failure(e) => Toml/Error/message(e) | success(_) => "accept" end;
+
+-- The document's refusal rendered whole, or that it was accepted.
+let located(input: Str) -> Str =
+    match Toml/decode(input) | failure(e) => Toml/Error/to_str(e) | success(_) => "accept" end;
+
+-- Whether the document decodes.
+let verdict(input: Str) -> Str =
+    match Toml/decode(input) | failure(_) => "reject" | success(_) => "accept" end;
+
+-- `b` as lowercase hexadecimal, two digits a byte.
+let hexs(b: Bytes) -> Str =
+    Bytes/fold(b, "", (byte, acc) =>
+        let n = Byte/to_nat(byte);
+        let hi = Result/unwrap_or(Str/of_bytes(Char/to_utf8(Char/hex_digit(n / 16))), "");
+        let lo = Result/unwrap_or(Str/of_bytes(Char/to_utf8(Char/hex_digit(n % 16))), "");
+        Str/flatten([acc, hi, lo]));
+
+-- The bits of the float the document's key `f` holds, or what stood in the way.
+let fbits(input: Str) -> Str =
+    match Toml/decode(input)
+    | failure(_) => "reject"
+    | success(root) =>
+        match Map/try_get(root, "f")
+        | some(flt(x)) => hexs(Flt/to_le_bytes(x))
+        | some(_) => "not-flt"
+        | none() => "missing"
+        end
+    end;
+
+-- Scalar documents through `canon`: decoded, then encoded, and the encoder's output is the document's one spelling.
+test a_scalar_document_re_encodes_as_its_one_spelling =
+    Test/equal(
+        [
+            canon("i = 42"),
+            canon("s = \"hi\""),
+            canon("b = true"),
+            canon("f = 3.5"),
+            canon("neg = -9223372036854775808"),
+            canon("f = inf"),
+            canon("f = -inf"),
+            canon("f = nan"),
+            canon("f = -nan"),
+            canon("arr = [1, \"two\", 3.5]"),
+            canon("[t]\nx = 1"),
+            canon("\"dot.ted\" = 3"),
+            canon("")],
+        ["i = 42\n", "s = \"hi\"\n", "b = true\n", "f = 3.5\n", "neg = -9223372036854775808\n",
+            "f = inf\n", "f = -inf\n", "f = nan\n", "f = -nan\n", "arr = [1, \"two\", 3.5]\n",
+            "[t]\nx = 1\n", "\"dot.ted\" = 3\n", ""]);
+
+-- Every string form and escape, re-encoded to the basic-string spelling.
+test every_string_form_re_encodes_as_a_basic_string =
+    Test/equal(
+        [
+            canon("s = \"é→𝄞\"\nl = 'ü–𝄞'\n\"ké\" = 1 # ñ\n"),
+            canon("e = \"a\tb\\u0041\\U0001F600\""),
+            canon("l = 'C:\\path'"),
+            canon("m = \"\"\"\nhi\n\"\"\""),
+            canon("w = \"\"\"one \\\n  two\"\"\""),
+            canon("r = '''a'b''c'''"),
+            canon("q = \"\"\"a \"\"b\"\"\"\"\"")],
+        ["\"ké\" = 1\nl = \"ü–𝄞\"\ns = \"é→𝄞\"\n", "e = \"a\\tbA😀\"\n", "l = \"C:\\\\path\"\n",
+            "m = \"hi\\n\"\n", "w = \"one two\"\n", "r = \"a'b''c\"\n",
+            "q = \"a \\\"\\\"b\\\"\\\"\"\n"]);
+
+-- The RFC 3339 subset: offset, local and partial forms, a leap second, and nanosecond truncation.
+test a_date_time_reads_the_rfc_3339_subset =
+    Test/equal(
+        [
+            canon("d = 1979-05-27T07:32:00Z"),
+            canon("d = 1979-05-27 07:32:00Z"),
+            canon("d = 1979-05-27T00:32:00-07:00"),
+            canon("d = 1979-05-27T07:32:00+00:00"),
+            canon("d = 1979-05-27T07:32:00-00:00"),
+            canon("d = 07:32:00"),
+            canon("d = 1979-05-27t07:32:60+23:59"),
+            canon("d = 1979-05-27"),
+            canon("d = 2000-02-29"),
+            canon("d = 00:00:00.1234567891"),
+            canon("d = 00:00:00.500")],
+        ["d = 1979-05-27T07:32:00Z\n", "d = 1979-05-27T07:32:00Z\n",
+            "d = 1979-05-27T00:32:00-07:00\n", "d = 1979-05-27T07:32:00+00:00\n",
+            "d = 1979-05-27T07:32:00Z\n", "d = 07:32:00\n", "d = 1979-05-27T07:32:60+23:59\n",
+            "d = 1979-05-27\n", "d = 2000-02-29\n", "d = 00:00:00.123456789\n",
+            "d = 00:00:00.5\n"]);
+
+-- The 64-bit signed range TOML 1.0 states, in every radix, and the first value past it on each side, refused.
+test an_integer_reads_the_64_bit_range_in_every_radix =
+    Test/equal(
+        [
+            decoded("i = 9223372036854775807"),
+            decoded("i = -9223372036854775808"),
+            decoded("i = 0x7fff_ffff_ffff_ffff"),
+            decoded("i = 0o777777777777777777777"),
+            decoded(Str/concat("i = 0b", run_of("1", 63))),
+            decoded("i = 0x0000_0001"),
+            decoded("i = +0"),
+            decoded("i = -0"),
+            decoded("i = 9223372036854775808"),
+            decoded("i = -9223372036854775809"),
+            decoded("i = 0x8000000000000000"),
+            decoded("i = 0o1000000000000000000000"),
+            decoded(Str/concat("i = 0b1", run_of("0", 63))),
+            decoded("i = 42949672960"),
+            decoded("i = 9999999999999999999")],
+        ["i = 9223372036854775807\n", "i = -9223372036854775808\n", "i = 9223372036854775807\n",
+            "i = 9223372036854775807\n", "i = 9223372036854775807\n", "i = 1\n", "i = 0\n",
+            "i = 0\n", "reject", "reject", "reject", "reject", "reject", "i = 42949672960\n",
+            "reject"]);
+
+-- Float lexemes pinned to their binary64 bit patterns, little-endian hex: the zeros, the specials, overflow and underflow, and the seventeen-digit boundary where three consecutive integers share one value.
+test a_float_lexeme_reads_as_its_binary64_pattern =
+    Test/equal(
+        [
+            fbits("f = 0.0"),
+            fbits("f = -0.0"),
+            fbits("f = 1.0"),
+            fbits("f = 1.5"),
+            fbits("f = 3.5"),
+            fbits("f = -1.5"),
+            fbits("f = 0.25"),
+            fbits("f = inf"),
+            fbits("f = -inf"),
+            fbits("f = nan"),
+            fbits("f = -nan"),
+            fbits("f = 1e309"),
+            fbits("f = -1e309"),
+            fbits("f = 1e-330"),
+            fbits("f = 12345678901234567.0"),
+            fbits("f = 12345678901234568.0"),
+            fbits("f = 12345678901234569.0"),
+            fbits("f = 1_2.5e1_0")],
+        ["0000000000000000", "0000000000000080", "000000000000f03f", "000000000000f83f",
+            "0000000000000c40", "000000000000f8bf", "000000000000d03f", "000000000000f07f",
+            "000000000000f0ff", "000000000000f87f", "000000000000f8ff", "000000000000f07f",
+            "000000000000f0ff", "0000000000000000", "c4a5b52e2aee4543", "c4a5b52e2aee4543",
+            "c4a5b52e2aee4543", "000000a2941a3d42"]);
+
+-- Each malformed input pinned to the *message* it is refused with, not merely to the fact that it is refused. The decoder hands these strings to its caller through `Result(Str, _)`, so they are contract rather than debug output, and a reformulation of the scanners into `/std/Parse` combinators can flatten a specific reason into whichever generic message the combinator that happened to fail carries. Accept-versus-reject cannot see that happen; this test can. Every refusal is the refusing parser's own reason: the date-time, fraction and exponent parsers commit once their prefix can be nothing else, so `digit_led_value`'s `or` reports `invalid date` rather than restoring the position, reading `2021` as an integer and failing on the line end.
+test a_malformed_document_is_refused_with_its_reason =
+    Test/equal(
+        [
+            reason("i = 1__2"),
+            reason("i = _1"),
+            reason("i = 1_"),
+            reason("i = 01"),
+            reason("f = 01.0"),
+            reason("f = 1."),
+            reason("f = .5"),
+            reason("f = 1e"),
+            reason("s = \"\\uD800\""),
+            reason("s = \"\\q\""),
+            reason("d = 2021-02-30"),
+            reason("t = 24:00:00"),
+            reason("t = 00:00:61"),
+            reason("d = 1979-05-27T00:00:00+24:00"),
+            reason("k = truex")],
+        ["malformed underscore", "malformed underscore", "malformed underscore", "leading zero",
+            "leading zero", "expected digit", "expected digit", "expected digit",
+            "invalid Unicode scalar in escape", "unknown escape", "invalid date", "invalid time",
+            "invalid time", "invalid offset", "expected end of line"]);
+
+-- Each refusal rendered whole by `Toml/Error/to_str`: a syntax refusal names the byte offset the parser stopped at, and a broken construction rule names the key path being applied. `message` is the reason alone, which the reasons test pins.
+test a_refusal_names_where_it_stopped =
+    Test/equal(
+        [
+            located("i = 1__2"),
+            located("x = \"unterminated"),
+            located("a = 1\na = 2"),
+            located("[t]\nx = 1\n[t]\n"),
+            located("[a.b]\nc = 1\n[a]\nb.c = 2\n")],
+        ["malformed underscore at byte 6", "unterminated string at byte 17",
+            "duplicate key at key a", "table defined more than once at key t",
+            "cannot extend a table defined elsewhere with dotted keys at key b.c"]);
+
+-- Table construction: a key or table defined twice, a table opened over a dotted key or an inline table, and arrays of tables against tables, against the three that are allowed.
+test a_table_is_constructed_once =
+    Test/equal(
+        [
+            verdict("dup = 1\ndup = 2"),
+            verdict("[a]\n[a]"),
+            verdict("a.b = 1\n[a]"),
+            verdict("[t]\na.b = 1\n[t.a]"),
+            verdict("t = {a = 1}\n[t]"),
+            verdict("t = {a = 1}\nt.b = 2"),
+            verdict("a = 1\n[a]"),
+            verdict("a = []\n[[a]]"),
+            verdict("[a]\n[[a]]"),
+            verdict("[[a]]\n[a]"),
+            verdict("t = {a = 1, a = 2}"),
+            verdict("[a.b]\n[a]"),
+            verdict("[[a]]\nb = 1\n[[a]]\nb = 1"),
+            verdict("p.q = 1\np.r = 2")],
+        ["reject", "reject", "reject", "reject", "reject", "reject", "reject", "reject", "reject",
+            "reject", "reject", "accept", "accept", "accept"]);
+
+-- Comments, CRLF and blank lines accepted; trailing junk after a value, a header or an empty key refused.
+test comments_and_line_endings_are_read_and_junk_is_refused =
+    Test/equal(
+        [
+            verdict("a = 1 # note"),
+            verdict("# full\r\n\nb = 2"),
+            verdict("# only a comment"),
+            verdict("   \n\t\n"),
+            verdict("a = 1\r\nb = 2\r\n"),
+            verdict("x = 1 junk"),
+            verdict("[a] junk"),
+            verdict("= 1")],
+        ["accept", "accept", "accept", "accept", "accept", "reject", "reject", "reject"]);
+
+-- Arrays and inline tables nest, and the encoder's output is a fixed point of decode-then-encode: the second row re-encodes the first row's output and compares.
+test nested_arrays_and_inline_tables_reach_a_fixed_point =
+    Test/equal(
+        [
+            canon("[[a]]\nb = { c = 2 }\n[a.d]\ne = 1"),
+            let c1 = canon("[[a]]\nb = { c = 2 }\n[a.d]\ne = 1");
+            Bool/to_str(Str/eql(c1, canon(c1))),
+            canon("b = [1, [2]]")],
+        ["a = [{ b = { c = 2 }, d = { e = 1 } }]\n", "true", "b = [1, [2]]\n"]);
+
+-- The float lexemes a narrowing gets wrong: a mantissa past seventeen digits, large exponents, subnormals, and the overflow boundary, where `1.7976931348623159e308` is above the largest finite value and rounds to an infinity, each pinned to the bit pattern a correctly rounded parse gives.
+test a_float_lexeme_rounds_once_to_the_nearest_binary64 =
+    Test/equal(
+        [
+            fbits("f = 1.2345678901234567e-5"),
+            fbits("f = 123456.789012345"),
+            fbits("f = 7.1551326123456785e37"),
+            fbits("f = 1.7976931348623157e308"),
+            fbits("f = 1.7976931348623159e308"),
+            fbits("f = 1.797693134862316e308"),
+            fbits("f = 1.0e-310"),
+            fbits("f = 5.0e-324"),
+            fbits("f = 2.225073858507201e-308"),
+            fbits("f = 0.1000000000000000055511151231257827"),
+            fbits("f = 12345678901234569.0"),
+            fbits("f = 9.999999999999998e9"),
+            fbits("f = 1.0000000000000002"),
+            fbits("f = -1.5e-310"),
+            fbits("f = 1_2.5e1_0")],
+        ["ba78263009e4e93e", "9f68cb9f0c24fe40", "38032a5f24eaca47", "ffffffffffffef7f",
+            "000000000000f07f", "000000000000f07f", "2be6708b68120000", "0100000000000000",
+            "ffffffffffff0f00", "9a9999999999b93f", "c4a5b52e2aee4543", "ffffff1f5fa00242",
+            "010000000000f03f", "415929d19c1b0080", "000000a2941a3d42"]);
+
+-- The encoder on a map built by hand rather than decoded, which is the one path no test above reaches: a key is a string, so every table has a spelling, and a key that is no bare key is quoted.
+test encode_spells_a_map_built_by_hand =
+    Test/equal(Toml/encode(Map/insert(Map/empty(), "a key", Toml/int(+1))), "\"a key\" = 1\n");
