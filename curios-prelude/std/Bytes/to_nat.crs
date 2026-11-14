@@ -2,9 +2,9 @@ use /std/{Nat, Byte, Bytes, proved, Bool};
 
 --- The number a minimal encoding denotes, which is `of_nat`'s inverse.
 ---
---- One structural fold, because the least significant byte arrives first and carries a weight the fold already knows. Reading a big-endian run back would need the length before it could weigh its first byte.
+--- One structural recursion, because the least significant byte arrives first and carries a weight the rest's reading already knows. Reading a big-endian run back would need the length before it could weigh its first byte.
 pub let to_nat(b: Bytes) -> Nat =
-    match b | x[] => 0 | x[h, .._]; ih => Byte/to_nat(h) + 256 * ih end;
+    match b | x[] => 0 | x[h, ..t] => Byte/to_nat(h) + 256 * to_nat(t) end;
 
 --- The number a run denotes is below `256` to the run's length.
 ---

@@ -172,7 +172,8 @@ let hex_octet(n: Nat, @nibble: Bool/Holds(n < 16)) -> Field/Value/Octet =
 let escaped_bytes(b: Bytes) -> Field/Value =
     match b
     | x[] => Field/Value/empty
-    | x[h, .._]; rest =>
+    | x[h, ..t] =>
+        let rest = escaped_bytes(t);
         let n = Byte/to_nat(h);
         let quoted =
             Field/Value/cons(

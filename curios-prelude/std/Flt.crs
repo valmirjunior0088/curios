@@ -490,7 +490,7 @@ pub let to_str(f: Flt) -> Str =
 
 --- Ten to the power `n`, as a float.
 pub let pow10(n: Nat) -> Flt =
-    match n | 0 => +1.0 | _ + 1; ih => ih * +10.0 end;
+    match n | 0 => +1.0 | k + 1 => pow10(k) * +10.0 end;
 
 --- The float nearest to `d` times ten to the `e`, correctly rounded with ties to even, negated when `negative`. `digits` is how many decimal digits spelled `d`, leading zeros included.
 pub let of_decimal(negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =

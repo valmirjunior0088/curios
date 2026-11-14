@@ -3,7 +3,7 @@
 //! Each accessor enumerates one structural dimension of a right-hand side — its atom operands, its owned sub-blocks, the values its sub-blocks bind — in deterministic evaluation order. Consumers drive their own worklists over these.
 
 use {
-    super::{Atom, BlockId, Module, Rhs, Statement, Terminator, ValueId},
+    super::{Atom, BlockId, FunctionId, Module, Rhs, Statement, Terminator, ValueId},
     std::collections::BTreeSet,
 };
 
@@ -123,6 +123,50 @@ pub fn control_blocks(module: &Module, root: BlockId) -> Vec<BlockId> {
         }
     }
     blocks
+}
+
+/// Count every reference to `function` inside its own region, including nested function bodies.
+pub fn self_references(module: &Module, function: FunctionId) -> usize {
+    let mut count = 0usize;
+    let mut functions = vec![function];
+    let mut seen = BTreeSet::new();
+    while let Some(current) = functions.pop() {
+        if !seen.insert(current) {
+            continue;
+        }
+        let Some(definition) = module.function(current) else {
+            continue;
+        };
+        for block in control_blocks(module, definition.body) {
+            let Some(block) = module.block(block) else {
+                continue;
+            };
+            for &statement in &block.statements {
+                match module.statement(statement) {
+                    Some(Statement::Let { rhs, .. }) => {
+                        for atom in rhs.operands() {
+                            if atom == Atom::Function(function) {
+                                count += 1;
+                            }
+                        }
+                    }
+                    Some(Statement::Functions {
+                        functions: nested, ..
+                    }) => functions.extend(nested),
+                    Some(Statement::Rec { group }) => {
+                        if let Some(group) = module.rec_group(*group) {
+                            functions.extend(&group.functions);
+                        }
+                    }
+                    None => {}
+                }
+            }
+            if block.terminator.atoms().contains(&Atom::Function(function)) {
+                count += 1;
+            }
+        }
+    }
+    count
 }
 
 #[cfg(test)]

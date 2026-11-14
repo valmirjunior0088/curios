@@ -23,7 +23,7 @@ use {
     crate::{
         Atom, Block, BlockId, Constant, FreeMonoidPart, Function, FunctionId, Module, Operation,
         Rhs, Semantics, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
-        control_blocks, droppable_functions,
+        droppable_functions, self_references,
     },
     curios_num::Binary,
     std::collections::{BTreeMap, BTreeSet},
@@ -660,7 +660,7 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Ro
     let row = row?;
 
     // Every self-reference in the function's whole region must be one of the spine calls: a self-call off the spine (or the function escaping as a value from its own body) declines the transform.
-    if count_self_references(module, function) != spine_calls {
+    if self_references(module, function) != spine_calls {
         return None;
     }
 
@@ -735,48 +735,4 @@ fn ending(module: &Module, function: FunctionId, block: &Block, returned: Atom) 
         Some(row) => Ending::Combine { call, row, context },
         None => Ending::Bare { call },
     }
-}
-
-/// Count every reference to `function` inside its own region, including nested function bodies.
-fn count_self_references(module: &Module, function: FunctionId) -> usize {
-    let mut count = 0usize;
-    let mut functions = vec![function];
-    let mut seen = BTreeSet::new();
-    while let Some(current) = functions.pop() {
-        if !seen.insert(current) {
-            continue;
-        }
-        let Some(definition) = module.function(current) else {
-            continue;
-        };
-        for block in control_blocks(module, definition.body) {
-            let Some(block) = module.block(block) else {
-                continue;
-            };
-            for &statement in &block.statements {
-                match module.statement(statement) {
-                    Some(Statement::Let { rhs, .. }) => {
-                        for atom in rhs.operands() {
-                            if atom == Atom::Function(function) {
-                                count += 1;
-                            }
-                        }
-                    }
-                    Some(Statement::Functions {
-                        functions: nested, ..
-                    }) => functions.extend(nested),
-                    Some(Statement::Rec { group }) => {
-                        if let Some(group) = module.rec_group(*group) {
-                            functions.extend(&group.functions);
-                        }
-                    }
-                    None => {}
-                }
-            }
-            if block.terminator.atoms().contains(&Atom::Function(function)) {
-                count += 1;
-            }
-        }
-    }
-    count
 }

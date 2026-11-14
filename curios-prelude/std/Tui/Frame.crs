@@ -31,7 +31,7 @@ let resize(@T: Type, fill: T, m: Nat, l: List(T)) -> Vec(T, m) =
 let drop_upto(@T: Type, l: List(T), k: Nat) -> List(T) =
     match k
     | 0 => l
-    | _ + 1; ih => match ih | [] => [] | [_, ..rest] => rest end
+    | j + 1 => match drop_upto(l, j) | [] => [] | [_, ..rest] => rest end
     end;
 
 -- What a run of tiles keeps of its wide glyphs: a wide glyph keeps its second column and that column its glyph, and a cut that parted the two shows a blank where either stood. Every tile answers one, so the run keeps its length.

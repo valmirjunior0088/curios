@@ -60,14 +60,17 @@ pub let cons(o: Octet, v: Value) -> Value =
 
 --- `a` then `b`: octets that may each stand in a value may stand in one together.
 pub let append(a: Value, b: Value) -> Value =
-    match a.bytes: (m) => (Bool/Holds(Bytes/all(m, admits))) -> Value
-    | x[] => (_) => b
-    | x[h, ..t]; rest =>
-        (clean) =>
-            cons(
-                Octet { byte = h, @clean = Bool/and/first(admits(h), Bytes/all(t, admits), clean) },
-                rest(Bool/and/second(admits(h), Bytes/all(t, admits), clean)))
-    end(a.clean);
+    prepended(a.bytes, @a.clean, b);
+
+-- `m`'s octets ahead of `b`, each standing in a value by what `clean` says of them all.
+let prepended(m: Bytes, @clean: Bool/Holds(Bytes/all(m, admits)), b: Value) -> Value =
+    match m
+    | x[] => b
+    | x[h, ..t] =>
+        cons(
+            Octet { byte = h, @clean = Bool/and/first(admits(h), Bytes/all(t, admits), clean) },
+            prepended(t, @Bool/and/second(admits(h), Bytes/all(t, admits), clean), b))
+    end;
 
 -- The ten decimal digits, each an octet a value may hold.
 let digit_octets: List(Octet) =
