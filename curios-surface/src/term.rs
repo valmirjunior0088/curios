@@ -1,13 +1,16 @@
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Dialect, Intrinsic, Label, Literal, Name, NatLiteral, Program, Radix, parse_whole_term,
         print_match_pattern, print_term,
     },
-    curios_common::{InfixOp, Plicity, Sign, Source, Span},
+    curios_common::{InfixOp, Plicity, Sign, Source, Span, recurse},
     curios_num::Natural,
     curios_parse::ParserError,
     curios_print::run_printer,
-    std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
+    std::{fmt, mem, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
 };
 
 /// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
@@ -33,13 +36,44 @@ impl<D: Dialect> Term<D> {
         self.span.as_ref()
     }
 
-    pub(crate) fn into_subterm(self) -> Subterm<D> {
-        // A uniquely held node moves out; a shared one (a packrat cache entry, a spread base) is copied one level — its own `Term` fields are `Rc` bumps, so the copy never recurses.
-        Rc::unwrap_or_clone(self.inner)
+    pub(crate) fn into_subterm(mut self) -> Subterm<D> {
+        // A uniquely held node moves out, leaving a husk its drop passes over; a shared one (a packrat cache entry, a spread base) is copied one level — its own `Term` fields are `Rc` bumps, so the copy never recurses.
+        match Rc::get_mut(&mut self.inner) {
+            Some(subterm) => mem::replace(subterm, Subterm::Type),
+            None => Subterm::clone(&self.inner),
+        }
     }
 
     pub fn as_subterm(&self) -> &Subterm<D> {
         &self.inner
+    }
+}
+
+/// Freed inside [`recurse`]: a tree nests as deep as the text it was read from, and the derived drop descends one native frame per level. A node this drop holds alone gives its subterm up for a husk holding no term, and the subterm is freed inside the bracket; a shared one only loses a reference.
+impl<D: Dialect> Drop for Term<D> {
+    fn drop(&mut self) {
+        let Some(subterm) = Rc::get_mut(&mut self.inner) else {
+            return;
+        };
+        // A form holding no term frees nothing deep, so it takes no bracket, which on a thread short of the reserve maps a segment; a husk is one.
+        if matches!(
+            subterm,
+            Subterm::Type
+                | Subterm::Prop
+                | Subterm::Sort
+                | Subterm::Name(_)
+                | Subterm::Hole
+                | Subterm::Held
+                | Subterm::Goal
+                | Subterm::Derive
+                | Subterm::ProofLiteral(_)
+                | Subterm::NumLit(_)
+        ) {
+            return;
+        }
+
+        let detached = mem::replace(subterm, Subterm::Type);
+        recurse(|| drop(detached));
     }
 }
 
