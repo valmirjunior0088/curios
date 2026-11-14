@@ -491,3 +491,165 @@ fn a_switchs_edge_to_a_return_hands_back_what_a_jump_does() {
         );
     }
 }
+
+/// `main` builds a `Pair` holding a `Pair` nothing else holds and enters a loop over it, whose two arms each read the inner `Pair` out of the loop's parameter, read its slot, and build a `Pair` of what they read beside the inner one dying. Where `back` is false, each arm then builds a `Pair` over what it built and hands it to the next round; where it is true, each hands the loop's parameter back by a join.
+fn arms_of_a_round(back: bool) -> Module {
+    let mut module = Module::new();
+    let pair = module.add_row(Row {
+        debug_name: Some("Pair".into()),
+        slots: vec![Slot::Tag, Slot::Opaque],
+    });
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let [v, inner, outer, p, s, a, y, n, b, z, m, w, d] = [
+        "v", "inner", "outer", "p", "s", "a", "y", "n", "b", "z", "m", "w", "d",
+    ]
+    .map(|name| module.add_value(Some(name.into())));
+    let [round, join, done, left, right] = [(); 5].map(|()| module.reserve_continuation());
+
+    // Each arm: the inner `Pair` read out of `p`, its slot read, a `Pair` built of it, and the next round entered.
+    let mut arm = |read: ValueId, slot: ValueId, built: ValueId| {
+        let next = match back {
+            true => module.add_node(Node::ApplyCont(Edge {
+                target: join,
+                args: vec![Atom::Value(p)],
+            })),
+            false => {
+                let onward = module.add_value(Some("o".into()));
+                let enter = module.add_node(Node::ApplyCont(Edge {
+                    target: round,
+                    args: vec![Atom::Value(onward)],
+                }));
+                module.add_node(Node::LetValue {
+                    result: onward,
+                    value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(built)]),
+                    next: enter,
+                })
+            }
+        };
+        let build = module.add_node(Node::LetValue {
+            result: built,
+            value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(slot)]),
+            next,
+        });
+        let read_slot = module.add_node(Node::LetIntrinsic {
+            result: slot,
+            op: Intrinsic::RowGet(pair, 1),
+            args: vec![Atom::Value(read)],
+            next: build,
+        });
+        module.add_node(Node::LetIntrinsic {
+            result: read,
+            op: Intrinsic::RowGet(pair, 1),
+            args: vec![Atom::Value(p)],
+            next: read_slot,
+        })
+    };
+    let left_body = arm(a, y, n);
+    let right_body = arm(b, z, m);
+    for (continuation, body) in [(left, left_body), (right, right_body)] {
+        module.define_continuation(
+            continuation,
+            Continuation {
+                debug_name: None,
+                params: vec![],
+                body,
+            },
+        );
+    }
+    let to = |target, args| Edge { target, args };
+    let pick = module.add_node(Node::Switch {
+        scrutinee: Atom::Value(s),
+        cases: std::collections::BTreeMap::from([
+            (0, to(done, vec![Atom::Value(p)])),
+            (1, to(left, vec![])),
+        ]),
+        default: Some(to(right, vec![])),
+    });
+    let arms = module.add_node(Node::LetCont {
+        continuations: vec![left, right],
+        body: pick,
+    });
+    let read_tag = module.add_node(Node::LetIntrinsic {
+        result: s,
+        op: Intrinsic::RowGet(pair, 0),
+        args: vec![Atom::Value(p)],
+        next: arms,
+    });
+    module.define_continuation(
+        round,
+        Continuation {
+            debug_name: None,
+            params: vec![p],
+            body: read_tag,
+        },
+    );
+    let again = module.add_node(Node::ApplyCont(to(round, vec![Atom::Value(w)])));
+    module.define_continuation(
+        join,
+        Continuation {
+            debug_name: None,
+            params: vec![w],
+            body: again,
+        },
+    );
+    let exit = module.add_node(halt(vec![Atom::Value(d)]));
+    module.define_continuation(
+        done,
+        Continuation {
+            debug_name: None,
+            params: vec![d],
+            body: exit,
+        },
+    );
+
+    let enter = module.add_node(Node::ApplyCont(to(round, vec![Atom::Value(outer)])));
+    let scope = module.add_node(Node::LetCont {
+        continuations: vec![round, join, done],
+        body: enter,
+    });
+    let holder = module.add_node(Node::LetValue {
+        result: outer,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(inner)]),
+        next: scope,
+    });
+    let held = module.add_node(Node::LetValue {
+        result: inner,
+        value: ValueExpr::Row(pair, vec![nat(1), Atom::Value(v)]),
+        next: holder,
+    });
+    let body = module.add_node(Node::LetIntrinsic {
+        result: v,
+        op: Intrinsic::NatAdd,
+        args: vec![nat(3), nat(4)],
+        next: held,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    module
+}
+
+/// A loop's parameter each round binds to another object is read and rebuilt in each arm that takes it apart: the arms of one round exclude each other, and the next round's reads are of another object. Where the loop hands its parameter back by a join, a round reads the object an earlier round read, so nothing it read is written into.
+#[test]
+fn each_arm_of_a_round_rebuilds_what_it_takes_apart_where_the_round_binds_another_object() {
+    assert_eq!(
+        rebuilds(&arms_of_a_round(false)).len(),
+        4,
+        "each arm rebuilds the inner `Pair` it read, and the loop's parameter"
+    );
+    assert_eq!(
+        rebuilds(&arms_of_a_round(true)).len(),
+        0,
+        "a loop handing its parameter back by a join writes into nothing a round read"
+    );
+}

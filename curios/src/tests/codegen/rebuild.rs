@@ -177,6 +177,19 @@ const ROPE: &str = r#"
 const ROPE_FLIPPED_TWICE: &str =
     "total(flip(flip(make(n, Rope/tip(n)), Rope/tip(1)), Rope/tip(2)), 0)";
 
+/// A rope of [`ROPE`]'s links in alternating colors, built over a tip that is a literal.
+const MIXED_ROPE: &str = r#"
+    let mixed(n: Nat, acc: Rope) -> Rope =
+        match n
+        | 0 => acc
+        | k + 1; _ =>
+            match k % 2
+            | 0 => mixed(k, Rope/red(k, acc))
+            | _ => mixed(k, Rope/blue(k, acc))
+            end
+        end;
+"#;
+
 /// A map filled with `n` keys, then drained of every other one and of keys it never held.
 const REMOVALS: &str = r#"
     let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
@@ -524,7 +537,7 @@ fn a_branch_of_a_tree_a_loop_hands_on_as_it_took_it_is_inserted_into_by_a_copy()
     assert_eq!(run(&module, "5"), run(&kept, "5"));
 }
 
-/// A loop whose accumulator starts as a literal, the bare number a tip is, and whose result a second loop takes apart: a literal is no row, so the accumulator a link is built on is no less unique for having been one, and each loop rebuilds the link it takes apart, in the arms a link is in.
+/// A loop whose accumulator starts as a literal, the bare number a tip is, and whose result a second loop takes apart: a literal is no row, so the accumulator a link is built on is no less unique for having been one, and the second loop rebuilds the links it takes apart.
 #[test]
 fn a_loop_started_on_a_literal_rebuilds_the_links_it_takes_apart() {
     let (lowered, module) = modules(&program(ROPE, ROPE_FLIPPED_TWICE));
@@ -533,6 +546,24 @@ fn a_loop_started_on_a_literal_rebuilds_the_links_it_takes_apart() {
     curios_cps::optimize(&mut kept);
     for n in ["0", "1", "300"] {
         assert_eq!(run(&module, n), run(&kept, n), "{n}");
+    }
+}
+
+/// A loop that takes apart a rope nothing else holds, building a link in each of its arms: each round takes apart another link than the round before, so either arm rebuilds the link it takes apart, and the program collects as often as the one that only builds the rope. Collections are counted from the engine's own records, at a size whose links outgrow the heap's first half.
+#[test]
+fn a_loop_over_a_rope_nothing_else_holds_rebuilds_its_links_in_either_arm() {
+    let rope = [ROPE, MIXED_ROPE].concat();
+    let (lowered, flipped) = modules(&program(
+        &rope,
+        "total(flip(mixed(n, Rope/tip(0)), Rope/tip(1)), 0)",
+    ));
+    let (_, built) = modules(&program(&rope, "total(mixed(n, Rope/tip(0)), 0)"));
+    let collections = |module: &Module| collected(|| run(module, "600000")).1.collections;
+    assert_eq!(collections(&flipped), collections(&built), "{flipped}");
+    let mut kept = lowered;
+    curios_cps::optimize(&mut kept);
+    for n in ["0", "1", "300"] {
+        assert_eq!(run(&flipped, n), run(&kept, n), "{n}");
     }
 }
 

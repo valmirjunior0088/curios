@@ -937,10 +937,11 @@ enum Def {
 /// The edge of a switch a use hands its value on, by its target and its case, `None` for the default; `None` for a use at a node.
 type Edge = Option<(ContinuationId, Option<u32>)>;
 
-/// One way a continuation is entered: the arguments a jump or a switch's edge hands it, and the switch and key where it is a case.
+/// One way a continuation is entered: the arguments a jump or a switch's edge hands it, the block that jump or switch ends, and the switch and key where it is a case.
 #[derive(Debug, Clone)]
 struct Entry {
     args: Vec<Atom>,
+    from: Block,
     case: Option<(NodeId, u32)>,
 }
 
@@ -1180,6 +1181,7 @@ impl Shape {
                                             shape.entries.entry(edge.target).or_default().push(
                                                 Entry {
                                                     args: edge.args.clone(),
+                                                    from: block,
                                                     case: None,
                                                 },
                                             )
@@ -1201,6 +1203,7 @@ impl Shape {
                                             shape.entries.entry(edge.target).or_default().push(
                                                 Entry {
                                                     args: edge.args.clone(),
+                                                    from: block,
                                                     case: key.map(|key| (at, key)),
                                                 },
                                             );
@@ -1315,6 +1318,56 @@ impl Shape {
         let ((from_block, from_at), (to_block, to_at)) = (self.place[&from], self.place[&to]);
         (from_block == to_block && to_at > from_at)
             || self.reached_outside(home, from_block).contains(&to_block)
+    }
+
+    /// Whether `to` can run after `from` while `value` names the object it names at `from`: before a run binds it again, or past one where that run may bind it to the same object ([`Self::may_bind_again_to_itself`]).
+    fn reaches_as_one(&self, value: ValueId, from: NodeId, to: NodeId) -> bool {
+        match self.may_bind_again_to_itself(value) {
+            true => self.reaches(from, to),
+            false => self.reaches_holding(value, from, to),
+        }
+    }
+
+    /// Whether a run that binds `value` again may bind it to the object it named: every value may but a loop's parameter each entry its loop's own body makes hands another object, which is a field of the parameter, no object holding itself, a construction, a literal, a filler, or a join's parameter each of whose entries hands one of these.
+    fn may_bind_again_to_itself(&self, value: ValueId) -> bool {
+        let Some(Def::ContParam(continuation, index)) = self.defs.get(&value) else {
+            return true;
+        };
+        let body = self.reached(Block::Cont(*continuation));
+        let mut handed = self
+            .entries
+            .get(continuation)
+            .into_iter()
+            .flatten()
+            .filter(|entry| body.contains(&entry.from))
+            .map(|entry| entry.args[*index].clone())
+            .collect::<Vec<_>>();
+        let mut joins = BTreeSet::new();
+        while let Some(atom) = handed.pop() {
+            let Atom::Value(other) = atom else {
+                continue;
+            };
+            if other == value || self.constant.contains(&other) {
+                return true;
+            }
+            match self.defs.get(&other) {
+                Some(Def::Construction) => {}
+                Some(Def::Field(of)) if *of == value => {}
+                Some(Def::ContParam(join, at)) => {
+                    if joins.insert((*join, *at)) {
+                        handed.extend(
+                            self.entries
+                                .get(join)
+                                .into_iter()
+                                .flatten()
+                                .map(|entry| entry.args[*at].clone()),
+                        );
+                    }
+                }
+                _ => return true,
+            }
+        }
+        false
     }
 
     /// The block that binds `value`: its function's body, its continuation's, or the one its binder sits along.
@@ -1801,7 +1854,7 @@ impl<'s> Facts<'s> {
         }
     }
 
-    /// The constructions of a row beside a unique value of that row, dead there and consumed on no path to them, rebuilt at most once on a path, and never where a constant may be the value and no tag test rules it out.
+    /// The constructions of a row beside a unique value of that row, dead there and consumed on no path to them, rebuilt at most once while it names one object, and never where a constant may be the value and no tag test rules it out.
     fn rebuilds(&self, tags: &BTreeMap<ValueId, Tags>) -> Vec<Rebuild> {
         let (module, shape) = (self.module, self.shape);
         let mut by_row = BTreeMap::<(FunctionId, RowId), Vec<ValueId>>::new();
@@ -1844,7 +1897,8 @@ impl<'s> Facts<'s> {
                         && !shape.returns_without_rebinding(*value, *node_id)
                         && clear_of_constants(module, shape, tags, *value, *node_id)
                         && chosen.get(value).into_iter().flatten().all(|other| {
-                            !shape.reaches(*other, *node_id) && !shape.reaches(*node_id, *other)
+                            !shape.reaches_as_one(*value, *other, *node_id)
+                                && !shape.reaches_as_one(*value, *node_id, *other)
                         })
                 })
                 .map(|of| {
@@ -1934,14 +1988,18 @@ fn sources(
                             )
                         })
             }
-            // Two reads of one slot on one path name one object, and so does one read on two rounds of a loop that binds what it reads once.
+            // Two reads of one slot name one object where one can run after the other while the value they read names one object, and so does one read on two rounds of a loop that binds what it reads once.
             Def::Field(of) => {
                 shape.returns_without_rebinding(*of, shape.binder[value])
                     || shape.fields.get(of).into_iter().flatten().any(|other| {
                         *other != *value
                             && shape.slot_of.get(other) == shape.slot_of.get(value)
-                            && (shape.reaches(shape.binder[value], shape.binder[other])
-                                || shape.reaches(shape.binder[other], shape.binder[value]))
+                            && (shape.reaches_as_one(*of, shape.binder[value], shape.binder[other])
+                                || shape.reaches_as_one(
+                                    *of,
+                                    shape.binder[other],
+                                    shape.binder[value],
+                                ))
                     })
             }
         };
