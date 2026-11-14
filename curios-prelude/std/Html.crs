@@ -64,13 +64,12 @@ pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> H
             element("body", [], body)]);
 
 let escape_char(c: Char) -> Str =
-    let n = Char/to_nat(c);
-    match
-    | n == '&' => "&amp;"
-    | n == '<' => "&lt;"
-    | n == '>' => "&gt;"
-    | n == '"' => "&quot;"
-    | n == '\'' => "&#39;"
+    match Char/to_nat(c)
+    | '&' => "&amp;"
+    | '<' => "&lt;"
+    | '>' => "&gt;"
+    | '"' => "&quot;"
+    | '\'' => "&#39;"
     | _ => Str/of_char(c)
     end;
 

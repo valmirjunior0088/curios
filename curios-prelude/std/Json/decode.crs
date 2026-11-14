@@ -40,11 +40,7 @@ let exp_fields() -> Parse(Str, Int) =
     let sign = Parse/optional(Parse/str/char_if((c) => c == '+' || c == '-'))!;
     let run = digits1()!;
     let magnitude = Nat/to_int(digits_value(run));
-    Parse/pure(
-        match sign
-        | some(c) => match c == '-' | true => +0 - magnitude | false => magnitude end
-        | none() => magnitude
-        end);
+    Parse/pure(match sign | some(c), c == '-' => +0 - magnitude | _ => magnitude end);
 
 --- The exponent: what follows an `e` of either case, or zero where none is written. An `e` owes a digit.
 let exp_part() -> Parse(Str, Int) =
@@ -134,12 +130,8 @@ let str_segment: Parse(Str, Str) =
 let str_control() -> Parse(Str, Str) =
     let next = Parse/str/peek!;
     match next
-    | some(c) =>
-        match Char/to_nat(c) < 0x20
-        | true => Parse/commit(Parse/fail("unescaped control character"))
-        | false => Parse/fail("no control character")
-        end
-    | none() => Parse/fail("no control character")
+    | some(c), Char/to_nat(c) < 0x20 => Parse/commit(Parse/fail("unescaped control character"))
+    | _ => Parse/fail("no control character")
     end;
 
 let str_body: Parse(Str, List(Str)) =

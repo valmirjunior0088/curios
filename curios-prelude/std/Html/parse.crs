@@ -139,19 +139,16 @@ let element() -> Parse(Str, Html) =
     let closed = Parse/optional(Parse/str/expect('/'))!;
     let _ = ws!;
     let _ = Parse/optional(Parse/str/expect('>'))!;
-    match Option/is_some(closed)
-    | true => Parse/pure(Html/void(n, attrs))
-    | false =>
-        match Html/is_raw_text(n)
-        | true =>
-            let body = Parse/str/until(Str/concat("</", n))!;
-            let _ = Parse/optional(close_tag())!;
-            Parse/pure(Html/element(n, attrs, [Html/text(body)]))
-        | false =>
-            let children = trees!;
-            let _ = Parse/optional(close_tag())!;
-            Parse/pure(Html/element(n, attrs, children))
-        end
+    match
+    | Option/is_some(closed) => Parse/pure(Html/void(n, attrs))
+    | Html/is_raw_text(n) =>
+        let body = Parse/str/until(Str/concat("</", n))!;
+        let _ = Parse/optional(close_tag())!;
+        Parse/pure(Html/element(n, attrs, [Html/text(body)]))
+    | _ =>
+        let children = trees!;
+        let _ = Parse/optional(close_tag())!;
+        Parse/pure(Html/element(n, attrs, children))
     end
 and tree() -> Parse(Str, Html) =
     let next = Parse/str/peek!;
