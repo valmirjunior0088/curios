@@ -4,7 +4,9 @@ use {
     crate::convert::{convert_under, test_support::*},
     crate::*,
     curios_common::{Plicity, Qualifier},
-    curios_core::{Atom, InductDecl, Level, MetavarId, Telescope, Term, UniverseContext},
+    curios_core::{
+        Atom, Constructors, InductDecl, Level, MetavarId, Telescope, Term, UniverseContext,
+    },
 };
 
 // === Parked-constraint retries ==============================================
@@ -106,7 +108,7 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
         Term::induct_type(nominal(path), Vec::<Term>::new(), Vec::<Term>::new())
     };
     // `induct P : Prop` and `induct Pair : Type | two(a : P, b : P)`.
-    let proposition = family(&mut context, "P", Vec::new().into(), Term::prop());
+    let proposition = family(&mut context, "P", Constructors::default(), Term::prop());
     let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
     let pair = family(
         &mut context,
@@ -122,7 +124,8 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
                 vec![Plicity::Explicit, Plicity::Explicit],
             ),
         )])
-        .into(),
+        .try_into()
+        .unwrap(),
         Term::type_ground(),
     );
     let scrutinee = context.fresh(Some("t"));

@@ -243,8 +243,7 @@ fn elaborate_induct_constructors(
         return Ok(());
     };
 
-    let mut constructors = Vec::new();
-    for (tag, case) in induct_decl.constructors() {
+    let elaborated = induct_decl.clone().try_with_cases(|case| {
         let signature = &induct_decl.signature(case);
         let labels = signature
             .labels()
@@ -293,10 +292,10 @@ fn elaborate_induct_constructors(
             .collect::<Vec<_>>();
         let payload = Telescope::build_marked(payload.to_vec(), targets)
             .relabel(&label_refs[induct_decl.param_count()..]);
-        constructors.push((tag.clone(), InductParam::over(&params, payload)));
-    }
+        Ok::<_, Error>(InductParam::over(&params, payload))
+    })?;
 
-    context.update_induct(name, induct_decl.with_constructors(constructors.into()));
+    context.update_induct(name, elaborated);
 
     Ok(())
 }

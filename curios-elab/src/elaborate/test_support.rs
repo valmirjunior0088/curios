@@ -52,7 +52,8 @@ pub fn register_opt(context: &mut Context) {
                         ),
                     ),
                 ])
-                .into(),
+                .try_into()
+                .unwrap(),
                 Term::type_ground(),
                 Qualifier::empty(),
                 true,

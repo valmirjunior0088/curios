@@ -228,7 +228,8 @@ fn a_proofs_match_stands_while_the_instance_it_states_is_open() {
                     Atom::from("zero"),
                     curios_core::test_support::case(0, Telescope::done(vec![nat(0)]), Vec::new()),
                 )]
-                .into(),
+                .try_into()
+                .unwrap(),
                 Term::prop(),
                 Qualifier::empty(),
                 true,

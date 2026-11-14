@@ -5,8 +5,8 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::{
-        ConceptDecl, DefinitionKind, Global, HeadKey, InductDecl, StructDecl, Telescope, Term,
-        UniverseContext, Universes, WitnessKey,
+        ConceptDecl, Constructors, DefinitionKind, Global, HeadKey, InductDecl, StructDecl,
+        Telescope, Term, UniverseContext, Universes, WitnessKey,
     },
     std::collections::BTreeSet,
 };
@@ -65,7 +65,7 @@ fn unit_of_entries(context: &mut Context) -> [Global; 4] {
             InductDecl::new(
                 UniverseContext::default(),
                 Telescope::done(Telescope::done(())),
-                Vec::new().into(),
+                Constructors::default(),
                 Term::type_ground(),
                 Qualifier::default(),
                 true,

@@ -4,8 +4,8 @@ use {
     curios_cert::{Certifier, carries_information},
     curios_common::Qualifier,
     curios_core::{
-        Free, Global, InductDecl, Intrinsic, Level, MetavarId, Subterm, Telescope, Term,
-        UniverseContext,
+        Constructors, Free, Global, InductDecl, Intrinsic, Level, MetavarId, Subterm, Telescope,
+        Term, UniverseContext,
     },
 };
 
@@ -87,7 +87,7 @@ fn both_checkers_decide_non_informativeness_alike() {
     let declaration = InductDecl::new(
         UniverseContext::default(),
         Telescope::done(Telescope::done(())),
-        Vec::new().into(),
+        Constructors::default(),
         Term::prop(),
         Qualifier::from(["Held"]),
         true,

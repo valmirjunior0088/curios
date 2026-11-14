@@ -9,6 +9,7 @@ variants!(Refusal {
     UnknownField,
     RepeatedField,
     RepeatedLevelPart,
+    RepeatedCase,
     UnknownNode,
     Malformed,
     UnknownIntrinsic,

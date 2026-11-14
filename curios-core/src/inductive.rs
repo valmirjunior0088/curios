@@ -103,11 +103,13 @@ impl InductParam {
     }
 }
 
-/// A family's cases in declaration order, each tag beside its signature, with the position of each tag found in constant time.
+/// A family's cases in declaration order, no two under one tag, each tag beside its signature, with the position of each tag found in constant time.
 ///
 /// A sequence, because the order is load-bearing: a case's position *is* its runtime tag ([`InductDecl::constructor_index`]). A `BTreeMap<Atom, _>` would make that position the collation order over constructor spellings, so renaming a case would silently renumber the emitted tags of every case it sorted past. Declaration order is predictable from the source, stable under a rename, and changes only under an edit that visibly reorders the declaration.
 ///
-/// The positions are found the first time a tag is looked up, and never stored, being read off the cases: a scan for a tag would make every construction and every reader of one case pay the family's width. Nothing reorders or renames a case once the sequence is made, so the positions found stand; equality, and the debug form, are the cases'.
+/// **No two cases share a tag.** A tag is the elimination key and the runtime index, and every reader resolves one to the case at its position, so a repeat would hide the case behind it rather than add one: a rule walking the cases one by one would answer about the first once per case, and coverage, asked whether each case is impossible at the scrutinee's indices, would report a family empty at an index its own later case constructs at. So a sequence that repeats a tag is no family's cases, which is why the cases are made only by `TryFrom`, and every door after it keeps the tags they were made with.
+///
+/// The positions are found where the cases are made, and the first time a tag is looked up in cases restored from an archive, and never stored, being read off the cases: a scan for a tag would make every construction and every reader of one case pay the family's width. Nothing reorders or renames a case once the sequence is made, so the positions found stand; equality, and the debug form, are the cases'.
 #[derive(Clone, Default)]
 #[curios_archive::archived]
 pub struct Constructors {
@@ -116,15 +118,61 @@ pub struct Constructors {
     positions: OnceLock<HashMap<Atom, usize>>,
 }
 
+/// A case whose tag a case before it has: the tag, and the later case's position.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepeatedCase {
+    pub tag: Atom,
+    pub position: usize,
+}
+
+impl TryFrom<Vec<(Atom, InductParam)>> for Constructors {
+    type Error = RepeatedCase;
+
+    /// The cases `cases` states, in its order, or the first of them whose tag a case before it has.
+    fn try_from(cases: Vec<(Atom, InductParam)>) -> Result<Self, RepeatedCase> {
+        let mut positions = HashMap::with_capacity(cases.len());
+        for (position, (tag, _)) in cases.iter().enumerate() {
+            if positions.insert(tag.clone(), position).is_some() {
+                return Err(RepeatedCase {
+                    tag: tag.clone(),
+                    position,
+                });
+            }
+        }
+
+        Ok(Self {
+            cases,
+            positions: OnceLock::from(positions),
+        })
+    }
+}
+
 impl Constructors {
-    /// The position of the first case `tag` names, which is its runtime tag.
+    /// These cases with each payload `rewrite` makes of it, under the tags they have.
+    fn rewritten<E>(
+        &self,
+        mut rewrite: impl FnMut(&InductParam) -> Result<InductParam, E>,
+    ) -> Result<Self, E> {
+        let cases = self
+            .cases
+            .iter()
+            .map(|(tag, case)| Ok((tag.clone(), rewrite(case)?)))
+            .collect::<Result<_, E>>()?;
+
+        Ok(Self {
+            cases,
+            positions: self.positions.clone(),
+        })
+    }
+
+    /// The position of the case `tag` names, which is its runtime tag.
     pub fn position(&self, tag: &Atom) -> Option<usize> {
         let positions = self.positions.get_or_init(|| {
-            let mut positions = HashMap::with_capacity(self.cases.len());
-            for (position, (tag, _)) in self.cases.iter().enumerate() {
-                positions.entry(tag.clone()).or_insert(position);
-            }
-            positions
+            self.cases
+                .iter()
+                .enumerate()
+                .map(|(position, (tag, _))| (tag.clone(), position))
+                .collect()
         });
 
         positions.get(tag).copied()
@@ -159,21 +207,6 @@ impl IntoIterator for Constructors {
 
     fn into_iter(self) -> Self::IntoIter {
         self.cases.into_iter()
-    }
-}
-
-impl From<Vec<(Atom, InductParam)>> for Constructors {
-    fn from(cases: Vec<(Atom, InductParam)>) -> Self {
-        Self {
-            cases,
-            positions: OnceLock::new(),
-        }
-    }
-}
-
-impl FromIterator<(Atom, InductParam)> for Constructors {
-    fn from_iter<I: IntoIterator<Item = (Atom, InductParam)>>(cases: I) -> Self {
-        Self::from(cases.into_iter().collect::<Vec<_>>())
     }
 }
 
@@ -333,29 +366,18 @@ impl InductDecl {
 
     /// This entry with its cases `rewrite` makes of each, which keeps each one's parameters ([`InductParam::rewritten`]).
     pub fn with_cases(self, mut rewrite: impl FnMut(&InductParam) -> InductParam) -> Self {
-        let constructors = self
-            .constructors
-            .iter()
-            .map(|(tag, case)| (tag.clone(), rewrite(case)))
-            .collect();
-        held_under(&constructors, self.arity.len());
+        let Ok(rewritten) =
+            self.try_with_cases(|case| Ok::<_, std::convert::Infallible>(rewrite(case)));
 
-        Self {
-            constructors,
-            ..self
-        }
+        rewritten
     }
 
     /// [`Self::with_cases`] by a rewrite that can refuse.
     pub fn try_with_cases<E>(
         self,
-        mut rewrite: impl FnMut(&InductParam) -> Result<InductParam, E>,
+        rewrite: impl FnMut(&InductParam) -> Result<InductParam, E>,
     ) -> Result<Self, E> {
-        let constructors = self
-            .constructors
-            .iter()
-            .map(|(tag, case)| Ok((tag.clone(), rewrite(case)?)))
-            .collect::<Result<Constructors, E>>()?;
+        let constructors = self.constructors.rewritten(rewrite)?;
         held_under(&constructors, self.arity.len());
 
         Ok(Self {

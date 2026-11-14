@@ -5,9 +5,9 @@ use {
     crate::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Cases, Exhaustion, Free, Global, InductDecl, Intrinsic, Level, Many, Match,
-        MatchResult, MetavarId, Scope, StructDecl, Subterm, Telescope, Term, UniverseContext,
-        Universes,
+        Atom, Cases, Constructors, Exhaustion, Free, Global, InductDecl, Intrinsic, Level, Many,
+        Match, MatchResult, MetavarId, Scope, StructDecl, Subterm, Telescope, Term,
+        UniverseContext, Universes,
     },
 };
 
@@ -368,7 +368,7 @@ fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
                     [(param, Term::prop())],
                     Telescope::build([(index, Term::free_var(&param))], ()),
                 ),
-                Vec::new().into(),
+                Constructors::default(),
                 Term::type_ground(),
                 Qualifier::empty(),
                 true,
@@ -493,7 +493,7 @@ fn a_struct_field_at_a_proposition_is_not_read() {
             InductDecl::new(
                 UniverseContext::empty(),
                 Telescope::done(Telescope::done(())),
-                Vec::new().into(),
+                Constructors::default(),
                 Term::prop(),
                 Qualifier::empty(),
                 true,
@@ -557,7 +557,7 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
             InductDecl::new(
                 UniverseContext::empty(),
                 Telescope::done(Telescope::done(())),
-                Vec::new().into(),
+                Constructors::default(),
                 Term::prop(),
                 Qualifier::empty(),
                 true,
@@ -585,7 +585,8 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
                         vec![Plicity::Explicit, Plicity::Explicit],
                     ),
                 )])
-                .into(),
+                .try_into()
+                .unwrap(),
                 Term::type_ground(),
                 Qualifier::empty(),
                 true,
@@ -648,7 +649,8 @@ fn a_constructor_payload_at_the_unit_type_converges_unread() {
                         vec![Plicity::Explicit, Plicity::Explicit],
                     ),
                 )])
-                .into(),
+                .try_into()
+                .unwrap(),
                 Term::type_ground(),
                 Qualifier::empty(),
                 true,

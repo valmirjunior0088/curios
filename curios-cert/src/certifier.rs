@@ -197,8 +197,6 @@ pub enum Error {
     IndexedByItsGroup { member: Global },
     /// A term whose typing needs its own type while that typing is in progress, every local it names standing at the binder it stood at where that typing began: a derivation resting on its own conclusion, whose regress a walk would follow a level a turn.
     NeedsItsOwnTyping(Term),
-    /// A family that declares one constructor tag more than once. Every lookup resolves a tag by first match, so a repeat hides a constructor rather than adding one — and the coverage rule then answers about the first entry once per entry, reporting a family empty at an index its own later entry constructs at.
-    RepeatedTag(Atom),
     /// An elimination with no arm for this constructor, no catch-all, and no clash making the case impossible at the scrutinee's indices. An arm may be legitimately absent only when its index targets cannot equal the actuals; anything else is a stuck term inhabiting the motive.
     MissingArm { family: Global, tag: Atom },
     /// A value of a case, or an arm of an elimination, at a tag its family does not declare: the family is held, and has no case of that name.
@@ -431,12 +429,6 @@ impl fmt::Display for Displayed<'_> {
                 write!(
                     formatter,
                     "typing `{term}` needs the type of `{term}` itself, which that typing is computing"
-                )
-            }
-            Error::RepeatedTag(tag) => {
-                write!(
-                    formatter,
-                    "constructor tag `{tag}` is declared more than once"
                 )
             }
             Error::MissingArm { family, tag } => write!(

@@ -91,7 +91,8 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
                 vec![Plicity::Explicit],
             ),
         )]
-        .into(),
+        .try_into()
+        .unwrap(),
         Term::type_at(three),
         Qualifier::from(["E"]),
         true,

@@ -6,8 +6,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Definition, DefinitionKind, Definitions, Free, Global, InductDecl, Intrinsic, Item, Nat,
-        Telescope, Term, UniverseContext, Universes, test_support::*,
+        Constructors, Definition, DefinitionKind, Definitions, Free, Global, InductDecl, Intrinsic,
+        Item, Nat, Telescope, Term, UniverseContext, Universes, test_support::*,
     },
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -177,7 +177,7 @@ fn a_withheld_declaring_item_takes_its_registry_entry_out_of_the_module() {
     let entry = InductDecl::new(
         UniverseContext::empty(),
         Telescope::Done(Box::new(Telescope::Done(Box::new(())))),
-        Vec::new().into(),
+        Constructors::default(),
         Term::type_ground(),
         Qualifier::empty(),
         true,

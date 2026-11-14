@@ -16,8 +16,8 @@ use {
     },
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Bound, Cursor, Free, Global, InductDecl, InductParam, Label, Polarity, StructDecl,
-        Telescope, Term, UniverseContext, Variance,
+        Atom, Bound, Constructors, Cursor, Free, Global, InductDecl, InductParam, Label, Polarity,
+        StructDecl, Telescope, Term, UniverseContext, Variance,
     },
 };
 
@@ -418,6 +418,12 @@ pub fn family_entry_read(
         Telescope::build_marked(read, proving_telescope(indices_built, &indices)),
         &params,
     );
+    let cases = Constructors::try_from(cases).map_err(|repeated| {
+        ReadError::at(
+            Refusal::RepeatedCase(repeated.tag.to_string()),
+            family.cases[repeated.position].label.span(),
+        )
+    })?;
     let result_sort = core_read(&family.result_sort, reader)?;
     let (mut universe_context, mut module) = (scheme.clone(), parent(name));
     let (mut polarities, mut variances) = (Vec::new(), Vec::new());
@@ -432,7 +438,7 @@ pub fn family_entry_read(
     Ok(InductDecl::new(
         universe_context,
         arity,
-        cases.into(),
+        cases,
         result_sort,
         module,
         family.rep_pub,

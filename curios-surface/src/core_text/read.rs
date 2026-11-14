@@ -46,6 +46,8 @@ pub enum Refusal {
     RepeatedField(String),
     /// A head, or the constant, a level's `max` names twice: the printer writes one part a head, and a reader taking either would read a level other than the one written.
     RepeatedLevelPart(String),
+    /// A case of a family whose tag a case before it has: a family's cases are under distinct tags ([`curios_core::Constructors`]).
+    RepeatedCase(String),
     /// A `node` no form of this shape fills.
     UnknownNode(String),
     /// A value of a shape its field does not take.
@@ -78,6 +80,9 @@ impl fmt::Display for ReadError {
             }
             Refusal::RepeatedLevelPart(part) => {
                 write!(formatter, "a `max` names {part} twice")
+            }
+            Refusal::RepeatedCase(tag) => {
+                write!(formatter, "the family has a case `{tag}` already")
             }
             Refusal::UnknownNode(node) => {
                 write!(formatter, "`node = {node}` names no node this form fills")

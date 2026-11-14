@@ -64,7 +64,8 @@ fn register_tagged(context: &mut Context) {
                         vec![Plicity::Implicit, Plicity::Explicit],
                     ),
                 )])
-                .into(),
+                .try_into()
+                .unwrap(),
                 Term::type_ground(),
                 Qualifier::empty(),
                 true,
@@ -237,7 +238,8 @@ fn register_flag(context: &mut Context) {
                         ),
                     ),
                 ])
-                .into(),
+                .try_into()
+                .unwrap(),
                 Term::type_ground(),
                 Qualifier::empty(),
                 true,

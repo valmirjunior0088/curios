@@ -153,7 +153,8 @@ fn top_induct() -> curios_core::InductDecl {
             curios_core::Atom::from("qed"),
             curios_core::test_support::case(0, curios_core::Telescope::done(Vec::new()), vec![]),
         )])
-        .into(),
+        .try_into()
+        .unwrap(),
         curios_core::Term::prop(),
         Qualifier::empty(),
         true,

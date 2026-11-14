@@ -1846,7 +1846,8 @@ fn process_items(
                                     param_tys.clone(),
                                     curios_core::Telescope::build(index_tys.iter().cloned(), ()),
                                 ),
-                                constructors.into(),
+                                curios_core::Constructors::try_from(constructors)
+                                    .expect("discovery refuses a repeated case"),
                                 result_sort.clone(),
                                 context.island(),
                                 u.rep_pub,

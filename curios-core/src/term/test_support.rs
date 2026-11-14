@@ -130,7 +130,7 @@ pub fn shaped(params: usize, indices: usize, variances: &[Variance]) -> InductDe
                 (),
             ),
         ),
-        Vec::new().into(),
+        Constructors::default(),
         Term::type_ground(),
         Qualifier::default(),
         true,

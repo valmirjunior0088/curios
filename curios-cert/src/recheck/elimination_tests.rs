@@ -3,8 +3,8 @@
 use {
     super::test_support::*,
     crate::*,
-    curios_common::{Qualifier, fill},
-    curios_core::{Atom, Global, Quality, Subterm},
+    curios_common::fill,
+    curios_core::{Atom, Quality, Subterm},
     curios_surface::Spellable,
 };
 
@@ -287,24 +287,23 @@ let /cast: (p: #{node = InductType} /Pin()(0), h: #{node = InductType} /Held()) 
 ///
 /// What it would certify is `vacuous : (x : Held(Two/b())) -> False` — a refutation of a constructor the same declaration states. That is not a closed inhabitant of `False`: construction resolves by first match too, so `let h : Held(Two/b()) = Held/mk()` is a `Mismatch` of `Held(Two/a())` against `Held(Two/b())`, and the shadowed entry has no inhabitant to hand the refutation. Refusing the repeated tag keeps the elimination rule from being sound only because an unrelated rule is lossy in the same direction.
 ///
-/// No `.crs` file reaches it: `curios-module` refuses both spellings with ``` `mk` is already declared in this module ```, whether or not the representation is public. The elaborator is the stricter of the two, so the certifier's copy of the rule is unreachable from the corpus, and that is why this belongs here rather than in `curios/src/tests`.
+/// No `.crs` file reaches it: `curios-module` refuses both spellings with ``` `mk` is already declared in this module ```, whether or not the representation is public. Nor does a module: a family's cases are made under distinct tags ([`curios_core::Constructors`]), so Core text's reader refuses the second `mk` where it stands, and the certifier is never handed the family.
 ///
-/// A tag names a constructor, which the family declares beside its former, so a repeat is a name declared twice, and the walk refuses the module whole for it before judging anything (`redeclarations`); `check_distinct_tags` holds an entry declared outside a walk to the same rule.
-///
-/// The control is the same shape at two *distinct* tags, both targeting `Two/a()`. It must stay accepted: ruling impossible cases out is what an indexed family's vacuous elimination is for, and a clause that refused every multi-constructor declaration, or every empty elimination over one, would shut this hole with a brick.
+/// The control is the same shape at two *distinct* tags, both targeting `Two/a()`. It must stay accepted: ruling impossible cases out is what an indexed family's vacuous elimination is for, and a rule that refused every multi-constructor declaration, or every empty elimination over one, would shut this hole with a brick.
 #[test]
 fn a_family_that_declares_one_tag_twice_is_refused() {
     let cases = "| mk(): (#{node = Variant} /Two/a())\n| mk(): (#{node = Variant} /Two/a())";
-    let verdicts = text_verdicts(&fill!(SHADOWED, cases));
+    let read = put().read(&fill!(SHADOWED, cases)).map(|_| ());
 
-    let mk = Global::Authored(Qualifier::from(["Held", "mk"]));
-    assert_eq!(
-        verdicts,
-        [Verdict {
-            name: Some(mk),
-            error: Error::Redeclared(mk),
-        }],
-        "the certifier accepted a refutation of a constructor the declaration states",
+    assert!(
+        matches!(
+            &read,
+            Err(crate::test_support::Unread::Read(curios_surface::ReadError {
+                refusal: curios_surface::Refusal::RepeatedCase(tag),
+                span: Some(_),
+            })) if tag == "mk"
+        ),
+        "a family was read with two cases under one tag: {read:?}",
     );
 }
 

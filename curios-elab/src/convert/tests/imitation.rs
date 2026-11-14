@@ -5,8 +5,8 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::{
-        InductDecl, Intrinsic, Level, MetavarId, MetavarOrigin, ReduceError, StructDecl, Telescope,
-        Term, UniverseContext, UniverseParam, Variance,
+        Constructors, InductDecl, Intrinsic, Level, MetavarId, MetavarOrigin, ReduceError,
+        StructDecl, Telescope, Term, UniverseContext, UniverseParam, Variance,
     },
     std::collections::BTreeSet,
 };
@@ -22,7 +22,7 @@ fn register_list(context: &mut Context) {
             InductDecl::new(
                 UniverseContext::empty(),
                 Telescope::build([(elem, Term::type_ground())], Telescope::done(())),
-                Vec::new().into(),
+                Constructors::default(),
                 Term::type_ground(),
                 Qualifier::empty(),
                 true,
@@ -44,7 +44,7 @@ fn register_vec(context: &mut Context) {
                     [(elem, Term::type_ground())],
                     Telescope::build([(length, Term::intrinsic(Intrinsic::NatType))], ()),
                 ),
-                Vec::new().into(),
+                Constructors::default(),
                 Term::type_ground(),
                 Qualifier::empty(),
                 true,
@@ -67,7 +67,7 @@ fn register_wrap(context: &mut Context, variance: Variance) {
                     constraints: Vec::new(),
                 },
                 Telescope::build([(elem, sort.clone())], Telescope::done(())),
-                Vec::new().into(),
+                Constructors::default(),
                 sort,
                 Qualifier::empty(),
                 true,

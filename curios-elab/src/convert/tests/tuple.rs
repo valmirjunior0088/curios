@@ -5,8 +5,9 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::{
-        Cases, DefinitionKind, Exhaustion, Free, Global, InductDecl, Intrinsic, Match, MatchResult,
-        MetavarId, StructDecl, StructType, Subterm, Telescope, Term, UniverseContext, Universes,
+        Cases, Constructors, DefinitionKind, Exhaustion, Free, Global, InductDecl, Intrinsic,
+        Match, MatchResult, MetavarId, StructDecl, StructType, Subterm, Telescope, Term,
+        UniverseContext, Universes,
     },
 };
 
@@ -432,7 +433,7 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
                 InductDecl::new(
                     UniverseContext::empty(),
                     Telescope::done(Telescope::done(())),
-                    Vec::new().into(),
+                    Constructors::default(),
                     sort,
                     Qualifier::empty(),
                     true,

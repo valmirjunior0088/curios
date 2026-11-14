@@ -7,11 +7,12 @@ use {
     },
     curios_common::{Qualifier, Source},
     curios_core::{
-        Arm, Atom, Bind, CalleeId, Cases, Definition, DefinitionKind, Definitions, Field, Free,
-        Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam, Intrinsic, Item, Let,
-        Level, Match, MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj,
-        Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm, Telescope, Term,
-        UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
+        Arm, Atom, Bind, CalleeId, Cases, Constructors, Definition, DefinitionKind, Definitions,
+        Field, Free, Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam, Intrinsic,
+        Item, Let, Level, Match, MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal,
+        Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm,
+        Telescope, Term, UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey,
+        WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -247,7 +248,7 @@ fn bit() -> InductDecl {
             Vec::<(Free, Term)>::new(),
             Telescope::build(Vec::<(Free, Term)>::new(), ()),
         ),
-        [case("zero"), case("one")].into_iter().collect(),
+        Constructors::try_from(vec![case("zero"), case("one")]).unwrap(),
         Term::type_ground(),
         Qualifier::empty(),
         false,
@@ -889,6 +890,19 @@ fn a_form_that_implies_a_definition_needs_a_scope() {
             })
         ));
     }
+}
+
+/// A family's cases are under distinct tags ([`curios_core::Constructors`]), so a case whose tag a case before it has is refused by name where it stands rather than read hidden behind the earlier one, which every reader of the family would resolve the tag to.
+#[test]
+fn a_family_naming_one_case_twice_is_refused_where_the_repeat_stands() {
+    let text = "induct /Two: pub Type\n| a()\n| a()\nend\n";
+    let file = text.parse::<CoreFile>().unwrap();
+    let error = to_core(&file, None).map(|_| ()).expect_err(text);
+
+    assert_eq!(
+        (error.refusal, error.span.map(|span| span.start)),
+        (Refusal::RepeatedCase("a".to_string()), Some(30)),
+    );
 }
 
 /// A level's `max` holds one part a head and one constant, as the printer writes it, so a `max` naming one twice is refused by name where the repeat stands rather than read as one of the two: `max(u + 1, u)` would otherwise be `u`, a level below the one written, and `max(5, 0)` would be `0`. Mutation-checked: with the parts folded by assignment, both read.

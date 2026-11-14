@@ -4,7 +4,9 @@ use {
     curios_analysis::test_support::*,
     curios_cert::Certifier,
     curios_common::Qualifier,
-    curios_core::{Atom, Free, Global, InductDecl, InductParam, Telescope, Term, UniverseContext},
+    curios_core::{
+        Atom, Constructors, Free, Global, InductDecl, InductParam, Telescope, Term, UniverseContext,
+    },
 };
 
 pub fn certifier() -> Certifier<'static> {
@@ -23,15 +25,18 @@ pub fn declare(certifier: &mut Certifier, path: &str, result_sort: Term) -> Glob
             &InductDecl::new(
                 UniverseContext::default(),
                 Telescope::done(Telescope::done(())),
-                ["a", "b"]
-                    .into_iter()
-                    .map(|tag| {
-                        (
-                            Atom::from(tag),
-                            InductParam::over(&[], Telescope::done(Vec::new())),
-                        )
-                    })
-                    .collect(),
+                Constructors::try_from(
+                    ["a", "b"]
+                        .into_iter()
+                        .map(|tag| {
+                            (
+                                Atom::from(tag),
+                                InductParam::over(&[], Telescope::done(Vec::new())),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap(),
                 result_sort,
                 Qualifier::from([path]),
                 true,
@@ -49,11 +54,11 @@ pub fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
     InductDecl::new(
         UniverseContext::default(),
         Telescope::done(Telescope::done(())),
-        vec![(
+        Constructors::try_from(vec![(
             Atom::from("c"),
             InductParam::over(&[], Telescope::build([(binder, payload_type)], Vec::new())),
-        )]
-        .into(),
+        )])
+        .unwrap(),
         result_sort,
         Qualifier::from(["T"]),
         true,

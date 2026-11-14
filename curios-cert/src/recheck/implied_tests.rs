@@ -127,22 +127,25 @@ match
 end
 "#;
 
-/// The second constructor a form implies under a name is a second declaration under it, refused before anything of the module is judged.
+/// A family's cases are under distinct tags ([`curios_core::Constructors`]), so a form stating a second case under a tag implies no second constructor under its name: the reader refuses the case where it stands, and no module holds the family.
 #[test]
-fn two_constructors_a_form_implies_under_one_name_are_refused_for_it() {
-    let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${TWO_CASES_ONE_TAG}",
-        PROPOSITIONS,
-        TWO_CASES_ONE_TAG
-    ));
-    let constructor = Global::Authored(Qualifier::from(["D", "mk"]));
+fn two_cases_a_form_states_under_one_tag_are_refused_as_it_is_read() {
+    let read = put()
+        .read(&fill!(
+            "${PROPOSITIONS}\n${TWO_CASES_ONE_TAG}",
+            PROPOSITIONS,
+            TWO_CASES_ONE_TAG
+        ))
+        .map(|_| ());
 
     assert!(
         matches!(
-            &verdicts[..],
-            [Verdict { name: Some(owner), error: Error::Redeclared(redeclared) }]
-                if *owner == constructor && *redeclared == constructor
+            &read,
+            Err(crate::test_support::Unread::Read(curios_surface::ReadError {
+                refusal: curios_surface::Refusal::RepeatedCase(tag),
+                span: Some(_),
+            })) if tag == "mk"
         ),
-        "{verdicts:?}"
+        "{read:?}"
     );
 }

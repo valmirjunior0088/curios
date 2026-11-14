@@ -5,7 +5,7 @@ use {
     crate::*,
     curios_common::Qualifier,
     curios_core::{
-        Free, InductDecl, Intrinsic, Level, Telescope, Term, UniverseConstraintKind,
+        Constructors, Free, InductDecl, Intrinsic, Level, Telescope, Term, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam, UniverseRole,
         Variance,
     },
@@ -45,7 +45,7 @@ fn a_case_equation_answers_at_another_instance_of_an_irrelevant_level() {
                         constraints: Vec::new(),
                     },
                     Telescope::build([(carrier, sort.clone())], Telescope::done(())),
-                    Vec::new().into(),
+                    Constructors::default(),
                     sort.clone(),
                     Qualifier::empty(),
                     true,

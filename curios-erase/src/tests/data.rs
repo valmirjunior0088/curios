@@ -75,7 +75,8 @@ fn opt_induct() -> curios_core::InductDecl {
                 ),
             ),
         ])
-        .into(),
+        .try_into()
+        .unwrap(),
         curios_core::Term::type_ground(),
         Qualifier::empty(),
         true,
@@ -611,7 +612,8 @@ fn unary_induct(payload: curios_core::Term) -> curios_core::InductDecl {
                 vec![Plicity::Explicit],
             ),
         )])
-        .into(),
+        .try_into()
+        .unwrap(),
         curios_core::Term::type_ground(),
         Qualifier::empty(),
         true,

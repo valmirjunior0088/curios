@@ -6,7 +6,7 @@ use {
     curios_analysis::test_support::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Definition, DefinitionKind, Free, InductDecl, Level, Telescope, Term,
+        Atom, Constructors, Definition, DefinitionKind, Free, InductDecl, Level, Telescope, Term,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseMetaId,
         UniverseParam, UniverseRole, Variance,
     },
@@ -28,7 +28,7 @@ fn declare_wrap(context: &mut Context, variance: Variance) {
                     constraints: Vec::new(),
                 },
                 Telescope::build([(carrier, sort.clone())], Telescope::done(())),
-                Vec::new().into(),
+                Constructors::default(),
                 sort,
                 Qualifier::empty(),
                 true,
@@ -73,7 +73,8 @@ fn declare_held(context: &mut Context) {
                         vec![Plicity::Explicit],
                     ),
                 )]
-                .into(),
+                .try_into()
+                .unwrap(),
                 Term::type_at(level()),
                 Qualifier::empty(),
                 true,

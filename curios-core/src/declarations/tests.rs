@@ -36,7 +36,7 @@ fn family(owner: &str, tags: &[&str]) -> Item {
             Vec::<(Free, Term)>::new(),
             Telescope::build(Vec::<(Free, Term)>::new(), ()),
         ),
-        tags.iter().map(case).collect(),
+        Constructors::try_from(tags.iter().map(case).collect::<Vec<_>>()).unwrap(),
         Term::type_ground(),
         Qualifier::empty(),
         false,

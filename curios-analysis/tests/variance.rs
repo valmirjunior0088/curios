@@ -7,8 +7,8 @@ use {
     curios_cert::Certifier,
     curios_common::Qualifier,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, LevelHead, StructDecl,
-        Telescope, Term, UniverseContext, UniverseMetaId, UniverseParam, Variance,
+        Atom, Constructors, Free, Global, InductDecl, InductParam, Intrinsic, Level, LevelHead,
+        StructDecl, Telescope, Term, UniverseContext, UniverseMetaId, UniverseParam, Variance,
     },
     std::collections::BTreeMap,
 };
@@ -66,14 +66,14 @@ fn family(
     InductDecl::new(
         scheme(levels),
         Telescope::build(typed.clone(), Telescope::build(indexed, ())),
-        vec![(
+        Constructors::try_from(vec![(
             Atom::from("c"),
             InductParam::over(
                 &binders.iter().collect::<Vec<_>>(),
                 Telescope::build(held, targets),
             ),
-        )]
-        .into(),
+        )])
+        .unwrap(),
         Term::type_ground(),
         Qualifier::default(),
         true,
@@ -190,7 +190,7 @@ fn a_level_an_index_type_mentions_is_invariant() {
         |_| Vec::new(),
         vec![nat()],
     )
-    .with_constructors(Vec::new().into());
+    .with_constructors(Constructors::default());
 
     assert_eq!(vector("Over", over), "=");
 }

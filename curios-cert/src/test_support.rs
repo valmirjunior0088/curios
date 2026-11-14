@@ -309,7 +309,6 @@ variants!(Error {
     NotCore,
     IndexedByItsGroup,
     NeedsItsOwnTyping,
-    RepeatedTag,
     MissingArm,
     NotDescending,
     NotPositive,

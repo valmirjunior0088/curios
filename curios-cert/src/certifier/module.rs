@@ -430,7 +430,6 @@ pub fn state_rec_group(
 /// 2. It carries no elaboration residue: no `Metavar` node, no level holding an unsolved universe metavariable — `induct_residue`.
 /// 3. Its `result_sort` is a *literal* sort — `check_declared_sort`. See the note below on why literal, and not merely something that reduces to one.
 /// 4. Every domain of its arity is a type — `check_arity`, which reaches the parameters as well as the indices, and so covers a family with no constructors at all.
-/// 5. No two constructors share a tag — `check_distinct_tags`. Every lookup resolves a tag by first match, so this is what makes `constructors` a set of constructors rather than a list in which some are unreachable.
 /// 6. Every constructor domain is well-sorted and sits at or below the family's declared level, with one rung of slack for the parameters — `check_signature`. This is the clause that keeps an inductive from containing the universe it lives in.
 /// 7. Every constructor states as many index targets as the family declares indices — `check_case_counts`.
 /// 8. Every index target inhabits the index telescope at the family's parameters — `check_constructed`. A target is read by inversion and by the arm rule, so this is the judgment that types it.
@@ -439,7 +438,7 @@ pub fn state_rec_group(
 ///
 /// # What is unspellable rather than checked
 ///
-/// Two agreements need no clause because they cannot be violated. The indices are the terminal of the parameter telescope, so "the index telescope leads with the parameters" cannot fail. And a constructor's signature terminates in its index targets alone, so a terminal naming another family, or standing at parameters other than the declaration's own, cannot be written. And a constructor's marks are its signature's entries' own, so a signature a mark short of its binders cannot be written. A variance vector's length needs no clause either: a position it does not reach reads invariant, which is equality, and an entry past the declaration's parameter count has no recomputed counterpart, so the reconciliation denies it if it claims irrelevance and nothing reads it if it does not.
+/// The agreements here need no clause because they cannot be violated. The indices are the terminal of the parameter telescope, so "the index telescope leads with the parameters" cannot fail. A family's cases are under distinct tags, which its sequence of cases holds where it is made ([`Constructors`](curios_core::Constructors)), so a repeated tag, which would hide the case behind it from every reader, cannot be written. And a constructor's signature terminates in its index targets alone, so a terminal naming another family, or standing at parameters other than the declaration's own, cannot be written. And a constructor's marks are its signature's entries' own, so a signature a mark short of its binders cannot be written. A variance vector's length needs no clause either: a position it does not reach reads invariant, which is equality, and an entry past the declaration's parameter count has no recomputed counterpart, so the reconciliation denies it if it claims irrelevance and nothing reads it if it does not.
 ///
 /// # How a case is closed without repeating its parameters
 ///
@@ -454,7 +453,6 @@ pub fn check_induct_decl(certifier: &mut Certifier, declaration: &InductDecl) ->
     curios_profile::profile!("check_induct_decl");
     check_case_counts(declaration)?;
     check_declared_sort(declaration.result_sort())?;
-    check_distinct_tags(declaration)?;
 
     at_every_sort(
         certifier,
@@ -505,26 +503,6 @@ fn check_declared_sort(result_sort: &Term) -> Result<(), Error> {
         }) => Err(Error::OpenSort(result_sort.clone())),
         _ => Err(Error::NotASort(result_sort.clone())),
     }
-}
-
-/// No two constructors share a tag.
-///
-/// A tag is the elimination key and the runtime index, and every lookup resolves one by *first match* — [`InductDecl::constructor`], and `constructor_index` with it. So a repeat does not add a constructor, it hides one, and the rules that walk `constructors` entry by entry answer about the first one once per entry. Coverage shows the cost: asked whether each constructor is impossible at the scrutinee's indices, it would resolve both entries to the first and could report a family empty at an index the declaration's own second entry constructs at — certifying a refutation of a constructor the same declaration states.
-///
-/// Construction resolves by first match too, so the shadowed entry would have no inhabitant to hand that refutation, but that is an accident. With this clause the elimination rule ranges over constructors that are distinct, rather than being sound because an unrelated rule happens to be lossy in the same direction.
-fn check_distinct_tags(declaration: &InductDecl) -> Result<(), Error> {
-    // Scanned rather than collected into a set, for the reason [`InductDecl::constructor`] gives for scanning: constructor counts are small enough that the set costs more than it saves.
-    for (position, tag) in declaration.constructor_order().enumerate() {
-        if declaration
-            .constructor_order()
-            .take(position)
-            .any(|earlier| earlier == tag)
-        {
-            return Err(Error::RepeatedTag(tag.clone()));
-        }
-    }
-
-    Ok(())
 }
 
 /// Every domain of the declaration's arity is a type: its parameters, and the index telescope they terminate in.

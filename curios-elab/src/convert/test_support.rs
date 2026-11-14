@@ -7,8 +7,8 @@ use {
     curios_analysis::test_support::*,
     curios_common::Qualifier,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Nat, ReduceError, Telescope, Term,
-        UniverseContext,
+        Atom, Constructors, Free, Global, InductDecl, InductParam, Intrinsic, Nat, ReduceError,
+        Telescope, Term, UniverseContext,
     },
 };
 
@@ -72,7 +72,7 @@ pub fn register(
             InductDecl::new(
                 UniverseContext::empty(),
                 Telescope::done(indices),
-                constructors.into(),
+                constructors.try_into().unwrap(),
                 sort,
                 Qualifier::empty(),
                 true,
@@ -91,7 +91,7 @@ pub fn declare_proposition(context: &mut Context, path: &str) -> Term {
             InductDecl::new(
                 UniverseContext::empty(),
                 Telescope::done(Telescope::done(())),
-                Vec::new().into(),
+                Constructors::default(),
                 Term::prop(),
                 Qualifier::empty(),
                 true,
