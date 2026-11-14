@@ -34,12 +34,9 @@ pub let meets(
                 | none() => Option/some((past = at, reach = reached))
                 | some(want) =>
                     match At/try_next(s, at)
-                    | some(have) =>
-                        match have.char == want.char
-                        | true => again(have.past, have.progress)(want.past, proved())
-                        | false => Option/none()
-                        end
-                    | none() => Option/none()
+                    | some(have), have.char == want.char =>
+                        again(have.past, have.progress)(want.past, proved())
+                    | _ => Option/none()
                     end
                 end,
         from)(
@@ -56,12 +53,9 @@ pub let meets_back(s: Str, from: At(s), piece: Str, p: At(piece)) -> Option(At(s
                 | none() => Option/some(at)
                 | some(want) =>
                     match At/try_prev(s, at)
-                    | some(have) =>
-                        match have.char == want.char
-                        | true => again(have.past, have.progress)(want.past)
-                        | false => Option/none()
-                        end
-                    | none() => Option/none()
+                    | some(have), have.char == want.char =>
+                        again(have.past, have.progress)(want.past)
+                    | _ => Option/none()
                     end
                 end,
         from)(
@@ -143,7 +137,7 @@ pub let back_over(s: Str, from: At(s), pred: (Char) -> Bool) -> At(s) =
         (_) => At(s),
         (at, again) =>
             match At/try_prev(s, at)
-            | some(p) => match pred(p.char) | true => again(p.past, p.progress) | false => at end
-            | none() => at
+            | some(p), pred(p.char) => again(p.past, p.progress)
+            | _ => at
             end,
         from);

@@ -10,27 +10,18 @@ let class_continues(k: Class) -> Bool =
 --- Every lead `classify` reports asks its continuation bytes for a range inside `0x80..=0xBF`. Walked by `classify`'s own guards, each of which fixes the range it reports.
 let classify_continues(c: Byte) -> Bool/Holds(class_continues(classify(c))) =
     let n = Byte/to_nat(c);
-    match Nat/in_range(n, 0x0, 0x7F)
-    | true => Bool/True/qed()
-    | false =>
-        match Nat/in_range(n, 0xC2, 0xDF)
-        | true => Bool/True/qed()
-        | false =>
-            match Nat/in_range(n, 0xE0, 0xEF)
-            | true =>
-                match n == 0xE0
-                | true | false => match n == 0xED | true | false => Bool/True/qed() end
-                end
-            | false =>
-                match Nat/in_range(n, 0xF0, 0xF4)
-                | true =>
-                    match n == 0xF0
-                    | true | false => match n == 0xF4 | true | false => Bool/True/qed() end
-                    end
-                | false => Bool/True/qed()
-                end
-            end
+    match
+    | Nat/in_range(n, 0x0, 0x7F) => Bool/True/qed()
+    | Nat/in_range(n, 0xC2, 0xDF) => Bool/True/qed()
+    | Nat/in_range(n, 0xE0, 0xEF) =>
+        match n == 0xE0
+        | true | false => match n == 0xED | true | false => Bool/True/qed() end
         end
+    | Nat/in_range(n, 0xF0, 0xF4) =>
+        match n == 0xF0
+        | true | false => match n == 0xF4 | true | false => Bool/True/qed() end
+        end
+    | _ => Bool/True/qed()
     end;
 
 --- A scan between characters that meets a byte continuing one goes bad: `classify` reports no lead for it, each of its guards refuted by the byte's range.
@@ -39,21 +30,12 @@ let step_of_continuing(
     q: Bool/Holds(continues(c)),
 ) -> Eq()(step(c, Scan/lead()), Scan/bad()) =
     let n = Byte/to_nat(c);
-    match Nat/in_range(n, 0x0, 0x7F)
-    | true => match proved(@Bool/False) end
-    | false =>
-        match Nat/in_range(n, 0xC2, 0xDF)
-        | true => match proved(@Bool/False) end
-        | false =>
-            match Nat/in_range(n, 0xE0, 0xEF)
-            | true => match proved(@Bool/False) end
-            | false =>
-                match Nat/in_range(n, 0xF0, 0xF4)
-                | true => match proved(@Bool/False) end
-                | false => Eq/refl()
-                end
-            end
-        end
+    match
+    | Nat/in_range(n, 0x0, 0x7F) => match proved(@Bool/False) end
+    | Nat/in_range(n, 0xC2, 0xDF) => match proved(@Bool/False) end
+    | Nat/in_range(n, 0xE0, 0xEF) => match proved(@Bool/False) end
+    | Nat/in_range(n, 0xF0, 0xF4) => match proved(@Bool/False) end
+    | _ => Eq/refl()
     end;
 
 --- Whether a scan has come to rest between characters.
@@ -364,81 +346,74 @@ pub let decode_head(c: Byte, @t: Bytes, w: from(Scan/lead(), x[c, ..t])) -> Char
 ---
 --- Walked by the guards `Char/to_utf8` chose its family by, so each arm's goal reduces to that family's bytes read through `classify`. What reduction cannot see is where a lead byte narrows its first continuation's range, and each such edge is one arm: `E0` floors it at `A0`, so a three-byte form cannot spell what two bytes hold; `ED` caps it at `9F`, which excludes the surrogates; `F0` floors it at `90`, lifting a four-byte value past `U+FFFF`; and `F4` caps it at `8F`, at `U+10FFFF`. The code point's own bounds settle each — its guards, and `c.valid` where the ceiling is the scalar values' — and every other byte's range reduction decides.
 pub let encoded(c: Char) -> Valid(Char/to_utf8(c)) =
-    match c.code < 0x80
-    | true => Bool/True/qed()
-    | false =>
-        match c.code < 0x800
-        -- `C2..=DF`: the lead byte's payload is at least `2`, since the code point is at least `0x80`, and below `0x20`.
+    match
+    | c.code < 0x80 => Bool/True/qed()
+    -- `C2..=DF`: the lead byte's payload is at least `2`, since the code point is at least `0x80`, and below `0x20`.
+    | c.code < 0x800 =>
+        match c.code / 0x40 >= 2
+        | false => match proved(@Bool/False) end
         | true =>
-            match c.code / 0x40 >= 2
+            match c.code / 0x40 <= 0x1F
+            | true => Bool/True/qed()
             | false => match proved(@Bool/False) end
+            end
+        end
+    -- `E0..=EF`, the lead byte's payload being below `0x10`.
+    | c.code < 0x10000 =>
+        match c.code / 0x1000 <= 0xF
+        | false => match proved(@Bool/False) end
+        | true =>
+            match c.code / 0x1000 == 0
+            -- `E0`: the code point is at least `0x800` with nothing above its low twelve bits, so its next six are at least `0x20`.
             | true =>
-                match c.code / 0x40 <= 0x1F
-                | true => Bool/True/qed()
-                | false => match proved(@Bool/False) end
+                match c.code / 0x1000 == 0xD
+                | true => match proved(@Bool/False) end
+                | false =>
+                    match c.code % 0x1000 / 0x40 >= 0x20
+                    | true => Bool/True/qed()
+                    | false => match proved(@Bool/False) end
+                    end
+                end
+            | false =>
+                match c.code / 0x1000 == 0xD
+                -- `ED`: the code point is below `0xE000`, so validity puts it below the surrogates at `0xD800`, and its next six bits below `0x20`.
+                | true =>
+                    match c.code % 0x1000 / 0x40 <= 0x1F
+                    | true => Bool/True/qed()
+                    | false =>
+                        let high = Char/Valid/below_surrogates_of(c.code, c.valid, proved());
+                        match proved(@Bool/False) end
+                    end
+                | false => Bool/True/qed()
                 end
             end
-        | false =>
-            match c.code < 0x10000
-            -- `E0..=EF`, the lead byte's payload being below `0x10`.
+        end
+    -- `F0..=F4`, the lead byte's payload being at most `4` because a scalar value is at most `U+10FFFF`.
+    | _ =>
+        let top = Char/Valid/at_most(c.code, c.valid);
+        match c.code / 0x40000 <= 4
+        | false => match proved(@Bool/False) end
+        | true =>
+            match c.code / 0x40000 == 0
+            -- `F0`: the code point is at least `0x10000` with nothing above its low eighteen bits, so its next six are at least `0x10`.
             | true =>
-                match c.code / 0x1000 <= 0xF
-                | false => match proved(@Bool/False) end
-                | true =>
-                    match c.code / 0x1000 == 0
-                    -- `E0`: the code point is at least `0x800` with nothing above its low twelve bits, so its next six are at least `0x20`.
-                    | true =>
-                        match c.code / 0x1000 == 0xD
-                        | true => match proved(@Bool/False) end
-                        | false =>
-                            match c.code % 0x1000 / 0x40 >= 0x20
-                            | true => Bool/True/qed()
-                            | false => match proved(@Bool/False) end
-                            end
-                        end
-                    | false =>
-                        match c.code / 0x1000 == 0xD
-                        -- `ED`: the code point is below `0xE000`, so validity puts it below the surrogates at `0xD800`, and its next six bits below `0x20`.
-                        | true =>
-                            match c.code % 0x1000 / 0x40 <= 0x1F
-                            | true => Bool/True/qed()
-                            | false =>
-                                let high =
-                                    Char/Valid/below_surrogates_of(c.code, c.valid, proved());
-                                match proved(@Bool/False) end
-                            end
-                        | false => Bool/True/qed()
-                        end
+                match c.code / 0x40000 == 4
+                | true => match proved(@Bool/False) end
+                | false =>
+                    match c.code % 0x40000 / 0x1000 >= 0x10
+                    | true => Bool/True/qed()
+                    | false => match proved(@Bool/False) end
                     end
                 end
-            -- `F0..=F4`, the lead byte's payload being at most `4` because a scalar value is at most `U+10FFFF`.
             | false =>
-                let top = Char/Valid/at_most(c.code, c.valid);
-                match c.code / 0x40000 <= 4
-                | false => match proved(@Bool/False) end
+                match c.code / 0x40000 == 4
+                -- `F4`: the code point is at most `U+10FFFF`, so its next six bits are at most `0xF`.
                 | true =>
-                    match c.code / 0x40000 == 0
-                    -- `F0`: the code point is at least `0x10000` with nothing above its low eighteen bits, so its next six are at least `0x10`.
-                    | true =>
-                        match c.code / 0x40000 == 4
-                        | true => match proved(@Bool/False) end
-                        | false =>
-                            match c.code % 0x40000 / 0x1000 >= 0x10
-                            | true => Bool/True/qed()
-                            | false => match proved(@Bool/False) end
-                            end
-                        end
-                    | false =>
-                        match c.code / 0x40000 == 4
-                        -- `F4`: the code point is at most `U+10FFFF`, so its next six bits are at most `0xF`.
-                        | true =>
-                            match c.code % 0x40000 / 0x1000 <= 0xF
-                            | true => Bool/True/qed()
-                            | false => match proved(@Bool/False) end
-                            end
-                        | false => Bool/True/qed()
-                        end
+                    match c.code % 0x40000 / 0x1000 <= 0xF
+                    | true => Bool/True/qed()
+                    | false => match proved(@Bool/False) end
                     end
+                | false => Bool/True/qed()
                 end
             end
         end

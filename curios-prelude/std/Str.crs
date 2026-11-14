@@ -366,12 +366,8 @@ pub let span(
         (at, again) =>
             (reached) =>
                 match At/try_next(s, at)
-                | some(n) =>
-                    match pred(n.char)
-                    | true => again(n.past, n.progress)(proved())
-                    | false => (past = at, reach = reached)
-                    end
-                | none() => (past = at, reach = reached)
+                | some(n), pred(n.char) => again(n.past, n.progress)(proved())
+                | _ => (past = at, reach = reached)
                 end,
         from)(
         Nat/le/refl(from.offset));
