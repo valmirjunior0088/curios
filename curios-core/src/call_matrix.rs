@@ -10,7 +10,7 @@
 pub enum Size {
     /// No relation the analysis can establish.
     Unknown,
-    /// The argument is the parameter's own expanded value.
+    /// The argument is no larger than the parameter's expanded value: that value itself, or an arithmetic result that never grows past it.
     Same,
     /// The argument is a proper subterm of the parameter's expanded value.
     Less,

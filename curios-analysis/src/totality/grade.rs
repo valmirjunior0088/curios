@@ -359,8 +359,8 @@ impl<'a, E: Env> Grader<'a, E> {
     fn expand_shape(&self, shape: &Shape, fuel: usize) -> Shape {
         match shape {
             Shape::Atom(var) => self.expand(var, fuel),
-            // Already relative to a binder; expanding that binder would only lose the identity the claim is stated against.
-            Shape::Smaller(below) => Shape::Smaller(*below),
+            // Left as read: the value each holds was read where its operand stood, and a refinement made since is no part of that claim.
+            Shape::Smaller(_) | Shape::AtMost(_) => shape.clone(),
             Shape::Opaque => Shape::Opaque,
             Shape::Node(tag, kids) => Shape::node(
                 tag.clone(),
@@ -474,9 +474,9 @@ impl<'a, E: Env> Grader<'a, E> {
         terms.iter().map(|term| self.shape_of(term)).collect()
     }
 
-    /// Read `left op right` as a decrease on the binder `left` stands for.
+    /// Read `left op right` as below the value `left` is, or at most it.
     ///
-    /// `least` is the smallest literal right-hand operand that makes the operation strictly decreasing: `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. A non-literal operand, an operand below `least`, or a left side that is neither the binder nor already a decrease on one, all read as unread.
+    /// `least` is the smallest literal right-hand operand that makes the operation strictly decreasing: `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. A non-literal operand or an operand below `least` reads as unread. A left side known nonzero — a binder an arm ruled zero out of, a successor run, or already a decrease — makes a decrease; any other is at most what it was, as a fixed point at zero.
     fn arithmetic_shape(
         &mut self,
         left: &Term,
@@ -491,10 +491,17 @@ impl<'a, E: Env> Grader<'a, E> {
         }
         Ok(match self.shape_of(left)? {
             // `n` itself, and an arm has ruled out zero.
-            Shape::Atom(atom) if self.context.nonzero.contains(&atom) => Shape::Smaller(atom),
-            // Already below `below`, and these operations never grow: dividing or subtracting again keeps it below.
+            Shape::Atom(atom) if self.context.nonzero.contains(&atom) => {
+                Shape::smaller(Shape::Atom(atom))
+            }
+            // A successor run is not zero by its shape: `n` where an arm refined it to `pred + 1`, or what a case equation rewrote it to.
+            run @ Shape::UnaryRun { .. } => Shape::smaller(run),
+            // Already below `below`, or at most `above`, and these operations never grow: dividing or subtracting again keeps it so.
             Shape::Smaller(below) => Shape::Smaller(below),
-            _ => Shape::Opaque,
+            Shape::AtMost(above) => Shape::AtMost(above),
+            Shape::Opaque => Shape::Opaque,
+            // Not known nonzero, so possibly zero, where the operation is a fixed point, and never above `left`: what a parameter `left` is below is above it too. A case equation is where this is met, `(x + 1) - 2` cancelling to `x - 1` before it is read.
+            operand => Shape::at_most(operand),
         })
     }
 

@@ -2,7 +2,7 @@
 
 use {super::test_support::*, crate::tests::test_support::*, curios_analysis::Erased};
 
-// The arithmetic decrease is licensed by the *arm*, not by the operator. `n - 1` is smaller than `n` only where `n` is known nonzero — `Nat` subtraction saturates, so `0 - 1` is `0` and the "decrease" is a fixed point — and a `Nat` dispatch's default arm establishes nonzero exactly when `0` is one of the enumerated cases. This fixture omits `0`, so nothing rules it out and the call may not be graded as descending.
+// The arithmetic decrease is licensed by the *arm*, not by the operator. `n - 1` is smaller than `n` only where `n` is known nonzero — `Nat` subtraction saturates, so `0 - 1` is `0` and the "decrease" is a fixed point — and the arm a `Nat` match falls to past its literals establishes nonzero exactly when `0` is one of them: the successor's arm where `0` is the only literal, a dispatch's default otherwise. This fixture omits `0`, so nothing rules it out and the call may not be graded as descending.
 //
 // Read the wrong way the cost is a non-terminating *type*, which is the negative knot `a_type_level_rec_cannot_tie_the_negative_knot` above spells out in full: `Down(0)` would unfold to `Down(0)` forever while the classifier reported the group total, type formation would rest on a family that never forms, and (T) — whose whole job is that nothing reachable from a type position is partial — would have been satisfied by a false premise rather than by a fact.
 //
@@ -491,6 +491,37 @@ fn a_subtraction_by_zero_licenses_no_decrease() {
         b"ok",
     )
     .refused(&[("Down(n - 1)", "Down(n - 0)")])
+    .by_elaborator_in("/Down", |error| {
+        matches!(
+            error,
+            curios_elab::Error::PartialInErasedPosition {
+                erased: Erased::Type,
+                ..
+            }
+        )
+    });
+}
+
+// A successor arm's subtraction past the one layer it peels. The certifier reads the arm under its case equation, `n = x + 1`, and `(x + 1) - 2` cancels to `x - 1` before the grader sees it, so what licenses the call there is that `x - 1` is at most `x`, below the `x + 1` the parameter stands for; the elaborator reads `n - 2` as written, below the successor `n` is. The refused sibling enumerates `1` instead, so nothing rules zero out and `n - 2` is at most `n` itself: a fixed point at zero.
+#[test]
+fn a_subtraction_past_the_layer_a_successor_arm_peels_descends() {
+    control(
+        r#"
+        use /std/{Nat};
+
+        let Down(n : Nat) -> Type =
+            match n
+            | 0 => {}
+            | _ => Down(n - 2)
+            end;
+
+        let held : Down(4) = ();
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| 0 => {}", "| 1 => {}")])
     .by_elaborator_in("/Down", |error| {
         matches!(
             error,

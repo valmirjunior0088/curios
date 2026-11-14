@@ -349,3 +349,18 @@ fn a_struct_pattern_names_its_structure_at_every_binder() {
         assert!(unknown.contains("`Nope` is not in scope"), "{unknown}");
     }
 }
+
+// A binder beside `0` and no other literal is under the successor's case, `0` and a binder being induction's two cases: `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal.
+#[test]
+fn a_binder_beside_zero_alone_is_the_successors_arm() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        let defaulted(n: Nat) -> Nat = match n | 0 => 5 | _ => 7 end;
+        let peeled(n: Nat) -> Nat = match n | 0 => 5 | _ + 1 => 7 end;
+        let same(n: Nat) -> Eq()(defaulted(n), peeled(n)) = Eq/refl();
+        let past_zero(m: Nat) -> Eq()(defaulted(m + 1), 7) = Eq/refl();
+        /std/print("ok")
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}

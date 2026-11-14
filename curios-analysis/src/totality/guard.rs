@@ -1,6 +1,6 @@
 //! Reading a boolean scrutinee as a comparison between a tracked binder and a `Nat` literal.
 //!
-//! This is the *only* shape from which an arm can conclude that a binder is not zero, and that conclusion is what licenses an arithmetic decrease: `n / k` and `n - k` are below `n` only where `n` is nonzero, since both saturate. `/std/Nat/to_str` descends on exactly this — the false arm of `n < 10` gives `n >= 10`.
+//! This is the *only* shape of a boolean scrutinee from which an arm can conclude that a binder is not zero, and that conclusion is what licenses an arithmetic decrease: `n / k` and `n - k` are below `n` only where `n` is nonzero, since both saturate. `/std/Nat/to_str` descends on exactly this — the false arm of `n < 10` gives `n >= 10`.
 //!
 //! The relation table below is therefore an accepting rule, and each row says what it takes for the arm's fact to exclude zero. The obligation it serves is `documentation/design/soundness/totality-of-the-erased-program.md`'s.
 

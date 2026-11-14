@@ -1040,7 +1040,7 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// Rows over a `Nat` column, in one of two forms the rows that write a case choose: induction where a row peels a successor, `0` and `n + 1` with a hypothesis, and dispatch otherwise, over the literals written, with the rows that write a binder as what any other value takes. A literal beside a successor is refused: no one form peels a successor and dispatches on a value.
+    /// Rows over a `Nat` column, in one of two forms the rows that write a case choose: dispatch where a row writes a literal past `0`, over the literals written, with the rows that write a binder as what any other value takes, and induction otherwise, `0` and `n + 1` with a hypothesis, a row that writes a binder under both. A literal beside a successor is refused: no one form peels a successor and dispatches on a value.
     fn naturals(
         &mut self,
         context: &mut Context,
@@ -1084,7 +1084,8 @@ impl<'m> Compiler<'m> {
 
         let term = self.term;
 
-        if !peels {
+        // `0` and a binder are induction's two cases, so `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its successor arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal.
+        if dispatches {
             let literal = |pattern: &Pattern| match pattern {
                 Pattern::Zero => Natural::zero(),
                 Pattern::Literal(value) => value.clone(),
@@ -2022,7 +2023,7 @@ impl<'m> Compiler<'m> {
             }
             Pattern::Zero | Pattern::Succ { .. } => {
                 let split = match shared {
-                    // The tree's dispatch is in the form its rows chose: a `0` is a literal's case where no row peels a successor.
+                    // The tree's dispatch is in the form its rows chose: a `0` is a literal's case where a row writes a literal past it.
                     Some(Outermost::Switch(split)) => {
                         walk_awaited(context, awaits, |context| {
                             split.arm(context, &Natural::zero(), |context, expected| {

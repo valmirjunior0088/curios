@@ -9,6 +9,7 @@ use {
         StructDecl, Subterm, Term,
     },
     curios_num::Binary,
+    std::slice,
 };
 
 /// An [`Env`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
@@ -179,30 +180,83 @@ fn runs_merge_so_a_refined_tail_stays_one_chain() {
 }
 
 #[test]
-fn an_arithmetic_decrease_grades_only_against_its_own_binder() {
-    // `n / 10` is below `n` and says nothing about anything else. In particular it must not grade against a parameter an enclosing arm has refined to a constructor, because that parameter no longer stands for the binder the decrease was measured from.
+fn an_arithmetic_decrease_is_below_its_value_and_what_that_value_is_below() {
+    // `n / 10` is below `n`, so below a parameter an enclosing arm has refined to a constructor over `n` as well, and says nothing about anything else. Withheld there, it would grade below `at_most`'s weaker claim at the same parameter.
     let (n, other) = (Free::local(1, None), Free::local(2, None));
-    let smaller = Shape::Smaller(n);
+    let smaller = Shape::smaller(Shape::Atom(n));
 
     assert_eq!(smaller.against(&Shape::Atom(n)), Size::Less);
     assert_eq!(smaller.against(&Shape::Atom(other)), NONE);
     assert_eq!(smaller.against(&Shape::Opaque), NONE);
 
     let refined = Shape::unary_run(Natural::from(1usize), Shape::Atom(n));
-    assert_eq!(smaller.against(&refined), NONE);
+    assert_eq!(smaller.against(&refined), Size::Less);
+    assert_eq!(Shape::at_most(Shape::Atom(n)).against(&refined), Size::Less);
 }
 
 #[test]
-fn an_arithmetic_decrease_is_inert_in_the_constructor_order() {
-    // It is a claim about a binder, not a value, so it can never be found equal to or inside a tree. Anything else would manufacture a decrease out of a term the walk never read.
-    let n = Free::local(1, None);
-    let smaller = Shape::Smaller(n);
-    let tree = Shape::node(Tag::Tuple, [smaller.clone(), Shape::Atom(n)]);
-    let run = Shape::elem_run(Carriers::List, vec![smaller.clone()], Shape::Atom(n));
+fn an_arithmetic_decrease_on_a_successor_is_below_it() {
+    // A successor arm refines `n` to `pred + 1`, which is not zero by its shape, so `n - 1` is below the value `n` stands for there, and the parameter `n` expands to that value too. The control is the zero arm's refinement, where `n - 1` is `0` again: no larger than the parameter, and no descent.
+    let mut probe = Probe::default();
+    let n = Free::local(1, Some("n"));
+    let pred = Free::local(2, Some("pred"));
+    let successor = Shape::unary_run(Natural::from(1usize), Shape::Atom(pred));
+    let zero = Shape::node(Tag::Empty(Carriers::Unary), []);
+    let argument = Term::intrinsic(Intrinsic::nat_sub(
+        Term::free_var(&n),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+    ));
 
-    assert!(!smaller.same_as(&smaller));
-    assert!(!smaller.proper_subterm_of(&tree));
-    assert!(!smaller.proper_subterm_of(&run));
+    for (refined, size) in [(successor, LESS), (zero, SAME)] {
+        let mut context = SizeContext::default();
+        context.open(Some((n, refined)), None, Vec::new());
+        let Ok(call) = grade(
+            &mut probe,
+            &context,
+            0,
+            &[n],
+            0,
+            1,
+            slice::from_ref(&argument),
+        );
+        assert_eq!(call.matrix.entry(0, 0), size);
+    }
+}
+
+#[test]
+fn an_arithmetic_result_is_at_most_its_operand() {
+    // Neither operation grows, so `x - 1` with `x` not known nonzero is at most `x`: the parameter's size where the parameter is `x`, a fixed point at zero and no descent, and below a parameter `x` is below. A successor arm's case equation is where the second is met: the certifier reads `n - 2` under `n = x + 1`, which cancels to `x - 1`.
+    let mut probe = Probe::default();
+    let n = Free::local(1, Some("n"));
+    let x = Free::local(2, Some("x"));
+    let successor = Shape::unary_run(Natural::from(1usize), Shape::Atom(x));
+    let argument = Term::intrinsic(Intrinsic::nat_sub(
+        Term::free_var(&x),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+    ));
+
+    let mut context = SizeContext::default();
+    context.open(Some((n, successor)), None, Vec::new());
+    let Ok(call) = grade(&mut probe, &context, 0, &[n, x], 0, 1, &[argument]);
+    assert_eq!(call.matrix.entry(0, 0), LESS);
+    assert_eq!(call.matrix.entry(1, 0), SAME);
+}
+
+#[test]
+fn an_arithmetic_claim_is_inert_in_the_constructor_order() {
+    // Each is a claim about another value, not a value of its own, so it can never be found equal to or inside a tree. Anything else would manufacture a decrease out of a term the walk never read.
+    let n = Free::local(1, None);
+    for claim in [
+        Shape::smaller(Shape::Atom(n)),
+        Shape::at_most(Shape::Atom(n)),
+    ] {
+        let tree = Shape::node(Tag::Tuple, [claim.clone(), Shape::Atom(n)]);
+        let run = Shape::elem_run(Carriers::List, vec![claim.clone()], Shape::Atom(n));
+
+        assert!(!claim.same_as(&claim));
+        assert!(!claim.proper_subterm_of(&tree));
+        assert!(!claim.proper_subterm_of(&run));
+    }
 }
 
 #[test]

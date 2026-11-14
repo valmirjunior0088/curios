@@ -905,6 +905,8 @@ pub let count(n: Nat) -> {Nat, Bool} =
 
 A dispatch on a `Nat` has literal arms and an arm that writes a binder, which takes every other value, since no set of literals covers every natural.
 
+A match whose only literal is `0` is a case split ([Natural-number induction](#natural-number-induction)): its arm that writes a binder is the successor's, so `| 0 => … | _ => …` is `| 0 => … | _ + 1 => …`.
+
 ```crs
 use /std/{Nat, Str};
 

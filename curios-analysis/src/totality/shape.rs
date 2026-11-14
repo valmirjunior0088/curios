@@ -57,10 +57,14 @@ pub enum Shape {
         heads: Rc<[Shape]>,
         tail: Rc<Shape>,
     },
-    /// A `Nat` strictly below the binder it names, established arithmetically rather than structurally: `n / k` for a literal `k >= 2`, or `n - k` for a literal `k >= 1`, at a point where `n` is known nonzero.
+    /// A `Nat` strictly below the value it holds, established arithmetically rather than structurally: `n / k` for a literal `k >= 2`, or `n - k` for a literal `k >= 1`, of an `n` known nonzero — a binder an arm ruled zero out of, or a successor run, which is nonzero by its shape.
     ///
     /// It is a claim *about* another shape rather than a shape of its own, so it is inert everywhere the constructor order is read — never equal to anything, never a subterm of anything — and is consulted only by [`Shape::against`].
-    Smaller(Free),
+    Smaller(Rc<Shape>),
+    /// A `Nat` at most the value it holds: `a / k` for a literal `k >= 2`, or `a - k` for a literal `k >= 1`, of an `a` not known nonzero. Both saturate, so at zero the result is `a` itself, and neither grows past `a`.
+    ///
+    /// A claim about another shape as [`Shape::Smaller`] is, inert in the constructor order in the same way, and consulted only by [`Shape::against`].
+    AtMost(Rc<Shape>),
     /// Anything else. Never equal to, and never a subterm of, anything — including another `Opaque`, since two unreadable terms are not thereby the same term.
     Opaque,
 }
@@ -69,6 +73,16 @@ impl Shape {
     /// `tag` applied to `kids`.
     pub fn node(tag: Tag, kids: impl IntoIterator<Item = Shape>) -> Shape {
         Shape::Node(tag, kids.into_iter().collect())
+    }
+
+    /// A `Nat` strictly below `value`.
+    pub fn smaller(value: Shape) -> Shape {
+        Shape::Smaller(Rc::new(value))
+    }
+
+    /// A `Nat` at most `value`.
+    pub fn at_most(value: Shape) -> Shape {
+        Shape::AtMost(Rc::new(value))
     }
 
     /// `count` successors over `tail`. Zero successors are the tail itself, and a run landing on another run merges, so the canonicity the comparisons assume is established here rather than at every builder.
@@ -215,12 +229,22 @@ impl Shape {
 
     /// This argument's size against a parameter whose expanded value is `parameter` — the whole size order, applied to one entry.
     pub fn against(&self, parameter: &Shape) -> Size {
-        // An arithmetic decrease names the binder it is below, so it grades only against a parameter still standing for exactly that binder. A parameter an enclosing arm has refined to a constructor is a different value, and withholding the claim there is the conservative reading rather than a missed case.
+        // An arithmetic decrease is below the value it holds, so below a parameter standing for that value and below one that value is below, and says nothing of any other.
         if let Shape::Smaller(below) = self {
-            return match parameter {
-                Shape::Atom(atom) if atom == below => Size::Less,
-                _ => Size::Unknown,
+            return match below.same_as(parameter) || below.proper_subterm_of(parameter) {
+                true => Size::Less,
+                false => Size::Unknown,
             };
+        }
+        // A result that never grows past the value it holds is no larger than a parameter standing for that value, and below one that value is below.
+        if let Shape::AtMost(above) = self {
+            if above.same_as(parameter) {
+                return Size::Same;
+            }
+            if above.proper_subterm_of(parameter) {
+                return Size::Less;
+            }
+            return Size::Unknown;
         }
         if self.same_as(parameter) {
             return Size::Same;
