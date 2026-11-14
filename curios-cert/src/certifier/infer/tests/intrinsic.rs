@@ -2,49 +2,38 @@
 
 use {
     crate::certifier::infer::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
-    curios_core::{
-        Atom, Free, Global, InductDecl, Intrinsic, Level, Telescope, Term, UniverseContext,
-        Universes,
-    },
-    curios_num::Integer,
+    curios_common::fill,
+    curios_core::{Global, Level, Term, UniverseContext},
 };
+
+/// Declare `Holds` in `certifier` as the predicate a bound's proof inhabits, with no body: the fixture registry only names it, and opaque is enough.
+fn declare_holds(certifier: &mut Certifier) {
+    certifier
+        .declare(
+            &Global::Authored(SYNTAX.proof.holds.qualifier()),
+            &term("(b: #BoolType) -> Prop"),
+            &UniverseContext::default(),
+        )
+        .expect("a name is declared once");
+}
 
 #[test]
 fn a_channel_allocation_checks_its_positive_capacity_evidence() {
     let mut certifier = certifier();
-    let holds = Global::Authored(SYNTAX.proof.holds.qualifier());
-    certifier
-        .declare(
-            &holds,
-            &Term::func_type([(binder(0, "b"), bool_type())], Term::prop()),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-    let proof = binder(1, "positive");
-    certifier.assume(
-        &proof,
-        &Term::apply(
-            Term::instance(holds, Universes::default()),
-            vec![Term::intrinsic(Intrinsic::Bool(true))],
-        ),
+    declare_holds(&mut certifier);
+    let [allocated, of_nothing, unproved] = under(
+        &mut certifier,
+        "positive: /std/Bool/Holds(true)",
+        "#Channel(#NatType, 1, positive), #Channel(#NatType, 0, positive), #Channel(#NatType, 1, 1)",
     );
-    let allocation = |capacity, evidence| {
-        Term::intrinsic(Intrinsic::Channel {
-            element: nat_type(),
-            capacity: nat(capacity),
-            positive: evidence,
-        })
-    };
+
     assert_eq!(
-        infer(&mut certifier, &allocation(1, Term::free_var(&proof))),
-        Ok(Term::intrinsic(Intrinsic::IoType(Term::intrinsic(
-            Intrinsic::ChannelType(nat_type())
-        )))),
+        infer(&mut certifier, &allocated),
+        Ok(term("#IoType(#ChannelType(#NatType))")),
     );
-    for invalid in [allocation(0, Term::free_var(&proof)), allocation(1, nat(1))] {
+    for invalid in [of_nothing, unproved] {
         assert!(matches!(
             infer(&mut certifier, &invalid),
             Err(Error::Mismatch { .. })
@@ -57,13 +46,8 @@ fn a_channel_allocation_checks_its_positive_capacity_evidence() {
 fn an_intrinsic_operand_of_the_wrong_type_is_refused() {
     let mut certifier = certifier();
 
-    let mixed = Term::intrinsic(Intrinsic::nat_add(
-        Term::intrinsic(Intrinsic::Bool(true)),
-        nat(1),
-    ));
-
     assert!(matches!(
-        infer(&mut certifier, &mixed),
+        infer(&mut certifier, &term("#NatAdd(true, 1)")),
         Err(Error::Mismatch { .. }),
     ));
 }
@@ -74,51 +58,16 @@ fn an_intrinsic_operand_of_the_wrong_type_is_refused() {
 #[test]
 fn a_narrowing_to_nat_is_refused_without_its_bound() {
     let mut certifier = certifier();
-    let int_type = Term::intrinsic(Intrinsic::IntType);
-
-    let holds = Global::Authored(SYNTAX.proof.holds.qualifier());
-    certifier
-        .declare(
-            &holds,
-            &Term::func_type([(binder(0, "b"), bool_type())], Term::prop()),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-
-    let x = binder(1, "x");
-    certifier.assume(&x, &int_type);
-
-    let ok = binder(2, "ok");
-    certifier.assume(
-        &ok,
-        &Term::apply(
-            Term::instance(holds, Universes::default()),
-            vec![Term::intrinsic(Intrinsic::IntLe(
-                Term::intrinsic(Intrinsic::Int(Integer::from(0))),
-                Term::free_var(&x),
-            ))],
-        ),
+    declare_holds(&mut certifier);
+    let [narrowed, unproved] = under(
+        &mut certifier,
+        "x: #IntType, ok: /std/Bool/Holds(#IntLe(#Int(0), x))",
+        "#IntToNat(x, ok), #IntToNat(x, 1)",
     );
 
-    assert_eq!(
-        infer(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::IntToNat {
-                int: Term::free_var(&x),
-                non_neg: Term::free_var(&ok),
-            }),
-        ),
-        Ok(nat_type()),
-    );
-
+    assert_eq!(infer(&mut certifier, &narrowed), Ok(term("#NatType")));
     assert!(matches!(
-        infer(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::IntToNat {
-                int: Term::free_var(&x),
-                non_neg: nat(1),
-            }),
-        ),
+        infer(&mut certifier, &unproved),
         Err(Error::Mismatch { .. }),
     ));
 }
@@ -128,18 +77,12 @@ fn an_intrinsic_operation_has_the_result_type_its_rule_states() {
     let mut certifier = certifier();
 
     assert_eq!(
-        infer(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::nat_add(nat(1), nat(2)))
-        ),
-        Ok(nat_type()),
+        infer(&mut certifier, &term("#NatAdd(1, 2)")),
+        Ok(term("#NatType"))
     );
     assert_eq!(
-        infer(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::nat_lt(nat(1), nat(2)))
-        ),
-        Ok(bool_type()),
+        infer(&mut certifier, &term("#NatLt(1, 2)")),
+        Ok(term("#BoolType"))
     );
 }
 
@@ -147,38 +90,19 @@ fn an_intrinsic_operation_has_the_result_type_its_rule_states() {
 #[test]
 fn a_list_literal_checks_its_elements_against_its_carried_type() {
     let mut certifier = certifier();
+    let list = term("#ListType(#NatType)");
 
     assert_eq!(
-        infer(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::List {
-                element: nat_type(),
-                items: vec![nat(1), nat(2)]
-            }),
-        ),
-        Ok(Term::intrinsic(Intrinsic::ListType(nat_type()))),
+        infer(&mut certifier, &term("#List(#NatType, [1, 2])")),
+        Ok(list.clone())
     );
-
     assert!(matches!(
-        infer(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::List {
-                element: nat_type(),
-                items: vec![nat(1), Term::intrinsic(Intrinsic::Bool(true))]
-            }),
-        ),
+        infer(&mut certifier, &term("#List(#NatType, [1, true])")),
         Err(Error::Mismatch { .. }),
     ));
-
     assert_eq!(
-        infer(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::List {
-                element: nat_type(),
-                items: Vec::new()
-            })
-        ),
-        Ok(Term::intrinsic(Intrinsic::ListType(nat_type()))),
+        infer(&mut certifier, &term("#List(#NatType, [])")),
+        Ok(list)
     );
 }
 
@@ -186,49 +110,18 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
 #[test]
 fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
     let mut certifier = certifier();
-    let n = binder(0, "n");
-    let motive = binder(1, "m");
-    let pred = binder(2, "pred");
-    let ih = binder(3, "ih");
-    certifier.assume(&n, &nat_type());
-
-    // Motive `(m) => Nat`: the zero arm at `Nat`, the succ arm's ih at `Nat`, and using the ih is exactly inhabiting the motive at the tail.
-    let counts = Term::nat_match(
-        Term::free_var(&n),
-        Some(&motive),
-        nat_type(),
-        nat(0),
-        &pred,
-        &ih,
-        Term::free_var(&ih),
+    // Motive `(m) => Nat`: the zero arm at `Nat`, the succ arm's ih at `Nat`, and using the ih is exactly inhabiting the motive at the tail; then a succ arm that produces a Bool where the motive demands a Nat, and a zero arm of the wrong type — the identity case is a case like any other.
+    let [counts, wrong, wrong_zero] = under(
+        &mut certifier,
+        "n: #NatType",
+        "match n: (m) => #NatType | 0 => 0 | pred + 1; ih => ih end, match n: (m) => #NatType | 0 => 0 | pred + 1; ih => true end, match n: (m) => #NatType | 0 => true | pred + 1; ih => ih end",
     );
-    assert_eq!(infer(&mut certifier, &counts), Ok(nat_type()));
 
-    // A succ arm that produces a Bool where the motive demands a Nat.
-    let wrong = Term::nat_match(
-        Term::free_var(&n),
-        Some(&motive),
-        nat_type(),
-        nat(0),
-        &pred,
-        &ih,
-        Term::intrinsic(Intrinsic::Bool(true)),
-    );
+    assert_eq!(infer(&mut certifier, &counts), Ok(term("#NatType")));
     assert!(matches!(
         infer(&mut certifier, &wrong),
         Err(Error::Mismatch { .. }),
     ));
-
-    // A zero arm of the wrong type is refused too — the identity case is a case like any other.
-    let wrong_zero = Term::nat_match(
-        Term::free_var(&n),
-        Some(&motive),
-        nat_type(),
-        Term::intrinsic(Intrinsic::Bool(true)),
-        &pred,
-        &ih,
-        Term::free_var(&ih),
-    );
     assert!(matches!(
         infer(&mut certifier, &wrong_zero),
         Err(Error::Mismatch { .. }),
@@ -239,23 +132,13 @@ fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
 #[test]
 fn a_free_monoid_carrier_must_match_its_scrutinee() {
     let mut certifier = certifier();
-    let xs = binder(0, "xs");
-    let motive = binder(1, "m");
-    let head = binder(2, "head");
-    let tail = binder(3, "tail");
-    let ih = binder(4, "ih");
-    certifier.assume(&xs, &Term::intrinsic(Intrinsic::ListType(nat_type())));
-
     // Carrier claims Bool elements over a Nat-list scrutinee.
-    let mismatched = Term::list_match(
-        Term::free_var(&xs),
-        bool_type(),
-        Some(&motive),
-        nat_type(),
-        nat(0),
-        &[&head, &tail, &ih],
-        Term::free_var(&ih),
+    let [mismatched] = under(
+        &mut certifier,
+        "xs: #ListType(#NatType)",
+        "#{cases = {carrier = {elem = #BoolType}}} match xs: (m) => #NatType | [] => 0 | [head, ..tail]; ih => ih end,",
     );
+
     assert!(matches!(
         infer(&mut certifier, &mismatched),
         Err(Error::Mismatch { .. }),
@@ -271,11 +154,12 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
 fn a_boolean_elimination_requires_a_boolean_scrutinee() {
     let mut certifier = certifier();
 
-    // `match (0 : Nat) : (_) => Nat | false => 1 | true => 2 end`
-    let eliminated = Term::bool_match(nat(0), None, nat_type(), nat(1), nat(2));
-
     assert!(
-        infer(&mut certifier, &eliminated).is_err(),
+        infer(
+            &mut certifier,
+            &term("match 0: (_) => #NatType | false => 1 | true => 2 end")
+        )
+        .is_err(),
         "the certifier typed a boolean elimination of a `Nat`",
     );
 }
@@ -285,200 +169,131 @@ fn a_boolean_elimination_requires_a_boolean_scrutinee() {
 fn a_dispatch_requires_a_natural_scrutinee() {
     let mut certifier = certifier();
 
-    // `match (true : Bool) : (_) => Nat | 0 => 1 | _ => 2 end`
-    let eliminated = Term::switch(
-        Term::intrinsic(Intrinsic::Bool(true)),
-        None,
-        nat_type(),
-        [(0u32, nat(1))],
-        nat(2),
-    );
-
     assert!(
-        infer(&mut certifier, &eliminated).is_err(),
+        infer(
+            &mut certifier,
+            &term("match true: (_) => #NatType | 0 => 1 | _ => 2 end")
+        )
+        .is_err(),
         "the certifier typed a `Nat` dispatch on a `Bool`",
     );
 }
 
+/// The values the forms of [`a_description_a_cell_and_a_channel_are_taken_apart_by_nothing`] take apart, each held at `${wrap}` over what it carries.
+const HELD: &str = "pair: ${pair}, record: ${record}, refuted: ${refuted}, truth: ${truth}, count: ${count}, list: ${list}";
+
+/// Each form that takes a value apart, over the values [`HELD`] holds: a tuple's and a record's projection, a match on an empty family, a boolean elimination, a dispatch, a natural-number fold and a list fold.
+const FORMS: &str = "pair.0, #{field = Struct(/Boxed, 0)} record.0, match refuted: (_) => #NatType end, match truth: (_) => #NatType | false => 0 | true => 1 end, match count: (_) => #NatType | 0 => 1 | _ => 2 end, match count: (_) => #NatType | 0 => 0 | head + 1; ih => 1 end, #{cases = {carrier = {elem = #NatType}}} match list: (_) => #NatType | [] => 0 | [head, ..tail]; ih => 1 end";
+
 /// A description, a cell and a channel are eliminated by nothing, so no term reads the value one holds or describes: each form that takes a value apart — a tuple's or a record's projection, a match on a family, and each carrier's own case forms — is refused over one, however well its arms would type at what it carries. Read, a description of `{False, Nat}` that exits would hand back the `False` it never returns.
 #[test]
 fn a_description_a_cell_and_a_channel_are_taken_apart_by_nothing() {
-    let carriers: [fn(Term) -> Intrinsic; 3] = [
-        Intrinsic::IoType,
-        Intrinsic::CellType,
-        Intrinsic::ChannelType,
+    let no_components: fn(&Error) -> bool = |error| matches!(error, Error::NotATuple(_));
+    let no_family: fn(&Error) -> bool = |error| matches!(error, Error::Unclassified(_));
+    let names = [
+        ("a tuple's projection", no_components),
+        ("a record's projection", no_components),
+        ("a match on an empty family", no_family),
+        ("a boolean elimination", no_family),
+        ("a dispatch", no_family),
+        ("a natural-number fold", no_family),
+        ("a list fold", no_family),
     ];
 
-    // Each form over a value held at `wrap(carried)`, with the refusal it meets where the wrapper is a carrier.
-    let forms = |certifier: &mut Certifier, wrap: &dyn Fn(Term) -> Term| {
-        let boxed = parameterized_struct(certifier);
-        let absurd = Global::Authored(Qualifier::from(["Absurd"]));
-        certifier
-            .declare_induct(&absurd, &empty_proposition())
-            .expect("a name is declared once");
-        let held = |certifier: &mut Certifier, index: u32, carried: Term| {
-            let held = binder(index, "held");
-            certifier.assume(&held, &wrap(carried));
-            Term::free_var(&held)
-        };
-        let [head, tail, ih] = [binder(10, "head"), binder(11, "tail"), binder(12, "ih")];
-
-        let pair = Term::tuple_type([
-            (binder(20, "f"), nat_type()),
-            (binder(21, "n"), bool_type()),
-        ]);
-        let pair = held(certifier, 0, pair);
-        let record = held(certifier, 1, Term::struct_type(boxed, [nat_type()]));
-        let refuted = held(
+    // Each form over a value held at `wrap` over what it carries, with the refusal it meets where the wrapper is a carrier.
+    let forms = |certifier: &mut Certifier, wrap: &str| {
+        declared(certifier, BOXED);
+        declared(certifier, "induct /Absurd: pub Prop\nend");
+        let held = |carried: &str| fill!(wrap, carried);
+        let terms: [Term; 7] = under(
             certifier,
-            2,
-            Term::induct_type(absurd, Vec::<Term>::new(), Vec::<Term>::new()),
-        );
-        let truth = held(certifier, 3, bool_type());
-        let count = held(certifier, 4, nat_type());
-        let list = held(
-            certifier,
-            5,
-            Term::intrinsic(Intrinsic::ListType(nat_type())),
+            &fill!(
+                HELD,
+                pair = held("{f: #NatType, n: #BoolType}"),
+                record = held("#{node = StructType} /Boxed(#NatType)"),
+                refuted = held("#{node = InductType} /Absurd()"),
+                truth = held("#BoolType"),
+                count = held("#NatType"),
+                list = held("#ListType(#NatType)")
+            ),
+            FORMS,
         );
 
-        let no_components: fn(&Error) -> bool = |error| matches!(error, Error::NotATuple(_));
-        let no_family: fn(&Error) -> bool = |error| matches!(error, Error::Unclassified(_));
-        [
-            ("a tuple's projection", Term::proj(pair, 0), no_components),
-            (
-                "a record's projection",
-                Term::proj_struct(record, boxed, 0),
-                no_components,
-            ),
-            (
-                "a match on an empty family",
-                Term::induct_match(
-                    refuted,
-                    None,
-                    nat_type(),
-                    Vec::<(Atom, Vec<Free>, Term)>::new(),
-                ),
-                no_family,
-            ),
-            (
-                "a boolean elimination",
-                Term::bool_match(truth, None, nat_type(), nat(0), nat(1)),
-                no_family,
-            ),
-            (
-                "a dispatch",
-                Term::switch(count.clone(), None, nat_type(), [(0u32, nat(1))], nat(2)),
-                no_family,
-            ),
-            (
-                "a natural-number fold",
-                Term::nat_match(count, None, nat_type(), nat(0), &head, &ih, nat(1)),
-                no_family,
-            ),
-            (
-                "a list fold",
-                Term::list_match(
-                    list,
-                    nat_type(),
-                    None,
-                    nat_type(),
-                    nat(0),
-                    &[&head, &tail, &ih],
-                    nat(1),
-                ),
-                no_family,
-            ),
-        ]
+        names.into_iter().zip(terms)
     };
 
     // The control: each form over the carried value itself types, so what refuses it below is the carrier.
     let mut certifier = certifier();
-    for (form, term, _) in forms(&mut certifier, &|carried| carried) {
+    for ((form, _), term) in forms(&mut certifier, "${carried}") {
         assert_eq!(
             infer(&mut certifier, &term),
-            Ok(nat_type()),
+            Ok(self::term("#NatType")),
             "{form} stopped typing"
         );
     }
 
-    for carrier in carriers {
+    for carrier in ["#IoType", "#CellType", "#ChannelType"] {
         let mut certifier = self::certifier();
-        let wrapped = |carried| Term::intrinsic(carrier(carried));
-        for (form, term, refused) in forms(&mut certifier, &wrapped) {
+        let wrap = fill!("${carrier}(${carried})", carrier, carried = "${carried}");
+        for ((form, refused), term) in forms(&mut certifier, &wrap) {
             let answer = infer(&mut certifier, &term);
             assert!(
                 answer.as_ref().err().is_some_and(refused),
-                "{form} over a `{:?}` answered {answer:?}",
-                Term::intrinsic(carrier(nat_type())),
+                "{form} over a `{carrier}` answered {answer:?}",
             );
         }
     }
-}
-
-/// `induct Absurd : Prop end`.
-fn empty_proposition() -> InductDecl {
-    InductDecl::new(
-        UniverseContext::default(),
-        Telescope::done(Telescope::done(())),
-        Vec::new().into(),
-        Term::prop(),
-        Qualifier::default(),
-        true,
-    )
 }
 
 /// The control for both, and it is what a fix by brick would fail: each form at its own carrier is ordinary code and must keep typing.
 #[test]
 fn each_intrinsic_elimination_at_its_own_carrier_is_still_accepted() {
     let mut certifier = certifier();
+    let nat = term("#NatType");
 
-    let boolean = Term::bool_match(
-        Term::intrinsic(Intrinsic::Bool(true)),
-        None,
-        nat_type(),
-        nat(1),
-        nat(2),
+    assert_eq!(
+        infer(
+            &mut certifier,
+            &term("match true: (_) => #NatType | false => 1 | true => 2 end")
+        ),
+        Ok(nat.clone())
     );
-    assert_eq!(infer(&mut certifier, &boolean), Ok(nat_type()));
-
-    let dispatch = Term::switch(nat(0), None, nat_type(), [(0u32, nat(1))], nat(2));
-    assert_eq!(infer(&mut certifier, &dispatch), Ok(nat_type()));
+    assert_eq!(
+        infer(
+            &mut certifier,
+            &term("match 0: (_) => #NatType | 0 => 1 | _ => 2 end")
+        ),
+        Ok(nat)
+    );
 }
 
 /// An operation stuck on its operands is classified by the type its signature produces, the type typing read it at: a read of a list of `Type 1`s is a type at `Type 1`, and one of a list of propositions a proposition. The lookup answered only for the formers, and refused a type typing had accepted. The control is an operation producing a number, which classifies nothing.
 #[test]
 fn a_stuck_read_of_a_list_of_types_is_a_type_at_their_sort() {
     let one = Level::zero().succ().expect("level zero has a successor");
-    let read = |certifier: &mut Certifier, element: Term| {
-        let list = binder(30, "ts");
-        certifier.assume(
-            &list,
-            &Term::intrinsic(Intrinsic::ListType(element.clone())),
+    let read = |certifier: &mut Certifier, element: &str| {
+        let [read] = under(
+            certifier,
+            &fill!("ts: #ListType(${element})", element),
+            &fill!("#ListGet(${element}, ts, 0, h),", element),
         );
-        Term::intrinsic(Intrinsic::ListGet {
-            element,
-            list: Term::free_var(&list),
-            index: nat(0),
-            in_range: Term::free_var(&binder(31, "h")),
-        })
+
+        read
     };
 
     let mut certifier = certifier();
-    let types = read(&mut certifier, Term::type_at(one.clone()));
+    let types = read(&mut certifier, "#{level = 1} Type");
     assert_eq!(Sort::of(&mut certifier, &types), Ok(Sort::Type(one)));
 
     let mut certifier = self::certifier();
-    let propositions = read(&mut certifier, Term::prop());
+    let propositions = read(&mut certifier, "Prop");
     assert_eq!(
         Sort::of(&mut certifier, &propositions),
         Ok(Sort::Prop(Level::zero()))
     );
 
     let mut certifier = self::certifier();
-    let n = binder(32, "n");
-    certifier.assume(&n, &nat_type());
-    let number = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+    let [number] = under(&mut certifier, "n: #NatType", "#NatAdd(n, 1),");
     assert!(matches!(
         Sort::of(&mut certifier, &number),
         Err(Error::Unclassified(_))

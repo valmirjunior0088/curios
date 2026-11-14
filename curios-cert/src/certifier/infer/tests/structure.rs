@@ -2,12 +2,9 @@
 
 use {
     crate::certifier::infer::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_common::Qualifier,
-    curios_core::{
-        Global, InductDecl, Intrinsic, MetavarId, Struct, StructType, Subterm, Telescope, Term,
-        Transient, UniverseContext, Universes,
-    },
+    curios_core::Global,
 };
 
 /// A list or a cell *of* proofs is not a proposition, and the typing rule has to say so — `Sort::of` already does.
@@ -22,55 +19,35 @@ use {
 #[test]
 fn a_list_or_cell_of_proofs_is_not_a_proposition() {
     let mut certifier = certifier();
-    let name = Global::Authored(Qualifier::from(["P"]));
-
     // `induct P : Prop end` — an empty proposition, so `Sort::of` reads `Prop` off its declaration.
-    certifier
-        .declare_induct(
-            &name,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::done(())),
-                Vec::new().into(),
-                Term::prop(),
-                Qualifier::from(["P"]),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
-    let proposition = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
+    declared(&mut certifier, "induct /P: pub Prop\nend");
+    let [list, cell, proposition] = terms(
+        "(#ListType(#{node = InductType} /P()), #CellType(#{node = InductType} /P()), #{node = InductType} /P())",
+    );
+    let (ground, prop) = (term("Type"), term("Prop"));
 
-    let list = Term::intrinsic(Intrinsic::ListType(proposition.clone()));
-    let cell = Term::intrinsic(Intrinsic::CellType(proposition.clone()));
-
-    assert_eq!(infer(&mut certifier, &list), Ok(Term::type_ground()));
-    assert_eq!(infer(&mut certifier, &cell), Ok(Term::type_ground()));
+    assert_eq!(infer(&mut certifier, &list), Ok(ground.clone()));
+    assert_eq!(infer(&mut certifier, &cell), Ok(ground.clone()));
 
     assert!(matches!(
-        check(&mut certifier, &list, &Term::prop()),
+        check(&mut certifier, &list, &prop),
         Err(Error::Mismatch { .. }),
     ));
     assert!(matches!(
-        check(&mut certifier, &cell, &Term::prop()),
+        check(&mut certifier, &cell, &prop),
         Err(Error::Mismatch { .. }),
     ));
 
     // A former still carries its element's level rather than being pinned at zero, and a proposition still stands where one is wanted.
     assert_eq!(
-        infer(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::ListType(nat_type()))
-        ),
-        Ok(Term::type_ground()),
+        infer(&mut certifier, &term("#ListType(#NatType)")),
+        Ok(ground)
     );
     assert_eq!(
-        infer(
-            &mut certifier,
-            &Term::intrinsic(Intrinsic::ListType(Term::type_ground())),
-        ),
-        Ok(Term::type_at(one())),
+        infer(&mut certifier, &term("#ListType(Type)")),
+        Ok(term("#{level = 1} Type")),
     );
-    assert_eq!(check(&mut certifier, &proposition, &Term::prop()), Ok(()));
+    assert_eq!(check(&mut certifier, &proposition, &prop), Ok(()));
 }
 
 /// Elaboration-only syntax reaching the certifier means a term was handed over before elaboration finished with it.
@@ -79,15 +56,12 @@ fn elaboration_only_syntax_is_refused() {
     let mut certifier = certifier();
 
     // A derived witness body that elaboration never wrote is the same class of residue as a metavariable: the transient is refused wholesale, so no derivation can smuggle an unchecked body past the certifier.
-    let derive = Term::from(Subterm::Transient(Transient::Derive));
     assert!(matches!(
-        infer(&mut certifier, &derive),
+        infer(&mut certifier, &term("#{node = Derive} ?")),
         Err(Error::NotCore(_)),
     ));
-
-    let metavar = Term::hole(MetavarId::from(0usize));
     assert!(matches!(
-        infer(&mut certifier, &metavar),
+        infer(&mut certifier, &term("#{id = 0, origin = Hole} ?")),
         Err(Error::NotCore(_)),
     ));
 }
@@ -100,34 +74,19 @@ fn elaboration_only_syntax_is_refused() {
 #[test]
 fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
     let mut certifier = certifier();
-    let name = parameterized_struct(&mut certifier);
-
-    let short: Term = Subterm::StructType(StructType {
-        name,
-        universes: Universes::default(),
-        params: Vec::new(),
-    })
-    .into();
-
-    let value = binder(2, "v");
-    certifier.assume(&value, &short);
-
-    assert!(
-        matches!(
-            infer(
-                &mut certifier,
-                &Term::proj_struct(Term::free_var(&value), name, 0)
-            ),
-            Err(Error::Arity { .. }),
-        ),
-        "a projection opened the arity at a parameter count the declaration does not have",
+    declared(&mut certifier, BOXED);
+    let [projected, literal] = under(
+        &mut certifier,
+        "v: #{node = StructType} /Boxed()",
+        "#{field = Struct(/Boxed, 0)} v.0, /Boxed { 0 }",
     );
 
     assert!(
-        matches!(
-            infer(&mut certifier, &boxed(name, Vec::new(), nat(0))),
-            Err(Error::Arity { .. }),
-        ),
+        matches!(infer(&mut certifier, &projected), Err(Error::Arity { .. }),),
+        "a projection opened the arity at a parameter count the declaration does not have",
+    );
+    assert!(
+        matches!(infer(&mut certifier, &literal), Err(Error::Arity { .. }),),
         "a record literal opened the arity at a parameter count the declaration does not have",
     );
 }
@@ -138,33 +97,15 @@ fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
 #[test]
 fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
     let mut certifier = certifier();
-    let name = parameterized_struct(&mut certifier);
-
-    let exact: Term = Subterm::StructType(StructType {
-        name,
-        universes: Universes::default(),
-        params: vec![nat_type()],
-    })
-    .into();
-
-    let value = binder(2, "v");
-    certifier.assume(&value, &exact);
-
-    assert_eq!(
-        infer(
-            &mut certifier,
-            &Term::proj_struct(Term::free_var(&value), name, 0)
-        ),
-        Ok(nat_type()),
+    declared(&mut certifier, BOXED);
+    let [projected, literal, exact] = under(
+        &mut certifier,
+        "v: #{node = StructType} /Boxed(#NatType)",
+        "#{field = Struct(/Boxed, 0)} v.0, /Boxed(#NatType) { 7 }, #{node = StructType} /Boxed(#NatType)",
     );
-    assert_eq!(
-        check(
-            &mut certifier,
-            &boxed(name, vec![nat_type()], nat(7)),
-            &exact
-        ),
-        Ok(())
-    );
+
+    assert_eq!(infer(&mut certifier, &projected), Ok(term("#NatType")));
+    assert_eq!(check(&mut certifier, &literal, &exact), Ok(()));
 }
 
 /// A structure's type has one literal, the structure's own: a tuple literal of the same fields is no value of it.
@@ -173,13 +114,13 @@ fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
 #[test]
 fn a_tuple_literal_is_no_value_of_a_structure() {
     let mut certifier = certifier();
-    let name = parameterized_struct(&mut certifier);
+    declared(&mut certifier, BOXED);
 
     assert!(matches!(
         check(
             &mut certifier,
-            &Term::tuple([nat(7)]),
-            &Term::struct_type(name, [nat_type()])
+            &term("(7,)"),
+            &term("#{node = StructType} /Boxed(#NatType)")
         ),
         Err(Error::Mismatch { .. }),
     ));
@@ -189,31 +130,12 @@ fn a_tuple_literal_is_no_value_of_a_structure() {
 #[test]
 fn a_records_field_is_checked_at_the_parameters_its_literal_states() {
     let mut certifier = certifier();
-    let name = parameterized_struct(&mut certifier);
+    declared(&mut certifier, BOXED);
 
     assert!(matches!(
-        infer(
-            &mut certifier,
-            &boxed(
-                name,
-                vec![nat_type()],
-                Term::intrinsic(Intrinsic::Bool(true))
-            )
-        ),
+        infer(&mut certifier, &term("/Boxed(#NatType) { true }")),
         Err(Error::Mismatch { .. }),
     ));
-}
-
-/// The literal of the one-field structure [`parameterized_struct`] declares, at `params`, holding `value`: entry-free, as elaboration leaves one.
-fn boxed(name: Global, params: Vec<Term>, value: Term) -> Term {
-    Subterm::Struct(Struct {
-        name,
-        universes: Universes::default(),
-        params,
-        fields: vec![value],
-        entries: Vec::new(),
-    })
-    .into()
 }
 
 /// A projection says what its slot is a slot of, and the certifier holds that to its head's type.
@@ -222,37 +144,27 @@ fn boxed(name: Global, params: Vec<Term>, value: Term) -> Term {
 #[test]
 fn a_slot_of_one_thing_read_off_a_value_of_another_is_refused() {
     let mut certifier = certifier();
-    let name = parameterized_struct(&mut certifier);
-    let other = Global::Authored(Qualifier::from(["Other"]));
-
-    let exact: Term = Subterm::StructType(StructType {
-        name,
-        universes: Universes::default(),
-        params: vec![nat_type()],
-    })
-    .into();
-
-    let value = binder(2, "v");
-    certifier.assume(&value, &exact);
-    let pair = binder(3, "p");
-    certifier.assume(&pair, &Term::tuple_type([(binder(4, "a"), nat_type())]));
+    declared(&mut certifier, BOXED);
+    let [tuple_slot, struct_slot, other_slot, own_slot] = under(
+        &mut certifier,
+        "v: #{node = StructType} /Boxed(#NatType), p: {a: #NatType}",
+        "v.0, #{field = Struct(/Boxed, 0)} p.0, #{field = Struct(/Other, 0)} v.0, p.0",
+    );
+    let named = |path: &str| Global::Authored(Qualifier::from([path]));
 
     assert!(matches!(
-        infer(&mut certifier, &Term::proj(Term::free_var(&value), 0)),
+        infer(&mut certifier, &tuple_slot),
         Err(Error::NotASlotOf { named: None, .. }),
     ));
     assert!(matches!(
-        infer(&mut certifier, &Term::proj_struct(Term::free_var(&pair), name, 0)),
-        Err(Error::NotASlotOf { named: Some(named), .. }) if named == name,
+        infer(&mut certifier, &struct_slot),
+        Err(Error::NotASlotOf { named: Some(found), .. }) if found == named("Boxed"),
     ));
     assert!(matches!(
-        infer(&mut certifier, &Term::proj_struct(Term::free_var(&value), other, 0)),
-        Err(Error::NotASlotOf { named: Some(named), .. }) if named == other,
+        infer(&mut certifier, &other_slot),
+        Err(Error::NotASlotOf { named: Some(found), .. }) if found == named("Other"),
     ));
 
     // The tuple's own slot still reads.
-    assert_eq!(
-        infer(&mut certifier, &Term::proj(Term::free_var(&pair), 0)),
-        Ok(nat_type()),
-    );
+    assert_eq!(infer(&mut certifier, &own_slot), Ok(term("#NatType")));
 }

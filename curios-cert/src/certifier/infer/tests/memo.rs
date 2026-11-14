@@ -2,64 +2,67 @@
 
 use {
     crate::certifier::infer::test_support::*,
-    crate::*,
+    crate::{test_support::*, *},
     curios_analysis::test_support::*,
-    curios_common::Qualifier,
-    curios_core::{Global, Intrinsic, Nat, Term, UniverseContext, Universes},
+    curios_common::fill,
+    curios_core::Term,
 };
+
+/// `depth` levels of `${node}` over `base`, each level's operand written once and shared by its second occurrence under the share keys from `keys` on, the operand's two places written `${below}` and `${again}`: a graph whose tree is `2^depth`.
+fn doubled(node: &str, base: &str, depth: usize, keys: usize) -> String {
+    (keys..keys + depth).fold(base.to_string(), |operand, key| {
+        fill!(
+            node,
+            below = fill!("#{share = ${key}} (${operand})", key, operand),
+            again = fill!("#{shared = ${key}} _", key)
+        )
+    })
+}
 
 /// A local-free term's type is remembered for the declaration, so a term whose tree is exponential in its depth — a sum adding a shared subterm to itself sixty times over, the shape a reduct takes when each step mentions the one before it more than once — is typed in the size of its graph. At a depth the uncached certifier can afford, both give the same type.
 #[test]
 fn a_shared_closed_term_is_typed_once_per_node() {
-    let doubled = |depth: usize| {
-        let mut term = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
-        for _ in 0..depth {
-            term = Term::intrinsic(Intrinsic::nat_add(term.clone(), term));
-        }
-        term
-    };
+    let sum = |depth| term(&doubled("#NatAdd(${below}, ${again})", "1", depth, 0));
 
-    assert!(infer(&mut certifier(), &doubled(60)).is_ok());
+    assert!(infer(&mut certifier(), &sum(60)).is_ok());
 
     let mut uncached = Certifier::uncached(100_000, SYNTAX);
     assert_eq!(
-        infer(&mut certifier(), &doubled(8)),
-        infer(&mut uncached, &doubled(8))
+        infer(&mut certifier(), &sum(8)),
+        infer(&mut uncached, &sum(8))
     );
 }
 
 /// Nor does a hit replay the identities the inference it remembers minted. Each level here applies a lambda, whose binder typing opens, to a sum sharing the level below twice; replayed per hit, those identities double with every level as a memo-free certifier's would, and forty levels are past the identity space. A hit opens nothing, so the graph mints what typing each of its nodes once does, read off the identities minted on either side.
 #[test]
 fn a_shared_closed_term_mints_once_per_node() {
-    let x = binder(0, "x");
-    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
-    let mut term = nat(1);
-    for _ in 0..40 {
-        term = Term::apply(
-            identity.clone(),
-            [Term::intrinsic(Intrinsic::nat_add(term.clone(), term))],
-        );
-    }
+    let applied = term(&doubled(
+        "((x: #NatType) => x)(#NatAdd(${below}, ${again}))",
+        "1",
+        40,
+        0,
+    ));
 
     let mut certifier = certifier();
     let before = certifier.fresh(None).index();
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
+    assert_eq!(infer(&mut certifier, &applied), Ok(term("#NatType")));
     let after = certifier.fresh(None).index();
     let minted = after - before - 1;
     assert!(minted <= 40, "minted {minted}");
 }
 
-/// A pair of the level below with itself, `depth` deep, over `base`, beside the record of its type over `base_type`.
-fn doubled_pair(base: Term, base_type: Term, depth: u32) -> (Term, Term) {
-    (0..depth).fold((base, base_type), |(value, type_), level| {
-        (
-            Term::tuple([value.clone(), value]),
-            Term::tuple_type([
-                (binder(2 * level + 100, "first"), type_.clone()),
-                (binder(2 * level + 101, "second"), type_),
-            ]),
+/// A pair of the level below with itself, `depth` deep, over `n`, and the record of its type over `Nat`, as text.
+fn doubled_pair(depth: usize) -> String {
+    fill!(
+        "${value}, ${type_}",
+        value = doubled("(${below}, ${again})", "n", depth, 0),
+        type_ = doubled(
+            "{first: ${below}, second: ${again}}",
+            "#NatType",
+            depth,
+            depth
         )
-    })
+    )
 }
 
 /// A term naming a local is typed once per node too, for as long as what its typing read of the scope stands: sixty levels of a pair over a binder are sixty-one nodes, and inferring it answers where a walk per path does not. At a depth the uncached certifier affords, both give the same type.
@@ -67,37 +70,34 @@ fn doubled_pair(base: Term, base_type: Term, depth: u32) -> (Term, Term) {
 /// Mutation-checked: with no type read off the scope answered, the sixty-level inference runs the budget out.
 #[test]
 fn a_shared_term_over_a_local_is_typed_once_per_node() {
-    let n = binder(0, "n");
-    let over = |mut certifier: Certifier<'static>| {
-        certifier.assume(&n, &nat_type());
-        certifier
-    };
-    let pair = |depth| doubled_pair(Term::free_var(&n), nat_type(), depth).0;
+    let inferred = |mut certifier: Certifier<'static>, depth| {
+        let [pair, _] = under(&mut certifier, "n: #NatType", &doubled_pair(depth));
 
-    assert!(infer(&mut over(certifier()), &pair(60)).is_ok());
+        infer(&mut certifier, &pair)
+    };
+
+    assert!(inferred(certifier(), 60).is_ok());
     assert_eq!(
-        infer(&mut over(certifier()), &pair(8)),
-        infer(&mut over(Certifier::uncached(100_000, SYNTAX)), &pair(8)),
+        inferred(certifier(), 8),
+        inferred(Certifier::uncached(100_000, SYNTAX), 8),
     );
 }
 
 /// And under an arm, where no type was remembered at all: the same pair is typed once per node while the arm's equation stands.
 #[test]
 fn a_shared_term_under_an_arm_is_typed_once_per_node() {
-    let n = binder(0, "n");
-    let m = binder(1, "m");
     let mut certifier = certifier();
-    certifier.assume(&n, &nat_type());
-    certifier.assume(&m, &nat_type());
+    let [m, pair, _] = under(
+        &mut certifier,
+        "n: #NatType, m: #NatType",
+        &fill!("m, ${pair}", pair = doubled_pair(60)),
+    );
 
     let inferred = certifier.scoped(|certifier| {
         certifier
-            .refine(Term::free_var(&m), nat(0))
+            .refine(m, term("0"))
             .expect("the equation records");
-        infer(
-            certifier,
-            &doubled_pair(Term::free_var(&n), nat_type(), 60).0,
-        )
+        infer(certifier, &pair)
     });
 
     assert!(inferred.is_ok());
@@ -108,10 +108,8 @@ fn a_shared_term_under_an_arm_is_typed_once_per_node() {
 /// Mutation-checked: with no check read off the scope answered, it runs the budget out.
 #[test]
 fn a_shared_tuple_is_checked_once_per_node() {
-    let n = binder(0, "n");
     let mut certifier = certifier();
-    certifier.assume(&n, &nat_type());
-    let (value, type_) = doubled_pair(Term::free_var(&n), nat_type(), 60);
+    let [value, type_] = under(&mut certifier, "n: #NatType", &doubled_pair(60));
 
     assert_eq!(check(&mut certifier, &value, &type_), Ok(()));
 }
@@ -123,36 +121,23 @@ fn a_shared_tuple_is_checked_once_per_node() {
 fn a_remembered_type_does_not_outlive_the_equations_it_was_taken_under() {
     type Judge = fn(&mut Certifier, &Term) -> bool;
     let inferring: Judge = |certifier, term| infer(certifier, term).is_ok();
-    let checking: Judge = |certifier, term| check(certifier, term, &nat_type()).is_ok();
+    let checking: Judge = |certifier, term| check(certifier, term, &self::term("#NatType")).is_ok();
 
     let sequence = |mut certifier: Certifier, judge: Judge| {
-        let n = binder(0, "n");
-        let family = binder(1, "P");
-        let f = binder(2, "f");
-        let a = binder(3, "a");
-        let x = binder(4, "x");
-        let at = |index: Term| Term::apply(Term::free_var(&family), [index]);
-
-        certifier.assume(&n, &nat_type());
-        certifier.assume(
-            &family,
-            &Term::func_type([(x, nat_type())], Term::type_ground()),
+        let [n, applied] = under(
+            &mut certifier,
+            "n: #NatType, P: (x: #NatType) -> Type, f: (x: P(n)) -> #NatType, a: P(0)",
+            "n, f(a)",
         );
-        certifier.assume(
-            &f,
-            &Term::func_type([(x, at(Term::free_var(&n)))], nat_type()),
-        );
-        certifier.assume(&a, &at(nat(0)));
-        let term = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
 
-        let before = judge(&mut certifier, &term);
+        let before = judge(&mut certifier, &applied);
         let inside = certifier.scoped(|certifier| {
             certifier
-                .refine(Term::free_var(&n), nat(0))
+                .refine(n.clone(), term("0"))
                 .expect("the equation records");
-            judge(certifier, &term)
+            judge(certifier, &applied)
         });
-        let after = judge(&mut certifier, &term);
+        let after = judge(&mut certifier, &applied);
 
         [before, inside, after]
     };
@@ -174,31 +159,31 @@ fn a_remembered_type_does_not_outlive_the_equations_it_was_taken_under() {
 #[test]
 fn a_remembered_type_does_not_outlive_its_binder() {
     let mut certifier = certifier();
-    let h = binder(0, "h");
-    let term = Term::free_var(&h);
 
-    let first = certifier.scoped(|certifier| {
-        certifier.assume(&h, &nat_type());
-        infer(certifier, &term)
+    let ((locals, [h]), first) = certifier.scoped(|certifier| {
+        let opened = hypotheses(certifier, "h: #NatType", "h,");
+        let first = infer(certifier, &opened.1[0]);
+
+        (opened, first)
     });
     let second = certifier.scoped(|certifier| {
-        certifier.assume(&h, &bool_type());
-        infer(certifier, &term)
+        certifier.assume(&locals[0], &term("#BoolType"));
+        infer(certifier, &h)
     });
 
-    assert_eq!(first, Ok(nat_type()));
-    assert_eq!(second, Ok(bool_type()));
+    assert_eq!(first, Ok(term("#NatType")));
+    assert_eq!(second, Ok(term("#BoolType")));
 }
 
 /// A walk refused inside [`Certifier::tried`] leaves no position behind: what it recorded before the refusal is taken back, so the judgment after it records what that judgment records alone. The same walk in an ordinary bracket leaves the positions it recorded, and the judgment's are counted after them.
 #[test]
 fn a_refused_walk_takes_back_the_positions_it_recorded() {
     let refused = |certifier: &mut Certifier| {
-        check(certifier, &nat_type(), &Term::type_ground())?;
-        check(certifier, &nat(0), &bool_type())
+        check(certifier, &term("#NatType"), &term("Type"))?;
+        check(certifier, &term("0"), &term("#BoolType"))
     };
     let judged = |certifier: &mut Certifier| {
-        check(certifier, &bool_type(), &Term::type_ground()).expect("a type is typed");
+        check(certifier, &term("#BoolType"), &term("Type")).expect("a type is typed");
         let (positions, failure) = certifier.take_checked();
         assert!(failure.is_none());
 
@@ -221,10 +206,9 @@ fn a_refused_walk_takes_back_the_positions_it_recorded() {
 /// Mutation-checked: with the typings kept past a refusal, the lambda typed again records no position.
 #[test]
 fn a_term_typed_in_a_refused_walk_is_recorded_when_typed_again() {
-    let x = binder(0, "x");
-    let term = Term::func([(x, nat_type())], Term::free_var(&x));
+    let lambda = term("(x: #NatType) => x");
     let judged = |certifier: &mut Certifier| {
-        infer(certifier, &term).expect("the lambda types");
+        infer(certifier, &lambda).expect("the lambda types");
         let (positions, failure) = certifier.take_checked();
         assert!(failure.is_none());
 
@@ -236,67 +220,27 @@ fn a_term_typed_in_a_refused_walk_is_recorded_when_typed_again() {
 
     let mut tried = certifier();
     let refused = tried.tried(|certifier| {
-        infer(certifier, &term)?;
-        check(certifier, &nat(0), &bool_type())
+        infer(certifier, &lambda)?;
+        check(certifier, &term("0"), &term("#BoolType"))
     });
     assert!(refused.is_err());
     assert_eq!(judged(&mut tried), alone);
 
     let mut scoped = certifier();
     scoped
-        .scoped(|certifier| infer(certifier, &term))
+        .scoped(|certifier| infer(certifier, &lambda))
         .expect("the lambda types");
     assert_eq!(judged(&mut scoped), alone);
 }
 
-/// `alias : Type 0 = ()`, defined into `certifier` as a refused definition stands: a type to `infer_type`, which reads its declared sort, and none to `Sort::of`, which reduces it to a value.
-fn defining_alias(certifier: &mut Certifier) -> Global {
-    let alias = Global::Authored(Qualifier::from(["alias"]));
-    certifier
-        .define(
-            &alias,
-            &Term::type_ground(),
-            &Term::tuple(Vec::<Term>::new()),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
-
-    alias
-}
+/// `alias : Type 0 = ()`, as a refused definition stands: a type to `infer_type`, which reads its declared sort, and none to `Sort::of`, which reduces it to a value.
+const ALIAS: &str = "let /alias: Type = ();";
 
 /// `((z : alias) => 0)(())`, which checks `()` at `alias`: a position whose classification fails, recorded before the check refuses.
-fn checked_at(alias: Global, z: u32) -> Term {
-    Term::apply(
-        Term::func(
-            [(binder(z, "z"), Term::instance(alias, Universes::default()))],
-            nat(0),
-        ),
-        [Term::tuple(Vec::<Term>::new())],
-    )
-}
+const CHECKED_AT_ALIAS: &str = "((z: /alias) => 0)(())";
 
-/// `match not(true) | false => 0 | true => arm`: an arm no reduction takes, typed and refused, and withdrawn with what it recorded. Its scrutinee names no local, so no equation is in force inside it, and what it classifies is remembered for the declaration.
-fn never_taken(arm: Term) -> Term {
-    let c = binder(0, "c");
-    let not = Term::func(
-        [(c, bool_type())],
-        Term::bool_match(
-            Term::free_var(&c),
-            None,
-            bool_type(),
-            Term::intrinsic(Intrinsic::Bool(true)),
-            Term::intrinsic(Intrinsic::Bool(false)),
-        ),
-    );
-
-    Term::bool_match(
-        Term::apply(not, [Term::intrinsic(Intrinsic::Bool(true))]),
-        None,
-        nat_type(),
-        nat(0),
-        arm,
-    )
-}
+/// `match not(true) | false => 0 | true => ${arm} end`: an arm no reduction takes, typed and refused, and withdrawn with what it recorded. Its scrutinee names no local, so no equation is in force inside it, and what it classifies is remembered for the declaration.
+const NEVER_TAKEN: &str = "match ((c: #BoolType) => match c: (_) => #BoolType | false => true | true => false end)(true): (_) => #NatType | false => 0 | true => ${arm} end";
 
 /// A classification that failed is asked again where its type is met next: a withdrawn arm checks a value at `alias` first, and the same check outside the match records the failure again, with the memos on as with them off.
 ///
@@ -304,11 +248,15 @@ fn never_taken(arm: Term) -> Term {
 #[test]
 fn a_classification_that_failed_in_a_withdrawn_arm_fails_again_outside_it() {
     for mut certifier in [certifier(), Certifier::uncached(100_000, SYNTAX)] {
-        let alias = defining_alias(&mut certifier);
-        let term = Term::tuple([never_taken(checked_at(alias, 1)), checked_at(alias, 2)]);
+        declared(&mut certifier, ALIAS);
+        let both = term(&fill!(
+            "(${withdrawn}, ${checked})",
+            withdrawn = fill!(NEVER_TAKEN, arm = CHECKED_AT_ALIAS),
+            checked = CHECKED_AT_ALIAS
+        ));
 
         assert!(
-            infer(&mut certifier, &term).is_err(),
+            infer(&mut certifier, &both).is_err(),
             "nothing inhabits `alias`"
         );
         assert!(matches!(
@@ -322,11 +270,14 @@ fn a_classification_that_failed_in_a_withdrawn_arm_fails_again_outside_it() {
 #[test]
 fn a_classification_that_failed_only_in_a_withdrawn_arm_is_withdrawn_with_it() {
     for mut certifier in [certifier(), Certifier::uncached(100_000, SYNTAX)] {
-        let alias = defining_alias(&mut certifier);
+        declared(&mut certifier, ALIAS);
 
         assert_eq!(
-            infer(&mut certifier, &never_taken(checked_at(alias, 1))),
-            Ok(nat_type())
+            infer(
+                &mut certifier,
+                &term(&fill!(NEVER_TAKEN, arm = CHECKED_AT_ALIAS))
+            ),
+            Ok(term("#NatType"))
         );
         assert!(certifier.take_checked().1.is_none());
     }
@@ -338,26 +289,18 @@ fn a_classification_that_failed_only_in_a_withdrawn_arm_is_withdrawn_with_it() {
 #[test]
 fn a_check_remembered_under_an_arms_binding_does_not_outlive_it() {
     for mut certifier in [certifier(), Certifier::uncached(100_000, SYNTAX)] {
-        let b = binder(1, "b");
-        certifier.assume(&b, &bool_type());
-        let chosen = Term::bool_match(
-            Term::free_var(&b),
-            None,
-            Term::type_ground(),
-            bool_type(),
-            nat_type(),
+        let (locals, [chosen]) = hypotheses(
+            &mut certifier,
+            "b: #BoolType",
+            "match b: (_) => Type | false => #BoolType | true => #NatType end,",
         );
+        let zero = term("0");
 
         let inside = certifier.scoped(|certifier| {
-            certifier.bind(
-                &b,
-                &bool_type(),
-                &Term::intrinsic(Intrinsic::Bool(true)),
-                false,
-            );
-            check(certifier, &nat(0), &chosen)
+            certifier.bind(&locals[0], &term("#BoolType"), &term("true"), false);
+            check(certifier, &zero, &chosen)
         });
-        let after = check(&mut certifier, &nat(0), &chosen);
+        let after = check(&mut certifier, &zero, &chosen);
 
         assert_eq!(inside, Ok(()));
         assert!(matches!(after, Err(Error::Mismatch { .. })), "{after:?}");

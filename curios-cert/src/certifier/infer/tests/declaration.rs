@@ -2,86 +2,34 @@
 
 use {
     crate::certifier::infer::test_support::*,
-    crate::*,
-    curios_common::{Plicity, Qualifier},
-    curios_core::{
-        Atom, DefinitionKind, Global, InductDecl, Intrinsic, Level, Telescope, Term,
-        UniverseConstraint, UniverseContext, UniverseParam,
-    },
+    crate::{test_support::*, *},
+    curios_common::fill,
+    curios_core::{Definition, DefinitionKind},
 };
+
+/// `induct Wrapped | mk(value : Nat) end`.
+const WRAPPED: &str = "induct /Wrapped: pub Type\n| mk(value: #NatType)\nend";
 
 /// A constructor's type is its signature's terminal — the family at the parameters and index targets this case aims at.
 #[test]
 fn a_constructor_has_the_type_its_signature_ends_in() {
     let mut certifier = certifier();
-    let name = Global::Authored(Qualifier::from(["Wrapped"]));
-    let payload = binder(0, "value");
+    declared(&mut certifier, WRAPPED);
 
-    // `induct Wrapped | mk(value : Nat) end`
-    let constructed = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
-    certifier
-        .declare_induct(
-            &name,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::done(())),
-                vec![(
-                    Atom::from("mk"),
-                    curios_core::test_support::case(
-                        0,
-                        Telescope::build([(payload, nat_type())], Vec::new()),
-                        vec![Plicity::Explicit],
-                    ),
-                )]
-                .into(),
-                Term::type_ground(),
-                Qualifier::from(["Wrapped"]),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
-
-    let value = Term::variant(name, Vec::<Term>::new(), "mk", [nat(5)]);
-    assert_eq!(infer(&mut certifier, &value), Ok(constructed));
+    assert_eq!(
+        infer(&mut certifier, &term("#{node = Variant} /Wrapped/mk(5)")),
+        Ok(term("#{node = InductType} /Wrapped()"))
+    );
 }
 
 /// A constructor's payload is checked against its declared field types.
 #[test]
 fn a_constructor_payload_of_the_wrong_type_is_refused() {
     let mut certifier = certifier();
-    let name = Global::Authored(Qualifier::from(["Wrapped"]));
-    let payload = binder(0, "value");
+    declared(&mut certifier, WRAPPED);
 
-    certifier
-        .declare_induct(
-            &name,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::done(())),
-                vec![(
-                    Atom::from("mk"),
-                    curios_core::test_support::case(
-                        0,
-                        Telescope::build([(payload, nat_type())], Vec::new()),
-                        vec![Plicity::Explicit],
-                    ),
-                )]
-                .into(),
-                Term::type_ground(),
-                Qualifier::from(["Wrapped"]),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
-
-    let value = Term::variant(
-        name,
-        Vec::<Term>::new(),
-        "mk",
-        [Term::intrinsic(Intrinsic::Bool(true))],
-    );
     assert!(matches!(
-        infer(&mut certifier, &value),
+        infer(&mut certifier, &term("#{node = Variant} /Wrapped/mk(true)")),
         Err(Error::Mismatch { .. }),
     ));
 }
@@ -90,123 +38,90 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
 #[test]
 fn an_elimination_has_the_type_its_motive_states() {
     let mut certifier = certifier();
-    let motive = binder(0, "m");
-    let pred = binder(1, "pred");
-    let hypothesis = binder(2, "ih");
 
-    let term = Term::nat_match(
-        nat(3),
-        Some(&motive),
-        nat_type(),
-        nat(0),
-        &pred,
-        &hypothesis,
-        Term::free_var(&pred),
+    assert_eq!(
+        infer(
+            &mut certifier,
+            &term("match 3: (m) => #NatType | 0 => 0 | pred + 1; ih => pred end")
+        ),
+        Ok(term("#NatType"))
     );
-
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
 }
 
 /// Cumulativity: a small type stands where a larger universe is wanted, and `Prop` stands wherever a `Type` is. The reverse does not hold.
 #[test]
 fn a_small_universe_is_admitted_where_a_larger_one_is_wanted() {
     let mut certifier = certifier();
+    let (ground, one) = (term("Type"), term("#{level = 1} Type"));
 
-    assert_eq!(
-        check(&mut certifier, &Term::type_ground(), &Term::type_at(one())),
-        Ok(()),
-    );
-    assert_eq!(
-        check(&mut certifier, &nat_type(), &Term::type_ground()),
-        Ok(())
-    );
+    assert_eq!(check(&mut certifier, &ground, &one), Ok(()));
+    assert_eq!(check(&mut certifier, &term("#NatType"), &ground), Ok(()));
     assert!(matches!(
-        check(&mut certifier, &Term::type_at(one()), &Term::type_ground()),
+        check(&mut certifier, &one, &ground),
         Err(Error::Mismatch { .. }),
     ));
 }
 
-/// A generic definition is checked *under* its own constraint set. `(x : Type.{u}) => x` inhabits `(x : Type.{u}) -> Type.{w}` exactly when `u ≤ w` is among the hypotheses — discarding them would refuse a correct polymorphic definition.
+/// The one definition `text` writes.
+fn definition(text: &str) -> Definition {
+    let mut definitions = read_module(text)
+        .items
+        .iter()
+        .flat_map(|item| item.definitions())
+        .collect::<Vec<_>>();
+    assert_eq!(definitions.len(), 1, "one definition");
+
+    definitions.remove(0)
+}
+
+/// `poly.{u, v} : (x : Type.{u}) -> Type.{v} = (x) => x` under `${constraints}`.
+const POLY: &str = "#{universe_context = {parameter_count = 2, constraints = [${constraints}]}}\nlet /poly: (x: #{level = u} Type) -> #{level = v} Type = (x: #{level = u} Type) => x;";
+
+/// A generic definition is checked *under* its own constraint set. `(x : Type.{u}) => x` inhabits `(x : Type.{u}) -> Type.{v}` exactly when `u ≤ v` is among the hypotheses — discarding them would refuse a correct polymorphic definition.
 #[test]
 fn a_definition_checks_under_its_own_constraints() {
-    let (u, w) = (
-        Level::param(UniverseParam(0)),
-        Level::param(UniverseParam(1)),
-    );
-    let x = binder(0, "x");
-    let name = Global::Authored(Qualifier::from(["poly"]));
+    let checked = |constraints: &str| {
+        let poly = definition(&fill!(POLY, constraints));
 
-    let type_ = Term::func_type([(x, Term::type_at(u.clone()))], Term::type_at(w.clone()));
-    let body = Term::func([(x, Term::type_at(u.clone()))], Term::free_var(&x));
-
-    let constrained = UniverseContext {
-        parameter_count: 2,
-        quality_count: 0,
-        constraints: vec![UniverseConstraint { lower: u, upper: w }],
-    };
-    let mut certifier = certifier();
-    assert!(
         check_definition(
-            &mut certifier,
-            &name,
+            &mut certifier(),
+            &poly.name,
             &DefinitionKind::Authored,
-            &type_,
-            &body,
-            &constrained
+            &poly.type_,
+            &poly.body,
+            &poly.universe_context,
         )
-        .is_ok()
-    );
-
-    let unconstrained = UniverseContext {
-        parameter_count: 2,
-        quality_count: 0,
-        constraints: Vec::new(),
     };
-    let mut certifier = self::certifier();
-    assert!(matches!(
-        check_definition(
-            &mut certifier,
-            &name,
-            &DefinitionKind::Authored,
-            &type_,
-            &body,
-            &unconstrained
-        ),
-        Err(Error::Mismatch { .. }),
-    ));
+
+    assert!(checked("u <= v").is_ok());
+    assert!(matches!(checked(""), Err(Error::Mismatch { .. })));
 }
 
-/// The other direction: an occurrence must *satisfy* the scheme it instantiates. A scheme declaring `u + 1 ≤ w` refuses the instance `{0, 0}` and admits `{0, 1}`.
+/// The other direction: an occurrence must *satisfy* the scheme it instantiates. A scheme declaring `u + 1 ≤ v` refuses the instance `{0, 0}` and admits `{0, 1}`.
+///
+/// The name is declared with no body, as a judgment declares one before its body, so the type and the scheme are all an occurrence reads.
 #[test]
 fn an_instance_must_satisfy_its_schemes_constraints() {
-    let u = Level::param(UniverseParam(0));
-    let w = Level::param(UniverseParam(1));
-    let name = Global::Authored(Qualifier::from(["bounded"]));
-
     let mut certifier = certifier();
+    let bounded = definition(
+        "#{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}}\nlet /bounded: #{level = u} Type = #NatType;",
+    );
     certifier
-        .declare(
-            &name,
-            &Term::type_at(u.clone()),
-            &UniverseContext {
-                parameter_count: 2,
-                quality_count: 0,
-                constraints: vec![UniverseConstraint {
-                    lower: u.succ().expect("level has a successor"),
-                    upper: w,
-                }],
-            },
-        )
+        .declare(&bounded.name, &bounded.type_, &bounded.universe_context)
         .expect("a name is declared once");
 
-    let at = |levels: Vec<Level>| Term::instance(name, levels);
-
     assert_eq!(
-        infer(&mut certifier, &at(vec![Level::zero(), one()])),
-        Ok(Term::type_at(Level::zero())),
+        infer(
+            &mut certifier,
+            &term("#{universes = {levels = [0, 1]}} /bounded")
+        ),
+        Ok(term("Type")),
     );
     assert!(matches!(
-        infer(&mut certifier, &at(vec![Level::zero(), Level::zero()])),
+        infer(
+            &mut certifier,
+            &term("#{universes = {levels = [0, 0]}} /bounded")
+        ),
         Err(Error::UniverseInstance { .. }),
     ));
 }
@@ -215,27 +130,13 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
 #[test]
 fn a_recursive_proof_that_does_not_descend_is_refused() {
     let mut certifier = certifier();
-    let name = Global::Authored(Qualifier::from(["False"]));
-    certifier
-        .declare_induct(
-            &name,
-            &InductDecl::new(
-                UniverseContext::default(),
-                Telescope::done(Telescope::done(())),
-                Vec::new().into(),
-                Term::prop(),
-                Qualifier::from(["False"]),
-                true,
-            ),
-        )
-        .expect("a name is declared once");
-    let false_ = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
-
-    let f = binder(0, "f");
-    let term = Term::rec([(f, false_, Term::free_var(&f))], Term::free_var(&f));
+    declared(&mut certifier, "induct /False: pub Prop\nend");
 
     assert!(matches!(
-        infer(&mut certifier, &term),
+        infer(
+            &mut certifier,
+            &term("#{node = Rec} (let f: #{node = InductType} /False() = f; f)")
+        ),
         Err(Error::NotDescending { .. }),
     ));
 }
@@ -244,14 +145,12 @@ fn a_recursive_proof_that_does_not_descend_is_refused() {
 #[test]
 fn a_recursive_type_that_does_not_descend_is_refused() {
     let mut certifier = certifier();
-    let bad = binder(0, "Bad");
-    let term = Term::rec(
-        [(bad, Term::type_ground(), Term::free_var(&bad))],
-        Term::free_var(&bad),
-    );
 
     assert!(matches!(
-        infer(&mut certifier, &term),
+        infer(
+            &mut certifier,
+            &term("#{node = Rec} (let Bad: Type = Bad; Bad)")
+        ),
         Err(Error::NotDescending { .. }),
     ));
 }
@@ -260,18 +159,12 @@ fn a_recursive_type_that_does_not_descend_is_refused() {
 #[test]
 fn a_recursive_value_needs_no_descent() {
     let mut certifier = certifier();
-    let f = binder(0, "f");
-    let n = binder(1, "n");
 
-    let signature = Term::func_type([(n, nat_type())], nat_type());
-    let body = Term::func(
-        [(n, nat_type())],
-        Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
+    assert_eq!(
+        infer(
+            &mut certifier,
+            &term("#{node = Rec} (let f: (n: #NatType) -> #NatType = (n: #NatType) => f(n); f(1))")
+        ),
+        Ok(term("#NatType"))
     );
-    let term = Term::rec(
-        [(f, signature, body)],
-        Term::apply(Term::free_var(&f), [nat(1)]),
-    );
-
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
 }

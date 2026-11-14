@@ -2,148 +2,58 @@
 
 use {
     crate::certifier::infer::test_support::*,
-    crate::*,
-    curios_analysis::test_support::*,
-    curios_common::{Qualifier, SyntaxName},
-    curios_core::{
-        Atom, Declaration, Global, InductDecl, InductParam, Intrinsic, Nat, Polarity, Reducer,
-        Subterm, Telescope, Term, UniverseContext, Universes, Var, Visit,
-    },
-    curios_num::{Binary, Floating, Integer, Natural, Rounding},
+    crate::{test_support::*, *},
+    curios_common::fill,
+    curios_core::{Declaration, Intrinsic, Reducer, Subterm, Term, Var, Visit},
 };
 
-/// A family over `parameters` types with no index, at `result_sort`.
-fn family(
-    parameters: u32,
-    constructors: Vec<(Atom, InductParam)>,
-    result_sort: Term,
-) -> InductDecl {
-    InductDecl::new(
-        UniverseContext::default(),
-        Telescope::build(
-            (0..parameters).map(|index| (binder(90 + index, "A"), Term::type_ground())),
-            Telescope::done(()),
-        ),
-        constructors.into(),
-        result_sort,
-        Qualifier::default(),
-        true,
-    )
-    .with_polarities((0..parameters).map(|_| Polarity::Strict).collect())
-}
+/// The vocabulary a bound is stated in, defined as `/sys` defines it — `True` with its one proof, a proposition with none, and `Holds(b)` reducing to one or the other — so a bound is discharged by its decision reducing, as a program's is, rather than assumed.
+const BOUNDS: &str = r#"
+induct /std/Bool/True: pub Prop
+| qed()
+end
+induct /False: pub Prop
+end
+let /std/Bool/Holds: (b: #BoolType) -> Prop =
+    (b: #BoolType) => match b: (_) => Prop | false => #{node = InductType} /False() | true => #{node = InductType} /std/Bool/True() end;
+"#;
 
-/// A certifier holding the vocabulary a bound is stated in, defined as `/sys` defines it — `True` with its one proof, a proposition with none, and `Holds(b)` reducing to one or the other — so a bound is discharged by its decision reducing, as a program's is, rather than assumed.
+/// A certifier holding [`BOUNDS`].
 fn certifier_with_bounds() -> Certifier<'static> {
     let mut certifier = certifier();
-    let nullary = |name| Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
-
-    let truth = Global::Authored(SYNTAX.proof.true_type.qualifier());
-    let falsity = Global::Authored(Qualifier::from(["False"]));
-    certifier
-        .declare_induct(
-            &truth,
-            &family(
-                0,
-                vec![(
-                    Atom::from("qed"),
-                    curios_core::test_support::case(0, Telescope::done(Vec::new()), Vec::new()),
-                )],
-                Term::prop(),
-            ),
-        )
-        .expect("a name is declared once");
-    certifier
-        .declare_induct(&falsity, &family(0, Vec::new(), Term::prop()))
-        .expect("a name is declared once");
-
-    let decision = binder(0, "b");
-    certifier
-        .define(
-            &Global::Authored(SYNTAX.proof.holds.qualifier()),
-            &Term::func_type([(binder(1, "b"), bool_type())], Term::prop()),
-            &Term::func(
-                [(decision, bool_type())],
-                Term::bool_match(
-                    Term::free_var(&decision),
-                    None,
-                    Term::prop(),
-                    nullary(falsity),
-                    nullary(truth),
-                ),
-            ),
-            &UniverseContext::default(),
-        )
-        .expect("a name is declared once");
+    declared(&mut certifier, BOUNDS);
 
     certifier
-}
-
-/// The family a coordination outcome is read through, at the name the registry gives it. Typing an outcome reads its family's arity and sort and never its cases, so it is declared with none.
-fn declare_outcome(certifier: &mut Certifier, name: SyntaxName, parameters: u32) {
-    certifier
-        .declare_induct(
-            &Global::Authored(name.qualifier()),
-            &family(parameters, Vec::new(), Term::type_ground()),
-        )
-        .expect("a name is declared once");
 }
 
 /// The one proof of `True`, which closes every bound whose decision reduces to `true` and no other.
-fn qed() -> Term {
-    Term::variant(
-        Global::Authored(SYNTAX.proof.true_type.qualifier()),
-        Vec::<Term>::new(),
-        "qed",
-        Vec::<Term>::new(),
-    )
+const QED: &str = "#{node = Variant} /std/Bool/True/qed()";
+
+/// `template` with its bound closed by [`QED`], which it writes `${qed}`.
+fn proved(template: &str) -> String {
+    fill!(template, qed = QED)
 }
 
-fn truth(value: bool) -> Term {
-    Term::intrinsic(Intrinsic::Bool(value))
-}
+/// A `Flt` literal at `value`, a number, written as the reader reads one: signed, with its decimal point, which Rust leaves out of a value with no fraction.
+fn flt(value: f64) -> String {
+    let written = format!("{value:+}");
+    let written = match written.contains('.') {
+        true => written,
+        false => written + ".0",
+    };
 
-fn byte(value: u8) -> Term {
-    Term::intrinsic(Intrinsic::Byte(value))
-}
-
-fn int(value: i32) -> Term {
-    Term::intrinsic(Intrinsic::Int(Integer::from(value)))
-}
-
-fn flt(value: f64) -> Term {
-    Term::intrinsic(Intrinsic::Flt(Floating::from_bits(value.to_bits())))
-}
-
-fn bytes(run: &[u8]) -> Term {
-    Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(run.to_vec())))
-}
-
-fn list(items: &[usize]) -> Term {
-    Term::intrinsic(Intrinsic::List {
-        element: nat_type(),
-        items: items.iter().map(|item| nat(*item)).collect(),
-    })
-}
-
-/// A run of `length` bytes.
-fn run(length: usize) -> Term {
-    bytes(&vec![0xA5; length])
-}
-
-/// One byte, which no [`run`] holds.
-fn generator() -> Term {
-    byte(0x5A)
+    fill!("#Flt(${written})", written)
 }
 
 /// The type a carrier of the algebra is, as the roster spells it.
 fn carried(carrier: curios_algebra::Carrier) -> Term {
-    Term::intrinsic(match carrier {
-        curios_algebra::Carrier::Natural => Intrinsic::NatType,
-        curios_algebra::Carrier::Integer => Intrinsic::IntType,
-        curios_algebra::Carrier::Boolean => Intrinsic::BoolType,
-        curios_algebra::Carrier::Byte => Intrinsic::ByteType,
-        curios_algebra::Carrier::Float => Intrinsic::FltType,
-        curios_algebra::Carrier::Bytes => Intrinsic::BytesType,
+    term(match carrier {
+        curios_algebra::Carrier::Natural => "#NatType",
+        curios_algebra::Carrier::Integer => "#IntType",
+        curios_algebra::Carrier::Boolean => "#BoolType",
+        curios_algebra::Carrier::Byte => "#ByteType",
+        curios_algebra::Carrier::Float => "#FltType",
+        curios_algebra::Carrier::Bytes => "#BytesType",
         curios_algebra::Carrier::List => unreachable!("no intrinsic is declared at a list"),
     })
 }
@@ -166,360 +76,146 @@ fn is_value(term: &Term) -> bool {
 
 /// One closed application of every row a fold answers, its operands at the carriers the row states and inside the domain it states — at that domain's edge wherever it has one.
 fn inside() -> Vec<Term> {
-    let rounding = Rounding::TiesToEven;
-    let mut rows = Vec::new();
-
-    let bool_binary: [fn(Term, Term) -> Intrinsic; 5] = [
-        Intrinsic::BoolAnd,
-        Intrinsic::BoolOr,
-        Intrinsic::BoolXor,
-        Intrinsic::BoolEql,
-        Intrinsic::BoolNeq,
-    ];
-    rows.extend(bool_binary.map(|row| row(truth(true), truth(false))));
-
-    let nat_binary: [fn(Term, Term) -> Intrinsic; 15] = [
-        Intrinsic::NatMin,
-        Intrinsic::NatMax,
-        Intrinsic::NatEql,
-        Intrinsic::NatNeq,
-        Intrinsic::NatAdd,
-        Intrinsic::NatSub,
-        Intrinsic::NatMul,
-        Intrinsic::NatLt,
-        Intrinsic::NatLe,
-        Intrinsic::NatAnd,
-        Intrinsic::NatOr,
-        Intrinsic::NatXor,
-        Intrinsic::NatShl,
-        Intrinsic::NatShr,
-        Intrinsic::NatPow,
-    ];
-    rows.extend(nat_binary.map(|row| row(nat(7), nat(2))));
-
-    let int_binary: [fn(Term, Term) -> Intrinsic; 12] = [
-        Intrinsic::IntMin,
-        Intrinsic::IntMax,
-        Intrinsic::IntEql,
-        Intrinsic::IntNeq,
-        Intrinsic::IntAdd,
-        Intrinsic::IntSub,
-        Intrinsic::IntMul,
-        Intrinsic::IntLt,
-        Intrinsic::IntLe,
-        Intrinsic::IntAnd,
-        Intrinsic::IntOr,
-        Intrinsic::IntXor,
-    ];
-    rows.extend(int_binary.map(|row| row(int(-7), int(2))));
-
-    // A shift's count is a natural on both carriers.
-    let int_shift: [fn(Term, Term) -> Intrinsic; 2] = [Intrinsic::IntShl, Intrinsic::IntShr];
-    rows.extend(int_shift.map(|row| row(int(-7), nat(2))));
-
-    let flt_rounded: [fn(Rounding, Term, Term) -> Intrinsic; 4] = [
-        Intrinsic::FltAdd,
-        Intrinsic::FltSub,
-        Intrinsic::FltMul,
-        Intrinsic::FltDiv,
-    ];
-    rows.extend(flt_rounded.map(|row| row(rounding, flt(2.5), flt(-0.5))));
-
-    let flt_binary: [fn(Term, Term) -> Intrinsic; 8] = [
-        Intrinsic::FltRem,
-        Intrinsic::FltEql,
-        Intrinsic::FltNeq,
-        Intrinsic::FltLt,
-        Intrinsic::FltLe,
-        Intrinsic::FltMin,
-        Intrinsic::FltMax,
-        Intrinsic::FltCopysign,
-    ];
-    rows.extend(flt_binary.map(|row| row(flt(2.5), flt(-0.5))));
-
-    rows.extend([
+    let rows = vec![
+        "#BoolAnd(true, false)".to_string(),
+        "#BoolOr(true, false)".to_string(),
+        "#BoolXor(true, false)".to_string(),
+        "#BoolEql(true, false)".to_string(),
+        "#BoolNeq(true, false)".to_string(),
+        "#NatMin(7, 2)".to_string(),
+        "#NatMax(7, 2)".to_string(),
+        "#NatEql(7, 2)".to_string(),
+        "#NatNeq(7, 2)".to_string(),
+        "#NatAdd(7, 2)".to_string(),
+        "#NatSub(7, 2)".to_string(),
+        "#NatMul(7, 2)".to_string(),
+        "#NatLt(7, 2)".to_string(),
+        "#NatLe(7, 2)".to_string(),
+        "#NatAnd(7, 2)".to_string(),
+        "#NatOr(7, 2)".to_string(),
+        "#NatXor(7, 2)".to_string(),
+        "#NatShl(7, 2)".to_string(),
+        "#NatShr(7, 2)".to_string(),
+        "#NatPow(7, 2)".to_string(),
+        "#IntMin(#Int(-7), #Int(2))".to_string(),
+        "#IntMax(#Int(-7), #Int(2))".to_string(),
+        "#IntEql(#Int(-7), #Int(2))".to_string(),
+        "#IntNeq(#Int(-7), #Int(2))".to_string(),
+        "#IntAdd(#Int(-7), #Int(2))".to_string(),
+        "#IntSub(#Int(-7), #Int(2))".to_string(),
+        "#IntMul(#Int(-7), #Int(2))".to_string(),
+        "#IntLt(#Int(-7), #Int(2))".to_string(),
+        "#IntLe(#Int(-7), #Int(2))".to_string(),
+        "#IntAnd(#Int(-7), #Int(2))".to_string(),
+        "#IntOr(#Int(-7), #Int(2))".to_string(),
+        "#IntXor(#Int(-7), #Int(2))".to_string(),
+        // A shift's count is a natural on both carriers.
+        "#IntShl(#Int(-7), 2)".to_string(),
+        "#IntShr(#Int(-7), 2)".to_string(),
+        "#FltAdd(TiesToEven, #Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltSub(TiesToEven, #Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltMul(TiesToEven, #Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltDiv(TiesToEven, #Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltRem(#Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltEql(#Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltNeq(#Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltLt(#Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltLe(#Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltMin(#Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltMax(#Flt(+2.5), #Flt(-0.5))".to_string(),
+        "#FltCopysign(#Flt(+2.5), #Flt(-0.5))".to_string(),
         // The one literal that carries a term: a floor of successors over a natural.
-        Intrinsic::Nat(Nat::Succ(Natural::from(3u32), nat(4))),
+        "#Nat(Succ(3, 4))".to_string(),
         // The least divisor a quotient takes at each carrier, and a negative one at `Int`.
-        Intrinsic::NatDiv {
-            dividend: nat(7),
-            divisor: nat(1),
-            non_zero: qed(),
-        },
-        Intrinsic::NatRem {
-            dividend: nat(7),
-            divisor: nat(1),
-            non_zero: qed(),
-        },
-        Intrinsic::IntDiv {
-            dividend: int(-7),
-            divisor: int(-1),
-            non_zero: qed(),
-        },
-        Intrinsic::IntRem {
-            dividend: int(-7),
-            divisor: int(-1),
-            non_zero: qed(),
-        },
+        proved("#NatDiv(7, 1, ${qed})"),
+        proved("#NatRem(7, 1, ${qed})"),
+        proved("#IntDiv(#Int(-7), #Int(-1), ${qed})"),
+        proved("#IntRem(#Int(-7), #Int(-1), ${qed})"),
         // The greatest natural a byte holds, and the least integer a natural does.
-        Intrinsic::ByteToNat(byte(u8::MAX)),
-        Intrinsic::NatToByte {
-            nat: nat(255),
-            below: qed(),
-        },
-        Intrinsic::NatToInt(nat(7)),
+        "#ByteToNat(#Byte(255))".to_string(),
+        proved("#NatToByte(255, ${qed})"),
+        "#NatToInt(7)".to_string(),
         // A magnitude and a sign of an integer below zero.
-        Intrinsic::IntAbs(int(-7)),
-        Intrinsic::IntSign(int(-7)),
-        Intrinsic::IntToNat {
-            int: int(0),
-            non_neg: qed(),
-        },
-        Intrinsic::NatToFlt(rounding, nat(7)),
-        Intrinsic::IntToFlt(rounding, int(-7)),
-        Intrinsic::FltNeg(flt(2.5)),
-        Intrinsic::FltAbs(flt(-2.5)),
-        Intrinsic::FltSqrt(rounding, flt(2.5)),
-        Intrinsic::FltRoundIntegral(rounding, flt(2.5)),
-        Intrinsic::FltFma(rounding, flt(2.5), flt(-0.5), flt(1.0)),
+        "#IntAbs(#Int(-7))".to_string(),
+        "#IntSign(#Int(-7))".to_string(),
+        proved("#IntToNat(#Int(0), ${qed})"),
+        "#NatToFlt(TiesToEven, 7)".to_string(),
+        "#IntToFlt(TiesToEven, #Int(-7))".to_string(),
+        "#FltNeg(#Flt(+2.5))".to_string(),
+        "#FltAbs(#Flt(-2.5))".to_string(),
+        "#FltSqrt(TiesToEven, #Flt(+2.5))".to_string(),
+        "#FltRoundIntegral(TiesToEven, #Flt(+2.5))".to_string(),
+        "#FltFma(TiesToEven, #Flt(+2.5), #Flt(-0.5), #Flt(+1.0))".to_string(),
         // Both ends of each narrowing's domain: the negative zero and the greatest finite value into `Nat`, the two finite extremes and the least subnormal into `Int`.
-        Intrinsic::FltToNat {
-            flt: flt(-0.0),
-            non_neg: qed(),
-        },
-        Intrinsic::FltToNat {
-            flt: flt(f64::MAX),
-            non_neg: qed(),
-        },
-        Intrinsic::FltToInt {
-            flt: flt(f64::MAX),
-            finite: qed(),
-        },
-        Intrinsic::FltMantissa {
-            flt: flt(f64::MIN),
-            finite: qed(),
-        },
-        Intrinsic::FltExponent {
-            flt: flt(f64::from_bits(1)),
-            finite: qed(),
-        },
-        Intrinsic::FltToLeBytes(flt(2.5)),
-        Intrinsic::FltOfLeBytes {
-            bytes: bytes(&[0; 8]),
-            eight_bytes: qed(),
-        },
-    ]);
-
-    rows.extend([
-        Intrinsic::BytesLen(run(2)),
-        Intrinsic::BytesEql(run(2), run(1)),
+        proved("#FltToNat(#Flt(-0.0), ${qed})"),
+        fill!("#FltToNat(${max}, ${qed})", max = flt(f64::MAX), qed = QED),
+        fill!("#FltToInt(${max}, ${qed})", max = flt(f64::MAX), qed = QED),
+        fill!("#FltMantissa(${min}, ${qed})", min = flt(f64::MIN), qed = QED),
+        fill!(
+            "#FltExponent(${least}, ${qed})",
+            least = flt(f64::from_bits(1)),
+            qed = QED
+        ),
+        "#FltToLeBytes(#Flt(+2.5))".to_string(),
+        proved("#FltOfLeBytes(x[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], ${qed})"),
+        "#BytesLen(x[0xA5, 0xA5])".to_string(),
+        "#BytesEql(x[0xA5, 0xA5], x[0xA5])".to_string(),
         // The last index, and a window ending where the run does.
-        Intrinsic::BytesGet {
-            bytes: run(2),
-            index: nat(1),
-            in_range: qed(),
-        },
-        Intrinsic::BytesSlice {
-            bytes: run(2),
-            start: nat(1),
-            length: nat(1),
-            within: qed(),
-        },
-        Intrinsic::BytesAppend {
-            bytes: run(2),
-            element: generator(),
-        },
-        Intrinsic::BytesConcat {
-            operands: vec![run(2), run(1)],
-        },
-        Intrinsic::BytesReplicate {
-            count: nat(3),
-            atom: generator(),
-        },
-        Intrinsic::BytesAnd {
-            left: run(2),
-            right: run(2),
-            same_length: qed(),
-        },
-        Intrinsic::BytesOr {
-            left: run(2),
-            right: run(2),
-            same_length: qed(),
-        },
-        Intrinsic::BytesXor {
-            left: run(2),
-            right: run(2),
-            same_length: qed(),
-        },
-    ]);
-
-    let item = binder(10, "item");
-    let accumulator = binder(11, "accumulator");
-    rows.extend([
-        Intrinsic::ListLen {
-            element: nat_type(),
-            list: list(&[4, 5]),
-        },
-        Intrinsic::ListGet {
-            element: nat_type(),
-            list: list(&[4, 5]),
-            index: nat(1),
-            in_range: qed(),
-        },
-        Intrinsic::ListSlice {
-            element: nat_type(),
-            list: list(&[4, 5]),
-            start: nat(1),
-            length: nat(1),
-            within: qed(),
-        },
-        Intrinsic::ListAppend {
-            element: nat_type(),
-            list: list(&[4, 5]),
-            item: nat(6),
-        },
-        Intrinsic::ListConcat {
-            element: nat_type(),
-            operands: vec![list(&[4, 5]), list(&[6])],
-        },
+        proved("#BytesGet(x[0xA5, 0xA5], 1, ${qed})"),
+        proved("#BytesSlice(x[0xA5, 0xA5], 1, 1, ${qed})"),
+        "#BytesAppend(x[0xA5, 0xA5], #Byte(90))".to_string(),
+        "#BytesConcat([x[0xA5, 0xA5], x[0xA5]])".to_string(),
+        "#BytesReplicate(3, #Byte(90))".to_string(),
+        proved("#BytesAnd(x[0xA5, 0xA5], x[0xA5, 0xA5], ${qed})"),
+        proved("#BytesOr(x[0xA5, 0xA5], x[0xA5, 0xA5], ${qed})"),
+        proved("#BytesXor(x[0xA5, 0xA5], x[0xA5, 0xA5], ${qed})"),
+        "#ListLen(#NatType, #List(#NatType, [4, 5]))".to_string(),
+        proved("#ListGet(#NatType, #List(#NatType, [4, 5]), 1, ${qed})"),
+        proved("#ListSlice(#NatType, #List(#NatType, [4, 5]), 1, 1, ${qed})"),
+        "#ListAppend(#NatType, #List(#NatType, [4, 5]), 6)".to_string(),
+        "#ListConcat(#NatType, [#List(#NatType, [4, 5]), #List(#NatType, [6])])".to_string(),
         // A map into another carrier, so the image's element type is the row's `to` and not its `from`.
-        Intrinsic::ListMap {
-            from: nat_type(),
-            to: bool_type(),
-            list: list(&[4, 5]),
-            function: Term::func(
-                [(item, nat_type())],
-                Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&item), nat(5))),
-            ),
-        },
-        Intrinsic::ListFold {
-            element: nat_type(),
-            result: nat_type(),
-            list: list(&[4, 5]),
-            init: nat(0),
-            function: Term::func(
-                [(item, nat_type()), (accumulator, nat_type())],
-                Term::intrinsic(Intrinsic::nat_add(
-                    Term::free_var(&item),
-                    Term::free_var(&accumulator),
-                )),
-            ),
-        },
-    ]);
+        "#ListMap(#NatType, #BoolType, #List(#NatType, [4, 5]), (item: #NatType) => #NatLt(item, 5))"
+            .to_string(),
+        "#ListFold(#NatType, #NatType, #List(#NatType, [4, 5]), 0, (item: #NatType, accumulator: #NatType) => #NatAdd(item, accumulator))"
+            .to_string(),
+    ];
 
-    rows.into_iter().map(Term::intrinsic).collect()
+    rows.iter().map(|row| term(row)).collect()
 }
 
 /// One closed application of every row that states a bound, one step past the edge of the domain it states, the bound closed with the proof that closes it inside. A channel's capacity is the one bound here over a row no fold answers.
 fn outside() -> Vec<Term> {
-    let mut rows = vec![
-        Intrinsic::NatDiv {
-            dividend: nat(7),
-            divisor: nat(0),
-            non_zero: qed(),
-        },
-        Intrinsic::NatRem {
-            dividend: nat(7),
-            divisor: nat(0),
-            non_zero: qed(),
-        },
-        Intrinsic::IntDiv {
-            dividend: int(-7),
-            divisor: int(0),
-            non_zero: qed(),
-        },
-        Intrinsic::IntRem {
-            dividend: int(-7),
-            divisor: int(0),
-            non_zero: qed(),
-        },
-        Intrinsic::NatToByte {
-            nat: nat(256),
-            below: qed(),
-        },
-        Intrinsic::IntToNat {
-            int: int(-1),
-            non_neg: qed(),
-        },
+    let rows = [
+        proved("#NatDiv(7, 0, ${qed})"),
+        proved("#NatRem(7, 0, ${qed})"),
+        proved("#IntDiv(#Int(-7), #Int(0), ${qed})"),
+        proved("#IntRem(#Int(-7), #Int(0), ${qed})"),
+        proved("#NatToByte(256, ${qed})"),
+        proved("#IntToNat(#Int(-1), ${qed})"),
         // The least negative value, and the three values that are no number.
-        Intrinsic::FltToNat {
-            flt: flt(-f64::from_bits(1)),
-            non_neg: qed(),
-        },
-        Intrinsic::FltToNat {
-            flt: flt(f64::INFINITY),
-            non_neg: qed(),
-        },
-        Intrinsic::FltToInt {
-            flt: flt(f64::INFINITY),
-            finite: qed(),
-        },
-        Intrinsic::FltMantissa {
-            flt: flt(f64::NEG_INFINITY),
-            finite: qed(),
-        },
-        Intrinsic::FltExponent {
-            flt: flt(f64::NAN),
-            finite: qed(),
-        },
-        Intrinsic::FltOfLeBytes {
-            bytes: bytes(&[0; 7]),
-            eight_bytes: qed(),
-        },
-        Intrinsic::FltOfLeBytes {
-            bytes: bytes(&[0; 9]),
-            eight_bytes: qed(),
-        },
-        Intrinsic::ListGet {
-            element: nat_type(),
-            list: list(&[4, 5]),
-            index: nat(2),
-            in_range: qed(),
-        },
-        Intrinsic::ListSlice {
-            element: nat_type(),
-            list: list(&[4, 5]),
-            start: nat(1),
-            length: nat(2),
-            within: qed(),
-        },
-        Intrinsic::Channel {
-            element: nat_type(),
-            capacity: nat(0),
-            positive: qed(),
-        },
+        fill!(
+            "#FltToNat(${least}, ${qed})",
+            least = flt(-f64::from_bits(1)),
+            qed = QED
+        ),
+        proved("#FltToNat(#Flt(+inf.0), ${qed})"),
+        proved("#FltToInt(#Flt(+inf.0), ${qed})"),
+        proved("#FltMantissa(#Flt(-inf.0), ${qed})"),
+        proved("#FltExponent(#Flt(+nan.0), ${qed})"),
+        proved("#FltOfLeBytes(x[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], ${qed})"),
+        proved("#FltOfLeBytes(x[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], ${qed})"),
+        proved("#ListGet(#NatType, #List(#NatType, [4, 5]), 2, ${qed})"),
+        proved("#ListSlice(#NatType, #List(#NatType, [4, 5]), 1, 2, ${qed})"),
+        proved("#Channel(#NatType, 0, ${qed})"),
+        proved("#BytesGet(x[0xA5, 0xA5], 2, ${qed})"),
+        proved("#BytesSlice(x[0xA5, 0xA5], 1, 2, ${qed})"),
+        proved("#BytesAnd(x[0xA5, 0xA5], x[0xA5], ${qed})"),
+        proved("#BytesOr(x[0xA5, 0xA5], x[0xA5], ${qed})"),
+        proved("#BytesXor(x[0xA5, 0xA5], x[0xA5], ${qed})"),
     ];
 
-    rows.extend([
-        Intrinsic::BytesGet {
-            bytes: run(2),
-            index: nat(2),
-            in_range: qed(),
-        },
-        Intrinsic::BytesSlice {
-            bytes: run(2),
-            start: nat(1),
-            length: nat(2),
-            within: qed(),
-        },
-        Intrinsic::BytesAnd {
-            left: run(2),
-            right: run(1),
-            same_length: qed(),
-        },
-        Intrinsic::BytesOr {
-            left: run(2),
-            right: run(1),
-            same_length: qed(),
-        },
-        Intrinsic::BytesXor {
-            left: run(2),
-            right: run(1),
-            same_length: qed(),
-        },
-    ]);
-
-    rows.into_iter().map(Term::intrinsic).collect()
+    rows.iter().map(|row| term(row)).collect()
 }
 
 /// A row is the definition of what its operation means, so a wrong one disagrees with nothing a program can spell — but it disagrees with the fold, the carrier's own computation, whose operands and result are Rust values of one type each. A row stating another operand carrier than the fold reads leaves a closed application stuck; one stating another result types the application at a carrier its reduct is not a value of, and conversion then holds that reduct at the wrong type; a bound weaker than the fold's domain admits an application the fold has no value for, under laws that take the bound for granted.
@@ -584,6 +280,7 @@ fn a_bounded_row_is_refused_one_step_past_its_folds_domain() {
 #[test]
 fn an_operation_is_declared_to_the_algebra_at_the_carrier_its_row_types() {
     let mut declared = 0;
+    let (nat, boolean) = (term("#NatType"), term("#BoolType"));
 
     for application in inside() {
         let Subterm::Intrinsic(intrinsic) = &*application else {
@@ -617,9 +314,11 @@ fn an_operation_is_declared_to_the_algebra_at_the_carrier_its_row_types() {
             curios_algebra::Operation::Equal
             | curios_algebra::Operation::Unequal
             | curios_algebra::Operation::Less
-            | curios_algebra::Operation::AtMost => (vec![carrier.clone(), carrier], bool_type()),
+            | curios_algebra::Operation::AtMost => {
+                (vec![carrier.clone(), carrier], boolean.clone())
+            }
             curios_algebra::Operation::ShiftLeft | curios_algebra::Operation::ShiftRight => {
-                (vec![carrier.clone(), nat_type()], carrier)
+                (vec![carrier.clone(), nat.clone()], carrier)
             }
             curios_algebra::Operation::Sum
             | curios_algebra::Operation::Difference
@@ -672,7 +371,7 @@ fn the_operands_an_operation_is_declared_over_are_the_first_its_traversal_meets(
         let Declaration::Operation { operands, .. } = intrinsic.algebra() else {
             continue;
         };
-        let mut masking = Visit::masking(|_, _: &Var| None, Term::type_ground());
+        let mut masking = Visit::masking(|_, _: &Var| None, term("Type"));
         intrinsic.traverse(&mut masking);
         let children = masking.take_masked_children();
         let declared = operands
@@ -686,89 +385,47 @@ fn the_operands_an_operation_is_declared_over_are_the_first_its_traversal_meets(
     }
 }
 
+/// The families coordination outcomes are read through, at the names the registry gives them. Typing an outcome reads its family's arity and sort and never its cases, so each is declared with none.
+const OUTCOMES: &str = r#"
+#{polarities = [Strict]}
+induct /sys/Option(A: Type): pub Type
+end
+#{polarities = [Strict]}
+induct /sys/Channel/Take(A: Type): pub Type
+end
+induct /sys/Channel/Push: pub Type
+end
+"#;
+
 /// The rows no fold answers are the effect carrier's: its two constructors, and the cell and channel operations. Nothing computes against them, and the one thing a wrong row among them could do to admit is hand out what a description yields — `Io` has no eliminator only while no row is one, and a host call that diverges inhabits `Io` at any type. So each is typed at an `Io`, and reduction leaves each the node it was: `bind(pure(x), f)` is not `f(x)`.
 ///
 /// Mutation-checked as the grid above is: `IoBind` producing its bare result type, and a channel's count a bare `Nat`, each fail the first assertion.
 #[test]
 fn every_row_no_fold_answers_produces_an_inert_description() {
     let mut certifier = certifier_with_bounds();
-    declare_outcome(&mut certifier, SYNTAX.option.family, 1);
-    declare_outcome(&mut certifier, SYNTAX.channel.take, 1);
-    declare_outcome(&mut certifier, SYNTAX.channel.push, 0);
-
-    let cell = binder(20, "cell");
-    let channel = binder(21, "channel");
-    let item = binder(22, "item");
-    certifier.assume(&cell, &Term::intrinsic(Intrinsic::CellType(nat_type())));
-    certifier.assume(
-        &channel,
-        &Term::intrinsic(Intrinsic::ChannelType(nat_type())),
+    declared(&mut certifier, OUTCOMES);
+    let rows: [Term; 12] = under(
+        &mut certifier,
+        "cell: #CellType(#NatType), channel: #ChannelType(#NatType)",
+        &[
+            "#Cell(#NatType)".to_string(),
+            "#CellFill(#NatType, cell, 1)".to_string(),
+            "#CellPoll(#NatType, cell, {})".to_string(),
+            proved("#Channel(#NatType, 1, ${qed})"),
+            "#ChannelPush(#NatType, channel, 1)".to_string(),
+            "#ChannelTake(#NatType, channel, {})".to_string(),
+            "#ChannelClose(#NatType, channel)".to_string(),
+            "#ChannelClosed(#NatType, channel)".to_string(),
+            "#ChannelCount(#NatType, channel)".to_string(),
+            "#ChannelCapacity(#NatType, channel)".to_string(),
+            "#IoPure(#NatType, 1)".to_string(),
+            "#IoBind(#NatType, #NatType, #IoPure(#NatType, 1), (item: #NatType) => #IoPure(#NatType, item))"
+                .to_string(),
+        ]
+        .join(", "),
     );
-    let pure = |value| {
-        Term::intrinsic(Intrinsic::IoPure {
-            result: nat_type(),
-            value,
-        })
-    };
 
-    let rows = [
-        Intrinsic::Cell {
-            element: nat_type(),
-        },
-        Intrinsic::CellFill {
-            element: nat_type(),
-            cell: Term::free_var(&cell),
-            value: nat(1),
-        },
-        Intrinsic::CellPoll {
-            element: nat_type(),
-            cell: Term::free_var(&cell),
-            universes: Universes::default(),
-        },
-        Intrinsic::Channel {
-            element: nat_type(),
-            capacity: nat(1),
-            positive: qed(),
-        },
-        Intrinsic::ChannelPush {
-            element: nat_type(),
-            channel: Term::free_var(&channel),
-            value: nat(1),
-        },
-        Intrinsic::ChannelTake {
-            element: nat_type(),
-            channel: Term::free_var(&channel),
-            universes: Universes::default(),
-        },
-        Intrinsic::ChannelClose {
-            element: nat_type(),
-            channel: Term::free_var(&channel),
-        },
-        Intrinsic::ChannelClosed {
-            element: nat_type(),
-            channel: Term::free_var(&channel),
-        },
-        Intrinsic::ChannelCount {
-            element: nat_type(),
-            channel: Term::free_var(&channel),
-        },
-        Intrinsic::ChannelCapacity {
-            element: nat_type(),
-            channel: Term::free_var(&channel),
-        },
-        Intrinsic::IoPure {
-            result: nat_type(),
-            value: nat(1),
-        },
-        Intrinsic::IoBind {
-            from: nat_type(),
-            to: nat_type(),
-            action: pure(nat(1)),
-            continuation: Term::func([(item, nat_type())], pure(Term::free_var(&item))),
-        },
-    ];
-
-    for application in rows.map(Term::intrinsic) {
+    for application in rows {
         let stated = infer(&mut certifier, &application)
             .unwrap_or_else(|error| panic!("{application:?} is refused: {error:?}"));
         assert!(
@@ -791,20 +448,20 @@ fn a_literal_is_typed_at_the_carrier_its_payload_is_a_value_of() {
     let mut certifier = certifier();
 
     for (literal, former) in [
-        (truth(true), Intrinsic::BoolType),
-        (nat(0), Intrinsic::NatType),
-        (nat(7), Intrinsic::NatType),
-        (byte(7), Intrinsic::ByteType),
-        (int(-7), Intrinsic::IntType),
-        (flt(2.5), Intrinsic::FltType),
-        (run(2), Intrinsic::BytesType),
-        (Term::intrinsic(Intrinsic::Handle(7)), Intrinsic::HandleType),
-        (list(&[4, 5]), Intrinsic::ListType(nat_type())),
+        ("true", "#BoolType"),
+        ("0", "#NatType"),
+        ("7", "#NatType"),
+        ("#Byte(7)", "#ByteType"),
+        ("#Int(-7)", "#IntType"),
+        ("#Flt(+2.5)", "#FltType"),
+        ("x[0xA5, 0xA5]", "#BytesType"),
+        ("#Handle(7)", "#HandleType"),
+        ("#List(#NatType, [4, 5])", "#ListType(#NatType)"),
     ] {
-        let former = Term::intrinsic(former);
+        let former = term(former);
 
-        assert_eq!(infer(&mut certifier, &literal), Ok(former.clone()));
-        assert_eq!(infer(&mut certifier, &former), Ok(Term::type_ground()));
+        assert_eq!(infer(&mut certifier, &term(literal)), Ok(former.clone()));
+        assert_eq!(infer(&mut certifier, &former), Ok(term("Type")));
     }
 }
 
@@ -813,27 +470,19 @@ fn a_literal_is_typed_at_the_carrier_its_payload_is_a_value_of() {
 /// Mutation-checked at `sort_of_intrinsic`: answering `Prop` for an element that is one fails the first case, and answering level zero whatever the element's level fails the third.
 #[test]
 fn a_parameterized_former_sits_at_its_elements_level_and_never_in_prop() {
-    let formers: [fn(Term) -> Intrinsic; 4] = [
-        Intrinsic::ListType,
-        Intrinsic::CellType,
-        Intrinsic::ChannelType,
-        Intrinsic::IoType,
-    ];
-
-    for former in formers {
+    for former in ["#ListType", "#CellType", "#ChannelType", "#IoType"] {
         let mut certifier = certifier();
-        let proposition = binder(0, "P");
-        certifier.assume(&proposition, &Term::prop());
+        let formed: [Term; 3] = under(
+            &mut certifier,
+            "P: Prop",
+            &fill!("${former}(P), ${former}(#NatType), ${former}(Type)", former),
+        );
 
-        for (element, sort) in [
-            (Term::free_var(&proposition), Term::type_ground()),
-            (nat_type(), Term::type_ground()),
-            (Term::type_ground(), Term::type_at(one())),
-        ] {
-            assert_eq!(
-                infer(&mut certifier, &Term::intrinsic(former(element))),
-                Ok(sort),
-            );
+        for (formed, sort) in formed
+            .into_iter()
+            .zip(["Type", "Type", "#{level = 1} Type"])
+        {
+            assert_eq!(infer(&mut certifier, &formed), Ok(term(sort)));
         }
     }
 }

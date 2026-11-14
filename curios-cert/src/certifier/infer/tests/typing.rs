@@ -2,78 +2,63 @@
 
 use {
     crate::certifier::infer::test_support::*,
-    crate::*,
-    curios_common::Plicity,
-    curios_core::{Intrinsic, Subterm, Term},
+    crate::{test_support::*, *},
+    curios_core::{Free, Subterm},
 };
 
 #[test]
 fn a_universe_is_one_level_above_itself() {
     let mut certifier = certifier();
+    let one = term("#{level = 1} Type");
 
-    assert_eq!(
-        infer(&mut certifier, &Term::type_ground()),
-        Ok(Term::type_at(one())),
-    );
-    assert_eq!(
-        infer(&mut certifier, &Term::prop()),
-        Ok(Term::type_at(one()))
-    );
+    assert_eq!(infer(&mut certifier, &term("Type")), Ok(one.clone()));
+    assert_eq!(infer(&mut certifier, &term("Prop")), Ok(one));
 }
 
 #[test]
 fn a_literal_has_its_carriers_type() {
     let mut certifier = certifier();
 
-    assert_eq!(infer(&mut certifier, &nat(7)), Ok(nat_type()));
-    assert_eq!(
-        infer(&mut certifier, &Term::intrinsic(Intrinsic::Bool(true))),
-        Ok(bool_type()),
-    );
+    assert_eq!(infer(&mut certifier, &term("7")), Ok(term("#NatType")));
+    assert_eq!(infer(&mut certifier, &term("true")), Ok(term("#BoolType")));
 }
 
 #[test]
 fn a_variable_has_the_type_it_was_bound_at() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-    certifier.assume(&x, &nat_type());
+    let [x] = under(&mut certifier, "x: #NatType", "x,");
 
-    assert_eq!(infer(&mut certifier, &Term::free_var(&x)), Ok(nat_type()));
+    assert_eq!(infer(&mut certifier, &x), Ok(term("#NatType")));
 }
 
 /// A finished term has no free names. Refusing rather than treating one as a neutral is what makes that a checked statement.
 #[test]
 fn an_unbound_variable_is_refused() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
 
     assert_eq!(
-        infer(&mut certifier, &Term::free_var(&x)),
-        Err(Error::Unbound(x)),
+        infer(&mut certifier, &term("#{binding = Free(0)} x")),
+        Err(Error::Unbound(Free::local(0, Some("x")))),
     );
 }
 
 #[test]
 fn a_lambda_has_the_function_type_over_its_telescope() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
 
-    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
-    let arrow = Term::func_type([(x, nat_type())], nat_type());
-
-    assert_eq!(infer(&mut certifier, &identity), Ok(arrow));
+    assert_eq!(
+        infer(&mut certifier, &term("(x: #NatType) => x")),
+        Ok(term("(x: #NatType) -> #NatType"))
+    );
 }
 
 #[test]
 fn an_application_substitutes_its_arguments_into_the_result() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-
-    let identity = Term::func([(x, nat_type())], Term::free_var(&x));
 
     assert_eq!(
-        infer(&mut certifier, &Term::apply(identity, [nat(4)])),
-        Ok(nat_type()),
+        infer(&mut certifier, &term("((x: #NatType) => x)(4)")),
+        Ok(term("#NatType")),
     );
 }
 
@@ -81,31 +66,20 @@ fn an_application_substitutes_its_arguments_into_the_result() {
 #[test]
 fn a_dependent_result_mentions_the_argument_supplied() {
     let mut certifier = certifier();
-    let a = binder(0, "A");
-    let x = binder(1, "x");
 
     // `(A : Type, x : A) -> A` applied at `(3)` results in `Nat`.
-    let f = Term::func(
-        [(a, Term::type_ground()), (x, Term::free_var(&a))],
-        Term::free_var(&x),
-    );
-
     assert_eq!(
-        infer(&mut certifier, &Term::apply(f, [nat_type(), nat(3)])),
-        Ok(nat_type()),
+        infer(&mut certifier, &term("((A: Type, x: A) => x)(#NatType, 3)")),
+        Ok(term("#NatType")),
     );
 }
 
 #[test]
 fn an_argument_of_the_wrong_type_is_refused() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-
-    let f = Term::func([(x, nat_type())], Term::free_var(&x));
-    let applied = Term::apply(f, [Term::intrinsic(Intrinsic::Bool(true))]);
 
     assert!(matches!(
-        infer(&mut certifier, &applied),
+        infer(&mut certifier, &term("((x: #NatType) => x)(true)")),
         Err(Error::Mismatch { .. }),
     ));
 }
@@ -113,13 +87,9 @@ fn an_argument_of_the_wrong_type_is_refused() {
 #[test]
 fn an_application_of_the_wrong_arity_is_refused() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
-
-    let f = Term::func([(x, nat_type())], Term::free_var(&x));
-    let applied = Term::apply(f, [nat(1), nat(2)]);
 
     assert_eq!(
-        infer(&mut certifier, &applied),
+        infer(&mut certifier, &term("((x: #NatType) => x)(1, 2)")),
         Err(Error::Arity {
             counted: Counted::Arguments,
             expected: 1,
@@ -132,21 +102,11 @@ fn an_application_of_the_wrong_arity_is_refused() {
 #[test]
 fn a_later_domain_is_opened_at_the_argument_its_own_binder_was_given() {
     let mut certifier = certifier();
-    let (t, u, x) = (binder(0, "T"), binder(1, "U"), binder(2, "x"));
-
-    let f = Term::func(
-        [
-            (t, Term::type_ground()),
-            (u, Term::type_ground()),
-            (x, Term::free_var(&t)),
-        ],
-        Term::free_var(&x),
-    );
 
     assert!(matches!(
         infer(
             &mut certifier,
-            &Term::apply(f, [bool_type(), nat_type(), nat(3)])
+            &term("((T: Type, U: Type, x: T) => x)(#BoolType, #NatType, 3)")
         ),
         Err(Error::Mismatch { .. }),
     ));
@@ -160,8 +120,8 @@ fn a_tuple_component_is_checked_at_its_entry_opened_at_the_components_before_it(
     assert!(matches!(
         check(
             &mut certifier,
-            &Term::tuple([bool_type(), nat(3)]),
-            &dependent_pair_type()
+            &term("(#BoolType, 3)"),
+            &term(DEPENDENT_PAIR)
         ),
         Err(Error::Mismatch { .. }),
     ));
@@ -172,7 +132,7 @@ fn applying_a_non_function_is_refused() {
     let mut certifier = certifier();
 
     assert!(matches!(
-        infer(&mut certifier, &Term::apply(nat(1), [nat(2)])),
+        infer(&mut certifier, &term("1(2)")),
         Err(Error::NotAFunction(_)),
     ));
 }
@@ -180,15 +140,12 @@ fn applying_a_non_function_is_refused() {
 #[test]
 fn a_tuple_has_the_product_of_its_components_types() {
     let mut certifier = certifier();
+    let [pair, first, second] = terms("((1, false), (1, false).0, (1, false).1)");
 
-    let pair = Term::tuple([nat(1), Term::intrinsic(Intrinsic::Bool(false))]);
     let type_ = infer(&mut certifier, &pair).expect("a closed pair has a type");
 
-    assert_eq!(
-        infer(&mut certifier, &Term::proj(pair.clone(), 0)),
-        Ok(nat_type()),
-    );
-    assert_eq!(infer(&mut certifier, &Term::proj(pair, 1)), Ok(bool_type()));
+    assert_eq!(infer(&mut certifier, &first), Ok(term("#NatType")));
+    assert_eq!(infer(&mut certifier, &second), Ok(term("#BoolType")));
     assert!(matches!(&*type_, Subterm::TupleType(_)));
 }
 
@@ -197,7 +154,7 @@ fn projecting_from_a_non_tuple_is_refused() {
     let mut certifier = certifier();
 
     assert!(matches!(
-        infer(&mut certifier, &Term::proj(nat(1), 0)),
+        infer(&mut certifier, &term("(1).0")),
         Err(Error::NotATuple(_)),
     ));
 }
@@ -206,14 +163,13 @@ fn projecting_from_a_non_tuple_is_refused() {
 #[test]
 fn a_let_checks_its_binding_before_its_tail() {
     let mut certifier = certifier();
-    let x = binder(0, "x");
 
-    let term = Term::let_(&x, nat_type(), nat(2), Term::free_var(&x));
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
-
-    let wrong = Term::let_(&x, bool_type(), nat(2), Term::free_var(&x));
+    assert_eq!(
+        infer(&mut certifier, &term("(let x: #NatType = 2; x)")),
+        Ok(term("#NatType"))
+    );
     assert!(matches!(
-        infer(&mut certifier, &wrong),
+        infer(&mut certifier, &term("(let x: #BoolType = 2; x)")),
         Err(Error::Mismatch { .. }),
     ));
 }
@@ -222,51 +178,28 @@ fn a_let_checks_its_binding_before_its_tail() {
 #[test]
 fn a_recursive_group_checks_its_bodies_against_its_declared_types() {
     let mut certifier = certifier();
-    let countdown = binder(0, "countdown");
-    let n = binder(1, "n");
-    let motive = binder(2, "m");
-    let pred = binder(3, "pred");
-    let hypothesis = binder(4, "ih");
 
-    let signature = Term::func_type([(n, nat_type())], nat_type());
-    let body = Term::func(
-        [(n, nat_type())],
-        Term::nat_match(
-            Term::free_var(&n),
-            Some(&motive),
-            nat_type(),
-            nat(0),
-            &pred,
-            &hypothesis,
-            Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
+    assert_eq!(
+        infer(
+            &mut certifier,
+            &term(
+                "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1; ih => countdown(pred) end; countdown(3))"
+            )
         ),
+        Ok(term("#NatType"))
     );
-
-    let term = Term::rec(
-        [(countdown, signature.clone(), body)],
-        Term::apply(Term::free_var(&countdown), [nat(3)]),
-    );
-
-    assert_eq!(infer(&mut certifier, &term), Ok(nat_type()));
 }
 
 /// A group whose body does not have the type it declares is refused — the assumption is what the body must live up to, not a licence.
 #[test]
 fn a_recursive_body_that_misses_its_declared_type_is_refused() {
     let mut certifier = certifier();
-    let f = binder(0, "f");
-    let n = binder(1, "n");
-
-    let signature = Term::func_type([(n, nat_type())], nat_type());
-    let body = Term::func([(n, nat_type())], Term::intrinsic(Intrinsic::Bool(true)));
-
-    let term = Term::rec(
-        [(f, signature, body)],
-        Term::apply(Term::free_var(&f), [nat(1)]),
-    );
 
     assert!(matches!(
-        infer(&mut certifier, &term),
+        infer(
+            &mut certifier,
+            &term("#{node = Rec} (let f: (n: #NatType) -> #NatType = (n: #NatType) => true; f(1))")
+        ),
         Err(Error::Mismatch { .. }),
     ));
 }
@@ -275,16 +208,14 @@ fn a_recursive_body_that_misses_its_declared_type_is_refused() {
 #[test]
 fn a_lambda_of_other_marks_does_not_check_against_a_function_type() {
     let mut certifier = certifier();
-    let n = binder(0, "n");
-    let expected = Term::func_type([(binder(1, "m"), nat_type())], nat_type());
-    let lambda = |mark: Plicity| Term::func_marked([(mark, n, nat_type())], Term::free_var(&n));
+    let expected = term("(m: #NatType) -> #NatType");
 
     assert_eq!(
-        check(&mut certifier, &lambda(Plicity::Explicit), &expected),
+        check(&mut certifier, &term("(n: #NatType) => n"), &expected),
         Ok(())
     );
     assert!(matches!(
-        check(&mut certifier, &lambda(Plicity::Implicit), &expected),
+        check(&mut certifier, &term("(@n: #NatType) => n"), &expected),
         Err(Error::Mismatch { .. })
     ));
 }
