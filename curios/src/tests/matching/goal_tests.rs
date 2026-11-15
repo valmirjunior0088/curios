@@ -264,3 +264,26 @@ fn a_goal_that_is_a_match_takes_the_sort_its_arms_decide() {
         "{report}"
     );
 }
+
+// A binder no source names, a hidden payload its pattern leaves out, is named in a goal's scope where a term the report shows mentions it: the printer numbers it from `x0` there, and its scope line takes that name, so the type that mentions it reads it from the scope.
+#[test]
+fn an_unnamed_binder_a_shown_term_mentions_is_named_in_the_goals_scope() {
+    let report = error(
+        r#"
+        use /std/{Nat};
+        pub induct Vec(T: Type): (Nat) -> pub Type
+        | nil(): (0)
+        | cons(@m: Nat, x: T, xs: Vec(T)(m)): (m + 1)
+        end
+        pub let append(@T: Type, @n: Nat, @k: Nat, v: Vec(T)(n), w: Vec(T)(k)) -> Vec(T)(n + k) =
+            match v | nil() => w | cons(x, xs) => ? end;
+        /std/print("")
+        "#,
+    );
+
+    assert!(report.contains("`Vec(T)(x0 + 1 + k)` expected"), "{report}");
+    assert!(
+        report.contains("│  x0 : Nat\n│  x : T\n│  xs : Vec(T)(x0)"),
+        "{report}"
+    );
+}

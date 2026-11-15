@@ -14,7 +14,7 @@ use {
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
     curios_common::{Kind, LINE_WIDTH, Plicity, Qualifier, Report, Said, Style},
     curios_core::{
-        Anchors, CalleeId, Global, Level, Mention, Quality, ReduceError, Sort, Subterm, Term,
+        Anchors, CalleeId, Free, Global, Level, Mention, Quality, ReduceError, Sort, Subterm, Term,
         UniverseMetaId, WitnessKey,
     },
     curios_surface::{ReaderPosition, Spellable, Spelling},
@@ -106,9 +106,10 @@ pub fn goal_said(report: &GoalReport, spelling: &Rc<Spelling>) -> Said {
         None => (Said::line("a term is expected"), true, false),
     };
     for (name, type_) in &report.scope {
-        let shown = match unnameable_binder(name) {
-            true => "_".to_string(),
-            false => clause(name),
+        // A binder no source spells is `_`, unless a term shown beside it mentions it, which the printer names there: its own line then takes that name, so the two read as one binder.
+        let shown = match unnameable_binder(name).filter(|binder| !report.mentions(binder)) {
+            Some(_) => "_".to_string(),
+            None => clause(name),
         };
         said.stating(format_args!("{shown} : {}", clause(type_)));
     }
@@ -135,11 +136,11 @@ pub fn goal_said(report: &GoalReport, spelling: &Rc<Spelling>) -> Said {
     said
 }
 
-/// Whether a goal-scope binder is unnameable — a hintless local no written expression can reference. Its scope line spells `_` the way source does, instead of the synthesized name the rename map would mint for it.
-fn unnameable_binder(name: &Term) -> bool {
+/// The binder of a goal-scope line where it is unnameable — a hintless local no written expression can reference, whose line spells `_` the way source does where no other term the report shows mentions it.
+fn unnameable_binder(name: &Term) -> Option<&Free> {
     match &**name {
-        Subterm::Var(var) => var.as_free().is_some_and(|free| !free.nameable()),
-        _ => false,
+        Subterm::Var(var) => var.as_free().filter(|free| !free.nameable()),
+        _ => None,
     }
 }
 

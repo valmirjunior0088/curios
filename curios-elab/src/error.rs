@@ -113,7 +113,7 @@ impl fmt::Display for RecordKeyword {
     }
 }
 
-/// One written goal's entry in an [`Error::Goals`] batch: its occurrence extent, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
+/// One written goal's entry in an [`Error::Goals`] batch: its occurrence extent, the local scope frozen at its birth, its expected type, and the solution unification committed (if any). Scope binders are free `Var` terms (not raw strings) for the same pretty-rename reason as [`Error::Goal`], an unnameable binder's line spelling `_` the way source does where no other term the report shows mentions it; every term is display-ready — tolerantly materialized, so committed substitutions appear while goal-origin and unsolved metavariables stay visible.
 #[derive(Debug)]
 pub struct GoalReport {
     extent: Option<Extent>,
@@ -132,6 +132,19 @@ pub struct GoalReport {
 }
 
 impl GoalReport {
+    /// Whether a term this report shows beside its scope's lines mentions `binder`: a scope binder's type, the goal, the solution, an obligation or a candidate. Where one does, the printer names the binder there, and a binder no source spells is named on its own line the same way.
+    fn mentions(&self, binder: &Free) -> bool {
+        let mentions = |term: &Term| term.mentions_free(binder);
+        self.scope.iter().any(|(_, type_)| mentions(type_))
+            || mentions(&self.goal)
+            || self.solution.as_ref().is_some_and(mentions)
+            || self
+                .obligations
+                .iter()
+                .any(|(this, that)| mentions(this) || mentions(that))
+            || self.candidates.iter().any(mentions)
+    }
+
     /// The report of a goal as it stands, with nothing said beside it ([`GoalReport::beside`]).
     pub fn new(
         extent: Option<Extent>,
@@ -1000,7 +1013,7 @@ pub enum Error {
         name: Global,
         member: Global,
     },
-    /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently — except an unnameable binder, whose line spells `_` the way source does.
+    /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently — an unnameable binder's line spelling `_` the way source does where no other term the report shows mentions it.
     ///
     /// The compile path batches goals via [`Error::Goals`] before zonk runs, so this single-goal form survives as the safety net for direct zonk callers.
     Goal {
