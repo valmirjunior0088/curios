@@ -121,7 +121,7 @@ pub fn parse_pattern_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
         .parse(state)
 }
 
-// A tuple pattern `(p1, p2, …)` / `(label = p, …)` — the literal mirror of `parse_tuple`, with `Term` replaced by `Pattern`. A bare `(p)` with neither a comma nor a label is not a one-element tuple pattern (the language has no such thing, exactly like tuple literals) — it falls through to the parenthesized-pattern case in `parse_pattern` below.
+// A tuple pattern `(p1, p2, …)` / `(label = p, …)`, or `()` of no fields — the literal mirror of `parse_tuple` and `parse_empty_tuple`, with `Term` replaced by `Pattern`. A bare `(p)` with neither a comma nor a label is not a one-element tuple pattern (the language has no such thing, exactly like tuple literals) — it falls through to the parenthesized-pattern case in `parse_pattern` below.
 pub fn parse_tuple_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Pattern<D>> {
     parse_literal("(")
         .and_keep(parse_pattern_field::<D>)
@@ -139,6 +139,7 @@ pub fn parse_tuple_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
                     value,
                 }]
             }))
+        .or(parse_literal("(").map(|_| Vec::new()))
         .and_drop(parse_literal(")"))
         .map(Pattern::Tuple)
         .parse(state)
@@ -259,7 +260,7 @@ pub fn parse_match_pattern_field<'a, D: Grammar>(
         .parse(state)
 }
 
-// A tuple match pattern `(p1, p2, …)` / `(label = p, …)` — the `MatchPattern` counterpart of `parse_tuple_pattern`.
+// A tuple match pattern `(p1, p2, …)` / `(label = p, …)`, or `()` — the `MatchPattern` counterpart of `parse_tuple_pattern`.
 pub fn parse_tuple_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
@@ -279,6 +280,7 @@ pub fn parse_tuple_match_pattern<'a, D: Grammar>(
                     value,
                 }]
             }))
+        .or(parse_literal("(").map(|_| Vec::new()))
         .and_drop(parse_literal(")"))
         .map(MatchPattern::Tuple)
         .parse(state)

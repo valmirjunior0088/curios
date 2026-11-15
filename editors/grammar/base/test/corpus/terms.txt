@@ -470,6 +470,42 @@ loop(inc(a))
                         (identifier)))))))))))))
 
 ================================================================================
+The pattern of `{}` at a let, a lambda and an arm
+================================================================================
+
+let () = u;
+let f = (()) => 1;
+match u | () => f(()) end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (tuple_pattern)
+      (path
+        (identifier)))
+    (let_term
+      (let_binding
+        (identifier)
+        (lambda
+          (lambda_parameters
+            (lambda_parameter
+              (tuple_pattern)))
+          (number)))
+      (match_term
+        (path
+          (identifier))
+        (match_arm
+          (tuple_match_pattern)
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (unit)))))))))
+
+================================================================================
 A goal, sorts, and a tuple type
 ================================================================================
 

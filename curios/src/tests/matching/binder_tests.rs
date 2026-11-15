@@ -398,6 +398,34 @@ fn a_tuple_pattern_takes_apart_every_field_of_its_tuple() {
     );
 }
 
+// `()` is the pattern of `{}` wherever a pattern is written, and of nothing else: it takes apart the value of `{}` under a `let`, a parameter, a lambda's parameter and an arm, in both checkers, and is refused over a value of another type.
+#[test]
+fn the_pattern_of_no_fields_takes_apart_the_unit_alone() {
+    let source = r#"
+        use /std/{Nat};
+        let at_let(u: {}) -> Nat = let () = u; 1;
+        let at_parameter((): {}) -> Nat = 2;
+        let at_lambda(u: {}) -> Nat = let g: ({}) -> Nat = (()) => 3; g(u);
+        let at_arm(u: {}) -> Nat = match u | () => 4 end;
+        /std/print(Nat/to_str(at_let(()) * 1000 + at_parameter(()) * 100 + at_lambda(()) * 10 + at_arm(())))
+        "#;
+    assert_eq!(run(source), b"1234");
+
+    for written in [
+        "let f(n: Nat) -> Nat = let () = n; n;",
+        "let f(n: Nat) -> Nat = match n | () => 0 end;",
+    ] {
+        let error = error(&fill!(
+            "use /std/{Nat};\n${written}\n/std/print(Nat/to_str(f(1)))\n",
+            written
+        ));
+        assert!(
+            error.contains("`()` matches the value of `{}`\n│  scrutinee: Nat"),
+            "{written}: {error}"
+        );
+    }
+}
+
 // A pattern written in a shape its column does not have is wrong whichever arm reads it. A row written after an arm a guard rules out joins that arm's case, so the pattern is first met there, and the refusal states the pattern's shape alone, with no word of the dead arm it was met in. Mutation-checked: keeping the guard's reason on a shape refusal reports the arm as never taken.
 #[test]
 fn a_pattern_of_the_wrong_shape_is_refused_whatever_arm_reads_it() {

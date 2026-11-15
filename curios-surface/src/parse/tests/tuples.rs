@@ -121,6 +121,27 @@ fn parse_empty_tuple() {
     );
 }
 
+// `()` is a pattern wherever one is written, the mirror of the literal of the tuple of no fields, and prints back as it is read.
+#[test]
+fn the_tuple_of_no_fields_is_a_pattern() {
+    for source in [
+        "let () = u; u",
+        "(()) => 1",
+        "((): {}) => 1",
+        "let (a, ()) = p; a",
+        "match u | () => 1 end",
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        let printed = term.to_string();
+        assert!(printed.contains("()"), "{source}: {printed}");
+        assert_eq!(
+            printed.parse::<Term>().unwrap(),
+            term,
+            "{source}: {printed}"
+        );
+    }
+}
+
 #[test]
 fn parse_one_tuple() {
     assert_eq!(

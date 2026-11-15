@@ -23,6 +23,8 @@ module.exports = grammar({
 
   conflicts: ($) => [
     [$.struct_literal, $.struct_pattern],
+    // `()` in a parenthesized list is the unit value or the pattern of `{}`; the arrow after the list decides.
+    [$.unit, $.tuple_pattern],
     [$.lambda_parameter, $.parenthesized_pattern],
     [$.lambda_parameter, $.pattern_field],
     [$.function_type_parameter, $.parenthesized],
@@ -641,9 +643,11 @@ module.exports = grammar({
     tuple_pattern: ($) =>
       seq(
         "(",
-        choice(
-          seq($.pattern_field, ",", commaList($.pattern_field)),
-          seq(field("name", $._name), "=", $._pattern),
+        optional(
+          choice(
+            seq($.pattern_field, ",", commaList($.pattern_field)),
+            seq(field("name", $._name), "=", $._pattern),
+          ),
         ),
         ")",
       ),
@@ -698,9 +702,11 @@ module.exports = grammar({
     tuple_match_pattern: ($) =>
       seq(
         "(",
-        choice(
-          seq($.match_pattern_field, ",", commaList($.match_pattern_field)),
-          seq(field("name", $._name), "=", $._match_pattern),
+        optional(
+          choice(
+            seq($.match_pattern_field, ",", commaList($.match_pattern_field)),
+            seq(field("name", $._name), "=", $._match_pattern),
+          ),
         ),
         ")",
       ),

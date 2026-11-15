@@ -430,7 +430,7 @@ pub let total(value: {Nat, {Nat, Nat}}, point: Point) -> Nat =
     a + b + x + y + color;
 ```
 
-Such a pattern projects, and matches nothing at run time. A structure pattern names the structure its binder is; a head naming another structure, or nothing, is refused. A tuple pattern writes every field of its tuple, `_` for one it does not read: `(a, b)` takes apart a pair, and a triple is refused.
+Such a pattern projects, and matches nothing at run time. A structure pattern names the structure its binder is; a head naming another structure, or nothing, is refused. A tuple pattern writes every field of its tuple, `_` for one it does not read: `(a, b)` takes apart a pair, and a triple is refused. `()`, which writes none, is the pattern of `{}`, as `()` is its value: `let () = print("hi")!;`.
 
 - An unlabeled field is matched by position among the plain fields, whose order is part of the type.
 - A field written `label = pattern` projects that label, holding the position it is written at, as a labeled entry of a literal does.
