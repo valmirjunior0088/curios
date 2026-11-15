@@ -345,7 +345,7 @@ fn a_binder_spans_its_word_alone() {
     let Subterm::Let(outer) = &*term else {
         panic!("a let");
     };
-    let Pattern::Tuple(fields) = &outer.groups[0].members[0].binder else {
+    let Pattern::Tuple(TuplePattern { fields, .. }) = &outer.groups[0].members[0].binder else {
         panic!("a tuple pattern");
     };
     let leaves = fields

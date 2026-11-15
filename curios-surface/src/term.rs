@@ -251,12 +251,25 @@ pub struct Tuple<D: Dialect = Program> {
 pub enum Pattern<D: Dialect = Program> {
     /// A name, or `_`, which holds the position and binds nothing. A member with no binder at all — a `use` premise — is not a pattern: the site that admits one holds it apart ([`FuncSugarParam::Premise`]).
     Binder(Binder<D>),
-    Tuple(Vec<PatternField<D>>),
+    Tuple(TuplePattern<D>),
     /// A structure's fields under the name the structure is written by, kept as written for the lowering to resolve: the pattern is held to the structure its binder is.
     Struct {
         head: Name,
         fields: Vec<PatternField<D>>,
     },
+}
+
+/// A tuple pattern's fields, and where its parentheses are written: what a refusal of its shape points at, since `()` has no leaf to point at. A location, as a [`Term`]'s span is, and no part of what the pattern is.
+#[derive(Debug, Clone)]
+pub struct TuplePattern<D: Dialect = Program> {
+    pub fields: Vec<PatternField<D>>,
+    pub span: Option<Span>,
+}
+
+impl<D: Dialect> PartialEq for TuplePattern<D> {
+    fn eq(&self, other: &Self) -> bool {
+        self.fields == other.fields
+    }
 }
 
 /// A binder's word as written, under what the decorator before it states of the label Core keeps for it — where the binder sits among its declaration's written binders and whether it binds a proof, `#{written = 2, proof = true} h`: Core text's, and nothing in a program, whose binder is its word alone. The word is the label's hint; the decorator states the rest of it, each field by the name Core's label gives it.

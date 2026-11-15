@@ -10,7 +10,7 @@ use {
     curios_surface::{
         Apply, BytesSegment, Field, FuncParam, FuncTypeParam, Intrinsic, Label, Let, LetBinding,
         LetGroup, LetSignature, ListEntry, Literal, Name, NumLit, Pattern, PatternField,
-        ProofLiteral, StructLit, StructLitEntry, Subterm, Term, func_sugar_params,
+        ProofLiteral, StructLit, StructLitEntry, Subterm, Term, TuplePattern, func_sugar_params,
         func_sugar_type_params,
     },
     std::{
@@ -1059,7 +1059,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let leaves = &binders[seen..seen + pattern_names(pattern).len()];
             match pattern {
                 Pattern::Binder(_) => lowered.push((*plicity, leaves[0].1, domain)),
-                Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+                Pattern::Tuple(TuplePattern { fields, .. }) | Pattern::Struct { fields, .. } => {
                     let synthetic = self.context.fresh_binder(None);
                     shapes.push((pattern, synthetic));
                     chains.push((fields, synthetic, leaves));
@@ -1196,7 +1196,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         value,
                     });
                 }
-                Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+                Pattern::Tuple(TuplePattern { fields, .. }) | Pattern::Struct { fields, .. } => {
                     let binder = self.context.fresh_binder(None);
                     frames.push(RegionFrame::Let {
                         binder,
@@ -1231,14 +1231,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 };
                 (held, head.span().cloned())
             }
-            Pattern::Tuple(fields) => {
+            Pattern::Tuple(TuplePattern { fields, span }) => {
                 let held = curios_core::Pattern::Tuple(
                     fields
                         .iter()
                         .map(|field| (field.label.clone(), curios_core::Pattern::Wildcard))
                         .collect(),
                 );
-                (held, pattern_span(pattern))
+                (held, span.clone().or_else(|| pattern_span(pattern)))
             }
         };
         Ok(RegionFrame::Held {
@@ -1581,7 +1581,7 @@ fn param_labels(params: &[FuncParam]) -> Vec<(String, Option<Span>)> {
 fn pattern_labels(pattern: &Pattern) -> Vec<(String, Option<Span>)> {
     match pattern {
         Pattern::Binder(name) => vec![(name.to_string(), name.span().cloned())],
-        Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => fields
+        Pattern::Tuple(TuplePattern { fields, .. }) | Pattern::Struct { fields, .. } => fields
             .iter()
             .flat_map(|field| pattern_labels(&field.value))
             .collect(),
@@ -1602,7 +1602,7 @@ fn pattern_span(pattern: &Pattern) -> Option<Span> {
 fn pattern_names(pattern: &Pattern) -> Vec<String> {
     match pattern {
         Pattern::Binder(name) => vec![name.to_string()],
-        Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => fields
+        Pattern::Tuple(TuplePattern { fields, .. }) | Pattern::Struct { fields, .. } => fields
             .iter()
             .flat_map(|field| pattern_names(&field.value))
             .collect(),

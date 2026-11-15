@@ -20,7 +20,7 @@ use {
         MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
         PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm, StructField, StructLit,
         StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet,
-        TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TuplePattern, TupleType,
         TupleTypeParam, UseGroup, WitnessField, intrinsic_form, intrinsic_path,
     },
     crate::{ELIDED, Writer, op_precedence, written_intrinsic},
@@ -309,7 +309,7 @@ impl<D: Layout> TreePrinter<D> {
     fn pattern(self, pattern: Pattern<D>) -> Printer {
         match pattern {
             Pattern::Binder(binder) => self.binder(binder),
-            Pattern::Tuple(fields) => {
+            Pattern::Tuple(TuplePattern { fields, .. }) => {
                 if fields.len() == 1 {
                     let field = fields.into_iter().next().unwrap();
                     // A labeled one-element tuple pattern needs no trailing comma — the `=` already disambiguates it from a grouped pattern.

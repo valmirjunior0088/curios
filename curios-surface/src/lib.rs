@@ -25,7 +25,7 @@ pub use term::{
     FuncType, FuncTypeParam, Guard, HeadlessArm, HeadlessMatch, Infix, Let, LetBinding, LetGroup,
     LetSignature, Match, MatchPattern, MatchPatternField, MatrixArm, NatPattern, NumLit, Pattern,
     PatternField, Proj, ProofLiteral, StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple,
-    TupleField, TupleType, TupleTypeParam, func_sugar_params, func_sugar_type_params,
+    TupleField, TuplePattern, TupleType, TupleTypeParam, func_sugar_params, func_sugar_type_params,
 };
 
 mod spell;

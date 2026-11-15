@@ -411,9 +411,14 @@ fn the_pattern_of_no_fields_takes_apart_the_unit_alone() {
         "#;
     assert_eq!(run(source), b"1234");
 
-    for written in [
-        "let f(n: Nat) -> Nat = let () = n; n;",
-        "let f(n: Nat) -> Nat = match n | () => 0 end;",
+    // Under a binder the refusal stands at the `()` it is about, which has no name of its own to stand on; an arm's stands at its `match`, as a struct pattern's head does.
+    for (written, at) in [
+        ("let f(n: Nat) -> Nat = let () = n; n;", "()"),
+        (
+            "let f(n: Nat) -> Nat = let g: (Nat) -> Nat = (()) => 0; g(n);",
+            "()",
+        ),
+        ("let f(n: Nat) -> Nat = match n | () => 0 end;", "match"),
     ] {
         let error = error(&fill!(
             "use /std/{Nat};\n${written}\n/std/print(Nat/to_str(f(1)))\n",
@@ -421,6 +426,11 @@ fn the_pattern_of_no_fields_takes_apart_the_unit_alone() {
         ));
         assert!(
             error.contains("`()` matches the value of `{}`\n│  scrutinee: Nat"),
+            "{written}: {error}"
+        );
+        let column = written.find(at).expect("the place is written") + 1;
+        assert!(
+            error.contains(&format!("[error] 2:{column}")),
             "{written}: {error}"
         );
     }

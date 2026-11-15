@@ -4,18 +4,18 @@ use {
         Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led, member_ends, members,
         parse_char_value, parse_identifier, parse_keyword, parse_label, parse_literal, parse_mark,
         parse_name, parse_named_premise, parse_nat_digits, parse_place, parse_qualified_name,
-        parse_word_raw, refused, require_space,
+        parse_word_raw, refused, require_space, trimmed,
     },
     crate::{
         Binder, Elements, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
         MatchPatternField, NatLiteral, NatPattern, Pattern, PatternField, Subterm, Term,
-        parse_term, parse_whitespace,
+        TuplePattern, parse_term, parse_whitespace,
     },
     curios_common::{Plicity, recurse},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, many0, mark,
-        memoize, not_ahead, preceded_by_space, pure, refusal, sep_by0_trailing, take_exact,
-        take_while, uncommit,
+        memoize, not_ahead, preceded_by_space, pure, refusal, sep_by0_trailing, spanned,
+        take_exact, take_while, uncommit,
     },
     std::iter,
 };
@@ -123,6 +123,20 @@ pub fn parse_pattern_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
 
 // A tuple pattern `(p1, p2, …)` / `(label = p, …)`, or `()` of no fields — the literal mirror of `parse_tuple` and `parse_empty_tuple`, with `Term` replaced by `Pattern`. A bare `(p)` with neither a comma nor a label is not a one-element tuple pattern (the language has no such thing, exactly like tuple literals) — it falls through to the parenthesized-pattern case in `parse_pattern` below.
 pub fn parse_tuple_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Pattern<D>> {
+    spanned(tuple_pattern_fields::<D>)
+        .map(|(span, fields)| {
+            Pattern::Tuple(TuplePattern {
+                fields,
+                span: Some(trimmed(span)),
+            })
+        })
+        .parse(state)
+}
+
+// What [`parse_tuple_pattern`] reads between and including its parentheses.
+fn tuple_pattern_fields<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, Vec<PatternField<D>>> {
     parse_literal("(")
         .and_keep(parse_pattern_field::<D>)
         .and_drop(parse_literal(","))
@@ -141,7 +155,6 @@ pub fn parse_tuple_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
             }))
         .or(parse_literal("(").map(|_| Vec::new()))
         .and_drop(parse_literal(")"))
-        .map(Pattern::Tuple)
         .parse(state)
 }
 
