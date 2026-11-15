@@ -84,7 +84,8 @@ pub let index_of(@T: Type, use Eql(T), l: List(T), x: T) -> Option(Nat) =
 pub let last(@T: Type, l: List(T)) -> Option(T) =
     match l
     | [] => Option/none()
-    | [h, ..t] => match t | [] => Option/some(h) | _ => last(t) end
+    | [h] => Option/some(h)
+    | [_, ..t] => last(t)
     end;
 
 --- The longest prefix `pred` accepts.
@@ -110,9 +111,9 @@ pub let take(@T: Type, l: List(T), n: Nat) -> List(T) =
 
 --- Pairs, position by position, as long as the shorter list.
 pub let zip(@A: Type, @B: Type, a: List(A), b: List(B)) -> List({A, B}) =
-    match a
-    | [] => []
-    | [x, ..xs] => match b | [] => [] | [y, ..ys] => [(x, y), ..zip(xs, ys)] end
+    match (a, b)
+    | ([x, ..xs], [y, ..ys]) => [(x, y), ..zip(xs, ys)]
+    | _ => []
     end;
 
 --- The elements in reverse order.
@@ -213,9 +214,10 @@ pub let balanced(
 
 --- Whether the two hold equal elements in the same order.
 pub let eql(@A: Type, use Eql(A), a: List(A), b: List(A)) -> Bool =
-    match a
-    | [] => match b | [] => true | _ => false end
-    | [x, ..xs] => match b | [] => false | [y, ..ys] => x == y && eql(xs, ys) end
+    match (a, b)
+    | ([], []) => true
+    | ([x, ..xs], [y, ..ys]) => x == y && eql(xs, ys)
+    | _ => false
     end;
 
 satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
@@ -238,17 +240,15 @@ satisfy Monad(List) {
 
 --- Lexicographic, a proper prefix first.
 pub let ord(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
-    match a
-    | [] => match b | [] => Ordering/eq() | _ => Ordering/lt() end
-    | [x, ..xs] =>
-        match b
-        | [] => Ordering/gt()
-        | [y, ..ys] =>
-            match Ord/ord(x, y)
-            | eq() => ord(xs, ys)
-            | lt() => Ordering/lt()
-            | gt() => Ordering/gt()
-            end
+    match (a, b)
+    | ([], []) => Ordering/eq()
+    | ([], [_, .._]) => Ordering/lt()
+    | ([_, .._], []) => Ordering/gt()
+    | ([x, ..xs], [y, ..ys]) =>
+        match Ord/ord(x, y)
+        | eq() => ord(xs, ys)
+        | lt() => Ordering/lt()
+        | gt() => Ordering/gt()
         end
     end;
 
