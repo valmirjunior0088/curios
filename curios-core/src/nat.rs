@@ -173,6 +173,17 @@ impl Nat {
         matches!(&**term, Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)))
     }
 
+    /// Whether a reduced term is certainly greater than `summand`: a positive floor over a sum holding `summand` among its summands, at any coefficient. What the inverter's cycle rule reads of a variable met against such a sum: `x ~ x + 1` has no solution, and nor has `x ~ 2 · x + y + 1`.
+    pub fn exceeds(term: &Term, summand: &Term) -> bool {
+        let (floor, inner) = Self::decompose(term);
+
+        !floor.is_zero()
+            && Self::summands(&inner).iter().any(|each| {
+                let (coefficient, factor) = Self::literal_factor(each);
+                !coefficient.is_zero() && factor == *summand
+            })
+    }
+
     /// The summands of a reduced `Nat`'s symbolic inner, flattening the neutral `add` spine, in the order they are written. `NatAdd` hoists every literal floor outward, so no summand reached here is successor-headed. The order matters: [`Nat::sum_over_floor`] folds the list back left-to-right, so reading it left-to-right is what makes read-then-rebuild the identity on a sum already in normal form — a rebuild that reordered would hand the reducer a new term every pass, and that oscillation once overflowed the stack building the prelude.
     pub(crate) fn summands(inner: &Term) -> Vec<Term> {
         curios_profile::profile!("nat::summands");

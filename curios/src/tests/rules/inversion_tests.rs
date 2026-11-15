@@ -156,7 +156,7 @@ fn a_binder_forced_to_a_projection_is_solved_to_it() {
     });
 }
 
-// A solution may not reach its own variable through what an arm in force refined. The arm `node(t)` refines the key `p.0` to `node(t)`, and the inner case forces `t ~ node(p.0)`: solved, `t` would stand for a value whose key reads back to `t`, a cycle the certifier meets by name. The occurs check closes the value's locals under the refinements in force, so `t` stays unsolved, the arm is checked as written, and the claim that would need the solution is refused.
+// A solution may not reach its own variable through what an arm in force refined. The arm `node(t)` refines the key `p.0` to `node(t)`, and the inner case forces `t ~ node(p.0)`: solved, `t` would stand for a value whose key reads back to `t`, a cycle the certifier meets by name. The occurs check closes the value's locals under the refinements in force, so `t` stays unsolved; read through the key, `t ~ node(node(t))` is a cycle, so the case is one no value reaches, the arm is checked as written, and the claim that would need the solution is refused.
 #[test]
 fn a_solution_does_not_reach_its_variable_through_a_refined_projection() {
     control(
@@ -216,7 +216,7 @@ fn a_solution_does_not_reach_its_variable_through_a_refined_application() {
     .by_elaborator_in("/g", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
-// The same cycle through a variable an arm refined: the outer arm solves `z := [1, ..m]`, and the inner one meets `[2, ..z]`, which the certifier reads as `[2, 1, ..m]`. Posed as the certifier reads it, the inner equations refine `m` to the binder `w` and then leave `w ~ [2, 1, ..w]` standing, since `w` reaches itself through `m`.
+// The same cycle through a variable an arm refined: the outer arm solves `z := [1, ..m]`, and the inner one meets `[2, ..z]`, which the certifier reads as `[2, 1, ..m]`. Posed as the certifier reads it, the inner equations refine `m` to the binder `w` and then meet `[2, 1, ..w] ~ w`, which `w` reaches through `m` and which is a cycle, so the case is one no value reaches and its arm is checked as written.
 #[test]
 fn a_solution_does_not_reach_its_variable_through_a_refined_variable() {
     control(
@@ -241,4 +241,89 @@ fn a_solution_does_not_reach_its_variable_through_a_refined_variable() {
         "| refl() => let _: Eq()(m, [2, 1, ..m]) = Eq/refl(); 0",
     )])
     .by_elaborator_in("/g", |error| matches!(error, Error::TypeMismatch { .. }));
+}
+
+// The cycle rule over a successor: `n` is refined to the binder `z`, and the second position is `n + 1 ~ z`, a variable against a positive floor over a sum that holds it, which no natural is. So the match needs no arm. The refusal forces `n` to itself, which is reachable.
+#[test]
+fn a_natural_met_against_its_own_successor_is_impossible() {
+    control(
+        r#"
+        use /std/{Nat, Eq};
+
+        let never(@n: Nat, e: Eq()(n, n + 1)) -> Nat = match e end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("e: Eq()(n, n + 1)", "e: Eq()(n, n)")])
+    .by_elaborator_in("/never", |error| {
+        matches!(error, Error::MatrixUncovered { .. })
+    });
+}
+
+// The cycle rule over a word: a list that spells out an element and holds `l` as a stretch is longer than `l`. The refusal puts a stretch of unknown length in the element's place, which may be empty.
+#[test]
+fn a_list_met_against_a_longer_list_holding_it_is_impossible() {
+    control(
+        r#"
+        use /std/{Nat, Eq, List};
+
+        let never(@l: List(Nat), @m: List(Nat), e: Eq()(l, [1, ..l])) -> Nat = match e end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("e: Eq()(l, [1, ..l])", "e: Eq()(l, [..m, ..l])")])
+    .by_elaborator_in("/never", |error| {
+        matches!(error, Error::MatrixUncovered { .. })
+    });
+}
+
+// The cycle rule beneath a constructor: `t` is a proper part of `node(t, t)`, and no finite tree is. The refusal puts an opaque function's value in its place, which may be `t` itself.
+#[test]
+fn a_tree_met_against_a_tree_holding_it_is_impossible() {
+    control(
+        r#"
+        use /std/{Nat, Eq};
+
+        induct Tree: Type
+        | leaf()
+        | node(Tree, Tree)
+        end
+
+        let never(@f: (Tree) -> Tree, @t: Tree, e: Eq()(t, Tree/node(t, t))) -> Nat = match e end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("e: Eq()(t, Tree/node(t, t))", "e: Eq()(t, f(t))")])
+    .by_elaborator_in("/never", |error| {
+        matches!(error, Error::MatrixUncovered { .. })
+    });
+}
+
+// A proposition's constructor breaks the chain: irrelevance makes `wrap(p)` one value with `p`, so the case is reachable and its arm is owed. The refusal leaves it out.
+#[test]
+fn a_proof_met_against_a_constructor_holding_it_is_reachable() {
+    control(
+        r#"
+        use /std/{Nat, Eq};
+
+        induct Wrap: Prop
+        | wrap(Wrap)
+        end
+
+        let owed(@p: Wrap, e: Eq()(p, Wrap/wrap(p))) -> Nat = match e | refl() => 0 end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("match e | refl() => 0 end", "match e end")])
+    .by_elaborator_in("/owed", |error| {
+        matches!(error, Error::MatrixUncovered { .. })
+    });
 }

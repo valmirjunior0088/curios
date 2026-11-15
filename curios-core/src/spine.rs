@@ -441,6 +441,58 @@ pub fn leading_element(intrinsic: &Intrinsic) -> Option<(Term, Term)> {
     )
 }
 
+/// What a `List` or `Bytes` value certainly holds, read off its word ([`word_contents`]).
+pub struct WordContents {
+    /// The elements it spells out as terms: a literal's, an appended element, a symbolic byte. A literal byte is a value, no term.
+    pub elements: Vec<Term>,
+    /// The stretches whose contents and length are unknown.
+    pub chunks: Vec<Term>,
+    /// Whether it spells out any element at all, a literal byte among them, which makes it longer than any one of its chunks.
+    pub spelled: bool,
+}
+
+/// A `List` or `Bytes` value read for what it certainly holds. `None` where `intrinsic` is no word. A window of a base is neither an element nor a chunk: its contents are its base's, and its length may be zero.
+///
+/// The piece the inverter's cycle rule reads: a word that spells out an element and holds `x` as a chunk is longer than `x`, so `x ~ [1, ..x]` has no solution, and an element is a part of the value as a constructor's payload is.
+pub fn word_contents(intrinsic: &Intrinsic) -> Option<WordContents> {
+    if is_bytes_word(intrinsic) {
+        let words = Words::new(Bytes);
+        return Some(contents(words.read(intrinsic), |_: Packed| Vec::new()));
+    }
+
+    let element = list_element(intrinsic)?;
+    let words = Words::new(Element(element));
+    Some(contents(words.read(intrinsic), |items: Vec<Term>| items))
+}
+
+/// `word`'s segments sorted into what [`WordContents`] holds; a run is never empty in a word's normal form, so each one spells.
+fn contents<S: Sequence>(
+    word: Word<Words<S>>,
+    elements_of: impl Fn(S::Run) -> Vec<Term>,
+) -> WordContents {
+    let mut contents = WordContents {
+        elements: Vec::new(),
+        chunks: Vec::new(),
+        spelled: false,
+    };
+    for segment in word.into_segments() {
+        match segment {
+            Segment::Run(run) => {
+                contents.spelled = true;
+                contents.elements.append(&mut elements_of(run));
+            }
+            Segment::Single(element) => {
+                contents.spelled = true;
+                contents.elements.push(element);
+            }
+            Segment::Chunk(chunk) => contents.chunks.push(chunk),
+            Segment::Window(_) => {}
+        }
+    }
+
+    contents
+}
+
 /// `word`'s first element and the word after it rebuilt, `empty` where nothing is left.
 fn split_first<S: Sequence>(
     words: &Words<S>,

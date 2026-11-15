@@ -95,8 +95,8 @@ pub use intrinsic::{
 mod spine;
 use spine::*;
 pub use spine::{
-    leading_element, peel_commutative, peel_comparison, peel_intrinsic, peel_lattice_leaf,
-    peel_monomial, peel_spine,
+    WordContents, leading_element, peel_commutative, peel_comparison, peel_intrinsic,
+    peel_lattice_leaf, peel_monomial, peel_spine, word_contents,
 };
 
 mod words;

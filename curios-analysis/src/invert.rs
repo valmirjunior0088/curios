@@ -8,6 +8,7 @@
 //! - **Solution.** A flexible variable on one side is solved to the other where it is not among the locals that side reaches through what is in force ([`Unifier::reaches`]) and the value fits it ([`fits_its_variable`]). Where both sides are flexible variables the scrutinee's is refined to the case's, the orientation `curios_core::goal_at` reads a variable actual index in, and the case's is solved instead where that does not fit. Every equation after a solution, and every solution before it, is read through it.
 //! - **Injectivity.** Two applications of one constructor of a relevant family, two tuples of one arity, a pair the peel reduces to another, and two words that each start with a known element ([`leading_element`]) become an equation per component.
 //! - **Conflict.** Two constructors of a relevant family under different tags, and a pair the peel answers `Impossible`, make the case unreachable.
+//! - **Cycle.** A flexible variable not solved to a value that holds it as a proper part — beneath a layer injectivity takes apart, or as a chunk of a longer word, or a summand of a greater `Nat` — makes the case unreachable too, no finite value being its own proper part ([`Unifier::cycles`]).
 //! - **Anything else is undecided.** It stands aside without taking its siblings with it and is read again after a later solution; what is still undecided at the end specializes nothing, and keeps the arm mandatory.
 //!
 //! Nothing here asks conversion: a pair conversion alone holds equal is undecided, which neither specializes nor excuses anything, and two forms the walk tells apart are never convertible.
@@ -24,7 +25,8 @@ use {
     curios_algebra::Deduction,
     curios_common::recurse,
     curios_core::{
-        Free, Names, Quality, Sort, Subterm, Telescope, Term, leading_element, peel_intrinsic,
+        Free, Global, Names, Nat, Quality, Sort, Subterm, Telescope, Term, leading_element,
+        peel_intrinsic, word_contents,
     },
     std::{
         collections::{BTreeSet, HashMap},
@@ -161,6 +163,19 @@ fn fits_its_variable<J: Judge>(judge: &mut J, name: &Free, value: &Term) -> Resu
     }
 }
 
+/// Whether the family `name` is relevant, its declared result sort read on the nose: `Some(false)` at `Prop`, and `None` where the registry cannot answer for it, which licenses neither injectivity nor a clash.
+fn relevance<E: Env>(env: &E, name: &Global) -> Option<bool> {
+    let declaration = env.induct_decl(name)?;
+
+    Some(!matches!(
+        **declaration.result_sort(),
+        Subterm::Sort(Sort {
+            quality: Quality::Prop,
+            level: _
+        })
+    ))
+}
+
 /// One equation's outcome inside the walk.
 enum Step {
     /// Decided without a clash: every part of it solved, deleted, or set aside where it stands.
@@ -262,20 +277,37 @@ impl<'f> Unifier<'f> {
         let target = self.read(judge, target)?;
 
         // Solution, the scrutinee's side refined to the case's where both are variables, and the case's solved where that refinement does not fit or would reach its own variable.
-        let solved = match (self.flexible(&actual), self.flexible(&target)) {
-            (Some(this), Some(that)) if this == that => return Ok(Step::Ok),
-            (Some(this), Some(that)) => {
-                self.solve_one(judge, this, &target)? || self.solve_one(judge, that, &actual)?
-            }
-            (Some(this), None) => self.solve_one(judge, this, &target)?,
-            (None, Some(that)) => self.solve_one(judge, that, &actual)?,
-            (None, None) => return self.decompose(judge, &actual, &target),
-        };
+        match (self.flexible(&actual), self.flexible(&target)) {
+            (Some(this), Some(that)) if this == that => Ok(Step::Ok),
+            (Some(this), Some(that)) => Ok(
+                match self.solve_one(judge, this, &target)?
+                    || self.solve_one(judge, that, &actual)?
+                {
+                    true => Step::Ok,
+                    false => Step::Aside,
+                },
+            ),
+            (Some(this), None) => self.solve_or_cycle(judge, this, &target),
+            (None, Some(that)) => self.solve_or_cycle(judge, that, &actual),
+            (None, None) => self.decompose(judge, &actual, &target),
+        }
+    }
 
-        Ok(match solved {
-            true => Step::Ok,
-            false => Step::Aside,
-        })
+    /// Solve `name` to `value`, or, where `value` holds `name` as a proper part, the cycle rule's clash.
+    fn solve_or_cycle<J: Judge>(
+        &mut self,
+        judge: &mut J,
+        name: Free,
+        value: &Term,
+    ) -> Result<Step, J::Error> {
+        if self.solve_one(judge, name, value)? {
+            return Ok(Step::Ok);
+        }
+        if self.cycles(judge, value, &name)? {
+            return Ok(Step::Clash);
+        }
+
+        Ok(Step::Aside)
     }
 
     /// Deletion, conflict and injectivity, between two sides neither of which is a flexible variable.
@@ -333,17 +365,10 @@ impl<'f> Unifier<'f> {
                 // Only a variant can reach this: an `Intrinsic` carrier is a relevant type, and a `Prop`-sorted tuple or structure has none but non-informative components, so decomposing one yields equations between proofs, which any inhabitant satisfies.
                 // Matched on the nose rather than reduced: `check_induct_decl` requires a declared result sort to be a literal sort, which is the clause this test is licensed by. Without it a family declared at a redex unfolding to `Prop` reads as relevant here and as a proposition everywhere else, and the clash below excuses an arm that irrelevance says is reachable.
                 // A family the registry cannot answer for is set aside rather than read as relevant: the tag test's license is the declared sort, so a lookup that answers nothing licenses nothing — falling through to the clash would decide the strong verdict out of blindness, the one direction the analyses on this seam never take.
-                let Some(declaration) = judge.induct_decl(&a.name) else {
-                    return Ok(Step::Aside);
-                };
-                if matches!(
-                    **declaration.result_sort(),
-                    Subterm::Sort(Sort {
-                        quality: Quality::Prop,
-                        level: _
-                    })
-                ) {
-                    return Ok(Step::Ok);
+                match relevance(&*judge, &a.name) {
+                    None => return Ok(Step::Aside),
+                    Some(false) => return Ok(Step::Ok),
+                    Some(true) => {}
                 }
                 if a.tag != t.tag {
                     return Ok(Step::Clash);
@@ -457,6 +482,57 @@ impl<'f> Unifier<'f> {
         }
 
         false
+    }
+
+    /// The cycle rule: whether `value`, which `name` was not solved to, holds `name` as a proper part, so that no value of `name` is `value` and the case is unreachable.
+    ///
+    /// The walk goes beneath the layers injectivity takes apart: a constructor of a relevant family, a tuple, and an element a word spells out, each part read as the walk reads a pair, forced and through the solutions. Met beneath one, `name` is a proper part of the value it would have to be, and no finite value is. At the top, a word that spells out an element is longer than a chunk of it, and a `Nat` with a positive floor over a sum holding `name` is greater than `name`. Anything else stops the walk: an application or a projection, whose value is no part of it as written; a proposition's constructor, which irrelevance identifies with any other proof; and a word's chunk beneath nothing, which may be the whole word.
+    fn cycles<J: Judge>(&self, judge: &mut J, value: &Term, name: &Free) -> Result<bool, J::Error> {
+        let named = Term::free_var(name);
+        let mut pending = vec![(value.clone(), false)];
+        let mut seen = HashMap::new();
+
+        while let Some((part, beneath)) = pending.pop() {
+            if beneath && part == named {
+                return Ok(true);
+            }
+            if seen.insert(part.identity(), part.clone()).is_some() {
+                continue;
+            }
+
+            let parts = match &*part {
+                Subterm::Variant(variant) if relevance(&*judge, &variant.name) == Some(true) => {
+                    variant.payload.clone()
+                }
+                Subterm::Tuple(tuple) => tuple.fields.clone(),
+                Subterm::Intrinsic(_) => {
+                    let resolved = self.resolved(&part);
+                    if !beneath && Nat::exceeds(&resolved, &named) {
+                        return Ok(true);
+                    }
+                    let Some(contents) = (match &*resolved {
+                        Subterm::Intrinsic(intrinsic) => word_contents(intrinsic),
+                        _ => None,
+                    }) else {
+                        continue;
+                    };
+                    if beneath || contents.spelled {
+                        for chunk in &contents.chunks {
+                            if self.read(judge, chunk)? == named {
+                                return Ok(true);
+                            }
+                        }
+                    }
+                    contents.elements
+                }
+                _ => Vec::new(),
+            };
+            for each in parts {
+                pending.push((self.read(judge, &each)?, true));
+            }
+        }
+
+        Ok(false)
     }
 
     /// Whether either side names a variable solved so far.

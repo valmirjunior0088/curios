@@ -30,39 +30,45 @@ fn a_forced_index_equation_refines_an_outer_hypothesis() {
     assert_eq!(infer(&mut certifier, &matched), Ok(at_b));
 }
 
-/// A forced equation whose solution mentions a refinable variable is refused rather than substituted: `Cyc(b)` matched against a case aimed at `b + 1` would solve `b := b + 1`, and the occurs check must leave the arm unspecialized instead. The hypothesis therefore stays at `P(b)` and fails the expectation `P(b + 1)` — a refusal, never a silent cycle.
+/// A forced equation whose solution would mention its own variable is never substituted. `Cyc(b)` matched against a case aimed at `b + 1` would solve `b := b + 1`: the cycle rule reads the case as one no value reaches, so the arm is typed by no rule and the match stands at its goal. Aimed at `f(b)`, an opaque `f`, which may be `b`, the occurs check leaves the arm unspecialized instead, and the hypothesis at `P(b)` fails the expectation `P(f(b))` — a refusal, never a silent cycle.
 ///
 /// The case's target names the outer `b` by its identity, so the family is declared once `b` is opened.
 #[test]
-fn a_cyclic_index_equation_refines_nothing() {
-    let mut certifier = certifier();
-    opaque(&mut certifier, "P", "(n: #NatType) -> Type");
-    let (locals, [matched]) = hypotheses(
-        &mut certifier,
-        &fill!(
-            "b: #NatType, w: /P(b), subject: ${cyc}",
-            cyc = family_at("Cyc", "b")
-        ),
-        &fill!(
-            "${matched},",
-            matched = eliminating("/P(b)", &["mk() => w"])
-        ),
-    );
-    declare(
-        &mut certifier,
-        "Cyc",
-        "i: #NatType",
-        "Type",
-        &[&fill!(
-            "mk(): (#Nat(Succ(1, #{binding = Free(${b})} b)))",
-            b = locals[0].index()
-        )],
-    );
+fn a_cyclic_index_equation_is_impossible_or_refines_nothing() {
+    for (label, cyclic) in [
+        ("a successor of the variable", true),
+        ("an opaque function of the variable", false),
+    ] {
+        let mut certifier = certifier();
+        opaque(&mut certifier, "P", "(n: #NatType) -> Type");
+        opaque(&mut certifier, "f", "(n: #NatType) -> #NatType");
+        let (locals, [matched]) = hypotheses(
+            &mut certifier,
+            &fill!(
+                "b: #NatType, w: /P(b), subject: ${cyc}",
+                cyc = family_at("Cyc", "b")
+            ),
+            &fill!(
+                "${matched},",
+                matched = eliminating("/P(b)", &["mk() => w"])
+            ),
+        );
+        let b = locals[0].index();
+        let case = match cyclic {
+            true => fill!("mk(): (#Nat(Succ(1, #{binding = Free(${b})} b)))", b),
+            false => fill!("mk(): (/f(#{binding = Free(${b})} b))", b),
+        };
+        declare(&mut certifier, "Cyc", "i: #NatType", "Type", &[&case]);
 
-    assert!(matches!(
-        infer(&mut certifier, &matched),
-        Err(Error::Mismatch { .. }),
-    ));
+        let inferred = infer(&mut certifier, &matched);
+        match cyclic {
+            true => assert!(inferred.is_ok(), "{label}: {inferred:?}"),
+            false => assert!(
+                matches!(inferred, Err(Error::Mismatch { .. })),
+                "{label}: {inferred:?}"
+            ),
+        }
+    }
 }
 
 /// A variable `Bool` scrutinee stands refined to the literal in each arm — the zero-index instance of the same specialization.
