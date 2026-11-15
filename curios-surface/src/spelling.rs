@@ -661,14 +661,26 @@ fn assign(
 
     // Where each hint's search for a free suffix resumes. Every suffix below it was found taken, and a taken spelling stays taken, so a search begun again for each binder would re-ask what is known — for the like-named binders a large type opens, the square of how many there are.
     let mut resume: HashMap<&str, u32> = HashMap::new();
-    for (key, local) in hinted.into_iter().chain(hintless) {
-        let hint = local.hint().unwrap_or("x");
+    for (key, local) in hinted {
+        let hint = local.hint().expect("a hinted binder has a hint");
         let next = resume.entry(hint).or_insert(2);
         let mut candidate = hint.to_string();
         while used.contains(&candidate) {
             candidate = format!("{hint}{next}");
             *next += 1;
         }
+        used.insert(candidate.clone());
+        spellings.insert(*key, candidate);
+    }
+    // A binder no source names is numbered from `x0`, every one of them, so its spelling reads as the printer's rather than as a name its author wrote.
+    let mut next = 0;
+    for (key, _) in hintless {
+        let mut candidate = format!("x{next}");
+        while used.contains(&candidate) {
+            next += 1;
+            candidate = format!("x{next}");
+        }
+        next += 1;
         used.insert(candidate.clone());
         spellings.insert(*key, candidate);
     }

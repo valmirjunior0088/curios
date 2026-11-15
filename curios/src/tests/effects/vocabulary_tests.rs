@@ -164,7 +164,7 @@ fn a_state_region_cannot_perform_io() {
 
     let error = typecheck(source).expect_err("a State region must refuse Io");
     assert!(
-        error.contains("wanted: /std/Monad/Lift(/std/Io, (x) => State(Nat, x))"),
+        error.contains("wanted: /std/Monad/Lift(/std/Io, (x0) => State(Nat, x0))"),
         "expected the missing Io edge, got: {error}"
     );
 }

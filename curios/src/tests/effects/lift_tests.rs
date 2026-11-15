@@ -426,7 +426,9 @@ fn a_try_sequenced_in_a_region_with_no_edge_for_it_is_told_what_is_written_inste
     .expect_err("a `Try` has no edge into `Io`");
 
     assert!(
-        error.contains("needed to sequence a (x) => Try(Io, Io/Error, x) action in this Io region"),
+        error.contains(
+            "needed to sequence a (x0) => Try(Io, Io/Error, x0) action in this Io region"
+        ),
         "expected the missing edge, got: {error}"
     );
     assert!(

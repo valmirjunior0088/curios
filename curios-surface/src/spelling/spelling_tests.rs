@@ -117,9 +117,9 @@ fn a_render_spells_the_binders_its_dry_run_met() {
     assert_eq!(rendered, "(x) => (x2) => x2");
 }
 
-/// Like-named binders are spelled apart by the least suffix that is free, however many there are: the first keeps the name, and each one after takes the next number no global and no binder before it holds.
+/// Binders no source names are numbered from `x0`, however many there are, each taking the least number no global and no binder before it holds.
 #[test]
-fn like_named_binders_take_the_least_free_suffixes() {
+fn unnamed_binders_take_the_least_free_numbers() {
     let taken = Global::Authored(Qualifier::from(["main", "x3"]));
     let binders = (0..10_000)
         .map(|index| Free::local(index, None))
@@ -140,11 +140,12 @@ fn like_named_binders_take_the_least_free_suffixes() {
     );
     let spelled = |index: usize| rename.get(&binders[index]).map(String::as_str);
 
-    assert_eq!(spelled(0), Some("x"));
-    assert_eq!(spelled(1), Some("x2"));
+    assert_eq!(spelled(0), Some("x0"));
+    assert_eq!(spelled(1), Some("x1"));
+    assert_eq!(spelled(2), Some("x2"));
     // `x3` is the global's.
-    assert_eq!(spelled(2), Some("x4"));
-    assert_eq!(spelled(9_999), Some("x10001"));
+    assert_eq!(spelled(3), Some("x4"));
+    assert_eq!(spelled(9_999), Some("x10000"));
 }
 
 /// A sort's own level where instances are suppressed: a concrete one is the node's whole content and prints, and one headed by a metavariable names nothing a reader can act on and does not. Held over terms built by hand, a program's sorts above zero being at levels their declarations leave to a caller, which a report meets still open.

@@ -226,7 +226,7 @@ fn a_description_cannot_be_carried_out_of_its_monad() {
         ("let boom = carried;", "let boom() -> False =\n            match carried(Proc/exit(@Empty, 1)).held end;"),
     ])
     .by_elaborator_in("/witness~/std/Monad/Lift(Io, /Box)", |error| {
-        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(x)" && pinned(expected) == "x")
+        matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(x0)" && pinned(expected) == "x0")
     });
 }
 
