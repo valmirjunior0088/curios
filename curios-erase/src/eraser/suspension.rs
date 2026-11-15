@@ -219,44 +219,57 @@ impl Eraser<'_> {
         )
     }
 
-    /// Whether a cell of `cells` is filled: a fold over them, polling each.
+    /// Whether a cell of `cells` is filled: a scan over them, polling each in turn and stopping at the first filled one.
     fn any_filled(&mut self, cells: curios_anf::Atom, polled: Polled) -> curios_anf::Atom {
+        let scan = self.builder.reserve_function();
+        let held = self.builder.value(None);
         let element = self.builder.value(None);
         let suffix = self.builder.value(None);
-        let accumulator = self.builder.value(None);
-        let empty = self.block(|lowering| lowering.boolean(false));
-        let block = self.block(|lowering| {
-            let poll = lowering.let_atom(curios_anf::Rhs::Cell {
-                operation: curios_anf::CellOperation::Poll {
-                    some: polled.some,
-                    none: polled.none,
-                },
-                operands: vec![curios_anf::Atom::Value(element)],
+        let body = self.block(|lowering| {
+            let empty = lowering.block(|lowering| lowering.boolean(false));
+            let cons = lowering.block(|lowering| {
+                let poll = lowering.let_atom(curios_anf::Rhs::Cell {
+                    operation: curios_anf::CellOperation::Poll {
+                        some: polled.some,
+                        none: polled.none,
+                    },
+                    operands: vec![curios_anf::Atom::Value(element)],
+                });
+                let unfilled = lowering.block(|lowering| {
+                    lowering.applied(
+                        curios_anf::Atom::Function(scan),
+                        vec![curios_anf::Atom::Value(suffix)],
+                    )
+                });
+                let filled = lowering.block(|lowering| lowering.boolean(true));
+                lowering.let_atom(curios_anf::Rhs::MatchVariant {
+                    family: polled.family,
+                    scrutinee: poll,
+                    arms: vec![curios_anf::VariantArm {
+                        constructor: polled.none,
+                        bindings: Vec::new(),
+                        block: unfilled,
+                    }],
+                    default: Some(filled),
+                })
             });
-            let unfilled = lowering.block(|_| curios_anf::Atom::Value(accumulator));
-            let filled = lowering.block(|lowering| lowering.boolean(true));
-            lowering.let_atom(curios_anf::Rhs::MatchVariant {
-                family: polled.family,
-                scrutinee: poll,
-                arms: vec![curios_anf::VariantArm {
-                    constructor: polled.none,
-                    bindings: Vec::new(),
-                    block: unfilled,
-                }],
-                default: Some(filled),
+            lowering.let_atom(curios_anf::Rhs::UnconsSequence {
+                grain: curios_anf::SequenceGrain::List,
+                scrutinee: curios_anf::Atom::Value(held),
+                empty,
+                cons: curios_anf::UnconsSequenceStep {
+                    element,
+                    suffix,
+                    block: cons,
+                },
             })
         });
-        self.let_atom(curios_anf::Rhs::FoldSequence {
-            grain: curios_anf::SequenceGrain::List,
-            scrutinee: cells,
-            empty,
-            step: curios_anf::FoldSequenceStep {
-                element,
-                suffix,
-                accumulator,
-                block,
-            },
-        })
+        self.builder
+            .define_function(scan, Some("io/any_filled".to_string()), vec![held], body);
+        // Part of surfacing a suspension, which runs a performance: no definition's evaluation.
+        self.builder.assign_role(scan, curios_anf::Role::Machinery);
+        self.builder.let_functions(vec![scan]);
+        self.applied(curios_anf::Atom::Function(scan), vec![cells])
     }
 
     fn boolean(&mut self, value: bool) -> curios_anf::Atom {

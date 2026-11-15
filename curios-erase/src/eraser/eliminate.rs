@@ -2,7 +2,7 @@
 //!
 //! Each Core elimination erases to its most precise erased form — `SwitchBool`, `SwitchNat` (a `Nat` case split's too, one key and a default), first-class `UnconsSequence` over the sequence itself, one peel, and schema-carrying `MatchVariant` whose arms bind the payload directly. A sequence's peel names no read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/compilation/a-lowering-names-the-elimination-it-performs.md).
 //!
-//! The scrutinee is erased exactly once, and every arm is erased under the refinement it was elaborated under, keyed on the *original* head term: arm bodies were elaborated against reductions keyed on that term, and erasure re-types what it walks, so refining an alias in its place loses them. No elimination therefore re-derives a Core term from its head — the `Nat` case split computes its predecessor from the erased operand, and the sequence forms bind their element and suffix as values the peel fills. `List/fold`'s loop is the one form whose step does re-derive, reading `get(l, i)`, so it aliases its compound operands on the Core side first — a fresh variable defined as the operand, its label mapped to the once-erased atom — and has no arm to refine. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
+//! The scrutinee is erased exactly once, and every arm is erased under the refinement it was elaborated under, keyed on the *original* head term: arm bodies were elaborated against reductions keyed on that term, and erasure re-types what it walks, so refining an alias in its place loses them. No elimination therefore re-derives a Core term from its head — the `Nat` case split computes its predecessor from the erased operand, and the sequence forms bind their element and suffix as values the peel fills. `List/fold`'s loop peels its list as a case split does, aliasing its compound operands on the Core side first — a fresh variable defined as the operand, its label mapped to the once-erased atom — so its step reads each once. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
 
 use {
     super::{Demanded, Eraser, Outcome, demanded_type},
@@ -383,9 +383,9 @@ impl Eraser<'_> {
         ))
     }
 
-    /// The `List/fold` intrinsic as a bounded `Nat` fold over the list's length, one read per step: `fold-nat len(l) { zero => init; step(i, acc) => f(get(l, i), acc) }`. The loop is emitted here rather than spelled by the library, so the type level keeps the intrinsic's laws and the runtime keeps the loop. `FoldSequence` is the wrong shape for it, being a right fold whose accumulator is the suffix's result; a left fold threads its accumulator the other way, and the `Nat` loop runs that way already.
+    /// The `List/fold` intrinsic as the loop `/std/Bytes/fold` is written as, `go(z, acc) = match z | [] => acc | [h, ..t] => go(t, f(h, acc))`: a peel and a call in its tail, which the lowering makes a loop whose suffix is a window. The loop is built here rather than spelled by the library, so the type level keeps the intrinsic's laws; it is part of the evaluation of the definition it is erased in, whose verdict marks it ([`curios_anf::Role::Evaluation`]).
     ///
-    /// The list and the stepper are aliased once through `scrutinee_operand`, so a compound operand is erased before the loop rather than once per step. The read inside the step carries a dead bound: erasure never reads a `get`'s proof, and `i < len(l)` holds by construction of the loop.
+    /// The list and the stepper are aliased once through `scrutinee_operand`, so a compound operand is erased before the loop rather than once per turn, and the initial value is erased ahead of it, where its first turn reads it.
     pub fn erase_list_fold(
         &mut self,
         context: &mut Reader,
@@ -398,9 +398,8 @@ impl Eraser<'_> {
         ]: [Demanded<'_>; 3],
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let nat_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
         let list_type = demanded_type(context, &list_demand);
-        let (list, _) = match self.scrutinee_operand(context, list, &list_type)? {
+        let (_, list) = match self.scrutinee_operand(context, list, &list_type)? {
             Ok(pair) => pair,
             Err(diverged) => return Ok(diverged),
         };
@@ -409,60 +408,90 @@ impl Eraser<'_> {
             Ok(pair) => pair,
             Err(diverged) => return Ok(diverged),
         };
-        let length = curios_core::Term::intrinsic(curios_core::Intrinsic::list_len(
-            element.clone(),
-            list.clone(),
-        ));
-        let (_, scrutinee) = match self.scrutinee_operand(context, &length, &nat_type)? {
-            Ok(pair) => pair,
-            Err(diverged) => return Ok(diverged),
+        let init_type = demanded_type(context, &init_demand);
+        let initial = match self.walk(context, init, &init_type, None)? {
+            Outcome::Emitted(atom) => atom,
+            diverged @ Outcome::Diverged(_) => return Ok(diverged),
         };
 
-        let init_type = demanded_type(context, &init_demand);
-        let zero = self.open_arm(context, &init_type, init)?;
-
-        let index_label = context.fresh(None);
+        let turn = self.builder.reserve_function();
+        let element_label = context.fresh(None);
         let accumulator_label = context.fresh(None);
-        let predecessor = self.builder.value(Some("i".to_string()));
-        let hypothesis = self.builder.value(Some("acc".to_string()));
+        let rest = self.builder.value(Some("z".to_string()));
+        let accumulator = self.builder.value(Some("acc".to_string()));
+        let head = self.builder.value(Some("h".to_string()));
+        let suffix = self.builder.value(Some("t".to_string()));
+        self.state(context, rest, &list_type)?;
+        self.state(context, accumulator, result)?;
         self.environment
-            .bind(index_label, curios_anf::Atom::Value(predecessor));
+            .bind(element_label, curios_anf::Atom::Value(head));
         self.environment
-            .bind(accumulator_label, curios_anf::Atom::Value(hypothesis));
+            .bind(accumulator_label, curios_anf::Atom::Value(accumulator));
 
         self.builder.open_block();
+        self.builder.open_block();
+        let empty =
+            self.builder
+                .seal_block(curios_anf::Terminator::Return(curios_anf::Atom::Value(
+                    accumulator,
+                )));
+        self.builder.open_block();
         let outcome = context.scoped(|context| {
-            context.assume(&index_label, &nat_type);
+            context.assume(&element_label, element);
             context.assume(&accumulator_label, result);
-
-            // The bound never reaches the erased read, so any term serves its slot.
-            let dead_bound = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
-                curios_core::Nat::new(0usize),
-            ));
-            let item = curios_core::Term::intrinsic(curios_core::Intrinsic::list_get(
-                element.clone(),
-                list.clone(),
-                curios_core::Term::free_var(&index_label),
-                dead_bound,
-            ));
             let body = curios_core::Term::apply(
                 function.clone(),
-                [item, curios_core::Term::free_var(&accumulator_label)],
+                [
+                    curios_core::Term::free_var(&element_label),
+                    curios_core::Term::free_var(&accumulator_label),
+                ],
             );
             self.walk(context, &body, result, None)
         })?;
-        let step = self.seal(outcome);
+        let cons = match outcome {
+            Outcome::Emitted(next) => {
+                let call = self.builder.let_value(
+                    None,
+                    curios_anf::Rhs::Apply {
+                        callee: curios_anf::Atom::Function(turn),
+                        arguments: vec![curios_anf::Atom::Value(suffix), next],
+                    },
+                );
+                self.builder
+                    .seal_block(curios_anf::Terminator::Return(curios_anf::Atom::Value(
+                        call,
+                    )))
+            }
+            Outcome::Diverged(terminator) => self.builder.seal_block(terminator),
+        };
+        let peeled = self.builder.let_value(
+            None,
+            curios_anf::Rhs::UnconsSequence {
+                grain: curios_anf::SequenceGrain::List,
+                scrutinee: curios_anf::Atom::Value(rest),
+                empty,
+                cons: curios_anf::UnconsSequenceStep {
+                    element: head,
+                    suffix,
+                    block: cons,
+                },
+            },
+        );
+        let body =
+            self.builder
+                .seal_block(curios_anf::Terminator::Return(curios_anf::Atom::Value(
+                    peeled,
+                )));
+        let name = self.derived_hint();
+        self.builder
+            .define_function(turn, name, vec![rest, accumulator], body);
+        self.builder.let_functions(vec![turn]);
 
         Ok(self.bind(
             hint,
-            curios_anf::Rhs::FoldNat {
-                scrutinee,
-                zero,
-                step: curios_anf::FoldNatStep {
-                    predecessor,
-                    hypothesis,
-                    block: step,
-                },
+            curios_anf::Rhs::Apply {
+                callee: curios_anf::Atom::Function(turn),
+                arguments: vec![list, initial],
             },
         ))
     }

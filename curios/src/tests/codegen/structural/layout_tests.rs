@@ -428,6 +428,51 @@ fn a_read_in_a_loop_keeps_the_run_it_last_resolved() {
     assert!(!resolve.contains("array.len"), "{resolve}");
 }
 
+/// A `List/fold` walks its list through a window, as a `Bytes/fold` does: erased as the peel loop that library fold is written as, its loop is handed the window's base, end and length where a suffix stood, and reads each element where it stands rather than building a suffix a turn.
+#[test]
+fn a_list_fold_walks_its_list_through_a_window() {
+    let source = r#"
+        use /std/{Nat, List, Proc};
+
+        let entry() -> /std/Io({}) =
+            let n = List/len(Proc/args()!);
+            let xs = List/map(List/range(0, 64), (i) => i * 7 + n);
+            /std/print(Nat/to_str(List/fold(xs, 7, (x, acc) => (acc * 31 + x) % 65521)));
+        entry()
+        "#;
+
+    let module = cps_optm_module(source);
+    let loops = module
+        .live_continuations()
+        .filter(|(_, continuation)| {
+            continuation
+                .debug_name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("/sys/List/fold"))
+        })
+        .map(|(_, continuation)| {
+            continuation
+                .params
+                .iter()
+                .filter_map(|&param| module.value(param)?.debug_name.clone())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    assert!(!loops.is_empty(), "the fold is a loop:\n{module}");
+    for params in &loops {
+        for field in ["/base", "/end", "/length"] {
+            assert!(
+                params
+                    .iter()
+                    .any(|name| name.starts_with("window/") && name.ends_with(field)),
+                "the fold's loop is handed the window's {field}: {params:?}"
+            );
+        }
+    }
+
+    assert_eq!(run(source), b"7289");
+}
+
 /// A window walk holds its end and its length in words read unsigned. A window counts down to its end, so each field is a length or what a monus of one leaves, which the representation's bounds put below `2³²`: both ride `Repr::Length` round the loop, where an offset grown by a sum each step was bounded by nothing the analysis could see and stayed a reference.
 #[test]
 fn a_window_walk_holds_its_end_and_length_in_words_read_unsigned() {
