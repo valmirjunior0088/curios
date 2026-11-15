@@ -24,7 +24,10 @@ Its benefit is beyond doubt: `/std` writes a run of elements, or a case of an el
 
 - **A successor step past one, `k + c`, with literals beside it.** Its one use in `/std` is the count of continuation bytes the UTF-8 decoders peel, three functions, and to stand beside the literals they write it needs a literal peeled one step at a time in a column that steps, as Lean's match compiler peels one, which makes what a match costs depend on a literal's value rather than on what it spells: `| 0 | 1000 | n + 1`, refused today, would be a thousand nested splits. Haskell 2010 dropped its `n + k` patterns as a special case of very limited usefulness.
 - **A suffix, `[..init, last]`.** It takes a sequence apart from its end, an elimination Core does not have, and so reaches the certifier; the languages whose lists are taken apart from the front, the ML family, Haskell and Lean among them, have none.
-- **A literal prefix of a packed sequence.** No `/std` site outside its tests asks for one.
+
+## Deferred
+
+- **A literal prefix of a packed sequence.** It waits for a consumer: no `/std` site outside its tests asks for one yet.
 
 ## Stages
 
