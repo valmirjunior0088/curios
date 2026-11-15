@@ -170,17 +170,14 @@ fn affine(builder: &mut Builder, answer: Atom, plus: Atom) -> Atom {
     operation(builder, Operation::NatAdd, tripled, plus)
 }
 
-/// Whether the printed module dispatches by a fold, whose step arm binds what the fold of the rest answers.
-fn folds(printed: &str) -> bool {
-    printed
-        .lines()
-        .map(str::trim_start)
-        .any(|line| line.starts_with('|') && (line.contains(" + 1; ") || line.contains("]; ")))
+/// Whether the printed module holds the loop an inversion makes: the worker `f@loop` the recursion became, which takes the levels in turn.
+fn loops(printed: &str) -> bool {
+    printed.contains("$f@loop(")
 }
 
 /// `f(x, a) = f(x - 1, a) * 3 + 1`.
 #[test]
-fn a_nat_recursion_its_call_answers_into_becomes_its_fold() {
+fn a_nat_recursion_its_call_answers_into_becomes_a_loop() {
     let printed = optimized(Peel::Nat, |builder, arm| {
         let answer = call(
             builder,
@@ -190,12 +187,12 @@ fn a_nat_recursion_its_call_answers_into_becomes_its_fold() {
         let one = nat(builder, 1);
         affine(builder, answer, one)
     });
-    assert!(folds(&printed), "{printed}");
+    assert!(loops(&printed), "{printed}");
 }
 
 /// `f(l, a) = f(rest, a) * 3 + 1`, over a list.
 #[test]
-fn a_list_recursion_its_call_answers_into_becomes_its_fold() {
+fn a_list_recursion_its_call_answers_into_becomes_a_loop() {
     let printed = optimized(Peel::List, |builder, arm| {
         let answer = call(
             builder,
@@ -205,10 +202,10 @@ fn a_list_recursion_its_call_answers_into_becomes_its_fold() {
         let one = nat(builder, 1);
         affine(builder, answer, one)
     });
-    assert!(folds(&printed), "{printed}");
+    assert!(loops(&printed), "{printed}");
 }
 
-/// `f(x, a) = f(x - 1, a) * 3 + x`: each level reads its own `x`, which the fold's arm would read at its outermost.
+/// `f(x, a) = f(x - 1, a) * 3 + x`: each level reads its own `x`, which the loop's turn would read at its outermost.
 #[test]
 fn a_recursion_reading_its_peeled_parameter_past_the_peel_is_left_as_written() {
     let printed = optimized(Peel::Nat, |builder, arm| {
@@ -219,7 +216,7 @@ fn a_recursion_reading_its_peeled_parameter_past_the_peel_is_left_as_written() {
         );
         affine(builder, answer, Atom::Value(arm.x))
     });
-    assert!(!folds(&printed), "{printed}");
+    assert!(!loops(&printed), "{printed}");
 }
 
 /// `f(x, a) = f(x - 1, a + 1) * 3 + 1`: the call hands another parameter on changed.
@@ -231,10 +228,10 @@ fn a_recursion_handing_another_parameter_on_changed_is_left_as_written() {
         let answer = call(builder, arm.f, vec![Atom::Value(arm.tail), next]);
         affine(builder, answer, one)
     });
-    assert!(!folds(&printed), "{printed}");
+    assert!(!loops(&printed), "{printed}");
 }
 
-/// `f(x, a) = f(x - 1, a) * 3 + f(x - 1, a)`: a second call would stay a recursion inside the fold.
+/// `f(x, a) = f(x - 1, a) * 3 + f(x - 1, a)`: a second call would stay a recursion inside the loop.
 #[test]
 fn a_recursion_of_two_calls_is_left_as_written() {
     let printed = optimized(Peel::Nat, |builder, arm| {
@@ -243,10 +240,10 @@ fn a_recursion_of_two_calls_is_left_as_written() {
         let second = call(builder, arm.f, arguments);
         affine(builder, first, second)
     });
-    assert!(!folds(&printed), "{printed}");
+    assert!(!loops(&printed), "{printed}");
 }
 
-/// `f(x, a) = let p = poll(); f(x - 1, a) * 3 + p`: the recursion asks the host from the outermost level in, and the fold would ask from the innermost out.
+/// `f(x, a) = let p = poll(); f(x - 1, a) * 3 + p`: the recursion asks the host from the outermost level in, and the loop would ask from the innermost out.
 #[test]
 fn a_host_call_ahead_of_the_call_keeps_the_recursion() {
     let printed = optimized(Peel::Nat, |builder, arm| {
@@ -258,12 +255,12 @@ fn a_host_call_ahead_of_the_call_keeps_the_recursion() {
         );
         affine(builder, answer, asked)
     });
-    assert!(!folds(&printed), "{printed}");
+    assert!(!loops(&printed), "{printed}");
 }
 
-/// `f(x, a) = let r = f(x - 1, a); r * 3 + poll()`: the recursion asks the host from the innermost level out, as the fold does.
+/// `f(x, a) = let r = f(x - 1, a); r * 3 + poll()`: the recursion asks the host from the innermost level out, as the loop does.
 #[test]
-fn a_host_call_after_the_call_keeps_its_order_in_the_fold() {
+fn a_host_call_after_the_call_keeps_its_order_in_the_loop() {
     let printed = optimized(Peel::Nat, |builder, arm| {
         let answer = call(
             builder,
@@ -273,10 +270,10 @@ fn a_host_call_after_the_call_keeps_its_order_in_the_fold() {
         let asked = ask(builder, arm.poll);
         affine(builder, answer, asked)
     });
-    assert!(folds(&printed), "{printed}");
+    assert!(loops(&printed), "{printed}");
 }
 
-/// `f(x, a) = (a < 7) && f(x - 1, a)`: the recursion stops at the first level whose `a < 7` decides, where its fold would run every level.
+/// `f(x, a) = (a < 7) && f(x - 1, a)`: the recursion stops at the first level whose `a < 7` decides, where its loop would run every level.
 #[test]
 fn a_recursion_only_some_runs_of_its_arm_read_is_left_as_written() {
     let printed = optimized(Peel::Nat, |builder, arm| {
@@ -289,7 +286,7 @@ fn a_recursion_only_some_runs_of_its_arm_read_is_left_as_written() {
         let below = operation(builder, Operation::NatLt, Atom::Value(arm.a), seven);
         operation(builder, Operation::BoolAnd, below, answer)
     });
-    assert!(!folds(&printed), "{printed}");
+    assert!(!loops(&printed), "{printed}");
 }
 
 /// `f(x, a) = let r = f(x - 1, a); match a < 7 | true => r * 3 + 1 | false => …`, its other arm `r * 5 + 2` where `both`, and `a` where not.
@@ -328,14 +325,14 @@ fn dispatched(builder: &mut Builder, arm: &Arm, both: bool) -> Atom {
 
 /// An answer every arm of a dispatch reads is read on every run.
 #[test]
-fn an_answer_every_arm_of_a_dispatch_reads_becomes_its_fold() {
+fn an_answer_every_arm_of_a_dispatch_reads_becomes_a_loop() {
     let printed = optimized(Peel::Nat, |builder, arm| dispatched(builder, arm, true));
-    assert!(folds(&printed), "{printed}");
+    assert!(loops(&printed), "{printed}");
 }
 
 /// An answer one arm of a dispatch reads is placed in that arm, and the recursion stops at the first level that takes the other.
 #[test]
 fn an_answer_one_arm_of_a_dispatch_reads_is_left_as_written() {
     let printed = optimized(Peel::Nat, |builder, arm| dispatched(builder, arm, false));
-    assert!(!folds(&printed), "{printed}");
+    assert!(!loops(&printed), "{printed}");
 }

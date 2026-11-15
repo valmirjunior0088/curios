@@ -1,31 +1,32 @@
-//! A structural recursion inverted into its fold: a recursion that peels one parameter and calls itself once, on what the peel left, with every other parameter as it came, computes the fold of that peel's case split, and becomes it — a `Nat` recursion `FoldNat`, a sequence's `FoldSequence` — which the lowering into CPS makes a loop. Why, and what it rejects, is [`curios-anf`'s README](../../README.md#a-structural-recursion-is-its-fold).
+//! A structural recursion inverted into a loop: a recursion that peels one parameter and calls itself once, on what the peel left, with every other parameter as it came, computes its base and then each level in turn from the innermost out, and becomes a worker that does so — a `Nat` recursion's counting its predecessor up from zero, a sequence's counting its indices down from its length and reading each level's element — whose call of itself is its tail, which the CPS optimizer makes a loop. Why, and what it rejects, is [`curios-anf`'s README](../../README.md#a-structural-recursion-is-a-loop).
 //!
 //! ```text
 //!   rec f(n, a) = match n | 0 => z(a) | _ => let k = n - 1; s(k, a, f(k, a)) end
-//!   ⟶  f(n, a)   = fold n | 0 => z(a) | k + 1; r => s(k, a, r) end
+//!   ⟶  f(n, a)   = let rec go(k, r) = match k < n | true => go(k + 1, s(k, a, r)) | false => r end;
+//!                  go(0, z(a))
 //! ```
 //!
-//! **The envelope, structural in ANF.** The function's body is one dispatch it returns: a `SwitchNat` on a parameter whose one case is `0`, or an `UnconsSequence` on a parameter. Among the step arm's own statements is a self-call handed, in the peeled parameter's place, the predecessor the arm computes ahead of it (`n - 1`) or the suffix the peel binds, and every other parameter in its own place, or anything where the function never reads the parameter, as an erased type or proof is handed on as `unit`. It is the only reference the function's region makes to itself, every run of the arm reads its answer, and the dispatch and the predecessor are the only reads of the peeled parameter, which the fold leaves at its outermost value. Outside the envelope the pass is a no-op, never a miscompile.
+//! **The envelope, structural in ANF.** The function's body is one dispatch it returns: a `SwitchNat` on a parameter whose one case is `0`, or an `UnconsSequence` on a parameter. Among the step arm's own statements is a self-call handed, in the peeled parameter's place, the predecessor the arm computes ahead of it (`n - 1`) or the suffix the peel binds, and every other parameter in its own place, or anything where the function never reads the parameter, as an erased type or proof is handed on as `unit`. It is the only reference the function's region makes to itself, every run of the arm reads its answer, and the dispatch and the predecessor are the only reads of the peeled parameter, which the loop leaves at its outermost value. Outside the envelope the pass is a no-op, never a miscompile.
 //!
-//! **Every run reads the answer.** A call whose answer only some runs of the arm read is one the lowering places where it is read ([`curios-cps`'s README](../../../curios-cps/README.md#a-droppable-computation-runs-where-it-is-read)), so the recursion stops at the first level that does not read it, as `x == y && eql(xs, ys)` stops at the first unequal pair; its fold would run every level. So the arm's answer is read, and so is what the definition of a value read reads, chased across the arm's statements and its arms alike ([`Demand`]); the call's answer must be among it.
+//! **Every run reads the answer.** A call whose answer only some runs of the arm read is one the lowering places where it is read ([`curios-cps`'s README](../../../curios-cps/README.md#a-droppable-computation-runs-where-it-is-read)), so the recursion stops at the first level that does not read it, as `x == y && eql(xs, ys)` stops at the first unequal pair; its loop would run every level. So the arm's answer is read, and so is what the definition of a value read reads, chased across the arm's statements and its arms alike ([`Demand`]); the call's answer must be among it.
 //!
-//! **What runs in another order.** The recursion runs every level's statements ahead of its call from the outermost level in, then the base, then every level's statements after its call from the innermost out; the fold runs the base, then each level whole from the innermost out. The base and what follows each call keep their order, and the statements ahead of a call, which run later than they did, are held to perform nothing observable ([`Summary`]). Nothing runs earlier than a value it could depend on: the base reads only what the function was handed, and a statement ahead of the call only its own level's, so a proof erased from either still holds where it runs.
+//! **What runs in another order.** The recursion runs every level's statements ahead of its call from the outermost level in, then the base, then every level's statements after its call from the innermost out; the loop runs the base, then each level whole from the innermost out. The base and what follows each call keep their order, and the statements ahead of a call, which run later than they did, are held to perform nothing observable ([`Summary`]). Nothing runs earlier than a value it could depend on: the base reads only what the function was handed, and a statement ahead of the call only its own level's, so a proof erased from either still holds where it runs.
 
 #[cfg(test)]
 mod tests;
 
 use {
     crate::{
-        Analysis, Atom, BlockId, Constant, FoldNatStep, FoldSequenceStep, FunctionId, Module,
-        Operation, Rhs, Semantics, Statement, StatementId, Summary, Terminator, ValueId,
-        control_blocks, self_references,
+        Analysis, Atom, Block, BlockId, Constant, Function, FunctionId, Module, NatCase, Operation,
+        Rhs, Semantics, SequenceGrain, SequenceOp, Statement, StatementId, Summary, Terminator,
+        ValueId, control_blocks, self_references,
     },
     curios_common::recurse,
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Invert every recognized recursion into its fold, module-wide.
+/// Invert every recognized recursion into a loop, module-wide.
 pub fn invert_structural_recursion(module: &mut Module) {
     curios_profile::profile!("invert_structural_recursion");
     // Targets: functions bound alone by a `Functions` statement, anywhere. An inversion rewrites its own function's body and nothing else, so one snapshot serves every target: what it still says of a function already inverted, that it recurses, only makes a later target's reading more cautious.
@@ -50,13 +51,28 @@ pub fn invert_structural_recursion(module: &mut Module) {
     }
 }
 
-/// A recursion recognized as its fold: the dispatch its body returns, the fold that takes its place, and the step arm's statements less the call and the predecessor, which the fold binds.
+/// A recursion recognized as a loop: the function, the dispatch its body returns and what it binds, the peeled parameter, the base and step arms, the step arm's statements less the call and the predecessor, and the values a turn of the loop is handed where the recursion bound them — the answer so far where the call's answer stood, and what the peel left.
 struct Inversion {
+    function: FunctionId,
     dispatch: StatementId,
     result: ValueId,
-    fold: Rhs,
+    parameter: ValueId,
+    base: BlockId,
     step: BlockId,
     statements: Vec<StatementId>,
+    hypothesis: ValueId,
+    peel: Peel,
+}
+
+/// What a turn of the loop is handed of the peeled parameter.
+enum Peel {
+    /// A `Nat`'s predecessor: the loop counts it up from zero to the parameter.
+    Nat { predecessor: ValueId },
+    /// A sequence's element: the loop counts the indices down from its length, reading each.
+    Sequence {
+        grain: SequenceGrain,
+        element: ValueId,
+    },
 }
 
 impl Inversion {
@@ -146,8 +162,13 @@ impl Inversion {
             return None;
         }
 
-        // What the peel left: `n - 1`, computed ahead of the call, or the suffix the peel binds.
-        let (fold, predecessor) = match sequence {
+        // The base is computed ahead of the loop, so it must hand back a value.
+        if !matches!(module.block(base)?.terminator, Terminator::Return(_)) {
+            return None;
+        }
+
+        // What the peel left: `n - 1`, computed ahead of the call, or the suffix the peel binds, which no turn may read beyond the call it is handed to: the loop reads each element by its index and builds no suffix.
+        let (peel, predecessor, suffix) = match sequence {
             None => {
                 let predecessor = ahead.iter().copied().find(|&statement| {
                     matches!(
@@ -167,33 +188,13 @@ impl Inversion {
                             )
                     )
                 })?;
-                let fold = Rhs::FoldNat {
-                    scrutinee: Atom::Value(parameter),
-                    zero: base,
-                    step: FoldNatStep {
-                        predecessor: tail,
-                        hypothesis,
-                        block: step,
-                    },
-                };
-                (fold, Some(predecessor))
+                (Peel::Nat { predecessor: tail }, Some(predecessor), None)
             }
             Some((grain, element, suffix)) => {
                 if tail != suffix {
                     return None;
                 }
-                let fold = Rhs::FoldSequence {
-                    grain,
-                    scrutinee: Atom::Value(parameter),
-                    empty: base,
-                    step: FoldSequenceStep {
-                        element,
-                        suffix,
-                        accumulator: hypothesis,
-                        block: step,
-                    },
-                };
-                (fold, None)
+                (Peel::Sequence { grain, element }, None, Some(suffix))
             }
         };
 
@@ -205,12 +206,16 @@ impl Inversion {
             let summary = Summary::analyze(module, &analysis);
             (analysis, summary)
         });
-        // Each level read its own value of the peeled parameter, where the fold's arms would read the outermost one.
+        // Each level read its own value of the peeled parameter, where the loop's turns would read the outermost one.
         if analysis.value_uses(parameter) != 1 + usize::from(predecessor.is_some()) {
             return None;
         }
         // A parameter the call hands on changed is one no level reads.
         if changed.iter().any(|&param| analysis.value_uses(param) != 0) {
+            return None;
+        }
+        // The call is the one reader of the suffix.
+        if suffix.is_some_and(|suffix| analysis.value_uses(suffix) != 1) {
             return None;
         }
         // What runs later than it did performs nothing a program could tell the order of.
@@ -236,24 +241,192 @@ impl Inversion {
             .filter(|&statement| statement != call && Some(statement) != predecessor)
             .collect();
         Some(Self {
+            function,
             dispatch,
             result: *result,
-            fold,
+            parameter,
+            base,
             step,
             statements,
+            hypothesis,
+            peel,
         })
     }
 
-    /// Put the fold in the dispatch's place and take the call and the predecessor out of the step arm, whose results the fold now binds. The statements taken out own nothing else, and the prune after the optimizer's passes drops them.
+    /// Put a loop in the recursion's place: the base computed first, as the innermost level computes it, then a worker taking the levels in turn from the innermost out, each turn the step arm handed the level's peel and the answer so far, its own answer handed on in its tail. A `Nat`'s worker counts the predecessor up from zero to the parameter; a sequence's counts the indices down from its length and reads each level's element. The worker is what the recursion was ([`crate::Function::role`]), and its termination is the recursion's: inverting a recursion moves where its levels run, never whether they end.
     fn apply(self, module: &mut Module) {
-        module.set_block_statements(self.step, self.statements);
-        module.set_statement(
-            self.dispatch,
-            Statement::Let {
-                result: self.result,
-                rhs: self.fold,
+        let Self {
+            function,
+            dispatch,
+            result,
+            parameter,
+            base,
+            step,
+            statements,
+            hypothesis,
+            peel,
+        } = self;
+        let definition = module
+            .function(function)
+            .cloned()
+            .expect("an inverted function is live");
+        let body = module
+            .block(definition.body)
+            .cloned()
+            .expect("an inverted function has a body");
+        let base_block = module.block(base).cloned().expect("the base arm is live");
+        let Terminator::Return(start_answer) = base_block.terminator else {
+            unreachable!("the base hands back a value, as the recognizer required");
+        };
+        let step_block = module.block(step).cloned().expect("the step arm is live");
+        let one = Atom::Constant(module.intern_constant(Constant::Nat(Natural::one())));
+        let worker = module.reserve_function();
+
+        // What a turn starts from, what it reads of the peel, and the count it hands the next turn.
+        let (counter, start, setup, mut turn, next) = match peel {
+            Peel::Nat { predecessor } => {
+                let zero = Atom::Constant(module.intern_constant(Constant::Nat(Natural::zero())));
+                let (raised, raising) = module.let_value(
+                    None,
+                    Rhs::Operation {
+                        operation: Operation::NatAdd,
+                        operands: vec![Atom::Value(predecessor), one],
+                    },
+                );
+                (predecessor, zero, Vec::new(), vec![raising], raised)
+            }
+            Peel::Sequence { grain, element } => {
+                let (len, get) = match grain {
+                    SequenceGrain::Bytes => (SequenceOp::BytesLen, SequenceOp::BytesGet),
+                    SequenceGrain::List => (SequenceOp::ListLen, SequenceOp::ListGet),
+                };
+                let (length, measured) = module.let_value(
+                    None,
+                    Rhs::Sequence {
+                        operation: len,
+                        operands: vec![Atom::Value(parameter)],
+                    },
+                );
+                let index = module.add_value(Some("i".into()));
+                let (below, lowering) = module.let_value(
+                    None,
+                    Rhs::Operation {
+                        operation: Operation::NatSub,
+                        operands: vec![Atom::Value(index), one],
+                    },
+                );
+                // The element the peel bound, now read by its index: the peel's binder stated a carrier, and the read names its own.
+                let read = module.add_statement(Statement::Let {
+                    result: element,
+                    rhs: Rhs::Sequence {
+                        operation: get,
+                        operands: vec![Atom::Value(parameter), Atom::Value(below)],
+                    },
+                });
+                (
+                    index,
+                    Atom::Value(length),
+                    vec![measured],
+                    vec![lowering, read],
+                    below,
+                )
+            }
+        };
+        turn.extend(statements);
+        // A turn hands its answer on to the next, unless the step arm ends otherwise.
+        let terminator = match step_block.terminator {
+            Terminator::Return(answer) => {
+                let (handed, handing) = module.let_value(
+                    None,
+                    Rhs::Apply {
+                        callee: Atom::Function(worker),
+                        arguments: vec![Atom::Value(next), answer],
+                    },
+                );
+                turn.push(handing);
+                Terminator::Return(Atom::Value(handed))
+            }
+            terminator => terminator,
+        };
+        module.set_block_statements(step, turn);
+        module.set_block_terminator(step, terminator);
+
+        // Done once the count is: the answer so far is the recursion's.
+        let done = module.add_block(Block {
+            statements: Vec::new(),
+            terminator: Terminator::Return(Atom::Value(hypothesis)),
+        });
+        let (test, switched) = match peel {
+            Peel::Nat { .. } => {
+                let (more, comparing) = module.let_value(
+                    None,
+                    Rhs::Operation {
+                        operation: Operation::NatLt,
+                        operands: vec![Atom::Value(counter), Atom::Value(parameter)],
+                    },
+                );
+                let (switched, switching) = module.let_value(
+                    None,
+                    Rhs::SwitchBool {
+                        scrutinee: Atom::Value(more),
+                        if_false: done,
+                        if_true: step,
+                    },
+                );
+                (vec![comparing, switching], switched)
+            }
+            Peel::Sequence { .. } => {
+                let (switched, switching) = module.let_value(
+                    None,
+                    Rhs::SwitchNat {
+                        scrutinee: Atom::Value(counter),
+                        cases: vec![NatCase {
+                            key: Natural::zero(),
+                            block: done,
+                        }],
+                        default: step,
+                    },
+                );
+                (vec![switching], switched)
+            }
+        };
+        let worker_body = module.add_block(Block {
+            statements: test,
+            terminator: Terminator::Return(Atom::Value(switched)),
+        });
+        module.define_function(
+            worker,
+            Function {
+                debug_name: definition
+                    .debug_name
+                    .as_ref()
+                    .map(|name| format!("{name}@loop")),
+                params: vec![counter, hypothesis],
+                body: worker_body,
+                role: definition.role,
+                total: definition.total,
             },
         );
+
+        // The function: the base, the worker, and the loop entered at the start with the base's answer.
+        let binding = module.add_functions(vec![worker]);
+        module.set_statement(
+            dispatch,
+            Statement::Let {
+                result,
+                rhs: Rhs::Apply {
+                    callee: Atom::Function(worker),
+                    arguments: vec![start, start_answer],
+                },
+            },
+        );
+        module.set_block_statements(base, Vec::new());
+        let mut statements = base_block.statements;
+        statements.push(binding);
+        statements.extend(setup);
+        statements.push(dispatch);
+        debug_assert_eq!(body.statements, vec![dispatch]);
+        module.set_block_statements(definition.body, statements);
     }
 }
 

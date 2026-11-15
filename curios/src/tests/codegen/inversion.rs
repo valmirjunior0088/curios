@@ -1,4 +1,4 @@
-//! A structural recursion is its fold: each `/std` function written as a recursion on one peel is a fold after the ANF optimizer, which the lowering makes a loop, and keeps no frame a level.
+//! A structural recursion is a loop: each `/std` function written as a recursion on one peel enters a worker after the ANF optimizer, which takes the levels in turn and which the CPS optimizer makes a loop, so it keeps no frame a level.
 
 use {
     curios_anf::{BlockId, Rhs, Statement},
@@ -58,25 +58,28 @@ fn optimized(source: &str) -> (curios_anf::Module, curios_cps::Module) {
     )
 }
 
-/// Whether `body` is the fold an inversion makes: one fold it returns.
-fn is_fold(module: &curios_anf::Module, body: BlockId) -> bool {
-    let Some(block) = module.block(body) else {
-        return false;
-    };
-    let [statement] = block.statements.as_slice() else {
+/// Whether `body` is the loop an inversion makes: it ends by entering the worker the recursion became, named for it with `@loop`.
+fn is_loop(module: &curios_anf::Module, body: BlockId) -> bool {
+    let Some(&last) = module.block(body).and_then(|block| block.statements.last()) else {
         return false;
     };
     matches!(
-        module.statement(*statement),
+        module.statement(last),
         Some(Statement::Let {
-            rhs: Rhs::FoldNat { .. } | Rhs::FoldSequence { .. },
+            rhs: Rhs::Apply {
+                callee: curios_anf::Atom::Function(worker),
+                ..
+            },
             ..
-        })
+        }) if module
+            .function(*worker)
+            .and_then(|worker| worker.debug_name.as_deref())
+            .is_some_and(|name| name.ends_with("@loop"))
     )
 }
 
 #[test]
-fn every_recursion_on_one_peel_std_writes_is_its_fold_and_keeps_no_twin() {
+fn every_recursion_on_one_peel_std_writes_is_a_loop_and_keeps_no_twin() {
     let (anf, cps) = optimized(PROGRAM);
     for name in RECURSIONS {
         let bodies: Vec<BlockId> = anf
@@ -87,8 +90,8 @@ fn every_recursion_on_one_peel_std_writes_is_its_fold_and_keeps_no_twin() {
             .collect();
         assert!(!bodies.is_empty(), "{name} is in the program:\n{anf}");
         assert!(
-            bodies.iter().all(|&body| is_fold(&anf, body)),
-            "{name} is its fold:\n{anf}"
+            bodies.iter().all(|&body| is_loop(&anf, body)),
+            "{name} is a loop:\n{anf}"
         );
         assert!(
             cps.live_functions()
