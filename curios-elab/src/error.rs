@@ -1841,6 +1841,18 @@ impl Error {
         }
     }
 
+    /// Whether this error says a pattern is written in a shape its column's type does not have — a structure's head, a tuple's arity, two shapes in one column, a literal over a type no literal takes apart — which is so whichever case the arm reading the pattern states.
+    pub fn is_a_pattern_shape(&self) -> bool {
+        matches!(
+            self.unwrapped(),
+            Self::MatrixStructHead { .. }
+                | Self::MatrixTupleArity { .. }
+                | Self::MatrixInconsistentShape
+                | Self::MatrixLiteralColumn { .. }
+                | Self::MatrixByteSuccessor { .. }
+        )
+    }
+
     /// Say that the arm this error arose in is dead, for `dead`: a reason known where the arm opens, as its indices' clash is, or one a guard gives, found once an error is raised or a bound given up.
     pub fn in_dead_arm(self, dead: &DeadArm) -> Self {
         Self::InUnreachableArm {

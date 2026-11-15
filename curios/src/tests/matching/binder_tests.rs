@@ -398,6 +398,41 @@ fn a_tuple_pattern_takes_apart_every_field_of_its_tuple() {
     );
 }
 
+// A pattern written in a shape its column does not have is wrong whichever arm reads it. A row written after an arm a guard rules out joins that arm's case, so the pattern is first met there, and the refusal states the pattern's shape alone, with no word of the dead arm it was met in. Mutation-checked: keeping the guard's reason on a shape refusal reports the arm as never taken.
+#[test]
+fn a_pattern_of_the_wrong_shape_is_refused_whatever_arm_reads_it() {
+    let program = |pattern: &str| {
+        fill!(
+            r#"
+            use /std/{Nat};
+            struct A: Type { x: Nat }
+            struct B: Type { x: Nat }
+            let f(a: A, t: {Nat, Nat, Nat}) -> Nat =
+                match (0, a, t) | (1, _, _) => 0 | (_, ${pattern}) => x end;
+            /std/print(Nat/to_str(f(A { x = 1 }, (1, 2, 3))))
+            "#,
+            pattern
+        )
+    };
+
+    for (pattern, said) in [
+        (
+            "B { x }, _",
+            "a `B` pattern matches a value of that structure",
+        ),
+        (
+            "A { x }, (_, _)",
+            "a tuple pattern of 2 fields matches a tuple of 2 fields",
+        ),
+    ] {
+        let error = error(&program(pattern));
+        assert!(
+            error.contains(said) && !error.contains("this arm is never taken"),
+            "{error}"
+        );
+    }
+}
+
 // A binder beside `0` and no other literal is under the successor's case, `0` and a binder being induction's two cases: `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal.
 #[test]
 fn a_binder_beside_zero_alone_is_the_successors_arm() {

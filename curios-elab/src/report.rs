@@ -11,7 +11,7 @@ mod tests;
 
 use {
     super::{
-        Beside, Context, Error, HeldFrames, Rejected, callee, decided_sort_of, is_monad,
+        Beside, Context, DeadArm, Error, HeldFrames, Rejected, callee, decided_sort_of, is_monad,
         monad_shape, normalize, numeral_default, quality_of, reduce_forced, refold_recs,
         settle_qualities, stuck_on_metavar, watched, zonk_solved_term_metas,
     },
@@ -154,10 +154,20 @@ impl Error {
                 names,
                 error: Box::new(error.shown(context)),
             },
-            Self::InUnreachableArm { dead, error } => Self::InUnreachableArm {
-                dead,
-                error: Box::new(error.shown(context)),
-            },
+            Self::InUnreachableArm { dead, error } => {
+                let error = error.shown(context);
+                // A guard that always takes another case changes no column's type, so it says nothing of a pattern written in a shape its column does not have, which a row written after the arm meets inside it too, where the row joins the arm's case.
+                if let DeadArm::Guard { .. } | DeadArm::EnclosingGuard { .. } = *dead
+                    && error.is_a_pattern_shape()
+                {
+                    error
+                } else {
+                    Self::InUnreachableArm {
+                        dead,
+                        error: Box::new(error),
+                    }
+                }
+            }
             Self::InAlternative { written, error } => Self::InAlternative {
                 written,
                 error: Box::new(error.shown(context)),
