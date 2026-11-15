@@ -286,6 +286,8 @@ fn collapse(module: &mut Module, nest: Nest) {
     let rewritten = module.function_mut(function).expect("a nest is live");
     rewritten.params = params;
     rewritten.body = inner.body;
+    // A call now runs the innermost body, which the outer levels only bound: its claim is the call's, naming values every level's parameters still hold.
+    rewritten.droppable = inner.droppable;
 
     for (call, passed) in calls {
         if let Some(Node::ApplyFun { args, .. }) = module.node_mut(call) {

@@ -194,6 +194,24 @@ fn the_fewest_applications_a_call_makes_bound_the_collapse() {
     );
 }
 
+/// A call of a collapsed nest runs its innermost level's body, which the levels above only bound, so the function is as droppable as that level is, whatever the outer levels claimed.
+#[test]
+fn a_collapsed_nest_is_as_droppable_as_its_innermost_level() {
+    for claim in [Droppable::Never, Droppable::ALWAYS] {
+        let (mut module, g) = called_twice(1, 1, 1, false);
+        let Some(Node::LetFun { functions, .. }) = module.node(module.function(g).unwrap().body)
+        else {
+            unreachable!("a level binds the next");
+        };
+        let inner = functions[0];
+        module.function_mut(g).unwrap().droppable = Droppable::ALWAYS;
+        module.function_mut(inner).unwrap().droppable = claim.clone();
+
+        assert!(uncurry_nests(&mut module));
+        assert_eq!(module.function(g).unwrap().droppable, claim);
+    }
+}
+
 /// A function named as a value is called where no call site shows, with what no call passes, so its nest stays as written.
 #[test]
 fn a_nest_named_as_a_value_stays_as_written() {

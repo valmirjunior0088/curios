@@ -281,6 +281,19 @@ fn a_tail_forwarded_chain_is_uncurried_together() {
     module.verify().expect("the rewrite leaves valid CPS");
 }
 
+/// A member claimed droppable for building the closure it returns gives the claim up once uncurried: a call of it now applies that closure too, whose effects the claim never stated, so a call whose answer goes unread would drop them, as it dropped `/std/Channel/changed`'s wake of a waiter.
+#[test]
+fn an_uncurried_member_is_droppable_at_no_call() {
+    let (mut module, leader, forwarder) = chain(Use::Applied, Use::Applied);
+    for member in [leader, forwarder] {
+        module.function_mut(member).unwrap().droppable = Droppable::ALWAYS;
+    }
+    assert!(uncurry_returns(&mut module), "the class is admissible");
+    for member in [leader, forwarder] {
+        assert_eq!(module.function(member).unwrap().droppable, Droppable::Never);
+    }
+}
+
 /// A member nothing calls from outside the class takes its width from the class, and is rewritten with it.
 ///
 /// This is what "propagate the decision across tail-forwarding" has to mean. Tail-forwarding makes the members return through one another, so the class shares one stream of returned closures; a member with no caller of its own contributes no reading of that stream and contradicts none, and requiring it to be observed independently would decline a chain for a reason that is not one. `state_monad`'s `{/loop, /loop/2}` escapes that only because each of the two happens to have a caller.

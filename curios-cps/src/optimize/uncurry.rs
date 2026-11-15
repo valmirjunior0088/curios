@@ -10,8 +10,8 @@ pub use nest::*;
 
 use {
     crate::{
-        Atom, CallAnalysis, Callee, ContinuationId, Edge, FunctionId, Module, Node, NodeId,
-        ValueId, analyze_calls, atoms, collect_control_targets, continuation_entries,
+        Atom, CallAnalysis, Callee, ContinuationId, Droppable, Edge, FunctionId, Module, Node,
+        NodeId, ValueId, analyze_calls, atoms, collect_control_targets, continuation_entries,
         function_nodes, nodes_from,
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -384,7 +384,10 @@ fn apply_class(
         let params = (0..width)
             .map(|index| module.add_value(Some(format!("applied/{}/{index}", member.index()))))
             .collect::<Vec<_>>();
-        module.function_mut(member).unwrap().params.extend(&params);
+        let definition = module.function_mut(member).unwrap();
+        definition.params.extend(&params);
+        // A call now applies what the member returned, whose effects no claim made of building it states.
+        definition.droppable = Droppable::Never;
         extra.insert(member, params);
     }
 
