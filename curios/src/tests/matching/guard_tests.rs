@@ -503,3 +503,29 @@ fn a_sequence_split_with_guards_is_held_to_coverage_and_order() {
         "{misplaced}"
     );
 }
+
+// A guarded arm read as the function of what its failures take — two guards, or a guard on an arm its own walk types — is checked in a region whose type is a reduct: after a `!`, `Parse(Str, Nat)` stands unfolded, holding the method its carrier's sealed `Input` witness gives. The failure's type comes from the function type the arm is checked at and is not elaborated again, where that method is private to `/std/Parse`.
+#[test]
+fn a_guarded_arm_is_read_in_a_region_whose_type_holds_a_sealed_method() {
+    let source = r#"
+        use /std/{Char, Nat, Option, Parse, Result, Str};
+        let two_guards() -> Parse(Str, Nat) =
+            let c = Parse/str/char!;
+            match Option/some(Char/to_nat(c))
+            | some(n), n > 50, n < 55 => Parse/pure(1)
+            | _ => Parse/pure(0)
+            end;
+        let walked() -> Parse(Str, Nat) =
+            let c = Parse/str/char!;
+            match Char/to_nat(c)
+            | '/' => Parse/pure(2)
+            | _, Char/is_ascii_digit(c) => Parse/pure(3)
+            | _ => Parse/pure(4)
+            end;
+        let read(p: Parse(Str, Nat), s: Str) -> Str =
+            match Parse/run(p, s) | success(n) => Nat/to_str(n) | failure(_) => "refused" end;
+        /std/print(Str/join(" ", [read(two_guards(), "4"), read(walked(), "/"), read(walked(), "7"), read(walked(), "x")]))
+        "#;
+
+    assert_eq!(run(source), b"1 2 3 4");
+}

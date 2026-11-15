@@ -639,7 +639,7 @@ impl<'m> Compiler<'m> {
         let function = match self.strays[row] {
             true => self.walked(context, &line)?,
             false => {
-                let function = self.failing(context, line, &type_);
+                let function = self.failing(context, line);
                 let expected = failing_type(context, &type_);
                 let (function, _) = elaborate(context, &function, Mode::Check(expected))
                     .map_err(|error| self.in_alternative(row, error))?;
@@ -1535,8 +1535,8 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// A row with guards as the function of what a value takes where one of them fails, `(failed: type_) => …`: each guard a `Bool` match or a match over its value, the row's body past the last, and `failed` wherever one fails — under what the row binds ahead of it, as [`Compiler::body_of`] writes a body.
-    fn failing(&mut self, context: &mut Context, line: Line<'m>, type_: &Term) -> Term {
+    /// A row with guards as the function of what a value takes where one of them fails, `(failed) => …`: each guard a `Bool` match or a match over its value, the row's body past the last, and `failed` wherever one fails — under what the row binds ahead of it, as [`Compiler::body_of`] writes a body. It is checked at [`failing_type`], whose domain gives `failed` its type: the type the leaf answers is elaborated already, and written in again as an annotation it would be elaborated a second time, in the match's module, where a projection reduction left in it may be private (a sealed concept's method, as `Parse(I, A)` reduces to `Input/Admits` of `I`'s witness).
+    fn failing(&mut self, context: &mut Context, line: Line<'m>) -> Term {
         let failed = context.fresh(None);
         let mut values = line
             .taken
@@ -1550,7 +1550,7 @@ impl<'m> Compiler<'m> {
         let passing = self.passing(context, line.row, 0, &mut values, &Term::free_var(&failed));
         let chain = Self::bound_ahead(context, line.lets, passing);
 
-        Term::func(vec![(failed, type_.clone())], chain)
+        Term::func(vec![(failed, Term::hole(context.mint_metavar()))], chain)
     }
 
     /// The guards of the row at `row` from the one at `index`, with `values` standing for the binders written before it, as the term a value that passed the ones before comes to: the row's body where none is left, and `failed` where this one fails.
@@ -1686,7 +1686,7 @@ impl<'m> Compiler<'m> {
                 let Mode::Check(type_) = mode else {
                     unreachable!("a row is walked against the type its case stands at");
                 };
-                let function = self.failing(context, line, &type_);
+                let function = self.failing(context, line);
                 let expected = failing_type(context, &type_);
                 let (body, _) = elaborate(context, &function, Mode::Check(expected))?;
 
