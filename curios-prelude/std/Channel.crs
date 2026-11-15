@@ -57,7 +57,7 @@ pub let new(
 pub let try_send(@A: Type, s: Sender(A), a: A) -> Io(Push) =
     let outcome = /sys/Channel/push(s.0.channel, a)!;
     match outcome
-    | taken() => Io/bind(changed(s.0.readers), (_) => Io/pure(outcome))
+    | taken() => Io/bind(changed(s.0.readers), (()) => Io/pure(outcome))
     | _ => Io/pure(outcome)
     end;
 
@@ -65,14 +65,14 @@ pub let try_send(@A: Type, s: Sender(A), a: A) -> Io(Push) =
 pub let try_receive(@A: Type, r: Receiver(A)) -> Io(Take(A)) =
     let outcome = /sys/Channel/take(r.0.channel)!;
     match outcome
-    | item(_) => Io/bind(changed(r.0.writers), (_) => Io/pure(outcome))
+    | item(_) => Io/bind(changed(r.0.writers), (()) => Io/pure(outcome))
     | _ => Io/pure(outcome)
     end;
 
 --- End what the channel sends: a receiver drains what is already queued and then answers `none`, and a send answers `false`.
 pub let finish(@A: Type, s: Sender(A)) -> Io({}) =
-    let _ = /sys/Channel/close(s.0.channel)!;
-    let _ = changed(s.0.readers)!;
+    let () = /sys/Channel/close(s.0.channel)!;
+    let () = changed(s.0.readers)!;
     changed(s.0.writers);
 
 --- An offer that yields the next value, or `none` once the channel is closed and drained.

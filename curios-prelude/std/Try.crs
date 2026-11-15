@@ -108,9 +108,9 @@ satisfy (@E: Type, use Show(E)) => Program(Try(Io, E, {})) {
     execute(program) =
         let outcome = run(program)!;
         match outcome
-        | success(_) => Io/pure(())
+        | success(()) => Io/pure(())
         | failure(why) =>
-            let _ = print_err(Str/concat(Show/show(why), "\n"))!;
+            let () = print_err(Str/concat(Show/show(why), "\n"))!;
             Proc/exit(1)
         end,
 }

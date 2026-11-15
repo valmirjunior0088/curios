@@ -17,7 +17,7 @@ let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =
     end;
 
 let date_time_tail(date: Date) -> Parse(Str, Toml) =
-    let _ = rfc3339/separator!;
+    let () = rfc3339/separator!;
     let time = iso8601/time!;
     Parse/or(
         offset_tail(date, time),

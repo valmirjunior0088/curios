@@ -77,7 +77,7 @@ let exchange(c: Client, request: Request) -> Try(Io, Error, Response) =
                 let r = Reader/new(s)!;
                 let answered = reply(c.limits, request.method, r)!;
                 match wrote
-                | success(_) => Try/pure(answered)
+                | success(()) => Try/pure(answered)
                 | failure(unsent) =>
                     match answered
                     | success(_) => Try/pure(answered)

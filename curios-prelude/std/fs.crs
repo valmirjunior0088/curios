@@ -54,7 +54,7 @@ foreign file_stat(Bytes) -> {status: Nat, kind: Nat, size: Nat, mtime_secs: Int,
 --- What is at `path`. A kind the host names by no code this library knows is a reply its row rules out.
 pub let stat(path: Path) -> Try(Io, Io/Error, Metadata) =
     let reply = file_stat(Path/to_bytes(path))!;
-    let _ = Status/succeeded(reply.status)!;
+    let () = Status/succeeded(reply.status)!;
     match kind_of(reply.kind)
     | some(kind) =>
         Try/pure(
@@ -93,7 +93,7 @@ foreign dir_list(Bytes) -> {status: Nat, names: List(Bytes)};
 --- The entries' names, each a `Path` that `Path/join` puts back under `path`.
 pub let list(path: Path) -> Try(Io, Io/Error, List(Path)) =
     let reply = dir_list(Path/to_bytes(path))!;
-    let _ = Status/succeeded(reply.status)!;
+    let () = Status/succeeded(reply.status)!;
     Try/pure(List/map(reply.names, Path/of_bytes));
 
 --- Create the directory at this path: `ok`, or the status of the failure.
@@ -132,14 +132,14 @@ pub let rename(from: Path, to: Path) -> Try(Io, Io/Error, {}) =
 pub let create_dir_all(path: Path) -> Try(Io, Io/Error, {}) =
     let r = Try/run(create_dir(path))!;
     match r
-    | success(_) => Try/pure(())
+    | success(()) => Try/pure(())
     | failure(e) =>
         match e
         | already_exists() => Try/pure(())
         | not_found() =>
             match Path/parent(path)
             | some(parent) =>
-                let _ = create_dir_all(parent)!;
+                let () = create_dir_all(parent)!;
                 create_dir(path)
             | none() => Try/raise(e)
             end
@@ -153,7 +153,7 @@ pub let remove_all(path: Path) -> Try(Io, Io/Error, {}) =
     match m.kind
     | directory() =>
         let entries = list(path)!;
-        let _ = remove_each(path, entries)!;
+        let () = remove_each(path, entries)!;
         remove_dir(path)
     | _ => remove_file(path)
     end
@@ -161,6 +161,6 @@ and remove_each(dir: Path, entries: List(Path)) -> Try(Io, Io/Error, {}) =
     match entries
     | [] => Try/pure(())
     | [entry, ..rest] =>
-        let _ = remove_all(Path/join(dir, entry))!;
+        let () = remove_all(Path/join(dir, entry))!;
         remove_each(dir, rest)
     end;

@@ -78,12 +78,12 @@ let held_once(
     | none() =>
         match y
         | none() => Eq/refl()
-        | some(_) => match Bool/false_neq_true(e) end
+        | some(()) => match Bool/false_neq_true(e) end
         end
-    | some(_) =>
+    | some(()) =>
         match y
         | none() => match Bool/false_neq_true(Eq/sym(e)) end
-        | some(_) => Eq/refl()
+        | some(()) => Eq/refl()
         end
     end;
 

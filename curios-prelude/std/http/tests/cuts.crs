@@ -85,7 +85,7 @@ let chunked: (read/Decoded, Bytes) -> Reader/Step(read/Decoded, Refusal, Bytes) 
     (decoded, held) => read/chunked(Limits/server, decoded, held);
 
 let stated(n: Nat) -> ({}, Bytes) -> Reader/Step({}, Refusal, Bytes) =
-    (_, held) => read/length(Limits/server, n, held);
+    ((), held) => read/length(Limits/server, n, held);
 
 -- A head is its lines without the empty one that ends them, and what follows is left for the body, wherever the bytes are cut; short of its empty line it wants more.
 test a_head_reads_whole_at_every_cut =

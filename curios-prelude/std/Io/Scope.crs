@@ -19,7 +19,7 @@ let counted(live: Live, change: (Nat) -> Nat) -> Io({}) =
 
 -- One child of `live` ended.
 let ended(live: Live) -> Io({}) =
-    let _ = counted(live, (n) => match n | 0 => 0 | m + 1 => m end)!;
+    let () = counted(live, (n) => match n | 0 => 0 | m + 1 => m end)!;
     Signal/notify(live.ended);
 
 --- What a scope's body spawns its children into and defers its releases to.
@@ -38,8 +38,8 @@ pub struct Task(A: Type): Type {
 --- `child` run beside the body of the scope `s`, answering at once with the task `Task/join` waits on. A child still running when the body of its scope answers is cancelled where it waits, and one spawned once the scope has answered never runs.
 pub let spawn(@A: Type, s: Scope, child: Io(A)) -> Io(Task(A)) =
     let f = Future/new()!;
-    let _ = counted(s.live, (n) => n + 1)!;
-    let finished = Io/bind(child, (a) => Io/bind(Future/fill(f, a), (_) => ended(s.live)));
+    let () = counted(s.live, (n) => n + 1)!;
+    let finished = Io/bind(child, (a) => Io/bind(Future/fill(f, a), (()) => ended(s.live)));
     let _ = Channel/send(s.children, finished)!;
     Io/pure(Task { f });
 
@@ -51,7 +51,7 @@ pub let join_all(s: Scope) -> Io({}) =
     match n
     | 0 => Io/pure(())
     | _ =>
-        let _ = Signal/wait(s.live.ended)!;
+        let () = Signal/wait(s.live.ended)!;
         join_all(s)
     end;
 
@@ -66,7 +66,7 @@ pub let defer(s: Scope, release: (Ended) -> Io({})) -> Io({}) =
 let each(releases: List((Ended) -> Io({})), how: Ended) -> Io({}) =
     match releases
     | [] => Io/pure(())
-    | [r, ..more] => Io/bind(r(how), (_) => each(more, how))
+    | [r, ..more] => Io/bind(r(how), (()) => each(more, how))
     end;
 
 -- Every release deferred to `s`, the latest first, told `how` it ended.
@@ -95,7 +95,7 @@ pub let run(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
             releases = releases };
     let answer: Future(A) = Future/new()!;
     let driven() -> Io(A) =
-        let _ = drive([into(body(s), answer)], spawned(ends.1), answered(answer))!;
-        let _ = Channel/finish(ends.0)!;
+        let () = drive([into(body(s), answer)], spawned(ends.1), answered(answer))!;
+        let () = Channel/finish(ends.0)!;
         Future/wait(answer);
     using((how) => released(s, how), driven());

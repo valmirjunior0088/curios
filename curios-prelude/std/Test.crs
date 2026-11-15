@@ -103,7 +103,7 @@ pub let all(tests: List(Test({}))) -> Test({}) =
         (next, state: {test: Test({}), index: Nat}) =>
             (
                 test =
-                    bind(state.test, (_) =>
+                    bind(state.test, (()) =>
                         context(Str/concat("case ", Nat/to_str(state.index)), next)),
                 index = state.index + 1)).test;
 
@@ -140,11 +140,11 @@ let message(failure: Failure) -> Str =
 let report(name: Str, test: Test({})) -> Io(Bool) =
     let result = finish(test)!;
     match result
-    | success(_) =>
-        let _ = print(Str/concat(name, ": passed\n"))!;
+    | success(()) =>
+        let () = print(Str/concat(name, ": passed\n"))!;
         Io/pure(true)
     | failure(failure) =>
-        let _ = Fmt/print("%: failed\n  %\n")(name)(message(failure))!;
+        let () = Fmt/print("%: failed\n  %\n")(name)(message(failure))!;
         Io/pure(false)
     end;
 
@@ -152,9 +152,9 @@ let report(name: Str, test: Test({})) -> Io(Bool) =
 let answer(test: Test({})) -> Io(Bool) =
     let result = finish(test)!;
     match result
-    | success(_) => Io/pure(true)
+    | success(()) => Io/pure(true)
     | failure(failure) =>
-        let _ = print_err(Str/concat(message(failure), "\n"))!;
+        let () = print_err(Str/concat(message(failure), "\n"))!;
         Io/pure(false)
     end;
 

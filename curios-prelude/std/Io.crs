@@ -111,12 +111,12 @@ end
 let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
     /sys/Io/advance(
         body,
-        (a) => bind(release(Ended/finished()), (_) => pure(a)),
+        (a) => bind(release(Ended/finished()), (()) => pure(a)),
         (on, filled, cancel, rest) =>
             /sys/Io/suspend(
                 on,
                 filled,
-                bind(cancel, (_) => release(Ended/cancelled())),
+                bind(cancel, (()) => release(Ended/cancelled())),
                 using(release, rest)));
 
 --- One read's answer: bytes, or the end of the stream. A read that fails says so in its `Try`.
@@ -180,7 +180,7 @@ pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> T
         let c = Read/read(from, 4096)!;
         match c
         | bytes(b) =>
-            let _ = Write/write(to, b)!;
+            let () = Write/write(to, b)!;
             go()
         | ended() => Try/pure(())
         end;
@@ -212,7 +212,7 @@ let waits(@A: Type, offers: List(Offer(A))) -> Io(List(Waiting)) =
 let released(ws: List(Waiting)) -> Io({}) =
     match ws
     | [] => pure(())
-    | [w, ..more] => bind(w.release, (_) => released(more))
+    | [w, ..more] => bind(w.release, (()) => released(more))
     end;
 
 --- The value of the first offer to yield one, waiting on what all of them wait on while every one declines. Offers are tried in list order, so a selection is not fair, and nothing leaves a source until it is the answer, so an offer that loses has consumed nothing. Which offer answered is the value's to say, through `Offer/map`.
@@ -229,7 +229,7 @@ pub let select(@A: Type, offers: List(Offer(A))) -> Io(A) =
             List/flatten(List/map(ws, (w: Waiting) => w.on)),
             List/flatten(List/map(ws, (w: Waiting) => w.filled)),
             release,
-            bind(release, (_) => select(offers)))
+            bind(release, (()) => select(offers)))
     end;
 
 -- Descriptions run side by side under one: each runs until it suspends, and the one that holds them waits on what all of them wait on. A branch no longer needed — a loser, a timed-out action, a child of a scope whose body has answered — is cancelled where it waits.
@@ -243,7 +243,7 @@ end
 let step(b: Io({})) -> Io(Option(Branch)) =
     /sys/Io/advance(
         b,
-        (_) => pure(Option/none()),
+        (()) => pure(Option/none()),
         (on, filled, cancel, rest) => pure(Option/some(Branch/waiting(on, filled, cancel, rest))));
 
 -- Whether a cell of `cells` is filled.
@@ -252,7 +252,7 @@ let any_filled(cells: List(Cell({}))) -> Io(Bool) =
     | [] => pure(false)
     | [cell, ..more] =>
         let held = Cell/poll(cell)!;
-        match held | some(_) => pure(true) | none() => any_filled(more) end
+        match held | some(()) => pure(true) | none() => any_filled(more) end
     end;
 
 -- Whether any of the first `n` of `flags` holds, and the flags after them.
@@ -283,7 +283,7 @@ let cancel_all(branches: List(Branch)) -> Io({}) =
     match branches
     | [] => pure(())
     | [b, ..more] =>
-        let _ =
+        let () =
             match b
             | waiting(_, _, cancel, _) => cancel
             | fresh(_) => pure(())
@@ -373,7 +373,7 @@ let into(@A: Type, a: Io(A), f: Future(A)) -> Branch =
 pub let both(@A: Type, @B: Type, a: Io(A), b: Io(B)) -> Io({A, B}) =
     let fa = Future/new()!;
     let fb = Future/new()!;
-    let _ = drive([into(a, fa), into(b, fb)], nothing_more, pure(false))!;
+    let () = drive([into(a, fa), into(b, fb)], nothing_more, pure(false))!;
     let x = Future/wait(fa)!;
     let y = Future/wait(fb)!;
     pure((x, y));
@@ -401,7 +401,7 @@ let awaited(@A: Type, fs: List(Future(A))) -> Io(List(A)) =
 --- Every action of `actions` side by side, and their answers in their order once all have them.
 pub let all(@A: Type, actions: List(Io(A))) -> Io(List(A)) =
     let pairs = promised(actions)!;
-    let _ =
+    let () =
         drive(
             List/map(pairs, (p: {Io(A), Future(A)}) => into(p.0, p.1)),
             nothing_more,
@@ -411,9 +411,9 @@ pub let all(@A: Type, actions: List(Io(A))) -> Io(List(A)) =
 --- The first of `actions` to answer; every other one is cancelled where it waits. Actions are stepped in list order, so of two that can answer at once — two whose waits ended together — the earlier in the list answers. An action dropped part-way loses whatever it had taken and not yet answered with, which is what abandoning a running computation costs — a selection over offers takes nothing until it keeps it, and is the way to choose without paying that. Which action answered is its answer's to say. With no action, nothing answers.
 pub let race(@A: Type, actions: List(Io(A))) -> Io(A) =
     let won: Future(A) = Future/new()!;
-    let _ = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more, answered(won))!;
+    let () = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more, answered(won))!;
     Future/wait(won);
 
 --- `a`'s answer, or `none` where `d` passes first, `a` then cancelled where it waits. An answer that lands after `d` is dropped, which is what a timeout means.
 pub let timeout(@A: Type, d: Duration, a: Io(A)) -> Io(Option(A)) =
-    race([bind(a, (x) => pure(Option/some(x))), bind(sleep(d), (_) => pure(Option/none()))]);
+    race([bind(a, (x) => pure(Option/some(x))), bind(sleep(d), (()) => pure(Option/none()))]);

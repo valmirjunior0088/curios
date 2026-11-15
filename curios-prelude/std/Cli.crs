@@ -408,7 +408,7 @@ let environment(names: List(Str)) -> Io(Map(Str, Str)) =
     end;
 
 let refuse(text: Str) -> Io({}) =
-    let _ = print_err(text)!;
+    let () = print_err(text)!;
     Proc/exit(2);
 
 --- The process's command line read against `cli`, beside the environment variables it declares, and what it parsed into handed to `run`. Help and the version are written to standard output; a line refused is reported on standard error with the usage of the command that refused it, and ends the program with 2.
@@ -441,7 +441,7 @@ pub let try_main(
     match check/problems(command, version)
     | [] => main(Cli { command = command, version = version, @ok = Bool/True/qed() }, run)
     | [p, ..more] =>
-        let _ =
+        let () =
             Fmt/print_err("error: invalid command line declaration: %\n")(
                 Str/join("; ", List/map([p, ..more], described)))!;
         Proc/exit(1)

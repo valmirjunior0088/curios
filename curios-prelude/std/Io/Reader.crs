@@ -80,19 +80,19 @@ let kept(@S: Type, r: Reader(S), held: Held) -> Io({}) =
 --- The bytes `r` holds, left where they are.
 pub let held(@S: Type, r: Reader(S)) -> Io(Bytes) =
     let now = taken(r)!;
-    let _ = kept(r, now)!;
+    let () = kept(r, now)!;
     Io/pure(now.bytes);
 
 -- Everything `r` holds, taken as one piece.
 let drained(@S: Type, r: Reader(S)) -> Io(Bytes) =
     let now = taken(r)!;
-    let _ = kept(r, Held { cuts = now.cuts + 1, bytes = x[] })!;
+    let () = kept(r, Held { cuts = now.cuts + 1, bytes = x[] })!;
     Io/pure(now.bytes);
 
 -- Whether `r` holds other than the `bytes` a piece left at `cuts`: what another reader cut or took in meanwhile, which the piece has not been asked of.
 let touched(@S: Type, r: Reader(S), cuts: Nat, bytes: Bytes) -> Io(Bool) =
     let now = taken(r)!;
-    let _ = kept(r, now)!;
+    let () = kept(r, now)!;
     Io/pure(Bool/not(now.cuts == cuts && Bytes/len(now.bytes) == Bytes/len(bytes)));
 
 --- `piece` asked of the bytes `r` holds, and asked again each time its stream yields more, until it answers: the piece, or how it went unread. The bytes after the piece, and all of them where there is none, stay in `r`.
@@ -113,10 +113,10 @@ pub let take(
         let at = match seen == now.cuts | true => from | false => state end;
         match piece(at, now.bytes)
         | took(a, rest) =>
-            let _ = kept(r, Held { cuts = now.cuts + 1, bytes = rest })!;
+            let () = kept(r, Held { cuts = now.cuts + 1, bytes = rest })!;
             Io/pure(Result/success(a))
         | refused(why) =>
-            let _ = kept(r, now)!;
+            let () = kept(r, now)!;
             Io/pure(Result/failure(Stop/refused(why)))
         | more(next, bytes) =>
             -- A piece that kept fewer bytes than it was asked of has cut some.
@@ -125,12 +125,12 @@ pub let take(
                 | true => now.cuts
                 | false => now.cuts + 1
                 end;
-            let _ = kept(r, Held { cuts = cuts, bytes = bytes })!;
+            let () = kept(r, Held { cuts = cuts, bytes = bytes })!;
             let arrived = Try/run(Io/read(@S, r.stream, 65536))!;
             match arrived
             | success(bytes(fresh)) =>
                 let then = taken(r)!;
-                let _ = kept(r, Held { cuts = then.cuts, bytes = x[..then.bytes, ..fresh] })!;
+                let () = kept(r, Held { cuts = then.cuts, bytes = x[..then.bytes, ..fresh] })!;
                 go(next, cuts)
             | success(ended()) =>
                 let moved = touched(r, cuts, bytes)!;
@@ -227,7 +227,7 @@ pub let exactly(
     n: Nat,
 ) -> Try(Io, Error, {bytes: Bytes, whole: Bool}) =
     let read() -> Io(Result(Error, {bytes: Bytes, whole: Bool})) =
-        let got = take(r, (_: {}, bytes: Bytes) => piece/exactly(r.limit, n, bytes), ())!;
+        let got = take(r, ((): {}, bytes: Bytes) => piece/exactly(r.limit, n, bytes), ())!;
         settled(
             r,
             got,
@@ -238,6 +238,6 @@ pub let exactly(
 --- Everything up to the end of the stream, the bytes held first. More than `r`'s bound is `too_long`, and stays held.
 pub let rest(@S: Type, use Io/Read(S), r: Reader(S)) -> Try(Io, Error, Bytes) =
     let read() -> Io(Result(Error, Bytes)) =
-        let got = take(r, (_: {}, bytes: Bytes) => piece/rest(r.limit, bytes), ())!;
+        let got = take(r, ((): {}, bytes: Bytes) => piece/rest(r.limit, bytes), ())!;
         settled(r, got, (found: Bytes) => found, (last: Bytes) => last);
     Try/attempt(read());

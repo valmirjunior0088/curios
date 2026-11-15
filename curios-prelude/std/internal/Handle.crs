@@ -25,7 +25,7 @@ let mode_code(mode: Mode) -> Nat =
 --- The handle the file at `path` opens to in `mode`: what a file and a terminal are each opened through.
 pub let open(path: Bytes, mode: Mode) -> Try(Io, Io/Error, Handle) =
     let reply = file_open(path, mode_code(mode))!;
-    let _ = Status/succeeded(reply.status)!;
+    let () = Status/succeeded(reply.status)!;
     Try/pure(reply.handle);
 
 --- Close this handle.
@@ -91,7 +91,7 @@ pub let retried(
     let reply = attempt!;
     match Status/of_code(status(reply))
     | blocked() =>
-        let _ = wait(h, interest)!;
+        let () = wait(h, interest)!;
         retried(h, interest, attempt, status, settle)
     | settled(settled) => settle(reply, settled)
     end;

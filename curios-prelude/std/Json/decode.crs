@@ -1,13 +1,13 @@
 use /std/{Str, Bool, Char, Flt, Nat, Int, Parse, Option, List, Result, Json};
 
 let null_value: Parse(Str, Json) =
-    Parse/map(Parse/str/literal("null"), (_) => Json/null());
+    Parse/map(Parse/str/literal("null"), (()) => Json/null());
 
 let true_value: Parse(Str, Json) =
-    Parse/map(Parse/str/literal("true"), (_) => Json/bool(true));
+    Parse/map(Parse/str/literal("true"), (()) => Json/bool(true));
 
 let false_value: Parse(Str, Json) =
-    Parse/map(Parse/str/literal("false"), (_) => Json/bool(false));
+    Parse/map(Parse/str/literal("false"), (()) => Json/bool(false));
 
 --- The number a run of decimal digits spells, `0` for an empty one.
 let digits_value(run: Str) -> Nat =
@@ -174,7 +174,7 @@ let ws: Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws), (_) => ());
 
 let symbol(c: Char) -> Parse(Str, Char) =
-    let _ = ws!;
+    let () = ws!;
     Parse/str/expect(c);
 
 --- The next character without consuming it; declines at the end of the input.
@@ -193,7 +193,7 @@ let bracketed(
     after: Str,
 ) -> Parse(Str, List(A)) =
     let _ = symbol(open)!;
-    let _ = ws!;
+    let () = ws!;
     let next = peek_char()!;
     match next == close
     | true => Parse/map(Parse/str/char, (_) => [])
@@ -204,7 +204,7 @@ let bracketed(
     end;
 
 let value() -> Parse(Str, Json) =
-    let _ = ws!;
+    let () = ws!;
     let next = peek_char()!;
     match Char/to_nat(next)
     | 'n' => null_value
@@ -224,7 +224,7 @@ and array: Parse(Str, Json) =
 and object: Parse(Str, Json) =
     Parse/map(bracketed('{', member(), '}', "expected ',' or '}'"), (pairs) => Json/obj(pairs))
 and member() -> Parse(Str, {Str, Json}) =
-    let _ = ws!;
+    let () = ws!;
     let key = raw_str()!;
     Parse/commit(member_value(key))
 and member_value(key: Str) -> Parse(Str, {Str, Json}) =
@@ -235,8 +235,8 @@ and member_value(key: Str) -> Parse(Str, {Str, Json}) =
 -- A whole document, surrounding whitespace included; anything after the value is refused.
 let document() -> Parse(Str, Json) =
     let parsed = value()!;
-    let _ = ws!;
-    let _ = Parse/eof()!;
+    let () = ws!;
+    let () = Parse/eof()!;
     Parse/pure(parsed);
 
 --- The value `source` writes as a whole document, or the refusal that stopped it.

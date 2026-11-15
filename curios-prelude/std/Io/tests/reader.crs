@@ -82,10 +82,10 @@ let field(limit: Nat) -> (Nat, Bytes) -> Reader/Step(Nat, Io/Error, Bytes) =
     (searched, held) => Reader/piece/until(limit, ',', searched, held);
 
 let counted(limit: Nat, n: Nat) -> ({}, Bytes) -> Reader/Step({}, Io/Error, Bytes) =
-    (_, held) => Reader/piece/exactly(limit, n, held);
+    ((), held) => Reader/piece/exactly(limit, n, held);
 
 let left(limit: Nat) -> ({}, Bytes) -> Reader/Step({}, Io/Error, Bytes) =
-    (_, held) => Reader/piece/rest(limit, held);
+    ((), held) => Reader/piece/rest(limit, held);
 
 -- A line is the bytes before its newline, a carriage return that ends them going with it, and what follows is left for the next read, wherever the bytes are cut — between the carriage return and the newline too; short of its newline it wants more.
 test a_line_reads_whole_at_every_cut =

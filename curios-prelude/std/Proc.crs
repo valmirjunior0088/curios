@@ -50,7 +50,7 @@ let drain(o: Option(Input)) -> Io(Result(Io/Error, Bytes)) =
     end;
 
 let fed(i: Output, input: Bytes) -> Try(Io, Io/Error, {}) =
-    let _ = Io/write(i, input)!;
+    let () = Io/write(i, input)!;
     Io/finish(i);
 
 -- A child that stops reading before its input is all written leaves the rest unread, which is its own to answer for: the broken pipe is no failure of the run.
@@ -72,7 +72,7 @@ let exchange(
             feed(Child/stdin(c), input),
             Io/both(drain(Child/stdout(c)), drain(Child/stderr(c))))!;
     let (o, e) = outputs;
-    let _ = fed!;
+    let () = fed!;
     let stdout = o!;
     let stderr = e!;
     let exit = Child/wait(c)!;
@@ -123,7 +123,7 @@ foreign proc_cwd() -> {status: Nat, path: Bytes};
 --- The working directory of this process.
 pub let cwd() -> Try(Io, Io/Error, Path) =
     let reply = proc_cwd()!;
-    let _ = Status/succeeded(reply.status)!;
+    let () = Status/succeeded(reply.status)!;
     Try/pure(Path/of_bytes(reply.path));
 
 --- End the instance with this code. The call does not return.
@@ -175,7 +175,7 @@ satisfy Io/Close(Output) {
 }
 
 let ended(o: Output) -> Try(Io, Io/Error, {}) =
-    let _ = Io/close(o)!;
+    let () = Io/close(o)!;
     Try/pure(());
 
 --- The reader at the other end reads the end of the stream: the stream is closed, which is the one way a pipe or a standard stream tells its reader it has ended. Writing it after answers `not_found`, as a closed handle does.

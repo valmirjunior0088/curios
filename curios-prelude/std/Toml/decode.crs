@@ -13,18 +13,18 @@ end
 
 let key_path(acc: List(Str)) -> Parse(Str, List(Str)) =
     let k = key_part!;
-    let _ = ws!;
+    let () = ws!;
     let acc2 = [..acc, k];
     let dot = Parse/optional(Parse/str/expect('.'))!;
     match dot
     | some(_) =>
-        let _ = ws!;
+        let () = ws!;
         key_path(acc2)
     | none() => Parse/pure(acc2)
     end;
 
 let header(double: Bool) -> Parse(Str, List(Str)) =
-    let _ = ws!;
+    let () = ws!;
     let path = key_path([])!;
     let _ = Parse/label(Parse/str/expect(']'), "expected ']' in table header")!;
     match double
@@ -40,7 +40,7 @@ let stmt() -> Parse(Str, Stmt) =
     | none() =>
         let path = key_path([])!;
         let _ = Parse/label(Parse/str/expect('='), "expected '=' after key")!;
-        let _ = ws!;
+        let () = ws!;
         let parsed = value()!;
         Parse/pure(Stmt/assign(path, parsed))
     | some(_) =>
@@ -56,13 +56,13 @@ let stmt() -> Parse(Str, Stmt) =
     end;
 
 let stmts(acc: List(Stmt)) -> Parse(Str, List(Stmt)) =
-    let _ = trivia!;
+    let () = trivia!;
     let done = Parse/optional(Parse/eof())!;
     match done
-    | some(_) => Parse/pure(acc)
+    | some(()) => Parse/pure(acc)
     | none() =>
         let s = stmt()!;
-        let _ = line_end()!;
+        let () = line_end()!;
         stmts([..acc, s])
     end;
 

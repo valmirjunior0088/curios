@@ -22,7 +22,7 @@ end
 pub let open(s: Io/Scope, path: Path, mode: Mode) -> Try(Io, Io/Error, File) =
     let h = Handle/open(Path/to_bytes(path), mode)!;
     let f = File { h };
-    let _ = Io/Scope/defer(s, (_) => Io/close(f))!;
+    let () = Io/Scope/defer(s, (_) => Io/close(f))!;
     Try/pure(f);
 
 --- Close `f` before its scope ends. The scope's own close then finds nothing to close.

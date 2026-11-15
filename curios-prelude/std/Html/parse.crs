@@ -90,14 +90,14 @@ let unquoted: Parse(Str, Str) =
     Parse/str/take_while((c) => Bool/not(is_ws(c) || c == '>'));
 
 let attr_value() -> Parse(Str, Str) =
-    let _ = ws!;
+    let () = ws!;
     let _ = Parse/str/expect('=')!;
-    let _ = ws!;
+    let () = ws!;
     Parse/or(quoted('"'), Parse/or(quoted('\''), unquoted));
 
 --- One attribute: a name, then `=` and a value, quoted or bare, when there is one. Declines at anything but a name, which ends the run.
 let attribute() -> Parse(Str, Attr) =
-    let _ = ws!;
+    let () = ws!;
     let n = name!;
     match Str/is_empty(n)
     | true => Parse/fail("an attribute has a name")
@@ -111,21 +111,21 @@ let attribute() -> Parse(Str, Attr) =
     end;
 
 let close_tag() -> Parse(Str, {}) =
-    let _ = Parse/str/literal("</")!;
+    let () = Parse/str/literal("</")!;
     let _ = name!;
-    let _ = ws!;
+    let () = ws!;
     let _ = Parse/optional(Parse/str/expect('>'))!;
     Parse/pure(());
 
 let comment() -> Parse(Str, Html) =
-    let _ = Parse/str/literal("<!--")!;
+    let () = Parse/str/literal("<!--")!;
     let body = Parse/str/until("-->")!;
     let _ = Parse/optional(Parse/str/literal("-->"))!;
     Parse/pure(Html/comment(body));
 
 --- A doctype or any other `<!…>` declaration, skipped as an empty run.
 let declaration() -> Parse(Str, Html) =
-    let _ = Parse/str/literal("<!")!;
+    let () = Parse/str/literal("<!")!;
     let _ = until_char('>')!;
     let _ = Parse/optional(Parse/str/expect('>'))!;
     Parse/pure(Html/fragment([]));
@@ -142,9 +142,9 @@ let element() -> Parse(Str, Html) =
     let _ = Parse/str/expect('<')!;
     let n = name!;
     let attrs = Parse/many0(attribute())!;
-    let _ = ws!;
+    let () = ws!;
     let closed = Parse/optional(Parse/str/expect('/'))!;
-    let _ = ws!;
+    let () = ws!;
     let _ = Parse/optional(Parse/str/expect('>'))!;
     match
     | Option/is_some(closed) => Parse/pure(Html/void(n, attrs))
@@ -182,7 +182,7 @@ and trees: Parse(Str, List(Html)) =
     Parse/many0(tree());
 
 let stray_close: Parse(Str, Html) =
-    Parse/map(close_tag(), (_) => Html/fragment([]));
+    Parse/map(close_tag(), (()) => Html/fragment([]));
 
 let is_empty_fragment(h: Html) -> Bool =
     match h
@@ -192,7 +192,7 @@ let is_empty_fragment(h: Html) -> Bool =
 
 let content() -> Parse(Str, Html) =
     let all = Parse/many0(Parse/or(tree(), stray_close))!;
-    let _ = Parse/eof()!;
+    let () = Parse/eof()!;
     let read = List/filter(all, (n) => Bool/not(is_empty_fragment(n)));
     Parse/pure(match read | [one] => one | _ => Html/fragment(read) end);
 

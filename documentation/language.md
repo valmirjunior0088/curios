@@ -521,7 +521,7 @@ pub let contents() -> Try(Io, Io/Error, Bytes) =
     Try/scope((s) =>
         let f = File/open(s, Path/of_str("notes.txt"), File/Mode/read())!;
         let text = Io/read_all(f)!;
-        let _ = Io/close(f)!;
+        let () = Io/close(f)!;
         Try/pure(text));
 ```
 
@@ -546,7 +546,7 @@ satisfy Monad/Lift(Io, Job) {
 }
 
 pub let job() -> Job({}) =
-    let _ = print("hello\n")!;
+    let () = print("hello\n")!;
     Monad/pure(());
 ```
 

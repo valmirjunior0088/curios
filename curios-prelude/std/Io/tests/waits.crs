@@ -21,24 +21,24 @@ let heard(receiver: Channel/Receiver(Io/Ended), finished: Bool) -> Io(Bool) =
         end);
 
 test a_yield_at_the_top_of_a_program_goes_on =
-    let _ = Io/yield()!;
+    let () = Io/yield()!;
     Test/assert(true);
 
 test a_sleep_holds_only_its_own_branch =
-    let n = Io/race([Io/bind(Io/sleep(Duration/of_secs(3600)), (_) => Io/pure(1)), Io/pure(2)])!;
+    let n = Io/race([Io/bind(Io/sleep(Duration/of_secs(3600)), (()) => Io/pure(1)), Io/pure(2)])!;
     Test/assert(n == 2);
 
 test a_wait_on_a_cell_goes_on_once_the_branch_beside_it_fills_it =
     let cell = Cell/new()!;
     let (waited, filled) =
-        Io/both(Io/bind(Io/wait_filled([cell]), (_) => Io/pure(true)), Cell/fill(cell, ()))!;
+        Io/both(Io/bind(Io/wait_filled([cell]), (()) => Io/pure(true)), Cell/fill(cell, ()))!;
     Test/assert(waited && filled);
 
 test a_scope_tells_its_release_a_body_ran_to_its_end =
     let ends = Channel/new(@Io/Ended, 1)!;
     let n =
         Io/scope((scope) =>
-            Io/bind(Io/Scope/defer(scope, (ended) => told(ends.0, ended)), (_) => Io/pure(3)))!;
+            Io/bind(Io/Scope/defer(scope, (ended) => told(ends.0, ended)), (()) => Io/pure(3)))!;
     let finished = heard(ends.1, true)!;
     Test/assert(n == 3 && finished);
 
@@ -49,7 +49,7 @@ test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
         Io/scope((scope) =>
             Io/bind(
                 Io/Scope/defer(scope, (ended) => told(ends.0, ended)),
-                (_) => Io/bind(Io/wait_filled([never]), (_) => Io/pure(3))));
+                (()) => Io/bind(Io/wait_filled([never]), (()) => Io/pure(3))));
     let _ = Io/race([body, Io/pure(4)])!;
     let cancelled = heard(ends.1, false)!;
     Test/assert(cancelled);

@@ -301,7 +301,7 @@ pub let body(
     | length(n) =>
         match length(limits, n, held)
         | took(taken, rest) => Reader/Step/took(taken, rest)
-        | more(_, kept) => Reader/Step/more(decoded, kept)
+        | more((), kept) => Reader/Step/more(decoded, kept)
         | refused(why) => Reader/Step/refused(why)
         end
     | chunked() => chunked(limits, decoded, held)

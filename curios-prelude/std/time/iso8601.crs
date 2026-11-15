@@ -112,13 +112,13 @@ pub let write_date(d: Date) -> Str =
 
 --- A date after its year: a `-`, past which the reader is committed to a date, then the month and the day, and the date they spell or a refusal.
 pub let date_after(year: Int) -> Parse(Str, Date) =
-    let _ = expect('-', "malformed date-time")!;
+    let () = expect('-', "malformed date-time")!;
     Parse/commit(month_and_day(year));
 
 -- A date after its year and the `-` that follows it: the month and the day, and the date they spell or a refusal. Read once the `-` has said a date is what follows, so a refusal here is the date's.
 let month_and_day(year: Int) -> Parse(Str, Date) =
     let m = fixed(2, 0)!;
-    let _ = expect('-', "malformed date-time")!;
+    let () = expect('-', "malformed date-time")!;
     let d = fixed(2, 0)!;
     match Month/try_of_nat(m)
     | some(month) =>
@@ -147,13 +147,13 @@ pub let write_time(t: Time) -> Str =
 --- A time of day, the reader committed to one past the `:` after its hour; a second of 60 is a leap second, and a fraction past nine digits is read to the nanosecond, as RFC 3339 reads a time too.
 pub let time: Parse(Str, Time) =
     let h = fixed(2, 0)!;
-    let _ = expect(':', "malformed date-time")!;
+    let () = expect(':', "malformed date-time")!;
     Parse/commit(time_after(h));
 
 -- A time of day after its hour and the `:` that follows it, read once the `:` has said a time is what follows.
 let time_after(h: Nat) -> Parse(Str, Time) =
     let m = fixed(2, 0)!;
-    let _ = expect(':', "malformed date-time")!;
+    let () = expect(':', "malformed date-time")!;
     let s = fixed(2, 0)!;
     let n = fraction_part!;
     match Time/try_of(h, m, s, n)
@@ -199,7 +199,7 @@ let offset_of(sign: Char, h: Nat, m: Nat, s: Nat) -> Parse(Str, Offset) =
 -- An offset after its sign: hours and minutes, and the seconds where there are some.
 let offset_after(sign: Char) -> Parse(Str, Offset) =
     let h = fixed(2, 0)!;
-    let _ = expect(':', "malformed date-time")!;
+    let () = expect(':', "malformed date-time")!;
     let m = fixed(2, 0)!;
     let colon = Parse/optional(Parse/str/expect(':'))!;
     match colon
@@ -284,7 +284,7 @@ let duration_parts(hours: Nat, minutes: Nat, last: Nat) -> Parse(Str, Int) =
         | '.' =>
             let first = digit!;
             let n = fraction_digits(1, first)!;
-            let _ = expect('S', "expected S")!;
+            let () = expect('S', "expected S")!;
             total(hours, minutes, read.value, n)
         | _ => Parse/fail("malformed duration")
         end
@@ -298,8 +298,8 @@ let duration_parts(hours: Nat, minutes: Nat, last: Nat) -> Parse(Str, Int) =
 --- A duration: an optional `-`, then `PT` and its parts.
 pub let duration: Parse(Str, Duration) =
     let minus = Parse/optional(Parse/str/expect('-'))!;
-    let _ = expect('P', "expected P")!;
-    let _ = expect('T', "expected T")!;
+    let () = expect('P', "expected P")!;
+    let () = expect('T', "expected T")!;
     let n = duration_parts(0, 0, 0)!;
     match minus
     | some(_) => Parse/pure(Duration/of_nanos(+0 - n))
@@ -309,7 +309,7 @@ pub let duration: Parse(Str, Duration) =
 -- `p`, and then the end of the input.
 let completely(@A: Type, p: Parse(Str, A)) -> Parse(Str, A) =
     let a = p!;
-    let _ = Parse/eof()!;
+    let () = Parse/eof()!;
     Parse/pure(a);
 
 --- What `p` reads of the whole of `s`, or `none` where it reads less or refuses.

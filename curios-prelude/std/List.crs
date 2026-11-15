@@ -184,7 +184,7 @@ pub let each(@M: (Type) -> Type, @T: Type, use Monad(M), l: List(T), f: (T) -> M
     match l
     | [] => Monad/pure(())
     | [h, ..t] =>
-        let _ = f(h)!;
+        let () = f(h)!;
         each(t, f)
     end;
 

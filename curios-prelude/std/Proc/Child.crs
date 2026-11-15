@@ -47,7 +47,7 @@ foreign proc_spawn(List(Bytes), Bytes, List(Bytes), Nat, Nat, Nat) -> {
 
 --- Start `p` into `s`: when `s` ends the child is killed if it still runs, and its handle and pipes are closed, so no child outlives the scope it was started in. The child arrives with a pipe for each stream `p` piped, in the one call that starts it. An environment key that is empty or holds `=` names no variable, and is refused with `EINVAL` before anything starts.
 pub let spawn(s: Io/Scope, p: Proc) -> Try(Io, Io/Error, Child) =
-    let _ = env_checked(p.env)!;
+    let () = env_checked(p.env)!;
     let reply =
         proc_spawn(
             [Str/to_bytes(p.program), ..List/map(p.args, Str/to_bytes)],
@@ -56,7 +56,7 @@ pub let spawn(s: Io/Scope, p: Proc) -> Try(Io, Io/Error, Child) =
             stdio_of(p.stdin),
             stdio_of(p.stdout),
             stdio_of(p.stderr))!;
-    let _ = Status/succeeded(reply.status)!;
+    let () = Status/succeeded(reply.status)!;
     let c =
         Child {
             handle = reply.child,
@@ -75,7 +75,7 @@ pub let spawn(s: Io/Scope, p: Proc) -> Try(Io, Io/Error, Child) =
                 | true => Option/some(Proc/Input { reply.stderr })
                 | false => Option/none()
                 end };
-    let _ = Io/Scope/defer(s, (_) => release(c))!;
+    let () = Io/Scope/defer(s, (_) => release(c))!;
     Try/pure(c);
 
 --- What this process writes the child's standard input through, when it was piped.
@@ -97,8 +97,8 @@ let close_output(o: Option(Proc/Input)) -> Io({}) =
     match o | some(o) => Io/close(o.0) | none() => Io/pure(()) end;
 
 let close_pipes(c: Child) -> Io({}) =
-    let _ = close_input(c.stdin)!;
-    let _ = close_output(c.stdout)!;
+    let () = close_input(c.stdin)!;
+    let () = close_output(c.stdout)!;
     close_output(c.stderr);
 
 --- End this child: `ok`, or the status of the failure.
@@ -111,13 +111,13 @@ let killed(c: Child) -> Io({}) =
 
 -- End the child if it still runs, then close its handle and its pipes. The kill is the last use of the handle, and the host reaps the process whether or not anything waits for it.
 let release(c: Child) -> Io({}) =
-    let _ = killed(c)!;
-    let _ = Io/close(c.handle)!;
+    let () = killed(c)!;
+    let () = Io/close(c.handle)!;
     close_pipes(c);
 
 --- End the child if it still runs, and close its pipes.
 pub let kill(c: Child) -> Io({}) =
-    let _ = killed(c)!;
+    let () = killed(c)!;
     close_pipes(c);
 
 --- How this child ended: `ok` beside its exit code and the signal that ended it, or the status of the failure.
@@ -125,7 +125,7 @@ foreign proc_wait(Handle) -> {status: Nat, code: Nat, signal: Nat};
 
 --- How the child of `h` ended, once its handle is readable: asked again where the host still answers that it runs, since readiness is advisory.
 let exit_reply(h: Handle) -> Io({{status: Nat, code: Nat, signal: Nat}, Status/Settled}) =
-    let _ = Handle/wait(h, Handle/Interest/readable)!;
+    let () = Handle/wait(h, Handle/Interest/readable)!;
     Handle/retried(
         h,
         Handle/Interest/readable,
@@ -135,10 +135,10 @@ let exit_reply(h: Handle) -> Io({{status: Nat, code: Nat, signal: Nat}, Status/S
 
 --- How the child ended, waiting until it does. A piped input is finished first, so a child reading to the end of its input is not left waiting on the parent that waits on it; the outputs are closed with the child, so read what it wrote before waiting for it.
 pub let wait(c: Child) -> Try(Io, Io/Error, Proc/Exit) =
-    let _ = close_input(c.stdin)!;
+    let () = close_input(c.stdin)!;
     let (reply, settled) = exit_reply(c.handle)!;
-    let _ = close_pipes(c)!;
-    let _ = Status/answer(settled)!;
+    let () = close_pipes(c)!;
+    let () = Status/answer(settled)!;
     Try/pure(
         match reply.signal == 0
         | true => Proc/Exit/exited(reply.code)

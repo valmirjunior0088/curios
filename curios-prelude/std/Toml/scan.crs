@@ -50,6 +50,6 @@ pub let trivia: Parse(Str, {}) =
 
 --- The end of a line: trailing whitespace, an optional comment, then a line break or the end of the input.
 pub let line_end() -> Parse(Str, {}) =
-    let _ = ws!;
-    let _ = Parse/or(comment(), Parse/pure(()))!;
+    let () = ws!;
+    let () = Parse/or(comment(), Parse/pure(()))!;
     Parse/label(Parse/or(newline, Parse/eof()), "expected end of line");

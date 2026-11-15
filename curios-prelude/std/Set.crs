@@ -34,7 +34,7 @@ pub let remove(@K: Type, use Map/Key(K), s: Set(K), k: K) -> Set(K) =
 
 --- Over the elements in their order, with `f(elem, acc)`.
 pub let fold(@K: Type, use Map/Key(K), @A: Type, s: Set(K), init: A, f: (K, A) -> A) -> A =
-    Map/fold(s.map, init, (k, _, acc) => f(k, acc));
+    Map/fold(s.map, init, (k, (), acc) => f(k, acc));
 
 --- The set of the elements of `l`.
 pub let of_list(@K: Type, use Map/Key(K), l: List(K)) -> Set(K) =

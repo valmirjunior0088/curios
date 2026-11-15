@@ -70,9 +70,9 @@ pub let open(s: Io/Scope, path: Path, c: Config) -> Try(Io, Io/Error, Serial) =
             of_parity(c.parity),
             c.stop_bits,
             of_flow(c.flow))!;
-    let _ = Status/succeeded(reply.status)!;
+    let () = Status/succeeded(reply.status)!;
     let port = Serial { reply.handle };
-    let _ = Io/Scope/defer(s, (_) => Io/close(port))!;
+    let () = Io/Scope/defer(s, (_) => Io/close(port))!;
     Try/pure(port);
 
 --- Close `s` before its scope ends, as the scope does when it ends. What it accepted and has not sent is discarded, so the close never waits on the wire: `drain` first to send it.
@@ -122,5 +122,5 @@ foreign serial_list() -> {status: Nat, paths: List(Bytes)};
 --- The serial devices the host has, each by a path `open` takes, in byte order, and none where it has none. On Linux a device is named by its entry of `/dev/serial/by-id` where the system keeps one — a name that carries its vendor, product and serial number, and outlives the order devices were plugged in — and by its node otherwise, as an onboard port is `/dev/ttyS0`; on macOS by its callout device, `/dev/cu.` and its name.
 pub let list() -> Try(Io, Io/Error, List(Path)) =
     let reply = serial_list()!;
-    let _ = Status/succeeded(reply.status)!;
+    let () = Status/succeeded(reply.status)!;
     Try/pure(List/map(reply.paths, Path/of_bytes));

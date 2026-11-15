@@ -171,7 +171,7 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
             let folded = Parse/str/peek!;
             match folded
             | some(w), w == ' ' || w == '\t' || w == '\n' || w == '\r' =>
-                let _ = trim_run(false)!;
+                let () = trim_run(false)!;
                 ml_basic_body(here)
             | _ =>
                 let piece = escape()!;
@@ -227,12 +227,12 @@ pub let str_literal: Parse(Str, Str) =
 
 --- A multi-line basic string, delimited by `"""`, with its escapes resolved and the opening line break dropped.
 pub let str_ml_basic() -> Parse(Str, Str) =
-    let _ = Parse/str/literal("\"\"\"")!;
-    let _ = skip_opening_newline()!;
+    let () = Parse/str/literal("\"\"\"")!;
+    let () = skip_opening_newline()!;
     ml_basic_body("");
 
 --- A multi-line literal string, delimited by `'''`, taken as written with the opening line break dropped.
 pub let str_ml_literal() -> Parse(Str, Str) =
-    let _ = Parse/str/literal("'''")!;
-    let _ = skip_opening_newline()!;
+    let () = Parse/str/literal("'''")!;
+    let () = skip_opening_newline()!;
     ml_literal_body("");

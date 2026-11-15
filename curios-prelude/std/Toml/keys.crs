@@ -14,7 +14,7 @@ pub let key_part: Parse(Str, Str) =
     Parse/or(key_bare(), Parse/or(str_basic, str_literal));
 
 let dot() -> Parse(Str, {}) =
-    let _ = ws!;
+    let () = ws!;
     let _ = Parse/str/expect('.')!;
     ws;
 

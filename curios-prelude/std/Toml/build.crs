@@ -232,7 +232,7 @@ let walk(
                 | table(inner) =>
                     match may_extend(side, kp, act)
                     | failure(msg) => Result/failure(msg)
-                    | success(_) =>
+                    | success(()) =>
                         match walk(inner, side, kp, rest, 0, act)
                         | success((inner2, side2, res)) =>
                             Result/success((

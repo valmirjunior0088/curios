@@ -41,7 +41,7 @@ let part(s: Str) -> Parse(Str, Str) =
 
 let scheme() -> Parse(Str, Scheme) =
     let name = Parse/str/take_while(until([':']))!;
-    let _ = Parse/str/literal("://")!;
+    let () = Parse/str/literal("://")!;
     match
     | Str/eql_ignoring_ascii_case(name, "http") => Parse/pure(Scheme/http())
     | Str/eql_ignoring_ascii_case(name, "https") => Parse/pure(Scheme/https())

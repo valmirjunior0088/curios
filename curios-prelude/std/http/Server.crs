@@ -113,7 +113,7 @@ let request(
             let invited = invite(limits, c, r, o)!;
             match invited
             | failure(_) => Io/pure(Result/failure(Unread/silent()))
-            | success(_) =>
+            | success(()) =>
                 let content = stream/body(limits, r, o.framing)!;
                 Io/pure(
                     match content
@@ -181,7 +181,7 @@ let send(s: Server, c: Socket, method: Method, reply: Response) -> Io({}) =
     let wrote = Try/run(Io/write(c, bytes))!;
     match wrote
     | failure(_) => Io/pure(())
-    | success(_) =>
+    | success(()) =>
         let _ = Try/run(Io/flush(c))!;
         let _ = Try/run(Io/finish(c))!;
         drain(c, s.quiet, s.limits.head + s.limits.content)

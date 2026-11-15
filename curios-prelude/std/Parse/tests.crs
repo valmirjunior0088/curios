@@ -7,9 +7,9 @@ let shown(@A: Type, r: Result(Parse/Error, A), f: (A) -> Str) -> Str =
 let pair() -> Parse(Str, {Str, Str}) =
     let word = Parse/str/take_while((c) => Char/to_nat(c) != 32)!;
     let _ = Parse/str/expect(' ')!;
-    let _ = Parse/str/literal("wö")!;
+    let () = Parse/str/literal("wö")!;
     let rest = Parse/str/rest!;
-    let _ = Parse/eof()!;
+    let () = Parse/eof()!;
     Parse/pure((word, rest));
 
 -- A text parser answers characters and the pieces of its input it read: a run of non-spaces, a separator, a literal of multi-byte characters and what follows it.
@@ -47,24 +47,24 @@ test a_character_is_refused_at_the_end =
 
 -- Of two alternatives that both decline, the refusal reported is the one that reached further into the input, in either order: `ab` then `cd` stops at byte 2, where `x` stopped at the start.
 test or_reports_the_refusal_that_reached_further =
-    let far: Parse(Str, {}) = Parse/bind(Parse/str/literal("ab"), (_) => Parse/str/literal("cd"));
+    let far: Parse(Str, {}) = Parse/bind(Parse/str/literal("ab"), (()) => Parse/str/literal("cd"));
     let near: Parse(Str, {}) = Parse/str/literal("x");
     Test/all([
         Test/equal(
-            shown(Parse/run(Parse/or(far, near), "abx"), (_) => "ok"),
+            shown(Parse/run(Parse/or(far, near), "abx"), (()) => "ok"),
             "expected \"cd\" at byte 2"),
         Test/equal(
-            shown(Parse/run(Parse/or(near, far), "abx"), (_) => "ok"),
+            shown(Parse/run(Parse/or(near, far), "abx"), (()) => "ok"),
             "expected \"cd\" at byte 2")]);
 
 -- A bytes parser walks its literal byte by byte, and declines where it started when the input is not it.
 test a_bytes_literal_is_read_byte_by_byte =
     Test/all([
         Test/equal(
-            shown(Parse/run(Parse/bytes/literal("ab"), x['a', 'b', 'c']), (_) => "ok"),
+            shown(Parse/run(Parse/bytes/literal("ab"), x['a', 'b', 'c']), (()) => "ok"),
             "ok"),
         Test/equal(
-            shown(Parse/run(Parse/bytes/literal("ab"), x['a']), (_) => "ok"),
+            shown(Parse/run(Parse/bytes/literal("ab"), x['a']), (()) => "ok"),
             "expected \"ab\" at byte 0")]);
 
 let digit: Parse(Str, Char) =
@@ -75,7 +75,7 @@ let comma: Parse(Str, {}) =
 
 let whole(list: Parse(Str, List(Char))) -> Parse(Str, Str) =
     let items = list!;
-    let _ = Parse/eof()!;
+    let () = Parse/eof()!;
     Parse/pure(Str/flatten(List/map(items, Str/of_char)));
 
 let read(list: Parse(Str, List(Char)), input: Str) -> Str =
@@ -110,7 +110,7 @@ test or_reports_the_first_refusal_on_a_tie =
     Test/equal(
         shown(
             Parse/run(Parse/or(Parse/str/literal("a"), Parse/str/literal("b")), "x"),
-            (_) => "ok"),
+            (()) => "ok"),
         "expected \"a\" at byte 0");
 
 let cut(lit: Str) -> Parse(Str, {Str, Str}) =
@@ -132,7 +132,7 @@ test until_reads_the_piece_before_a_literal =
 
 let one_byte() -> Parse(Bytes, Byte) =
     let b = Parse/bytes/byte!;
-    let _ = Parse/eof()!;
+    let () = Parse/eof()!;
     Parse/pure(b);
 
 -- `eof` accepts only where the input has ended: a parser that reads one byte and then `eof` accepts exactly one byte, and refuses a second byte and an empty input alike.

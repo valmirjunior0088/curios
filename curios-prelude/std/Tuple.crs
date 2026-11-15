@@ -8,7 +8,7 @@ let then(first: Ordering, rest: ({}) -> Ordering) -> Ordering =
     match first | eq() => rest(()) | _ => first end;
 
 satisfy Show({}) {
-    show(_) = "()",
+    show(()) = "()",
 }
 
 satisfy (@A: Type, use Show(A)) => Show({A}) {
@@ -134,7 +134,7 @@ satisfy (
 }
 
 satisfy Spell({}) {
-    spell(_) = "()",
+    spell(()) = "()",
 }
 
 satisfy (@A: Type, use Spell(A)) => Spell({A}) {
@@ -272,8 +272,8 @@ satisfy (
 }
 
 satisfy Eql({}) {
-    eql(_, _) = true,
-    neq(_, _) = false,
+    eql((), ()) = true,
+    neq((), ()) = false,
 }
 
 satisfy (@A: Type, use Eql(A)) => Eql({A}) {
@@ -387,7 +387,7 @@ satisfy (
 }
 
 satisfy Ord({}) {
-    ord(_, _) = Ordering/eq(),
+    ord((), ()) = Ordering/eq(),
 }
 
 satisfy (@A: Type, use Ord(A)) => Ord({A}) {
@@ -395,11 +395,11 @@ satisfy (@A: Type, use Ord(A)) => Ord({A}) {
 }
 
 satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
-    ord(a, b) = then(Ord/ord(a.0, b.0), (_) => Ord/ord(a.1, b.1)),
+    ord(a, b) = then(Ord/ord(a.0, b.0), (()) => Ord/ord(a.1, b.1)),
 }
 
 satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Ord({A, B, C}) {
-    ord(a, b) = then(Ord/ord(a.0, b.0), (_) => then(Ord/ord(a.1, b.1), (_) => Ord/ord(a.2, b.2))),
+    ord(a, b) = then(Ord/ord(a.0, b.0), (()) => then(Ord/ord(a.1, b.1), (()) => Ord/ord(a.2, b.2))),
 }
 
 satisfy (
@@ -415,8 +415,10 @@ satisfy (
     ord(a, b) =
         then(
             Ord/ord(a.0, b.0),
-            (_) =>
-                then(Ord/ord(a.1, b.1), (_) => then(Ord/ord(a.2, b.2), (_) => Ord/ord(a.3, b.3)))),
+            (()) =>
+                then(
+                    Ord/ord(a.1, b.1),
+                    (()) => then(Ord/ord(a.2, b.2), (()) => Ord/ord(a.3, b.3)))),
 }
 
 satisfy (
@@ -434,13 +436,13 @@ satisfy (
     ord(a, b) =
         then(
             Ord/ord(a.0, b.0),
-            (_) =>
+            (()) =>
                 then(
                     Ord/ord(a.1, b.1),
-                    (_) =>
+                    (()) =>
                         then(
                             Ord/ord(a.2, b.2),
-                            (_) => then(Ord/ord(a.3, b.3), (_) => Ord/ord(a.4, b.4))))),
+                            (()) => then(Ord/ord(a.3, b.3), (()) => Ord/ord(a.4, b.4))))),
 }
 
 satisfy (
@@ -460,16 +462,16 @@ satisfy (
     ord(a, b) =
         then(
             Ord/ord(a.0, b.0),
-            (_) =>
+            (()) =>
                 then(
                     Ord/ord(a.1, b.1),
-                    (_) =>
+                    (()) =>
                         then(
                             Ord/ord(a.2, b.2),
-                            (_) =>
+                            (()) =>
                                 then(
                                     Ord/ord(a.3, b.3),
-                                    (_) => then(Ord/ord(a.4, b.4), (_) => Ord/ord(a.5, b.5)))))),
+                                    (()) => then(Ord/ord(a.4, b.4), (()) => Ord/ord(a.5, b.5)))))),
 }
 
 satisfy (
@@ -491,22 +493,22 @@ satisfy (
     ord(a, b) =
         then(
             Ord/ord(a.0, b.0),
-            (_) =>
+            (()) =>
                 then(
                     Ord/ord(a.1, b.1),
-                    (_) =>
+                    (()) =>
                         then(
                             Ord/ord(a.2, b.2),
-                            (_) =>
+                            (()) =>
                                 then(
                                     Ord/ord(a.3, b.3),
-                                    (_) =>
+                                    (()) =>
                                         then(
                                             Ord/ord(a.4, b.4),
-                                            (_) =>
+                                            (()) =>
                                                 then(
                                                     Ord/ord(a.5, b.5),
-                                                    (_) => Ord/ord(a.6, b.6))))))),
+                                                    (()) => Ord/ord(a.6, b.6))))))),
 }
 
 satisfy (
@@ -530,23 +532,23 @@ satisfy (
     ord(a, b) =
         then(
             Ord/ord(a.0, b.0),
-            (_) =>
+            (()) =>
                 then(
                     Ord/ord(a.1, b.1),
-                    (_) =>
+                    (()) =>
                         then(
                             Ord/ord(a.2, b.2),
-                            (_) =>
+                            (()) =>
                                 then(
                                     Ord/ord(a.3, b.3),
-                                    (_) =>
+                                    (()) =>
                                         then(
                                             Ord/ord(a.4, b.4),
-                                            (_) =>
+                                            (()) =>
                                                 then(
                                                     Ord/ord(a.5, b.5),
-                                                    (_) =>
+                                                    (()) =>
                                                         then(
                                                             Ord/ord(a.6, b.6),
-                                                            (_) => Ord/ord(a.7, b.7)))))))),
+                                                            (()) => Ord/ord(a.7, b.7)))))))),
 }

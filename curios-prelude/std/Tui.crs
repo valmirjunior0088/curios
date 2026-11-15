@@ -202,8 +202,8 @@ let running(
     let issue(d: Directive(E)) -> Try(Io, Io/Error, {tasks: List(Io/Scope/Task(E)), quit: Bool}) =
         let a = asked(d);
         let tasks = Io/all(List/map(a.work, performed))!;
-        let _ = released(a.released)!;
-        let _ =
+        let () = released(a.released)!;
+        let () =
             match a.redraw
             | true => Session/forget(s)
             | false => Try/pure(())
@@ -217,7 +217,7 @@ let running(
         match events
         | [] => Try/pure((model = m, tasks = [], quit = false))
         | [e, ..more] =>
-            let _ =
+            let () =
                 match e
                 | input(resize(now)) => Session/resized(s, now)
                 | _ => Try/pure(())
@@ -266,7 +266,7 @@ let running(
         match folded.quit
         | true => quitting(folded.model, folded.tasks)
         | false =>
-            let _ = draw(folded.model)!;
+            let () = draw(folded.model)!;
             step(folded.model, reading, due)
         end
     and step(m: M, reading: Bool, due: Option(Io/Scope/Task({}))) -> Try(Io, Io/Error, M) =
@@ -281,7 +281,7 @@ let running(
                 (got) => match got | some(e) => Io/pure(Wake/answer(e)) | none() => never end);
         let tick =
             match due
-            | some(task) => Io/bind(Io/Scope/Task/join(task), (_) => Io/pure(Wake/tick()))
+            | some(task) => Io/bind(Io/Scope/Task/join(task), (()) => Io/pure(Wake/tick()))
             | none() => never
             end;
         -- A deadline that has passed is acted on before what arrived as it passed, which the read leaves where it was.
@@ -304,7 +304,7 @@ let running(
     match first.quit
     | true => quitting(app.init.0, first.tasks)
     | false =>
-        let _ = draw(app.init.0)!;
+        let () = draw(app.init.0)!;
         let due = deadline()!;
         step(app.init.0, true, due)
     end;

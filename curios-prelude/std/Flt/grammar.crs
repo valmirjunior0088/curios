@@ -109,7 +109,7 @@ pub let nan_payload(signaling: Bool) -> Parse(Str, Nat) =
     match open
     | none() => Parse/pure(match signaling | true => 1 | false => 0 end)
     | some(_) =>
-        let _ = hex_mark()!;
+        let () = hex_mark()!;
         let run = hex_run!;
         let _ = Parse/str/expect(')')!;
         match hex_value(run)
@@ -146,7 +146,7 @@ pub let special(negative: Bool) -> Parse(Str, Flt) =
 
 --- Hex text after its sign, rounded once in the direction `r`: `0x`, hex digits with an optional point and at least one digit among them, and an optional `p` exponent. A nonzero significand is the exact dyadic `Dyadic/to_flt` rounds, whatever its exponent; a zero takes its sign here, since a dyadic's zero has none.
 pub let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
-    let _ = hex_mark()!;
+    let () = hex_mark()!;
     let whole = hex_run!;
     let fraction = fraction_of(hex_run)!;
     let exponent = exponent_after('p', 'P')!;
@@ -194,7 +194,7 @@ pub let number(r: Rounding, decimals: Bool) -> Parse(Str, Flt) =
         | false => hexadecimal(r, negative)
         end;
     let value = Parse/or(special(negative), finite)!;
-    let _ = Parse/eof()!;
+    let () = Parse/eof()!;
     Parse/pure(value);
 
 --- The number a nonempty run of hex digits spells, in either case, or `none`.
