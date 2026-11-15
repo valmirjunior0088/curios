@@ -57,6 +57,9 @@ pub use represent::{Representation, Storage, representation};
 mod survey;
 pub use survey::{Fate, Outcome, descendants, fates};
 
+mod value_flow;
+use value_flow::*;
+
 mod verify;
 pub use verify::VerifyError;
 use verify::*;

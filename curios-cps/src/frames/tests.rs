@@ -108,6 +108,120 @@ fn counting(tail: bool) -> (Module, FunctionId) {
     (module, count)
 }
 
+/// `apply(c)` calls `c` at no arguments, not in tail position, and answers what it answered; `leaf()` answers `0`; and `again()` tail-calls `apply` with itself where `back` holds and with `leaf` otherwise, naming itself in a list it drops where not, so that a function of no parameters some atom names is what it is either way. `main` calls `apply(leaf)`.
+fn applying(back: bool) -> (Module, FunctionId) {
+    let zero = || Atom::Literal(Literal::Nat(Natural::from(0u32)));
+    let mut module = Module::new();
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let apply = module.reserve_function();
+    let apply_return = module.reserve_continuation();
+    let leaf = module.reserve_function();
+    let leaf_return = module.reserve_continuation();
+    let again = module.reserve_function();
+    let again_return = module.reserve_continuation();
+
+    let closure = module.add_value(Some("c".into()));
+    let answer = module.add_value(None);
+    let after_body = module.add_node(Node::ApplyCont(Edge {
+        target: apply_return,
+        args: vec![Atom::Value(answer)],
+    }));
+    let after = module.add_continuation(Continuation {
+        debug_name: None,
+        params: vec![answer],
+        body: after_body,
+    });
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(closure),
+        args: vec![],
+        return_to: after,
+    });
+    let apply_body = module.add_node(Node::LetCont {
+        continuations: vec![after],
+        body: call,
+    });
+    module.define_function(
+        apply,
+        Function {
+            debug_name: Some("apply".into()),
+            params: vec![closure],
+            return_cont: apply_return,
+            body: apply_body,
+            droppable: Droppable::Never,
+        },
+    );
+
+    let leaf_body = module.add_node(Node::ApplyCont(Edge {
+        target: leaf_return,
+        args: vec![zero()],
+    }));
+    module.define_function(
+        leaf,
+        Function {
+            debug_name: Some("leaf".into()),
+            params: vec![],
+            return_cont: leaf_return,
+            body: leaf_body,
+            droppable: Droppable::Never,
+        },
+    );
+
+    let handed = match back {
+        true => again,
+        false => leaf,
+    };
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(apply),
+        args: vec![Atom::Fun(handed)],
+        return_to: again_return,
+    });
+    let again_body = match back {
+        true => call,
+        false => {
+            let named = module.add_value(None);
+            module.add_node(Node::LetValue {
+                result: named,
+                value: ValueExpr::List(vec![Atom::Fun(again)]),
+                next: call,
+            })
+        }
+    };
+    module.define_function(
+        again,
+        Function {
+            debug_name: Some("again".into()),
+            params: vec![],
+            return_cont: again_return,
+            body: again_body,
+            droppable: Droppable::Never,
+        },
+    );
+
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(apply),
+        args: vec![Atom::Fun(leaf)],
+        return_to: main_return,
+    });
+    let main_body = module.add_node(Node::LetFun {
+        functions: vec![apply, leaf, again],
+        body: call,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body: main_body,
+            droppable: Droppable::Never,
+        },
+    );
+    module.set_entry(main);
+    module.verify().expect("the fixture verifies");
+    (module, apply)
+}
+
 /// The budget operations the live nodes of `module` hold, each by whether it enters.
 fn budget_operations(module: &Module) -> Vec<bool> {
     module
@@ -169,6 +283,28 @@ fn a_call_on_no_cycle_is_left_alone() {
 
     assert!(budget_operations(&module).is_empty());
     assert_eq!(module.live_functions().count(), functions);
+}
+
+#[test]
+fn a_closure_call_reaching_no_function_on_its_cycle_is_left_alone() {
+    let (mut module, _) = applying(false);
+    let functions = module.live_functions().count();
+
+    bound_frames(&mut module);
+
+    assert!(budget_operations(&module).is_empty());
+    assert_eq!(module.live_functions().count(), functions);
+}
+
+#[test]
+fn a_recursion_through_a_closure_is_guarded_and_its_members_gain_twins() {
+    let (mut module, apply) = applying(true);
+
+    bound_frames(&mut module);
+
+    module.verify().expect("a bounded module verifies");
+    assert!(budget_operations(&module).contains(&true));
+    assert!(module.twin(apply).is_some(), "apply is on the cycle");
 }
 
 #[test]
