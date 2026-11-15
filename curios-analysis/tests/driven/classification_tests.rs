@@ -3,10 +3,10 @@
 use {
     super::test_support::*,
     curios_analysis::{
-        Answered, Classes, Judge, ScrutineeRead, answers, answers_classed, group_totality,
-        holds_no_type, one_up_to_instances, read_scrutinee, test_support::*,
+        Answered, Classes, ScrutineeRead, answers, answers_classed, group_totality, holds_no_type,
+        one_up_to_instances, read_scrutinee, test_support::*,
     },
-    curios_cert::Certifier,
+    curios_cert::{Certifier, convert},
     curios_common::Qualifier,
     curios_core::{
         Cases, Exhaustion, Free, Global, Intrinsic, Level, Match, Nat, Reducer, Subterm, Term,
@@ -77,7 +77,7 @@ fn a_connective_leaf_with_no_value_is_compared_as_written() {
         )),
     ));
 
-    assert_eq!(certifier.convert_at(&boolean, &this, &that), Ok(true));
+    assert_eq!(convert(&mut certifier, &boolean, &this, &that), Ok(true));
 }
 
 /// Conversion's readers key atoms on spelling, so two sums of atoms that commute a sum inside their arguments would meet only where the positional congruence pairs them, and an `Int` sum keeps the order it was written in: `h(i + j) + e(k + l)` against `e(l + k) + h(j + i)` would pair `h` with `e` and be refused, whichever identities the heads hold. A pair the chain decides nothing about is read once more with every atom's arguments forced, and the cancellation then pairs them. The control keeps one argument genuinely different, and stays apart.
@@ -105,12 +105,12 @@ fn atoms_equal_up_to_their_arguments_convert_in_whichever_order_their_sum_holds_
         let apart = sum(at(&e, of(&l, &k)), at(&h, of(&j, &j)));
 
         assert_eq!(
-            certifier.convert_at(&int(), &this, &that),
+            convert(&mut certifier, &int(), &this, &that),
             Ok(true),
             "h at {h_index}, e at {e_index}"
         );
         assert_eq!(
-            certifier.convert_at(&int(), &this, &apart),
+            convert(&mut certifier, &int(), &this, &apart),
             Ok(false),
             "h at {h_index}, e at {e_index}"
         );
@@ -152,18 +152,18 @@ fn a_magnitude_over_two_spellings_of_its_atoms_converts_whichever_way_they_rank(
         let nat = Term::intrinsic(Intrinsic::NatType);
         let abs = |operand: &Term| Term::intrinsic(Intrinsic::IntAbs(operand.clone()));
         assert_eq!(
-            certifier.convert_at(&nat, &abs(&first), &abs(&second)),
+            convert(&mut certifier, &nat, &abs(&first), &abs(&second)),
             Ok(true),
             "abs, e({n})"
         );
         assert_eq!(
-            certifier.convert_at(&nat, &abs(&first), &abs(&apart)),
+            convert(&mut certifier, &nat, &abs(&first), &abs(&apart)),
             Ok(false),
             "abs, e({n})"
         );
         let sign = |operand: &Term| Term::intrinsic(Intrinsic::IntSign(operand.clone()));
         assert_eq!(
-            certifier.convert_at(&int(), &sign(&first), &sign(&second)),
+            convert(&mut certifier, &int(), &sign(&first), &sign(&second)),
             Ok(true),
             "sign, e({n})"
         );
@@ -208,16 +208,16 @@ fn a_fused_multiply_add_pairs_its_factors_and_keeps_its_addend_in_place() {
 
     let this = fused(toward_zero, at(&x, &y), Term::free_var(&b), &c);
     let swapped = fused(toward_zero, Term::free_var(&b), at(&y, &x), &c);
-    assert_eq!(certifier.convert_at(&flt(), &this, &swapped), Ok(true));
+    assert_eq!(convert(&mut certifier, &flt(), &this, &swapped), Ok(true));
 
     let addend_for_factor = fused(toward_zero, Term::free_var(&c), at(&y, &x), &b);
     assert_eq!(
-        certifier.convert_at(&flt(), &this, &addend_for_factor),
+        convert(&mut certifier, &flt(), &this, &addend_for_factor),
         Ok(false)
     );
     let another_direction = fused(Rounding::TowardPositive, Term::free_var(&b), at(&y, &x), &c);
     assert_eq!(
-        certifier.convert_at(&flt(), &this, &another_direction),
+        convert(&mut certifier, &flt(), &this, &another_direction),
         Ok(false)
     );
 }
@@ -390,7 +390,7 @@ fn a_call_apart_from_the_key_in_its_instance_alone_is_asked_about_by_its_argumen
             Ok(Answered::Whole)
         );
         let asked = one_up_to_instances(&term, &key, &mut |this, that| {
-            certifier.convert_at(&nat_type, this, that)
+            convert(&mut certifier, &nat_type, this, that)
         })
         .expect("the certifier compares two locals");
         assert_eq!(asked, one);

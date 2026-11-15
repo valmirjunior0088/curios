@@ -10,7 +10,7 @@
 //!
 //! Reading the goal at the case's targets teaches the *goal* the case's equations, and nothing else: the ambient locals, the body's occurrences of outer variables, and the scrutinee variable itself would all stay at their unrefined types. The other half of the rule is [`specialize`]: the arm is checked in a context specialized by the most-general solution of `actual indices ~ case targets` (plus `scrutinee ~ constructed value` when the scrutinee is a variable). Definitional K — `Eq : Prop` plus proof irrelevance, recorded permanent in `documentation/design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md` — is the license for solving those equations by first-order unification and binding each solved variable to its solution.
 //!
-//! Both directions run the *shared* unifier from [`curios_analysis::invert_indices`]. Pinning an arm binder to the rigid actual it must equal is the call as the elaborator makes it; refining an outer variable to the target it must equal is the same call with its sides swapped, and the swap lands the guards exactly right — the occurs check refuses the parameter cycle (`b := b + 1` through a family parameter), and the top guard leaves the variable-variable case to the first direction. Both directions and their composition are one shared function, [`curios_analysis::solve_indices`], which the elaborator calls too: it records the solution in its counterfactual refinement store, while the certifier binds each solved variable to its solution as a `let` binds a local, so the arm is checked as written and every reader reads it by value ([`bind_solutions`]). Which locals the solution re-types, and at what type, is shared as well ([`curios_analysis::retyped`], which [`Certifier::bind`] applies wherever it binds over a local that stood for nothing), and so is the scrutinee's own solution ([`curios_analysis::scrutinee_solution`]); the existing `mark`/`retract` bracket scopes the bindings and the re-typed entries exactly to the arm.
+//! The solution is the *shared* unifier's, [`curios_analysis::solve_indices`]: the index equations solved as one problem over the arm's binders and the outer variables the scrutinee's indices name, the scrutinee's variable refined to the case's where both sides are variables, and the occurs check, read through the case equations in force, refusing a cycle (`b := b + 1` through a family parameter, or `t := node(p.0)` under an arm that refined `p.0` to `node(t)`). The elaborator calls the same function, handing it the indices as this checker reads them: it records the solution in its counterfactual refinement store, while the certifier binds each solved variable to its solution as a `let` binds a local, so the arm is checked as written and every reader reads it by value ([`bind_solutions`]). Which locals the solution re-types, and at what type, is shared as well ([`curios_analysis::retyped`], which [`Certifier::bind`] applies wherever it binds over a local that stood for nothing), and so is the scrutinee's own solution ([`curios_analysis::scrutinee_solution`]); the existing `mark`/`retract` bracket scopes the bindings and the re-typed entries exactly to the arm.
 //!
 //! # The large-elimination guard
 //!
@@ -65,7 +65,7 @@ pub fn check_induct_arms(
         return Ok(());
     }
 
-    // Coverage: an absent arm must justify its absence. With no catch-all, every constructor with no arm must be *impossible* at the scrutinee's indices — its targets must clash with the actuals, decided by the call of the shared unifier that specializes the present arms, both its directions, so an arm may be absent exactly where one written is typed by no rule. A case the unifier merely cannot decide is a refusal, not a pass: undecided is not absent.
+    // Coverage: an absent arm must justify its absence. With no catch-all, every constructor with no arm must be *impossible* at the scrutinee's indices — its targets must clash with the actuals, decided by the call of the shared unifier that specializes the present arms, so an arm may be absent exactly where one written is typed by no rule. A case the unifier merely cannot decide is a refusal, not a pass: undecided is not absent.
     for tag in &at.tags(certifier) {
         if cases.iter().any(|(present, _)| present == tag) {
             continue;
@@ -328,7 +328,7 @@ pub fn assume_case_value(
     Ok(assumed)
 }
 
-/// The most-general solution of `actual indices ~ case targets`, both directions, as one idempotent substitution — the shared [`solve_indices`], which carries the rule. Empty when the equations force nothing, and `None` where they *clash*: the case is one no value of the scrutinee's type is.
+/// The most-general solution of `actual indices ~ case targets`, as one idempotent substitution — the shared [`solve_indices`], which carries the rule. Empty when the equations force nothing, and `None` where they *clash*: the case is one no value of the scrutinee's type is.
 fn specialize(
     certifier: &mut Certifier,
     family: &InductType,

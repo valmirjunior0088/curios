@@ -897,6 +897,18 @@ impl<'s> Frames<'s> {
         variables.into_iter().collect()
     }
 
+    /// The projections the arms in the window refine, each as the term it projects beside the value the projection stands for.
+    pub fn projection_refinements(&self) -> Vec<(Term, Term)> {
+        self.refined_in_view()
+            .flat_map(|frame| {
+                frame
+                    .refinement_projections
+                    .iter()
+                    .map(|(_, entry)| (entry.original.clone(), entry.value.clone()))
+            })
+            .collect()
+    }
+
     /// Whether `canonical` is a scrutinee key registered in a frame a judgment standing on held frames set aside, and in none that stands: a guard the judgment's own frames register is its own, whether or not a settlement withholds it, and unfolds where it does not answer as it would with nothing set aside. A `Var`/`Proj` key stays neutral there for free (its refinement is not in view, so it does not unfold); an application key would otherwise unfold to its definition body and stop being a key. The reducer consults this to keep such a key neutral, so a solution committed where a guard is not in view stays a term the guard can still fire on where it is.
     pub fn is_key_set_aside(&self, canonical: &Term) -> bool {
         if !self.aside.is_empty() {

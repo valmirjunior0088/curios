@@ -574,6 +574,18 @@ impl Scope {
         self.hidden.unwrap_or(self.refinements.len())
     }
 
+    /// The equations in force that answer, each under its written spelling and its resolved one where it has one, beside the value it stands for: what a reader of a term naming a key's locals may meet ([`curios_analysis::Env::refined`]).
+    pub fn refined(&self) -> Vec<(Term, Term)> {
+        self.in_force_innermost_first()
+            .flat_map(|entry| {
+                [Some(&entry.key), entry.resolved.as_ref()]
+                    .into_iter()
+                    .flatten()
+                    .map(|key| (key.clone(), entry.value.clone()))
+            })
+            .collect()
+    }
+
     /// The equations in force that answer, innermost first — the order every probe reads them in. One an arm has restated answers through its restatement.
     fn in_force_innermost_first(&self) -> impl Iterator<Item = &Refinement> {
         self.refinements[..self.in_force()]

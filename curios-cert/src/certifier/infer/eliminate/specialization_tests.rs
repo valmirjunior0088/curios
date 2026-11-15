@@ -150,9 +150,9 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
 
 /// One variable of the scrutinee's indices forced to two values that clash makes the case impossible as two forcings of one binder do, so the arm may be omitted — and at a proposition they do not, so it may not.
 ///
-/// The mirror of the fixture above. The targets are closed, `apart() : (a(), b())`, and it is the scrutinee's indices that name one variable twice, `(x, x)`. The unifier's first direction decides nothing of it, a variable being what may yet be either target; the second solves `x` to each target and asks whether the two can be one value. At a relevant carrier they cannot, so no value of `Apart(x, x)` is `apart()` and the omission stands. At a `Prop` carrier they convert, `apart()` inhabits `Apart(x, x)` for every `x`, and the omitted arm is one the elimination cannot prove absent.
+/// The mirror of the fixture above. The targets are closed, `apart() : (a(), b())`, and it is the scrutinee's indices that name one variable twice, `(x, x)`. The unifier solves `x` to the first target, and the second position, read through that solution, asks whether the two targets can be one value. At a relevant carrier they cannot, so no value of `Apart(x, x)` is `apart()` and the omission stands. At a `Prop` carrier they are one value, `apart()` inhabits `Apart(x, x)` for every `x`, and the omitted arm is one the elimination cannot prove absent.
 ///
-/// Mutation-checked: with absence asked of the first direction alone, the relevant half demands the arm.
+/// Mutation-checked: with the outer variables left out of the flexible set, the relevant half demands the arm.
 #[test]
 fn an_outer_variable_forced_two_ways_excuses_the_arm() {
     for (label, carrier_sort, omission_stands) in CARRIERS {

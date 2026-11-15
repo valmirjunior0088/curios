@@ -549,6 +549,24 @@ impl<'s> Context<'s> {
         self.typing.frames.scrutinee_equations()
     }
 
+    /// What the arms in force refine, each as a term naming the refined term's locals beside its value: each variable an arm refines, each projection by the term it projects, and each scrutinee equation in force under its key and its unerased spelling ([`curios_analysis::Env::refined`]).
+    pub(crate) fn in_force_refinements(&self) -> Vec<(Term, Term)> {
+        let frames = &self.typing.frames;
+        let variables = frames
+            .refined_variables()
+            .into_iter()
+            .map(|(name, value)| (Term::free_var(&name), value));
+        let scrutinees = frames
+            .scrutinee_equations()
+            .into_iter()
+            .flat_map(|(key, entry)| [(key, entry.value.clone()), (entry.original, entry.value)]);
+
+        variables
+            .chain(frames.projection_refinements())
+            .chain(scrutinees)
+            .collect()
+    }
+
     /// Every equation an arm in force withholds, innermost frame first.
     pub(crate) fn withheld_equations(&self) -> Vec<ScrutineeEntry> {
         self.typing.frames.withheld_equations()

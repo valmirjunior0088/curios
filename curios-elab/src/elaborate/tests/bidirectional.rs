@@ -83,7 +83,7 @@ fn annotated_func_infers_a_function_type() {
     // Meta-free, and convertible (alpha-insensitive) to the expected function type; a structural `assert_eq!` would trip only on the cosmetic fresh binder label the Infer arm generates.
     assert!(term.metavars().is_empty());
     assert!(
-        convert_at(
+        convert(
             &mut context,
             &Term::type_ground(),
             &type_,

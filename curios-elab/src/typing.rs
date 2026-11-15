@@ -5,11 +5,11 @@ use {
     super::{
         AwaitId, Binders, Choice, Context, DeadArm, Error, HeldConversion, HeldFrames, Mode,
         Opened, Outcome, ParkedChoice, ParkedConversion, ParkedProblem, ParkedWork, Problem,
-        Spines, Watched, answer_witness, answers_differ, callee, convert, elaborate,
-        elaborate_func_settle, hold_spines, mismatch, no_witness_error, numeral_default,
-        obligation_shown, pending, probe_open_sort, problem_outcome, reduce_forced, region_flex,
-        resolved_for_display, retry_discharge, retry_witness, shallow_scrutinee, subsume_outcome,
-        synth_neutral, terms_differ, waits_as_reference, zonk_solved_term_metas,
+        Spines, Watched, answer_witness, answers_differ, callee, elaborate, elaborate_func_settle,
+        hold_spines, mismatch, no_witness_error, numeral_default, obligation_shown, pending,
+        probe_open_sort, problem_outcome, reduce_forced, region_flex, resolved_for_display,
+        retry_discharge, retry_witness, shallow_scrutinee, subsume_outcome, synth_neutral,
+        terms_differ, waits_as_reference, zonk_solved_term_metas,
     },
     crate::{declared_quality, is_prop_to, sort_of, sort_of_in},
     curios_analysis::{
@@ -38,20 +38,6 @@ pub fn reduce_with(context: &mut Context, term: &Term) -> Result<Term, Error> {
     reduce_forced(context, term.clone()).map_err(|error| {
         Error::from_reduce(error, |refusal| {
             Error::reduce_exhausted(term.clone(), refusal)
-        })
-    })
-}
-
-/// `super::convert` with its `ReduceError` mapped to `Error`, at an explicit type so proof-irrelevance and eta fire at the terms' real sort. The inverter uses it to compare a binder's competing forcings at the binder's own type.
-pub fn convert_at(
-    context: &mut Context,
-    type_: &Term,
-    this: &Term,
-    that: &Term,
-) -> Result<bool, Error> {
-    convert(context, type_, this, that).map_err(|error| {
-        Error::from_reduce(error, |refusal| {
-            Error::convert_exhausted(this.clone(), that.clone(), refusal)
         })
     })
 }
@@ -1360,6 +1346,24 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
     Ok(())
 }
 
+/// The most-general solution of a case's index equations, `actuals ~ targets` over the case's `binders` and the outer variables, each side as the certifier is handed it ([`Context::certifier_spelling`]). A variable an arm in force refined is spelled as its value there, so the outer variables are the same locals to both checkers and none is one an arm already solved, and the occurs check reads what the elaborator's store would read back.
+pub fn solve_case_indices(
+    context: &mut Context,
+    actuals: &[Term],
+    targets: &[Term],
+    binders: &[Free],
+) -> Result<Invert, Error> {
+    let spelled = |terms: &[Term]| {
+        terms
+            .iter()
+            .map(|term| context.certifier_spelling(term))
+            .collect::<Vec<_>>()
+    };
+    let (actuals, targets) = (spelled(actuals), spelled(targets));
+
+    solve_indices(context, &actuals, &targets, binders)
+}
+
 /// The family a match's scrutinee is a value of, as an inductive arm is entered at (`enter_induct_case`): its name, its instance, its parameters and its actual indices.
 pub struct InductCase<'a> {
     pub name: &'a Global,
@@ -1368,7 +1372,7 @@ pub struct InductCase<'a> {
     pub actual_indices: &'a [Term],
 }
 
-/// Enter the arm of the constructor `tag` of a match on `head`, a value of `family`, as it was elaborated: each payload binder of `labels`, standing as `vars`, assumed at the constructor's signature `telescope`, the scrutinee refined to the value the case constructs, and the index equations to their most-general solution, as elaboration and the certifier solve them, both directions. Hands back the case's target indices and the value it constructs. Typing-only: it touches the context and builds nothing.
+/// Enter the arm of the constructor `tag` of a match on `head`, a value of `family`, as it was elaborated: each payload binder of `labels`, standing as `vars`, assumed at the constructor's signature `telescope`, the scrutinee refined to the value the case constructs, and the index equations to their most-general solution, as elaboration and the certifier solve them ([`solve_case_indices`]). Hands back the case's target indices and the value it constructs. Typing-only: it touches the context and builds nothing.
 pub fn enter_induct_case(
     context: &mut Context,
     head: &Term,
@@ -1398,7 +1402,7 @@ pub fn enter_induct_case(
     );
     refine_head(context, head, &value)?;
     if let Invert::Solved(solutions) =
-        solve_indices(context, family.actual_indices, &targets, labels)?
+        solve_case_indices(context, family.actual_indices, &targets, labels)?
     {
         for (name, solution) in solutions {
             context.refine(&name, &solution);

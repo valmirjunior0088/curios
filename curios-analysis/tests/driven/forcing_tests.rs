@@ -8,28 +8,36 @@ use {
     std::slice,
 };
 
-/// The bound `fits_its_variable` states, put to the function that states it: an outer variable assumed at a sort keeps a target only where the judge holds the target's own sort below that sort.
+/// The bound `fits_its_variable` states, put to the function that states it: a variable assumed at a sort keeps a value only where the judge holds the value's own sort below that sort, an outer variable and a case's binder alike.
 ///
-/// The target is the literal `Type 4`, whose sort every reader computes as `Type 5`. Assumed at `Type 5` the variable holds it; assumed at `Type 0` it does not, and the solution is the one the rule says is dropped.
+/// The value is the literal `Type 4`, whose sort every reader computes as `Type 5`. Assumed at `Type 5` the variable holds it; assumed at `Type 0` it does not, and the solution is the one the rule says is dropped.
 #[test]
-fn an_outer_variable_at_a_sort_keeps_only_a_target_its_sort_holds() {
+fn a_variable_at_a_sort_keeps_only_a_value_its_sort_holds() {
     let target = Term::type_at(Level::constant(4));
 
-    for (label, assumed, held) in [
-        ("the target's sort below the variable's", 5, true),
-        ("above the variable's", 0, false),
+    for (label, assumed, held, binder) in [
+        (
+            "an outer variable, the value's sort below its own",
+            5,
+            true,
+            false,
+        ),
+        ("an outer variable, above its own", 0, false, false),
+        ("a binder, the value's sort below its own", 5, true, true),
+        ("a binder, above its own", 0, false, true),
     ] {
         let mut certifier = certifier();
         let variable = Free::local(900, Some("X"));
         certifier.assume(&variable, &Term::type_at(Level::constant(assumed)));
 
-        let Invert::Solved(solutions) = solve_indices(
-            &mut certifier,
-            &[Term::free_var(&variable)],
-            slice::from_ref(&target),
-            &[],
-        )
-        .expect("the certifier answers") else {
+        let (actual, case) = (Term::free_var(&variable), target.clone());
+        let (actuals, targets, binders) = match binder {
+            false => ([actual], [case], Vec::new()),
+            true => ([case], [actual], vec![variable]),
+        };
+        let Invert::Solved(solutions) = solve_indices(&mut certifier, &actuals, &targets, &binders)
+            .expect("the certifier answers")
+        else {
             panic!("{label}: a reachable case was reported unreachable");
         };
 
@@ -40,20 +48,17 @@ fn an_outer_variable_at_a_sort_keeps_only_a_target_its_sort_holds() {
     }
 }
 
-/// The deletion rule (Goguen–McBride–McKinna) decides a binder forced in two index positions by *convertibility*, and this is the direction no program reaches.
+/// A binder forced in two index positions is one equation between its two forcings: the first solves it, and the second, read through that solution, is an equation between the two values, which deletion, conflict and injectivity decide as they decide any.
 ///
-/// Every re-forcing the corpus makes that the rule accepts has two *syntactically identical* forcings, so a plain equality test would decide every acceptance the prelude and the test programs contain. The semantic half of the rule — accepting two forcings that differ but convert — is exercised by no program, which is precisely the condition under which a rule's mistakes stay invisible.
+/// Every fixture forces one binder in the first index position and again in the second — the shape `refl(@z) : (z, z)` meets at `Eq()(a, b)` — and the first two differ in nothing but the family's sort, which is what makes them a control pair rather than two unrelated cases.
 ///
-/// So its answers are put to it directly. Every fixture forces one binder in the first index position and again in the second — the shape `refl(@z) : (z, z)` meets at `Eq()(a, b)` — and the first two differ in nothing but the family's sort, which is what makes them a control pair rather than two unrelated cases.
+/// At a proposition the two forcings `a()` and `b()` are one value by irrelevance, so the equation between them is deleted and the first forcing's solution stands: sound because `Eq : Prop` makes the system definitionally K. At a relevant family the same two are constructors a program tells apart, and each forcing was reached by injective steps, so the case is reachable only if `a()` is `b()`: the verdict is `Impossible`, the conflict rule arriving through a non-linear target, and it is what lets `match h end` close a hypothesis `Eq()(false, true)`. The third fixture is the control on *that*: two forcings that neither are one value nor clash — one opaque function at two arguments, which may well agree — leave the equation between them undecided, and the first forcing's solution stands beside it.
 ///
-/// At a proposition the two forcings `a()` and `b()` convert by irrelevance, so the rule deletes the redundant constraint and one solution survives: sound because `Eq : Prop` makes the system definitionally K, and harmless because the surviving substitution is interchangeable with the one it replaced. At a relevant family the same two are constructors a program tells apart, and each forcing was reached by injective steps, so the case is reachable only if `a()` is `b()`: the verdict is `Impossible`, the conflict rule arriving through a non-linear target, and it is what lets `match h end` close a hypothesis `Eq()(false, true)`. The third fixture is the control on *that*: two forcings that do not convert and do not clash either — one opaque function at two arguments, which may well agree — are dropped, the arm still checked with the binder unsolved.
-///
-/// `Impossible` excuses an arm from being checked at all, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to a closed inhabitant of `False`, routed there from index inversion. So the proposition's verdict is the one this holds hardest: the clash is asked of the walk a linear position is put to, whose tag test is licensed by the family's sort, and only after conversion said no — and at a proposition conversion says yes.
+/// `Impossible` excuses an arm from being checked at all, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to a closed inhabitant of `False`, routed there from index inversion. So the proposition's verdict is the one this holds hardest: the equation between the forcings is put to the walk a linear position is put to, whose tag test is licensed by the family's sort.
 #[test]
-fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
+fn a_binder_forced_twice_is_one_equation_between_its_forcings() {
     enum Verdict {
         Survives,
-        Dropped,
         Impossible,
     }
 
@@ -74,7 +79,7 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
             "a relevant family, at two values nothing tells apart or together",
             Term::type_ground(),
             true,
-            Verdict::Dropped,
+            Verdict::Survives,
         ),
     ] {
         let mut certifier = certifier();
@@ -107,7 +112,7 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
         )
         .expect("inversion is a total function of finished terms");
 
-        let surviving = match (outcome, expected) {
+        let solutions = match (outcome, expected) {
             (Invert::Impossible, Verdict::Impossible) => continue,
             (Invert::Impossible, _) => panic!(
                 "{label}: a re-forced binder was reported unreachable, which excuses the arm from being checked"
@@ -115,70 +120,20 @@ fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
             (Invert::Solved(_), Verdict::Impossible) => {
                 panic!("{label}: two forcings that clash left the case reachable")
             }
-            (Invert::Solved(solutions), Verdict::Survives) => (solutions, 1),
-            (Invert::Solved(solutions), Verdict::Dropped) => (solutions, 0),
+            (Invert::Solved(solutions), Verdict::Survives) => solutions,
         };
-        let (solutions, count) = surviving;
 
         assert_eq!(
-            solutions.len(),
-            count,
-            "{label}: the deletion rule kept {} of the two forcings",
-            solutions.len(),
-        );
-        assert!(
-            solutions.iter().all(|(bound, _)| *bound == binder),
-            "{label}: a solution was recorded for a binder that was never forced",
-        );
-    }
-}
-
-/// The rule's third answer, which the pair above does not reach: a binder whose *type* is out of scope.
-///
-/// `consolidate` decides a re-forcing by asking the `Judge` for the binder's assumed type and comparing the two forcings at it. With no assumption there is nothing to compare at, so it drops the binder's solutions — the conservative direction, leaving the binder unsolved and the arm still checked. No program reaches the branch: both certifier callers reach `invert_indices` through `open_payload`, which assumes every binder it opens before the body runs, so from the certifier it is unreachable by construction.
-///
-/// It is pinned anyway, because the conservative answer is not the obvious one to write. `None => true` — no type, so nothing to disagree about, so keep the forcing — is the plausible slip, and it would accept a re-forcing that *no convertibility test ever decided*, which is the deletion rule discharging a constraint it never checked. Nothing else in the workspace would notice.
-///
-/// The discrimination is against the two constructor cases above rather than beside them: identical family, identical sort, identical forcings, and the binder assumed there and not here. At a proposition that one difference must turn one surviving solution into none. At a relevant family it must turn `Impossible` into none as well: the clash is asked only after conversion has said no, and with no type conversion was never asked, so the strong verdict — the one that excuses an arm from being checked — would be decided out of blindness, which is the direction no analysis on this seam takes.
-#[test]
-fn a_binder_whose_type_is_out_of_scope_drops_its_forcings() {
-    for (label, sort) in [
-        ("a proposition", Term::prop()),
-        ("a relevant family", Term::type_ground()),
-    ] {
-        let mut certifier = certifier();
-        let family = declare(&mut certifier, "Forced", sort);
-        let binder = Free::local(900, Some("p"));
-
-        // Deliberately not assumed: this is the whole of the fixture.
-
-        let inhabitant = |tag| Term::variant(family, Vec::<Term>::new(), tag, Vec::<Term>::new());
-        let target = Term::free_var(&binder);
-
-        let outcome = invert_indices(
-            &mut certifier,
-            &[inhabitant("a"), inhabitant("b")],
-            &[target.clone(), target],
-            slice::from_ref(&binder),
-        )
-        .expect("inversion is a total function of finished terms");
-
-        let Invert::Solved(solutions) = outcome else {
-            panic!(
-                "{label}: a binder with no assumption was reported unreachable, which excuses the arm from being checked"
-            );
-        };
-
-        assert!(
-            solutions.is_empty(),
-            "{label}: a binder whose type is out of scope kept a forcing that no convertibility test decided",
+            solutions,
+            vec![(binder, inhabitant("a"))],
+            "{label}: the binder is solved to its first forcing and to nothing else",
         );
     }
 }
 
 /// The clash rule's license is the registry, and a family the registry cannot answer for must not clash.
 ///
-/// Two different constructors of one family definitely clash only when the family is *relevant*: at a `Prop`-sorted family irrelevance makes every inhabitant the same value, so reading tag disjointness there contradicts conversion, and an arm excused as impossible on that reading is the vacuous-elimination route to a closed inhabitant of `False`. The sort is read out of `induct_decl`, so the whole of that protection rests on the lookup answering — and a lookup that answered nothing and fell through to the tag check would answer `Impossible`: the analysis deciding the strong verdict *because* it was blind, where every other blindness on this seam — an unknown positivity name, an undecodable size, an unassumed binder — turns into a refusal. The branch is unreachable from either checker as far as the walks are known, a well-typed variant's family being registered wherever the term came from, but the fixture above pins an equally unreachable branch for the same reason: the conservative answer is not the obvious one to write, and nothing else in the workspace would notice the wrong one.
+/// Two different constructors of one family definitely clash only when the family is *relevant*: at a `Prop`-sorted family irrelevance makes every inhabitant the same value, so reading tag disjointness there contradicts conversion, and an arm excused as impossible on that reading is the vacuous-elimination route to a closed inhabitant of `False`. The sort is read out of `induct_decl`, so the whole of that protection rests on the lookup answering — and a lookup that answered nothing and fell through to the tag check would answer `Impossible`: the analysis deciding the strong verdict *because* it was blind, where every other blindness on this seam — an unknown positivity name, an undecodable size, an unassumed binder — turns into a refusal. The branch is unreachable from either checker as far as the walks are known, a well-typed variant's family being registered wherever the term came from, and it is pinned anyway: the conservative answer is not the obvious one to write, and nothing else in the workspace would notice the wrong one.
 ///
 /// The control pair holds what the rule must not move: the same position with the declaration present still clashes at a relevant sort, and still yields nothing at `Prop`.
 #[test]
@@ -227,11 +182,11 @@ fn a_family_the_registry_cannot_answer_for_does_not_clash() {
     }
 }
 
-/// The outer direction reaches a variable inside an index, and only a local's.
+/// An outer variable inside an index is solved, and only a local.
 ///
-/// A case whose target is `1`, met at an actual index `n + 1`, is reachable only when `n` is `0`: the peel reduces the pair to `0` against `n`, and the second direction solves the outer variable there. Both checkers get it from `solve_indices`. The control drops the one fact the rule reads from its driver: with `n` not a local the walk opened, it is a name no case can refine, and nothing is solved.
+/// A case whose target is `1`, met at an actual index `n + 1`, is reachable only when `n` is `0`: the peel reduces the pair to `0` against `n`, and the unifier solves the outer variable there. Both checkers get it from `solve_indices`. The control drops the one fact the rule reads from its driver: with `n` not a local the walk opened, it is a name no case can refine, and nothing is solved.
 #[test]
-fn the_outer_direction_solves_a_variable_inside_an_index() {
+fn an_outer_variable_inside_an_index_is_solved() {
     let n = Free::local(900, Some("n"));
     let nat = |k: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(k)));
     let actual = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
@@ -256,11 +211,11 @@ fn the_outer_direction_solves_a_variable_inside_an_index() {
     }
 }
 
-/// A binder the first direction pins is rewritten through what the second solves, so the arm's substitution is idempotent.
+/// A case is solved as one idempotent substitution: a binder solved to a value naming an outer variable is rewritten through what that variable is solved to.
 ///
-/// Actuals `(n + 1, n + 1)` against targets `(k, 1)`: the first direction pins `k := n + 1`, and the second learns `n := 0` from the other position. Applied one after the other the pair would leave `k` naming a variable the same substitution replaces; composed, `k`'s value no longer mentions `n` at all.
+/// Actuals `(n + 1, n + 1)` against targets `(k, 1)`: the first position solves `k := n + 1`, and the second learns `n := 0`. Applied one after the other the pair would leave `k` naming a variable the same substitution replaces; made idempotent, `k`'s value no longer mentions `n` at all.
 #[test]
-fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
+fn a_case_is_solved_as_one_idempotent_substitution() {
     let mut certifier = certifier();
     let n = Free::local(900, Some("n"));
     let k = Free::local(901, Some("k"));
@@ -298,9 +253,9 @@ fn a_pinned_binder_is_rewritten_through_the_outer_solution() {
     );
 }
 
-/// The outer direction's clash is held as the first direction's is: a local forced to two values a program tells apart leaves the case with no value, and one forced to two inhabitants of a proposition is forced to one value twice.
+/// An outer variable forced twice is one equation between its two values: a local forced to two values a program tells apart leaves the case with no value, and one forced to two inhabitants of a proposition is forced to one value twice.
 ///
-/// Actuals `(x, x)` against targets `(a(), b())`, for a case with no binder. The first direction reads a variable as what may yet be the target, and decides nothing. The second solves `x` to each target in turn. At a relevant family the two clash and the case is impossible, which is what leaves a written arm untyped by the certifier and may leave it out. At a proposition the same two convert, so the case stays reachable: read as a clash there, an arm would go unchecked on the strength of two proofs being told apart.
+/// Actuals `(x, x)` against targets `(a(), b())`, for a case with no binder. `x` is solved to `a()`, and the second position is then `a() ~ b()`. At a relevant family the two clash and the case is impossible, which is what leaves a written arm untyped by the certifier and may leave it out. At a proposition the same two are one value, so the case stays reachable: read as a clash there, an arm would go unchecked on the strength of two proofs being told apart.
 #[test]
 fn an_outer_variable_forced_twice_clashes_only_where_its_forcings_are_told_apart() {
     for (label, sort, impossible) in [
@@ -326,14 +281,6 @@ fn an_outer_variable_forced_twice_clashes_only_where_its_forcings_are_told_apart
         let inhabitant = |tag| Term::variant(family, Vec::<Term>::new(), tag, Vec::<Term>::new());
         let actuals = [Term::free_var(&x), Term::free_var(&x)];
         let targets = [inhabitant("a"), inhabitant("b")];
-
-        assert!(
-            matches!(
-                invert_indices(&mut certifier, &actuals, &targets, &[]),
-                Ok(Invert::Solved(_))
-            ),
-            "{label}: the first direction decided what a variable may yet be",
-        );
 
         let outcome =
             solve_indices(&mut certifier, &actuals, &targets, &[]).expect("the certifier answers");

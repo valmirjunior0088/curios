@@ -9,9 +9,10 @@ use {
         list_element, same_atom,
     },
     curios_algebra::{
-        Carrier, Conclusion, Deduction, Operation, Stripped, pair_factors, same_leaves,
-        same_position,
+        Carrier, Conclusion, Deduction, Operation, Packed, Run, Segment, Stripped, Word,
+        pair_factors, same_leaves, same_position,
     },
+    curios_num::Binary,
 };
 
 /// What a peel concludes, over the pair of residuals it hands back. Every peel here is at [`Deduction`]'s strength — a residual it hands back holds exactly when the pair does, a common prefix or summand peeled off or a side regrouped — except [`peel_monomial`]'s and [`peel_comparison`]'s, which are merely sufficient and are therefore [`Conclusion`]s only conversion reads. `Undecided` is a pair the peel reads and makes no progress on, which every reader treats as the refusing direction, so declining can only cost reductions; `None` beside it is a pair the peel does not read at all.
@@ -413,6 +414,62 @@ pub fn peel_list(left: &Intrinsic, right: &Intrinsic) -> Option<Verdict> {
     list_element(right)?;
 
     Some(peel_words(&Words::new(Element(element)), left, right))
+}
+
+/// A `List` or `Bytes` value's first element and the value after it, where its word starts with one: a literal's first element or byte, or a symbolic byte. `None` where the word starts with a chunk or a window, whose first element is unknown, where it is empty, and where `intrinsic` is no word.
+///
+/// The piece the inverter's injectivity for a word reads: a free monoid cancels a generator, so `[a, ..u] = [b, ..v]` holds exactly where `a = b` and `u = v`. The peels above keep their one residual; which pair to cancel is the caller's.
+pub fn leading_element(intrinsic: &Intrinsic) -> Option<(Term, Term)> {
+    if is_bytes_word(intrinsic) {
+        let words = Words::new(Bytes);
+        let empty = Term::intrinsic(Intrinsic::Bytes(Binary::empty()));
+        let first = |run: &Packed| Some(Term::intrinsic(Intrinsic::Byte(run.bytes.byte(0)?)));
+        return split_first(&words, words.read(intrinsic), first, empty);
+    }
+
+    let element = list_element(intrinsic)?;
+    let empty = Term::intrinsic(Intrinsic::List {
+        element: element.clone(),
+        items: Vec::new(),
+    });
+    let words = Words::new(Element(element));
+    split_first(
+        &words,
+        words.read(intrinsic),
+        |run: &Vec<Term>| run.first().cloned(),
+        empty,
+    )
+}
+
+/// `word`'s first element and the word after it rebuilt, `empty` where nothing is left.
+fn split_first<S: Sequence>(
+    words: &Words<S>,
+    word: Word<Words<S>>,
+    first: impl Fn(&S::Run) -> Option<Term>,
+    empty: Term,
+) -> Option<(Term, Term)> {
+    let mut segments = word.into_segments();
+    let element = match segments.pop_front()? {
+        Segment::Run(mut run) => {
+            let element = first(&run)?;
+            run.skip(1);
+            segments.push_front(Segment::Run(run));
+            element
+        }
+        Segment::Single(element) => element,
+        Segment::Window(_) | Segment::Chunk(_) => return None,
+    };
+
+    let mut rest = Word::default();
+    for segment in segments {
+        rest.push(words, segment);
+    }
+    let rest = match rest.segments().is_empty() {
+        true => empty,
+        false => words.rebuild(rest),
+    };
+
+    Some((element, rest))
 }
 
 /// The verdict [`peel_bytes`] and [`peel_list`] share: what the strip decided, or its residuals rebuilt — handed back where a prefix came off, regrouped where none did.

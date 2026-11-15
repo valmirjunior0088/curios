@@ -70,6 +70,10 @@ impl Env for Probe {
     fn applications(&self, _: &Global) -> Option<Applications> {
         None
     }
+
+    fn refined(&self) -> Vec<(Term, Term)> {
+        Vec::new()
+    }
 }
 
 /// One graded call, from member `caller` to member `callee`.

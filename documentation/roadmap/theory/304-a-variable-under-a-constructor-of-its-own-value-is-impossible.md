@@ -1,12 +1,12 @@
 # A variable under a constructor of its own value is impossible
 
-Its next step is blocked on [An arm's index equations are solved as one problem](100-an-arms-index-equations-are-solved-as-one-problem.md)'s stage 1, whose occurs check this reads. It waits for a consumer: no `/std` site writes an arm for a cyclic case, or a lemma to refute one.
+Its next step is a ready delivery in `curios-analysis/src/invert.rs`'s occurs check (`Unifier::reaches`). It waits for a consumer: no `/std` site writes an arm for a cyclic case, or a lemma to refute one.
 
 ## What is missing
 
 The unifier has no cycle rule, so an equation that sets a variable to a constructor term holding it is undecided rather than impossible. `match e end` over `e: Eq()(l, [1, ..l])` is refused as "missing arm: its indices are not provably impossible at the scrutinee's", and so is one over a tree that holds itself, `Eq()(t, node(t, t))`. No finite value is its own proper subterm. Agda's unifier states this as its *Cycle* step, which fires on a variable that occurs "strongly rigid" in the other side.
 
-A successor cycle is the same case. `match e end` over `e: Eq()(n, n + 1)` is refused today. Once theory 100's stage 1 lands, `n` is refined to the case's binder `z`, and the second equation, `n + 1 ~ z`, is a variable against a successor of itself, which the occurs check leaves undecided. The peel never meets two sums there.
+A successor cycle is the same case. `match e end` over `e: Eq()(n, n + 1)` is refused too: `n` is refined to the case's binder `z`, and the second equation, `n + 1 ~ z`, is a variable against a successor of itself, which the occurs check leaves undecided. The peel never meets two sums there.
 
 ## Goal
 

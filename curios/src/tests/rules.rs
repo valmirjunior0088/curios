@@ -16,6 +16,7 @@ mod effect_tests;
 mod eta_tests;
 mod group_tests;
 mod index_tests;
+mod inversion_tests;
 mod irrelevance_tests;
 mod large_elimination_tests;
 mod metavariable_tests;

@@ -23,9 +23,9 @@ use {
     super::{
         Context, Settled, hold_at_one_instance, levels_clash_to_conversion, zonk_solved_term_metas,
     },
-    crate::{Error, classing, convert_at, is_prop, reduce_with, same_uncommitted, sort_of},
+    crate::{Error, classing, is_prop, reduce_with, same_uncommitted, sort_of},
     curios_analysis::{
-        Answered, Classes, Driver, ScrutineeRead, Within, answers, answers_classed,
+        Answered, Classes, Driver, Env, Judge, ScrutineeRead, Within, answers, answers_classed,
         apart_in_instance, atoms_within, case_target_indices, could_reduce_to, holds_no_type,
         one_up_to_instances, pinned_instance, read_operands, read_scrutinee,
         read_scrutinee_classed, refold,
@@ -151,8 +151,8 @@ impl Reducer for Context<'_> {
 
 /// The elaborator's side of the shared-analysis seam.
 ///
-/// Both methods are `typing`'s wrappers: they exist so a failure reaches the user as a placed diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Env::Error`](curios_analysis::Env::Error) formalizes.
-impl curios_analysis::Env for Context<'_> {
+/// Both methods are `typing`'s wrappers: they exist so a failure reaches the user as a placed diagnostic naming the offending term rather than as a bare `ReduceError`, which is precisely the split [`Env::Error`] formalizes.
+impl Env for Context<'_> {
     type Error = Error;
 
     /// Plain reduction, as the seam asks: a shared analysis borrows no opinion of the elaborator's conversion through the term it reads.
@@ -207,13 +207,13 @@ impl curios_analysis::Env for Context<'_> {
     fn applications(&self, name: &Global) -> Option<Applications> {
         self.definition_applications(name)
     }
+
+    fn refined(&self) -> Vec<(Term, Term)> {
+        self.in_force_refinements()
+    }
 }
 
-impl curios_analysis::Judge for Context<'_> {
-    fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error> {
-        convert_at(self, type_, this, that)
-    }
-
+impl Judge for Context<'_> {
     /// Classified as the certifier's lookup classifies it, the two sorts held to one quality: a quality left to a caller or to inference fits only itself, which is what the certifier finds at each assignment it judges the declaration at. The levels are this checker's to infer: the relation the answer needs is recorded where the store stays consistent with it (`UniverseSolver::settle_leq`), so the declaration's scheme states it and the certifier, which decides under that scheme, answers alike.
     fn sort_below(&mut self, type_: &Term, universe: &Term) -> Result<bool, Self::Error> {
         let Subterm::Sort(Sort {

@@ -565,13 +565,14 @@ impl Env for Certifier<'_> {
     fn applications(&self, name: &Global) -> Option<Applications> {
         Certifier::applications(self, name)
     }
+
+    /// The case equations of the arms in force; a solved variable is a `let`, substituted by value before a judgment meets it.
+    fn refined(&self) -> Vec<(Term, Term)> {
+        self.scope.refined()
+    }
 }
 
 impl Judge for Certifier<'_> {
-    fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error> {
-        convert::convert(self, type_, this, that)
-    }
-
     fn sort_below(&mut self, type_: &Term, universe: &Term) -> Result<bool, Self::Error> {
         let unread = |error: &Error| {
             matches!(

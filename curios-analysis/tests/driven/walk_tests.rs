@@ -732,11 +732,9 @@ fn a_let_alias_of_the_arm_payload_descends() {
     assert_eq!(group_totality(&mut certifier, group), Ok(Totality::Partial));
 }
 
-/// A key at a universe instance is the key the bare name is. At the top of a position the first direction leaves a key to index refinement, which may have refined it to the very binder it stands against, and a name at an instance is that key: solved against, the binder would be aliased to what reduces back to it.
-///
-/// Mutation-checked: with the guard reading a bare variable and a projection alone, the binder is solved to the instance.
+/// A binder forced to a top-level name is solved to it, bare or at a universe instance, as to a literal. No arm refines a top-level name, a case equation's key naming a local (`records_case_equation`), so the name is a value nothing in force reads back to the binder.
 #[test]
-fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
+fn a_binder_forced_to_a_top_level_name_is_solved_to_it() {
     let mut certifier = certifier();
     let n = Global::Authored(Qualifier::from(["n"]));
     let k = Free::local(901, Some("k"));
@@ -749,10 +747,10 @@ fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
     let instance = Term::instance(n, vec![Level::zero()]);
     let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
 
-    for (label, actual, solved) in [
-        ("a bare name", Term::instance(n, Universes::default()), None),
-        ("a name at an instance", instance, None),
-        ("a literal", literal.clone(), Some(literal)),
+    for (label, actual) in [
+        ("a bare name", Term::instance(n, Universes::default())),
+        ("a name at an instance", instance),
+        ("a literal", literal),
     ] {
         let Invert::Solved(solutions) = invert_indices(
             &mut certifier,
@@ -764,11 +762,7 @@ fn a_key_at_a_universe_instance_is_left_to_index_refinement() {
             panic!("{label}: a reachable case was reported unreachable");
         };
 
-        let expected = solved
-            .map(|value| (k, value))
-            .into_iter()
-            .collect::<Vec<_>>();
-        assert_eq!(solutions, expected, "{label}");
+        assert_eq!(solutions, vec![(k, actual)], "{label}");
     }
 }
 

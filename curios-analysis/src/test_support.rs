@@ -241,4 +241,8 @@ impl Env for Scope {
     fn applications(&self, _: &Global) -> Option<Applications> {
         None
     }
+
+    fn refined(&self) -> Vec<(Term, Term)> {
+        Vec::new()
+    }
 }

@@ -7,9 +7,10 @@ use {
     crate::{
         BinderSite, Context, Error, check, check_is_sort, dead_guard, decided_sort_of, expect,
         hold_prop, is_prop, pending, probe_open_sort, quality_of, reduce_with, refine_head,
-        resolved_for_display, same_uncommitted, stuck_on_metavar, zonk_solved_term_metas,
+        resolved_for_display, same_uncommitted, solve_case_indices, stuck_on_metavar,
+        zonk_solved_term_metas,
     },
-    curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
+    curios_analysis::{Invert, retyped, scrutinee_solution, wholly_pinned},
     curios_common::Plicity,
     curios_core::{
         Advance, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType, Intrinsic,
@@ -980,7 +981,7 @@ impl NominalSplit {
 
     /// Whether the arm for `tag` may be left out.
     ///
-    /// Inversion — checker-verified omission: a missing arm is accepted iff first-order unification of the scrutinee's actual indices against this case's targets finds a *definite* clash, in either direction — the answer a written arm is checked under, so an arm may be left out exactly where the certifier would type none of it. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
+    /// Inversion — checker-verified omission: a missing arm is accepted iff first-order unification of the scrutinee's actual indices against this case's targets finds a *definite* clash — the answer a written arm is checked under, so an arm may be left out exactly where the certifier would type none of it. The arm is then pruned (erase fills its slot with an unreachable body); anything short of definite keeps the arm mandatory.
     pub fn ruled_out(&self, context: &mut Context, tag: &Atom) -> Result<bool, Error> {
         // An unindexed inductive has nothing to invert: every arm is reachable and a missing one is plainly missing.
         if self.actual_indices.is_empty() {
@@ -992,10 +993,10 @@ impl NominalSplit {
             .map(|_| context.fresh(None))
             .collect::<Vec<_>>();
 
-        // The case is opened as a written arm's is, its binders assumed, because inversion reconciles a binder forced twice *at its type*: `refl(@z) : (z, z)` against `Eq()(false, true)` is decided by what `false` and `true` are at `Bool`, and a binder that is only a name has no type to be asked at.
+        // The case is opened as a written arm's is, its binders assumed, so inversion solves it as it solves the arm: a binder's solution must fit its variable, which is read at the binder's type.
         let inversion = context.with_frame(|context| {
             let ix_c = assume_payload(context, payload, &labels);
-            solve_indices(context, &self.actual_indices, &ix_c, &labels)
+            solve_case_indices(context, &self.actual_indices, &ix_c, &labels)
         })?;
 
         Ok(matches!(inversion, Invert::Impossible))
@@ -1052,27 +1053,28 @@ impl NominalSplit {
                 let ix_c = assume_payload(context, payload, labels);
                 open_arm(context, &self.head, &ctor_val)?;
 
-                // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the certifier's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved, and an error it raises is reported as one in an arm that may be left out. Refinements never justify the typing (the goal at the case does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
-                let solutions = match solve_indices(context, &self.actual_indices, &ix_c, labels)? {
-                    Invert::Solved(solutions) => solutions,
-                    Invert::Impossible => {
-                        let case = Term::induct_type_at(
-                            self.name,
-                            self.universes.clone(),
-                            self.params.clone(),
-                            ix_c.clone(),
-                        );
-                        let scrutinee = Term::induct_type_at(
-                            self.name,
-                            self.universes.clone(),
-                            self.params.clone(),
-                            self.actual_indices.clone(),
-                        );
-                        ruled_out = Some(context.rule_out_arm(case, scrutinee));
+                // The index equations: the most-general solution of `actual indices ~ case targets` over the arm's binders and the outer variables, by the certifier's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved, and an error it raises is reported as one in an arm that may be left out. Refinements never justify the typing (the goal at the case does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
+                let solutions =
+                    match solve_case_indices(context, &self.actual_indices, &ix_c, labels)? {
+                        Invert::Solved(solutions) => solutions,
+                        Invert::Impossible => {
+                            let case = Term::induct_type_at(
+                                self.name,
+                                self.universes.clone(),
+                                self.params.clone(),
+                                ix_c.clone(),
+                            );
+                            let scrutinee = Term::induct_type_at(
+                                self.name,
+                                self.universes.clone(),
+                                self.params.clone(),
+                                self.actual_indices.clone(),
+                            );
+                            ruled_out = Some(context.rule_out_arm(case, scrutinee));
 
-                        Vec::new()
-                    }
-                };
+                            Vec::new()
+                        }
+                    };
                 for (name, solution) in &solutions {
                     context.refine(name, solution);
                 }

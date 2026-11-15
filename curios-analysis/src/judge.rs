@@ -14,7 +14,7 @@
 //!
 //! # The concession this records
 //!
-//! [`Env`] is environment queries only — nothing it answers is a judgment, so an analysis needing no more than `Env` borrows no opinion from its driver. [`Judge`] adds conversion, which *is* a judgment, and an analysis requiring it takes its driver's word on convertibility. That is a real concession and the split exists to keep it visible in the type system rather than buried in a call graph: today `invert` is the only consumer of [`Judge`], and if its products are ever emitted as certificates the certifier type-checks instead, `Judge` losing its last implementor is the signal the concession is gone.
+//! [`Env`] is environment queries only — nothing it answers is a judgment, so an analysis needing no more than `Env` borrows no opinion from its driver. [`Judge`] adds a judgment of sorts, whether a type's sort sits below a universe, and an analysis requiring it takes its driver's word on the levels. That is a real concession and the split exists to keep it visible in the type system rather than buried in a call graph: today `invert` is the only consumer of [`Judge`], which it asks of a variable whose type is a sort before solving it, and it asks no conversion. If its products are ever emitted as certificates the certifier type-checks instead, `Judge` losing its last implementor is the signal the concession is gone.
 //!
 //! # Errors belong to the driver
 //!
@@ -93,6 +93,9 @@ pub trait Env {
     /// Asked of the checker for the reason [`Env::polarity`] is: the certifier's is the one its own walk filed of the definition, the elaborator's the one its publication filed.
     fn applications(&self, name: &Global) -> Option<Applications>;
 
+    /// What the arms in force refine, each as a term naming the locals the refined term names and the value it stands for there: a scrutinee an arm matched on, a projection of one, and in the elaborator a variable. A reader meets a refined term's value in its place as it meets a definition's, so a term reaches every local such a value names wherever it names one of the refined term's ([`invert_indices`](crate::invert_indices)'s occurs check). Empty where no arm is entered.
+    fn refined(&self) -> Vec<(Term, Term)>;
+
     /// How two instances of the family `name` compare in its `index`th universe parameter, as this checker holds it: [`Variance::Invariant`], never irrelevant, where it holds no vector for the name or the vector ends before `index`.
     ///
     /// Asked of the checker for the reason [`Env::polarity`] is. The elaborator's vector is the one its entry carries, which is what this answers unless a checker says otherwise; the certifier's is the one its own walk filed.
@@ -109,11 +112,8 @@ pub trait Env {
 
 /// [`Env`], plus the one judgment a shared analysis is allowed to borrow.
 ///
-/// Conversion is duplicated between the two checkers on purpose, so an analysis that asks for it here is trusting whichever implementation is driving it. See the module documentation on what that concession is and why it is a separate trait.
+/// Typing is duplicated between the two checkers on purpose, so an analysis that asks for a judgment here is trusting whichever implementation is driving it. See the module documentation on what that concession is and why it is a separate trait.
 pub trait Judge: Env {
-    /// Whether `this` and `that` are convertible *at* `type_`, so that proof irrelevance and eta fire at the terms' real sort.
-    fn convert_at(&mut self, type_: &Term, this: &Term, that: &Term) -> Result<bool, Self::Error>;
-
     /// Whether the type `type_` inhabits a sort below the universe `universe`: its sort as the checker's lookup classifies it, held to `universe` by subsumption. The certifier decides the levels under the declaration's constraints; the elaborator, which infers a declaration's levels, records the relation the answer needs where nothing refuses it, which is how the declaration comes to state it. `false` where either is no sort the lookup can read.
     fn sort_below(&mut self, type_: &Term, universe: &Term) -> Result<bool, Self::Error>;
 }

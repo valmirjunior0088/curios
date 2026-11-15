@@ -285,7 +285,7 @@ fn two_proofs_forced_on_one_binder_do_not_clash() {
     });
 }
 
-// The same conflict met from the scrutinee's side. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, one variable twice, so no position clashes on its own and the unifier's first direction, which reads a variable as what may yet be the target, decides nothing. Its second direction solves `n` to each target, and the two forcings clash as two forcings of one binder do: no value of `Two(n, n)` is `mk()`, whatever `n` is. Both checkers ask both directions of an absent arm, by the call a written arm is specialized by, so an arm may be left out exactly where the certifier would type none of it — a goal the case would refine among them, where a written arm has no body, and a clash that stands behind a position the first direction gave up on.
+// The same conflict met from the scrutinee's side. `mk()` targets `(0, 1)` and the scrutinee's indices are `(n, n)`, one variable twice, so no position clashes on its own: `n` is solved to `0`, and the second position, read through that solution, is `0 ~ 1`, which clashes as two forcings of one binder do: no value of `Two(n, n)` is `mk()`, whatever `n` is. Both checkers ask an absent arm by the call a written arm is specialized by, so an arm may be left out exactly where the certifier would type none of it — a goal the case would refine among them, where a written arm has no body.
 #[test]
 fn a_variable_of_the_indices_forced_two_ways_excuses_the_arm() {
     assert_eq!(
