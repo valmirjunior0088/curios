@@ -3,8 +3,9 @@
 use {
     crate::tests::test_support::*,
     curios_common::fill,
-    curios_cps::{Node, ValueExpr},
+    curios_cps::{Atom, Intrinsic, Literal, Node, ValueExpr},
     curios_native::test_support::*,
+    curios_num::Natural,
     std::collections::BTreeSet,
 };
 
@@ -264,7 +265,7 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
     );
 }
 
-/// A span builds its answer once, where its walk stops: what a step's recursion returns to constructs nothing, so no step rebuilds the answer of the one after it and a character passed keeps no frame. A walk that restates its proof around its recursion erases to that rebuild, a pair a character under a frame a character, and a program's stack holds the depth, so the shape is looked for and not the depth, as the worker is above. The text is read from standard input, or the closed walk would be evaluated where the program is compiled.
+/// A span builds its answer once, where its walk stops: what a step's recursion returns to constructs nothing, so no step rebuilds the answer of the one after it and a character passed keeps no frame. A walk that restates its proof around its recursion erases to that rebuild, a pair a character under a frame a character, and a program's stack holds the depth, so the shape is looked for and not the depth, as the worker is above. Where the function running the walk defines its step, the step is a loop of that function, contified into it, whose turns hand on by jumps that return to nothing; it is found by what a turn computes, the predicate's comparison with the newline. The text is read from standard input, or the closed walk would be evaluated where the program is compiled.
 #[test]
 fn a_span_builds_its_answer_where_its_walk_stops() {
     let module = cps_optm_module(
@@ -299,7 +300,47 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
         })
         .map(|(_, function)| function.body)
         .collect::<Vec<_>>();
-    let mut pending = steps;
+    // A loop whose turn compares a character with the newline and jumps back to itself: the walk, where it is contified.
+    let newline = Atom::Literal(Literal::Nat(Natural::from(10u32)));
+    let loops =
+        module
+            .live_continuations()
+            .filter(|(id, continuation)| {
+                let mut pending = vec![continuation.body];
+                let mut seen = BTreeSet::new();
+                let (mut compares, mut repeats) = (false, false);
+                while let Some(node) = pending.pop() {
+                    if !seen.insert(node) {
+                        continue;
+                    }
+                    match module.node(node).expect("a body's node is live") {
+                        Node::LetValue { next, .. } => pending.push(*next),
+                        Node::LetIntrinsic { op, args, next, .. } => {
+                            compares |= *op == Intrinsic::NatNeq && args.contains(&newline);
+                            pending.push(*next);
+                        }
+                        Node::LetCont {
+                            continuations,
+                            body,
+                        } => {
+                            pending.push(*body);
+                            pending.extend(continuations.iter().map(|continuation| {
+                                module.continuation(*continuation).unwrap().body
+                            }));
+                        }
+                        Node::ApplyCont(edge) => repeats |= edge.target == *id,
+                        Node::Switch { cases, default, .. } => {
+                            repeats |= cases.values().chain(default).any(|edge| edge.target == *id);
+                        }
+                        _ => {}
+                    }
+                }
+                compares && repeats
+            })
+            .map(|(_, continuation)| continuation.body)
+            .collect::<Vec<_>>();
+    let looped = !loops.is_empty();
+    let mut pending = steps.into_iter().chain(loops).collect::<Vec<_>>();
     let mut seen = BTreeSet::new();
     let mut calls = 0;
     while let Some(id) = pending.pop() {
@@ -343,8 +384,8 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
         }
     }
     assert!(
-        calls > 0,
-        "the walk recurs through a call its step makes:\n{module}"
+        calls > 0 || looped,
+        "the walk recurs through a call its step makes, or is a loop:\n{module}"
     );
 }
 

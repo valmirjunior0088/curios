@@ -9,7 +9,9 @@ use {
 
 /// Contify every non-escaping function whose calls resolve to a single return context into a local continuation, covering both the single-entry recursive loop and the non-recursive join-point cases.
 ///
-/// A function qualifies when it has exactly one external call site: any call from a third function would make `external` longer than one, so the only admissible calls are that single entry plus the function's own tail-recursive self-calls. This excludes mutual recursion and multi-return-context callers without a separate check, and a function with several external call sites stays a function.
+/// A function qualifies when it has exactly one external call site: any call from a third function would make `external` longer than one, so the only admissible calls are that single entry plus the function's own tail-recursive self-calls. This excludes multi-return-context callers without a separate check, and a function with several external call sites stays a function.
+///
+/// **A loop its caller defines is that caller's, wherever its step leads.** A callee that reaches its caller through the call graph is refused, the two being a mutual recursion, unless the caller is the function whose body introduces it: a fold through a tree's children is a loop its function defines whose step calls that function. Contifying it moves its body into the caller and copies nothing, so a call it makes back is the caller's own recursion, as it was before the move — see `curios-cps`'s README.
 ///
 /// The callee's captures need no check. Its one external site names it, so the `LetFun` binding it encloses that site, and every value the callee mentions without binding is bound before that `LetFun` — in scope at the site by the rule `verify_lexical_scopes` walks. A guard refusing the move unless the owner's own body *mentions* each such value would test the owner's text rather than its scope: a loop capturing an outer binding would stay a function call whenever its caller happens not to name the binding itself.
 ///
@@ -17,6 +19,18 @@ use {
 pub fn contify_calls(module: &mut Module) -> bool {
     let analysis = analyze_calls(module);
     let mut admitted = Vec::new();
+    // Which function's body introduces each function a `LetFun` binds.
+    let definers = analysis
+        .node_owners
+        .iter()
+        .filter_map(|(&node, &owner)| match module.node(node) {
+            Some(Node::LetFun { functions, .. }) => {
+                Some(functions.iter().map(move |&function| (function, owner)))
+            }
+            _ => None,
+        })
+        .flatten()
+        .collect::<BTreeMap<_, _>>();
 
     for (callee, function) in module.live_functions() {
         if Some(callee) == module.entry()
@@ -35,11 +49,11 @@ pub fn contify_calls(module: &mut Module) -> bool {
         if external.len() != 1 {
             continue;
         }
-        if function_reaches(
-            &analysis.call_graph,
-            callee,
-            analysis.node_owners[&external[0]],
-        ) {
+        // A callee that reaches its caller is admitted where the caller defines it: it is then the caller's loop, and a call it makes back is the caller's own recursion. One defined elsewhere is the other half of a mutual recursion between two functions, which stays as it was written.
+        let owner = analysis.node_owners[&external[0]];
+        if function_reaches(&analysis.call_graph, callee, owner)
+            && definers.get(&callee) != Some(&owner)
+        {
             continue;
         }
 

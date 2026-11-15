@@ -559,3 +559,124 @@ fn a_nontail_recursive_call_does_not_mint_a_copy() {
     module.function_mut(loop_fn).unwrap().body = body;
     declines_without_minting(module, 1);
 }
+
+/// `owner(y) = walker(y)` with `walker(x) = walker(owner(x))`: a loop whose step calls back into the function around it, defined by `owner` where `defined_by_owner`, and by `main` beside `owner` otherwise.
+fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
+    let mut module = Module::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let owner = module.reserve_function();
+    let owner_return = module.reserve_continuation();
+    let walker = module.reserve_function();
+    let walker_return = module.reserve_continuation();
+
+    let x = module.add_value(Some("x".into()));
+    let r = module.add_value(Some("r".into()));
+    let again = module.reserve_continuation();
+    let recur = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(walker),
+        args: vec![Atom::Value(r)],
+        return_to: walker_return,
+    });
+    module.define_continuation(
+        again,
+        Continuation {
+            debug_name: Some("again".into()),
+            params: vec![r],
+            body: recur,
+        },
+    );
+    let call_owner = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(owner),
+        args: vec![Atom::Value(x)],
+        return_to: again,
+    });
+    let walker_body = module.add_node(Node::LetCont {
+        continuations: vec![again],
+        body: call_owner,
+    });
+    module.define_function(
+        walker,
+        Function {
+            debug_name: Some("walker".into()),
+            params: vec![x],
+            return_cont: walker_return,
+            body: walker_body,
+            droppable: false,
+        },
+    );
+
+    let y = module.add_value(Some("y".into()));
+    let call_walker = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(walker),
+        args: vec![Atom::Value(y)],
+        return_to: owner_return,
+    });
+    let owner_body = match defined_by_owner {
+        true => module.add_node(Node::LetFun {
+            functions: vec![walker],
+            body: call_walker,
+        }),
+        false => call_walker,
+    };
+    module.define_function(
+        owner,
+        Function {
+            debug_name: Some("owner".into()),
+            params: vec![y],
+            return_cont: owner_return,
+            body: owner_body,
+            droppable: false,
+        },
+    );
+
+    let call_entry = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(owner),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
+        return_to: entry_return,
+    });
+    let functions = match defined_by_owner {
+        true => vec![owner],
+        false => vec![owner, walker],
+    };
+    let body = module.add_node(Node::LetFun {
+        functions,
+        body: call_entry,
+    });
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body,
+            droppable: false,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, walker)
+}
+
+/// A loop its caller defines is contified though its step calls back into the caller: it is the caller's loop, and the call back is the caller's own recursion. Mutation-checked: refusing every callee that reaches its caller leaves it a function.
+#[test]
+fn contifies_a_loop_its_caller_defines_though_its_step_calls_back() {
+    let (mut module, walker) = calling_back(true);
+    assert!(contify_calls(&mut module), "the loop is contified");
+    module.verify().unwrap();
+    assert!(
+        module.function(walker).is_none(),
+        "the loop is a continuation of the function defining it:\n{module}"
+    );
+}
+
+/// And one another function defines stays a function: calling back into a caller that does not define it is a mutual recursion between two functions, which contification leaves as written.
+#[test]
+fn does_not_contify_a_function_calling_back_a_caller_that_does_not_define_it() {
+    let (mut module, walker) = calling_back(false);
+    contify_calls(&mut module);
+    assert!(
+        module.function(walker).is_some(),
+        "the mutual recursion stays two functions:\n{module}"
+    );
+}

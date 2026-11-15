@@ -148,20 +148,16 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
         "nor does the application it received stay indirect: {indirect:?}"
     );
 
-    // Located by the walk's own arithmetic, since neither surviving name is load-bearing: the absorbed step becomes a parameter of the function that used to return it, so the pair is identified by what it computes.
+    // Located by the walk's own arithmetic, since no surviving name is load-bearing: the absorbed step becomes a parameter of the function that used to return it, and a loop of that function where it defines the step, so the walk is identified by what it computes.
     let stepping = functions
         .iter()
         .filter(|function| function.body.contains("30011"))
         .collect::<Vec<_>>();
-    assert_eq!(
-        stepping.len(),
-        2,
-        "the walk survives as the two functions it was written as, rather than being peeled",
-    );
+    assert!(!stepping.is_empty(), "the walk survives");
     for function in stepping {
         assert!(
-            function.body.contains("return_call $func/"),
-            "and each hands on directly and in tail position, keeping the loop flat: {}",
+            function.body.contains("loop $") || function.body.contains("return_call $func/"),
+            "as a loop, or handing on directly in tail position, rather than being peeled: {}",
             function.name,
         );
     }
