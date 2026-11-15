@@ -353,10 +353,9 @@ entry
 }
 
 #[test]
-fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
+fn a_nat_match_peels_to_a_dispatch() {
     let pred = fresh(Some("pred"));
-    let ih = fresh(Some("ih"));
-    // match n | 0 => 0 | succ pred (ih dead) => pred — a case split, not a fold.
+    // match n | 0 => 0 | pred + 1 => pred
     let items = vec![definition(
         "n",
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
@@ -368,7 +367,6 @@ fn a_dead_hypothesis_nat_match_peels_to_a_dispatch() {
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         nat_lit(0),
         &pred,
-        &ih,
         curios_core::Term::free_var(&pred),
     );
     let erased = erase(
@@ -391,58 +389,16 @@ entry
 }
 
 #[test]
-fn a_live_hypothesis_nat_match_erases_to_a_fold() {
-    let pred = fresh(Some("pred"));
-    let ih = fresh(Some("ih"));
-    // match n | 0 => 0 | succ pred ih => ih + 2 — genuine induction.
-    let items = vec![definition(
-        "n",
-        curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
-        nat_lit(5),
-    )];
-    let body = curios_core::Term::nat_match(
-        reference("n"),
-        None,
-        curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
-        nat_lit(0),
-        &pred,
-        &ih,
-        curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(
-            curios_core::Term::free_var(&ih),
-            nat_lit(2),
-        )),
-    );
-    let erased = erase(
-        &module(items, body),
-        curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
-    );
-    assert_eq!(
-        curios_anf::test_support::shape(&erased),
-        "\
-entry
-  Let ~v3 = FoldNat Nat(5)
-    zero
-      Return Nat(0)
-    step(~v0$pred, ~v1$ih)
-      Let ~v2 = Operation NatAdd [~v1$ih, Nat(2)]
-      Return ~v2
-  Return ~v3
-"
-    );
-}
-
-#[test]
-fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
+fn a_list_match_erases_to_one_peel() {
     let h = fresh(Some("h"));
     let t = fresh(Some("t"));
-    let ih = fresh(Some("ih"));
-    // match xs | [] => 0 | h :: t (ih) => ih + 1 — a length fold over a list.
+    // match xs | [] => 0 | [h, ..t] => h
     let list_ty = curios_core::Term::intrinsic(curios_core::Intrinsic::ListType(
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
     ));
     let items = vec![definition(
         "xs",
-        list_ty.clone(),
+        list_ty,
         curios_core::Term::intrinsic(curios_core::Intrinsic::List {
             element: curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
             items: vec![nat_lit(1)],
@@ -454,11 +410,8 @@ fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
         None,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         nat_lit(0),
-        &[&h, &t, &ih],
-        curios_core::Term::intrinsic(curios_core::Intrinsic::nat_add(
-            curios_core::Term::free_var(&ih),
-            nat_lit(1),
-        )),
+        &[&h, &t],
+        curios_core::Term::free_var(&h),
     );
     let erased = erase(
         &module(items, body),
@@ -470,13 +423,12 @@ fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
 items
   Let ~v0$/xs = Sequence ListBuild [Nat(1)]
 entry
-  Let ~v5 = FoldSequence List ~v0$/xs
+  Let ~v3 = UnconsSequence List ~v0$/xs
     empty
       Return Nat(0)
-    step(~v1$h, ~v2$t, ~v3$ih)
-      Let ~v4 = Operation NatAdd [~v3$ih, Nat(1)]
-      Return ~v4
-  Return ~v5
+    cons(~v1$h, ~v2$t)
+      Return ~v1$h
+  Return ~v3
 "
     );
 }
@@ -547,7 +499,6 @@ entry
 fn an_effectful_scrutinee_is_erased_once() {
     let x = fresh(Some("x"));
     let pred = fresh(Some("pred"));
-    let ih = fresh(Some("ih"));
     // The peel path re-derives Core terms from the head (`n - 1`); an effectful compound head must still evaluate exactly once, through the alias.
     let io_read = curios_core::Term::apply(reference("read"), [nat_lit(0)]);
     let items = vec![definition(
@@ -573,7 +524,6 @@ fn an_effectful_scrutinee_is_erased_once() {
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         nat_lit(0),
         &pred,
-        &ih,
         curios_core::Term::free_var(&pred),
     );
     let erased = erase(

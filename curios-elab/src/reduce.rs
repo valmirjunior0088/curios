@@ -752,7 +752,7 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
             })))
         }
 
-        // Structural induction on a native free-monoid intrinsic (`Nat`/`Bytes`/`List`). The carrier-specific one-step decode lives in `FreeMonoid::uncons` (the eliminator-side analogue of `spine::peel_intrinsic`); this driver is the shared catamorphism over it. An identity `Layer` takes the empty arm; a cons `Layer` peels a generator (its head absent for the unary `Nat`) and recurses symbolically for the induction hypothesis; a stuck scrutinee rebuilds.
+        // A case split of a native free-monoid intrinsic (`Nat`/`Bytes`/`List`). The carrier-specific one-step decode lives in `FreeMonoid::uncons` (the eliminator-side analogue of `spine::peel_intrinsic`). An identity `Layer` takes the empty arm; a cons `Layer` peels a generator (its head absent for the unary `Nat`) and takes the cons arm at it; a stuck scrutinee rebuilds.
         Cases::FreeMonoid { carrier } => {
             let scrutinee = Term::unwrap_or_clone(forced);
 
@@ -769,28 +769,15 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
                     | Carrier::Bytes { empty_case, .. }
                     | Carrier::List { empty_case, .. } => empty_case,
                 }),
-                Layer::Cons { head, tail } => {
-                    let ih: Term = Subterm::Match(Match {
-                        head: tail.clone(),
-                        result: result.clone(),
-                        cases: Cases::FreeMonoid {
-                            carrier: carrier.clone(),
-                        },
-                    })
-                    .into();
-
-                    // The cons arm binds the generator's payload (a head, absent for the unary `Nat`), then the tail and the induction hypothesis.
-                    Reduce::Continue(match &carrier {
-                        Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail, &ih]),
-                        Carrier::Bytes { cons_case, .. } | Carrier::List { cons_case, .. } => {
-                            cons_case.open(&[
-                                head.as_ref().expect("Bytes/List cons layer carries a head"),
-                                &tail,
-                                &ih,
-                            ])
-                        }
-                    })
-                }
+                // The cons arm binds the generator's payload (a head, absent for the unary `Nat`), then the tail.
+                Layer::Cons { head, tail } => Reduce::Continue(match &carrier {
+                    Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail]),
+                    Carrier::Bytes { cons_case, .. } | Carrier::List { cons_case, .. } => cons_case
+                        .open(&[
+                            head.as_ref().expect("Bytes/List cons layer carries a head"),
+                            &tail,
+                        ]),
+                }),
                 Layer::Stuck(scrutinee) => Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee.into(),
                     result,

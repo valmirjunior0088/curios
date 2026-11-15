@@ -210,12 +210,12 @@ fn two_distinct_recursions_do_not_convert() {
         let f(n : Nat) -> Nat =
             match n
             | 0 => 0
-            | k + 1; _ => f(k)
+            | k + 1 => f(k)
             end;
         let g(n : Nat) -> Nat =
             match n
             | 0 => 0
-            | k + 1; _ => g(k)
+            | k + 1 => g(k)
             end;
         let same : Eq()(f, g) = Eq/refl();
         /std/print(Nat/to_str(f(3) + g(3)))
@@ -223,8 +223,8 @@ fn two_distinct_recursions_do_not_convert() {
         b"0",
     )
     .refused(&[(
-        "| 0 => 0\n            | k + 1; _ => g(k)",
-        "| 0 => 1\n            | k + 1; _ => g(k)",
+        "| 0 => 0\n            | k + 1 => g(k)",
+        "| 0 => 1\n            | k + 1 => g(k)",
     )])
     .by_elaborator_in("/same", |error| matches!(error, Error::TypeMismatch { .. }));
 }

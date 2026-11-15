@@ -326,7 +326,6 @@ fn an_elimination_reads_its_scrutinee_as_the_algebra_decides_it() {
         nat_type(),
         nat(10),
         &Free::local(5, Some("pred")),
-        &Free::local(6, Some("hypothesis")),
         nat(20),
     ));
     let switch = Cases::Switch {

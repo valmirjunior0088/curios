@@ -153,7 +153,7 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
         "struct /U: pub Type {}\nstruct /W: pub Type {\n    u: {},\n}",
     );
     // `rec F : (Nat) -> Type = (n) => match n | 0 => {} | pred + 1 => {a: F(pred)}; F`. `F(0)` unfolds to the unit, and `F(1)` to a record of it.
-    let nested = "#{node = Rec} (let F: (n: #NatType) -> Type = (n: #NatType) => match n: (m) => Type | 0 => {} | pred + 1; ih => {a: F(pred)} end; F)";
+    let nested = "#{node = Rec} (let F: (n: #NatType) -> Type = (n: #NatType) => match n: (m) => Type | 0 => {} | pred + 1 => {a: F(pred)} end; F)";
     let hypotheses = fill!(
         "p: ${proposition}, q: ${proposition}, r: ${another}, u: {}, v: {}, s: #{node = StructType} /U(), t: #{node = StructType} /U(), x: {a: #NatType, b: {}}, y: {a: #NatType, b: {}}, f: (x: #NatType) -> {}, g: (x: #NatType) -> {}, a: #NatType, b: #NatType, c: {a: {}, b: {}}, d: {a: {}, b: {}}, w: #{node = StructType} /W(), z: #{node = StructType} /W(), h: (${nested})(0), k: (${nested})(0), i: (${nested})(1), j: (${nested})(1)",
         proposition,
@@ -427,7 +427,7 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
         // `match l | [] => (p, 0) | h ++ t; ih => (<chosen>, 1) end`.
         let folding = |chosen: &str| {
             fill!(
-                "#{cases = {carrier = {elem = ${held}}}} match l: (m) => ${result} | [] => (p, 0) | [h, ..t]; ih => (${chosen}, 1) end",
+                "#{cases = {carrier = {elem = ${held}}}} match l: (m) => ${result} | [] => (p, 0) | [h, ..t] => (${chosen}, 1) end",
                 held,
                 result,
                 chosen

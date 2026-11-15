@@ -25,7 +25,7 @@ fn accumulation_loops_are_linear_by_construction() {
         let go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")])
+            | k + 1 => go(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
         let entry() -> /std/Io({}) =
             let built = go(25000, x[]);
@@ -48,7 +48,7 @@ fn peel_loops_are_linear_by_construction() {
         let build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
-            | k + 1; ih => build(k, x[..acc, ..Str/to_bytes("0123456789")])
+            | k + 1 => build(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
         let entry() -> /std/Io({}) =
             let built = build(10000, x[]);
@@ -57,10 +57,10 @@ fn peel_loops_are_linear_by_construction() {
             let drain(c: Cell(Bytes), fuel : Nat, acc : Nat) -> Io(Nat) =
                 match fuel
                 | 0 => Io/pure(acc)
-                | f + 1; ih =>
+                | f + 1 =>
                     match Option/unwrap_or(Cell/poll(c)!, x[])
                     | x[] => Io/pure(acc)
-                    | x[h, ..t]; ih2 =>
+                    | x[h, ..t] =>
                         let next = Cell/new()!;
                         let _ = Cell/fill(next, t)!;
                         drain(next, f, acc + (Byte/to_nat(h) - 48))
@@ -145,7 +145,7 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
         let build(d : Nat, v : Nat) -> Tree =
             match d : (_) => Tree
             | 0 => Tree/leaf(v)
-            | dp + 1; ih => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
+            | dp + 1 => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
             end;
         let sum(t : Tree) -> Nat =
             match t : (_) => Nat
@@ -204,7 +204,7 @@ fn arena_pure_computation_hugs_a_host_effect() {
         let triangle(n : Nat) -> Nat =
             match n : (_) => Nat
             | 0 => 0
-            | p + 1; ih => n + ih
+            | p + 1 => n + triangle(p)
             end;
         let entry() -> /std/Io({}) =
             let before = /std/print("a")!;
@@ -213,7 +213,7 @@ fn arena_pure_computation_hugs_a_host_effect() {
             /std/Io/pure(());
         entry()
         "#;
-    assert_eq!(run(source), b"a10000".to_vec());
+    assert_eq!(run(source), b"a5050".to_vec());
 
     let cps_optm = cps_optm(source);
     assert!(
@@ -233,12 +233,12 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
         let count(b : Bytes) -> Nat =
             match b : (_) => Nat
             | x[] => 0
-            | x[h, ..t]; ih => count(t) + 1
+            | x[h, ..t] => count(t) + 1
             end;
         let build(n : Nat, acc : Bytes) -> Bytes =
             match n : (_) => Bytes
             | 0 => acc
-            | p + 1; ih => build(p, x[0x61, ..acc])
+            | p + 1 => build(p, x[0x61, ..acc])
             end;
         let entry() -> /std/Io({}) =
             let _ = /std/print(Nat/to_str(count(build(${depth}, x[]))))!;

@@ -7,12 +7,11 @@ use {
     },
     curios_common::{Qualifier, Source},
     curios_core::{
-        Arm, Atom, Bind, CalleeId, Cases, Constructors, Definition, DefinitionKind, Definitions,
-        Field, Free, Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam, Intrinsic,
-        Item, Let, Level, Match, MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal,
-        Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm,
-        Telescope, Term, UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey,
-        WitnessOrigin,
+        Arm, Atom, CalleeId, Cases, Constructors, Definition, DefinitionKind, Definitions, Field,
+        Free, Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam, Intrinsic, Item,
+        Let, Level, Match, MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern,
+        Proj, Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm, Telescope,
+        Term, UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -508,19 +507,9 @@ fn every_node_written_reads_back_as_itself() {
                     alternatives: vec![Row {
                         pattern: Pattern::Succ {
                             predecessor: Slot::Binder,
-                            hypothesis: Some(Bind::Fields(vec![
-                                (None, Bind::Wildcard),
-                                (None, Bind::Binder),
-                            ])),
                         },
                         guards: Vec::new(),
-                        body: Term::func(
-                            [
-                                (Free::local(1, None), nat_type()),
-                                (Free::local(2, Some("m")), nat_type()),
-                            ],
-                            one(),
-                        ),
+                        body: over(Free::local(1, None), one()),
                     }],
                 },
                 Arm {
@@ -535,7 +524,6 @@ fn every_node_written_reads_back_as_itself() {
                         pattern: Pattern::Cons {
                             head: Slot::Wildcard,
                             tail: Slot::Binder,
-                            hypothesis: None,
                         },
                         guards: Vec::new(),
                         body: over(Free::local(1, Some("rest")), one()),

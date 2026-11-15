@@ -17,22 +17,19 @@
 use {
     super::{
         BoolSplit, Mode, NatSplit, NominalSplit, Scrutinee, Sequence, SequenceSplit, SwitchSplit,
-        elaborate, holds_goal, payload_fills,
+        elaborate, payload_fills,
     },
     crate::{
         Context, Error, HeldFrames, check, expect, pending, reduce_with, resolved_for_display,
     },
     curios_common::{Plicity, recurse},
     curios_core::{
-        Arm, Atom, Bind, Free, Guard, InductArm, Many, Matrix, Mention, Pattern, Row, Scope, Slot,
+        Arm, Atom, Free, Guard, InductArm, Many, Matrix, Mention, Pattern, Row, Scope, Slot,
         StructType, Subterm, Telescope, Term, Tuple,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
-    std::{
-        collections::{BTreeMap, BTreeSet},
-        rc::Rc,
-    },
+    std::{collections::BTreeMap, rc::Rc},
 };
 
 /// Compile `matrix`, which `term` holds, into the tree of matches it comes to, each elaborated as it is built.
@@ -61,7 +58,6 @@ pub fn elaborate_matrix(
         outermost: None,
         strays: vec![false; rows],
         walks: vec![None; rows],
-        folds: None,
         taken: vec![false; rows],
         covers: vec![None; rows],
         seen: vec![Seen::Any],
@@ -77,21 +73,13 @@ type Label = (Option<String>, Option<u32>);
 type Cell<'m> = Option<(&'m Pattern, usize)>;
 
 /// A row under a successor or a cons: what it writes of the case, where it writes it, and the row.
-type Peeled<'m> = (Option<Written<'m>>, Line<'m>);
+type Peeled<'m> = (Option<Written>, Line<'m>);
 
-/// What a row writes of a successor's or a sequence's case: the place of its first binder, the slots ahead of the hypothesis, and the hypothesis.
+/// What a row writes of a successor's or a sequence's case: the place of its first binder, and its slots.
 #[derive(Clone)]
-struct Written<'m> {
+struct Written {
     place: usize,
     slots: Vec<Slot>,
-    hypothesis: &'m Option<Bind>,
-}
-
-impl Written<'_> {
-    /// The place of the hypothesis, past the binders the slots write.
-    fn hypothesis_place(&self) -> usize {
-        self.place + self.slots.iter().map(|slot| slot.binders()).sum::<usize>()
-    }
 }
 
 /// One column: the term it is, and the place of the value it holds in the pattern the match's scrutinee is being read as ([`Compiler::seen`]).
@@ -114,8 +102,6 @@ struct Line<'m> {
     guarded: bool,
     /// The binders bound ahead of the body, each to what it stands for, in the order they were read: the first is outermost.
     lets: Vec<(Free, Term)>,
-    /// Each hypothesis the row writes under a structure's name: what it stands for, the name as written and what it resolves to. Held where the row's body stands ([`Compiler::body_of`]), a hypothesis having no type before its case is entered.
-    held: Vec<(Term, String, Mention)>,
     /// The binders of the cases the row states, in the order it states them: what the binders of its own walk are replaced by where a leaf holds its instance.
     cases: Vec<Free>,
 }
@@ -171,8 +157,6 @@ struct Compiler<'m> {
     strays: Vec<bool>,
     /// Each such row as its own walk elaborated it, once a leaf takes it.
     walks: Vec<Option<Rc<Walked>>>,
-    /// For each row, whether each of the cases a fold splits that its pattern writes is one of a fold ([`Compiler::folds`]): read where a row is first walked.
-    folds: Option<Vec<Vec<bool>>>,
     /// The rows some leaf takes.
     taken: Vec<bool>,
     /// For a row that reached a leaf another row took, that row: the arm written before it that covers it there.
@@ -256,7 +240,6 @@ impl<'m> Compiler<'m> {
             taken: vec![None; self.row(row).pattern.binders()],
             guarded: !self.row(row).guards.is_empty(),
             lets: Vec::new(),
-            held: Vec::new(),
             cases: Vec::new(),
         }
     }
@@ -1040,7 +1023,7 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// Rows over a `Nat` column, in one of two forms the rows that write a case choose: dispatch where a row writes a literal past `0`, over the literals written, with the rows that write a binder as what any other value takes, and induction otherwise, `0` and `n + 1` with a hypothesis, a row that writes a binder under both. A literal beside a successor is refused: no one form peels a successor and dispatches on a value.
+    /// Rows over a `Nat` column, in one of two forms the rows that write a case choose: dispatch where a row writes a literal past `0`, over the literals written, with the rows that write a binder as what any other value takes, and a case split otherwise, `0` and `n + 1`, a row that writes a binder under both. A literal beside a successor is refused: no one form peels a successor and dispatches on a value.
     fn naturals(
         &mut self,
         context: &mut Context,
@@ -1159,17 +1142,10 @@ impl<'m> Compiler<'m> {
         for mut line in lines {
             match line.cells.remove(0) {
                 Some((Pattern::Zero, _)) => zeros.push(line),
-                Some((
-                    Pattern::Succ {
-                        predecessor,
-                        hypothesis,
-                    },
-                    place,
-                )) => successors.push((
+                Some((Pattern::Succ { predecessor }, place)) => successors.push((
                     Some(Written {
                         place,
                         slots: vec![*predecessor],
-                        hypothesis,
                     }),
                     line,
                 )),
@@ -1183,18 +1159,11 @@ impl<'m> Compiler<'m> {
             return Err(self.uncovered(&column, Seen::Leaf("0".to_string()), false));
         }
 
-        let reads_hypothesis = self.reads_hypothesis(&successors);
         let scrutinee = Scrutinee::read(context, &column.term)?;
         let motive = self.motive(context, top);
 
         context.awaiting(|context| {
-            let split = Rc::new(NatSplit::resolve(
-                context,
-                scrutinee,
-                &motive,
-                (term, &mode),
-                reads_hypothesis,
-            )?);
+            let split = Rc::new(NatSplit::resolve(context, scrutinee, &motive, term, &mode)?);
             self.resolved(top, || {
                 (
                     Outermost::Nat(Rc::clone(&split)),
@@ -1208,14 +1177,13 @@ impl<'m> Compiler<'m> {
                 self.case(context, rest.clone(), zeros, expected)
             })?;
 
-            let ([predecessor, hypothesis], group) = self.peel(context, successors);
+            let ([predecessor], group) = self.peel(context, successors);
             self.seen[column.seen] = Seen::Leaf("_ + 1".to_string());
-            let successor =
-                split.successor(context, &predecessor, &hypothesis, |context, expected| {
-                    self.case(context, rest, group, expected)
-                })?;
+            let successor = split.successor(context, &predecessor, |context, expected| {
+                self.case(context, rest, group, expected)
+            })?;
             self.seen[column.seen] = Seen::Any;
-            let (rebuilt, type_) = split.rebuild(zero, &predecessor, &hypothesis, successor);
+            let (rebuilt, type_) = split.rebuild(zero, &predecessor, successor);
 
             self.settled(context, top, rebuilt, type_)
         })
@@ -1238,18 +1206,10 @@ impl<'m> Compiler<'m> {
         for mut line in lines {
             match line.cells.remove(0) {
                 Some((Pattern::Nil, _)) => empties.push(line),
-                Some((
-                    Pattern::Cons {
-                        head,
-                        tail,
-                        hypothesis,
-                    },
-                    place,
-                )) => conses.push((
+                Some((Pattern::Cons { head, tail }, place)) => conses.push((
                     Some(Written {
                         place,
                         slots: vec![*head, *tail],
-                        hypothesis,
                     }),
                     line,
                 )),
@@ -1288,18 +1248,10 @@ impl<'m> Compiler<'m> {
         for mut line in lines {
             match line.cells.remove(0) {
                 Some((Pattern::End, _)) => empties.push(line),
-                Some((
-                    Pattern::Atom {
-                        head,
-                        tail,
-                        hypothesis,
-                    },
-                    place,
-                )) => atoms.push((
+                Some((Pattern::Atom { head, tail }, place)) => atoms.push((
                     Some(Written {
                         place,
                         slots: vec![*head, *tail],
-                        hypothesis,
                     }),
                     line,
                 )),
@@ -1321,7 +1273,7 @@ impl<'m> Compiler<'m> {
         )
     }
 
-    /// The fold over a list's or a packed sequence's column: the rows of its empty case and of its nonempty one, each the arm of its case over the columns left. `cases` is how a pattern writes the two.
+    /// The case split of a list's or a packed sequence's column: the rows of its empty case and of its nonempty one, each the arm of its case over the columns left. `cases` is how a pattern writes the two.
     fn sequence(
         &mut self,
         context: &mut Context,
@@ -1340,7 +1292,6 @@ impl<'m> Compiler<'m> {
             }
         }
 
-        let reads_hypothesis = self.reads_hypothesis(&conses);
         let scrutinee = Scrutinee::read(context, &column.term)?;
         let motive = self.motive(context, top);
         let term = self.term;
@@ -1352,7 +1303,6 @@ impl<'m> Compiler<'m> {
                 scrutinee,
                 &motive,
                 (term, &mode),
-                reads_hypothesis,
             )?);
             self.resolved(top, || {
                 (
@@ -1379,7 +1329,7 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// The binders a fold's nonempty case is entered under — the atom ahead where the carrier has one, what is left, and the hypothesis — and the rows that reach the case with those binders read. The one row that writes the case names them by its own binders; where several write it they are the compiler's, each of those rows binding its names to them. A row that wrote a binder at the column reads none.
+    /// The binders a nonempty case is entered under — the atom ahead where the carrier has one, and what is left — and the rows that reach the case with those binders read. The one row that writes the case names them by its own binders; where several write it they are the compiler's, each of those rows binding its names to them. A row that wrote a binder at the column reads none.
     fn peel<const N: usize>(
         &mut self,
         context: &mut Context,
@@ -1396,17 +1346,12 @@ impl<'m> Compiler<'m> {
             let written = written.clone().expect("the row that writes the case");
             let mut place = written.place;
             let mut slots = written.slots.iter().copied();
-            let binders = std::array::from_fn(|operand| match operand + 1 < N {
-                true => {
-                    let slot = slots
-                        .next()
-                        .expect("a slot for each binder ahead of the hypothesis");
-                    let (name, next) = self.slot(context, line, slot, place);
-                    place = next;
+            let binders = std::array::from_fn(|_| {
+                let slot = slots.next().expect("a slot for each binder");
+                let (name, next) = self.slot(context, line, slot, place);
+                place = next;
 
-                    name
-                }
-                false => self.hypothesis(context, line, written.hypothesis, place),
+                name
             });
             line.cases.extend(binders.iter().copied());
 
@@ -1418,15 +1363,11 @@ impl<'m> Compiler<'m> {
         for (written, mut line) in rows {
             if let Some(written) = written {
                 let mut place = written.place;
-                for (slot, binder) in written.slots.iter().zip(&binders[..N - 1]) {
+                for (slot, binder) in written.slots.iter().zip(&binders) {
                     if let Slot::Binder = slot {
                         self.bind(context, &mut line, place, Term::free_var(binder));
                         place += 1;
                     }
-                }
-                if let Some(bind) = written.hypothesis {
-                    let hypothesis = Term::free_var(&binders[N - 1]);
-                    self.project(context, &mut line, bind, place, hypothesis);
                 }
                 line.cases.extend(binders.iter().copied());
             }
@@ -1453,58 +1394,6 @@ impl<'m> Compiler<'m> {
             }
             Slot::Wildcard => (context.fresh(None), place),
         }
-    }
-
-    /// Whether the rows of a nonempty case may read its hypothesis, which is what makes their column a fold. The one row that writes the case reads it where its body names the binder it writes for it, or where it takes it apart; rows that each write the case bind what they write to the one hypothesis, which reads it; and a body holding a written goal may name anything in scope. A row that wrote a binder at the column reads none.
-    fn reads_hypothesis(&self, rows: &[Peeled<'m>]) -> bool {
-        let writing = rows
-            .iter()
-            .filter_map(|(written, line)| written.as_ref().map(|written| (written, line)))
-            .collect::<Vec<_>>();
-        let written = match writing.as_slice() {
-            [(written, line)] => match written.hypothesis {
-                Some(Bind::Binder) => self.names(line.row, written.hypothesis_place()),
-                Some(fields) => fields.binders() > 0,
-                None => false,
-            },
-            writing => writing.iter().any(|(written, _)| {
-                written
-                    .hypothesis
-                    .as_ref()
-                    .is_some_and(|bind| bind.binders() > 0)
-            }),
-        };
-
-        written
-            || writing
-                .iter()
-                .any(|(_, line)| row_holds_goal(self.row(line.row)))
-    }
-
-    /// Whether the row at `row` names its binder at `place`: its body, or a guard written after the binder.
-    fn names(&self, row: usize, place: usize) -> bool {
-        let written = self.row(row);
-
-        std::iter::once(&written.body)
-            .chain(written.guards.iter().map(Guard::term))
-            .any(|function| {
-                let Subterm::Func(func) = &**function else {
-                    unreachable!("a row's guards and body are functions over its binders");
-                };
-                if place >= func.telescope.len() {
-                    return false;
-                }
-                let mut cursor = func.telescope.cursor();
-                for _ in 0..place {
-                    let (_, domain) = cursor
-                        .entry()
-                        .expect("a row's function binds what is written before it");
-                    // A row's binder has no type written, so nothing after it reads what stands in its place here.
-                    cursor.advance(domain);
-                }
-
-                cursor.binder_used()
-            })
     }
 
     /// A tuple or struct column flattened into one column for each field, a projection of the scrutinee: a value of either has one shape, so matching one is reading its fields, and no row is put under a case by it. The rows that write the shape agree, field by field, on the label each is written with; a row that writes a binder binds its name to the column and reads no field. A struct pattern's head is the structure the column's type is.
@@ -1607,59 +1496,6 @@ impl<'m> Compiler<'m> {
         compiled
     }
 
-    /// The binder a row alone writes for its hypothesis: the row's own where it writes a name, and one of the compiler's where it writes none or writes a pattern, whose leaves are bound to its projections.
-    fn hypothesis(
-        &mut self,
-        context: &mut Context,
-        line: &mut Line<'m>,
-        bind: &Option<Bind>,
-        place: usize,
-    ) -> Free {
-        match bind {
-            Some(Bind::Binder) => {
-                let name = self.name(context, line, place);
-                line.taken[place] = Some(Term::free_var(&name));
-
-                name
-            }
-            Some(Bind::Wildcard) | None => context.fresh(None),
-            Some(fields) => {
-                let hypothesis = context.fresh(None);
-                self.project(context, line, fields, place, Term::free_var(&hypothesis));
-
-                hypothesis
-            }
-        }
-    }
-
-    /// Bind what `bind` writes to `value`: a name to the value, and a pattern's leaves to its projections, by position or by label as each is written.
-    fn project(
-        &mut self,
-        context: &mut Context,
-        line: &mut Line<'m>,
-        bind: &Bind,
-        mut place: usize,
-        value: Term,
-    ) {
-        match bind {
-            Bind::Binder => self.bind(context, line, place, value),
-            Bind::Wildcard => {}
-            Bind::Fields(fields) | Bind::Struct { fields, .. } => {
-                if let Bind::Struct {
-                    head, structure, ..
-                } = bind
-                {
-                    line.held.push((value.clone(), head.clone(), *structure));
-                }
-                for (index, (label, field)) in fields.iter().enumerate() {
-                    let projected = projection(&value, label.as_deref(), index);
-                    self.project(context, line, field, place, projected);
-                    place += field.binders();
-                }
-            }
-        }
-    }
-
     /// A row with every column read, as the term it comes to where it stands: its body over what its binders stand for, under the binders bound ahead of it.
     fn body_of(&mut self, context: &mut Context, line: Line<'m>) -> Term {
         let values = line
@@ -1673,41 +1509,16 @@ impl<'m> Compiler<'m> {
             .collect::<Vec<_>>();
         let body = self.body(line.row).open(&values);
 
-        Self::bound_ahead(context, line.lets, line.held, body)
+        Self::bound_ahead(context, line.lets, body)
     }
 
-    /// `body` under what a row binds ahead of it: each name to what it stands for, the first outermost, and each hypothesis written under a structure's name, as the one-row match over it whose row is the head over no field — the row takes nothing apart, and compiling it reads the head against the hypothesis's type, as an arm's pattern is read.
-    fn bound_ahead(
-        context: &mut Context,
-        lets: Vec<(Free, Term)>,
-        held: Vec<(Term, String, Mention)>,
-        body: Term,
-    ) -> Term {
-        let body = lets.into_iter().rev().fold(body, |tail, (name, value)| {
+    /// `body` under what a row binds ahead of it: each name to what it stands for, the first outermost.
+    fn bound_ahead(context: &mut Context, lets: Vec<(Free, Term)>, body: Term) -> Term {
+        lets.into_iter().rev().fold(body, |tail, (name, value)| {
             let hole = Term::hole(context.mint_metavar());
 
             Term::let_(&name, hole, value, tail)
-        });
-
-        held.into_iter()
-            .rev()
-            .fold(body, |tail, (value, head, structure)| {
-                Term::matrix(Matrix {
-                    head: value,
-                    motive: None,
-                    arms: vec![Arm {
-                        alternatives: vec![Row {
-                            pattern: Pattern::Struct {
-                                head,
-                                structure,
-                                fields: Vec::new(),
-                            },
-                            guards: Vec::new(),
-                            body: Term::func(Vec::<(Free, Term)>::new(), tail),
-                        }],
-                    }],
-                })
-            })
+        })
     }
 
     /// A row with guards as the function of what a value takes where one of them fails, `(failed: type_) => …`: each guard a `Bool` match or a match over its value, the row's body past the last, and `failed` wherever one fails — under what the row binds ahead of it, as [`Compiler::body_of`] writes a body.
@@ -1723,7 +1534,7 @@ impl<'m> Compiler<'m> {
             })
             .collect::<Vec<_>>();
         let passing = self.passing(context, line.row, 0, &mut values, &Term::free_var(&failed));
-        let chain = Self::bound_ahead(context, line.lets, line.held, passing);
+        let chain = Self::bound_ahead(context, line.lets, passing);
 
         Term::func(vec![(failed, type_.clone())], chain)
     }
@@ -1816,17 +1627,13 @@ impl<'m> Compiler<'m> {
 
     /// The row at `row` elaborated by its own walk: its cases entered alone, standing on the frames held where the match is entered.
     fn walk(&mut self, context: &mut Context, row: usize) -> Result<Walked, Error> {
-        if self.folds.is_none() {
-            self.folds = Some(self.folds());
-        }
-
         let held = self.held.clone();
         let line = self.line(row);
         let columns = vec![self.matrix.head.clone()];
         let mode = self.mode.clone();
 
         context.standing_on(&held, |context| {
-            self.alone_over(context, columns, line, 0, true, mode)
+            self.alone_over(context, columns, line, true, mode)
         })
     }
 
@@ -1846,13 +1653,12 @@ impl<'m> Compiler<'m> {
         }
     }
 
-    /// One step of a row's own walk: `line` alone over `columns`. A name it writes is bound to its column, a tuple or a struct it writes is flattened, and a case it states is entered by the eliminator's own step, with the columns left as the arm; nothing is rebuilt. `fold` counts the cases a fold splits that the row has stated, which is where [`Compiler::folds`] says whether the next is a fold's, and `top` says it has stated no case yet. Answers the row's body elaborated where every column is read, with the binders of the cases it stated.
+    /// One step of a row's own walk: `line` alone over `columns`. A name it writes is bound to its column, a tuple or a struct it writes is flattened, and a case it states is entered by the eliminator's own step, with the columns left as the arm; nothing is rebuilt. `top` says it has stated no case yet. Answers the row's body elaborated where every column is read, with the binders of the cases it stated.
     fn alone_over(
         &mut self,
         context: &mut Context,
         mut columns: Vec<Term>,
         mut line: Line<'m>,
-        fold: usize,
         top: bool,
         mode: Mode,
     ) -> Result<Walked, Error> {
@@ -1886,16 +1692,15 @@ impl<'m> Compiler<'m> {
             .remove(0)
             .expect("a row alone writes every column it reads");
         let term = self.term;
-        let row = line.row;
 
         match pattern {
             Pattern::Binder => {
                 self.bind(context, &mut line, place, column);
 
-                return recurse(|| self.alone_over(context, columns, line, fold, top, mode));
+                return recurse(|| self.alone_over(context, columns, line, top, mode));
             }
             Pattern::Wildcard => {
-                return recurse(|| self.alone_over(context, columns, line, fold, top, mode));
+                return recurse(|| self.alone_over(context, columns, line, top, mode));
             }
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 let mut cells = Vec::with_capacity(fields.len() + line.cells.len());
@@ -1910,18 +1715,12 @@ impl<'m> Compiler<'m> {
                 line.cells = cells;
                 projections.extend(columns);
 
-                return recurse(|| self.alone_over(context, projections, line, fold, top, mode));
+                return recurse(|| self.alone_over(context, projections, line, top, mode));
             }
             _ => {}
         }
 
         let (shared, mode, awaits) = self.entering(top, &column, mode);
-        let folds = |compiler: &Self| {
-            compiler
-                .folds
-                .as_ref()
-                .expect("the folds are read where a row is first walked")[row][fold]
-        };
 
         // What the arm of the row's case comes to: the walk of the columns left, kept apart from the arm the eliminator closes over it.
         let mut walked = None;
@@ -1929,10 +1728,9 @@ impl<'m> Compiler<'m> {
                        context: &mut Context,
                        columns: Vec<Term>,
                        line: Line<'m>,
-                       fold: usize,
                        expected: Term| {
             let reached = recurse(|| {
-                compiler.alone_over(context, columns, line, fold, false, Mode::Check(expected))
+                compiler.alone_over(context, columns, line, false, Mode::Check(expected))
             })?;
             let body = reached.body.clone();
             walked = Some(reached);
@@ -1972,7 +1770,7 @@ impl<'m> Compiler<'m> {
 
                 walk_awaited(context, awaits, |context| {
                     split.arm(context, tag, payload, &binders, |context, expected| {
-                        arm(self, context, payloads, line, fold, expected)
+                        arm(self, context, payloads, line, expected)
                     })
                 })?;
             }
@@ -1992,7 +1790,7 @@ impl<'m> Compiler<'m> {
 
                 walk_awaited(context, awaits, |context| {
                     split.arm(context, *value, |context, expected| {
-                        arm(self, context, columns, line, fold, expected)
+                        arm(self, context, columns, line, expected)
                     })
                 })?;
             }
@@ -2017,7 +1815,7 @@ impl<'m> Compiler<'m> {
 
                 walk_awaited(context, awaits, |context| {
                     split.arm(context, &value, |context, expected| {
-                        arm(self, context, columns, line, fold, expected)
+                        arm(self, context, columns, line, expected)
                     })
                 })?;
             }
@@ -2027,7 +1825,7 @@ impl<'m> Compiler<'m> {
                     Some(Outermost::Switch(split)) => {
                         walk_awaited(context, awaits, |context| {
                             split.arm(context, &Natural::zero(), |context, expected| {
-                                arm(self, context, columns, line, fold + 1, expected)
+                                arm(self, context, columns, line, expected)
                             })
                         })?;
 
@@ -2036,45 +1834,28 @@ impl<'m> Compiler<'m> {
                     Some(Outermost::Nat(split)) => split,
                     Some(_) => unreachable!("a column is split by one shape"),
                     None => {
-                        let reads_hypothesis = folds(self);
                         let scrutinee = Scrutinee::read(context, &column)?;
                         let motive = self.motive(context, false);
 
-                        Rc::new(NatSplit::resolve(
-                            context,
-                            scrutinee,
-                            &motive,
-                            (term, &mode),
-                            reads_hypothesis,
-                        )?)
+                        Rc::new(NatSplit::resolve(context, scrutinee, &motive, term, &mode)?)
                     }
                 };
 
                 match pattern {
-                    Pattern::Succ {
-                        predecessor,
-                        hypothesis,
-                    } => {
-                        let (predecessor, place) =
-                            self.slot(context, &mut line, *predecessor, place);
-                        let hypothesis = self.hypothesis(context, &mut line, hypothesis, place);
-                        line.cases.extend([predecessor, hypothesis]);
+                    Pattern::Succ { predecessor } => {
+                        let (predecessor, _) = self.slot(context, &mut line, *predecessor, place);
+                        line.cases.push(predecessor);
 
                         walk_awaited(context, awaits, |context| {
-                            split.successor(
-                                context,
-                                &predecessor,
-                                &hypothesis,
-                                |context, expected| {
-                                    arm(self, context, columns, line, fold + 1, expected)
-                                },
-                            )
+                            split.successor(context, &predecessor, |context, expected| {
+                                arm(self, context, columns, line, expected)
+                            })
                         })?;
                     }
                     _ => {
                         walk_awaited(context, awaits, |context| {
                             split.zero(context, |context, expected| {
-                                arm(self, context, columns, line, fold + 1, expected)
+                                arm(self, context, columns, line, expected)
                             })
                         })?;
                     }
@@ -2089,7 +1870,6 @@ impl<'m> Compiler<'m> {
                     Some(Outermost::Sequence(split)) => split,
                     Some(_) => unreachable!("a column is split by one shape"),
                     None => {
-                        let reads_hypothesis = folds(self);
                         let scrutinee = Scrutinee::read(context, &column)?;
                         let motive = self.motive(context, false);
 
@@ -2099,38 +1879,27 @@ impl<'m> Compiler<'m> {
                             scrutinee,
                             &motive,
                             (term, &mode),
-                            reads_hypothesis,
                         )?)
                     }
                 };
 
                 match pattern {
-                    Pattern::Cons {
-                        head,
-                        tail,
-                        hypothesis,
-                    }
-                    | Pattern::Atom {
-                        head,
-                        tail,
-                        hypothesis,
-                    } => {
+                    Pattern::Cons { head, tail } | Pattern::Atom { head, tail } => {
                         let (head, place) = self.slot(context, &mut line, *head, place);
-                        let (tail, place) = self.slot(context, &mut line, *tail, place);
-                        let hypothesis = self.hypothesis(context, &mut line, hypothesis, place);
-                        let binders = [head, tail, hypothesis];
+                        let (tail, _) = self.slot(context, &mut line, *tail, place);
+                        let binders = [head, tail];
                         line.cases.extend(binders);
 
                         walk_awaited(context, awaits, |context| {
                             split.cons(context, &binders, |context, expected| {
-                                arm(self, context, columns, line, fold + 1, expected)
+                                arm(self, context, columns, line, expected)
                             })
                         })?;
                     }
                     _ => {
                         walk_awaited(context, awaits, |context| {
                             split.empty(context, |context, expected| {
-                                arm(self, context, columns, line, fold + 1, expected)
+                                arm(self, context, columns, line, expected)
                             })
                         })?;
                     }
@@ -2139,33 +1908,6 @@ impl<'m> Compiler<'m> {
         }
 
         Ok(walked.expect("the arm of a row's case is its walk"))
-    }
-
-    /// For each row, for each case a fold splits that its pattern writes — a `Nat`'s `0` and successor, a list's and a packed sequence's two — in the order the pattern writes them, whether some row may read a hypothesis at that place of the scrutinee: it writes one there, or its body holds a written goal.
-    ///
-    /// A row's own walk enters such a case as a fold's arm where this holds, and as a case split's where it does not. The tree makes a column a fold where a row of the group it splits reads its hypothesis ([`Compiler::reads_hypothesis`]), and every such group is of rows that write that place, so a row walked as a case split is under no fold, and one walked as a fold's arm is typed under less than a case split gives it: its body stands wherever the tree puts it.
-    fn folds(&self) -> Vec<Vec<bool>> {
-        let mut places = Vec::with_capacity(self.rows.len());
-        let mut readers = BTreeSet::new();
-        for row in &self.rows {
-            let goal = row_holds_goal(row);
-            let mut written = Vec::new();
-            fold_places(&row.pattern, &mut Vec::new(), &mut |path, peeled| {
-                let reads = peeled.is_some_and(|hypothesis| {
-                    goal || hypothesis.is_some_and(|bind| bind.binders() > 0)
-                });
-                if reads {
-                    readers.insert(path.to_vec());
-                }
-                written.push(path.to_vec());
-            });
-            places.push(written);
-        }
-
-        places
-            .into_iter()
-            .map(|written| written.iter().map(|path| readers.contains(path)).collect())
-            .collect()
     }
 
     /// The body of the row at `row`, as the function over its binders it is.
@@ -2241,11 +1983,6 @@ fn labels(row: &Row) -> Vec<Label> {
     debug_assert_eq!(labels.len(), row.binders());
 
     labels
-}
-
-/// Whether `row` holds a written goal, in its body or a guard: a goal could read anything in scope there, a fold's hypothesis included.
-fn row_holds_goal(row: &Row) -> bool {
-    holds_goal(&row.body) || row.guards.iter().any(|guard| holds_goal(guard.term()))
 }
 
 /// `function`, a row's guard or body — a function over the binders written before it — opened at `values`.
@@ -2411,50 +2148,4 @@ fn instance(this: &Pattern, that: &Pattern) -> bool {
         (Pattern::Tuple(_) | Pattern::Struct { .. }, _) => false,
         _ => true,
     }
-}
-
-/// The cases a fold splits that `pattern` writes, in the order it writes them: each with the path that reaches it from the scrutinee, and, for a nonempty one, the hypothesis it is written with.
-fn fold_places<'m>(
-    pattern: &'m Pattern,
-    path: &mut Vec<Step>,
-    visit: &mut impl FnMut(&[Step], Option<Option<&'m Bind>>),
-) {
-    match pattern {
-        Pattern::Binder
-        | Pattern::Wildcard
-        | Pattern::Bool(_)
-        | Pattern::Literal(_)
-        | Pattern::Character(_) => {}
-        Pattern::Variant { tag, args } => {
-            for ((plain, hidden), arg) in payload_places(args) {
-                path.push(Step::Payload(tag.as_string(), plain, hidden));
-                fold_places(arg, path, visit);
-                path.pop();
-            }
-        }
-        Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
-            for (index, (_, field)) in fields.iter().enumerate() {
-                path.push(Step::Field(index));
-                fold_places(field, path, visit);
-                path.pop();
-            }
-        }
-        Pattern::Zero | Pattern::Nil | Pattern::End => visit(path, None),
-        Pattern::Succ {
-            hypothesis: bind, ..
-        }
-        | Pattern::Cons {
-            hypothesis: bind, ..
-        }
-        | Pattern::Atom {
-            hypothesis: bind, ..
-        } => visit(path, Some(bind.as_ref())),
-    }
-}
-
-/// One step from a value to a part of it a pattern reads: a payload of a constructor, by where it stands among the plain ones and, for a hidden one, among the hidden ones written ahead of the next plain one, or a field of a tuple or a struct.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum Step {
-    Payload(String, usize, Option<usize>),
-    Field(usize),
 }

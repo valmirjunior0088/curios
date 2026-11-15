@@ -298,7 +298,6 @@ variants!(Error {
     AtSorts,
     TooManySorts,
     NotAMotive,
-    AmbientFold,
     Mismatch,
     NotAFunction,
     NotATuple,

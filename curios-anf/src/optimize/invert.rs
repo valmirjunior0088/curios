@@ -2,7 +2,7 @@
 //!
 //! ```text
 //!   rec f(n, a) = match n | 0 => z(a) | _ => let k = n - 1; s(k, a, f(k, a)) end
-//!   ⟶  f(n, a)   = match n | 0 => z(a) | k + 1; r => s(k, a, r) end
+//!   ⟶  f(n, a)   = fold n | 0 => z(a) | k + 1; r => s(k, a, r) end
 //! ```
 //!
 //! **The envelope, structural in ANF.** The function's body is one dispatch it returns: a `SwitchNat` on a parameter whose one case is `0`, or an `UnconsSequence` on a parameter. Among the step arm's own statements is a self-call handed, in the peeled parameter's place, the predecessor the arm computes ahead of it (`n - 1`) or the suffix the peel binds, and every other parameter in its own place, or anything where the function never reads the parameter, as an erased type or proof is handed on as `unit`. It is the only reference the function's region makes to itself, every run of the arm reads its answer, and the dispatch and the predecessor are the only reads of the peeled parameter, which the fold leaves at its outermost value. Outside the envelope the pass is a no-op, never a miscompile.

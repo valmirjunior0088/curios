@@ -169,7 +169,7 @@ fn goal_reports_spell_no_universe_instances() {
         let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
             match n : (m) => Eq()(m + m, m * 2)
             | 0 => ?
-            | p + 1; ih => ?
+            | p + 1 => ?
             end;
         let subject : /std/Nat = double(21);
         /std/Io/pure(())

@@ -298,14 +298,6 @@ impl<D: Layout> TreePrinter<D> {
         D::bound(self, binder.core, pure(binder.label))
     }
 
-    /// The optional `; ih` tail of a `Nat` fold's succ arm or a `List`/`Bytes` fold's cons arm — any irrefutable pattern, printed through [`TreePrinter::pattern`]; `None` prints nothing at all (a plain case-split), matching how it was written.
-    fn cons_ih(self, ih: Option<Pattern<D>>) -> Printer {
-        match ih {
-            Some(ih) => flat([pure("; "), self.pattern(ih)]),
-            None => pure(""),
-        }
-    }
-
     fn pattern_field(self, field: PatternField<D>) -> Printer {
         match field.label {
             Some(label) => flat([pure(label), pure(" = "), self.pattern(field.value)]),
@@ -459,8 +451,8 @@ impl<D: Layout> TreePrinter<D> {
             MatchPattern::Bool(true) => pure("true"),
             MatchPattern::Char(character) => print_char_literal(character),
             MatchPattern::Nat(NatPattern::Zero) => pure("0"),
-            MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
-                flat([self.binder(pred_label), pure(" + 1"), self.cons_ih(ih)])
+            MatchPattern::Nat(NatPattern::Succ { pred_label }) => {
+                flat([self.binder(pred_label), pure(" + 1")])
             }
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(n, radix))) => {
                 pure(format_radix(&n, radix))
@@ -469,27 +461,23 @@ impl<D: Layout> TreePrinter<D> {
             MatchPattern::List(ListPattern::Cons {
                 head_label,
                 tail_label,
-                ih,
             }) => flat([
                 pure("["),
                 self.binder(head_label),
                 pure(", .."),
                 self.binder(tail_label),
                 pure("]"),
-                self.cons_ih(ih),
             ]),
             MatchPattern::Bytes(BytesPattern::End) => pure("x[]"),
             MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
                 tail_label,
-                ih,
             }) => flat([
                 pure("x["),
                 self.binder(head_label),
                 pure(", .."),
                 self.binder(tail_label),
                 pure("]"),
-                self.cons_ih(ih),
             ]),
         }
     }

@@ -21,7 +21,7 @@ let cells: Nat =
 let build(n: Nat, x: Nat, acc: Chain) -> Chain =
     match n
     | 0 => acc
-    | m + 1; _ => build(m, 75 * x % 65537, Chain/cons(x, acc))
+    | m + 1 => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
 let step(rest: Chain, acc: Chain) -> Chain =
@@ -31,7 +31,7 @@ let step(rest: Chain, acc: Chain) -> Chain =
     end;
 
 let rounds(k: Nat, c: Chain) -> Chain =
-    match k | 0 => c | m + 1; _ => rounds(m, step(c, Chain/nil())) end;
+    match k | 0 => c | m + 1 => rounds(m, step(c, Chain/nil())) end;
 
 let total(c: Chain, acc: Nat) -> Nat =
     match c

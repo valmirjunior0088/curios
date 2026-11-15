@@ -4,8 +4,7 @@ use {
     curios_common::Span,
     curios_surface::{
         Alternative, BytesPattern, Guard, HeadlessArm, HeadlessMatch, Label, ListPattern, Match,
-        MatchPattern, MatchPatternField, MatrixArm, NatLiteral, NatPattern, Pattern, PatternField,
-        Term,
+        MatchPattern, MatchPatternField, MatrixArm, NatLiteral, NatPattern, Term,
     },
     std::{collections::BTreeSet, mem},
 };
@@ -263,14 +262,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             MatchPattern::Bool(value) => curios_core::Pattern::Bool(*value),
             MatchPattern::Char(character) => curios_core::Pattern::Character(*character),
             MatchPattern::Nat(NatPattern::Zero) => curios_core::Pattern::Zero,
-            MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
-                let predecessor = self.slot(pred_label, binders);
-
-                curios_core::Pattern::Succ {
-                    predecessor,
-                    hypothesis: self.hypothesis(ih, binders)?,
-                }
-            }
+            MatchPattern::Nat(NatPattern::Succ { pred_label }) => curios_core::Pattern::Succ {
+                predecessor: self.slot(pred_label, binders),
+            },
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value, _))) => {
                 curios_core::Pattern::Literal(value.clone())
             }
@@ -278,21 +272,17 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             MatchPattern::List(ListPattern::Cons {
                 head_label,
                 tail_label,
-                ih,
             }) => curios_core::Pattern::Cons {
                 head: self.slot(head_label, binders),
                 tail: self.slot(tail_label, binders),
-                hypothesis: self.hypothesis(ih, binders)?,
             },
             MatchPattern::Bytes(BytesPattern::End) => curios_core::Pattern::End,
             MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
                 tail_label,
-                ih,
             }) => curios_core::Pattern::Atom {
                 head: self.slot(head_label, binders),
                 tail: self.slot(tail_label, binders),
-                hypothesis: self.hypothesis(ih, binders)?,
             },
         })
     }
@@ -318,53 +308,6 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         fields
             .iter()
             .map(|field| Ok((field.label.clone(), self.pattern(&field.value, binders)?)))
-            .collect()
-    }
-
-    /// What a fold's hypothesis is bound by, where one is written, its names minted onto `binders` after the binders it stands beside.
-    fn hypothesis(
-        &self,
-        hypothesis: &Option<Pattern>,
-        binders: &mut Vec<Binder>,
-    ) -> Result<Option<curios_core::Bind>, Error> {
-        hypothesis
-            .as_ref()
-            .map(|pattern| self.bind(pattern, binders))
-            .transpose()
-    }
-
-    fn bind(
-        &self,
-        pattern: &Pattern,
-        binders: &mut Vec<Binder>,
-    ) -> Result<curios_core::Bind, Error> {
-        Ok(match pattern {
-            Pattern::Binder(name) if !bindable(name.as_str()) => curios_core::Bind::Wildcard,
-            Pattern::Binder(name) => {
-                binders.push(self.pattern_binder(name));
-
-                curios_core::Bind::Binder
-            }
-            Pattern::Tuple(fields) => curios_core::Bind::Fields(self.binds(fields, binders)?),
-            Pattern::Struct { head, fields } => curios_core::Bind::Struct {
-                head: head.join(),
-                structure: match self.resolve_nominal(head)? {
-                    Ok(structure) => curios_core::Mention::Declaration(structure),
-                    Err(unbound) => curios_core::Mention::Local(unbound),
-                },
-                fields: self.binds(fields, binders)?,
-            },
-        })
-    }
-
-    fn binds(
-        &self,
-        fields: &[PatternField],
-        binders: &mut Vec<Binder>,
-    ) -> Result<Vec<(Option<String>, curios_core::Bind)>, Error> {
-        fields
-            .iter()
-            .map(|field| Ok((field.label.clone(), self.bind(&field.value, binders)?)))
             .collect()
     }
 }

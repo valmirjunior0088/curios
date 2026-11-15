@@ -422,7 +422,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     let on_bool = |scrutinee: &str| fill!(ON_BOOL, scrutinee);
     let on_product = |floor: usize| {
         fill!(
-            "match #NatMul(#NatAdd(#NatAdd(a, b), ${floor}), #NatAdd(#NatAdd(b, a), ${floor})): (_) => #NatType | 0 => 10 | pred + 1; hypothesis => 20 end",
+            "match #NatMul(#NatAdd(#NatAdd(a, b), ${floor}), #NatAdd(#NatAdd(b, a), ${floor})): (_) => #NatType | 0 => 10 | pred + 1 => 20 end",
             floor
         )
     };

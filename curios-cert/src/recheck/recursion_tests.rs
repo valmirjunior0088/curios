@@ -243,7 +243,7 @@ let /g : (n: #NatType) ->
         | 0 =>
             #{node = Variant}
             /std/Bool/True/qed()
-        | _ + 1; x =>
+        | _ + 1 =>
             #{node = Variant}
             /std/Bool/True/qed()
         end;
@@ -286,7 +286,7 @@ let /again : (n: #NatType) ->
             | 0 =>
                 #{node = Variant}
                 /std/Bool/True/qed()
-            | k + 1; y =>
+            | k + 1 =>
                 /again(x)
             end)(n);
 /std/Bool/False
@@ -373,7 +373,7 @@ const A_CALL_BELOW_ITS_PARAMETER_ONLY_TO_A_JUDGMENT: &str = r#"
             match n
             | 0 =>
                 #NatType
-            | k + 1; ih =>
+            | k + 1 =>
                 let a: /std/Bool/Holds(#NatEql(#NatSub(#NatAdd(k, f(p)), f(q)), k)) =
                     #{node = Variant}
                     /std/Bool/True/qed();
@@ -473,7 +473,7 @@ let /outer : (n: #NatType) -> #NatType =
                 match m
                 | 0 =>
                     #NatType
-                | k + 1; x =>
+                | k + 1 =>
                     T(k)
                 end
         and f: (x: T(0)) -> T(0) =
@@ -540,7 +540,7 @@ let /withheld : #BoolType =
             match n
             | 0 =>
                 true
-            | k + 1; x =>
+            | k + 1 =>
                 b(n)
             end
     and c: #BoolType =
@@ -626,7 +626,7 @@ let /g : (n: #NatType) ->
         | 0 =>
             #{node = Variant}
             /std/Bool/True/qed()
-        | _ + 1; x =>
+        | _ + 1 =>
             #{node = Variant}
             /std/Bool/True/qed()
         end
@@ -638,7 +638,7 @@ and /h : (n: #NatType) ->
         | 0 =>
             #{node = Variant}
             /std/Bool/True/qed()
-        | _ + 1; x =>
+        | _ + 1 =>
             #{node = Variant}
             /std/Bool/True/qed()
         end;
@@ -853,7 +853,7 @@ let /through_inner : /std/Bool/False =
             #{node = Rec}
             (let g: (m: #NatType) -> /std/Bool/False =
                 (m: #NatType) =>
-                    #{result = Ambient(/std/Bool/False)} match m | 0 => q(n) | k + 1; x => g(k) end;
+                    #{result = Ambient(/std/Bool/False)} match m | 0 => q(n) | k + 1 => g(k) end;
             g(0));
     q(0));
 /std/Bool/False

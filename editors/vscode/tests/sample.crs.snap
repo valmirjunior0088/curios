@@ -145,7 +145,7 @@
 #                                                                     ^^^ source.curios keyword.control.curios
 #                                                                        ^ source.curios punctuation.separator.curios
 >
->pub let even(n: Nat) -> Bool = match n | 0 => true | p + 1; _ => odd(p) end
+>pub let even(n: Nat) -> Bool = match n | 0 => true | p + 1 => odd(p) end
 #^^^ source.curios keyword.other.curios
 #   ^ source.curios
 #    ^^^ source.curios keyword.control.curios
@@ -183,18 +183,15 @@
 #                                                       ^ source.curios keyword.operator.arithmetic.curios
 #                                                        ^ source.curios
 #                                                         ^ source.curios constant.numeric.decimal.curios
-#                                                          ^ source.curios punctuation.separator.curios
-#                                                           ^ source.curios
-#                                                            ^ source.curios variable.other.curios
+#                                                          ^ source.curios
+#                                                           ^^ source.curios keyword.operator.arrow.curios
 #                                                             ^ source.curios
-#                                                              ^^ source.curios keyword.operator.arrow.curios
-#                                                                ^ source.curios
-#                                                                 ^^^ source.curios entity.name.function.curios
-#                                                                    ^ source.curios punctuation.bracket.curios
-#                                                                     ^ source.curios variable.other.curios
-#                                                                      ^ source.curios punctuation.bracket.curios
-#                                                                       ^ source.curios
-#                                                                        ^^^ source.curios keyword.control.curios
+#                                                              ^^^ source.curios entity.name.function.curios
+#                                                                 ^ source.curios punctuation.bracket.curios
+#                                                                  ^ source.curios variable.other.curios
+#                                                                   ^ source.curios punctuation.bracket.curios
+#                                                                    ^ source.curios
+#                                                                     ^^^ source.curios keyword.control.curios
 >and odd(n: Nat) -> Bool = even(n);
 #^^^ source.curios keyword.control.curios
 #   ^ source.curios

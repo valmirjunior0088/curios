@@ -220,7 +220,7 @@ fn a_position_over_a_let_bound_partial_group_says_so() {
 }
 
 /// `countdown`, descending from its argument, whose step at `pred` is `${step}`, then `${tail}`.
-const COUNTDOWN: &str = "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1; ih => ${step} end; ${tail})";
+const COUNTDOWN: &str = "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1 => ${step} end; ${tail})";
 
 /// The verdict filed for the group `term` states, once `term` is typed in `certifier` at `Nat`.
 fn verdict_once_typed(certifier: &mut Certifier, term: &Term, group: &Term) -> Option<Totality> {

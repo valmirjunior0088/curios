@@ -110,21 +110,18 @@ fn iota_agrees_despite_different_arm_binding() {
 }
 
 #[test]
-fn structural_nat_induction_agrees() {
+fn a_nat_case_split_agrees() {
     let mut context = context();
     let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
 
-    // The cons arm sums the hypothesis, so the whole spine is walked rather than one layer peeled.
     agree(Term::nat_match(
         nat(5),
         Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         nat(0),
         &pred,
-        &ih,
-        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat(2))),
+        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&pred), nat(2))),
     ));
 }
 
@@ -134,7 +131,6 @@ fn a_stuck_match_agrees() {
     let m = context.fresh(Some("m"));
     let n = context.fresh(Some("n"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
 
     agree(Term::nat_match(
         Term::free_var(&n),
@@ -142,7 +138,6 @@ fn a_stuck_match_agrees() {
         Term::intrinsic(Intrinsic::NatType),
         nat(0),
         &pred,
-        &ih,
         Term::free_var(&pred),
     ));
 }
@@ -182,7 +177,6 @@ fn recursion_agrees_to_a_literal_and_stays_folded_otherwise() {
     let n = context.fresh(Some("n"));
     let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
     let countdown = context.fresh(Some("countdown"));
     let x = context.fresh(Some("x"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
@@ -195,7 +189,6 @@ fn recursion_agrees_to_a_literal_and_stays_folded_otherwise() {
             nat_type.clone(),
             nat(0),
             &pred,
-            &ih,
             Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
         ),
     );

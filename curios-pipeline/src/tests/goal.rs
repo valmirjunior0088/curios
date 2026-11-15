@@ -252,7 +252,7 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
         let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
             match n : (m) => Eq()(double(m), m * 2)
             | 0 => Eq/refl()
-            | p + 1; ih => Eq/cong(?, ih)
+            | p + 1 => Eq/cong(?, double_correct(p))
             end;
         /std/Io/pure(())
     "#;
@@ -276,7 +276,7 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
         !error.contains("undecided conversion"),
         "unexpected error: {error}"
     );
-    // `subst`'s result `P(y)` meets any goal once `ih` fills its proof slot; an undecided fit of a parameter-headed result is refused.
+    // `subst`'s result `P(y)` meets any goal once `double_correct(p)` fills its proof slot; an undecided fit of a parameter-headed result is refused.
     assert!(!error.contains("Eq/subst("), "vacuous fit offered: {error}");
 
     let entrypoint = entrypoint_of(source);

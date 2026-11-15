@@ -1,11 +1,11 @@
 use {
     super::{
         Grammar, members, parse_func_pattern_param, parse_infix_expr, parse_keyword, parse_literal,
-        parse_match_pattern, parse_name, parse_pattern, trimmed, with_span,
+        parse_match_pattern, parse_name, trimmed, with_span,
     },
     crate::{
-        Alternative, Func, Guard, HeadlessArm, HeadlessMatch, Match, MatrixArm, Pattern, Subterm,
-        Term, parse_term, parse_whitespace,
+        Alternative, Func, Guard, HeadlessArm, HeadlessMatch, Match, MatrixArm, Subterm, Term,
+        parse_term, parse_whitespace,
     },
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail_from, look_ahead, many0, mark, not_ahead, pure,
@@ -223,15 +223,6 @@ fn parse_headed_match<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term
         .and(many0(parse_induct_match_branch::<D>))
         .and_drop(parse_keyword("end"))
         .map(|((head, motive), arms)| Subterm::Match(Match { head, motive, arms }).into())
-        .parse(state)
-}
-
-// The `; ih` induction-hypothesis tail on a `Nat` succ or `List`/`Bytes` cons leaf pattern: `;` sets the hypothesis apart from the scrutinee's shape. The hypothesis binds the *fold result*, not scrutinee shape, so it takes the same irrefutable pattern grammar a `let` binder does — `; ih` a plain name, `; (cur, live)` a destructuring. A plain case-split needs no hypothesis, so the tail may be omitted — `None`, not a placeholder; lowering mints a fresh internal name for it directly.
-pub fn parse_cons_ih<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Option<Pattern<D>>> {
-    parse_literal(";")
-        .and_keep(parse_pattern::<D>)
-        .map(Some)
-        .or(pure(None))
         .parse(state)
 }
 

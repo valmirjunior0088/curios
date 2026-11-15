@@ -132,7 +132,7 @@ fn acceptance_is_upward_closed_in_the_budget() {
             let sum(n : Nat) -> Nat =
                 match n
                 | 0 => 0
-                | p + 1; below => below + p
+                | p + 1 => sum(p) + p
                 end;
             let _held : Eq()(sum(200), 19900) = Eq/refl();
             /std/print("ok")

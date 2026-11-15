@@ -14,7 +14,7 @@ fn optimizes_to_a_smaller_valid_module() {
         let sum(n : /std/Nat) -> /std/Nat =
             match n : (_) => /std/Nat
             | 0 => 0
-            | pred + 1; ih => /std/Nat/add(/std/Nat/succ(pred), ih)
+            | pred + 1 => /std/Nat/add(/std/Nat/succ(pred), sum(pred))
             end;
 
         /std/Fmt/print("%")(sum(10))
@@ -61,7 +61,7 @@ fn dumping_emits_the_optimized_module_as_text() {
         let sum(n : /std/Nat) -> /std/Nat =
             match n : (_) => /std/Nat
             | 0 => 0
-            | pred + 1; ih => /std/Nat/add(/std/Nat/succ(pred), ih)
+            | pred + 1 => /std/Nat/add(/std/Nat/succ(pred), sum(pred))
             end;
 
         /std/Fmt/print("%")(sum(10))

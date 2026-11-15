@@ -42,7 +42,7 @@ fn an_elimination_has_the_type_its_motive_states() {
     assert_eq!(
         infer(
             &mut certifier,
-            &term("match 3: (m) => #NatType | 0 => 0 | pred + 1; ih => pred end")
+            &term("match 3: (m) => #NatType | 0 => 0 | pred + 1 => pred end")
         ),
         Ok(term("#NatType"))
     );

@@ -156,7 +156,6 @@ fn stepping(context: &mut Context, base: usize, by: usize, commuted: bool) -> Te
     let n = context.fresh(Some("n"));
     let motive = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
     let call = Term::apply(Term::free_var(&member), [Term::free_var(&pred)]);
     let step = match commuted {
         false => Intrinsic::nat_add(call, nat(by)),
@@ -175,7 +174,6 @@ fn stepping(context: &mut Context, base: usize, by: usize, commuted: bool) -> Te
                     nat_type(),
                     nat(base),
                     &pred,
-                    &ih,
                     Term::intrinsic(step),
                 ),
             ),
@@ -230,7 +228,6 @@ fn handing_back(context: &mut Context, flipped: bool) -> Term {
     let (n, x) = (context.fresh(Some("n")), context.fresh(Some("x")));
     let motive = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
     let ordered = |n: Term, x: Term| match flipped {
         false => [n, x],
         true => [x, n],
@@ -252,7 +249,6 @@ fn handing_back(context: &mut Context, flipped: bool) -> Term {
                     nat_type(),
                     Term::free_var(&x),
                     &pred,
-                    &ih,
                     Term::apply(
                         Term::free_var(&member),
                         ordered(Term::free_var(&pred), Term::free_var(&x)),
@@ -274,7 +270,6 @@ fn shifting(context: &mut Context) -> Term {
     );
     let motive = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
     let parameters = [(x, nat_type()), (y, nat_type()), (z, nat_type())];
 
     Term::rec(
@@ -289,7 +284,6 @@ fn shifting(context: &mut Context) -> Term {
                     nat_type(),
                     nat(0),
                     &pred,
-                    &ih,
                     Term::apply(
                         Term::free_var(&member),
                         [Term::free_var(&y), nat(0), Term::free_var(&pred)],
@@ -518,7 +512,6 @@ fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term
     let y = context.fresh(Some("y"));
     let motive = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
     let sort = Term::type_at(level);
 
     let body = Term::func(
@@ -529,7 +522,6 @@ fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term
             nat_type(),
             zero_arm,
             &pred,
-            &ih,
             Term::apply(
                 Term::free_var(&f),
                 [Term::free_var(&t), nat(0), Term::free_var(&pred)],

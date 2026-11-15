@@ -504,7 +504,7 @@ pub const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
                 match b: (_) => {Nat, Nat} | true => p | false => p end)
         = Eq/refl();
 
-    let in_a_fold_arm(n : Nat, p : {Nat, Nat})
+    let in_a_successor_arm(n : Nat, p : {Nat, Nat})
         -> Eq()(match n: (_) => {Nat, Nat} | 0 => (p.0, p.1) | m + 1 => p end,
                 match n: (_) => {Nat, Nat} | 0 => p | m + 1 => p end)
         = Eq/refl();
@@ -967,7 +967,7 @@ pub const A_RECURSIVE_FUNCTION_CARRYING_A_PROOF_CONVERTS_WITHOUT_UNFOLDING: &str
     | t()
     end
 
-    let g(n : Nat, p : T) -> Nat = match n | 0 => 0 | k + 1; _ => g(k, p) + 1 end;
+    let g(n : Nat, p : T) -> Nat = match n | 0 => 0 | k + 1 => g(k, p) + 1 end;
 
     let same(n : Nat, p : T, q : T, x : Eq()(g(n, p), 0)) -> Eq()(g(n, q), 0) = x;
 
@@ -981,7 +981,7 @@ pub const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
     | t()
     end
 
-    let g(n : Nat, p : T) -> Nat = match n | 0 => (match p | t() => 0 end) | k + 1; _ => g(k, p) + 1 end;
+    let g(n : Nat, p : T) -> Nat = match n | 0 => (match p | t() => 0 end) | k + 1 => g(k, p) + 1 end;
 
     let same(n : Nat, p : T, q : T, x : Eq()(g(n, p), 0)) -> Eq()(g(n, q), 0) = x;
 
@@ -1015,7 +1015,7 @@ pub const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
     let slow(n : Nat) -> Eq()(n, n) =
         match n : (k) => Eq()(k, k)
         | 0 => Eq/refl()
-        | k + 1; ih => Eq/cong((m : Nat) => m + 1, ih)
+        | k + 1 => Eq/cong((m : Nat) => m + 1, slow(k))
         end;
 
     let _closed : Eq()(Eq/subst((_) => Nat, slow(100000000000), 7), 7) = Eq/refl();
@@ -1072,7 +1072,7 @@ pub const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
     | t()
     end
 
-    let spin(n : Nat) -> T = match n : (_) => T | 0 => T/t() | k + 1; ih => ih end;
+    let spin(n : Nat) -> T = match n : (_) => T | 0 => T/t() | k + 1 => spin(k) end;
 
     let within(y : T, w : Same(@T)(y, y)) -> Nat =
         let _v : Same(@T)(spin(100000000000), y) = w;
@@ -1172,46 +1172,6 @@ pub const A_DESCRIPTION_OF_A_CONTRADICTION_STILL_COMPILES: &str = r#"
         Io/bind(Proc/exit(@Empty, 1), (e : Empty) => Io/pure(match e end));
 
     /std/print("ok")
-    "#;
-
-pub const A_FOLD_WHOSE_ARMS_INHABIT_A_MOTIVE_THAT_NAMES_ITS_SCRUTINEE_IS_ACCEPTED: &str = r#"
-    use /std/{Nat};
-    use /std/Bool/{True, Holds};
-
-    let bounded(n : Nat, bound : Nat, h : Holds(n <= bound)) -> Holds(n <= bound) =
-        match n : (_) => Holds(n <= bound)
-        | 0 => h
-        | k + 1; ih => ih
-        end;
-
-    let kept : Holds(3 <= 5) = bounded(3, 5, True/qed());
-
-    /std/print("held")
-    "#;
-
-pub const A_FOLD_MOTIVE_THAT_BINDS_ITS_SCRUTINEE_STILL_FOLDS: &str = r#"
-    use /std/{Nat, Eq};
-
-    let plus_zero(n : Nat) -> Eq()(n + 0, n) =
-        match n : (m) => Eq()(m + 0, m)
-        | 0 => Eq/refl()
-        | k + 1; ih => Eq/cong((w : Nat) => w + 1, ih)
-        end;
-
-    /std/print(Nat/to_str(3))
-    "#;
-
-pub const A_HYPOTHESIS_ABOUT_A_FOLDS_SCRUTINEE_RIDES_IN_ITS_MOTIVE: &str = r#"
-    use /std/{Nat, proved};
-    use /std/Bool/{True, Holds};
-
-    let counted(n : Nat, bound : Nat, h : Holds(n <= bound)) -> Nat =
-        match n : (m) => (h : Holds(m <= bound)) -> Nat
-        | 0 => (_) => 0
-        | k + 1; ih => (h) => ih(proved()) + 1
-        end(h);
-
-    /std/print(Nat/to_str(counted(3, 5, True/qed())))
     "#;
 
 pub const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"

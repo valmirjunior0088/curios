@@ -1,33 +1,6 @@
 //! Nested constructor patterns over every carrier, and the shapes that lower without synthetic indirection.
 
-use {crate::tests::test_support::*, curios_native::test_support::*};
-
-// The `;` fold-hypothesis position accepts an irrefutable pattern: the destructuring binds the fold result's fields directly, lowering to the same projections a `let (t, live) = ih;` would.
-#[test]
-fn a_fold_hypothesis_destructures_directly() {
-    let source = r#"
-        use /std/{Nat, Bool, Byte, Bytes};
-        let count(n : Nat) -> Nat =
-            let (total, _) =
-                match n : (_) => {Nat, Bool}
-                | 0 => (0, true)
-                | pred + 1; (t, live) => (t + 1, live)
-                end;
-            total;
-        let sum(b : Bytes) -> Nat =
-            let (s, _) =
-                match b : (_) => {Nat, Bool}
-                | x[] => (0, true)
-                | x[h, ..t]; (acc, live) => (acc + Byte/to_nat(h), live)
-                end;
-            s;
-        /std/print(Nat/to_str(count(5) + sum(x[0x01, 0x02, 0x03])))
-        "#;
-
-    let (system, io) = MockHost::builder().build();
-    run_text(source, system).expect("expected result");
-    assert_eq!(io.output(), b"11");
-}
+use crate::tests::test_support::*;
 
 // A single, unnested constructor arm reuses the written name rather than minting a synthetic binder: a core binder whose only label is a gensym is chained by the erasure pass's hint-based fresh naming into another gensym, compounding until a reference outruns its own binding. A plain flat match lowers with no such indirection.
 #[test]
@@ -63,7 +36,7 @@ fn nested_ctor_pattern_dispatches_by_shape() {
     assert_eq!(run(source), b"7");
 }
 
-// A `Nat` literal leaf (`0`/`n + 1; ih`) nested inside a constructor payload.
+// A `Nat` literal leaf (`0`/`n + 1`) nested inside a constructor payload.
 #[test]
 fn nested_nat_pattern_dispatches_by_shape() {
     let source = r#"
@@ -71,7 +44,7 @@ fn nested_nat_pattern_dispatches_by_shape() {
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(0) => 0
-            | some(n + 1; ih) => n
+            | some(n + 1) => n
             | none() => 1
             end;
         /std/print(Nat/to_str(f(Option/some(3))))
@@ -131,7 +104,7 @@ fn nested_bool_pattern_dispatches_by_shape() {
     assert_eq!(run(source), b"5");
 }
 
-// The carrier-leaf twin of `flat_option_match_lowers_without_synthetic_indirection`: a single, non-nested `some(0)`/`some(n + 1; ih)`/`none()` match lowers and runs end to end, exercising the single-row fast paths of the matrix compiler's `variants` and `naturals` together, which is where the erasure hint compounding would reappear for a carrier leaf.
+// The carrier-leaf twin of `flat_option_match_lowers_without_synthetic_indirection`: a single, non-nested `some(0)`/`some(n + 1)`/`none()` match lowers and runs end to end, exercising the single-row fast paths of the matrix compiler's `variants` and `naturals` together, which is where the erasure hint compounding would reappear for a carrier leaf.
 #[test]
 fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
     let source = r#"
@@ -139,7 +112,7 @@ fn nested_nat_zero_pattern_lowers_without_synthetic_indirection() {
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(0) => 0
-            | some(n + 1; ih) => n
+            | some(n + 1) => n
             | none() => 1
             end;
         /std/print(Nat/to_str(f(Option/some(1))))

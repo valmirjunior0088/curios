@@ -105,7 +105,7 @@ fn match_rejects_incomplete_nat_pattern() {
         use /std/{Nat};
         let f(n : Nat) -> Nat =
             match n
-            | n2 + 1; ih => n2
+            | n2 + 1 => n2
             end;
         /std/print(Nat/to_str(f(3)))
         "#;
@@ -124,7 +124,7 @@ fn match_allows_dependent_motive_on_nat_head() {
         use /std/{Nat};
         let f(n : Nat) -> Nat =
             match n : (m) => Nat
-            | m + 1; ih => m
+            | m + 1 => m
             | 0 => 0
             end;
         /std/print(Nat/to_str(f(3)))
@@ -146,24 +146,24 @@ fn a_nested_nat_literal_dispatches_by_value() {
     assert_eq!(run(source), b"1");
 }
 
-// A literal arm and a successor arm in one `Nat` column are the dispatch and the fold, and one column is one of them.
+// A literal arm and a successor arm in one `Nat` column are the dispatch and the case split, and one column is one of them.
 #[test]
 fn nat_literal_mixed_with_succ_is_rejected() {
     let source = r#"
         use /std/{Option, Nat};
         let f(m : Option(Nat)) -> Nat =
-            match m | some(5) => 1 | some(n + 1; ih) => n | _ => 0 end;
+            match m | some(5) => 1 | some(n + 1) => n | _ => 0 end;
         /std/print(Nat/to_str(f(Option/some(5))))
         "#;
 
     let error = error(source);
     assert!(
-        error.contains("`some(n + 1; ih)` peels a successor and `some(5)` matches a value"),
+        error.contains("`some(n + 1)` peels a successor and `some(5)` matches a value"),
         "unexpected error: {error}"
     );
 }
 
-// The refusal names the two arms as they are written, whatever they are, and notes each where it stands: no arm here reads a hypothesis, and the literal is no `5`.
+// The refusal names the two arms as they are written, whatever they are, and notes each where it stands: the literal here is no `5`.
 #[test]
 fn a_mixed_nat_column_is_refused_by_the_arms_it_holds() {
     let source = r#"
@@ -188,15 +188,15 @@ fn a_mixed_nat_column_is_refused_by_the_arms_it_holds() {
 fn a_match_shape_refusal_is_located_at_the_match() {
     for (source, line) in [
         (
-            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    match b\n    | some(5) => 1\n    | some(n + 1; ih) => n\n    | _ => 0\n    end;\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    match b\n    | some(5) => 1\n    | some(n + 1) => n\n    | _ => 0\n    end;\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
             "│  4 │     match b",
         ),
         (
-            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    1 + (match b | some(5) => 1 | some(n + 1; ih) => n | _ => 0 end);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    1 + (match b | some(5) => 1 | some(n + 1) => n | _ => 0 end);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
             "│  4 │     1 + (match b",
         ),
         (
-            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    let g = (k: Option(Nat)) =>\n        match k | some(5) => 1 | some(n + 1; ih) => n | _ => 0 end;\n    g(b);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    let g = (k: Option(Nat)) =>\n        match k | some(5) => 1 | some(n + 1) => n | _ => 0 end;\n    g(b);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
             "│  5 │         match k",
         ),
     ] {

@@ -2,16 +2,16 @@
 
 use {super::test_support::*, curios_elab::Error};
 
-// The induction hypothesis of a `Nat` fold is the motive at the predecessor, and the goal the motive at the successor: handed back directly, `ih` would prove `Eq()(k + 1, 0)` from `Eq()(k, 0)`, so a rule that typed it at the scrutinee rather than at the peeled index would make every predicate provable by induction. The control builds a vector at each length from the one below, which only the hypothesis at the predecessor types.
+// A recursive call at the predecessor is typed at the predecessor, and the arm's goal at the successor: handed back directly, `bogus(k)` would prove `Eq()(k + 1, 0)` from `Eq()(k, 0)`, so a rule that typed the call at the scrutinee rather than at the peeled index would make every predicate provable by induction. The control builds a vector at each length from the one below, which only the call at the predecessor types.
 #[test]
-fn an_induction_hypothesis_is_typed_at_the_predecessor() {
+fn a_recursive_call_at_the_predecessor_is_typed_there() {
     control(
         r#"
         use /std/{Nat, Vec};
         let bogus(n : Nat) -> Vec(Nat, n) =
             match n : (m) => Vec(Nat, m)
             | 0 => Vec/nil()
-            | k + 1; ih => Vec/cons(k, ih)
+            | k + 1 => Vec/cons(k, bogus(k))
             end;
         /std/print(Nat/to_str(Vec/first(bogus(3))))
         "#,
@@ -22,7 +22,7 @@ fn an_induction_hypothesis_is_typed_at_the_predecessor() {
         ("-> Vec(Nat, n) =", "-> Eq()(n, 0) ="),
         ("(m) => Vec(Nat, m)", "(m) => Eq()(m, 0)"),
         ("| 0 => Vec/nil()", "| 0 => Eq/refl()"),
-        ("Vec/cons(k, ih)", "ih"),
+        ("Vec/cons(k, bogus(k))", "bogus(k)"),
         ("Nat/to_str(Vec/first(bogus(3)))", "\"FORGED\""),
     ])
     .by_elaborator_in("/bogus", |error| {

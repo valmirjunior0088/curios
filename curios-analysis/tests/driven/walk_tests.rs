@@ -12,9 +12,9 @@ use {
     curios_core::{
         Apply, Argument, Arm, Bang, Carrier, Cases, Field, Free, Global, Guard, InductArm,
         InductType, Infix, Instance, Intrinsic, Level, Many, Match, MatchResult, Matrix, Metavar,
-        MetavarId, MetavarOrigin, MetavarSpine, Nat, Pattern, Proj, Row, Scope, Struct,
-        StructEntry, StructType, Subterm, Term, Three, Totality, Transient, Tuple, Two,
-        UniverseContext, Universes, Variant,
+        MetavarId, MetavarOrigin, MetavarSpine, Nat, One, Pattern, Proj, Row, Scope, Struct,
+        StructEntry, StructType, Subterm, Term, Totality, Transient, Tuple, Two, UniverseContext,
+        Universes, Variant,
     },
     curios_num::Natural,
     std::{collections::BTreeMap, slice, sync::Arc},
@@ -401,18 +401,14 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             let carrier = Carrier::Nat {
                 empty_case: markers.visited(),
-                cons_case: Scope::close(Two, &[&binder(2), &binder(3)], markers.visited()),
+                cons_case: Scope::close(One, &[&binder(2)], markers.visited()),
             };
             matching(markers, Cases::FreeMonoid { carrier })
         }),
         Specimen::of(&mut markers, |markers| {
             let carrier = Carrier::Bytes {
                 empty_case: markers.visited(),
-                cons_case: Scope::close(
-                    Three,
-                    &[&binder(2), &binder(3), &binder(4)],
-                    markers.visited(),
-                ),
+                cons_case: Scope::close(Two, &[&binder(2), &binder(3)], markers.visited()),
             };
             matching(markers, Cases::FreeMonoid { carrier })
         }),
@@ -420,11 +416,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             let carrier = Carrier::List {
                 elem: markers.visited(),
                 empty_case: markers.visited(),
-                cons_case: Scope::close(
-                    Three,
-                    &[&binder(2), &binder(3), &binder(4)],
-                    markers.visited(),
-                ),
+                cons_case: Scope::close(Two, &[&binder(2), &binder(3)], markers.visited()),
             };
             matching(markers, Cases::FreeMonoid { carrier })
         }),

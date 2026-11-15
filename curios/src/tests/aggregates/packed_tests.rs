@@ -8,7 +8,7 @@ fn vec_cons_with_nat_succ() {
         let Vec(T : Type, n : std/Nat) -> Type =
             match n : (_) => Type
             | 0 => {}
-            | pred + 1; ih => { T, ih }
+            | pred + 1 => { T, Vec(T, pred) }
             end;
 
         let cons(T : Type, n : std/Nat, x : T, xs : Vec(T, n)) -> Vec(T, std/Nat/succ(n)) =
@@ -65,7 +65,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
         use /std/{Nat, Byte, Bytes, Bool, Str, Option, Io};
 
         let front(b: Bytes) -> Bytes =
-            match b | x[] => x[] | x[h, .._]; rest => x[h, ..rest] end;
+            match b | x[] => x[] | x[h, ..t] => x[h, ..front(t)] end;
 
         let cut(b: Bytes, k: Nat) -> Bool =
             match k <= Bytes/len(b)
@@ -76,7 +76,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             end;
 
         let cuts(b: Bytes, k: Nat) -> Bool =
-            match k | 0 => cut(b, 0) | j + 1; rest => cut(b, j + 1) && rest end;
+            match k | 0 => cut(b, 0) | j + 1 => cut(b, j + 1) && cuts(b, j) end;
 
         let thirds(b: Bytes, k: Nat) -> Bool =
             match 2 * k <= Bytes/len(b)
@@ -88,11 +88,11 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
         let prefixes(whole: Bytes, n: Nat) -> Bool =
             match n
             | 0 => true
-            | j + 1; rest =>
+            | j + 1 =>
                 match j + 1 <= Bytes/len(whole)
                 | true =>
                     let b = Bytes/slice(whole, 0, j + 1);
-                    cuts(b, j + 1) && front(b) == b && thirds(b, 1) && thirds(b, 2) && rest
+                    cuts(b, j + 1) && front(b) == b && thirds(b, 1) && thirds(b, 2) && prefixes(whole, j)
                 | false => false
                 end
             end;

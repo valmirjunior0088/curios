@@ -44,7 +44,7 @@ use {
         Free, Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level,
         Lockstep, Many, Match, MatchResult, Mentions, Metavar, MetavarId, MetavarOrigin, Paired,
         Probe, Proj, Quality, Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm,
-        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        Telescope, Term, Tuple, TupleType, Two, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseError, Universes, Variance, Variant, paired,
     },
     std::{
@@ -676,25 +676,12 @@ impl Convert {
         }
     }
 
-    /// A cons arm's binders: the carrier's own domains, and the hypothesis at the result at the tail, which only a one-binder family states. An ambient goal types no hypothesis and its arm reads none, so that binder carries no type.
-    fn cons_binders(
-        &mut self,
-        context: &mut Context,
-        domains: Vec<Term>,
-        result: &MatchResult,
-    ) -> Vec<Term> {
-        let mut opened = domains
+    /// A cons arm's binders, at the carrier's own domains.
+    fn cons_binders(&mut self, context: &mut Context, domains: Vec<Term>) -> Vec<Term> {
+        domains
             .into_iter()
             .map(|domain| Term::free_var(&self.opening(context, None, Some(domain))))
-            .collect::<Vec<_>>();
-        let tail = opened.last().expect("a cons arm binds its tail");
-        let hypothesis = match result {
-            MatchResult::Family(motive) if motive.arity() == 1 => Some(motive.open(&[tail])),
-            _ => None,
-        };
-        opened.push(Term::free_var(&self.opening(context, None, hypothesis)));
-
-        opened
+            .collect()
     }
 
     pub fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
@@ -746,20 +733,19 @@ impl Convert {
         };
     }
 
-    /// Enqueue the bodies of two arity-3 cons arms (`Bytes`/`List`) for comparison, opened under shared fresh binders for `(head, tail, ih)` at the carrier's domains and the hypothesis ([`Convert::cons_binders`]).
-    fn compare_cons_three(
+    /// Enqueue the bodies of two two-binder cons arms (`Bytes`/`List`) for comparison, opened under shared fresh binders for `(head, tail)` at the carrier's domains ([`Convert::cons_binders`]).
+    fn compare_cons_two(
         &mut self,
         context: &mut Context,
         domains: Vec<Term>,
-        result: &MatchResult,
-        this: Scope<Three>,
-        that: Scope<Three>,
+        this: Scope<Two>,
+        that: Scope<Two>,
     ) {
-        let o = self.cons_binders(context, domains, result);
+        let o = self.cons_binders(context, domains);
         self.enqueue(
             Term::type_ground(),
-            this.open(&[&o[0], &o[1], &o[2]]),
-            that.open(&[&o[0], &o[1], &o[2]]),
+            this.open(&[&o[0], &o[1]]),
+            that.open(&[&o[0], &o[1]]),
         );
     }
 
@@ -1457,7 +1443,7 @@ impl Convert {
         })
     }
 
-    /// Two stuck eliminations, part by part. The motive's and the arms' binders are opened at the types their position gives them, read off the left elimination's scrutinee, which the right one's is posed as equal to: a constructor's arm at its telescope over the scrutinee's parameters, a cons arm at its carrier's domains and its hypothesis ([`Convert::cons_binders`]), a motive's as [`Convert::motive_binders`] opens them. So a proof an arm binds is one where the arm's body is compared, as it is in the certifier. Where no lookup types the scrutinee, or its family states no constructor of the arm's arity, the binders carry no type. An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
+    /// Two stuck eliminations, part by part. The motive's and the arms' binders are opened at the types their position gives them, read off the left elimination's scrutinee, which the right one's is posed as equal to: a constructor's arm at its telescope over the scrutinee's parameters, a cons arm at its carrier's domains ([`Convert::cons_binders`]), a motive's as [`Convert::motive_binders`] opens them. So a proof an arm binds is one where the arm's body is compared, as it is in the certifier. Where no lookup types the scrutinee, or its family states no constructor of the arm's arity, the binders carry no type. An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
     fn compare_match(
         &mut self,
         context: &mut Context,
@@ -1465,7 +1451,6 @@ impl Convert {
         that: Match,
     ) -> Result<bool, ReduceError> {
         let head = this.head.clone();
-        let result = this.result.clone();
         // Where the two matches state the instance they eliminate, the instances are posed as equal, the scrutinees at the instance, a typed position where two proofs are one unread, and the instance is the scrutinee's type with no lookup, as the certifier takes it. One that states an instance and one that states none are two terms.
         let scrutinee = match (this.cases.stated().cloned(), that.cases.stated().cloned()) {
             (Some(this_stated), Some(that_stated)) => {
@@ -1645,12 +1630,12 @@ impl Convert {
                     ) => {
                         self.enqueue(Term::type_ground(), this_empty, that_empty);
 
-                        // The unary cons arm binds (predecessor, ih); open both under shared fresh binders and compare the bodies.
-                        let o = self.cons_binders(context, domains, &result);
+                        // The unary cons arm binds the predecessor alone; open both under a shared fresh binder and compare the bodies.
+                        let o = self.cons_binders(context, domains);
                         self.enqueue(
                             Term::type_ground(),
-                            this_cons.open(&[&o[0], &o[1]]),
-                            that_cons.open(&[&o[0], &o[1]]),
+                            this_cons.open(&[&o[0]]),
+                            that_cons.open(&[&o[0]]),
                         );
 
                         Ok(true)
@@ -1668,7 +1653,7 @@ impl Convert {
                         },
                     ) => {
                         self.enqueue(Term::type_ground(), this_empty, that_empty);
-                        self.compare_cons_three(context, domains, &result, this_cons, that_cons);
+                        self.compare_cons_two(context, domains, this_cons, that_cons);
 
                         Ok(true)
                     }
@@ -1686,7 +1671,7 @@ impl Convert {
                     ) => {
                         self.enqueue(Term::type_ground(), this_elem, that_elem);
                         self.enqueue(Term::type_ground(), this_empty, that_empty);
-                        self.compare_cons_three(context, domains, &result, this_cons, that_cons);
+                        self.compare_cons_two(context, domains, this_cons, that_cons);
 
                         Ok(true)
                     }

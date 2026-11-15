@@ -26,8 +26,8 @@ fn intrinsic(term: &Term) -> Intrinsic {
     }
 }
 
-/// `countdown`, a group descending from its argument to `0`, at a word `${n}`, its motive's `${m}`, its predecessor's `${pred}` and hypothesis's `${ih}`, called at `x`: one recursion under any words.
-const COUNTDOWN: &str = "#{node = Rec} (let ${member}: (${n}: #NatType) -> #NatType = (${n}: #NatType) => match ${n}: (${m}) => #NatType | 0 => 0 | ${pred} + 1; ${ih} => ${member}(${pred}) end; ${member}(${argument}))";
+/// `countdown`, a group descending from its argument to `0`, at a word `${n}`, its motive's `${m}` and its predecessor's `${pred}`, called at `x`: one recursion under any words.
+const COUNTDOWN: &str = "#{node = Rec} (let ${member}: (${n}: #NatType) -> #NatType = (${n}: #NatType) => match ${n}: (${m}) => #NatType | 0 => 0 | ${pred} + 1 => ${member}(${pred}) end; ${member}(${argument}))";
 
 /// Binder *identity* must not leak into conversion. Two `rec` groups written with different minted names are the same group: binder names are display hints, and the bodies are de Bruijn-indexed under their scopes.
 ///
@@ -43,7 +43,6 @@ fn two_alpha_variant_recursive_groups_convert() {
             n = "n",
             m = "m",
             pred = "pred",
-            ih = "ih",
             argument = "x"
         ),
         right = fill!(
@@ -52,7 +51,6 @@ fn two_alpha_variant_recursive_groups_convert() {
             n = "k",
             m = "motive",
             pred = "p",
-            ih = "rest",
             argument = "x"
         )
     ));
@@ -74,7 +72,6 @@ fn a_folded_recursive_call_converts_without_unfolding_forever() {
             n = "n",
             m = "m",
             pred = "pred",
-            ih = "ih",
             argument
         )
     };
@@ -100,7 +97,7 @@ fn stepping(base: usize, by: usize, commuted: bool) -> String {
     };
 
     fill!(
-        "#{node = Rec} (let f: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => ${base} | pred + 1; ih => ${step} end; f)",
+        "#{node = Rec} (let f: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => ${base} | pred + 1 => ${step} end; f)",
         base,
         step
     )
@@ -168,13 +165,13 @@ fn two_groups_whose_bodies_part_are_apart() {
 }
 
 /// `rec f : (n: Nat, x: Nat) -> Nat = (n, x) => match n | 0 => x | pred + 1 => f(pred, x); f`: a recursion on `n` that hands `x` back.
-const HANDING_BACK: &str = "#{node = Rec} (let f: (n: #NatType, x: #NatType) -> #NatType = (n: #NatType, x: #NatType) => match n: (m) => #NatType | 0 => x | pred + 1; ih => f(pred, x) end; f)";
+const HANDING_BACK: &str = "#{node = Rec} (let f: (n: #NatType, x: #NatType) -> #NatType = (n: #NatType, x: #NatType) => match n: (m) => #NatType | 0 => x | pred + 1 => f(pred, x) end; f)";
 
 /// [`HANDING_BACK`] with its two parameters in the other order: one recursion over two orders of its arguments.
-const HANDING_BACK_FLIPPED: &str = "#{node = Rec} (let f: (x: #NatType, n: #NatType) -> #NatType = (x: #NatType, n: #NatType) => match n: (m) => #NatType | 0 => x | pred + 1; ih => f(x, pred) end; f)";
+const HANDING_BACK_FLIPPED: &str = "#{node = Rec} (let f: (x: #NatType, n: #NatType) -> #NatType = (x: #NatType, n: #NatType) => match n: (m) => #NatType | 0 => x | pred + 1 => f(x, pred) end; f)";
 
 /// `rec g : (x: Nat, y: Nat, z: Nat) -> Nat = (x, y, z) => match z | 0 => 0 | pred + 1 => g(y, 0, pred); g`: a recursion that discards `x` at its first step and `y` at its second, so two calls apart in `x` are one after one unfolding, and two apart in `y` after two.
-const SHIFTING: &str = "#{node = Rec} (let g: (x: #NatType, y: #NatType, z: #NatType) -> #NatType = (x: #NatType, y: #NatType, z: #NatType) => match z: (m) => #NatType | 0 => 0 | pred + 1; ih => g(y, 0, pred) end; g)";
+const SHIFTING: &str = "#{node = Rec} (let g: (x: #NatType, y: #NatType, z: #NatType) -> #NatType = (x: #NatType, y: #NatType, z: #NatType) => match z: (m) => #NatType | 0 => 0 | pred + 1 => g(y, 0, pred) end; g)";
 
 /// A pair of calls is unfolded against itself once, and met again inside that unfolding it is apart. The first two are one recursion over two orders of its arguments, which no comparison as binders holds, one binder standing for both members where their calls take their arguments in two orders. Unfolded, they pose their two heads again one binder further in, and would again at every round, in a scope no round has met. The second two are two calls of one member that a second unfolding would reconcile: the first poses the same member against itself at two spines, and that is where it stops. What holds either pair is an induction, which a lemma states, and the calls one unfolding reconciles are still one. The elaborator's twin shares the name.
 ///
@@ -290,7 +287,7 @@ fn two_groups_of_two_shapes_that_unfold_alike_are_apart() {
 }
 
 /// `rec f : (t: Type⟨${level}⟩, x: Nat, y: Nat) -> Nat = (t, x, y) => match y | 0 => 0 | p + 1 => f(t, 0, p); f` — the projection of a one-member group whose only universe data is its level, so two of them differ in nothing but their instance. The recursive call keeps the body restuck, so forcing returns the folded spelling, and it discards `x`, so two calls differing only there converge after one unfolding.
-const POLYMORPHIC_FOLD: &str = "#{node = Rec} (let f: (t: #{level = ${level}} Type, x: #NatType, y: #NatType) -> #NatType = (t: #{level = ${level}} Type, x: #NatType, y: #NatType) => match y: (m) => #NatType | 0 => 0 | pred + 1; ih => f(t, 0, pred) end; f)";
+const POLYMORPHIC_FOLD: &str = "#{node = Rec} (let f: (t: #{level = ${level}} Type, x: #NatType, y: #NatType) -> #NatType = (t: #{level = ${level}} Type, x: #NatType, y: #NatType) => match y: (m) => #NatType | 0 => 0 | pred + 1 => f(t, 0, pred) end; f)";
 
 /// [`POLYMORPHIC_FOLD`] at `level` applied to `Nat`, a discarded argument and a symbolic count, each a word over the hypotheses the caller opens.
 fn fold_call(level: &str, discarded: &str) -> String {
@@ -398,7 +395,7 @@ fn two_calls_of_one_recursive_group_at_two_proofs_convert_without_unfolding() {
     declared(&mut certifier, "induct /P: pub Prop\nend");
     let proposition = "#{node = InductType} /P()";
     let group = fill!(
-        "#{node = Rec} (let countdown: (n: #NatType, p: ${proposition}) -> #NatType = (n: #NatType, p: ${proposition}) => match n: (m) => #NatType | 0 => 0 | pred + 1; ih => countdown(pred, p) end; countdown)",
+        "#{node = Rec} (let countdown: (n: #NatType, p: ${proposition}) -> #NatType = (n: #NatType, p: ${proposition}) => match n: (m) => #NatType | 0 => 0 | pred + 1 => countdown(pred, p) end; countdown)",
         proposition
     );
     let [left, right] = under(

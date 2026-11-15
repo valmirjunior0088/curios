@@ -8,7 +8,7 @@ use {
     },
     curios_common::{Plicity, Qualifier, Sign, is_identifier_char, recurse},
     curios_core::{
-        Argument, Cursor, Free, Global, Intrinsic, Label, Scope, Subterm, Term, Three, Two,
+        Argument, Cursor, Free, Global, Intrinsic, Label, One, Scope, Subterm, Term, Two,
     },
     curios_num::Natural,
     std::{marker::PhantomData, rc::Rc},
@@ -57,6 +57,14 @@ impl<'a, D: Rendered> Frame<'a, D> {
         binders.map(|label| self.label(label)).collect()
     }
 
+    /// Open a one-binder scope under a minted label.
+    pub fn open_one(&self, scope: Scope<One>) -> (Free, Term) {
+        let only = self.label(scope.label(0));
+        let body = scope.open(&[&Term::free_var(&only)]);
+
+        (only, body)
+    }
+
     /// Open a two-binder scope under minted labels.
     pub fn open_two(&self, scope: Scope<Two>) -> ((Free, Free), Term) {
         let fst = self.label(scope.label(0));
@@ -64,20 +72,6 @@ impl<'a, D: Rendered> Frame<'a, D> {
         let body = scope.open(&[&Term::free_var(&fst), &Term::free_var(&snd)]);
 
         ((fst, snd), body)
-    }
-
-    /// The three-binder counterpart of [`Frame::open_two`].
-    pub fn open_three(&self, scope: Scope<Three>) -> ((Free, Free, Free), Term) {
-        let fst = self.label(scope.label(0));
-        let snd = self.label(scope.label(1));
-        let thd = self.label(scope.label(2));
-        let body = scope.open(&[
-            &Term::free_var(&fst),
-            &Term::free_var(&snd),
-            &Term::free_var(&thd),
-        ]);
-
-        ((fst, snd, thd), body)
     }
 
     /// A declaration as this render names it ([`Spelling::symbol`]): a witness by its identity where it is spelled so, and every other name as the path it is spelled by.

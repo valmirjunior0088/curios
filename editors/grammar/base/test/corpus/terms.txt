@@ -160,7 +160,7 @@ Match with a motive and every leaf shape
 
 match (n, xs, bs): (_) => Nat
 | (0, [], x[]) => 0
-| (p + 1; ih, [h, ..t]; (a, b), x[y, ..ys]) => ih
+| (p + 1, [h, ..t], x[y, ..ys]) => p
 | (some(@k, v), Point { x, y = z }, true) => v
 | _ => 1
 end
@@ -199,19 +199,11 @@ end
         (match_pattern_field
           (successor_pattern
             (identifier)
-            (number)
-            (hypothesis
-              (identifier))))
+            (number)))
         (match_pattern_field
           (list_pattern
             (identifier)
-            (identifier)
-            (hypothesis
-              (tuple_pattern
-                (pattern_field
-                  (identifier))
-                (pattern_field
-                  (identifier))))))
+            (identifier)))
         (match_pattern_field
           (packed_pattern
             (identifier)
@@ -250,7 +242,7 @@ Guards after an arm's patterns
 
 match o
 | some(n), n > 1, some(m) = f(n) => m
-| [h, .._]; count, h > 9 => count
+| [h, .._], h > 9 => h
 | _ => 0
 end
 
@@ -290,9 +282,7 @@ end
     (match_arm
       (list_pattern
         (identifier)
-        (identifier)
-        (hypothesis
-          (identifier)))
+        (identifier))
       (guard
         (binary
           (path

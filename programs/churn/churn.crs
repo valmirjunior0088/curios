@@ -21,7 +21,7 @@ struct Churn: Type {
 let walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
     match n
     | 0 => r
-    | m + 1; _ =>
+    | m + 1 =>
         let y = 75 * x % 65537;
         match p
         | 0 =>

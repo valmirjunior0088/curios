@@ -64,22 +64,26 @@ fn a_substituend_whose_evaluation_errors_falls_back_in_its_own_slot() {
     );
 }
 
-/// The proof is a fold over `10^11`, which no budget evaluates.
+/// The proof is a recursion counting `10^11` down, which no budget evaluates.
 const A_PROOF_BOUND_AS_WRITTEN_BESIDE_THE_DATA_READ: &str = r#"
 induct /Pk: pub Type
 | mk(p: /std/Bool/Holds(true), b: #BoolType)
 end
+#{node = Rec}
+let /stall : (n: #NatType) -> /std/Bool/Holds(true) =
+    (n: #NatType) =>
+        match n: (x2) => /std/Bool/Holds(true)
+        | 0 =>
+            /std/Bool/True/qed()
+        | k + 1 =>
+            /stall(k)
+        end;
 let /lemma : (
     c: #BoolType,
     h: /std/Bool/Holds(
         #{result = Ambient(#BoolType)}
         match /Pk/mk(
-            match 100000000000: (x2) => /std/Bool/Holds(true)
-            | 0 =>
-                /std/Bool/True/qed()
-            | k + 1; x =>
-                x
-            end,
+            /stall(100000000000),
             c
         )
         | mk(p, b) =>
@@ -93,12 +97,7 @@ let /lemma : (
         h: /std/Bool/Holds(
             #{result = Ambient(#BoolType)}
             match /Pk/mk(
-                match 100000000000: (x2) => /std/Bool/Holds(true)
-                | 0 =>
-                    /std/Bool/True/qed()
-                | k + 1; x =>
-                    x
-                end,
+                /stall(100000000000),
                 c
             )
             | mk(p, b) =>
@@ -111,7 +110,7 @@ let /lemma : (
 /lemma(false, /std/Bool/True/qed())
 "#;
 
-// The machine leaves a proof as written where its binder says it binds one: the constructor's wrapper at its proof binder, the arm at the payload `Pk`'s declaration states is a proof, and the `let` at its proof binder, so the fold no budget evaluates is never run and `b` reads `c`. Mutation checks: `ClosedHost::payload_proofs` answering no marks for the certifier, and `Machine::let_advance` ignoring `binds_proof`, each run the proof and refuse the closing term by `Reduce`.
+// The machine leaves a proof as written where its binder says it binds one: the constructor's wrapper at its proof binder, the arm at the payload `Pk`'s declaration states is a proof, and the `let` at its proof binder, so the recursion no budget evaluates is never run and `b` reads `c`. Mutation checks: `ClosedHost::payload_proofs` answering no marks for the certifier, and `Machine::let_advance` ignoring `binds_proof`, each run the proof and refuse the closing term by `Reduce`.
 #[test]
 fn a_proof_payload_and_a_let_bound_proof_are_left_as_written_beside_the_data_read() {
     let verdicts = core_text_verdicts(&fill!(
@@ -126,16 +125,20 @@ fn a_proof_payload_and_a_let_bound_proof_are_left_as_written_beside_the_data_rea
     );
 }
 
-/// `/W` at level 0 is a fold over `10^11`, which no budget evaluates.
+/// `/W` at level 0 is a recursion counting `10^11` down, which no budget evaluates.
 const A_WITNESS_AT_AN_INSTANCE_BESIDE_THE_DATA_READ: &str = r#"
+#{node = Rec}
+let /count : (n: #NatType) -> #NatType =
+    (n: #NatType) =>
+        match n: (x2) => #NatType
+        | 0 =>
+            0
+        | k + 1 =>
+            /count(k)
+        end;
 #{universe_context = {parameter_count = 1}}
 let /W : #NatType =
-    match 100000000000: (x2) => #NatType
-    | 0 =>
-        0
-    | k + 1; x =>
-        x
-    end;
+    /count(100000000000);
 let /lemma : (
     c: #BoolType,
     h: /std/Bool/Holds(
@@ -177,7 +180,7 @@ fn a_witness_named_at_an_instance_is_left_as_written_beside_the_data_read() {
     );
 }
 
-/// Each scrutinee is a fold over `10^11`, which no budget evaluates: a proof of `R2(5, 9)`, whose indices pin both payloads, and a proof of `Same(true, true)`, matched by an arm that names no payload.
+/// Each scrutinee is a recursion counting `10^11` down, which no budget evaluates: a proof of `R2(5, 9)`, whose indices pin both payloads, and a proof of `Same(true, true)`, matched by an arm that names no payload.
 const MATCHES_THAT_READ_NOTHING_OF_THEIR_PROOF: &str = r#"
 induct /Same: (x: #BoolType, y: #BoolType) -> pub Prop
 | refl(@z: #BoolType): (z, z)
@@ -185,6 +188,24 @@ end
 induct /R2: (n: #NatType, m: #NatType) -> pub Prop
 | mk(x: #NatType, y: #NatType): (x, y)
 end
+#{node = Rec}
+let /stall_r2 : (n: #NatType) -> #{node = InductType} /R2()(5, 9) =
+    (n: #NatType) =>
+        match n: (x2) => #{node = InductType} /R2()(5, 9)
+        | 0 =>
+            /R2/mk(5, 9)
+        | k + 1 =>
+            /stall_r2(k)
+        end;
+#{node = Rec}
+let /stall_same : (n: #NatType) -> #{node = InductType} /Same()(true, true) =
+    (n: #NatType) =>
+        match n: (x2) => #{node = InductType} /Same()(true, true)
+        | 0 =>
+            /Same/refl(@true)
+        | k + 1 =>
+            /stall_same(k)
+        end;
 let /lemma : (
     c: #BoolType,
     h: /std/Bool/Holds(
@@ -195,14 +216,7 @@ let /lemma : (
                     #{node = InductType}
                     /R2()(5, 9)}}
         match
-            match 100000000000: (x2) =>
-                #{node = InductType}
-                /R2()(5, 9)
-            | 0 =>
-                /R2/mk(5, 9)
-            | k + 1; x3 =>
-                x3
-            end
+            /stall_r2(100000000000)
         | mk(x, y) =>
             #BoolOr(
                 #BoolOr(#NatNeq(x, 5), #NatNeq(y, 9)),
@@ -213,14 +227,7 @@ let /lemma : (
                             #{node = InductType}
                             /Same()(true, true)}}
                 match
-                    match 100000000000: (x4) =>
-                        #{node = InductType}
-                        /Same()(true, true)
-                    | 0 =>
-                        /Same/refl(@true)
-                    | k2 + 1; x5 =>
-                        x5
-                    end
+                    /stall_same(100000000000)
                 | refl(@z) =>
                     c
                 end
@@ -238,14 +245,7 @@ let /lemma : (
                         #{node = InductType}
                         /R2()(5, 9)}}
             match
-                match 100000000000: (x2) =>
-                    #{node = InductType}
-                    /R2()(5, 9)
-                | 0 =>
-                    /R2/mk(5, 9)
-                | k + 1; x3 =>
-                    x3
-                end
+                /stall_r2(100000000000)
             | mk(x, y) =>
                 #BoolOr(
                     #BoolOr(#NatNeq(x, 5), #NatNeq(y, 9)),
@@ -256,14 +256,7 @@ let /lemma : (
                                 #{node = InductType}
                                 /Same()(true, true)}}
                     match
-                        match 100000000000: (x4) =>
-                            #{node = InductType}
-                            /Same()(true, true)
-                        | 0 =>
-                            /Same/refl(@true)
-                        | k2 + 1; x5 =>
-                            x5
-                        end
+                        /stall_same(100000000000)
                     | refl(@z) =>
                         c
                     end
@@ -454,7 +447,7 @@ let /parity : (n: #NatType) -> #NatType =
         match n
         | 0 =>
             0
-        | k + 1; x =>
+        | k + 1 =>
             #NatSub(1, /parity(k))
         end;
 let /lemma : (
@@ -561,7 +554,7 @@ let /f : (n: #NatType) -> #NatType =
         match n
         | 0 =>
             0
-        | k + 1; x =>
+        | k + 1 =>
             #{result = Ambient(#NatType)}
             match #ListFold(#NatType, #NatType, #List(#NatType, [5]), /f(k), (a: #NatType, b: #NatType) => b)
             | 0 =>
@@ -579,7 +572,7 @@ let /member : (n: #NatType) -> #NatType =
         match n
         | 0 =>
             0
-        | k + 1; x =>
+        | k + 1 =>
             /member(k)
         end;
 let /c3 : #{result = Ambient(Type)}
@@ -607,7 +600,7 @@ let /pair : (n: #NatType) -> {#NatType, #NatType} =
         match n
         | 0 =>
             (0, 1)
-        | k + 1; x =>
+        | k + 1 =>
             /pair(k)
         end;
 let /p : /std/Bool/Holds(

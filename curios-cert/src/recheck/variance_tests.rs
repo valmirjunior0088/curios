@@ -451,7 +451,7 @@ induct /Held(n: #NatType): pub #{level = u + 2} Type
                 | 0 =>
                     #{level = u}
                     Type
-                | j + 1; y =>
+                | j + 1 =>
                     m(j)
                 end;
         m))(n))
@@ -467,7 +467,7 @@ induct /Lied(n: #NatType): pub #{level = u + 2} Type
                 | 0 =>
                     #{level = u}
                     Type
-                | j + 1; y =>
+                | j + 1 =>
                     m(j)
                 end;
         m))(n))

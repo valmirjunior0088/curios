@@ -1353,21 +1353,13 @@ fn motive_binders(certifier: &mut Certifier, scrutinee: Option<&Term>, arity: us
     }
 }
 
-/// A cons arm's binders: the carrier's own domains, and the hypothesis at the result at the tail, which only a one-binder family states. An ambient goal types no hypothesis and its arm reads none, so that binder is opened at the stand-in.
-fn cons_binders(certifier: &mut Certifier, carrier: &Carrier, result: &MatchResult) -> Vec<Term> {
-    let mut opened = carrier
+/// A cons arm's binders: the carrier's own domains.
+fn cons_binders(certifier: &mut Certifier, carrier: &Carrier) -> Vec<Term> {
+    carrier
         .cons_domains()
         .iter()
         .map(|domain| assumed(certifier, domain))
-        .collect::<Vec<_>>();
-    let tail = opened.last().expect("a cons arm binds its tail");
-    let hypothesis = match result {
-        MatchResult::Family(motive) if motive.arity() == 1 => motive.open(&[tail]),
-        _ => Term::type_ground(),
-    };
-    opened.push(assumed(certifier, &hypothesis));
-
-    opened
+        .collect()
 }
 
 /// What `compare` reads of an arm of `tag`'s case opened at its payload: the payload at the constructor's telescope over the scrutinee's parameters, where a lookup typed the scrutinee as `family` and the family states a constructor of the arm's `arity`, and opaque binders otherwise. Those are assumed at the stand-in `Type`, which `Sort::of` reads like any recorded type: it is the least informative answer it can give a binder, so the stand-in can only lose an accepting rule, never gain one — `tests::irrelevance`'s `a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does` holds that, and the one exception it records.
@@ -1408,7 +1400,7 @@ fn opaque_binders(certifier: &mut Certifier, arity: usize) -> Vec<Term> {
 
 /// Compare two stuck eliminations' arm sets up to conversion: matching variants and, case by case, the arm each takes there, a catch-all standing for every case its own arms do not write ([`paired`]).
 ///
-/// Each arm's binders are opened at the types its position gives them, read off the left elimination, whose scrutinee and result the right one's have just been compared with: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains and its hypothesis ([`cons_binders`]). So a proof an arm binds is one where the arm's body is compared, as it is where the arm was typed. Where no lookup typed the scrutinee, or its family states no constructor of the arm's arity, the arm keeps the stand-in ([`ground_arm`]). An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
+/// Each arm's binders are opened at the types its position gives them, read off the left elimination, whose scrutinee and result the right one's have just been compared with: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains ([`cons_binders`]). So a proof an arm binds is one where the arm's body is compared, as it is where the arm was typed. Where no lookup typed the scrutinee, or its family states no constructor of the arm's arity, the arm keeps the stand-in ([`ground_arm`]). An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
 fn ground_cases(
     certifier: &mut Certifier,
     pairs: &mut Pairs,
@@ -1543,12 +1535,12 @@ fn ground_cases(
                     },
                 ) => Ok(ground(certifier, pairs, this_empty, that_empty)?
                     && certifier.scoped(|certifier| {
-                        let o = cons_binders(certifier, this, &left.result);
+                        let o = cons_binders(certifier, this);
                         ground(
                             certifier,
                             pairs,
-                            &this_cons.open(&[&o[0], &o[1]]),
-                            &that_cons.open(&[&o[0], &o[1]]),
+                            &this_cons.open(&[&o[0]]),
+                            &that_cons.open(&[&o[0]]),
                         )
                     })?),
                 (
@@ -1562,12 +1554,12 @@ fn ground_cases(
                     },
                 ) => Ok(ground(certifier, pairs, this_empty, that_empty)?
                     && certifier.scoped(|certifier| {
-                        let o = cons_binders(certifier, this, &left.result);
+                        let o = cons_binders(certifier, this);
                         ground(
                             certifier,
                             pairs,
-                            &this_cons.open(&[&o[0], &o[1], &o[2]]),
-                            &that_cons.open(&[&o[0], &o[1], &o[2]]),
+                            &this_cons.open(&[&o[0], &o[1]]),
+                            &that_cons.open(&[&o[0], &o[1]]),
                         )
                     })?),
                 (
@@ -1584,12 +1576,12 @@ fn ground_cases(
                 ) => Ok(ground(certifier, pairs, this_elem, that_elem)?
                     && ground(certifier, pairs, this_empty, that_empty)?
                     && certifier.scoped(|certifier| {
-                        let o = cons_binders(certifier, this, &left.result);
+                        let o = cons_binders(certifier, this);
                         ground(
                             certifier,
                             pairs,
-                            &this_cons.open(&[&o[0], &o[1], &o[2]]),
-                            &that_cons.open(&[&o[0], &o[1], &o[2]]),
+                            &this_cons.open(&[&o[0], &o[1]]),
+                            &that_cons.open(&[&o[0], &o[1]]),
                         )
                     })?),
                 _ => Ok(false),

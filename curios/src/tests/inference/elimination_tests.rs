@@ -6,13 +6,14 @@ use crate::tests::test_support::*;
 
 #[test]
 fn match_omitted_motive_infers() {
-    // The same induction as `triangular_sum`, but with the motive omitted. It is non-dependent (every arm has type `std/Nat`), so the synthesized metavar motive is solved by the arms — no explicit `: std/Nat` needed.
+    // The same recursion as `triangular_sum`, but with the motive omitted. It is non-dependent (every arm has type `std/Nat`), so the synthesized metavar motive is solved by the arms — no explicit `: std/Nat` needed.
     let source = r#"
-        let result : std/Nat =
-            match 5
+        let triangle(n : std/Nat) -> std/Nat =
+            match n
             | 0 => 0
-            | pred + 1; ih => std/Nat/add(ih, pred)
+            | pred + 1 => std/Nat/add(triangle(pred), pred)
             end;
+        let result : std/Nat = triangle(5);
         let entry() -> /std/Io({}) =
             let _ = /std/print(std/Nat/to_str(result))!;
             /std/Io/pure(());
@@ -30,12 +31,12 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
         let build(n : Nat) -> Vec(Nat, n) =
             match n : (m) => Vec(Nat, m)
             | 0 => Vec/nil()
-            | pred + 1; ih => Vec/cons(0, ih)
+            | pred + 1 => Vec/cons(0, build(pred))
             end;
         let d(k : Nat) -> Vec(Nat, Nat/add(k, k)) =
             match Nat/add(k, k)
             | 0 => Vec/nil()
-            | pred + 1; ih => build(Nat/succ(pred))
+            | pred + 1 => build(Nat/succ(pred))
             end;
         /std/print(Nat/to_str(Vec/len(d(2))))
         "#;

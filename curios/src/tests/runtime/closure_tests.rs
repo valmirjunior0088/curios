@@ -86,11 +86,12 @@ fn local_binders_shadow_module_bindings_without_leaking() {
 #[test]
 fn triangular_sum() {
     let source = r#"
-        let result : std/Nat =
-            match 5 : (_) => std/Nat
+        let triangle(n : std/Nat) -> std/Nat =
+            match n : (_) => std/Nat
             | 0 => 0
-            | pred + 1; ih => std/Nat/add(ih, pred)
+            | pred + 1 => std/Nat/add(triangle(pred), pred)
             end;
+        let result : std/Nat = triangle(5);
         let entry() -> /std/Io({}) =
             let _ = /std/print(std/Nat/to_str(result))!;
             /std/Io/pure(());
@@ -174,7 +175,7 @@ fn nested_local_rec_runs_correctly() {
             (let go(i : Nat) -> Nat =
                 match i
                 | 0 => 0
-                | k + 1; ih => go(k) + 1
+                | k + 1 => go(k) + 1
                 end;
              go(n));
         let entry() -> /std/Io({}) =
@@ -195,7 +196,7 @@ fn local_rec_calls_enclosing_rec_member() {
             (let go(i : Nat) -> Nat =
                 match i
                 | 0 => 0
-                | k + 1; ih => f(k) + go(k)
+                | k + 1 => f(k) + go(k)
                 end;
              go(n));
         let entry() -> /std/Io({}) =
@@ -234,7 +235,7 @@ fn recursive_group_signature_reduces_concrete_type_family() {
             let T(n : Nat) -> Type =
                 match n
                 | 0 => Nat
-                | k + 1; ih => T(k)
+                | k + 1 => T(k)
                 end
             and val : T(2) =
                 taint;

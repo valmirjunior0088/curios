@@ -1,4 +1,4 @@
-//! Guards: the tests an arm writes after its patterns, what a guard that fails teaches the arms after it, and guards at each step of a fold.
+//! Guards: the tests an arm writes after its patterns, what a guard that fails teaches the arms after it, and guards at each level of a recursion.
 
 use {crate::tests::test_support::*, curios_common::fill};
 
@@ -178,40 +178,40 @@ fn a_bind_guard_that_cannot_fail_is_refused() {
     );
 }
 
-// A fold's arm is taken at every tail, and its guards run at each: a guard on the arm that writes the hypothesis, one that reads the hypothesis, and one on the base case. A lone condition that fails at a step is a fact in the arms after it at that step: `10 / k` reads `k != 0`. Runtime-tainted, so each runs as wasm.
+// A recursion's arm is taken at every level, and its guards run at each: a guard on the predecessor, one that reads the call at the predecessor, and one on the base case. A lone condition that fails at a level is a fact in the arms after it there: `10 / k` reads `k != 0`. Runtime-tainted, so each runs as wasm.
 #[test]
-fn guards_run_at_every_step_of_a_fold() {
+fn guards_run_at_every_level_of_a_recursion() {
     let source = r#"
         use /std/{Bool, List, Nat, Str, Bytes, rand};
         let count(n: Nat) -> Nat =
             match n
             | 0 => 0
-            | k + 1; ih, k > 2 => ih + 1
-            | _ + 1; ih => ih
+            | k + 1, k > 2 => count(k) + 1
+            | k + 1 => count(k)
             end;
         let capped(n: Nat) -> Nat =
             match n
             | 0 => 0
-            | _ + 1; ih, ih > 3 => ih
-            | _ + 1; ih => ih + 1
+            | k + 1, capped(k) > 3 => capped(k)
+            | k + 1 => capped(k) + 1
             end;
         let based(flag: Bool, n: Nat) -> Nat =
             match n
             | 0, flag => 100
             | 0 => 0
-            | _ + 1; ih => ih + 1
+            | k + 1 => based(flag, k) + 1
             end;
         let big(l: List(Nat)) -> Nat =
             match l
             | [] => 0
-            | [h, .._]; acc, h > 2 => acc + h
-            | [_, .._]; acc => acc
+            | [h, ..t], h > 2 => big(t) + h
+            | [_, ..t] => big(t)
             end;
         let shares(n: Nat) -> Nat =
             match n
             | 0 => 0
-            | k + 1; ih, k == 0 => ih
-            | k + 1; ih => ih + 10 / k
+            | k + 1, k == 0 => shares(k)
+            | k + 1 => shares(k) + 10 / k
             end;
         let entry() -> /std/Io({}) =
             let z = Bytes/len(rand/bytes(0)!);
@@ -227,15 +227,15 @@ fn guards_run_at_every_step_of_a_fold() {
     assert_eq!(run(source), b"3 4 105 8 18");
 }
 
-// Where one arm alone writes the step and only its guard names the hypothesis, the guard is what makes the match a fold, as naming it in the body does: `before` is the predecessor's parity, read by nothing but the guard.
+// A guard may call the recursion its arm stands in, and where it fails the row that cannot fail takes the value: `even(k)` is the predecessor's parity, read by nothing but the guard.
 #[test]
-fn a_guard_alone_naming_the_hypothesis_makes_the_match_a_fold() {
+fn a_guard_may_call_the_recursion_its_arm_stands_in() {
     let source = r#"
         use /std/{Bool, Nat, Str, Bytes, rand};
         let even(n: Nat) -> Bool =
             match n
             | 0 => true
-            | _ + 1; before, before => false
+            | k + 1, even(k) => false
             | _ => true
             end;
         let shown(b: Bool) -> Str = match b | true => "even" | false => "odd" end;
@@ -248,34 +248,15 @@ fn a_guard_alone_naming_the_hypothesis_makes_the_match_a_fold() {
     assert_eq!(run(source), b"odd even even");
 }
 
-// A goal in a guard could read anything in scope, so it makes the match a fold as a goal in the body does: the hypothesis is in its scope though nothing names it.
+// A bind guard takes a recursive call apart: the last element above 2, found from the end of the list.
 #[test]
-fn a_goal_in_a_guard_sees_the_hypothesis_of_a_fold() {
-    let source = r#"
-        use /std/{Nat};
-        let f(n: Nat) -> Nat =
-            match n
-            | 0 => 0
-            | k + 1; ih, k > ? => k
-            | _ => 0
-            end;
-        /std/print(Nat/to_str(f(3)))
-        "#;
-    let report = typecheck(source).expect_err("a program with a written goal never compiles");
-
-    assert!(report.contains("└─ [goal]"), "{report}");
-    assert!(report.contains("ih : Nat"), "{report}");
-}
-
-// A bind guard takes the hypothesis apart, beside an arm that writes none: the last element above 2, found from the end of the list.
-#[test]
-fn a_bind_guard_takes_apart_the_hypothesis_of_a_fold() {
+fn a_bind_guard_takes_a_recursive_call_apart() {
     let source = r#"
         use /std/{List, Nat, Option, Str, Bytes, rand};
         let last_big(l: List(Nat)) -> Option(Nat) =
             match l
             | [] => Option/none()
-            | [_, .._]; found, some(v) = found => Option/some(v)
+            | [_, ..t], some(v) = last_big(t) => Option/some(v)
             | [h, .._], h > 2 => Option/some(h)
             | [_, .._] => Option/none()
             end;
@@ -292,21 +273,21 @@ fn a_bind_guard_takes_apart_the_hypothesis_of_a_fold() {
     assert_eq!(run(source), b"3 - 4");
 }
 
-// A chain that fails at a step falls to the arms after it there, the next with a guard of its own, each reading that step's hypothesis; and a row that cannot fail stands both for the base case and for a step whose guard fails.
+// A chain that fails at a level falls to the arms after it there, the next with a guard of its own, each reading the call at the predecessor; and a row that cannot fail stands both for the base case and for a level whose guard fails.
 #[test]
-fn a_chain_failing_at_a_step_falls_through_the_arms_after_it() {
+fn a_chain_failing_at_a_level_falls_through_the_arms_after_it() {
     let source = r#"
         use /std/{Nat, Str, Bytes, rand};
         let ramp(n: Nat) -> Nat =
             match n
             | 0 => 0
-            | k + 1; ih, k > 5, ih > 10 => ih
-            | k + 1; ih, k > 2 => ih + 2
-            | _ + 1; ih => ih + 1
+            | k + 1, k > 5, ramp(k) > 10 => ramp(k)
+            | k + 1, k > 2 => ramp(k) + 2
+            | k + 1 => ramp(k) + 1
             end;
         let late(n: Nat) -> Nat =
             match n
-            | k + 1; ih, k > 2 => ih + 1
+            | k + 1, k > 2 => late(k) + 1
             | _ => 7
             end;
         let entry() -> /std/Io({}) =
@@ -325,28 +306,28 @@ fn a_chain_failing_at_a_step_falls_through_the_arms_after_it() {
     assert_eq!(run(source), b"9 11 11 7 7 9");
 }
 
-// Guards read every shape of hypothesis: one taken apart into a tuple, one that is a function, called in the guard under a written motive, and a packed fold's.
+// Guards read every shape of recursive call: a tuple one projected, a function one applied, and one over a packed sequence.
 #[test]
-fn guards_read_a_hypothesis_taken_apart_a_function_one_and_a_packed_folds() {
+fn guards_read_a_recursive_call_projected_applied_and_over_bytes() {
     let source = r#"
         use /std/{Byte, List, Nat, Str, Bytes, rand};
         let tally(l: List(Nat)) -> {Nat, Nat} =
             match l
             | [] => (0, 0)
-            | [h, .._]; (count, total), h > 2, count < 2 => (count + 1, total + h)
-            | [_, .._]; kept => kept
+            | [h, ..t], h > 2, tally(t).0 < 2 => (tally(t).0 + 1, tally(t).1 + h)
+            | [_, ..t] => tally(t)
             end;
         let skip(l: List(Nat)) -> (Nat) -> Nat =
-            match l: (_) => (Nat) -> Nat
+            match l
             | [] => (a) => a
-            | [h, .._]; rest, rest(h) > 10 => (a) => rest(a)
-            | [h, .._]; rest => (a) => rest(a + h)
+            | [h, ..t], skip(t)(h) > 10 => (a) => skip(t)(a)
+            | [h, ..t] => (a) => skip(t)(a + h)
             end;
         let high(b: Bytes) -> Nat =
             match b
             | x[] => 0
-            | x[h, .._]; n, Byte/to_nat(h) > 127 => n + 1
-            | x[_, .._]; n => n
+            | x[h, ..t], Byte/to_nat(h) > 127 => high(t) + 1
+            | x[_, ..t] => high(t)
             end;
         let entry() -> /std/Io({}) =
             let z = Bytes/len(rand/bytes(0)!);
@@ -363,27 +344,28 @@ fn guards_read_a_hypothesis_taken_apart_a_function_one_and_a_packed_folds() {
     assert_eq!(run(source), b"2 10 4 2");
 }
 
-// A guard may hold a fold of its own, a fold's column may stand beside another the guard reads, and a guarded arm typed once by its own walk beside the fold's column falls through at the step.
+// A guard may hold a match of its own, a list's column may stand beside another the guard reads, and a guarded arm typed once by its own walk beside the list's column falls through at the level.
 #[test]
-fn a_guard_holds_a_fold_and_reads_the_columns_beside_one() {
+fn a_guard_holds_a_match_and_reads_the_columns_beside_one() {
     let source = r#"
-        use /std/{List, Nat, Str, Bytes, rand};
+        use /std/{Bool, List, Nat, Str, Bytes, rand};
+        let even(n: Nat) -> Bool = match n | 0 => true | k + 1 => even(k) == false end;
         let evens(l: List(Nat)) -> Nat =
             match l
             | [] => 0
-            | [h, .._]; acc, (match h | 0 => true | _ + 1; even => even == false end) => acc + 1
-            | [_, .._]; acc => acc
+            | [h, ..t], (match h | 0 => true | k + 1 => even(k) == false end) => evens(t) + 1
+            | [_, ..t] => evens(t)
             end;
         let over(l: List(Nat), m: Nat) -> Nat =
             match (l, m)
             | ([], _) => 0
-            | ([h, .._]; acc, k), h > k => acc + 1
-            | ([_, .._]; acc, _) => acc
+            | ([h, ..t], k), h > k => over(t, m) + 1
+            | ([_, ..t], _) => over(t, m)
             end;
         let stray(l: List(Nat), m: Nat) -> Nat =
             match (l, m)
             | ([], _) => 0
-            | ([_, .._]; acc, 0) => acc + 1
+            | ([_, ..t], 0) => stray(t, 0) + 1
             | (_, k), k > 5 => k
             | _ => 1
             end;
@@ -402,7 +384,7 @@ fn a_guard_holds_a_fold_and_reads_the_columns_beside_one() {
     assert_eq!(run(source), b"3 3 3 7 1 0");
 }
 
-// A proof by induction whose step a guard splits: where `n < j` holds, the hypothesis takes the premise the guard states, and where it fails, the failure is the `j <= n` the arm after it reads. A chain that fails teaches nothing, so the same proof under a second guard is refused.
+// A proof by induction whose step a guard splits: where `n < j` holds, the call at the predecessor takes the premise the guard states, and where it fails, the failure is the `j <= n` the arm after it reads. A chain that fails teaches nothing, so the same proof under a second guard is refused.
 #[test]
 fn a_failed_guard_at_a_step_is_a_fact_a_proof_by_induction_reads() {
     let proof = |guards: &str| {
@@ -411,17 +393,17 @@ fn a_failed_guard_at_a_step_is_a_fact_a_proof_by_induction_reads() {
             use /std/{Nat, Bool, Eq, proved};
             use /std/Bool/{True, Holds};
             let below(k: Nat, p: (Nat) -> Bool) -> Bool =
-                match k | 0 => true | j + 1; rest => p(j) && rest end;
+                match k | 0 => true | j + 1 => p(j) && below(j, p) end;
             let at(k: Nat, p: (Nat) -> Bool, n: Nat, all: Holds(below(k, p)), under: Holds(n < k)) -> Holds(p(n)) =
-                match k: (m) => (all: Holds(below(m, p)), under: Holds(n < m)) -> Holds(p(n))
-                | 0 => (_, under) => match under end
-                | j + 1; ih, ${guards} => (all, _) => ih(Bool/and/second(p(j), below(j, p), all), proved())
-                | j + 1 => (all, under) =>
+                match k
+                | 0 => match under end
+                | j + 1, ${guards} => at(j, p, n, Bool/and/second(p(j), below(j, p), all), proved())
+                | j + 1 =>
                     Eq/subst(
                         (m: Nat) => Holds(p(m)),
                         Nat/le/antisym(j, n, proved(), proved()),
                         Bool/and/first(p(j), below(j, p), all))
-                end(all, under);
+                end;
             let small: Holds(3 < 9) = at(5, (x) => x < 9, 3, True/qed(), True/qed());
             /std/print("ok")
             "#,
@@ -437,9 +419,9 @@ fn a_failed_guard_at_a_step_is_a_fact_a_proof_by_induction_reads() {
     );
 }
 
-// Conversion runs a fold whose arms take guards, as the program does: `count(6)` is 3 by reduction alone, and 4 is refused.
+// Conversion runs a recursion whose arms take guards, as the program does: `count(6)` is 3 by reduction alone, and 4 is refused.
 #[test]
-fn conversion_runs_a_fold_whose_arms_take_guards() {
+fn conversion_runs_a_recursion_whose_arms_take_guards() {
     let claim = |value: &str| {
         fill!(
             r#"
@@ -448,8 +430,8 @@ fn conversion_runs_a_fold_whose_arms_take_guards() {
             let count(n: Nat) -> Nat =
                 match n
                 | 0 => 0
-                | k + 1; ih, k > 2 => ih + 1
-                | _ + 1; ih => ih
+                | k + 1, k > 2 => count(k) + 1
+                | k + 1 => count(k)
                 end;
             let counted: Holds(count(6) == ${value}) = True/qed();
             /std/print("ok")
@@ -483,16 +465,16 @@ fn a_match_its_guards_flatten_converts_with_the_nested_one() {
     assert_eq!(run(source), b"ok");
 }
 
-// A fold is held to the rules of guards as any match is: a base case only a guarded arm reaches is refused, and so is a guarded arm written before a case of it.
+// A `Nat` or a list case split is held to the rules of guards as any match is: a base case only a guarded arm reaches is refused, and so is a guarded arm written before a case of it.
 #[test]
-fn a_fold_with_guards_is_held_to_coverage_and_order() {
+fn a_sequence_split_with_guards_is_held_to_coverage_and_order() {
     let uncovered = error(
         r#"
         use /std/{Bool, Nat};
         let f(flag: Bool, n: Nat) -> Nat =
             match n
             | 0, flag => 1
-            | _ + 1; ih => ih
+            | k + 1 => f(flag, k)
             end;
         /std/print(Nat/to_str(f(true, 3)))
         "#,
@@ -508,17 +490,16 @@ fn a_fold_with_guards_is_held_to_coverage_and_order() {
         let f(l: List(Nat), m: Nat) -> Nat =
             match (l, m)
             | ([], _) => 0
-            | ([_, .._]; acc, _), acc > 3 => acc
-            | ([_, .._]; acc, 0) => acc + 1
-            | ([_, .._]; acc, _) => acc
+            | ([_, ..t], _), m > 3 => f(t, m)
+            | ([_, ..t], 0) => f(t, 0) + 1
+            | ([_, ..t], _) => f(t, m)
             end;
         /std/print(Nat/to_str(f([1, 2], 0)))
         "#,
     );
     assert!(
-        misplaced.contains(
-            "`([_, .._]; acc, 0)` is a case of `([_, .._]; acc, _)`, which is written before it"
-        ),
+        misplaced
+            .contains("`([_, ..t], 0)` is a case of `([_, ..t], _)`, which is written before it"),
         "{misplaced}"
     );
 }

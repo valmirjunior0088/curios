@@ -102,7 +102,7 @@ use /std/{Str, Nat, Bytes, Hash, Option, Io};
 let walk(n: Nat, x: Nat, s: Nat) -> Nat =
     match n: (_) => Nat
     | 0 => s
-    | k + 1; ih =>
+    | k + 1 =>
         let y = 75 * x % 65537;
         walk(k, y, (s + y + Bytes/len(Hash/hash(y)) + Bytes/len(Hash/hash(x))) % 1000003)
     end;
@@ -131,7 +131,7 @@ use /std/{Str, Nat, Bytes, Option, Io};
 let walk(n: Nat, x: Nat, s: Nat) -> Nat =
     match n: (_) => Nat
     | 0 => s
-    | k + 1; ih =>
+    | k + 1 =>
         let y = 75 * x % 65537;
         walk(k, y, (s + y + 4) % 1000003)
     end;

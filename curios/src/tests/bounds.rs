@@ -531,11 +531,11 @@ const ROWS: &[Row] = &[
         "Nat",
         "let inner: Holds(f(n / 2) <= n / 2) = g(n / 2); let doubled: Holds(2 * f(n / 2) <= n) = proved(); 0",
     ),
-    // One call under two spellings only conversion holds one: an argument a statement writes as a sum beside the successor an arm refined a variable to, in a proof by induction whose step is stated at `k + 1`; two orders of one sum; and a quotient over each.
+    // One call under two spellings only conversion holds one: an argument a statement writes as a sum beside the successor an arm refined a variable to, in a proof by recursion whose step is stated at `k + 1`; two orders of one sum; and a quotient over each.
     body(
         "f: (Nat) -> Nat, step: (k: Nat) -> Holds(f(k) <= f(k + 1)), n: Nat",
         "Holds(f(0) <= f(n))",
-        "match n | 0 => True/qed() | p + 1; ih => let prior = ih; let stepped = step(p); proved() end",
+        "match n | 0 => True/qed() | p + 1 => let prior = row(f, step, p); let stepped = step(p); proved() end",
     ),
     claim(
         "f: (Nat) -> Nat, a: Nat, b: Nat, m: Nat, h: Holds(f(a + b) <= m)",

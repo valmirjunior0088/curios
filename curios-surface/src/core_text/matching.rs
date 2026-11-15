@@ -1,6 +1,6 @@
 //! A match, in the surface's spellings of its cases.
 //!
-//! **A match is `match head` and one arm per case, closed by `end`**: a boolean match's `| false` and `| true`, a dispatch's literal keys and its `| _`, a family's arms by their constructors' tags with their payloads' binders under their marks and its catch-all `| _`, and a fold's `| 0` and `| p + 1; ih`, `| []` and `| [h, ..t]; ih`, `| x[]` and `| x[h, ..t]; ih`. **A written motive is `: (binders) => motive` and builds the family it states**; a match with none states the goal it is checked against, `#{result = Ambient(T)}`. What a match's cases hold beside their arms is set in its `cases` field: the instance a family's match states, `#{cases = {stated = T}}`, and a list fold's element type, `#{cases = {carrier = {elem = T}}}`, which no arm writes.
+//! **A match is `match head` and one arm per case, closed by `end`**: a boolean match's `| false` and `| true`, a dispatch's literal keys and its `| _`, a family's arms by their constructors' tags with their payloads' binders under their marks and its catch-all `| _`, and a case split's `| 0` and `| p + 1`, `| []` and `| [h, ..t]`, `| x[]` and `| x[h, ..t]`. **A written motive is `: (binders) => motive` and builds the family it states**; a match with none states the goal it is checked against, `#{result = Ambient(T)}`. What a match's cases hold beside their arms is set in its `cases` field: the instance a family's match states, `#{cases = {stated = T}}`, and a list split's element type, `#{cases = {carrier = {elem = T}}}`, which no arm writes.
 
 use {
     super::{
@@ -14,7 +14,7 @@ use {
     },
     curios_common::Plicity,
     curios_core::{
-        Arity, Atom, Carrier, Cases, Free, InductArm, Many, Match, MatchResult, Scope, Term, Three,
+        Arity, Atom, Carrier, Cases, Free, InductArm, Many, Match, MatchResult, One, Scope, Term,
         Two,
     },
     std::{array, iter},
@@ -87,18 +87,13 @@ pub fn match_written<D: Rendered>(
                 empty_case,
                 cons_case,
             } => {
-                let [predecessor_core, hypothesis_core] = cores(cons_case.label_iter(), frame);
-                let ((predecessor, hypothesis), step) = frame.open_two(cons_case);
+                let [predecessor_core] = cores(cons_case.label_iter(), frame);
+                let (predecessor, step) = frame.open_one(cons_case);
                 vec![
                     arm(MatchPattern::Nat(NatPattern::Zero), empty_case, frame),
                     arm(
                         MatchPattern::Nat(NatPattern::Succ {
                             pred_label: decorated(predecessor_core, &predecessor, frame),
-                            ih: Some(Pattern::Binder(decorated(
-                                hypothesis_core,
-                                &hypothesis,
-                                frame,
-                            ))),
                         }),
                         step,
                         frame,
@@ -109,19 +104,14 @@ pub fn match_written<D: Rendered>(
                 empty_case,
                 cons_case,
             } => {
-                let [head_core, tail_core, hypothesis_core] = cores(cons_case.label_iter(), frame);
-                let ((head, tail, hypothesis), step) = frame.open_three(cons_case);
+                let [head_core, tail_core] = cores(cons_case.label_iter(), frame);
+                let ((head, tail), step) = frame.open_two(cons_case);
                 vec![
                     arm(MatchPattern::Bytes(BytesPattern::End), empty_case, frame),
                     arm(
                         MatchPattern::Bytes(BytesPattern::Atom {
                             head_label: decorated(head_core, &head, frame),
                             tail_label: decorated(tail_core, &tail, frame),
-                            ih: Some(Pattern::Binder(decorated(
-                                hypothesis_core,
-                                &hypothesis,
-                                frame,
-                            ))),
                         }),
                         step,
                         frame,
@@ -134,19 +124,14 @@ pub fn match_written<D: Rendered>(
                 cons_case,
             } => {
                 held.push(("carrier", nested(vec![("elem", value(sub(elem, frame)))])));
-                let [head_core, tail_core, hypothesis_core] = cores(cons_case.label_iter(), frame);
-                let ((head, tail, hypothesis), step) = frame.open_three(cons_case);
+                let [head_core, tail_core] = cores(cons_case.label_iter(), frame);
+                let ((head, tail), step) = frame.open_two(cons_case);
                 vec![
                     arm(MatchPattern::List(ListPattern::Nil), empty_case, frame),
                     arm(
                         MatchPattern::List(ListPattern::Cons {
                             head_label: decorated(head_core, &head, frame),
                             tail_label: decorated(tail_core, &tail, frame),
-                            ih: Some(Pattern::Binder(decorated(
-                                hypothesis_core,
-                                &hypothesis,
-                                frame,
-                            ))),
                         }),
                         step,
                         frame,
@@ -268,7 +253,7 @@ fn constructor_arm<D: Rendered>(
     )
 }
 
-/// A match: its head, its motive where one is written, and its cases, read off the spelling its arms are written in — a boolean match's `false` and `true`, a dispatch's keys and its `_`, a family's tags and its `_`, a fold's `0` and `p + 1; ih`, `[]` and `[h, ..t]; ih`, `x[]` and `x[h, ..t]; ih`. A match with no motive states the goal it is checked against, `#{result = Ambient(T)}`, and what its cases hold beside their arms is set in `cases`.
+/// A match: its head, its motive where one is written, and its cases, read off the spelling its arms are written in — a boolean match's `false` and `true`, a dispatch's keys and its `_`, a family's tags and its `_`, a case split's `0` and `p + 1`, `[]` and `[h, ..t]`, `x[]` and `x[h, ..t]`. A match with no motive states the goal it is checked against, `#{result = Ambient(T)}`, and what its cases hold beside their arms is set in `cases`.
 pub fn match_read(
     crate::Match { head, motive, arms }: &crate::Match<CoreText>,
     fields: &mut Fields<'_>,
@@ -326,17 +311,15 @@ pub fn match_read(
         },
         [
             MatchPattern::Nat(NatPattern::Zero),
-            MatchPattern::Nat(NatPattern::Succ { pred_label, ih }),
+            MatchPattern::Nat(NatPattern::Succ { pred_label }),
         ] => {
-            let hypothesis = hypothesis_read(ih.as_ref())
-                .ok_or_else(|| refused("a fold's hypothesis, `; ih`"))??;
-            let labels = [LabelRead::binder(pred_label)?, hypothesis];
+            let labels = [LabelRead::binder(pred_label)?];
             Cases::FreeMonoid {
                 carrier: Carrier::Nat {
                     empty_case: core_read(&arms[0].body, reader)?,
                     cons_case: scope_read(&labels, &arms[1].body, reader).map(
                         |(frees, body)| {
-                            proving_scope(Scope::close(Two, &[&frees[0], &frees[1]], body), &labels)
+                            proving_scope(Scope::close(One, &[&frees[0]], body), &labels)
                         },
                     )?,
                 },
@@ -347,24 +330,20 @@ pub fn match_read(
             MatchPattern::List(ListPattern::Cons {
                 head_label,
                 tail_label,
-                ih,
             }),
         ] => {
-            let hypothesis = hypothesis_read(ih.as_ref())
-                .ok_or_else(|| refused("a fold's hypothesis, `; ih`"))??;
             let labels = [
                 LabelRead::binder(head_label)?,
                 LabelRead::binder(tail_label)?,
-                hypothesis,
             ];
             let elem = carrier.take().ok_or_else(|| {
-                refused("a list fold's element, `#{cases = {carrier = {elem = T}}}`")
+                refused("a list split's element, `#{cases = {carrier = {elem = T}}}`")
             })?;
             Cases::FreeMonoid {
                 carrier: Carrier::List {
                     elem: core_read(&elem, reader)?,
                     empty_case: core_read(&arms[0].body, reader)?,
-                    cons_case: three_read(&labels, &arms[1].body, reader)?,
+                    cons_case: two_read(&labels, &arms[1].body, reader)?,
                 },
             }
         }
@@ -373,20 +352,16 @@ pub fn match_read(
             MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
                 tail_label,
-                ih,
             }),
         ] => {
-            let hypothesis = hypothesis_read(ih.as_ref())
-                .ok_or_else(|| refused("a fold's hypothesis, `; ih`"))??;
             let labels = [
                 LabelRead::binder(head_label)?,
                 LabelRead::binder(tail_label)?,
-                hypothesis,
             ];
             Cases::FreeMonoid {
                 carrier: Carrier::Bytes {
                     empty_case: core_read(&arms[0].body, reader)?,
-                    cons_case: three_read(&labels, &arms[1].body, reader)?,
+                    cons_case: two_read(&labels, &arms[1].body, reader)?,
                 },
             }
         }
@@ -487,16 +462,6 @@ fn motive_read(
     many_read(&labels, body, reader)
 }
 
-/// The label a fold's hypothesis binds, where it is a binder.
-fn hypothesis_read(
-    pattern: Option<&Pattern<CoreText>>,
-) -> Option<Result<LabelRead<'_>, ReadError>> {
-    match pattern? {
-        Pattern::Binder(binder) => Some(LabelRead::binder(binder)),
-        Pattern::Tuple(_) | Pattern::Struct { .. } => None,
-    }
-}
-
 /// Whether `binder` is a default arm's `_` under no decorator: a default binds nothing in Core, so nothing is stated of its label.
 fn is_bare_wildcard(binder: &Binder<CoreText>) -> bool {
     binder.as_str() == "_" && binder.core.is_empty()
@@ -536,16 +501,16 @@ fn many_read(
     ))
 }
 
-/// A fold's step over its head, its tail and its hypothesis.
-fn three_read(
+/// A sequence split's cons arm over its head and its tail.
+fn two_read(
     labels: &[LabelRead<'_>],
     body: &crate::Term<CoreText>,
     reader: &mut Reader<'_>,
-) -> Result<Scope<Three>, ReadError> {
+) -> Result<Scope<Two>, ReadError> {
     let (frees, body) = scope_read(labels, body, reader)?;
 
     Ok(proving_scope(
-        Scope::close(Three, &[&frees[0], &frees[1], &frees[2]], body),
+        Scope::close(Two, &[&frees[0], &frees[1]], body),
         labels,
     ))
 }

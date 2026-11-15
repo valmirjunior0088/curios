@@ -12,10 +12,10 @@ mod scope;
 use scope::*;
 pub use scope::{
     Advance, ArchivedBinding, ArchivedLabel, ArchivedMany, ArchivedOne, ArchivedScope,
-    ArchivedTelescope, ArchivedThree, ArchivedTwo, ArchivedVar, ArchivedWidth, Arity, Binding,
-    Bound, Cursor, Label, Lockstep, Many, NodeMemo, One, ProofBinders, Scope, Sharing, Step,
-    Telescope, Three, Two, Var, Visit, Width, instantiate_qualities, instantiate_universes,
-    open_quality, project_erased_universes, rewrite_universe_levels, rewrite_universe_qualities,
+    ArchivedTelescope, ArchivedTwo, ArchivedVar, ArchivedWidth, Arity, Binding, Bound, Cursor,
+    Label, Lockstep, Many, NodeMemo, One, ProofBinders, Scope, Sharing, Step, Telescope, Two, Var,
+    Visit, Width, instantiate_qualities, instantiate_universes, open_quality,
+    project_erased_universes, rewrite_universe_levels, rewrite_universe_qualities,
     stamp_declaration_instance, substitute_universe_metas, universe_metas, universe_params,
 };
 
@@ -160,21 +160,21 @@ pub use term::take_looks;
 use term::*;
 pub use term::{
     Apply, ArchivedApply, ArchivedArgument, ArchivedArm, ArchivedAscribed, ArchivedBang,
-    ArchivedBind, ArchivedCarrier, ArchivedCases, ArchivedField, ArchivedForeign, ArchivedFunc,
-    ArchivedFuncType, ArchivedGuard, ArchivedImplicitOrigin, ArchivedInductArm, ArchivedInductType,
-    ArchivedInfix, ArchivedInstance, ArchivedLet, ArchivedLetBinding, ArchivedMatch,
-    ArchivedMatchResult, ArchivedMatrix, ArchivedMetavar, ArchivedMetavarId, ArchivedMetavarOrigin,
-    ArchivedMethod, ArchivedNumLit, ArchivedPattern, ArchivedProj, ArchivedRec, ArchivedRecGroup,
+    ArchivedCarrier, ArchivedCases, ArchivedField, ArchivedForeign, ArchivedFunc, ArchivedFuncType,
+    ArchivedGuard, ArchivedImplicitOrigin, ArchivedInductArm, ArchivedInductType, ArchivedInfix,
+    ArchivedInstance, ArchivedLet, ArchivedLetBinding, ArchivedMatch, ArchivedMatchResult,
+    ArchivedMatrix, ArchivedMetavar, ArchivedMetavarId, ArchivedMetavarOrigin, ArchivedMethod,
+    ArchivedNumLit, ArchivedPattern, ArchivedProj, ArchivedRec, ArchivedRecGroup,
     ArchivedRecMemberScopes, ArchivedRow, ArchivedSlot, ArchivedSort, ArchivedStruct,
     ArchivedStructEntry, ArchivedStructType, ArchivedSubterm, ArchivedTerm, ArchivedTransient,
     ArchivedTuple, ArchivedTupleType, ArchivedVariant, ArchivedWitnessOrigin, Argument, Arm,
-    Ascribed, Bang, Bind, Carrier, Cases, Field, Foreign, FormerEta, Func, FuncType, Guard,
-    HeadTag, ImplicitOrigin, InductArm, InductType, Infix, Instance, Let, LetBinding,
-    LevelDifferences, Match, MatchResult, Matrix, MentionCache, Mentions, MentionsIter,
-    MetaRenaming, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Method, Names, NumLit, Paired,
-    Pattern, Proj, Ranked, Rec, RecGroup, RecMemberScopes, Row, ScalarCache, Scalars, Slot, Sort,
-    SpineEntries, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, TupleType,
-    Variant, WitnessOrigin, former_eta, paired,
+    Ascribed, Bang, Carrier, Cases, Field, Foreign, FormerEta, Func, FuncType, Guard, HeadTag,
+    ImplicitOrigin, InductArm, InductType, Infix, Instance, Let, LetBinding, LevelDifferences,
+    Match, MatchResult, Matrix, MentionCache, Mentions, MentionsIter, MetaRenaming, Metavar,
+    MetavarId, MetavarOrigin, MetavarSpine, Method, Names, NumLit, Paired, Pattern, Proj, Ranked,
+    Rec, RecGroup, RecMemberScopes, Row, ScalarCache, Scalars, Slot, Sort, SpineEntries, Struct,
+    StructEntry, StructType, Subterm, Term, Transient, Tuple, TupleType, Variant, WitnessOrigin,
+    former_eta, paired,
 };
 
 mod walk;

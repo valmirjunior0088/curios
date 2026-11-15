@@ -683,16 +683,9 @@ module.exports = grammar({
 
     constructor_argument: ($) => seq(optional("@"), $._match_pattern),
 
-    // `pred + 1`, with an optional `; hypothesis` receiving the fold result.
+    // `pred + 1`.
     successor_pattern: ($) =>
-      seq(
-        field("predecessor", $._binder),
-        "+",
-        $.number,
-        optional($.hypothesis),
-      ),
-
-    hypothesis: ($) => seq(";", $._pattern),
+      seq(field("predecessor", $._binder), "+", $.number),
 
     list_pattern: ($) =>
       choice(
@@ -704,7 +697,6 @@ module.exports = grammar({
           "..",
           field("tail", $._binder),
           "]",
-          optional($.hypothesis),
         ),
       ),
 
@@ -718,7 +710,6 @@ module.exports = grammar({
           "..",
           field("tail", $._binder),
           "]",
-          optional($.hypothesis),
         ),
       ),
 

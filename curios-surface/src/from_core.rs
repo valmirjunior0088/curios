@@ -17,9 +17,9 @@ use {
         Alternative, Apply, Argument, Binder, BytesPattern, BytesSegment, Dialect, Field, Func,
         FuncParam, FuncType, FuncTypeParam, Guard, HeadlessMatch, Infix, Label, Let, LetBinding,
         LetGroup, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern,
-        MatchPatternField, MatrixArm, Name, NatLiteral, NatPattern, NumLit, Pattern, PatternField,
-        Program, Proj, ProofLiteral, Radix, StrLit, StructLit, StructLitEntry, Subterm, Term,
-        Tuple, TupleField, TupleType, TupleTypeParam,
+        MatchPatternField, MatrixArm, Name, NatLiteral, NatPattern, NumLit, Pattern, Program, Proj,
+        ProofLiteral, Radix, StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField,
+        TupleType, TupleTypeParam,
     },
     curios_common::{InfixOp, Plicity, Qualifier, Sign, recurse},
     curios_core::Bound,
@@ -629,55 +629,31 @@ pub fn written_pattern<D: Dialect>(
         },
         curios_core::Pattern::Bool(value) => MatchPattern::Bool(*value),
         curios_core::Pattern::Zero => MatchPattern::Nat(NatPattern::Zero),
-        curios_core::Pattern::Succ {
-            predecessor,
-            hypothesis,
-        } => {
-            let pred_label = written_slot(*predecessor, names, own);
-
-            MatchPattern::Nat(NatPattern::Succ {
-                pred_label,
-                ih: hypothesis
-                    .as_ref()
-                    .map(|bind| written_bind(bind, names, own)),
-            })
-        }
+        curios_core::Pattern::Succ { predecessor } => MatchPattern::Nat(NatPattern::Succ {
+            pred_label: written_slot(*predecessor, names, own),
+        }),
         curios_core::Pattern::Literal(value) => {
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value.clone(), Radix::Dec(0))))
         }
         curios_core::Pattern::Character(character) => MatchPattern::Char(*character),
         curios_core::Pattern::Nil => MatchPattern::List(ListPattern::Nil),
-        curios_core::Pattern::Cons {
-            head,
-            tail,
-            hypothesis,
-        } => {
+        curios_core::Pattern::Cons { head, tail } => {
             let head_label = written_slot(*head, names, own);
             let tail_label = written_slot(*tail, names, own);
 
             MatchPattern::List(ListPattern::Cons {
                 head_label,
                 tail_label,
-                ih: hypothesis
-                    .as_ref()
-                    .map(|bind| written_bind(bind, names, own)),
             })
         }
         curios_core::Pattern::End => MatchPattern::Bytes(BytesPattern::End),
-        curios_core::Pattern::Atom {
-            head,
-            tail,
-            hypothesis,
-        } => {
+        curios_core::Pattern::Atom { head, tail } => {
             let head_label = written_slot(*head, names, own);
             let tail_label = written_slot(*tail, names, own);
 
             MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
                 tail_label,
-                ih: hypothesis
-                    .as_ref()
-                    .map(|bind| written_bind(bind, names, own)),
             })
         }
     }
@@ -710,38 +686,6 @@ fn written_fields<D: Dialect>(
         .map(|(label, field)| MatchPatternField {
             label: label.clone(),
             value: written_pattern(field, names, own),
-        })
-        .collect()
-}
-
-/// What a fold's hypothesis is bound by, as a program writes it, each binder under the next of `names` as `own` writes it, and a wildcard as `_`.
-fn written_bind<D: Dialect>(
-    bind: &curios_core::Bind,
-    names: &mut dyn Iterator<Item = Binder<D>>,
-    own: fn(Binder<D>) -> Binder<D>,
-) -> Pattern<D> {
-    match bind {
-        curios_core::Bind::Binder => Pattern::Binder(own(next_name(names))),
-        curios_core::Bind::Wildcard => Pattern::Binder("_".into()),
-        curios_core::Bind::Fields(fields) => Pattern::Tuple(written_binds(fields, names, own)),
-        curios_core::Bind::Struct { head, fields, .. } => Pattern::Struct {
-            head: name_of(head),
-            fields: written_binds(fields, names, own),
-        },
-    }
-}
-
-/// The fields of a hypothesis's pattern, each as [`written_bind`] writes it.
-fn written_binds<D: Dialect>(
-    fields: &[(Option<String>, curios_core::Bind)],
-    names: &mut dyn Iterator<Item = Binder<D>>,
-    own: fn(Binder<D>) -> Binder<D>,
-) -> Vec<PatternField<D>> {
-    fields
-        .iter()
-        .map(|(label, field)| PatternField {
-            label: label.clone(),
-            value: written_bind(field, names, own),
         })
         .collect()
 }
@@ -1275,16 +1219,6 @@ fn binder(label: &curios_core::Free, body: &curios_core::Term, frame: Frame) -> 
     }
 }
 
-/// The `; ih` a fold's arm binds its hypothesis by, left out where the arm is a case split: the compiler minted the binder and `body` never reads it.
-fn hypothesis(
-    label: &curios_core::Free,
-    body: &curios_core::Term,
-    frame: Frame,
-) -> Option<Pattern> {
-    (label.hint().is_some() || body.mentions_free(label))
-        .then(|| Pattern::Binder(Label::from(frame.word(label)).into()))
-}
-
 /// An elimination as the `match` that lowers to it: each case as the pattern a program writes it by.
 fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> {
     use curios_core::{Carrier, Cases, MatchResult};
@@ -1398,13 +1332,12 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
             } => {
                 let labels = frame.mint.scope_labels(&cons_case);
                 let terms = open(&labels);
-                let ([predecessor, ih], [opened, hypothesized]) = (&labels[..], &terms[..]) else {
+                let ([predecessor], [opened]) = (&labels[..], &terms[..]) else {
                     return None;
                 };
-                let body = cons_case.open(&[opened, hypothesized]);
+                let body = cons_case.open(&[opened]);
                 let succ = NatPattern::Succ {
                     pred_label: binder(predecessor, &body, frame),
-                    ih: hypothesis(ih, &body, frame),
                 };
 
                 vec![
@@ -1418,16 +1351,13 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
             } => {
                 let labels = frame.mint.scope_labels(&cons_case);
                 let terms = open(&labels);
-                let ([first, rest, ih], [peeled, remaining, hypothesized]) =
-                    (&labels[..], &terms[..])
-                else {
+                let ([first, rest], [peeled, remaining]) = (&labels[..], &terms[..]) else {
                     return None;
                 };
-                let body = cons_case.open(&[peeled, remaining, hypothesized]);
+                let body = cons_case.open(&[peeled, remaining]);
                 let atom = BytesPattern::Atom {
                     head_label: binder(first, &body, frame),
                     tail_label: binder(rest, &body, frame),
-                    ih: hypothesis(ih, &body, frame),
                 };
 
                 vec![
@@ -1445,16 +1375,13 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
             } => {
                 let labels = frame.mint.scope_labels(&cons_case);
                 let terms = open(&labels);
-                let ([first, rest, ih], [peeled, remaining, hypothesized]) =
-                    (&labels[..], &terms[..])
-                else {
+                let ([first, rest], [peeled, remaining]) = (&labels[..], &terms[..]) else {
                     return None;
                 };
-                let body = cons_case.open(&[peeled, remaining, hypothesized]);
+                let body = cons_case.open(&[peeled, remaining]);
                 let cons = ListPattern::Cons {
                     head_label: binder(first, &body, frame),
                     tail_label: binder(rest, &body, frame),
-                    ih: hypothesis(ih, &body, frame),
                 };
 
                 vec![

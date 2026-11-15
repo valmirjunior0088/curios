@@ -26,7 +26,7 @@ fn bytes_opaque(n: usize) -> String {
         r#"
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
-            match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
+            match i | 0 => acc | k + 1 => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
             match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
         let built = go(${n}, x[]);
@@ -43,7 +43,7 @@ fn bytes_fixed(n: usize) -> String {
         r#"
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
-            match i | 0 => acc | k + 1; ih => go(k, Str/to_bytes("0123456789")) end;
+            match i | 0 => acc | k + 1 => go(k, Str/to_bytes("0123456789")) end;
         let built = go(${n}, x[]);
         let head = Bytes/slice(built, 0, 10);
         /std/print("ok")
@@ -58,7 +58,7 @@ fn bytes_growing(n: usize) -> String {
         r#"
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
-            match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
+            match i | 0 => acc | k + 1 => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(${n}, x[]);
         let head = Bytes/slice(built, 0, 10);
         /std/print("ok")
@@ -73,7 +73,7 @@ fn list_opaque(n: usize) -> String {
         r#"
         use /std/{List, Nat, Str};
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
-            match i | 0 => acc | k + 1; ih => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
+            match i | 0 => acc | k + 1 => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
         let head_of(a : List(Nat)) -> List(Nat) =
             match 10 <= List/len(a) | true => List/slice(a, 0, 10) | false => [] end;
         let built = go(${n}, []);
@@ -90,7 +90,7 @@ fn list_fixed(n: usize) -> String {
         r#"
         use /std/{List, Nat, Str};
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
-            match i | 0 => acc | k + 1; ih => go(k, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) end;
+            match i | 0 => acc | k + 1 => go(k, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) end;
         let built = go(${n}, []);
         let head = List/slice(built, 0, 10);
         /std/print("ok")
@@ -105,7 +105,7 @@ fn list_growing(n: usize) -> String {
         r#"
         use /std/{List, Nat, Str};
         let go(i : Nat, acc : List(Nat)) -> List(Nat) =
-            match i | 0 => acc | k + 1; ih => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
+            match i | 0 => acc | k + 1 => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
         let built = go(${n}, []);
         let head = List/slice(built, 0, 10);
         /std/print("ok")
@@ -1274,7 +1274,7 @@ fn a_recursion_through_an_intrinsics_operand_runs_at_constant_native_depth() {
             use /std/{Nat};
             use /std/Bool/{True, Holds};
 
-            pub let sum(n: Nat) -> Nat = match n | 0 => 0 | k + 1; _ => sum(k) + 1 end;
+            pub let sum(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => sum(k) + 1 end;
             pub let x: Holds(sum(20000) == 20000) = True/qed();
 
             /std/print("ok")

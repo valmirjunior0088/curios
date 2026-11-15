@@ -183,7 +183,7 @@ fn a_recursive_group_checks_its_bodies_against_its_declared_types() {
         infer(
             &mut certifier,
             &term(
-                "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1; ih => countdown(pred) end; countdown(3))"
+                "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1 => countdown(pred) end; countdown(3))"
             )
         ),
         Ok(term("#NatType"))

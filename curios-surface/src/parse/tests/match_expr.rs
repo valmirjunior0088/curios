@@ -169,29 +169,21 @@ fn matrix_match_round_trips() {
          | (none(), some(y)) => h(y)\n\
          | (none(), none()) => d\n\
          end",
-        // Nat literal leaves nested inside a constructor payload, with and without the optional induction hypothesis.
-        "match o | some(0) => y | some(n + 1; ih) => y | none() => y end",
+        // Nat literal leaves nested inside a constructor payload.
         "match o | some(0) => y | some(n + 1) => n | none() => y end",
-        // List literal leaves nested inside a tuple field, with and without the optional induction hypothesis.
+        // List literal leaves nested inside a tuple field.
         "match p | (x, []) => x | (x, [h, ..t]) => h end",
-        "match p | (x, [h, ..t]; ih) => h | (x, []) => x end",
         // Bytes literal leaves nested inside a constructor payload.
         "match o | some(x[]) => y | some(x[h, ..t]) => y | none() => y end",
-        "match o | some(x[h, ..t]; ih) => y | some(x[]) => y | none() => y end",
         // Bool literal leaves nested inside a constructor payload.
         "match p | pair(true, y) => y | pair(false, y) => y end",
         // The four hardcoded carriers as *headed* matches — no separate surface variants, just matrices over that carrier's own leaves. Each must survive print → re-parse identically to prove the collapse preserves their surface syntax.
         "match b | false => x | true => y end",
-        "match n | 0 => a | m + 1; ih => b end",
         "match n | 0 => a | m + 1 => b end",
         // Nat literal dispatch: literal cases and the mandatory `| _ =>` default.
         "match d | 0 => a | 5 => b | _ => c end",
-        "match a | [] => b | [h, ..t]; ih => c end",
-        "match a | x[] => b | x[h, ..t]; ih => c end",
-        // The `;` fold-hypothesis position takes any irrefutable pattern — a destructuring binds the fold result's fields directly and round-trips as a plain name does.
-        "match n | 0 => a | m + 1; (count, live) => count end",
-        "match a | [] => b | [h, ..t]; (x, (y, z)) => x end",
-        "match a | x[] => b | x[h, ..t]; (seen = s, rest = r) => s end",
+        "match a | [] => b | [h, ..t] => c end",
+        "match a | x[] => b | x[h, ..t] => c end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
@@ -217,8 +209,8 @@ fn match_motive_spellings_round_trip() {
         // A motive whose body is itself a Π type, which no reading by shape can tell from a constant motive.
         "match b : (_) => (Nat) -> Nat\n| true => f\n| false => g\nend",
         // A motive on each hardcoded carrier, whose arity is 1 throughout.
-        "match n : (m) => P(m)\n| 0 => a\n| p + 1; ih => b\nend",
-        "match xs : (l) => P(l)\n| [] => a\n| [h, ..t]; ih => b\nend",
+        "match n : (m) => P(m)\n| 0 => a\n| p + 1 => b\nend",
+        "match xs : (l) => P(l)\n| [] => a\n| [h, ..t] => b\nend",
         // Omitted entirely: no `:` at all, faithfully recorded as `None`.
         "match v\n| nil() => a\n| cons(m, x, xs) => b\nend",
     ] {
@@ -231,17 +223,17 @@ fn match_motive_spellings_round_trip() {
     }
 }
 
-// A nested `Nat` succ pattern requires a space on each side of `+` (mirrors `infix_requires_spaces_and_disambiguates_signs`'s own operator spacing rule). A glued `n+1` is not recognized as `NatPattern::Succ` at all — it falls through to a plain `Binder("n")`, leaving `+1; ih` as trailing garbage the arm grammar rejects, a parse error rather than a silent reinterpretation.
+// A nested `Nat` succ pattern requires a space on each side of `+` (mirrors `infix_requires_spaces_and_disambiguates_signs`'s own operator spacing rule). A glued `n+1` is not recognized as `NatPattern::Succ` at all — it falls through to a plain `Binder("n")`, leaving `+1` as trailing garbage the arm grammar rejects, a parse error rather than a silent reinterpretation.
 #[test]
 fn matrix_match_nat_succ_pattern_requires_spaces_around_plus() {
     assert!(
-        "match o | some(n + 1; ih) => n | some(0) => n | none() => n end"
+        "match o | some(n + 1) => n | some(0) => n | none() => n end"
             .parse::<Term>()
             .is_ok()
     );
     // Glued on either side, the refusal names the rule rather than the `+1` the arm grammar did not expect, with the caret on the `+`.
     for source in [
-        "match o | some(n+1; ih) => n | some(0) => n | none() => n end",
+        "match o | some(n+1) => n | some(0) => n | none() => n end",
         "match n | 0 => 0 | p +1 => p end",
     ] {
         let report = source.parse::<Term>().unwrap_err().format();
@@ -348,14 +340,14 @@ fn a_leaf_operand_that_is_no_binder_is_refused_by_name() {
     }
 }
 
-/// Every leaf a `List` or a `Bytes` match writes still parses: the empty ones, the cons ones over binders and `_`, and a hypothesis after either.
+/// Every leaf a `List` or a `Bytes` match writes still parses: the empty ones, and the cons ones over binders and `_`.
 #[test]
 fn the_list_and_bytes_leaves_still_parse() {
     for source in [
         "match v | [] => 0 | [head, ..tail] => 1 end",
         "match v | x[] => 0 | x[head, ..tail] => 1 end",
-        "match v | [] => 0 | [_, .._]; ih => ih end",
-        "match v | x[] => 0 | x[ head , ..tail ]; (a, b) => a end",
+        "match v | [] => 0 | [_, .._] => 1 end",
+        "match v | x[] => 0 | x[ head , ..tail ] => 1 end",
         "match v | some([head, ..tail]) => 1 | _ => 0 end",
     ] {
         if let Err(error) = source.parse::<Term>() {

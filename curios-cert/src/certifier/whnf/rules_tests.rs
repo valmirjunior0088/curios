@@ -93,7 +93,7 @@ fn iota_peels_one_successor_off_a_nat() {
     let mut certifier = certifier();
 
     // `match 3 { 0 => 0 | succ(pred, _) => pred }` peels exactly one layer.
-    let matched = term("match 3: (m) => #NatType | 0 => 0 | pred + 1; ih => pred end");
+    let matched = term("match 3: (m) => #NatType | 0 => 0 | pred + 1 => pred end");
 
     assert_eq!(whnf(&mut certifier, matched), Ok(term("2")));
 }
@@ -252,7 +252,7 @@ fn a_recursive_application_stays_folded_until_forced() {
     let mut certifier = certifier();
     let countdown = |argument: &str| {
         term(&fill!(
-            "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1; ih => countdown(pred) end; countdown(${argument}))",
+            "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1 => countdown(pred) end; countdown(${argument}))",
             argument
         ))
     };
@@ -278,7 +278,7 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     let [y, applied] = under(
         &mut certifier,
         "y: #NatType",
-        "y, #{node = Rec} (let f: (n: #NatType) -> (x: #NatType) -> #NatType = (n: #NatType) => match n: (m) => (x: #NatType) -> #NatType | 0 => (x: #NatType) => x | pred + 1; ih => (x: #NatType) => f(pred)(x) end; f(2)(y))",
+        "y, #{node = Rec} (let f: (n: #NatType) -> (x: #NatType) -> #NatType = (n: #NatType) => match n: (m) => (x: #NatType) -> #NatType | 0 => (x: #NatType) => x | pred + 1 => (x: #NatType) => f(pred)(x) end; f(2)(y))",
     );
 
     assert_eq!(certifier.reduce_forced(applied), Ok(y));

@@ -445,7 +445,7 @@ So `let n: Nat = n + 1;` names the binding it declares, not an outer `n`, and is
 
 ### Irrefutable binder patterns
 
-The binders of a `let`, a lambda and a function's parameters, and the induction hypothesis after `;` in a `Nat`, `List` or `Bytes` arm, take nested tuple and structure patterns.
+The binders of a `let`, a lambda and a function's parameters take nested tuple and structure patterns.
 
 ```crs
 use /std/{Nat};
@@ -646,11 +646,7 @@ An arm's body is typed under the cases its own pattern states and nothing else, 
 
 Without a motive, the compiler infers one, and that is the form to prefer. Where the match has an expected type, the result is that type as written, and each arm is checked against it with the scrutinee standing for the arm's case: a variable scrutinee and its variable indices are substituted, an expression scrutinee's written occurrences are replaced, and inside the arm the scrutinee reduces to the case wherever else it is met, so a hypothesis about the scrutinee needs no help to follow it.
 
-A fold over `Nat`, `List` or `Bytes` whose arm reads its induction hypothesis — names it, or holds a goal that could — differs twice. Its hypothesis is typed at the result at the tail, so its motive is abstracted over the scrutinee instead. And its arms learn nothing of the scrutinee, since the fold takes each arm again at every tail, where the scrutinee is not that arm's case: a hypothesis about the scrutinee rides in the motive — `match n: (m) => (h: P(m)) -> Q(m) | … end(h)` — and is stated again at each tail. A case split, the same match with no hypothesis read, is not a fold.
-
 A motive is written where the result depends on the scrutinee and nothing states it — a match in inference position whose arms answer different types — and where the result depends on the scrutinee beyond its written occurrences. A match at the type level needs none, in a signature or in another match's motive, since its arms decide the sort it lands in.
-
-A fold's motive states its result at each tail through the binder it declares, and the hypothesis is typed at the motive opened at the tail: `match n: (m) => P(m)` asks its arms for `P(0)` and `P(k + 1)`, the hypothesis standing at `P(k)`. A motive that names the scrutinee instead, `match n: (_) => P(n)`, states `P(n)` at every tail, and the arms answer it as written.
 
 A motive is written only where every arm's top-level pattern, in each of its alternatives, is the same constructor shape of the scrutinee. A match over a tuple of scrutinees, over a structure, or with a binder alone for its pattern takes no motive.
 
@@ -691,7 +687,7 @@ pub let length(@T: Type, @n: Nat, vector: Vector(T)(n)) -> Nat =
     end;
 ```
 
-A pattern nests inside a constructor's, a tuple's or a structure's field, and parentheses group one. The operands of the `Nat`, `List` and `Bytes` patterns are binders rather than patterns, so `[some(x), ..tail]` is refused, while the hypothesis after `;` takes any irrefutable pattern.
+A pattern nests inside a constructor's, a tuple's or a structure's field, and parentheses group one. The operands of the `Nat`, `List` and `Bytes` patterns are binders rather than patterns, so `[some(x), ..tail]` is refused.
 
 ```crs
 use /std/{List, Nat, Option};
@@ -798,19 +794,6 @@ pub let share(value: Option(Nat)) -> Nat =
 
 A chain of guards that fails, or a bind guard that fails, teaches the arms after it nothing, since either failed in more ways than one. A bind guard whose pattern cannot fail is refused: a binding with no case to test is a `let`. A guard takes no [alternatives](#alternatives); the value they would test is written as the head.
 
-An arm of a [fold](#natural-number-induction) takes guards as any arm does: it is tried at every step its pattern reaches, its guards run at each, and a guard may read that step's hypothesis.
-
-```crs
-use /std/{List, Nat};
-
-pub let large(values: List(Nat)) -> Nat =
-    match values
-    | [] => 0
-    | [head, .._]; count, head > 9 => count + 1
-    | [_, .._]; count => count
-    end;
-```
-
 A guard is a region of its own, as an arm's body is ([Postfix `!`](#postfix-)). A guard's term is an operand, so a `let`, a lambda or a function type stands in one in parentheses.
 
 `&&` is no chain of guards: `a && b` evaluates both, and `b` knows nothing of `a`; `| a, b =>` evaluates `b` only where `a` holds, and `b` may rely on it.
@@ -875,29 +858,17 @@ pub let answer(condition: Bool) -> Str =
     end;
 ```
 
-### Natural-number induction
+### Natural-number case split
 
-Induction on a `Nat` has a zero arm and a successor arm. The successor arm binds the predecessor before `+ 1`, and a binding after `;` takes the induction hypothesis for the predecessor; without it, the arm is an ordinary case split. The `+` takes whitespace on both sides, as an operator does: `pred+1` is no successor pattern.
+A case split on a `Nat` has a zero arm and a successor arm, which binds the predecessor before `+ 1`. The `+` takes whitespace on both sides, as an operator does: `pred+1` is no successor pattern. Induction is a recursion on the predecessor, each arm typed at the result with the scrutinee standing for its case:
 
 ```crs
 use /std/{Nat};
 
 pub let induction(P: (Nat) -> Type, base: P(0), step: (k: Nat, P(k)) -> P(k + 1), n: Nat) -> P(n) =
-    match n: (m) => P(m)
-    | 0 => base
-    | predecessor + 1; hypothesis => step(predecessor, hypothesis)
-    end;
-```
-
-The binding after `;` names the fold's result, not a part of the scrutinee, so it takes the irrefutable patterns a `let` does:
-
-```crs
-use /std/{Bool, Nat};
-
-pub let count(n: Nat) -> {Nat, Bool} =
     match n
-    | 0 => (0, true)
-    | _ + 1; (count, live) => (count + 1, live)
+    | 0 => base
+    | predecessor + 1 => step(predecessor, induction(P, base, step, predecessor))
     end;
 ```
 
@@ -905,7 +876,7 @@ pub let count(n: Nat) -> {Nat, Bool} =
 
 A dispatch on a `Nat` has literal arms and an arm that writes a binder, which takes every other value, since no set of literals covers every natural.
 
-A match whose only literal is `0` is a case split ([Natural-number induction](#natural-number-induction)): its arm that writes a binder is the successor's, so `| 0 => … | _ => …` is `| 0 => … | _ + 1 => …`.
+A match whose only literal is `0` is a case split ([Natural-number case split](#natural-number-case-split)): its arm that writes a binder is the successor's, so `| 0 => … | _ => …` is `| 0 => … | _ + 1 => …`.
 
 ```crs
 use /std/{Nat, Str};
@@ -918,13 +889,13 @@ pub let name(tag: Nat) -> Str =
     end;
 ```
 
-One match does not mix induction arms and literal arms.
+One match does not mix a successor arm and literal arms.
 
 A dispatch literal is any natural, written whole, as a numeral or as a character literal, which matches its scalar value: `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, the conversion visible at the head.
 
-### List fold and case split
+### List case split
 
-A list match writes `[]` for the empty case and `[head, ..tail]` for the rest. A binding after `;` takes the fold's result for `tail` — a name or an irrefutable tuple or structure pattern, as in [natural-number induction](#natural-number-induction); without it, the arm is an ordinary case split.
+A list match writes `[]` for the empty case and `[head, ..tail]` for the rest.
 
 Both cases are required, since a list has no index to rule one out, and a final `| _ =>` may stand for the one left out.
 
@@ -934,13 +905,13 @@ use /std/{List, Nat};
 pub let sum(values: List(Nat)) -> Nat =
     match values
     | [] => 0
-    | [head, .._]; hypothesis => head + hypothesis
+    | [head, ..tail] => head + sum(tail)
     end;
 ```
 
-### Packed folds
+### Packed case split
 
-A `Bytes` match is a [list fold](#list-fold-and-case-split) under the bracket `x[`, with every rule of one: both cases required, the binding after `;` optional, and a final `| _ =>` standing for a case left out. Its head is a `Byte`.
+A `Bytes` match is a [list case split](#list-case-split) under the bracket `x[`, with every rule of one: both cases required, and a final `| _ =>` standing for a case left out. Its head is a `Byte`.
 
 ```crs
 use /std/{Byte, Bytes, Nat};
@@ -948,7 +919,7 @@ use /std/{Byte, Bytes, Nat};
 pub let total(bytes: Bytes) -> Nat =
     match bytes
     | x[] => 0
-    | x[head, .._]; hypothesis => Byte/to_nat(head) + hypothesis
+    | x[head, ..tail] => Byte/to_nat(head) + total(tail)
     end;
 
 pub let first_or_zero(bytes: Bytes) -> Byte =
@@ -1123,12 +1094,12 @@ pub let parity(input: Nat) -> Bool =
     let even(n: Nat) -> Bool =
         match n
         | 0 => true
-        | p + 1; _ => odd(p)
+        | p + 1 => odd(p)
         end
     and odd(n: Nat) -> Bool =
         match n
         | 0 => false
-        | p + 1; _ => even(p)
+        | p + 1 => even(p)
         end;
     even(input);
 ```

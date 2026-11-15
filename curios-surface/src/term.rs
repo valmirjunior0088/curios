@@ -472,11 +472,11 @@ pub enum MatchPattern<D: Dialect = Program> {
     Bool(bool),
     /// A character literal leaf — a `Nat` dispatch case spelled by its scalar value, printed back as written.
     Char(char),
-    /// A nested `Nat` literal leaf — the `0`/`n+1; ih` (induction) or bare literal (dispatch) shapes a headed `Nat` match takes.
+    /// A nested `Nat` literal leaf — the `0`/`n + 1` (case split) or bare literal (dispatch) shapes a headed `Nat` match takes.
     Nat(NatPattern<D>),
-    /// A nested `List` literal leaf — the `[]`/`[head,..tail][; ih]` shapes a headed `List` match takes.
+    /// A nested `List` literal leaf — the `[]`/`[head, ..tail]` shapes a headed `List` match takes.
     List(ListPattern<D>),
-    /// A nested `Bytes` literal leaf — the `x[]` and `x[head, ..tail][; ih]` shapes a headed packed-sequence match takes.
+    /// A nested `Bytes` literal leaf — the `x[]` and `x[head, ..tail]` shapes a headed packed-sequence match takes.
     Bytes(BytesPattern<D>),
 }
 
@@ -495,11 +495,8 @@ impl<D: Dialect> MatchPattern<D> {
 pub enum NatPattern<D: Dialect = Program> {
     /// The `0` leaf.
     Zero,
-    /// The `pred + 1; ih` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches. The `; ih` binds the *fold result*, not scrutinee shape, so it takes any irrefutable [`Pattern`] (`; (cur, live)` destructures a tuple-valued hypothesis exactly as a `let` binder would); it is optional, exactly like the `; ih` on the `List`/`Bytes` cons leaves below — omitting it makes the arm an ordinary case split.
-    Succ {
-        pred_label: Binder<D>,
-        ih: Option<Pattern<D>>,
-    },
+    /// The `pred + 1` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches.
+    Succ { pred_label: Binder<D> },
     /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, lowered to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
     ///
     /// Carries the numeral whole, as every stage down to the lowering that builds a branch table does: a key is as unbounded as the value it is compared with, and one no table indexes is decided by equality there (`curios-anf`'s `lower_switch`). Narrowed here, a numeral past a machine word would backtrack past every leaf, so the arm would be reported as holding no pattern where its key is one.
@@ -513,11 +510,10 @@ pub enum NatPattern<D: Dialect = Program> {
 pub enum ListPattern<D: Dialect = Program> {
     /// The `[]` leaf.
     Nil,
-    /// The `[head, ..tail][; ih]` leaf. `ih` is `None` when `; ih` is omitted (lowering mints a fresh internal name) — a plain case-split with no fold hypothesis; when written it is any irrefutable [`Pattern`], like the `Nat` succ leaf's.
+    /// The `[head, ..tail]` leaf.
     Cons {
         head_label: Binder<D>,
         tail_label: Binder<D>,
-        ih: Option<Pattern<D>>,
     },
 }
 
@@ -526,11 +522,10 @@ pub enum ListPattern<D: Dialect = Program> {
 pub enum BytesPattern<D: Dialect = Program> {
     /// The `x[]` leaf.
     End,
-    /// The `x[head, ..tail][; ih]` leaf; `ih` is optional (and an irrefutable [`Pattern`]) exactly as on the `List` cons leaf.
+    /// The `x[head, ..tail]` leaf.
     Atom {
         head_label: Binder<D>,
         tail_label: Binder<D>,
-        ih: Option<Pattern<D>>,
     },
 }
 

@@ -136,7 +136,7 @@ fn a_digit_past_a_names_first_character_and_a_number_still_parse() {
 fn the_keywords_the_grammar_spells_itself_still_parse() {
     for source in [
         "let f : (Bool) -> Nat = (b) => match b | true => 1 | false => 0 end;",
-        "let g : (Nat) -> Nat = (n) => match n | 0 => 0 | p + 1; ih => ih end;",
+        "let g : (Nat) -> Nat = (n) => match n | 0 => 0 | p + 1 => g(p) end;",
     ] {
         if let Err(error) = source.parse::<Module>() {
             panic!("{source}\n{}", error.format());

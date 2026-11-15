@@ -567,7 +567,7 @@ impl Machine {
             }
 
             mtc @ Subterm::Match(_) => {
-                // The match is remembered whole, for the induction hypothesis above all: `dispatch` binds it unreduced, as this very term, and an arm that projects a tuple-valued hypothesis three times demands the same term three times. Recorded under the key on the way out, the first demand runs the tail fold and the rest are probes; without the record each projection ran the fold again, and a fold whose arm projected its hypothesis `k` times cost `k` to the power of its length.
+                // The match is remembered whole, recorded under the key on the way out, so a second demand of the same term is a probe rather than a second run.
                 let key = Term::from(mtc);
                 let Subterm::Match(Match {
                     head,
@@ -744,7 +744,7 @@ impl Machine {
                 demand,
                 memo_key,
             } => {
-                // Recorded once here, for every shape the head turns out to have, rather than by each arm below deciding for itself. Deferring the decision to the arms would rest on two grounds, and only one holds: a folded spelling must indeed never be served to a demand that would unfold it, which [`Frame::Memo`] itself enforces by refusing to record a rec-shaped value — but *a member selection's calls never repeat within a run* is false. `let (a, b) = go(…)` is projection sugar, so one call is demanded once per component, and with the recursive arm left unrecorded each level would double the work: a fold returning a pair would cost exponentially more than its single-value twin.
+                // Recorded once here, for every shape the head turns out to have, rather than by each arm below deciding for itself. Deferring the decision to the arms would rest on two grounds, and only one holds: a folded spelling must indeed never be served to a demand that would unfold it, which [`Frame::Memo`] itself enforces by refusing to record a rec-shaped value — but *a member selection's calls never repeat within a run* is false. `let (a, b) = go(…)` is projection sugar, so one call is demanded once per component, and with the recursive arm left unrecorded each level would double the work: a recursion returning a pair would cost exponentially more than its single-value twin.
                 if let Some(key) = memo_key {
                     self.push(host, Frame::Memo { key, demand })?;
                 }
@@ -1184,33 +1184,19 @@ impl Machine {
                         },
                         demand,
                     )),
-                    Layer::Cons { head, tail } => {
-                        // The induction hypothesis is bound unreduced, exactly as the hosts bind it: evaluating it eagerly would run the whole tail fold whether or not the arm uses it. An arm that does use it demands it through a frame, at machine depth.
-                        let hypothesis: Term = Subterm::Match(Match {
-                            head: tail.clone(),
-                            result: result.clone(),
-                            cases: Cases::FreeMonoid {
-                                carrier: carrier.clone(),
-                            },
-                        })
-                        .into();
-
-                        Ok(Step::Eval(
-                            match &carrier {
-                                Carrier::Nat { cons_case, .. } => {
-                                    cons_case.open(&[&tail, &hypothesis])
-                                }
-                                Carrier::Bytes { cons_case, .. }
-                                | Carrier::List { cons_case, .. } => cons_case.open(&[
+                    Layer::Cons { head, tail } => Ok(Step::Eval(
+                        match &carrier {
+                            Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail]),
+                            Carrier::Bytes { cons_case, .. } | Carrier::List { cons_case, .. } => {
+                                cons_case.open(&[
                                     head.as_ref()
                                         .expect("a Bytes/List cons layer carries a head"),
                                     &tail,
-                                    &hypothesis,
-                                ]),
-                            },
-                            demand,
-                        ))
-                    }
+                                ])
+                            }
+                        },
+                        demand,
+                    )),
                     Layer::Stuck(stuck) => Ok(Step::Value(Term::from(Subterm::Match(Match {
                         head: stuck.into(),
                         result,

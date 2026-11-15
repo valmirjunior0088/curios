@@ -640,7 +640,7 @@ fn written_instead_of(word: &str) -> Option<&'static str> {
         }
         "import" => "a module's names are brought into scope with `use /path/{name};`",
         "for" | "while" => {
-            "a loop is a recursive function, or a `match` that folds over its scrutinee, `match n | 0 => … | k + 1; ih => … end`"
+            "a loop is a recursive function, `match n | 0 => … | k + 1 => … f(k) … end` in the body of `f`"
         }
         _ => return None,
     })

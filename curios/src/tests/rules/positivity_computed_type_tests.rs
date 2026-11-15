@@ -329,7 +329,7 @@ fn a_constructor_payload_a_self_calling_rec_computes_is_admitted() {
 
 // A user's own refinement over a packed carrier — the shape `/std/Cli` declares, a struct field whose proposition is computed from an earlier field: a self-calling fold applied to it.
 //
-// The cost is the positivity walk's, not the declaration checker's, and it is spent where the declaration is published, on a budget restored for that walk. Nothing here turns on how much native stack a thread has, and the tree sets none anywhere. What keeps a fold clear of this shape is the contrast in the test below.
+// The cost is the positivity walk's, not the declaration checker's, and it is spent where the declaration is published, on a budget restored for that walk. Nothing here turns on how much native stack a thread has, and the tree sets none anywhere.
 #[test]
 fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
     let source = r#"
@@ -355,34 +355,6 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
         /std/print("certified")
         "#;
     assert_eq!(run(source), b"certified");
-}
-
-// The green row: a fold like `/std/Bytes/to_nat` trips none of the above, and the `; ih` binding is why: a fold hypothesis is a *binder*, not a self-application, so forcing the member exposes no recursive call to force again. Swap this one arm for the explicit `always(t)` of the test above and the identical program diverges.
-#[test]
-fn a_refinement_field_over_a_fold_hypothesis_is_admitted() {
-    let source = r#"
-        use /std/{Bytes, Bool};
-        use /std/Bool/{True, False};
-
-        let always(b : Bytes) -> Bool =
-            match b
-            | x[] => true
-            | x[h, ..t]; ih => ih
-            end;
-
-        let Certified(b : Bytes) -> Prop =
-            match always(b) | true => True | false => False end;
-
-        struct Wrapped : Type {
-            bytes : Bytes,
-            ok : Certified(bytes),
-        }
-
-        let w : Wrapped = Wrapped { bytes = x[0x61], ok = True/qed() };
-
-        /std/print("folded")
-        "#;
-    assert_eq!(run(source), b"folded");
 }
 
 // A family the analysis cannot finish reading is refused for the budget, and so is nothing declared after it. `Wrap` stores its parameter under twelve doubling aliases, strictly, and `Outer` stores itself in that parameter. A checker short of the budget to unfold the aliases read the parameter at `Mixed`, and with that vector filed `Outer` was refused as not strictly positive, by an analysis that ran out of nothing. At no budget of the ladder is that the report: each accepts the program or names the budget.

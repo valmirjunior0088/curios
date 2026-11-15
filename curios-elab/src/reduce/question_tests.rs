@@ -567,21 +567,9 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     };
     let nat_type = || Term::intrinsic(Intrinsic::NatType);
     let on_bool = |scrutinee: Term| Term::bool_match(scrutinee, None, nat_type(), nat(2), nat(1));
-    let (pred, hypothesis) = (
-        context.fresh(Some("pred")),
-        context.fresh(Some("hypothesis")),
-    );
-    let on_nat = |scrutinee: Term| {
-        Term::nat_match(
-            scrutinee,
-            None,
-            nat_type(),
-            nat(10),
-            &pred,
-            &hypothesis,
-            nat(20),
-        )
-    };
+    let pred = context.fresh(Some("pred"));
+    let on_nat =
+        |scrutinee: Term| Term::nat_match(scrutinee, None, nat_type(), nat(10), &pred, nat(20));
 
     let contradiction = on_bool(and(and(less(&a, &b), less(&c, &b)), not(less(&a, &b))));
     let successor = on_nat(product(1));

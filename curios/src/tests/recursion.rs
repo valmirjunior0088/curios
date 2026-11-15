@@ -8,8 +8,8 @@ use {super::test_support::*, curios_common::fill};
 fn a_declared_group_of_definitions_is_mutually_recursive() {
     let source = r#"
         use /std/{Nat};
-        let f(n : Nat) -> Nat = match n | 0 => 0 | p + 1; _ => g(p) end
-        and g(n : Nat) -> Nat = match n | 0 => 1 | p + 1; _ => f(p) end;
+        let f(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => g(p) end
+        and g(n : Nat) -> Nat = match n | 0 => 1 | p + 1 => f(p) end;
         /std/print(Nat/to_str(f(3)))
         "#;
 
@@ -20,7 +20,7 @@ fn a_declared_group_of_definitions_is_mutually_recursive() {
 fn a_definition_that_names_itself_recurses() {
     let source = r#"
         use /std/{Nat};
-        let count(n : Nat) -> Nat = match n | 0 => 0 | p + 1; _ => count(p) + 1 end;
+        let count(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => count(p) + 1 end;
         /std/print(Nat/to_str(count(3)))
         "#;
 
@@ -32,7 +32,7 @@ fn a_local_binding_that_names_itself_recurses() {
     let source = r#"
         use /std/{Nat};
         let twice(n : Nat) -> Nat =
-            let go(k : Nat) -> Nat = match k | 0 => 0 | p + 1; _ => go(p) + 2 end;
+            let go(k : Nat) -> Nat = match k | 0 => 0 | p + 1 => go(p) + 2 end;
             go(n);
         /std/print(Nat/to_str(twice(3)))
         "#;
@@ -45,8 +45,8 @@ fn a_local_group_is_mutually_recursive() {
     let source = r#"
         use /std/{Nat};
         let parity(n : Nat) -> Nat =
-            let even(k : Nat) -> Nat = match k | 0 => 1 | p + 1; _ => odd(p) end
-            and odd(k : Nat) -> Nat = match k | 0 => 0 | p + 1; _ => even(p) end;
+            let even(k : Nat) -> Nat = match k | 0 => 1 | p + 1 => odd(p) end
+            and odd(k : Nat) -> Nat = match k | 0 => 0 | p + 1 => even(p) end;
             even(n);
         /std/print(Nat/to_str(parity(4)))
         "#;

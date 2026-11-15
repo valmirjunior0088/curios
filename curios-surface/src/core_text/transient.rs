@@ -14,8 +14,8 @@ use {
     },
     curios_common::{Plicity, Sign},
     curios_core::{
-        Arm, Ascribed, Atom, Bang, Bind, Func, Global, Infix, Matrix, Method, NumLit, Pattern, Row,
-        Slot, Subterm, Term, Transient,
+        Arm, Ascribed, Atom, Bang, Func, Global, Infix, Matrix, Method, NumLit, Pattern, Row, Slot,
+        Subterm, Term, Transient,
     },
 };
 
@@ -508,64 +508,27 @@ fn pattern_read(
         MatchPattern::Bool(value) => Pattern::Bool(*value),
         MatchPattern::Char(character) => Pattern::Character(*character),
         MatchPattern::Nat(NatPattern::Zero) => Pattern::Zero,
-        MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => Pattern::Succ {
+        MatchPattern::Nat(NatPattern::Succ { pred_label }) => Pattern::Succ {
             predecessor: slot_read(pred_label, at, places)?,
-            hypothesis: bind_read(ih.as_ref(), at, places)?,
         },
         MatchPattern::Nat(NatPattern::Lit(literal)) => Pattern::Literal(literal.0.clone()),
         MatchPattern::List(ListPattern::Nil) => Pattern::Nil,
         MatchPattern::List(ListPattern::Cons {
             head_label,
             tail_label,
-            ih,
         }) => Pattern::Cons {
             head: slot_read(head_label, at, places)?,
             tail: slot_read(tail_label, at, places)?,
-            hypothesis: bind_read(ih.as_ref(), at, places)?,
         },
         MatchPattern::Bytes(BytesPattern::End) => Pattern::End,
         MatchPattern::Bytes(BytesPattern::Atom {
             head_label,
             tail_label,
-            ih,
         }) => Pattern::Atom {
             head: slot_read(head_label, at, places)?,
             tail: slot_read(tail_label, at, places)?,
-            hypothesis: bind_read(ih.as_ref(), at, places)?,
         },
     })
-}
-
-/// What a fold's hypothesis is bound by, where one is written, each binder a place whose word `places` gathers and a bare `_` a wildcard.
-fn bind_read(
-    pattern: Option<&crate::Pattern<CoreText>>,
-    at: &crate::Term<CoreText>,
-    places: &mut Vec<String>,
-) -> Result<Option<Bind>, ReadError> {
-    fn bind(
-        pattern: &crate::Pattern<CoreText>,
-        at: &crate::Term<CoreText>,
-        places: &mut Vec<String>,
-    ) -> Result<Bind, ReadError> {
-        match pattern {
-            crate::Pattern::Binder(binder) => Ok(match own_place_read(binder, at)? {
-                Some(word) => {
-                    places.push(word);
-
-                    Bind::Binder
-                }
-                None => Bind::Wildcard,
-            }),
-            crate::Pattern::Tuple(fields) => Ok(Bind::Fields(
-                fields
-                    .iter()
-                    .map(|field| Ok((field.label.clone(), bind(&field.value, at, places)?)))
-                    .collect::<Result<_, ReadError>>()?,
-            )),
-            crate::Pattern::Struct { .. } => Err(unresolved(at)),
-        }
-    }
-    pattern.map(|pattern| bind(pattern, at, places)).transpose()
 }
 
 /// A pattern's own binder, or a successor's or a sequence's slot, where a bare `_` is a wildcard and no place: a word is a place, and `#{node = Binder} _` a nameless one. A decorator states nothing else of a place, whose label is the row's function's.

@@ -13,9 +13,9 @@ use {
     curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
     curios_common::Plicity,
     curios_core::{
-        Advance, Arity, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType,
-        Intrinsic, IntrinsicHead, Many, Match, MatchResult, MetavarOrigin, Nat, Quality, Scope,
-        Subterm, Telescope, Term, Three, Two, Universes,
+        Advance, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType, Intrinsic,
+        IntrinsicHead, Many, Match, MatchResult, Nat, One, Quality, Scope, Subterm, Telescope,
+        Term, Two, Universes,
     },
     curios_num::{Binary, Natural},
     std::collections::{HashMap, HashSet},
@@ -77,7 +77,7 @@ impl Scrutinee {
 #[derive(Debug, Clone, Copy)]
 pub enum Eliminator {
     Bool,
-    /// The fold over a natural and the dispatch on one alike.
+    /// The case split of a natural and the dispatch on one alike.
     Nat,
     List,
     Bytes,
@@ -116,7 +116,7 @@ fn seed_motive(
     Ok(())
 }
 
-/// Resolve the (arity-one) motive of an intrinsic eliminator that keeps a family: a fold whose arm reads its hypothesis, or any intrinsic elimination whose motive is written or inferred — an elided one checked against an expected type is otherwise ambient (`resolve_intrinsic_result`). An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `x[]` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
+/// Resolve the (arity-one) motive of an intrinsic eliminator that keeps a family: one whose motive is written or inferred — an elided one checked against an expected type is otherwise ambient (`resolve_intrinsic_result`). An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `x[]` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
 ///
 /// This complements `solve`'s occurrence abstraction (`convert.rs`), which already derives the dependent motive for a *compound* scrutinee: there the scrutinee is a clean abstraction subject in the motive metavar's spine, whereas a bare variable coincides with its own context binder — a duplicated, non-invertible spine entry that `solve` must leave alone. So anything but an elided-checking-mode-bare-variable match keeps the metavar path verbatim, letting `solve` (or the constant motive) do its job.
 fn resolve_intrinsic_motive(
@@ -139,57 +139,14 @@ fn resolve_intrinsic_motive(
     check_motive(context, &shape, motive)
 }
 
-/// The result of a fold, by the rule every reader of one states — erasure's split-or-fold reading and the certifier's arm rule too: the induction hypothesis is assumed exactly when the arm reads it, and only a family types it, at the motive opened at the tail. An arm that may read it (`may_read_hypothesis`) keeps the family, seeded against the expected type. An arm that cannot is a case split, resolved as a `Bool` elimination is: ambient where the motive is elided and checked, since nothing needs the type a hypothesis would have had.
-///
-/// The rebuilt motive is what everything below opens: insertion saturates applications during elaboration, and a lowered (under-applied) motive body reaching the reducer would open a telescope at the wrong arity.
-fn resolve_fold_result(
-    context: &mut Context,
-    head_type: &Term,
-    head: &Term,
-    motive: &Scope<Many>,
-    (term, mode): (&Term, &Mode),
-    reads_hypothesis: bool,
-) -> Result<MatchResult, Error> {
-    if !reads_hypothesis {
-        let result = resolve_intrinsic_result(context, head_type, head, motive, mode)?;
-        if let Some(motive) = result.family() {
-            seed_motive(context, term, motive, head, mode)?;
-        }
-        return Ok(result);
-    }
-
-    let motive = resolve_intrinsic_motive(context, head_type, head, motive, mode)?;
-    seed_motive(context, term, &motive, head, mode)?;
-
-    Ok(MatchResult::Family(motive))
-}
-
-/// Whether `term` holds a written goal.
-pub fn holds_goal(term: &Term) -> bool {
-    matches!(&**term, Subterm::Metavar(metavar) if metavar.origin == MetavarOrigin::Goal)
-        || term.any_child_term(&mut |child| holds_goal(child))
-}
-
-/// Whether a fold's written cons arm may read its induction hypothesis, the binder at `index`: it names the binder, or it holds a written goal, which stands for a term not yet written and may name anything in scope. Nothing else reaches the hypothesis without naming it — a metavariable is solved from types, and no type in scope mentions the hypothesis unless the arm does — so an arm that does neither elaborates to one that reads none, which is the occurrence the certifier and erasure read off the elaborated arm.
-fn may_read_hypothesis<N: Arity>(arm: &Scope<N>, index: usize) -> bool {
-    arm.uses(index) || holds_goal(arm.body())
-}
-
-/// One arm of a free-monoid elimination, at its case value: `body` is handed the type the arm is typed at and answers the arm. A case split's has the scrutinee refined to the case, the locals its solution re-types re-assumed, and the result taken there.
-///
-/// An arm of a fold — an elimination whose cons arm reads its hypothesis — learns nothing of the scrutinee: the fold at the tail is the same arms over the tail, so reduction takes each at every tail of the value, where the scrutinee is no case of it. It is typed at the motive opened at its case value and under nothing else, the certifier's rule (`check_free_monoid`), and a hypothesis about the scrutinee rides in the motive.
-fn fold_arm(
+/// One arm of a free-monoid case split, at its case value: `body` is handed the type the arm is typed at and answers the arm, with the scrutinee refined to the case, the locals its solution re-types re-assumed, and the result taken there.
+fn split_arm(
     context: &mut Context,
     head: &Term,
     result: &MatchResult,
     value: &Term,
-    reads_hypothesis: bool,
     body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
 ) -> Result<Term, Error> {
-    if reads_hypothesis {
-        return body(context, result.at(head, &[], &[], value));
-    }
-
     open_arm(context, head, value)
         .and_then(|()| {
             retype_locals(context, head, value, Vec::new());
@@ -213,42 +170,38 @@ fn from_arm(context: &mut Context, head: &Term, value: &Term, error: Error) -> E
     }
 }
 
-/// A `Nat` fold with its scrutinee and its result resolved: `0` and `predecessor + 1`, the second with a hypothesis about the predecessor where its arm reads one.
+/// A `Nat` case split with its scrutinee and its result resolved: `0` and `predecessor + 1`.
 pub struct NatSplit {
     head: Term,
     result: MatchResult,
-    reads_hypothesis: bool,
 }
 
 impl NatSplit {
-    /// `reads_hypothesis` says the successor arm may read its hypothesis ([`may_read_hypothesis`]), which is what keeps the result a family ([`resolve_fold_result`]).
     pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
         motive: &Scope<Many>,
-        site: (&Term, &Mode),
-        reads_hypothesis: bool,
+        term: &Term,
+        mode: &Mode,
     ) -> Result<Self, Error> {
         let (head, _) = scrutinee.of_intrinsic(context, Eliminator::Nat, IntrinsicHead::Nat)?;
-        let result = resolve_fold_result(
+
+        // The *rebuilt* motive throughout, as [`resolve_intrinsic_result`] states, or the ambient goal.
+        let result = resolve_intrinsic_result(
             context,
             &Subterm::Intrinsic(Intrinsic::NatType).into(),
             &head,
             motive,
-            site,
-            reads_hypothesis,
+            mode,
         )?;
+        if let Some(motive) = result.family() {
+            seed_motive(context, term, motive, &head, mode)?;
+        }
 
-        Ok(Self {
-            head,
-            result,
-            reads_hypothesis,
-        })
+        Ok(Self { head, result })
     }
 
-    /// The case `0`: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
-    ///
-    /// A case split's arms have the scrutinee refined to their case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy. A fold's arms learn nothing of it ([`fold_arm`]).
+    /// The case `0`: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm. The scrutinee is refined to the case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy.
     pub fn zero(
         &self,
         context: &mut Context,
@@ -256,31 +209,18 @@ impl NatSplit {
     ) -> Result<Term, Error> {
         let value: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))).into();
 
-        context.with_frame(|context| {
-            fold_arm(
-                context,
-                &self.head,
-                &self.result,
-                &value,
-                self.reads_hypothesis,
-                body,
-            )
-        })
+        context.with_frame(|context| split_arm(context, &self.head, &self.result, &value, body))
     }
 
-    /// The case `predecessor + 1`, under the two binders it opens: the hypothesis is assumed exactly where the arm reads it.
+    /// The case `predecessor + 1`, under the binder it opens.
     pub fn successor(
         &self,
         context: &mut Context,
         predecessor: &Free,
-        hypothesis: &Free,
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
     ) -> Result<Term, Error> {
         context.with_frame(|context| {
             context.assume(predecessor, &Subterm::Intrinsic(Intrinsic::NatType).into());
-            if let Some(motive) = self.result.family().filter(|_| self.reads_hypothesis) {
-                context.assume(hypothesis, &motive.open(&[&Term::free_var(predecessor)]));
-            }
 
             let value: Term = Subterm::Intrinsic(Intrinsic::nat_add(
                 Term::free_var(predecessor),
@@ -288,14 +228,7 @@ impl NatSplit {
             ))
             .into();
 
-            fold_arm(
-                context,
-                &self.head,
-                &self.result,
-                &value,
-                self.reads_hypothesis,
-                body,
-            )
+            split_arm(context, &self.head, &self.result, &value, body)
         })
     }
 
@@ -304,23 +237,17 @@ impl NatSplit {
         self.result.of(&self.head, &[])
     }
 
-    /// The match over the two arms, the second closed over the binders it was entered under.
-    pub fn rebuild(
-        &self,
-        zero: Term,
-        predecessor: &Free,
-        hypothesis: &Free,
-        successor: Term,
-    ) -> (Term, Term) {
+    /// The match over the two arms, the second closed over the binder it was entered under.
+    pub fn rebuild(&self, zero: Term, predecessor: &Free, successor: Term) -> (Term, Term) {
         let result_type = self.result.of(&self.head, &[]);
         let rebuilt = Subterm::Match(Match {
             head: self.head.clone(),
             result: self.result.clone(),
-            // `Nat` is the free monoid on one payload-less generator: its cons arm binds just (predecessor, ih), so the carrier is `Nat` and the head is absent.
+            // `Nat` is the free monoid on one payload-less generator: its cons arm binds just the predecessor, so the carrier is `Nat` and the head is absent.
             cases: Cases::FreeMonoid {
                 carrier: Carrier::Nat {
                     empty_case: zero,
-                    cons_case: Scope::close(Two, &[predecessor, hypothesis], successor),
+                    cons_case: Scope::close(One, &[predecessor], successor),
                 },
             },
         })
@@ -335,28 +262,26 @@ fn elaborate_nat_match(
     scrutinee: Scrutinee,
     motive: &Scope<Many>,
     zero_case: &Term,
-    succ_case: &Scope<Two>,
+    succ_case: &Scope<One>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let reads_hypothesis = may_read_hypothesis(succ_case, 1);
-    let split = NatSplit::resolve(context, scrutinee, motive, (term, &mode), reads_hypothesis)?;
+    let split = NatSplit::resolve(context, scrutinee, motive, term, &mode)?;
     let zero = split.zero(context, |context, expected| {
         check(context, zero_case, expected)
     })?;
 
     let predecessor = context.fresh_for(succ_case.hint(0), succ_case.written(0));
-    let hypothesis = context.fresh_for(succ_case.hint(1), succ_case.written(1));
-    let successor = split.successor(context, &predecessor, &hypothesis, |context, expected| {
-        let body = succ_case.open(&[&Term::free_var(&predecessor), &Term::free_var(&hypothesis)]);
+    let successor = split.successor(context, &predecessor, |context, expected| {
+        let body = succ_case.open(&[&Term::free_var(&predecessor)]);
 
         check(context, &body, expected)
     })?;
 
-    Ok(split.rebuild(zero, &predecessor, &hypothesis, successor))
+    Ok(split.rebuild(zero, &predecessor, successor))
 }
 
-/// The sequences a fold splits into the empty one and an atom ahead of a tail.
+/// The sequences a case split takes apart into the empty one and an atom ahead of a tail.
 #[derive(Debug, Clone, Copy)]
 pub enum Sequence {
     List,
@@ -369,24 +294,21 @@ enum Atoms {
     Bytes,
 }
 
-/// A fold over a list or a packed sequence with its scrutinee and its result resolved: the empty case, and an atom ahead of a tail with a hypothesis about the tail where its arm reads one.
+/// A case split of a list or a packed sequence with its scrutinee and its result resolved: the empty case, and an atom ahead of a tail.
 pub struct SequenceSplit {
     head: Term,
     head_type: Term,
     atoms: Atoms,
     result: MatchResult,
-    reads_hypothesis: bool,
 }
 
 impl SequenceSplit {
-    /// `reads_hypothesis` says the nonempty arm may read its hypothesis ([`may_read_hypothesis`]), which is what keeps the result a family ([`resolve_fold_result`]).
     pub fn resolve(
         context: &mut Context,
         sequence: Sequence,
         scrutinee: Scrutinee,
         motive: &Scope<Many>,
-        site: (&Term, &Mode),
-        reads_hypothesis: bool,
+        (term, mode): (&Term, &Mode),
     ) -> Result<Self, Error> {
         let (head, head_type, atoms) = match sequence {
             // `List` carries an element type the eliminator must read off the scrutinee (unlike `Nat`, whose carrier is parameterless) — its type must be `List(elem)`.
@@ -424,21 +346,21 @@ impl SequenceSplit {
                 (head, head_type, Atoms::Bytes)
             }
         };
-        let result =
-            resolve_fold_result(context, &head_type, &head, motive, site, reads_hypothesis)?;
+        // The *rebuilt* motive throughout, as [`resolve_intrinsic_result`] states, or the ambient goal.
+        let result = resolve_intrinsic_result(context, &head_type, &head, motive, mode)?;
+        if let Some(motive) = result.family() {
+            seed_motive(context, term, motive, &head, mode)?;
+        }
 
         Ok(Self {
             head,
             head_type,
             atoms,
             result,
-            reads_hypothesis,
         })
     }
 
-    /// The empty case: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
-    ///
-    /// A case split's arms have the scrutinee refined to their case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy. A fold's arms learn nothing of it ([`fold_arm`]).
+    /// The empty case: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm. The scrutinee is refined to the case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy.
     pub fn empty(
         &self,
         context: &mut Context,
@@ -453,23 +375,14 @@ impl SequenceSplit {
         })
         .into();
 
-        context.with_frame(|context| {
-            fold_arm(
-                context,
-                &self.head,
-                &self.result,
-                &value,
-                self.reads_hypothesis,
-                body,
-            )
-        })
+        context.with_frame(|context| split_arm(context, &self.head, &self.result, &value, body))
     }
 
-    /// The case of an atom ahead of a tail, under the three binders it opens — the atom, the tail and the hypothesis about the tail, which is assumed exactly where the arm reads it.
+    /// The case of an atom ahead of a tail, under the two binders it opens.
     pub fn cons(
         &self,
         context: &mut Context,
-        [atom, tail, hypothesis]: &[Free; 3],
+        [atom, tail]: &[Free; 2],
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
     ) -> Result<Term, Error> {
         context.with_frame(|context| {
@@ -508,18 +421,8 @@ impl SequenceSplit {
 
             context.assume(atom, &atom_type);
             context.assume(tail, &self.head_type);
-            if let Some(motive) = self.result.family().filter(|_| self.reads_hypothesis) {
-                context.assume(hypothesis, &motive.open(&[&Term::free_var(tail)]));
-            }
 
-            fold_arm(
-                context,
-                &self.head,
-                &self.result,
-                &value,
-                self.reads_hypothesis,
-                body,
-            )
+            split_arm(context, &self.head, &self.result, &value, body)
         })
     }
 
@@ -529,14 +432,9 @@ impl SequenceSplit {
     }
 
     /// The match over the two arms, the second closed over the binders it was entered under.
-    pub fn rebuild(
-        &self,
-        empty: Term,
-        [atom, tail, hypothesis]: &[Free; 3],
-        cons: Term,
-    ) -> (Term, Term) {
+    pub fn rebuild(&self, empty: Term, [atom, tail]: &[Free; 2], cons: Term) -> (Term, Term) {
         let result_type = self.result.of(&self.head, &[]);
-        let cons_case = Scope::close(Three, &[atom, tail, hypothesis], cons);
+        let cons_case = Scope::close(Two, &[atom, tail], cons);
         let carrier = match &self.atoms {
             Atoms::List { element } => Carrier::List {
                 elem: element.clone(),
@@ -564,7 +462,7 @@ fn elaborate_list_match(
     scrutinee: Scrutinee,
     motive: &Scope<Many>,
     empty_case: &Term,
-    cons_case: &Scope<Three>,
+    cons_case: &Scope<Two>,
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
@@ -582,7 +480,7 @@ fn elaborate_bytes_match(
     context: &mut Context,
     scrutinee: Scrutinee,
     motive: &Scope<Many>,
-    cases: (&Term, &Scope<Three>),
+    cases: (&Term, &Scope<Two>),
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
@@ -596,24 +494,16 @@ fn elaborate_bytes_match(
     )
 }
 
-/// A fold over a list or a packed sequence written one level deep: each arm is its lowered body, checked.
+/// A case split of a list or a packed sequence written one level deep: each arm is its lowered body, checked.
 fn elaborate_sequence_match(
     context: &mut Context,
     sequence: Sequence,
     scrutinee: Scrutinee,
     motive: &Scope<Many>,
-    (empty_case, cons_case): (&Term, &Scope<Three>),
+    (empty_case, cons_case): (&Term, &Scope<Two>),
     (term, mode): (&Term, Mode),
 ) -> Result<(Term, Term), Error> {
-    let reads_hypothesis = may_read_hypothesis(cons_case, 2);
-    let split = SequenceSplit::resolve(
-        context,
-        sequence,
-        scrutinee,
-        motive,
-        (term, &mode),
-        reads_hypothesis,
-    )?;
+    let split = SequenceSplit::resolve(context, sequence, scrutinee, motive, (term, &mode))?;
     let empty = split.empty(context, |context, expected| {
         check(context, empty_case, expected)
     })?;
@@ -621,15 +511,10 @@ fn elaborate_sequence_match(
     let binders = [
         context.fresh_for(cons_case.hint(0), cons_case.written(0)),
         context.fresh_for(cons_case.hint(1), cons_case.written(1)),
-        context.fresh_for(cons_case.hint(2), cons_case.written(2)),
     ];
     let cons = split.cons(context, &binders, |context, expected| {
-        let [atom, tail, hypothesis] = &binders;
-        let body = cons_case.open(&[
-            &Term::free_var(atom),
-            &Term::free_var(tail),
-            &Term::free_var(hypothesis),
-        ]);
+        let [atom, tail] = &binders;
+        let body = cons_case.open(&[&Term::free_var(atom), &Term::free_var(tail)]);
 
         check(context, &body, expected)
     })?;
@@ -637,9 +522,11 @@ fn elaborate_sequence_match(
     Ok(split.rebuild(empty, &binders, cons))
 }
 
-/// The result of an elimination whose arms read no induction hypothesis — `Bool`, `Switch`, and a fold's case split (`resolve_fold_result`): an elided motive checked against an expected type takes that type as its ambient result, whatever the scrutinee, and anything else resolves as an intrinsic motive. A fold whose arm reads its hypothesis keeps the family — the hypothesis is typed at the motive opened at the tail.
+/// The result of an intrinsic elimination — `Bool`, `Switch`, and the case splits of `Nat`, `List` and `Bytes`: an elided motive checked against an expected type takes that type as its ambient result, whatever the scrutinee, and anything else resolves as an intrinsic motive.
 ///
 /// An expression scrutinee takes the ambient form as a variable does: each arm checks against the goal with the scrutinee's syntactic occurrences standing for the case (`MatchResult::at`), and the arm's refinement reduces any occurrence the goal reaches only by unfolding. A family solved by `solve`'s occurrence abstraction instead sees the goal as it arrives reduced at its root, and an occurrence spelled through a `let` there escapes the abstraction while the application the refinement is keyed on has been unfolded away, which would leave an arm less than the unabstracted goal gives it.
+///
+/// The rebuilt motive is what everything below opens: insertion saturates applications during elaboration, and a lowered (under-applied) motive body reaching the reducer would open a telescope at the wrong arity.
 fn resolve_intrinsic_result(
     context: &mut Context,
     head_type: &Term,
@@ -673,7 +560,7 @@ impl SwitchSplit {
     ) -> Result<Self, Error> {
         let (head, _) = scrutinee.of_intrinsic(context, Eliminator::Nat, IntrinsicHead::Nat)?;
 
-        // The *rebuilt* motive throughout, as in [`NatSplit::resolve`], or the ambient goal.
+        // The *rebuilt* motive throughout, as [`resolve_intrinsic_result`] states, or the ambient goal.
         let result = resolve_intrinsic_result(
             context,
             &Subterm::Intrinsic(Intrinsic::NatType).into(),
@@ -892,7 +779,7 @@ impl BoolSplit {
     ) -> Result<Self, Error> {
         let (head, _) = scrutinee.of_intrinsic(context, Eliminator::Bool, IntrinsicHead::Bool)?;
 
-        // The *rebuilt* motive throughout, as in [`NatSplit::resolve`], or the ambient goal.
+        // The *rebuilt* motive throughout, as [`resolve_intrinsic_result`] states, or the ambient goal.
         let result = resolve_intrinsic_result(
             context,
             &Subterm::Intrinsic(Intrinsic::BoolType).into(),
@@ -1088,7 +975,7 @@ impl NominalSplit {
             _ => MatchResult::Family(check_motive(context, &shape, motive)?),
         };
 
-        // The match's own type: the result at the scrutinee's actual indices and the scrutinee itself — opened from the *rebuilt* motive, as in [`NatSplit::resolve`], or the ambient goal as written.
+        // The match's own type: the result at the scrutinee's actual indices and the scrutinee itself — opened from the *rebuilt* motive, as [`resolve_intrinsic_result`] states, or the ambient goal as written.
         let result_type = result.of(&head, &actual_indices);
 
         // The seed (`seed_motive`'s job, generalized over the pattern binders): in checking mode, pin the motive — a bare metavar when elided — to the expected type before the arms are checked. An ambient result is that type already, and the expectation is met by construction.

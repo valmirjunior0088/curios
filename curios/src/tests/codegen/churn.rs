@@ -37,7 +37,7 @@ let ballast_cells: Nat = BALLAST_CELLS;
 let build(n: Nat, x: Nat, acc: Chain) -> Chain =
     match n: (_) => Chain
     | 0 => acc
-    | m + 1; ih => build(m, 75 * x % 65537, Chain/cons(x, acc))
+    | m + 1 => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
 let step(rest: Chain, acc: Chain) -> Chain =
@@ -49,7 +49,7 @@ let step(rest: Chain, acc: Chain) -> Chain =
 let rounds(k: Nat, c: Chain) -> Chain =
     match k: (_) => Chain
     | 0 => c
-    | m + 1; ih => rounds(m, step(c, Chain/nil()))
+    | m + 1 => rounds(m, step(c, Chain/nil()))
     end;
 
 let total(c: Chain, acc: Nat) -> Nat =
@@ -227,7 +227,7 @@ let ballast_cells: Nat = BALLAST_CELLS;
 let build(n: Nat, x: Nat, acc: Chain) -> Chain =
     match n: (_) => Chain
     | 0 => acc
-    | m + 1; ih => build(m, 75 * x % 65537, Chain/cons(x, acc))
+    | m + 1 => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
 let drain(c: Chain, acc: Nat) -> Nat =
@@ -239,7 +239,7 @@ let drain(c: Chain, acc: Nat) -> Nat =
 let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
     match n: (_) => Map(Bytes, Nat)
     | 0 => m
-    | k + 1; ih =>
+    | k + 1 =>
         let y = 75 * x % 65537;
         walk(k, i + 1, y, Map/insert(m, Bytes/of_nat(y), i % 1000003))
     end;
@@ -322,7 +322,7 @@ const SPINES_KEYED: &str = r#"use /std/{Str, Nat, Map, Io, Bytes};
 let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
     match n: (_) => Map(Bytes, Nat)
     | 0 => m
-    | k + 1; _ih =>
+    | k + 1 =>
         let y = 75 * x % 65537;
         walk(k, i + 1, y, Map/insert(m, KEY, i % 1000003))
     end;

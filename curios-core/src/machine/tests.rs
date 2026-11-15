@@ -106,45 +106,57 @@ fn motive() -> Scope<Many> {
     Scope::close(Many(1), &[&m], nat_type())
 }
 
-/// The induction-hypothesis form: a structural fold whose cons arm combines the recursive result, `count(x[]) = 0`, `count(x[h, ..t]) = count(t) + 1`. Its depth is the hypothesis nesting — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
+/// The non-tail form: a structural recursion whose cons arm combines the call at the tail, `count(x[]) = 0`, `count(x[h, ..t]) = count(t) + 1`. Its depth is the nesting of calls — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
 #[test]
-fn an_ih_fold_costs_transitions_rather_than_frames() {
+fn a_non_tail_recursion_costs_transitions_rather_than_frames() {
     let n = 2_000usize;
     let mut host = Host::new(200 * n as u64);
-    let (h, t, ih) = (binder(0, "h"), binder(1, "t"), binder(2, "ih"));
 
-    let count = Term::bytes_match_scoped(
-        bytes(vec![7; n]),
-        motive(),
-        nat(0),
-        &[&h, &t, &ih],
-        Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat(1))),
-    );
+    let count = non_tail(vec![7; n], nat(0), |call| {
+        Term::intrinsic(Intrinsic::nat_add(call, nat(1)))
+    });
 
     assert_eq!(reduce_closed(&mut host, count, Demand::Forced), Ok(nat(n)));
 }
 
-/// The arm that binds its hypothesis and then returns it — `let (taken, stopped) = ih; match stopped | true => ih | …`, an induction carrying a flag past the element it stopped at — spelled as `count(x[]) = 5`, `count(x[h, ..t]) = let c = count(t); count(t)`. The `let` evaluates the hypothesis and the tail demands the same term again; recorded, the second demand is a probe and the fold is linear under the budget the single-projection test passes under. Unrecorded, each level runs the level below twice, so the fold doubles per element and runs out of steps a few dozen bytes in.
+/// The arm that calls itself and then calls itself again on the same tail — `let (taken, stopped) = count(t); match stopped | true => count(t) | …`, a recursion carrying a flag past the element it stopped at — spelled as `count(x[]) = 5`, `count(x[h, ..t]) = let c = count(t); count(t)`. The `let` evaluates the call and the tail demands the same term again; recorded, the second demand is a probe and the recursion is linear under the budget the single-call test passes under. Unrecorded, each level runs the level below twice, so the recursion doubles per element and runs out of steps a few dozen bytes in.
 #[test]
-fn a_hypothesis_demanded_twice_is_forced_once() {
+fn a_call_demanded_twice_is_forced_once() {
     let n = 2_000usize;
     let mut host = Host::new(200 * n as u64);
-    let (h, t, ih, c) = (
-        binder(0, "h"),
-        binder(1, "t"),
-        binder(2, "ih"),
-        binder(3, "c"),
-    );
+    let c = binder(6, "c");
 
-    let count = Term::bytes_match_scoped(
-        bytes(vec![7; n]),
-        motive(),
-        nat(5),
-        &[&h, &t, &ih],
-        Term::let_(&c, nat_type(), Term::free_var(&ih), Term::free_var(&ih)),
-    );
+    let count = non_tail(vec![7; n], nat(5), |call| {
+        Term::let_(&c, nat_type(), call.clone(), call)
+    });
 
     assert_eq!(reduce_closed(&mut host, count, Demand::Forced), Ok(nat(5)));
+}
+
+/// `count(x[]) = empty`, `count(x[h, ..t]) = cons(count(t))` over `data`.
+fn non_tail(data: Vec<u8>, empty: Term, cons: impl Fn(Term) -> Term) -> Term {
+    let (count, b) = (binder(0, "count"), binder(1, "b"));
+    let (h, t) = (binder(3, "h"), binder(4, "t"));
+
+    let body = Term::func(
+        [(b, bytes_type())],
+        Term::bytes_match_scoped(
+            Term::free_var(&b),
+            motive(),
+            empty,
+            &[&h, &t],
+            cons(Term::apply(Term::free_var(&count), [Term::free_var(&t)])),
+        ),
+    );
+
+    Term::rec(
+        [(
+            count,
+            Term::func_type([(b, bytes_type())], nat_type()),
+            body,
+        )],
+        Term::apply(Term::free_var(&count), [bytes(data)]),
+    )
 }
 
 /// The tail-accumulator fold `go(acc, x[h, ..t]) = go(acc + to_nat(h), t)`, built by `tail_fold`. Eager argument evaluation is what keeps the accumulator a literal at every step instead of a chain of unevaluated additions, and the per-element budget is the same claim as the induction-hypothesis test's.
@@ -187,7 +199,7 @@ fn a_closed_neutral_accumulator_stays_linear() {
 /// `go(acc, x[]) = acc`, `go(acc, x[h, ..t]) = go(combine(acc, h), t)` over `data`, applied to an accumulator of zero.
 fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
     let (go, acc, b) = (binder(0, "go"), binder(1, "acc"), binder(2, "b"));
-    let (h, t, ih) = (binder(3, "h"), binder(4, "t"), binder(5, "ih"));
+    let (h, t) = (binder(3, "h"), binder(4, "t"));
 
     let body = Term::func(
         [(acc, nat_type()), (b, bytes_type())],
@@ -195,7 +207,7 @@ fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
             Term::free_var(&b),
             motive(),
             Term::free_var(&acc),
-            &[&h, &t, &ih],
+            &[&h, &t],
             Term::apply(
                 Term::free_var(&go),
                 [
@@ -221,7 +233,7 @@ fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
 fn whnf_keeps_a_recursive_application_folded() {
     let mut host = Host::new(100_000);
     let (go, b) = (binder(0, "go"), binder(1, "b"));
-    let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
+    let (h, t) = (binder(2, "h"), binder(3, "t"));
 
     let body = Term::func(
         [(b, bytes_type())],
@@ -229,7 +241,7 @@ fn whnf_keeps_a_recursive_application_folded() {
             Term::free_var(&b),
             motive(),
             nat(0),
-            &[&h, &t, &ih],
+            &[&h, &t],
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
         ),
     );
@@ -270,7 +282,7 @@ fn whnf_keeps_a_recursive_application_folded() {
 fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
     let mut host = Host::new(1_000_000);
     let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
-    let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
+    let (h, t) = (binder(2, "h"), binder(3, "t"));
 
     let body = Term::func(
         [(b, bytes_type())],
@@ -278,7 +290,7 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
             Term::free_var(&b),
             motive(),
             nat(0),
-            &[&h, &t, &ih],
+            &[&h, &t],
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
         ),
     );
@@ -642,7 +654,7 @@ fn an_arm_that_names_its_payload_is_bound_to_what_the_host_states() {
     );
 }
 
-/// What the three fold shapes spend per element, printed rather than asserted — the assertions live in the budget bounds of the ordinary tests above. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.
+/// What the three recursion shapes spend per element, printed rather than asserted — the assertions live in the budget bounds of the ordinary tests above. Set `CURIOS_MACHINE_TRACE` to shrink the ladder and print every dispatch.
 #[test]
 #[ignore = "measurement, counted: reports what the machine spends per element rather than asserting"]
 fn spend_probe() {
@@ -653,16 +665,11 @@ fn spend_probe() {
     for n in sizes {
         let budget = 1_000_000_000u64;
         let mut host = Host::new(budget);
-        let (h, t, ih) = (binder(0, "h"), binder(1, "t"), binder(2, "ih"));
-        let count = Term::bytes_match_scoped(
-            bytes(vec![7; n]),
-            motive(),
-            nat(0),
-            &[&h, &t, &ih],
-            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat(1))),
-        );
+        let count = non_tail(vec![7; n], nat(0), |call| {
+            Term::intrinsic(Intrinsic::nat_add(call, nat(1)))
+        });
         reduce_closed(&mut host, count, Demand::Forced).unwrap();
-        let ih_spent = budget - host.budget;
+        let non_tail_spent = budget - host.budget;
 
         let mut host = Host::new(budget);
         let term = tail_fold(vec![3; n], |acc, h| {
@@ -680,8 +687,8 @@ fn spend_probe() {
         });
         reduce_closed(&mut host, term, Demand::Forced).unwrap();
         println!(
-            "n={n}: ih={ih_spent} ({}/elem), tail={tail_spent} ({}/elem), neutral={} ({}/elem), neutral categories {:?}",
-            ih_spent / n as u64,
+            "n={n}: non_tail={non_tail_spent} ({}/elem), tail={tail_spent} ({}/elem), neutral={} ({}/elem), neutral categories {:?}",
+            non_tail_spent / n as u64,
             tail_spent / n as u64,
             budget - host.budget,
             (budget - host.budget) / n as u64,

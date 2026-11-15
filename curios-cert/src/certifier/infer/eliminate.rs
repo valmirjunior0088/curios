@@ -23,7 +23,6 @@ mod ambient_tests;
 #[cfg(test)]
 mod coverage_tests;
 #[cfg(test)]
-mod fold_tests;
 #[cfg(test)]
 mod large_elimination_tests;
 #[cfg(test)]
@@ -279,8 +278,6 @@ pub fn unless_never_taken(
 /// Whether the arm of a case split at `value` is one reduction never takes: the scrutinee already is a literal or a constructed value of another case than `value` ([`another_case`]). Such an arm is not typed.
 ///
 /// **Nothing reads it.** A value is its case under every substitution, so a case split over one is its one arm wherever it stands: reduction opens no other, and conversion compares none, since the elimination is never stuck. Typing the arm would establish a term no rule reads, and would refuse one that was typed already: an arm is typed under the equation between its scrutinee and its case, an equation between two values is recorded nowhere ([`records_case_equation`](curios_analysis::records_case_equation)), and the result an arm is checked at puts a case in its scrutinee's place through the goal ([`MatchResult::at`]), an elimination of that scrutinee inside the goal among it. A proof that stood under that elimination's other arm, resting on its guard, then stands under a literal.
-///
-/// **A fold is never asked.** Its reduct holds the fold at the tail, so a value of either case takes the identity arm in the end: `match 3 : (_) => P | 0 => … | k + 1; ih => ih end` is its identity arm, which skipped would inhabit any `P` untyped. The callers ask for an arm taken once, at the scrutinee itself.
 ///
 /// **The scrutinee is read as it stands and not computed here.** Computing it would decide more — an elimination over `0 < 0` is its `false` arm — and typing must not evaluate a term that runs to accept what it accepts without: that is asked only of an arm that was refused ([`unless_never_taken`]). The shared [`another_case`] answers of a term as it stands.
 pub fn never_taken(

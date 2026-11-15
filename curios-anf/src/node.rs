@@ -78,7 +78,7 @@ pub enum Rhs {
     },
     /// Sequence elimination as a *case split*: `empty` computes the result for the empty sequence, and `cons` sees the head element and the suffix after it.
     ///
-    /// The non-looping sibling of [`Rhs::FoldSequence`], and the form a cons arm that ignores its induction hypothesis erases to. It exists so that the erasure states what the Core eliminator states — one peel — instead of open-coding one out of an index dispatch and two bounded reads, which is a window convention two crates would then each have to hold.
+    /// The non-looping sibling of [`Rhs::FoldSequence`], and the form Core's sequence case split erases to. It exists so that the erasure states what the Core eliminator states — one peel — instead of open-coding one out of an index dispatch and two bounded reads, which is a window convention two crates would then each have to hold.
     UnconsSequence {
         grain: SequenceGrain,
         scrutinee: Atom,

@@ -280,15 +280,15 @@ fn a_match_on_a_truth_value_is_written_as_its_two_arms() {
 }
 
 #[test]
-fn a_fold_over_a_number_is_written_with_its_hypothesis() {
+fn a_match_over_a_number_is_written_as_its_two_shapes() {
     let source = r#"
         use /std/{Nat};
-        pub let subject(n: Nat) -> Nat = match n | 0 => 0 | p + 1; ih => ih + 2 end;
+        pub let subject(n: Nat) -> Nat = match n | 0 => 0 | p + 1 => p + 2 end;
     "#;
 
     assert_eq!(
         body(source, "subject"),
-        "(n) => match n | 0 => 0 | p + 1; ih => ih + 2 end"
+        "(n) => match n | 0 => 0 | p + 1 => p + 2 end"
     );
 }
 

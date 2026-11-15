@@ -731,7 +731,7 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
             })))
         }
 
-        // Structural induction over a native free-monoid carrier (`Nat`/`Bytes`/`List`). `FreeMonoid::uncons` owns the carrier-specific one-step decode; this is the catamorphism over it. The cons arm binds the peeled generator (absent for the unary `Nat`), the tail, and an induction hypothesis that recurses symbolically on that tail.
+        // The case split of a native free-monoid carrier (`Nat`/`Bytes`/`List`). `FreeMonoid::uncons` owns the carrier-specific one-step decode; the cons arm binds the peeled generator (absent for the unary `Nat`) and the tail.
         Cases::FreeMonoid { carrier } => {
             let layer = match &carrier {
                 Carrier::Nat { .. } => FreeMonoid::Unary,
@@ -746,28 +746,15 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
                     | Carrier::Bytes { empty_case, .. }
                     | Carrier::List { empty_case, .. } => empty_case,
                 }),
-                Layer::Cons { head: elem, tail } => {
-                    let hypothesis: Term = Subterm::Match(Match {
-                        head: tail.clone(),
-                        result: result.clone(),
-                        cases: Cases::FreeMonoid {
-                            carrier: carrier.clone(),
-                        },
-                    })
-                    .into();
-
-                    Step::Continue(match &carrier {
-                        Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail, &hypothesis]),
-                        Carrier::Bytes { cons_case, .. } | Carrier::List { cons_case, .. } => {
-                            cons_case.open(&[
-                                elem.as_ref()
-                                    .expect("a Bytes/List cons layer carries a head"),
-                                &tail,
-                                &hypothesis,
-                            ])
-                        }
-                    })
-                }
+                Layer::Cons { head: elem, tail } => Step::Continue(match &carrier {
+                    Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail]),
+                    Carrier::Bytes { cons_case, .. } | Carrier::List { cons_case, .. } => cons_case
+                        .open(&[
+                            elem.as_ref()
+                                .expect("a Bytes/List cons layer carries a head"),
+                            &tail,
+                        ]),
+                }),
                 Layer::Stuck(stuck) => Step::Stop(Term::from(Subterm::Match(Match {
                     head: stuck.into(),
                     result,

@@ -59,12 +59,12 @@ fn slice_proof_aligns_with_byte_walk() {
             | cont(rem, lo, hi) =>
                 match b
                 | x[] => x[]
-                | x[h, ..t]; ih => to_lead_bytes(step(/std/Byte/to_nat(h), Scan/cont(rem, lo, hi)), t)
+                | x[h, ..t] => to_lead_bytes(step(/std/Byte/to_nat(h), Scan/cont(rem, lo, hi)), t)
                 end
             | bad() =>
                 match b
                 | x[] => x[]
-                | x[h, ..t]; ih => to_lead_bytes(step(/std/Byte/to_nat(h), Scan/bad()), t)
+                | x[h, ..t] => to_lead_bytes(step(/std/Byte/to_nat(h), Scan/bad()), t)
                 end
             end;
 
@@ -185,7 +185,7 @@ fn utf8_construction_spike() {
         let build(b : Bytes) -> All(b) =
             match b : (b) => All(b)
             | x[] => All/empty()
-            | x[h, ..t]; ih => All/snoc(/std/Byte/to_nat(h), t, ih)
+            | x[h, ..t] => All/snoc(/std/Byte/to_nat(h), t, build(t))
             end;
         let entry() -> /std/Io({}) =
             let _ = /std/print("ok")!;
@@ -351,8 +351,8 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
                 | cont(rem, lo, hi) => Option/none()
                 | bad() => Option/none()
                 end
-            | x[h, ..t]; ih => (s) =>
-                match ih(step(/std/Byte/to_nat(h), s)) : (_) => Option(Utf8(s, x[h, ..t]))
+            | x[h, ..t] => (s) =>
+                match check(t)(step(/std/Byte/to_nat(h), s)) : (_) => Option(Utf8(s, x[h, ..t]))
                 | some(rest) => Option/some(Utf8/more(/std/Byte/to_nat(h), s, t, rest))
                 | none() => Option/none()
                 end

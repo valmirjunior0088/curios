@@ -59,14 +59,15 @@ fn a_proofs_body_is_withheld_from_erasures_reader() {
     });
 }
 
-/// A decided bound's stand-in is shaped without evaluating its subject. `H(b)` is a match on `b` whose arms are the proposition `Top`, `c` folds `Nat` two hundred thousand times, and `head` hands `need` the proof `Top/qed()` of `H(c)`, which the certifier accepts by evaluating `c`. At a fresh `b`, `H(b)` is a match on it whose every arm is no function type, so no instance of it is one and the stand-in is the unit constant: erasing `head` charges under a tenth of what reducing `H(c)` alone does, where shaping the stand-in by that reduction ran the fold a second time.
+/// A decided bound's stand-in is shaped without evaluating its subject. `H(b)` is a match on `b` whose arms are the proposition `Top`, `c` recurs on a `Nat` two hundred thousand times, and `head` hands `need` the proof `Top/qed()` of `H(c)`, which the certifier accepts by evaluating `c`. At a fresh `b`, `H(b)` is a match on it whose every arm is no function type, so no instance of it is one and the stand-in is the unit constant: erasing `head` charges under a tenth of what reducing `H(c)` alone does, where shaping the stand-in by that reduction ran the recursion a second time.
 #[test]
 fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
-    let (b, p, pred, ih) = (
+    let (b, p, pred, k, walk) = (
         fresh(Some("b")),
         fresh(Some("p")),
         fresh(Some("pred")),
-        fresh(Some("ih")),
+        fresh(Some("k")),
+        fresh(Some("walk")),
     );
     let bool_type = curios_core::Term::intrinsic(curios_core::Intrinsic::BoolType);
     let nat_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
@@ -75,14 +76,27 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
         Vec::<curios_core::Term>::new(),
         Vec::<curios_core::Term>::new(),
     );
-    let subject = curios_core::Term::nat_match(
-        nat_lit(200_000),
-        None,
-        bool_type.clone(),
-        curios_core::Term::intrinsic(curios_core::Intrinsic::Bool(true)),
-        &pred,
-        &ih,
-        curios_core::Term::free_var(&ih),
+    // rec walk(k) = match k | 0 => true | pred + 1 => walk(pred) end; walk(200000)
+    let subject = curios_core::Term::rec(
+        vec![(
+            walk,
+            curios_core::Term::func_type([(k, nat_type.clone())], bool_type.clone()),
+            curios_core::Term::func(
+                [(k, nat_type.clone())],
+                curios_core::Term::nat_match(
+                    curios_core::Term::free_var(&k),
+                    None,
+                    bool_type.clone(),
+                    curios_core::Term::intrinsic(curios_core::Intrinsic::Bool(true)),
+                    &pred,
+                    curios_core::Term::apply(
+                        curios_core::Term::free_var(&walk),
+                        [curios_core::Term::free_var(&pred)],
+                    ),
+                ),
+            ),
+        )],
+        curios_core::Term::apply(curios_core::Term::free_var(&walk), [nat_lit(200_000)]),
     );
     let bound = curios_core::Term::apply(reference("H"), [subject]);
     let qed = curios_core::Term::variant(

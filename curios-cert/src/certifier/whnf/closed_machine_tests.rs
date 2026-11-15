@@ -91,27 +91,27 @@ fn bytes(data: &[u8]) -> String {
 }
 
 /// `go`, a member walking a `Bytes` to its end, as the projection out of its group a call names it by.
-const WALK: &str = "#{node = Rec} (let go: (b: #BytesType) -> #NatType = (b: #BytesType) => match b: (m) => #NatType | x[] => 0 | x[h, ..t]; ih => go(t) end; go)";
+const WALK: &str = "#{node = Rec} (let go: (b: #BytesType) -> #NatType = (b: #BytesType) => match b: (m) => #NatType | x[] => 0 | x[h, ..t] => go(t) end; go)";
 
-/// `member`, which descends from `n` to its zero case, answering `${zero}` at `${result}` there and `${step}` at each successor over `pred` and the hypothesis `ih`, as the projection out of its group a call names it by.
-const DESCENT: &str = "#{node = Rec} (let member: (n: #NatType) -> ${result} = (n: #NatType) => match n: (m) => ${result} | 0 => ${zero} | pred + 1; ih => ${step} end; member)";
+/// `member`, which descends from `n` to its zero case, answering `${zero}` at `${result}` there and `${step}` at each successor over `pred`, as the projection out of its group a call names it by.
+const DESCENT: &str = "#{node = Rec} (let member: (n: #NatType) -> ${result} = (n: #NatType) => match n: (m) => ${result} | 0 => ${zero} | pred + 1 => ${step} end; member)";
 
-/// **The differential fixture that holds the machine to the strategy.** The same closed terms are put to a certifier with the closed machine and to one without it — the recursive strategy — and the reducts must be identical, term for term, **at both demands**. The battery covers each rule the machine implements on its own: beta over eagerly-evaluated arguments, zeta's left-to-right release, all four match families, projection, recursive unfolding to a value, and the two fold recursion encodings over a packed carrier. Both evaluators determine these completely — a first-order value at the forced demand, and at the plain one either that or the folded spelling the demand stops at — so equality here is syntactic rather than up-to-anything.
+/// **The differential fixture that holds the machine to the strategy.** The same closed terms are put to a certifier with the closed machine and to one without it — the recursive strategy — and the reducts must be identical, term for term, **at both demands**. The battery covers each rule the machine implements on its own: beta over eagerly-evaluated arguments, zeta's left-to-right release, all four match families, projection, recursive unfolding to a value, and the two recursion shapes over a packed carrier. Both evaluators determine these completely — a first-order value at the forced demand, and at the plain one either that or the folded spelling the demand stops at — so equality here is syntactic rather than up-to-anything.
 ///
 /// Both demands are asked because the plain one is where the machine and the strategy can disagree, on the forced-then-plain terms below: a `rec` block both evaluators leave unopened at a plain demand is compared there but reaches nothing.
 #[test]
 fn the_closed_machine_agrees_with_the_strategy() {
-    let ih_fold = fill!(
-        "match ${bytes}: (m) => #NatType | x[] => 0 | x[h, ..t]; ih => #NatAdd(ih, 1) end",
+    let non_tail = fill!(
+        "#{node = Rec} (let count: (b: #BytesType) -> #NatType = (b: #BytesType) => match b: (m) => #NatType | x[] => 0 | x[h, ..t] => #NatAdd(count(t), 1) end; count(${bytes}))",
         bytes = bytes(&[7; 40])
     );
 
     let tail_fold = fill!(
-        "#{node = Rec} (let go: (acc: #NatType, b: #BytesType) -> #NatType = (acc: #NatType, b: #BytesType) => match b: (m) => #NatType | x[] => acc | x[h, ..t]; ih => go(#NatAdd(acc, #ByteToNat(h)), t) end; go(0, ${bytes}))",
+        "#{node = Rec} (let go: (acc: #NatType, b: #BytesType) -> #NatType = (acc: #NatType, b: #BytesType) => match b: (m) => #NatType | x[] => acc | x[h, ..t] => go(#NatAdd(acc, #ByteToNat(h)), t) end; go(0, ${bytes}))",
         bytes = bytes(&[3; 40])
     );
 
-    let countdown = "#{node = Rec} (let member: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1; ih => member(pred) end; member(9))";
+    let countdown = "#{node = Rec} (let member: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1 => member(pred) end; member(9))";
 
     let beta_zeta = "((x: #NatType, y: #NatType) => let y: #NatType = #NatAdd(x, 3); y)(2, 0)";
 
@@ -172,7 +172,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         term(forwarded_across_a_mark),
         term(&past_parameters),
         term(&plain_then_forced),
-        term(&ih_fold),
+        term(&non_tail),
         term(&tail_fold),
         term(countdown),
         term(beta_zeta),
@@ -204,7 +204,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
     }
 }
 
-/// **Runs past the fusion cap are the bytes they spell under the machine as under the strategy.** A concatenation of runs too long to fuse stays a node, and both evaluators fold a pointwise operation and a structural fold over it through it: `xor` of two such values split apart at different seams, one of them nested, is the elementwise run, and the fold over that run sums its bytes. A machine that read the node otherwise than the strategy would answer a closed computation in a type with a value reduction of the same term would not.
+/// **Runs past the fusion cap are the bytes they spell under the machine as under the strategy.** A concatenation of runs too long to fuse stays a node, and both evaluators take a pointwise operation and a structural recursion over it through it: `xor` of two such values split apart at different seams, one of them nested, is the elementwise run, and the recursion over that run sums its bytes. A machine that read the node otherwise than the strategy would answer a closed computation in a type with a value reduction of the same term would not.
 #[test]
 fn the_closed_machine_reads_runs_past_the_fusion_cap_as_the_strategy_does() {
     let run = |byte: u8, count: usize| bytes(&vec![byte; count]);
@@ -227,7 +227,7 @@ fn the_closed_machine_reads_runs_past_the_fusion_cap_as_the_strategy_does() {
         .sum::<usize>();
 
     let summed = fill!(
-        "match ${xor}: (m) => #NatType | x[] => 0 | x[h, ..t]; ih => #NatAdd(#ByteToNat(h), ih) end",
+        "#{node = Rec} (let sum: (b: #BytesType) -> #NatType = (b: #BytesType) => match b: (m) => #NatType | x[] => 0 | x[h, ..t] => #NatAdd(#ByteToNat(h), sum(t)) end; sum(${xor}))",
         xor
     );
 
@@ -357,7 +357,7 @@ fn a_host_calls_operands_are_left_as_the_strategy_leaves_them() {
     );
 }
 
-/// A fold over the list `${items}`, at `${result}`, from the call `member(3)` of a [`DESCENT`] at `${result}` that answers `${zero}` at zero and its hypothesis at each successor, by a step that hands its accumulator back: `member(n)` is `${zero}` for every `n`.
+/// A fold over the list `${items}`, at `${result}`, from the call `member(3)` of a [`DESCENT`] at `${result}` that answers `${zero}` at zero and the call at the predecessor at each successor, by a step that hands its accumulator back: `member(n)` is `${zero}` for every `n`.
 const FOLDED: &str = "#ListFold(#NatType, ${result}, #List(#NatType, [${items}]), (${member})(3), (item: #NatType, acc: ${result}) => acc)";
 
 /// [`FOLDED`] over `items`, at `result` with `zero` at zero.
@@ -366,7 +366,7 @@ fn folded(items: &str, result: &str, zero: &str) -> String {
         FOLDED,
         items,
         result,
-        member = fill!(DESCENT, result, zero, step = "ih")
+        member = fill!(DESCENT, result, zero, step = "member(pred)")
     )
 }
 
@@ -398,7 +398,7 @@ fn an_operand_a_fold_reads_plainly_is_not_served_its_forced_value() {
 fn a_match_or_a_projection_forces_what_an_intrinsic_answers() {
     let pair = "{first: #NatType, second: #NatType}";
     let matched = term(&fill!(
-        "match ${folded}: (m) => #NatType | 0 => 7 | pred + 1; ih => 9 end",
+        "match ${folded}: (m) => #NatType | 0 => 7 | pred + 1 => 9 end",
         folded = folded("5", "#NatType", "0")
     ));
     let projected = term(&fill!("${folded}.0", folded = folded("5", pair, "(0, 1)")));

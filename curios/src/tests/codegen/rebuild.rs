@@ -96,7 +96,7 @@ const SPINES: &str = r#"
     let walk(n: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
         match n
         | 0 => m
-        | k + 1; _ =>
+        | k + 1 =>
             let y = 75 * x % 65537;
             walk(k, y, Map/insert(m, y, k))
         end;
@@ -107,7 +107,7 @@ const TWO_WALKS: &str = r#"
     let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
         match n
         | 0 => m
-        | k + 1; _ =>
+        | k + 1 =>
             let y = 75 * x % 65537;
             walk(k, i + 1, y, Map/insert(m, y, i % 1000003))
         end;
@@ -146,7 +146,7 @@ const SEARCH_TREE: &str = r#"
         end;
     let size(t: Tree) -> Nat = match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
     let walk(n: Nat, x: Nat, t: Tree) -> Tree =
-        match n | 0 => t | k + 1; _ => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
+        match n | 0 => t | k + 1 => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
     let shared(n: Nat) -> Tree = Tree/node(Tree/leaf(), n + 1, Tree/leaf());
 "#;
 
@@ -158,7 +158,7 @@ const ROPE: &str = r#"
     | blue(value: Nat, rest: Rope)
     end
     let make(n: Nat, acc: Rope) -> Rope =
-        match n | 0 => acc | k + 1; _ => make(k, Rope/red(k, acc)) end;
+        match n | 0 => acc | k + 1 => make(k, Rope/red(k, acc)) end;
     let flip(r: Rope, acc: Rope) -> Rope =
         match r
         | tip(_) => acc
@@ -182,7 +182,7 @@ const MIXED_ROPE: &str = r#"
     let mixed(n: Nat, acc: Rope) -> Rope =
         match n
         | 0 => acc
-        | k + 1; _ =>
+        | k + 1 =>
             match k % 2
             | 0 => mixed(k, Rope/red(k, acc))
             | _ => mixed(k, Rope/blue(k, acc))
@@ -193,9 +193,9 @@ const MIXED_ROPE: &str = r#"
 /// A map filled with `n` keys, then drained of every other one and of keys it never held.
 const REMOVALS: &str = r#"
     let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
-        match n | 0 => m | k + 1; _ => fill(k, Map/insert(m, k * 7 % 1009, k)) end;
+        match n | 0 => m | k + 1 => fill(k, Map/insert(m, k * 7 % 1009, k)) end;
     let drain(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
-        match n | 0 => m | k + 1; _ => drain(k, Map/remove(m, k * 14 % 1009)) end;
+        match n | 0 => m | k + 1 => drain(k, Map/remove(m, k * 14 % 1009)) end;
 "#;
 
 /// The constructions keeping a slot of the node the function named `name` takes, which a rebuild in place leaves none of: each reads a field of it.
@@ -308,7 +308,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
             match n
             | 0 => acc + Map/len(m)
-            | k + 1; _ => let m2 = Map/insert(m, k % 97, k); walk(k, m2, acc + Map/len(m))
+            | k + 1 => let m2 = Map/insert(m, k % 97, k); walk(k, m2, acc + Map/len(m))
             end;
         "#,
         // Two maps sharing a subtree, the older read again.
@@ -316,7 +316,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
             match n
             | 0 => acc + Map/len(m)
-            | k + 1; _ =>
+            | k + 1 =>
                 let m1 = Map/insert(m, k % 89, k);
                 let m2 = Map/insert(m1, k % 97, k);
                 walk(k, m2, acc + Map/len(m1))
@@ -330,7 +330,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
             | some(m) =>
                 match n
                 | 0 => acc + Map/len(m)
-                | k + 1; _ => walk(k, [Map/insert(m, k % 97, k), m], acc + Map/len(m))
+                | k + 1 => walk(k, [Map/insert(m, k % 97, k), m], acc + Map/len(m))
                 end
             end;
         "#,
@@ -339,7 +339,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
             match n
             | 0 => acc + Map/len(m)
-            | k + 1; _ =>
+            | k + 1 =>
                 let size = () => Map/len(m);
                 let m2 = Map/insert(m, k % 97, k);
                 walk(k, m2, acc + size())
@@ -351,7 +351,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
             match n
             | 0 => acc + Map/len(m)
-            | k + 1; _ => walk(k, m, acc + Map/len(Map/insert(base, k % 97, k)))
+            | k + 1 => walk(k, m, acc + Map/len(Map/insert(base, k % 97, k)))
             end;
         "#,
     ];
@@ -415,7 +415,7 @@ fn a_constant_leaf_a_fork_holds_is_never_rebuilt() {
             end;
         let size(t: Tree) -> Nat = match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
         let walk(n: Nat, x: Nat, t: Tree) -> Tree =
-            match n | 0 => t | k + 1; _ => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
+            match n | 0 => t | k + 1 => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
     "#;
     let (_, module) = modules(&program(
         tree,
@@ -492,7 +492,7 @@ fn a_branch_read_on_every_round_of_a_loop_is_inserted_into_by_a_copy() {
                 let go(k: Nat, acc: Nat) -> Nat =
                     match k
                     | 0 => acc
-                    | j + 1; _ =>
+                    | j + 1 =>
                         match t
                         | leaf() => acc
                         | node(l, _, _) => go(j, acc + size(insert(l, 70000 + j)))
@@ -520,7 +520,7 @@ fn a_branch_of_a_tree_a_loop_hands_on_as_it_took_it_is_inserted_into_by_a_copy()
             let drip(n: Nat, t: Tree, acc: Nat) -> Nat =
                 match n
                 | 0 => acc + size(t)
-                | k + 1; _ =>
+                | k + 1 =>
                     match t
                     | leaf() => acc
                     | node(l, _, _) => drip(k, t, acc + size(insert(l, 70000 + k)))
@@ -649,7 +649,7 @@ fn a_constant_tree_a_map_holds_is_inserted_into_by_a_copy() {
             let visit(n: Nat, m: Map(Nat, Tree), acc: Nat) -> Nat =
                 match n
                 | 0 => acc
-                | k + 1; _ =>
+                | k + 1 =>
                     match Map/try_get(m, k % 3)
                     | none() => acc
                     | some(t) => visit(k, m, acc + size(insert(t, 70000 + k)))
@@ -688,7 +688,7 @@ fn an_insert_returning_the_node_it_was_handed_rebuilds_nothing() {
             end;
         let size(t: Tree) -> Nat = match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
         let walk(n: Nat, x: Nat, t: Tree) -> Tree =
-            match n | 0 => t | k + 1; _ => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
+            match n | 0 => t | k + 1 => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
     "#;
     let (_, module) = modules(&program(
         tree,
@@ -844,7 +844,7 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
         let walk(n: Nat, x: Nat, h: Heap) -> Heap =
             match n
             | 0 => h
-            | k + 1; _ =>
+            | k + 1 =>
                 let y = 75 * x % 65537;
                 walk(k, y, merge(h, Heap/node(1, y, Heap/empty(), Heap/empty())))
             end;

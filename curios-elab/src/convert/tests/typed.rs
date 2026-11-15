@@ -303,12 +303,11 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
                 handing_on(&mut context, &untyped, false),
             ),
         ];
-        // `match l | [] => (p, 0) | h ++ t; ih => (<chosen>, 1) end`.
+        // `match l | [] => (p, 0) | [h, ..t] => (<chosen>, 1) end`.
         let folding = |context: &mut Context, peeled: bool| {
-            let (h, t, ih, m) = (
+            let (h, t, m) = (
                 context.fresh(Some("h")),
                 context.fresh(Some("t")),
-                context.fresh(Some("ih")),
                 context.fresh(Some("m")),
             );
             let chosen = match peeled {
@@ -322,7 +321,7 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
                 Some(&m),
                 result.clone(),
                 Term::tuple([Term::free_var(&in_scope), nat(0)]),
-                &[&h, &t, &ih],
+                &[&h, &t],
                 Term::tuple([Term::free_var(&chosen), nat(1)]),
             )
         };

@@ -515,7 +515,7 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
             context.fresh(Some("n")),
             context.fresh(Some("m")),
         );
-        let (pred, ih) = (context.fresh(Some("pred")), context.fresh(Some("ih")));
+        let pred = context.fresh(Some("pred"));
         let again = Term::apply(Term::free_var(&f), [Term::free_var(&pred)]);
         let family = Term::func_type([(n, nat_type())], Term::type_ground());
         let body = Term::func(
@@ -526,7 +526,6 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
                 Term::type_ground(),
                 unit.clone(),
                 &pred,
-                &ih,
                 Term::tuple_type([(a, again)]),
             ),
         );

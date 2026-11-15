@@ -36,8 +36,8 @@ pub use subterm::*;
 use {
     super::{
         Atom, Bound, Enter, Extent, Families, Free, Global, Intrinsic, Level, LevelHead, Many,
-        MaskedLevels, Mention, Quality, QualityMetaId, Scope, Telescope, Three, Two,
-        UniverseMetaId, Universes, Var, Variance, Visit, capture_placed, project_erased_universes,
+        MaskedLevels, Mention, One, Quality, QualityMetaId, Scope, Telescope, Two, UniverseMetaId,
+        Universes, Var, Variance, Visit, capture_placed, project_erased_universes,
         stamp_declaration_instance, universe_metas,
     },
     curios_abi::ForeignFunction,
@@ -479,12 +479,12 @@ impl Term {
         }
     }
 
-    /// Build the structural `Bytes` eliminator ([`Carrier::Bytes`]) over an already-built motive scope: an empty arm plus a cons arm closed over `cons_binders`, `(head, tail, ih)` — the induction hypothesis at the tail.
+    /// Build the `Bytes` case split ([`Carrier::Bytes`]) over an already-built motive scope: an empty arm plus a cons arm closed over `cons_binders`, `(head, tail)`.
     pub fn bytes_match_scoped<H, EC, CC>(
         head: H,
         motive: Scope<Many>,
         empty_case: EC,
-        cons_binders: &[&Free; 3],
+        cons_binders: &[&Free; 2],
         cons_case: CC,
     ) -> Self
     where
@@ -498,7 +498,7 @@ impl Term {
             Cases::FreeMonoid {
                 carrier: Carrier::Bytes {
                     empty_case: empty_case.into(),
-                    cons_case: Scope::close(Three, cons_binders, cons_case.into()),
+                    cons_case: Scope::close(Two, cons_binders, cons_case.into()),
                 },
             },
         )
@@ -564,7 +564,7 @@ impl Term {
         elem: EL,
         motive: Scope<Many>,
         empty_case: EC,
-        cons_binders: &[&Free; 3],
+        cons_binders: &[&Free; 2],
         cons_case: CC,
     ) -> Self
     where
@@ -580,7 +580,7 @@ impl Term {
                 carrier: Carrier::List {
                     elem: elem.into(),
                     empty_case: empty_case.into(),
-                    cons_case: Scope::close(Three, cons_binders, cons_case.into()),
+                    cons_case: Scope::close(Two, cons_binders, cons_case.into()),
                 },
             },
         )
@@ -592,7 +592,6 @@ impl Term {
         motive: Scope<Many>,
         zero_case: ZC,
         pred_binder: &Free,
-        ih_binder: &Free,
         succ_case: SC,
     ) -> Self
     where
@@ -606,7 +605,7 @@ impl Term {
             Cases::FreeMonoid {
                 carrier: Carrier::Nat {
                     empty_case: zero_case.into(),
-                    cons_case: Scope::close(Two, &[pred_binder, ih_binder], succ_case.into()),
+                    cons_case: Scope::close(One, &[pred_binder], succ_case.into()),
                 },
             },
         )
@@ -1244,14 +1243,13 @@ impl Term {
         )
     }
 
-    /// Build the structural `Nat` eliminator ([`Carrier::Nat`]): a zero arm plus a successor arm closed over `(pred, ih)` — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bytes`/`List`'s.
+    /// Build the `Nat` case split ([`Carrier::Nat`]): a zero arm plus a successor arm closed over its predecessor — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bytes`/`List`'s.
     pub fn nat_match<H, M, ZC, SC>(
         head: H,
         motive_binder: Option<&Free>,
         motive: M,
         zero_case: ZC,
         pred_binder: &Free,
-        ih_binder: &Free,
         succ_case: SC,
     ) -> Self
     where
@@ -1265,19 +1263,18 @@ impl Term {
             Self::motive_scope(motive_binder, motive.into()),
             zero_case,
             pred_binder,
-            ih_binder,
             succ_case,
         )
     }
 
-    /// Build the structural `List` eliminator ([`Carrier::List`]): the element type `elem`, an empty arm, and a cons arm closed over `cons_binders`, `(head, tail, ih)` — the induction hypothesis at the tail.
+    /// Build the `List` case split ([`Carrier::List`]): the element type `elem`, an empty arm, and a cons arm closed over `cons_binders`, `(head, tail)`.
     pub fn list_match<H, M, EL, EC, CC>(
         head: H,
         elem: EL,
         motive_binder: Option<&Free>,
         motive: M,
         empty_case: EC,
-        cons_binders: &[&Free; 3],
+        cons_binders: &[&Free; 2],
         cons_case: CC,
     ) -> Self
     where
@@ -1297,7 +1294,7 @@ impl Term {
         )
     }
 
-    /// Build a [`Cases::Switch`] match: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], this is a case split, not induction.
+    /// Build a [`Cases::Switch`] match: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], whose successor arm binds its predecessor.
     pub fn switch<H, M, I, K, B, D>(
         head: H,
         motive_binder: Option<&Free>,

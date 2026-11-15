@@ -3,16 +3,17 @@
 use crate::tests::test_support::*;
 
 #[test]
-fn list_match_is_a_foldr() {
-    // Native `List` induction (slice 1): the `| [] | (h, t), ih` eliminator, erased by desugaring to `Nat`-induction on the length and reusing the loop. `f(h, ih) = ih * 10 + h` is non-commutative, so the result distinguishes a structural `foldr` (head is the *first* element, ih is the fold of the tail) from a reversed walk: `[1,2,3,4]` folds to `4321`, not `1234`.
+fn a_recursion_on_a_lists_tail_is_a_right_fold() {
+    // A `List` case split, its cons arm calling itself on the tail: `f(h, t) = f(t) * 10 + h` is non-commutative, so the result distinguishes a structural `foldr` (head is the *first* element, the call is at the tail) from a reversed walk: `[1,2,3,4]` gives `4321`, not `1234`.
     let source = r#"
         use /std/{Str, Nat, List, Io};
         let xs : List(Nat) = [1, 2, 3, 4];
-        let digits : Nat =
-            match xs : (_) => Nat
+        let digits_of(l : List(Nat)) -> Nat =
+            match l : (_) => Nat
             | [] => 0
-            | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
+            | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
             end;
+        let digits : Nat = digits_of(xs);
         let entry() -> /std/Io({}) =
             let _ = /std/print(Nat/to_str(digits))!;
             /std/Io/pure(());
@@ -23,7 +24,7 @@ fn list_match_is_a_foldr() {
 
 #[test]
 fn list_fold_is_a_left_loop() {
-    // `List/fold` is the structural left fold, an intrinsic whose erasure is a bounded `Nat` fold over the length with one read per step. `f(h, acc) = acc * 10 + h` is non-commutative, so the result pins the order: `[1, 2, 3, 4]` folds to `1234`, the mirror of what the right-fold eliminator gives.
+    // `List/fold` is the structural left fold, an intrinsic whose erasure is a bounded `Nat` fold over the length with one read per step. `f(h, acc) = acc * 10 + h` is non-commutative, so the result pins the order: `[1, 2, 3, 4]` folds to `1234`, the mirror of what a recursion on the tail gives.
     let source = r#"
         use /std/{Str, Nat, List, Io};
         let digits : Nat = List/fold([1, 2, 3, 4], 0, (h, acc) => acc * 10 + h);
@@ -66,16 +67,17 @@ fn list_map_distributes_over_cons() {
 }
 
 #[test]
-fn bytes_match_is_a_foldr() {
-    // Native `Bytes` induction (slice 2): the `| x[] | (h, t), ih` eliminator, erased exactly like `List` — `Nat`-induction on the byte length, reusing the loop. The leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr` probe as `list_match_is_a_foldr`: the bytes `x[0x01, 0x02, 0x03, 0x04]` fold to `4321`, not `1234`, pinning head = first byte and ih = fold of the tail.
+fn a_recursion_on_a_packed_tail_is_a_right_fold() {
+    // A `Bytes` case split, as a `List` one: the leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr` probe as `a_recursion_on_a_lists_tail_is_a_right_fold`: the bytes `x[0x01, 0x02, 0x03, 0x04]` give `4321`, not `1234`, pinning head = first byte and the call at the tail.
     let source = r#"
         use /std/{Str, Nat, Byte, Bytes, Io};
         let bytes : Bytes = x[0x01, 0x02, 0x03, 0x04];
-        let digits : Nat =
-            match bytes : (_) => Nat
+        let digits_of(b : Bytes) -> Nat =
+            match b : (_) => Nat
             | x[] => 0
-            | x[h, ..t]; ih => Nat/add(Nat/mul(ih, 10), Byte/to_nat(h))
+            | x[h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), Byte/to_nat(h))
             end;
+        let digits : Nat = digits_of(bytes);
         let entry() -> /std/Io({}) =
             let _ = /std/print(Nat/to_str(digits))!;
             /std/Io/pure(());
@@ -171,7 +173,7 @@ fn a_symbolic_run_is_the_same_value_however_it_is_grouped() {
             -> Eq()(x[..x[..g(a + b), ..t], 0], x[..g(b + a), ..t, 0]) =
             Eq/refl();
         let rev(@T : Type, l : List(T)) -> List(T) =
-            match l | [] => [] | [h, .._t]; r => [..r, ..[h]] end;
+            match l | [] => [] | [h, ..t] => [..rev(t), ..[h]] end;
         let fold_law(@T : Type, t : List(T), b : List(T), h : T)
             -> Eq()([..[..rev(b), ..rev(t)], ..[h]], [..rev(b), ..rev(t), ..[h]]) =
             Eq/refl();

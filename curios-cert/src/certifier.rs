@@ -160,8 +160,6 @@ pub enum Error {
         /// What typing the motive, or reading its type as a sort, met.
         refusal: Box<Error>,
     },
-    /// A free-monoid fold whose arm reads its induction hypothesis, at an ambient goal. The hypothesis is the fold itself at the tail, and its type is the goal at the tail — an instance only a family can state once the head has been substituted away. A case split, whose arm reads none, takes an ambient goal as any other elimination does.
-    AmbientFold(Term),
     /// A term arrived with a type other than the one required of it.
     Mismatch {
         inferred: Box<Term>,
@@ -350,13 +348,6 @@ impl fmt::Display for Displayed<'_> {
                     "`{stated}` is not a valid motive, which is well typed and lands in a sort: ",
                 )?;
                 Displayed(refusal, notation, None).fmt(formatter)
-            }
-            Error::AmbientFold(goal) => {
-                let goal = notation.term(goal);
-                write!(
-                    formatter,
-                    "a fold that reads its induction hypothesis needs a motive to type it, and `{goal}` is an ambient goal",
-                )
             }
             Error::Mismatch { inferred, expected } => {
                 let inferred = notation.term(inferred);

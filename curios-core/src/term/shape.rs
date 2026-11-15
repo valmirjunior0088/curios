@@ -5,7 +5,7 @@
 use {
     crate::{
         Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Matrix, MetavarSpine,
-        Quality, Scope, Subterm, Telescope, Term, Three, Two, Universes, Var, Visit,
+        One, Quality, Scope, Subterm, Telescope, Term, Two, Universes, Var, Visit,
         project_erased_universes,
     },
     curios_abi::ForeignFunction,
@@ -603,27 +603,27 @@ impl Cases {
     }
 }
 
-/// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bytes` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bytes`/`List` (head, tail, ih).
+/// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two arms: a case split, which peels one generator and binds what the peel leaves. `Nat` is the free monoid on one (payload-less) generator; `Bytes` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<One>` for `Nat` (the predecessor), `Scope<Two>` for `Bytes`/`List` (head, tail). A recursion over the carrier is a call on what the peel left, which totality grades.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Carrier {
     Nat {
         empty_case: Term,
-        cons_case: Scope<Two>,
+        cons_case: Scope<One>,
     },
     Bytes {
         empty_case: Term,
-        cons_case: Scope<Three>,
+        cons_case: Scope<Two>,
     },
     List {
         elem: Term,
         empty_case: Term,
-        cons_case: Scope<Three>,
+        cons_case: Scope<Two>,
     },
 }
 
 impl Carrier {
-    /// The types a cons arm's binders before its induction hypothesis are opened at, in order: the predecessor for `Nat`, and the peeled generator and then the tail for a packed sequence and for a list. The tail is the last.
+    /// The types a cons arm's binders are opened at, in order: the predecessor for `Nat`, and the peeled generator and then the tail for a packed sequence and for a list. The tail is the last.
     pub fn cons_domains(&self) -> Vec<Term> {
         match self {
             Carrier::Nat { .. } => vec![Term::intrinsic(Intrinsic::NatType)],

@@ -5,7 +5,6 @@ use {
     crate::*,
     curios_common::fill,
     curios_core::{Atom, Quality, Subterm},
-    curios_surface::Spellable,
 };
 
 /// `Two` at `${sort}`, with `a` and `b`, and `Held(t : Two) : Type` whose one case `mk` targets `Two/a()`; neither family's cases are defined. `False` is declared beside them.
@@ -97,20 +96,6 @@ let /extract: (p: #{node = InductType, universes = {levels = [${level}]}} /P()(0
     (p: #{node = InductType, universes = {levels = [${level}]}} /P()(0)) =>
         match p: (i, s) => match i: (k) => Type | 0 => #NatType | _ => #NatType end
         ${arms}
-        end;
-"#;
-
-/// `Eq(A : Type 1) : (x : A, y : A) -> Prop` with `refl`, and `all_zero : (n : Nat) -> Eq(Nat)(${goal})` a fold of `n` under `${motive}` whose zero arm is `refl(0)` and whose successor arm is `${step}`.
-const FOLDED: &str = r#"
-induct /Eq(A: #{level = 1} Type): (x: A, y: A) -> pub #{level = 1} Prop
-| refl(z: A): (z, z)
-end
-
-let /all_zero: (n: #NatType) -> #{node = InductType} /Eq(#NatType)(${goal}) =
-    (n: #NatType) =>
-        match n: (m) => #{node = InductType} /Eq(#NatType)(${motive})
-        | 0 => #{node = Variant} /Eq/refl(@#NatType, 0)
-        | k + 1; ih => ${step}
         end;
 "#;
 
@@ -451,55 +436,6 @@ fn no_type_position_admits_a_lying_motive() {
     }
 }
 
-/// A fold's induction hypothesis is typed at the motive opened at the tail, and its arms learn nothing of the scrutinee. A motive that names the scrutinee instead of binding it — `(_) => Eq()(n, 0)` over `match n` — therefore states `Eq()(n, 0)` at every tail, and the zero arm's `refl(0)` does not inhabit it. The surface spelling is `let all_zero(n: Nat) -> Eq()(n, 0) = match n: (_) => Eq()(n, 0) | 0 => Eq/refl() | k + 1; ih => ih end;`.
-///
-/// Mutation-checked: with a fold's arms specialized as a case split's are, the zero arm stands at `Eq()(0, 0)`, the hypothesis at the successor arm's own goal, and `all_zero(1) : Eq()(1, 0)` certifies. The control is the same module with the motive binding `m` and stating `Eq()(m, 0)`, refused at the successor arm instead — its hypothesis is `Eq()(k, 0)` and its goal `Eq()(k + 1, 0)`.
-#[test]
-fn a_fold_motive_that_names_its_scrutinee_states_it_at_every_tail() {
-    let (goal, motive, step) = ("n, 0", "n, 0", "ih");
-    let verdicts = text_verdicts(&fill!(FOLDED, goal, motive, step));
-
-    // Refused at the zero arm, whose goal is the motive as it is written: no successor is in it.
-    assert!(
-        refuses(&verdicts, Some("all_zero"), |error| match error {
-            Error::Mismatch { expected, .. } => !expected.faithful().to_string().contains("+ 1"),
-            _ => false,
-        }),
-        "the certifier typed a fold's zero arm with its scrutinee at zero: {verdicts:?}",
-    );
-}
-
-#[test]
-fn a_fold_motive_that_binds_its_scrutinee_types_the_hypothesis_at_the_tail() {
-    let (goal, motive, step) = ("n, 0", "m, 0", "ih");
-    let verdicts = text_verdicts(&fill!(FOLDED, goal, motive, step));
-
-    // The successor arm's hypothesis is `Eq()(k, 0)` and its goal `Eq()(k + 1, 0)`: refused as the mismatch it is, at the successor.
-    assert!(
-        refuses(&verdicts, Some("all_zero"), |error| match error {
-            Error::Mismatch { expected, .. } => expected.faithful().to_string().contains("+ 1"),
-            _ => false,
-        }),
-        "the honest motive was not refused at the successor arm: {verdicts:?}",
-    );
-}
-
-/// The same module at a goal each arm inhabits, which is what proves the two refusals above are about the motive rather than about the fixture.
-#[test]
-fn a_fold_motive_that_binds_its_scrutinee_is_accepted_at_an_inhabited_goal() {
-    let (goal, motive, step) = (
-        "n, n",
-        "m, m",
-        "#{node = Variant} /Eq/refl(@#NatType, #NatAdd(k, 1))",
-    );
-    let verdicts = text_verdicts(&fill!(FOLDED, goal, motive, step));
-
-    assert!(
-        verdicts.is_empty(),
-        "the reflexive fold was refused: {verdicts:?}"
-    );
-}
-
 // The guard reads a family's declared sort and its constructors, never the instance eliminated: a two-constructor proposition is refused into `Nat` at either instance of a level it is irrelevant in, and a one-constructor one is admitted at either.
 #[test]
 fn an_irrelevant_level_changes_no_elimination() {
@@ -679,165 +615,5 @@ fn a_refinements_fit_is_decided_at_the_levels_its_variables_instance_states() {
         text_verdicts(&fill!(REFINED_AT, variable)),
         Vec::new(),
         "the reading a capture would have left was refused for some other reason",
-    );
-}
-
-/// A fold whose identity arm holds an empty match on `v`, whose index is the scrutinee, over each carrier, and the same match as a case split, `/split`, whose identity arm is taken once, at the scrutinee itself. The term the module closes with types at `False` through `/nat`, a fold at `1` whose last tail reaches the empty match with `v` a `V(1)` that `/V/s(0)` inhabits.
-const A_MATCH_INSIDE_A_FOLDS_IDENTITY_ARM: &str = r#"
-induct /V: (n: #NatType) -> pub Type
-| s(m: #NatType): (#NatAdd(m, 1))
-end
-induct /L: (l: #ListType(#NatType)) -> pub Type
-| s(m: #NatType, t: #ListType(#NatType)): (#ListConcat(#NatType, [#List(#NatType, [m]), t]))
-end
-induct /B: (l: #BytesType) -> pub Type
-| s(m: #ByteType, t: #BytesType): (#BytesConcat([#BytesAppend(x[], m), t]))
-end
-let /nat : (
-    n: #NatType,
-    v:
-        #{node = InductType}
-        /V()(n)
-) -> /std/Bool/False =
-    (
-        n: #NatType,
-        v:
-            #{node = InductType}
-            /V()(n)
-    ) =>
-        match n: (x) => /std/Bool/False
-        | 0 =>
-            match v: (i, w) => /std/Bool/False
-            end
-        | pred + 1; ih =>
-            ih
-        end;
-let /list : (
-    xs: #ListType(#NatType),
-    v:
-        #{node = InductType}
-        /L()(xs)
-) -> /std/Bool/False =
-    (
-        xs: #ListType(#NatType),
-        v:
-            #{node = InductType}
-            /L()(xs)
-    ) =>
-        #{cases = {carrier = {elem = #NatType}}}
-        match xs: (x) => /std/Bool/False
-        | [] =>
-            match v: (i, w) => /std/Bool/False
-            end
-        | [h, ..t]; ih =>
-            ih
-        end;
-let /bytes : (
-    xs: #BytesType,
-    v:
-        #{node = InductType}
-        /B()(xs)
-) -> /std/Bool/False =
-    (
-        xs: #BytesType,
-        v:
-            #{node = InductType}
-            /B()(xs)
-    ) =>
-        match xs: (x) => /std/Bool/False
-        | x[] =>
-            match v: (i, w) => /std/Bool/False
-            end
-        | x[h, ..t]; ih =>
-            ih
-        end;
-let /split : (
-    n: #NatType,
-    v:
-        #{node = InductType}
-        /V()(n)
-) -> #NatType =
-    (
-        n: #NatType,
-        v:
-            #{node = InductType}
-            /V()(n)
-    ) =>
-        match n: (x) => #NatType
-        | 0 =>
-            match v: (i, w) => #NatType
-            end
-        | pred + 1; ih =>
-            1
-        end;
-/nat(
-    1,
-    #{node = Variant}
-    /V/s(0)
-)
-"#;
-
-// A fold takes its identity arm at the last tail, where the scrutinee is no case of that arm, so each arm of one is checked at the motive opened at its case and under nothing else: the empty match inside the identity arm meets `v` at the scrutinee's own index, `s`'s target may meet it, and `s` is missing over every carrier. The case split's identity arm is taken once, at the scrutinee itself, where `n` stands at `0` and `s` is excused. The three refusals are all that stand between the module and `False`. `curios`'s `tests::rules::fold_tests` puts the program to the elaborator under this name.
-//
-// Mutation-checked at `check_free_monoid` (`curios-cert/src/certifier/infer.rs`): with the identity arm checked by `at` whether or not the cons arm reads its hypothesis, `/nat`, `/list` and `/bytes` are admitted and the walk returns no verdict.
-#[test]
-fn a_match_inside_a_folds_identity_arm_learns_nothing_of_the_scrutinee() {
-    let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${A_MATCH_INSIDE_A_FOLDS_IDENTITY_ARM}",
-        PROPOSITIONS,
-        A_MATCH_INSIDE_A_FOLDS_IDENTITY_ARM
-    ));
-    let missing = |name: &str, family: &str| {
-        verdicts.iter().any(|verdict| {
-            verdict.name == Some(global(name))
-                && verdict.error
-                    == Error::MissingArm {
-                        family: global(family),
-                        tag: Atom::from("s"),
-                    }
-        })
-    };
-
-    assert!(missing("nat", "V"), "{verdicts:?}");
-    assert!(missing("list", "L"), "{verdicts:?}");
-    assert!(missing("bytes", "B"), "{verdicts:?}");
-    assert_eq!(verdicts.len(), 3, "{verdicts:?}");
-}
-
-/// The fold ticket's identity arm over `Bytes`, which its witnesses state for `Nat` and `List`: typed with `xs` at `x[]`, `h` would stand at `Holds(0 == 2)`, which is `False`, while reduction takes the arm at the last tail with `xs` still `x[0x01, 0x02]`.
-const THE_IDENTITY_ARM_OF_A_BYTES_FOLD: &str = r#"
-((xs: #BytesType, h: /std/Bool/Holds(#NatEql(#BytesLen(xs), 2))) =>
-    match xs: (x) => /std/Bool/False
-    | x[] =>
-        h
-    | x[b, ..t]; ih =>
-        ih
-    end)(
-    x[0x01, 0x02],
-    #{node = Variant}
-    /std/Bool/True/qed()
-)
-"#;
-
-// The identity arm learns nothing of `xs`, so `h` stands at the type it was given and is refused at the motive, in the term the module closes with. `curios`'s `tests::rules::fold_tests` puts the program to the elaborator under this name.
-//
-// Mutation-checked at `check_free_monoid` (`curios-cert/src/certifier/infer.rs`), as the test above is: with the identity arm checked by `at`, `h` is retyped at `Holds(#NatEql(#BytesLen(x[]), 2))`, the term types at `False` and the walk returns no verdict.
-#[test]
-fn the_identity_arm_of_a_bytes_fold_reads_its_scrutinee_at_no_case() {
-    let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${THE_IDENTITY_ARM_OF_A_BYTES_FOLD}",
-        PROPOSITIONS,
-        THE_IDENTITY_ARM_OF_A_BYTES_FOLD
-    ));
-
-    assert!(
-        matches!(
-            &verdicts[..],
-            [Verdict {
-                name: None,
-                error: Error::Mismatch { .. }
-            }]
-        ),
-        "{verdicts:?}"
     );
 }

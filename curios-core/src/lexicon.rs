@@ -19,7 +19,7 @@ pub struct Lexicon {
 /// Each nominal family's argument plicities, by the family's name: what a report marks an applied family by (axis (d)). Persistent, so a unit compiled over another holds the other's with the families it changed read again.
 pub type Marks = Persistent<Global, Rc<Vec<Plicity>>>;
 
-/// What a unit's structures and constructors are written by: each field's mark and label, each payload member's mark. Made once for a unit and kept with its [`Lexicon`]; persistent, as [`Marks`] are.
+/// What a unit's structures and constructors are written by: each field's mark and label, each payload member's mark. Made once for a unit and kept with its [`Lexicon`], as [`Marks`] are.
 #[derive(Debug, Default, Clone)]
 pub struct Members {
     /// Each structure's fields, a concept's among them, by the structure's name.

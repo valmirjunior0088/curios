@@ -218,13 +218,13 @@ end
 let build(n: Nat, acc: List(F)) -> List(F) =
     match n: (_) => List(F)
     | 0 => acc
-    | m + 1; ih => build(m, [..acc, match m % 2 | 0 => F/left() | _ => F/right() end])
+    | m + 1 => build(m, [..acc, match m % 2 | 0 => F/left() | _ => F/right() end])
     end;
 
 let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
     match r: (_) => Nat
     | 0 => s
-    | q + 1; ih =>
+    | q + 1 =>
         rounds(q, l, List/fold(l, s, (e, t) =>
             match e | left() => (t + 1) % 1000003 | right() => (t + 2) % 1000003 end))
     end;
@@ -258,13 +258,13 @@ end
 let build(n: Nat, acc: List(F)) -> List(F) =
     match n: (_) => List(F)
     | 0 => acc
-    | m + 1; ih => build(m, [..acc, match m % 2 | 0 => F/left(m) | _ => F/right(m) end])
+    | m + 1 => build(m, [..acc, match m % 2 | 0 => F/left(m) | _ => F/right(m) end])
     end;
 
 let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
     match r: (_) => Nat
     | 0 => s
-    | q + 1; ih =>
+    | q + 1 =>
         rounds(q, l, List/fold(l, s, (e, t) =>
             match e | left(v) => (t + v) % 1000003 | right(v) => (t + v + 1) % 1000003 end))
     end;

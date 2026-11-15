@@ -15,9 +15,9 @@ use {
     curios_common::{Plicity, recurse},
     curios_core::{
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
-        Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Many, Match,
+        Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Match,
         MatchResult, Mention, Method, Nat, Proj, Rec, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Transient, TupleType, Visit, WitnessOrigin,
+        Telescope, Term, Transient, TupleType, Two, Visit, WitnessOrigin,
     },
     curios_num::Binary,
     std::{
@@ -652,7 +652,7 @@ impl Writing {
                 stated: stated.as_ref().map(|stated| self.term(context, stated)),
             },
             Cases::FreeMonoid { carrier } => Cases::FreeMonoid {
-                carrier: self.carrier(context, &opened, result_motive(&result), carrier),
+                carrier: self.carrier(context, &opened, carrier),
             },
         };
 
@@ -733,45 +733,24 @@ impl Writing {
         InductArm::new(body, plicities)
     }
 
-    /// A free-monoid elimination's two arms. A case split's are refined to their case, as elaboration typed them; a fold's learn nothing of the scrutinee, and its hypothesis is entered at the motive where there is one.
-    fn carrier(
-        &mut self,
-        context: &mut Context,
-        head: &Term,
-        motive: Option<&Scope<Many>>,
-        carrier: &Carrier,
-    ) -> Carrier {
+    /// A free-monoid case split's two arms, each refined to its case, as elaboration typed them.
+    fn carrier(&mut self, context: &mut Context, head: &Term, carrier: &Carrier) -> Carrier {
         match carrier {
             Carrier::Nat {
                 empty_case,
                 cons_case,
             } => {
-                let folds = cons_case.uses(1);
                 let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
-                let empty_case = match folds {
-                    true => self.term(context, empty_case),
-                    false => self.case(context, head, &zero, empty_case),
-                };
+                let empty_case = self.case(context, head, &zero, empty_case);
                 let cons_case = context.with_frame(|context| {
                     let predecessor = context.fresh(cons_case.first_hint());
-                    let hypothesis = context.fresh(cons_case.second_hint());
                     let predecessor_var = Term::free_var(&predecessor);
                     context.assume(&predecessor, &Term::intrinsic(Intrinsic::NatType));
-                    if folds && let Some(motive) = motive {
-                        let at = self.released(&motive.open(&[&predecessor_var]));
-                        context.assume(&hypothesis, &at);
-                    }
                     let successor = Term::intrinsic(Intrinsic::nat_add(
                         predecessor_var.clone(),
                         Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
                     ));
-                    self.free_monoid_case(
-                        context,
-                        head,
-                        (!folds).then_some(&successor),
-                        &[predecessor_var, Term::free_var(&hypothesis)],
-                        cons_case,
-                    )
+                    self.free_monoid_case(context, head, &successor, &[predecessor_var], cons_case)
                 });
 
                 Carrier::Nat {
@@ -793,7 +772,6 @@ impl Writing {
                 let (empty_case, cons_case) = self.sequence(
                     context,
                     head,
-                    motive,
                     (&element, &sequence, &empty),
                     |atom, tail| {
                         Term::intrinsic(Intrinsic::ListConcat {
@@ -826,7 +804,6 @@ impl Writing {
                 let (empty_case, cons_case) = self.sequence(
                     context,
                     head,
-                    motive,
                     (&atom, &sequence, &empty),
                     |head, tail| {
                         Term::intrinsic(Intrinsic::BytesConcat {
@@ -850,57 +827,41 @@ impl Writing {
         }
     }
 
-    /// A sequence's two arms, its cons arm binding the atom, the tail and the hypothesis: see [`Writing::carrier`].
+    /// A sequence's two arms, its cons arm binding the atom and the tail: see [`Writing::carrier`].
     fn sequence(
         &mut self,
         context: &mut Context,
         head: &Term,
-        motive: Option<&Scope<Many>>,
         (atom_type, sequence, empty): (&Term, &Term, &Term),
         cons: impl FnOnce(&Term, &Term) -> Term,
-        (empty_case, cons_case): (&Term, &Scope<Three>),
-    ) -> (Term, Scope<Three>) {
-        let folds = cons_case.uses(2);
-        let empty_case = match folds {
-            true => self.term(context, empty_case),
-            false => self.case(context, head, empty, empty_case),
-        };
+        (empty_case, cons_case): (&Term, &Scope<Two>),
+    ) -> (Term, Scope<Two>) {
+        let empty_case = self.case(context, head, empty, empty_case);
         let cons_case = context.with_frame(|context| {
             let atom = context.fresh(cons_case.first_hint());
             let tail = context.fresh(cons_case.second_hint());
-            let hypothesis = context.fresh(cons_case.third_hint());
             let (atom_var, tail_var) = (Term::free_var(&atom), Term::free_var(&tail));
             context.assume(&atom, atom_type);
             context.assume(&tail, sequence);
-            if folds && let Some(motive) = motive {
-                let at = self.released(&motive.open(&[&tail_var]));
-                context.assume(&hypothesis, &at);
-            }
             let value = cons(&atom_var, &tail_var);
-            self.free_monoid_case(
-                context,
-                head,
-                (!folds).then_some(&value),
-                &[atom_var, tail_var, Term::free_var(&hypothesis)],
-                cons_case,
-            )
+            self.free_monoid_case(context, head, &value, &[atom_var, tail_var], cons_case)
         });
 
         (empty_case, cons_case)
     }
 
-    /// A free-monoid cons arm, its binders already entered at `binders`, refined to `value` where it is a case split.
+    /// A free-monoid cons arm, its binders already entered at `binders`, refined to `value`.
     fn free_monoid_case<A: Arity>(
         &mut self,
         context: &mut Context,
         head: &Term,
-        value: Option<&Term>,
+        value: &Term,
         binders: &[Term],
         arm: &Scope<A>,
     ) -> Scope<A> {
         let before = self.entered.len();
         self.entered.extend(binders.iter().rev().cloned());
-        let refined = value.is_none_or(|value| enter_case(context, head, value));
+        let refined = enter_case(context, head, value);
         let arm = match refined {
             true => {
                 self.layers.push(HashMap::new());
@@ -1099,14 +1060,6 @@ fn enter_case_of(
     };
 
     enter_induct_case(context, head, family, tag, (labels, vars), telescope).is_ok()
-}
-
-/// The motive a free-monoid fold's hypothesis is typed at, where its result is a family.
-fn result_motive(result: &MatchResult) -> Option<&Scope<Many>> {
-    match result {
-        MatchResult::Family(motive) => Some(motive),
-        MatchResult::Ambient(_) => None,
-    }
 }
 
 /// The type of a dictionary: a literal's structure at its parameters, and a neutral's as synthesized. `None` for any other term.

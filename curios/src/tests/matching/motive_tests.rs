@@ -252,22 +252,6 @@ fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
     assert_eq!(run(source), b"ok");
 }
 
-// A fold whose arm reads its hypothesis still closes a family over its scrutinee, so the same goal is refused there: the proof is stated at a type the family's binder does not match.
-#[test]
-fn a_fold_that_reads_its_hypothesis_still_closes_a_family() {
-    let source = r#"
-        use /std/{Nat, Bytes, Eq};
-        use /std/Bool/{Holds};
-        let at_bytes(a : Bytes, i : Nat, q : Holds(i < Bytes/len(a)))
-            -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
-            match a | x[] => Eq/refl() | x[_, .._]; ih => ih end;
-        /std/print("ok")
-        "#;
-
-    let error = error(source);
-    assert!(error.contains("type mismatch"), "unexpected error: {error}");
-}
-
 /// An arm's goal is the ambient goal with the case in its scrutinee's place, an elimination of that scrutinee inside the goal among it: in the `false` arm the goal's own `match` is one on `false`, whose `true` arm holds a proof that rested on its guard. A `match` inside the arm stores that goal as its result, and the certifier types no arm a literal scrutinee never takes. The second program eliminates a call, whose occurrence the goal writes.
 #[test]
 fn an_arms_goal_that_eliminates_its_scrutinee_is_a_result_a_match_may_store() {

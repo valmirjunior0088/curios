@@ -249,7 +249,7 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
             let decide(n : Nat, acc : Nat) -> Nat =
                 match n : (_) => Nat
                 | 0 => acc
-                | m + 1; ih =>
+                | m + 1 =>
                     let chosen : Pair = match flag | true => Pair/left(m) | false => Pair/right(m) end;
                     let folded = match chosen | left(x) => x + 65521 | right(x) => x + 65519 end;
                     decide(m, acc + folded)
@@ -289,7 +289,7 @@ fn a_tuple_is_read_at_its_own_final_type() {
             let build(n : Nat, acc : Chain) -> Chain =
                 match n : (_) => Chain
                 | 0 => acc
-                | m + 1; ih => build(m, Chain/link(m, acc))
+                | m + 1 => build(m, Chain/link(m, acc))
                 end;
             let total(c : Chain, acc : Nat) -> Nat =
                 match c
@@ -487,7 +487,7 @@ fn a_monomorphic_slot_carries_its_own_type() {
             let build(n : Nat, acc : Chain) -> Chain =
                 match n : (_) => Chain
                 | 0 => acc
-                | m + 1; ih => build(m, Chain/link(m, acc))
+                | m + 1 => build(m, Chain/link(m, acc))
                 end;
             let total(c : Chain, acc : Nat) -> Nat =
                 match c

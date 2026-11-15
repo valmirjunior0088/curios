@@ -12,7 +12,7 @@ fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
         let main() -> Io({}) =
             let bs = rand/bytes(1)!;
             let first: (Nat) -> Nat =
-                wrap((n) => match n | 0 => 0 | p + 1; _ => second(p) end)
+                wrap((n) => match n | 0 => 0 | p + 1 => second(p) end)
             and second: (Nat) -> Nat =
                 wrap((n) => helper(n))
             and helper(n: Nat) -> Nat = first(n);

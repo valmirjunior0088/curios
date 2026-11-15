@@ -688,19 +688,7 @@ fn check_cases(
     }
 }
 
-/// Whether a fold's cons arm reads its induction hypothesis, the last binder its scope closes over.
-fn reads_hypothesis(carrier: &Carrier) -> bool {
-    match carrier {
-        Carrier::Nat { cons_case, .. } => cons_case.uses(1),
-        Carrier::Bytes { cons_case, .. } | Carrier::List { cons_case, .. } => cons_case.uses(2),
-    }
-}
-
-/// The free-monoid arm rule: the identity arm inhabits the result at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and the induction hypothesis at that tail when the arm reads it — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bytes`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
-///
-/// **The hypothesis is assumed exactly when the arm reads it, and only a family types it**, at the motive opened at the tail — the rule erasure's split-or-fold reading and the elaborator's state too. Its precondition therefore binds exactly the folds that read it: an ambient goal has no tail to be taken at once the head is substituted away, so it cannot type one ([`Error::AmbientFold`]). A family that names the scrutinee beside its binder states one proposition at every tail, which the arms inhabit as it is written. An arm that reads none — a case split — is checked as a `Bool` arm is, at its case value under either form of result: its reduct `arm(h, t, fold(t))` never contains the fold at the tail, so nothing needs the type the hypothesis would have had.
-///
-/// **An arm of a fold learns nothing of the scrutinee.** The fold at the tail is the same two arms over the tail, so reduction takes each arm at every tail of the value, where the scrutinee is no case of that arm. An arm typed with the scrutinee at its case would read a hypothesis about the scrutinee at a value the scrutinee never has: under `h : Holds(n == 2)`, `match n : (_) => False | 0 => h | k + 1; ih => ih end` is `h` at `2`, and it was typed at `0`. So each arm of a fold is checked at the motive opened at its case value and under nothing else — no solution, no case equation, no size — and every arm of one is typed, a value of either case taking the identity arm in the end. A hypothesis about the scrutinee rides in the motive, which is abstracted over it and so restates it at each tail. A case split's arm is taken once, at the scrutinee itself, and keeps the specialization every other arm has (`at`).
+/// The free-monoid arm rule: the identity arm inhabits the result at the carrier's empty value, and the cons arm, under a peeled generator and a tail, inhabits it at one generator prepended to the tail; each is checked as every other arm is, at its case value with the scrutinee standing refined to it (`at`). The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bytes`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
 ///
 /// The carrier's own element type must agree with the scrutinee's: the arms are typed against the carrier's copy, and a value flowing through the match carries the scrutinee's, so a disagreement would type the arms at one type and run them at another.
 fn check_free_monoid(
@@ -711,22 +699,7 @@ fn check_free_monoid(
     carrier: &Carrier,
     at: &impl Fn(&mut Certifier, Term, &Term) -> Result<(), Error>,
 ) -> Result<(), Error> {
-    let motive = match (reads_hypothesis(carrier), result) {
-        (false, _) => None,
-        (true, MatchResult::Ambient(goal)) => return Err(Error::AmbientFold(goal.clone())),
-        (true, MatchResult::Family(motive)) => Some(motive),
-    };
-
-    // The hypothesis at a tail, for an arm that reads one.
-    let hypothesis = |tail: &Term| motive.map(|motive| motive.open(&[tail]));
-
-    // The identity arm: a fold's at the motive alone, a case split's as every arm taken once.
-    let identity = |certifier: &mut Certifier, value: Term, body: &Term| match motive {
-        Some(motive) => check(certifier, body, &motive.open(&[&value])),
-        None => at(certifier, value, body),
-    };
-
-    // One cons arm: open the binders, assume them at the carrier's types, and check the body at the result of the cons value — a fold's at the motive alone, a case split's with the scrutinee standing refined to that value, exactly as in every other arm.
+    // One cons arm: open the binders, assume them at the carrier's types, and check the body at the result of the cons value, with the scrutinee standing refined to that value, exactly as in every other arm.
     //
     // `size_value` is the cons value as the call recorder reads a size: the same value, spelled as the carrier's layered form where the typing's spelling is an operation the size order does not read through.
     let cons = |certifier: &mut Certifier,
@@ -738,9 +711,6 @@ fn check_free_monoid(
         certifier.scoped(|certifier| {
             for (binder, type_) in &binders {
                 certifier.assume(binder, type_);
-            }
-            if let Some(motive) = motive {
-                return check(certifier, body, &motive.open(&[&cons_value]));
             }
 
             let names = binders
@@ -781,28 +751,26 @@ fn check_free_monoid(
                 return Err(Error::Unclassified(scrutinee_type.clone()));
             }
 
-            identity(
+            at(
                 certifier,
                 Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
                 empty_case,
             )?;
 
             let pred = certifier.fresh(cons_case.first_hint());
-            let ih = certifier.fresh(cons_case.second_hint());
             let pred_occurrence = Term::free_var(&pred);
             let succ_value = Term::intrinsic(Intrinsic::nat_add(
                 pred_occurrence.clone(),
                 Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
             ));
-            let body = cons_case.open(&[&pred_occurrence, &Term::free_var(&ih)]);
+            let body = cons_case.open(&[&pred_occurrence]);
 
             // `pred + 1` as one successor layer over `pred`, which is how the size order reads a `Nat`.
             let size_value = Term::intrinsic(Intrinsic::Nat(Nat::Succ(
                 Natural::from(1usize),
                 pred_occurrence.clone(),
             )));
-            let mut binders = vec![(&pred, Term::intrinsic(Intrinsic::NatType))];
-            binders.extend(hypothesis(&pred_occurrence).map(|type_| (&ih, type_)));
+            let binders = vec![(&pred, Term::intrinsic(Intrinsic::NatType))];
 
             cons(certifier, binders, succ_value, size_value, &body)
         }
@@ -822,7 +790,7 @@ fn check_free_monoid(
                 });
             }
 
-            identity(
+            at(
                 certifier,
                 Term::intrinsic(Intrinsic::List {
                     element: elem.clone(),
@@ -833,7 +801,6 @@ fn check_free_monoid(
 
             let head = certifier.fresh(cons_case.first_hint());
             let tail = certifier.fresh(cons_case.second_hint());
-            let ih = certifier.fresh(cons_case.third_hint());
             let tail_occurrence = Term::free_var(&tail);
             let cons_value = Term::intrinsic(Intrinsic::ListConcat {
                 element: elem.clone(),
@@ -845,17 +812,12 @@ fn check_free_monoid(
                     tail_occurrence.clone(),
                 ],
             });
-            let body = cons_case.open(&[
-                &Term::free_var(&head),
-                &tail_occurrence,
-                &Term::free_var(&ih),
-            ]);
+            let body = cons_case.open(&[&Term::free_var(&head), &tail_occurrence]);
 
-            let mut binders = vec![
+            let binders = vec![
                 (&head, elem.clone()),
                 (&tail, Term::intrinsic(Intrinsic::ListType(elem.clone()))),
             ];
-            binders.extend(hypothesis(&tail_occurrence).map(|type_| (&ih, type_)));
 
             cons(certifier, binders, cons_value.clone(), cons_value, &body)
         }
@@ -869,12 +831,11 @@ fn check_free_monoid(
             }
 
             let empty = Term::intrinsic(Intrinsic::Bytes(Binary::empty()));
-            identity(certifier, empty.clone(), empty_case)?;
+            at(certifier, empty.clone(), empty_case)?;
 
             let atom_type = Term::intrinsic(Intrinsic::ByteType);
             let head = certifier.fresh(cons_case.first_hint());
             let tail = certifier.fresh(cons_case.second_hint());
-            let ih = certifier.fresh(cons_case.third_hint());
             let tail_occurrence = Term::free_var(&tail);
             let singleton = Term::intrinsic(Intrinsic::BytesAppend {
                 bytes: empty,
@@ -883,17 +844,12 @@ fn check_free_monoid(
             let cons_value = Term::intrinsic(Intrinsic::BytesConcat {
                 operands: vec![singleton, tail_occurrence.clone()],
             });
-            let body = cons_case.open(&[
-                &Term::free_var(&head),
-                &tail_occurrence,
-                &Term::free_var(&ih),
-            ]);
+            let body = cons_case.open(&[&Term::free_var(&head), &tail_occurrence]);
 
-            let mut binders = vec![
+            let binders = vec![
                 (&head, atom_type),
                 (&tail, Term::intrinsic(Intrinsic::BytesType)),
             ];
-            binders.extend(hypothesis(&tail_occurrence).map(|type_| (&ih, type_)));
 
             cons(certifier, binders, cons_value.clone(), cons_value, &body)
         }

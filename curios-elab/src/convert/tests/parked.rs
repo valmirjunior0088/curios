@@ -141,12 +141,8 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
             context.fresh(Some("b")),
             context.fresh(Some("m")),
         );
-        // `match ?0 | 0 => a | pred + 1; ih => a end`, stuck until the metavariable is solved.
-        let (inner, pred, ih) = (
-            context.fresh(Some("m")),
-            context.fresh(Some("pred")),
-            context.fresh(Some("ih")),
-        );
+        // `match ?0 | 0 => a | pred + 1 => a end`, stuck until the metavariable is solved.
+        let (inner, pred) = (context.fresh(Some("m")), context.fresh(Some("pred")));
         let handed = match through_the_hole {
             true => Term::nat_match(
                 Term::hole(0),
@@ -154,7 +150,6 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
                 proposition.clone(),
                 Term::free_var(&a),
                 &pred,
-                &ih,
                 Term::free_var(&a),
             ),
             false => Term::free_var(&b),

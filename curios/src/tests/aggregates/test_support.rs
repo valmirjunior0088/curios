@@ -85,7 +85,7 @@ pub fn reads_in_every_shape(carrier: &Carrier) -> String {
     let report(which: Nat, leaf: %RUN%, forced: %RUN%, view: %RUN%) -> Str =
         match which
         | 0 => mark(holds(0, leaf, forced, view))
-        | k + 1; rest => Str/concat(rest, mark(holds(k + 1, leaf, forced, view)))
+        | k + 1 => Str/concat(report(k, leaf, forced, view), mark(holds(k + 1, leaf, forced, view)))
         end;
 
     let main() -> Io({}) =

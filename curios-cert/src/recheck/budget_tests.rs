@@ -25,11 +25,11 @@ induct /Good: pub Type
 end
 "#;
 
-/// `Count.{u} : (X : Type u) -> Nat`, folding `${unfolding}` down to `0`, and `Held.{u} : (i : Nat) -> Type u` whose one case targets `Count(Nat)`: a variance walk reads the index by reducing it, which costs as much as the fold.
+/// `Count.{u} : (X : Type u) -> Nat`, two list folds nested over `${list}` that reach `0` in as many steps as its length squared, and `Held.{u} : (i : Nat) -> Type u` whose one case targets `Count(Nat)`: a variance walk reads the index by reducing it, which costs as much as the folds. A recursive call is its own weak-head form, so only a fold over a literal costs the walk its steps.
 const HELD_AT_A_COUNTED_INDEX: &str = r#"
 #{universe_context = {parameter_count = 1}}
 let /Count: (X: #{level = u} Type) -> #NatType =
-    (X: #{level = u} Type) => match ${unfolding}: (m) => #NatType | 0 => 0 | pred + 1; ih => ih end;
+    (X: #{level = u} Type) => #ListFold(#NatType, #NatType, ${list}, 0, (a: #NatType, b: #NatType) => #ListFold(#NatType, #NatType, ${list}, b, (c: #NatType, d: #NatType) => #NatAdd(d, c)));
 
 #{universe_context = {parameter_count = 1}}
 induct /Held: (i: #NatType) -> pub #{level = u} Type
@@ -82,19 +82,24 @@ fn held() -> Global {
     Global::Authored(Qualifier::from(["Held"]))
 }
 
-/// How many iterations a costly `Count` takes to unfold, and a budget that types the module and stops short of them: four frames, which buy the levels its types are classified at.
-const COSTLY: usize = 20_000;
+/// How long each of a costly `Count`'s two lists is, whose square is the steps it takes to unfold, and a budget that types the module and stops short of them: four frames, which buy the levels its types are classified at.
+const COSTLY: usize = 142;
 const BETWEEN: u64 = 4 * Cost::FRAME.get();
 
 /// A variance walk the budget cuts short is refused for the budget and files no vector: a reduction the budget refuses reads its term as holding every level it carries, so what the walk computed past it may be the budget's and not the declaration's.
 ///
-/// Two controls hold the budget to the walk alone. The same module with a count that unfolds in a step is accepted on the short budget, so typing fits it, and the costly one is accepted on a budget that runs the fold; each files `Held` irrelevant in its level, which its constructor's target does not hold once `Count` is unfolded.
+/// Two controls hold the budget to the walk alone. The same module with a count that unfolds in a step is accepted on the short budget, so typing fits it, and the costly one is accepted on a budget that runs the folds; each files `Held` irrelevant in its level, which its constructor's target does not hold once `Count` is unfolded.
 ///
 /// Mutation-checked against the refusal: with a walk cut short filed as it stands, the costly module is accepted on the short budget.
 #[test]
 fn a_variance_walk_the_budget_cuts_short_is_refused_and_files_no_vector() {
-    let certified = |unfolding: usize, budget: u64| {
-        text_certified_within(&fill!(HELD_AT_A_COUNTED_INDEX, unfolding), budget)
+    let certified = |side: usize, budget: u64| {
+        let list = fill!(
+            "#List(#NatType, [${zeros}])",
+            zeros = vec!["0"; side].join(", ")
+        );
+
+        text_certified_within(&fill!(HELD_AT_A_COUNTED_INDEX, list), budget)
     };
     let irrelevant = Some(&[Variance::Irrelevant][..]);
 

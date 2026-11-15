@@ -1839,33 +1839,6 @@
     }
   },
   {
-    "type": "hypothesis",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "identifier",
-          "named": true
-        },
-        {
-          "type": "parenthesized_pattern",
-          "named": true
-        },
-        {
-          "type": "struct_pattern",
-          "named": true
-        },
-        {
-          "type": "tuple_pattern",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
     "type": "index",
     "named": true,
     "fields": {
@@ -3019,16 +2992,6 @@
           }
         ]
       }
-    },
-    "children": {
-      "multiple": false,
-      "required": false,
-      "types": [
-        {
-          "type": "hypothesis",
-          "named": true
-        }
-      ]
     }
   },
   {
@@ -3666,16 +3629,6 @@
           }
         ]
       }
-    },
-    "children": {
-      "multiple": false,
-      "required": false,
-      "types": [
-        {
-          "type": "hypothesis",
-          "named": true
-        }
-      ]
     }
   },
   {
@@ -4867,13 +4820,9 @@
       }
     },
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": true,
       "types": [
-        {
-          "type": "hypothesis",
-          "named": true
-        },
         {
           "type": "number",
           "named": true

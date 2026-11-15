@@ -108,19 +108,12 @@ fn core_text_is_read_where_the_path_says_so() {
     assert!(refusal.contains("obtained: `#`"), "{refusal}");
 }
 
-/// Every `.crsc` under `directory`, skipping the directories that hold generated or foreign trees, and `editors/`, whose files are highlighting fixtures for the editor grammars, as [`collect_sources`] skips it.
+/// Every `.crsc` under `directory`, skipping the directories [`skipped`] names, as [`collect_sources`] skips them.
 fn core_text_files(directory: &Path, files: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(directory).expect("the tree is readable") {
         let path = entry.expect("a readable entry").path();
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("");
         if path.is_dir() {
-            if !matches!(
-                name,
-                "target" | ".git" | ".curios" | ".claude" | "node_modules" | "editors"
-            ) {
+            if !skipped(&path) {
                 core_text_files(&path, files);
             }
         } else if path

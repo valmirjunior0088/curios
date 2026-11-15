@@ -327,13 +327,9 @@ fn a_struct_pattern_names_its_structure_at_every_binder() {
         )
     };
     // Each binder position, its head written `HEAD`, beside what the program prints under the structure's own name.
-    let binders: [(&str, &[u8]); 3] = [
+    let binders: [(&str, &[u8]); 2] = [
         ("let f(a: A) -> Nat = let HEAD { x } = a; x;", b"3"),
         ("let f(HEAD { x }: A) -> Nat = x;", b"3"),
-        (
-            "let h(n: Nat, a: A) -> A = match n | 0 => a | _k + 1; HEAD { x } => A { x = x + 1 } end; let f(a: A) -> Nat = h(2, a).x;",
-            b"5",
-        ),
     ];
 
     for (written, answer) in binders {

@@ -16,18 +16,14 @@ const TWO_INSTANCES_OF_ZIP: &str = r#"
         Eq/cong((w: Nat) => w - 1, e);
     pub let zip_len(@A: Type, @B: Type, a: List(A), b: List(B), p: Eq()(List/len(b), List/len(a)))
         -> Eq()(List/len(List/zip(a, b)), List/len(a)) =
-        (match a: (l) =>
-                (c: List(B), q: Eq()(List/len(c), List/len(l))) -> Eq()(List/len(List/zip(l, c)), List/len(l))
-        | [] => (_, _) => Eq/refl()
-        | [x, ..xs]; ih =>
-            (c, q) =>
-                (match c: (d) =>
-                        (Eq()(List/len(d), List/len(xs) + 1))
-                            -> Eq()(List/len(List/zip([x, ..xs], d)), List/len(xs) + 1)
-                | [] => (r) => match zero_not_succ(r) end
-                | [_, ..ys] => (r) => Eq/cong((y: Nat) => y + 1, ih(ys, succ_cancel(r)))
-                end)(q)
-        end)(b, p);
+        match a
+        | [] => Eq/refl()
+        | [x, ..xs] =>
+            match b
+            | [] => match zero_not_succ(p) end
+            | [_, ..ys] => Eq/cong((y: Nat) => y + 1, zip_len(xs, ys, succ_cancel(p)))
+            end
+        end;
     pub let use_call(@A: Type, @B: Type, n: Nat, a: List(A), b: List(B),
                      ca: Eq()(List/len(same(a)), n), cb: Eq()(List/len(b), n))
         -> Eq()(List/len(List/zip(same(a), b)), n) =
@@ -300,7 +296,7 @@ fn a_case_equation_read_at_another_instance_holds_its_sorts_to_one() {
             | other()
             end
             let ins(@K: Type, key: K, t: Nat, k: Nat, @same: Eq()(k + 0, k)) -> Out =
-                match t | 0 => Out/added() | p + 1; _ih => ins(key, p, k, @same) end;
+                match t | 0 => Out/added() | p + 1 => ins(key, p, k, @same) end;
             let picked(@K: Type, key: K, n: Nat, k: Nat${binder}) -> Nat =
                 match ins(key, n, k, ${proof}) | added() => 1 | other() => 2 end;
             pub let held(@K: Type, key: K, n: Nat, k: Nat${binder}) -> Holds(

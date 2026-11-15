@@ -23,7 +23,7 @@ fn group(body: &str) -> Term {
 
 /// The two-arm split of `${scrutinee}` at `Type`: `Nat` when it is zero, `${cons}` when it is `pred + 1`.
 const SPLIT: &str =
-    "#{result = Ambient(Type)} match ${scrutinee} | 0 => #NatType | pred + 1; ih => ${cons} end";
+    "#{result = Ambient(Type)} match ${scrutinee} | 0 => #NatType | pred + 1 => ${cons} end";
 
 /// [`SPLIT`] of `scrutinee` with `cons` in its successor arm.
 fn split(scrutinee: &str, cons: &str) -> String {

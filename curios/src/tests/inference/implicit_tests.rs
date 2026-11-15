@@ -97,7 +97,7 @@ fn higher_kinded_implicit_infers_by_imitation() {
     assert_eq!(run(source), b"2");
 }
 
-// Two applications of one global definition are unified by their spines before the head unfolds — the first-order approximation. `trim` is a fold that never names itself, so it is a `let` and reduction would unfold it: the left side steps to `combine(false, trim(x))`, the right to a fold stuck on `?t`, and nothing pins `?t` again. Comparing the spines first states the solution outright, as it does for a `rec`-defined head, whose application stays folded.
+// Two applications of one global definition are unified by their spines before the head unfolds — the first-order approximation. `trim` folds with `List/fold` and never names itself, so it is a `let` and reduction would unfold it: the left side steps to a fold over `x`, the right to a fold stuck on `?t`, and nothing pins `?t` again. Comparing the spines first states the solution outright, as it does for a `rec`-defined head, whose application stays folded.
 #[test]
 fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
     let source = r#"
@@ -108,7 +108,7 @@ fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
             | [_, .._] => [head, ..t]
             end;
         let trim(bits : List(Bool)) -> List(Bool) =
-            match bits | [] => [] | [head, ..tail]; ih => combine(head, ih) end;
+            List/fold(bits, [], (head, acc) => combine(head, acc));
         let through(@t : List(Bool), q : Eq()(trim(t), [])) -> Eq()(trim(t), []) = q;
         let probe(x : List(Bool), q : Eq()(trim([false, ..x]), [])) -> Eq()(trim([false, ..x]), []) = through(q);
         let entry() -> /std/Io({}) =

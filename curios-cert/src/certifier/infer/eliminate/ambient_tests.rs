@@ -121,27 +121,11 @@ fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     );
 }
 
-/// `#{result = Ambient(${goal})} match k | 0 => 0 | pred + 1; ih => ${cons} end`, over a `Nat` `k`.
+/// `#{result = Ambient(${goal})} match k | 0 => 0 | pred + 1 => ${cons} end`, over a `Nat` `k`.
 const AMBIENT_ON_K: &str =
-    "#{result = Ambient(${goal})} match k | 0 => 0 | pred + 1; ih => ${cons} end,";
+    "#{result = Ambient(${goal})} match k | 0 => 0 | pred + 1 => ${cons} end,";
 
-/// A fold's induction hypothesis is the fold at the tail, typed at the result at the tail, and an ambient goal has no tail to be taken at once the head is substituted away: a fold whose arm reads its hypothesis is refused at one.
-#[test]
-fn an_ambient_fold_that_reads_its_hypothesis_is_refused() {
-    let mut certifier = certifier();
-    let [fold] = under(
-        &mut certifier,
-        "k: #NatType",
-        &fill!(AMBIENT_ON_K, goal = "#NatType", cons = "ih"),
-    );
-
-    assert!(matches!(
-        infer(&mut certifier, &fold),
-        Err(Error::AmbientFold(_))
-    ));
-}
-
-/// A case split reads no hypothesis, so nothing needs the type an ambient goal cannot give one: its reduct never contains the fold at the tail, and each arm is checked at its case value as a `Bool` arm is. The same match, its arms each inhabiting the goal, is inferred at the goal.
+/// A case split's arms are each checked at its case value, as a `Bool` arm is. The same match, its arms each inhabiting the goal, is inferred at the goal.
 #[test]
 fn an_ambient_case_split_is_checked_at_each_case() {
     let mut certifier = certifier();
@@ -173,7 +157,7 @@ fn an_ambient_case_split_whose_arm_misses_the_goal_is_refused() {
     ));
 }
 
-/// A budget failure is not a malformed motive, on the way from a motive's type to its sort as on the way to the type. `T : U`, where `U` is a `Nat` eliminator counting a literal down to `Type`, so the type of what the result states is in hand at once and reading *it* as a sort is what the budget cannot afford. Reporting `NotAMotive` whatever that read was refused for would send a reader to a motive with nothing wrong with it; an ambient goal and a family's motive go through the one read, so both are put to it. The control is the same elimination under a budget that affords the count, which is what says the refusal was the budget's.
+/// A budget failure is not a malformed motive, on the way from a motive's type to its sort as on the way to the type. `T : U`, where `U` is a `Bool` elimination into `Type` over a count two nested list folds take as long as their lengths' product to reach, so the type of what the result states is in hand at once and reading *it* as a sort is what the budget cannot afford. Reporting `NotAMotive` whatever that read was refused for would send a reader to a motive with nothing wrong with it; an ambient goal and a family's motive go through the one read, so both are put to it. The control is the same elimination under a budget that affords the count, which is what says the refusal was the budget's.
 #[test]
 fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
     let attempt = |budget: u64, ambient: bool| {
@@ -184,7 +168,10 @@ fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
         };
         let [elimination] = under(
             &mut certifier,
-            "b: #BoolType, T: match 50000: (_) => Type | 0 => Type | pred + 1; ih => ih end, x: T",
+            &fill!(
+                "b: #BoolType, T: match #NatEql(${count}, 0): (_) => Type | false => Type | true => Type end, x: T",
+                count = nested_count(224)
+            ),
             elimination,
         );
 
@@ -203,6 +190,19 @@ fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
             panic!("ambient = {ambient}: a budget that affords the count refused: {error:?}")
         });
     }
+}
+
+/// Two list folds over `side` zeros each, the inner one summing into the outer's accumulator: a `Nat` closed term weak-head reduction takes as many steps as `side` squared to reach, zero.
+fn nested_count(side: usize) -> String {
+    let list = fill!(
+        "#List(#NatType, [${zeros}])",
+        zeros = vec!["0"; side].join(", ")
+    );
+
+    fill!(
+        "#ListFold(#NatType, #NatType, ${list}, 0, (a: #NatType, b: #NatType) => #ListFold(#NatType, #NatType, ${list}, b, (c: #NatType, d: #NatType) => #NatAdd(d, c)))",
+        list
+    )
 }
 
 /// An arm reduction never takes is not typed: over the literal `false` an elimination is its `false` arm wherever it stands, and nothing reads the other. Here the other holds a `Bool` where the result is `Nat`, as the result an arm is checked at leaves a proof standing under a guard that is no longer one.
@@ -315,7 +315,7 @@ fn an_arm_refused_under_a_scrutinee_that_names_a_local_and_computes_is_not_typed
 /// A budget that cannot afford to compute the scrutinee withdraws no refusal: the scrutinee counts a literal down to `false`, its `true` arm holds a `Bool` where the result is `Nat`, and the elimination is refused for the budget where the count is past it and accepted where it is not.
 #[test]
 fn a_budget_that_cannot_compute_the_scrutinee_withdraws_no_refusal() {
-    let counted = "match 50000: (_) => #BoolType | 0 => false | pred + 1; ih => ih end";
+    let counted = "(#{node = Rec} (let down: (n: #NatType) -> #BoolType = (n: #NatType) => match n: (_) => #BoolType | 0 => false | pred + 1 => down(pred) end; down(50000)))";
     let attempt = |budget: u64| {
         let mut certifier = Certifier::new(budget, SYNTAX);
 
@@ -355,27 +355,4 @@ fn a_term_typed_in_an_arm_no_reduction_takes_is_recorded_when_typed_again() {
     withdrawn.take_checked();
 
     assert_eq!(judged(&mut withdrawn), judged(&mut certifier()));
-}
-
-/// A fold is no case split: its reduct holds the fold at the tail, so over the literal `3` it takes its identity arm in the end, and that arm is typed though `3` is another case. Here it holds a `Bool` where the motive is `Nat`.
-///
-/// Mutation-checked: with a fold's arms asked as a case split's are, the fold is accepted.
-#[test]
-fn every_arm_of_a_fold_over_a_literal_is_typed() {
-    let mut certifier = certifier();
-    let fold = term("match 3: (_) => #NatType | 0 => true | pred + 1; ih => ih end");
-
-    assert!(infer(&mut certifier, &fold).is_err());
-}
-
-/// Nor is a fold's refused arm withdrawn where its scrutinee computes: a fold takes its identity arm in the end whatever its scrutinee is, so that arm is typed. The scrutinee here is a product that is no literal as it stands and computes to `3`.
-#[test]
-fn every_arm_of_a_fold_over_a_scrutinee_that_computes_is_typed() {
-    let mut certifier = certifier();
-    let fold = term(&fill!(
-        "match #NatMul(3, 1): (_) => #NatType | 0 => ${wrong} | pred + 1; ih => ih end",
-        wrong = WRONG
-    ));
-
-    assert!(infer(&mut certifier, &fold).is_err());
 }

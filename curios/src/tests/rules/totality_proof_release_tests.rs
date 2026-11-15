@@ -324,7 +324,7 @@ fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
         let outer(n : Nat) -> True =
             match n
             | 0 => True/qed()
-            | p + 1; _ => (let keep(t : True) -> True = t; keep)(outer(p))
+            | p + 1 => (let keep(t : True) -> True = t; keep)(outer(p))
             end;
 
         let proved : True = outer(3);

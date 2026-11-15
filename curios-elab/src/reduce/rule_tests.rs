@@ -31,7 +31,6 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
     let n = context.fresh(Some("n"));
     let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
     let countdown = context.fresh(Some("countdown"));
     let x = context.fresh(Some("x"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
@@ -43,7 +42,6 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
             nat_type.clone(),
             nat(0),
             &pred,
-            &ih,
             Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
         ),
     );
@@ -84,7 +82,6 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     let n = context.fresh(Some("n"));
     let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
     let f = context.fresh(Some("f"));
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
@@ -104,7 +101,6 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
             arrow.clone(),
             Term::func([(x, nat_type.clone())], Term::free_var(&x)),
             &pred,
-            &ih,
             Term::func([(x, nat_type.clone())], called(&pred, Term::free_var(&x))),
         ),
     );
@@ -277,7 +273,6 @@ fn nat_fold_zero_takes_the_zero_case() {
     let mut context = context();
     let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
-    let ih = context.fresh(Some("ih"));
 
     let term: Term = Term::nat_match(
         Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
@@ -285,7 +280,6 @@ fn nat_fold_zero_takes_the_zero_case() {
         Term::intrinsic(Intrinsic::BoolType),
         Term::intrinsic(Intrinsic::Bool(false)),
         &pred,
-        &ih,
         Term::intrinsic(Intrinsic::Bool(true)),
     );
 

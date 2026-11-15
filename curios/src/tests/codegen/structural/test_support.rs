@@ -23,7 +23,7 @@ pub const LCG: &str = r#"
     let loop(k : Nat, x : Nat) -> Nat =
         match k : (_) => Nat
         | 0 => x
-        | kp + 1; ih => loop(kp, 75 * x % 65537)
+        | kp + 1 => loop(kp, 75 * x % 65537)
         end;
     let entry() -> /std/Io({}) =
         let taint = List/len(Proc/args()!);
@@ -41,7 +41,7 @@ pub const TREES: &str = r#"
     let build(d : Nat, v : Nat) -> Tree =
         match d : (_) => Tree
         | 0 => Tree/leaf(v)
-        | dp + 1; ih => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
+        | dp + 1 => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
         end;
     let sum(t : Tree) -> Nat =
         match t : (_) => Nat
@@ -92,7 +92,7 @@ pub const FUNCTION_ONLY: &str = r#"
     let down(n : Nat, acc : Nat) -> Nat =
         match n : (_) => Nat
         | 0 => acc
-        | p + 1; ih => down(p, acc + 1)
+        | p + 1 => down(p, acc + 1)
         end;
     let entry() -> /std/Io({}) =
         let taint = List/len(Proc/args()!);
@@ -105,9 +105,9 @@ pub const FUNCTION_ONLY: &str = r#"
 pub const MUTUAL_RECURSION: &str = r#"
     use /std/{Nat, List, Proc};
     let ping(n : Nat) -> Nat =
-        match n : (_) => Nat | 0 => 0 | p + 1; ih => pong(p) end
+        match n : (_) => Nat | 0 => 0 | p + 1 => pong(p) end
     and pong(n : Nat) -> Nat =
-        match n : (_) => Nat | 0 => 1 | p + 1; ih => ping(p) end;
+        match n : (_) => Nat | 0 => 1 | p + 1 => ping(p) end;
     let entry() -> /std/Io({}) =
         let taint = List/len(Proc/args()!);
         let n : Nat = taint;
@@ -220,7 +220,7 @@ pub const LOOPED_PICK: &str = r#"
     let spin(k : Nat, acc : Nat) -> Nat =
         match k : (_) => Nat
         | 0 => acc
-        | p + 1; ih =>
+        | p + 1 =>
             let f = match acc % 2 <= 0 : (_) => (Nat) -> Nat
                 | true => (y) => (y * 7 + 1) % 30011
                 | false => (y) => (y * 3 + 5) % 30011
@@ -272,7 +272,7 @@ pub const VARIANT_FILLER: &str = r#"
     let spin(k : Nat, o : Option(Flt)) -> Flt =
         match k : (_) => Flt
         | 0 => Option/unwrap_or(o, +0.25) * +2.0
-        | p + 1; ih =>
+        | p + 1 =>
             let next =
                 match Nat/eql(p % 3, 0) : (_) => Option(Flt)
                 | true => Option/some(Nat/to_flt(p) * +1.5 + +2.0)

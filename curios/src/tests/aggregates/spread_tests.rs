@@ -4,16 +4,17 @@ use crate::tests::test_support::*;
 
 #[test]
 fn list_spread_concats_segments() {
-    // `[1, ..xs, 4]` splices `xs` between the literal runs. The non-commutative foldr probe (see `list_match_is_a_foldr`) distinguishes the spliced order `[1, 2, 3, 4]` from any permutation or grouping artifact.
+    // `[1, ..xs, 4]` splices `xs` between the literal runs. The non-commutative foldr probe (see `a_recursion_on_a_lists_tail_is_a_right_fold`) distinguishes the spliced order `[1, 2, 3, 4]` from any permutation or grouping artifact.
     let source = r#"
         use /std/{Str, Nat, List, Io};
         let xs : List(Nat) = [2, 3];
         let ys : List(Nat) = [1, ..xs, 4];
-        let digits : Nat =
-            match ys : (_) => Nat
+        let digits_of(l : List(Nat)) -> Nat =
+            match l : (_) => Nat
             | [] => 0
-            | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
+            | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
             end;
+        let digits : Nat = digits_of(ys);
         let entry() -> /std/Io({}) =
             let _ = /std/print(Nat/to_str(digits))!;
             /std/Io/pure(());
@@ -30,11 +31,12 @@ fn list_spread_identity_and_multi() {
         let xs : List(Nat) = [2, 3];
         let ys : List(Nat) = [..xs];
         let zs : List(Nat) = [..ys, ..ys];
-        let digits : Nat =
-            match zs : (_) => Nat
+        let digits_of(l : List(Nat)) -> Nat =
+            match l : (_) => Nat
             | [] => 0
-            | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
+            | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
             end;
+        let digits : Nat = digits_of(zs);
         let entry() -> /std/Io({}) =
             let _ = /std/print(Nat/to_str(digits))!;
             /std/Io/pure(());
@@ -94,11 +96,12 @@ fn list_spread_operand_hoists_bangs() {
         use /std/{Str, Nat, List, Io};
         let prog() -> Io({}) =
             let ys : List(Nat) = [1, ..Io/pure([2, 3])!, 4];
-            let digits : Nat =
-                match ys : (_) => Nat
+            let digits_of(l : List(Nat)) -> Nat =
+                match l : (_) => Nat
                 | [] => 0
-                | [h, ..t]; ih => Nat/add(Nat/mul(ih, 10), h)
+                | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
                 end;
+            let digits : Nat = digits_of(ys);
             let wrote = /std/print(Nat/to_str(digits))!;
             Io/pure(());
         prog()

@@ -130,7 +130,7 @@ fn a_match_arm_binder_nothing_reads_is_reported() {
 }
 
 #[test]
-fn a_fold_hypothesis_and_a_cons_tail_nothing_reads_are_reported() {
+fn a_predecessor_and_a_cons_tail_nothing_reads_are_reported() {
     assert_eq!(
         lints(
             r#"
@@ -138,7 +138,7 @@ fn a_fold_hypothesis_and_a_cons_tail_nothing_reads_are_reported() {
             let a =
                 match n
                 | 0 => Type
-                | p + 1; ih => p
+                | p + 1 => Type
                 end;
             match l
             | [] => a
@@ -148,7 +148,7 @@ fn a_fold_hypothesis_and_a_cons_tail_nothing_reads_are_reported() {
     "#
         ),
         [
-            "unused-binder: unused binder\n  `ih` is never used\n  write `_` in its name's place",
+            "unused-binder: unused binder\n  `p` is never used\n  write `_` in its name's place",
             "unused-binder: unused binder\n  `t` is never used\n  write `_` in its name's place",
         ]
     );

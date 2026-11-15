@@ -11,7 +11,7 @@ fn a_computed_equality_goal_suggests_refl() {
         let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
             match n : (m) => Eq()(m + m, m * 2)
             | 0 => ?
-            | p + 1; ih => ?
+            | p + 1 => ?
             end;
         let subject : /std/Nat = double(21);
         /std/Io/pure(())
@@ -23,7 +23,7 @@ fn a_computed_equality_goal_suggests_refl() {
         error.contains("? \u{2248} Eq/refl()"),
         "unexpected error: {error}"
     );
-    // One refl line per arm. The step arm also offers `Eq/cong(?, ih)` from the imported `/std/Eq` — the hypothesis placed, the function open — which is why the count is of refl lines and not of every candidate line.
+    // One refl line per arm, which is why the count is of refl lines and not of every candidate line.
     assert_eq!(
         error.matches("\u{2248} Eq/refl()").count(),
         2,
@@ -205,14 +205,16 @@ fn an_imported_lemma_is_suggested_with_its_proof_slot_filled_from_the_scope() {
 
 #[test]
 fn a_hypothesis_fills_an_imported_lemmas_proof_slot_under_an_open_function() {
-    // The step case of a proof about a function the normalizer cannot unfold on a variable: `double(p + 1)` against `(p + 1) * 2` is not refl, and `Eq/cong`'s output `Eq()(f(x), f(y))` is undecided on `f` alone once `ih` pins `x` and `y` — undecided on exactly the open slot, which is the advisory the report keeps. The vacuous `Eq/sym(?)` and `Eq/trans(?, ?)`, true of every equation, are not offered.
+    // The step case of a proof about a function the normalizer cannot unfold on a variable: `double(p + 1)` against `(p + 1) * 2` is not refl, and `Eq/cong`'s output `Eq()(f(x), f(y))` is undecided on `f` alone once `ih`, the call at the predecessor, pins `x` and `y` — undecided on exactly the open slot, which is the advisory the report keeps. The vacuous `Eq/sym(?)` and `Eq/trans(?, ?)`, true of every equation, are not offered.
     let source = r#"
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
         let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
             match n : (m) => Eq()(double(m), m * 2)
             | 0 => Eq/refl()
-            | p + 1; ih => ?
+            | p + 1 =>
+                let ih = double_correct(p);
+                ?
             end;
         /std/Io/pure(())
     "#;

@@ -917,7 +917,7 @@ let /motiveHonest : (n: #NatType) -> #{level = 6} Type =
         | 0 =>
             #{level = 5}
             Type
-        | k + 1; x =>
+        | k + 1 =>
             #{level = 5}
             Type
         end;
@@ -929,7 +929,7 @@ let /motiveLowered : (n: #NatType) -> #{level = 7} Type =
         | 0 =>
             #{level = 6}
             Type
-        | k + 1; x =>
+        | k + 1 =>
             #{level = 6}
             Type
         end;

@@ -99,7 +99,7 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
         let build(n : Nat, acc : L) -> L =
             match n : (_) => L
             | 0 => acc
-            | m + 1; ih => build(m, L/cons(m, acc))
+            | m + 1 => build(m, L/cons(m, acc))
             end;
 
         let total(c : L, acc : Nat) -> Nat =

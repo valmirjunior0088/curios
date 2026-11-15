@@ -473,7 +473,7 @@ let /zero : (n: #NatType) -> #BoolType =
         match n
         | 0 =>
             true
-        | k + 1; x =>
+        | k + 1 =>
             false
         end;
 let /excused : (n: #NatType) ->

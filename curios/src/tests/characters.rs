@@ -153,7 +153,7 @@ fn a_character_case_cannot_join_successor_peeling() {
         let f(n: Nat) -> Nat =
             match n
             | 'a' => 0
-            | p + 1; _ => p
+            | p + 1 => p
             | _ => 1
             end;
         /std/print("")

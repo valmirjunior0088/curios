@@ -1,6 +1,6 @@
 //! Eliminations: the semantic identity each Core elimination selects.
 //!
-//! Each Core elimination erases to its most precise erased form — `SwitchBool`, `SwitchNat`, `FoldNat`, first-class `FoldSequence` over the sequence itself, and schema-carrying `MatchVariant` whose arms bind the payload directly. Both sequence forms keep the peel-versus-fold distinction: a cons arm that ignores its induction hypothesis erases to `UnconsSequence`, one peel rather than an n-step fold, so a non-tail recursive caller does not re-run the whole fold at every level. Neither names a read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/compilation/a-lowering-names-the-elimination-it-performs.md).
+//! Each Core elimination erases to its most precise erased form — `SwitchBool`, `SwitchNat` (a `Nat` case split's too, one key and a default), first-class `UnconsSequence` over the sequence itself, one peel, and schema-carrying `MatchVariant` whose arms bind the payload directly. A sequence's peel names no read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/compilation/a-lowering-names-the-elimination-it-performs.md).
 //!
 //! The scrutinee is erased exactly once, and every arm is erased under the refinement it was elaborated under, keyed on the *original* head term: arm bodies were elaborated against reductions keyed on that term, and erasure re-types what it walks, so refining an alias in its place loses them. No elimination therefore re-derives a Core term from its head — the `Nat` case split computes its predecessor from the erased operand, and the sequence forms bind their element and suffix as values the peel fills. `List/fold`'s loop is the one form whose step does re-derive, reading `get(l, i)`, so it aliases its compound operands on the Core side first — a fresh variable defined as the operand, its label mapped to the once-erased atom — and has no arm to refine. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
 
@@ -13,7 +13,7 @@ use {
     std::collections::HashMap,
 };
 
-/// The `List`/`Bytes` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
+/// The `List`/`Bytes` carrier a sequence case split eliminates: the carrier-specific reads, so the split's erasure stays carrier-agnostic.
 #[derive(Clone, Copy)]
 enum SeqCarrier<'a> {
     List { element: &'a curios_core::Term },
@@ -162,7 +162,7 @@ impl Eraser<'_> {
                         empty_case,
                         cons_case,
                     },
-            } => self.erase_nat_fold(context, site, empty_case, cons_case),
+            } => self.erase_nat_split(context, site, empty_case, cons_case),
             curios_core::Cases::FreeMonoid {
                 carrier:
                     curios_core::Carrier::List {
@@ -170,7 +170,7 @@ impl Eraser<'_> {
                         empty_case,
                         cons_case,
                     },
-            } => self.erase_seq_fold(
+            } => self.erase_seq_split(
                 context,
                 site,
                 SeqCarrier::List { element: elem },
@@ -183,7 +183,7 @@ impl Eraser<'_> {
                         empty_case,
                         cons_case,
                     },
-            } => self.erase_seq_fold(context, site, SeqCarrier::Bytes, empty_case, cons_case),
+            } => self.erase_seq_split(context, site, SeqCarrier::Bytes, empty_case, cons_case),
         }
     }
 
@@ -225,7 +225,7 @@ impl Eraser<'_> {
         Ok(self.seal(outcome))
     }
 
-    /// Open a fresh block, erase `body` as a tail typed at `expected` without refining the scrutinee, and seal it — the catch-all default, which stands for no one case, `List/fold`'s initial value, and a fold's identity arm, which a value of either case takes in the end.
+    /// Open a fresh block, erase `body` as a tail typed at `expected` without refining the scrutinee, and seal it — the catch-all default, which stands for no one case, and `List/fold`'s initial value.
     fn open_arm(
         &mut self,
         context: &mut Reader,
@@ -235,22 +235,6 @@ impl Eraser<'_> {
         self.builder.open_block();
         let outcome = self.walk(context, body, expected, None)?;
         Ok(self.seal(outcome))
-    }
-
-    /// The identity arm of a free-monoid elimination, at the carrier's empty `value`: a case split's refined by `head = value`, a fold's under no refinement — each as it was elaborated (`check_fold_arm`).
-    fn identity_arm(
-        &mut self,
-        context: &mut Reader,
-        head: &curios_core::Term,
-        value: &curios_core::Term,
-        result: &curios_core::MatchResult,
-        body: &curios_core::Term,
-        folds: bool,
-    ) -> Result<curios_anf::BlockId, Error> {
-        match folds {
-            true => self.open_arm(context, &result.at(head, &[], &[], value), body),
-            false => self.refined_arm(context, head, value, result, body),
-        }
     }
 
     /// A dependent `Bool` elimination — a first-class `SwitchBool`, distinct from a `Nat` dispatch.
@@ -329,19 +313,19 @@ impl Eraser<'_> {
         ))
     }
 
-    /// A `Nat` free-monoid elimination: a successor arm that uses its induction hypothesis is a `FoldNat`; one that ignores it is a case split, a single-key dispatch whose default computes the predecessor from the erased operand. A case split's successor arm is erased under `head = pred + 1`, the refinement it was elaborated under, and a fold's arms under none, as they were.
-    fn erase_nat_fold(
+    /// A `Nat` case split: a single-key dispatch whose default computes the predecessor from the erased operand, its successor arm erased under `head = pred + 1`, the refinement it was elaborated under. The predecessor is computed only where the arm reads it — the walk resolves a name through the environment and never walks a reduct, so a predecessor the arm does not mention needs no value.
+    fn erase_nat_split(
         &mut self,
         context: &mut Reader,
         site: Site<'_>,
         empty_case: &curios_core::Term,
-        cons_case: &curios_core::Scope<curios_core::Two>,
+        cons_case: &curios_core::Scope<curios_core::One>,
     ) -> Result<Outcome, Error> {
         let Site { head, result, hint } = site;
         let head_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
-        let zero = self.identity_arm(
+        let zero = self.refined_arm(
             context,
             head,
             &curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::new(
@@ -349,7 +333,6 @@ impl Eraser<'_> {
             ))),
             result,
             empty_case,
-            cons_case.uses(1),
         )?;
 
         let pred_hint = cons_case.first_hint().map(str::to_string);
@@ -362,89 +345,44 @@ impl Eraser<'_> {
             ))),
         ));
 
-        // The hypothesis is dead: a case split, not a fold. The predecessor is computed from the operand, and only where the arm reads it — the walk resolves a name through the environment and never walks a reduct, so a predecessor the arm does not mention needs no value.
-        if !cons_case.uses(1) {
-            self.builder.open_block();
-            let outcome = self.in_arm(context, |lowering, context| {
-                context.assume(
-                    &pred_label,
-                    &curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
-                );
-                if cons_case.uses(0) {
-                    let one = curios_anf::Atom::Constant(
-                        lowering
-                            .builder
-                            .constant(curios_anf::Constant::Nat(Natural::one())),
-                    );
-                    let predecessor = emitted!(lowering.bind(
-                        pred_hint.as_deref(),
-                        curios_anf::Rhs::Operation {
-                            operation: curios_anf::Operation::NatSub,
-                            operands: vec![scrutinee, one],
-                        },
-                    ));
-                    lowering.environment.bind(pred_label, predecessor);
-                }
-                refine(context, head, &successor)?;
-
-                // The hypothesis never appears, so any term serves its slot.
-                let dead_hypothesis = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
-                    curios_core::Nat::new(0usize),
-                ));
-                let peeled = cons_case.open(&[&pred_var, &dead_hypothesis]);
-                let expected = result.at(head, &[], &[], &successor);
-                lowering.walk(context, &peeled, &expected, None)
-            })?;
-            let default = self.seal(outcome);
-
-            return Ok(self.bind(
-                hint,
-                curios_anf::Rhs::SwitchNat {
-                    scrutinee,
-                    cases: vec![curios_anf::NatCase {
-                        key: Natural::zero(),
-                        block: zero,
-                    }],
-                    default,
-                },
-            ));
-        }
-
-        // Induction: bind the predecessor and the hypothesis, then erase the successor arm at the result at `pred + 1`.
-        let hypothesis_hint = cons_case.second_hint().map(str::to_string);
-        let hypothesis_label = context.fresh(hypothesis_hint.as_deref());
-        let predecessor = self.builder.value(pred_hint);
-        let hypothesis = self.builder.value(hypothesis_hint);
-        self.environment
-            .bind(pred_label, curios_anf::Atom::Value(predecessor));
-        self.environment
-            .bind(hypothesis_label, curios_anf::Atom::Value(hypothesis));
-
         self.builder.open_block();
-        let outcome = context.scoped(|context| {
+        let outcome = self.in_arm(context, |lowering, context| {
             context.assume(
                 &pred_label,
                 &curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
             );
-            context.assume(&hypothesis_label, &result.at(head, &[], &[], &pred_var));
+            if cons_case.uses(0) {
+                let one = curios_anf::Atom::Constant(
+                    lowering
+                        .builder
+                        .constant(curios_anf::Constant::Nat(Natural::one())),
+                );
+                let predecessor = emitted!(lowering.bind(
+                    pred_hint.as_deref(),
+                    curios_anf::Rhs::Operation {
+                        operation: curios_anf::Operation::NatSub,
+                        operands: vec![scrutinee, one],
+                    },
+                ));
+                lowering.environment.bind(pred_label, predecessor);
+            }
+            refine(context, head, &successor)?;
 
-            let body =
-                cons_case.open(&[&pred_var, &curios_core::Term::free_var(&hypothesis_label)]);
+            let peeled = cons_case.open(&[&pred_var]);
             let expected = result.at(head, &[], &[], &successor);
-            self.walk(context, &body, &expected, None)
+            lowering.walk(context, &peeled, &expected, None)
         })?;
-        let step = self.seal(outcome);
+        let default = self.seal(outcome);
 
         Ok(self.bind(
             hint,
-            curios_anf::Rhs::FoldNat {
+            curios_anf::Rhs::SwitchNat {
                 scrutinee,
-                zero,
-                step: curios_anf::FoldNatStep {
-                    predecessor,
-                    hypothesis,
-                    block: step,
-                },
+                cases: vec![curios_anf::NatCase {
+                    key: Natural::zero(),
+                    block: zero,
+                }],
+                default,
             },
         ))
     }
@@ -533,134 +471,67 @@ impl Eraser<'_> {
         ))
     }
 
-    /// A `List`/`Bytes` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a first-class `UnconsSequence` binding the element and the suffix alone. Both hand the reads to `curios-anf`'s lowering rather than emitting them, which is what keeps a window's operand convention out of this crate.
-    fn erase_seq_fold(
+    /// A `List`/`Bytes` case split: a first-class `UnconsSequence` binding the element and the suffix. It hands the reads to `curios-anf`'s lowering rather than emitting them, which is what keeps a window's operand convention out of this crate.
+    ///
+    /// The peel binds *names* for the element and the suffix rather than writing `get`/`slice` terms into the arm and letting the walk typecheck them. That is a typing requirement, not a style choice: both reads are bounded operations, and the bound each would carry — `0 < len` for the element, `1 <= len` for the window — is exactly what the dispatch establishes, so at the point the terms would be constructed there is no proof to hand them.
+    ///
+    /// The binders are opaque assumptions of the element and sequence types rather than the reads themselves, so the connection back to the scrutinee is restored by the refinement the arm was elaborated under: it is erased under `head = [element, ..suffix]`. Erasure re-types what it walks, and a proof in the arm may need the scrutinee at its case — `len(suffix) < len(head)` is decided only there.
+    ///
+    /// **The reads are not emitted here at all.** `UnconsSequence` is one peel, and how a peel is performed belongs to the lowering that performs it — `into_cps`'s `emit_peel`. Open-coding it here would make this crate hold a window's operand convention, which is the lowering's.
+    fn erase_seq_split(
         &mut self,
         context: &mut Reader,
         site: Site<'_>,
         carrier: SeqCarrier<'_>,
         empty_case: &curios_core::Term,
-        cons_case: &curios_core::Scope<curios_core::Three>,
+        cons_case: &curios_core::Scope<curios_core::Two>,
     ) -> Result<Outcome, Error> {
         let Site { head, result, hint } = site;
         let head_type = carrier.sequence_type();
         let sequence = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
-        let empty = self.identity_arm(
-            context,
-            head,
-            &carrier.empty_value(),
-            result,
-            empty_case,
-            cons_case.uses(2),
-        )?;
-
-        // The hypothesis is dead: a case split over the length, peeling the cons arm at the head element and tail slice.
-        //
-        // The peel binds *names* for the element and the suffix rather than writing `get`/`slice` terms into the arm and letting the walk typecheck them. That is a typing requirement, not a style choice: both reads are bounded operations, and the bound each would carry — `0 < len` for the element, `1 <= len` for the window — is exactly what the dispatch establishes, so at the point the terms would be constructed there is no proof to hand them.
-        //
-        // The binders are opaque assumptions of the element and sequence types rather than the reads themselves, so the connection back to the scrutinee is restored by the refinement the arm was elaborated under: it is erased under `head = [element, ..suffix]`. Erasure re-types what it walks, and a proof in the arm may need the scrutinee at its case — `len(suffix) < len(head)` is decided only there.
-        //
-        // **The reads are not emitted here at all.** `UnconsSequence` is one peel, and how a peel is performed belongs to the lowering that performs it — `into_cps`'s `emit_peel`, which the fold reaches too. Open-coding it here would make this crate hold a window's operand convention, which is the lowering's.
-        if !cons_case.uses(2) {
-            let element_hint = cons_case.first_hint().map(str::to_string);
-            let suffix_hint = cons_case.second_hint().map(str::to_string);
-            let element_label = context.fresh(element_hint.as_deref());
-            let suffix_label = context.fresh(suffix_hint.as_deref());
-            let element = self.builder.value(element_hint);
-            let suffix = self.builder.value(suffix_hint);
-
-            self.environment
-                .bind(element_label, curios_anf::Atom::Value(element));
-            self.environment
-                .bind(suffix_label, curios_anf::Atom::Value(suffix));
-
-            self.builder.open_block();
-            let outcome = self.in_arm(context, |lowering, context| {
-                let element_var = curios_core::Term::free_var(&element_label);
-                let suffix_var = curios_core::Term::free_var(&suffix_label);
-                context.assume(&element_label, &carrier.element_type());
-                // An element is a read no producer names the carrier of, so it states the register its element type names.
-                lowering.state(context, element, &carrier.element_type())?;
-                context.assume(&suffix_label, &head_type);
-
-                let cons_value = carrier.cons_value(&element_var, &suffix_var);
-                refine(context, head, &cons_value)?;
-
-                // The hypothesis never appears, so any term serves its slot.
-                let dead_hypothesis = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
-                    curios_core::Nat::new(0usize),
-                ));
-                let peeled = cons_case.open(&[&element_var, &suffix_var, &dead_hypothesis]);
-                let expected = result.at(head, &[], &[], &cons_value);
-                lowering.walk(context, &peeled, &expected, None)
-            })?;
-            let cons_block = self.seal(outcome);
-
-            return Ok(self.bind(
-                hint,
-                curios_anf::Rhs::UnconsSequence {
-                    grain: carrier.grain(),
-                    scrutinee: sequence,
-                    empty,
-                    cons: curios_anf::UnconsSequenceStep {
-                        element,
-                        suffix,
-                        block: cons_block,
-                    },
-                },
-            ));
-        }
+        let empty = self.refined_arm(context, head, &carrier.empty_value(), result, empty_case)?;
 
         let element_hint = cons_case.first_hint().map(str::to_string);
         let suffix_hint = cons_case.second_hint().map(str::to_string);
-        let accumulator_hint = cons_case.third_hint().map(str::to_string);
         let element_label = context.fresh(element_hint.as_deref());
         let suffix_label = context.fresh(suffix_hint.as_deref());
-        let accumulator_label = context.fresh(accumulator_hint.as_deref());
         let element = self.builder.value(element_hint);
         let suffix = self.builder.value(suffix_hint);
-        let accumulator = self.builder.value(accumulator_hint);
+
         self.environment
             .bind(element_label, curios_anf::Atom::Value(element));
         self.environment
             .bind(suffix_label, curios_anf::Atom::Value(suffix));
-        self.environment
-            .bind(accumulator_label, curios_anf::Atom::Value(accumulator));
 
         self.builder.open_block();
-        let outcome = context.scoped(|context| {
+        let outcome = self.in_arm(context, |lowering, context| {
             let element_var = curios_core::Term::free_var(&element_label);
             let suffix_var = curios_core::Term::free_var(&suffix_label);
             context.assume(&element_label, &carrier.element_type());
-            // An element is a read no producer names the carrier of, so it states the register its element type names; the accumulator is a join its flows decide.
-            self.state(context, element, &carrier.element_type())?;
+            // An element is a read no producer names the carrier of, so it states the register its element type names.
+            lowering.state(context, element, &carrier.element_type())?;
             context.assume(&suffix_label, &head_type);
-            context.assume(&accumulator_label, &result.at(head, &[], &[], &suffix_var));
 
             let cons_value = carrier.cons_value(&element_var, &suffix_var);
+            refine(context, head, &cons_value)?;
 
-            let body = cons_case.open(&[
-                &element_var,
-                &suffix_var,
-                &curios_core::Term::free_var(&accumulator_label),
-            ]);
+            let peeled = cons_case.open(&[&element_var, &suffix_var]);
             let expected = result.at(head, &[], &[], &cons_value);
-            self.walk(context, &body, &expected, None)
+            lowering.walk(context, &peeled, &expected, None)
         })?;
-        let step = self.seal(outcome);
+        let cons_block = self.seal(outcome);
 
         Ok(self.bind(
             hint,
-            curios_anf::Rhs::FoldSequence {
+            curios_anf::Rhs::UnconsSequence {
                 grain: carrier.grain(),
                 scrutinee: sequence,
                 empty,
-                step: curios_anf::FoldSequenceStep {
+                cons: curios_anf::UnconsSequenceStep {
                     element,
                     suffix,
-                    accumulator,
-                    block: step,
+                    block: cons_block,
                 },
             },
         ))

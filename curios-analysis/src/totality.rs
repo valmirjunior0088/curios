@@ -40,9 +40,9 @@ use {
     curios_common::recurse,
     curios_core::{
         Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, Foreign, Free, Func,
-        FuncType, InductType, Intrinsic, Many, Match, MatchResult, Nat, Probe, Proj, RecGroup,
-        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType,
-        Two, Variant,
+        FuncType, InductType, Intrinsic, Many, Match, MatchResult, Nat, One, Probe, Proj, RecGroup,
+        Scope, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Two,
+        Variant,
     },
     curios_num::Natural,
     std::collections::{BTreeSet, HashMap, hash_map::Entry},
@@ -354,19 +354,19 @@ impl<E: Env> Walk<'_, E> {
         (binders, body)
     }
 
-    /// Open the `(pred, ih)` arm of the `Nat` eliminator.
+    /// Open the predecessor arm of the `Nat` case split.
+    fn open_one(&mut self, scope: &Scope<One>) -> (Vec<Free>, Term) {
+        let binders = self.binders(scope);
+        let terms = binders.iter().map(Term::free_var).collect::<Vec<_>>();
+        let body = scope.open(&[&terms[0]]);
+        (binders, body)
+    }
+
+    /// Open the `(head, tail)` arm of the `Bytes`/`List` case splits.
     fn open_two(&mut self, scope: &Scope<Two>) -> (Vec<Free>, Term) {
         let binders = self.binders(scope);
         let terms = binders.iter().map(Term::free_var).collect::<Vec<_>>();
         let body = scope.open(&[&terms[0], &terms[1]]);
-        (binders, body)
-    }
-
-    /// Open the `(head, tail, ih)` arm of the `Bytes`/`List` eliminators.
-    fn open_three(&mut self, scope: &Scope<Three>) -> (Vec<Free>, Term) {
-        let binders = self.binders(scope);
-        let terms = binders.iter().map(Term::free_var).collect::<Vec<_>>();
-        let body = scope.open(&[&terms[0], &terms[1], &terms[2]]);
         (binders, body)
     }
 
@@ -525,14 +525,14 @@ impl<E: Env> Walk<'_, E> {
                 }
             }
 
-            // The cons arm binds the generator, the tail, and the induction hypothesis; the scrutinee is the generator consed onto the tail, and the hypothesis is not part of the value's shape.
+            // The cons arm binds the generator and the tail; the scrutinee is the generator consed onto the tail.
             Cases::FreeMonoid { carrier } => match carrier {
                 Carrier::Nat {
                     empty_case,
                     cons_case,
                 } => {
                     self.empty_arm(&scrutinee, Carriers::Unary, empty_case)?;
-                    let (binders, body) = self.open_two(cons_case);
+                    let (binders, body) = self.open_one(cons_case);
                     let shape = Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0]));
                     self.scoped(refine(scrutinee, shape), None, Vec::new(), &body)?;
                 }
@@ -569,14 +569,14 @@ impl<E: Env> Walk<'_, E> {
         self.scoped(refine(*scrutinee, shape), None, Vec::new(), empty_case)
     }
 
-    /// The cons arm of a `Bytes`/`List` eliminator, binding the generator, the tail, and the induction hypothesis.
+    /// The cons arm of a `Bytes`/`List` case split, binding the generator and the tail.
     fn elem_cons(
         &mut self,
         scrutinee: Option<Free>,
         carriers: Carriers,
-        cons_case: &Scope<Three>,
+        cons_case: &Scope<Two>,
     ) -> Result<(), E::Error> {
-        let (binders, body) = self.open_three(cons_case);
+        let (binders, body) = self.open_two(cons_case);
         let shape = Shape::elem_run(
             carriers,
             vec![Shape::Atom(binders[0])],

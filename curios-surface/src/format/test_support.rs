@@ -41,26 +41,31 @@ pub fn sources_of_the_tree() -> Vec<(PathBuf, String)> {
         .collect()
 }
 
-/// Every `.crs` under `directory`, skipping the directories that hold generated or foreign trees.
+/// Every `.crs` under `directory`, skipping the directories [`skipped`] names.
 pub fn collect_sources(directory: &Path, sources: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(directory).expect("the tree is readable") {
         let path = entry.expect("a readable entry").path();
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("");
         if path.is_dir() {
-            // `editors/` holds highlighting fixtures for the editor grammars, which are not programs.
-            if !matches!(
-                name,
-                "target" | ".git" | ".curios" | ".claude" | "node_modules" | "editors"
-            ) {
+            if !skipped(&path) {
                 collect_sources(&path, sources);
             }
         } else if path.extension().is_some_and(|extension| extension == "crs") {
             sources.push(path);
         }
     }
+}
+
+/// Whether the directory at `path` holds no text the formatter is held to: a generated or foreign tree; `editors/`, whose files are highlighting fixtures for the editor grammars; and the soundness board's archive, whose witnesses are written in constructs the language no longer has and must not parse.
+pub fn skipped(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+
+    matches!(
+        name,
+        "target" | ".git" | ".curios" | ".claude" | "node_modules" | "editors"
+    ) || path.ends_with("xboard/archive")
 }
 
 /// Every form Core text writes beyond a program's, in the layout the program's printer gives it: a decorator beside its operand where the two fit their line and above it otherwise, a declaration under its absolute name, a group of any kinds joined by `and`, items a blank line apart, and the entry's type on the line beneath it.

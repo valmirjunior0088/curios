@@ -182,7 +182,7 @@ pub fn tower(shape: Shape, lines: usize) -> String {
         Shape::Handed => {
             source.push_str("use /std/{Nat};\n\n");
             source.push_str("let tower(@A: Type, _: A, n: Nat) -> Nat =\n");
-            source.push_str("    match n\n    | 0 => 0\n    | p + 1; _ =>\n");
+            source.push_str("    match n\n    | 0 => 0\n    | p + 1 =>\n");
             chain(&mut source, "        ", "x", lines, "(p, p)", |x| {
                 format!("({x}, {x})")
             });
@@ -289,7 +289,7 @@ fn function(source: &mut String, stands: Stands, lines: usize, body: &Body) {
         }
         Stands::Member => {
             let again = format!("tower({}p)", body.forwarded);
-            let _ = writeln!(source, "    match n\n    | 0 => 0\n    | p + 1; _ =>");
+            let _ = writeln!(source, "    match n\n    | 0 => 0\n    | p + 1 =>");
             chain(
                 source,
                 "        ",

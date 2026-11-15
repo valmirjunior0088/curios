@@ -45,17 +45,17 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
         end
 
         let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T)(n)} =
-            match l | [] => (0, Vec/nil()) | [x, .._]; (m, v) => (m + 1, Vec/cons(x, v)) end;
+            match l | [] => (0, Vec/nil()) | [x, ..t] => let (m, v) = of_list(t); (m + 1, Vec/cons(x, v)) end;
 
         let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T)(n)) -> Vec(T)(m) =
-            (match m: (k) => (j: Nat, Vec(T)(j)) -> Vec(T)(k)
-            | 0 => (j, x) => Vec/nil()
-            | p + 1; ih => (j, x) =>
-                match x
-                | nil() => Vec/cons(fill, ih(0, Vec/nil()))
-                | cons(@q, y, ys) => Vec/cons(y, ih(q, ys))
+            match m
+            | 0 => Vec/nil()
+            | p + 1 =>
+                match v
+                | nil() => Vec/cons(fill, resize(fill, p, Vec/nil()))
+                | cons(@q, y, ys) => Vec/cons(y, resize(fill, p, ys))
                 end
-            end)(n, v);
+            end;
 
         let cascade(l: List(Nat), k: Nat, w: Nat) -> Vec(Nat)(w) =
             let bad(u: List(Nat)) -> List(Nat) = List/slice(u, k, 3);

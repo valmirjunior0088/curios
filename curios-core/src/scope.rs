@@ -28,7 +28,7 @@ pub use proof_binders::*;
 
 // === Arity ===================================================================
 
-/// A [`Scope`]'s binder count, lifted to the type level: the fixed arities ([`One`]/[`Two`]/[`Three`]) make `close`/`open` take exactly-sized arrays, so an arity mismatch on the common eliminator shapes is a compile error; [`Many`] defers the check to a runtime assert.
+/// A [`Scope`]'s binder count, lifted to the type level: the fixed arities ([`One`]/[`Two`]) make `close`/`open` take exactly-sized arrays, so an arity mismatch on the common eliminator shapes is a compile error; [`Many`] defers the check to a runtime assert.
 pub trait Arity: Copy {
     /// The parameter-pack shape `close`/`open` accept: a fixed-size array reference for the static arities, a plain slice for [`Many`].
     type Params<'a, T: ?Sized + 'a>: AsRef<[&'a T]>;
@@ -37,7 +37,7 @@ pub trait Arity: Copy {
     fn arity(&self) -> usize;
 }
 
-/// The static one-binder arity — `let` tails, telescope links, single-scrutinee motives.
+/// The static one-binder arity — `let` tails, telescope links, single-scrutinee motives, the `Nat` case split's successor arm.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct One;
@@ -55,7 +55,7 @@ impl Arity for One {
     }
 }
 
-/// The static two-binder arity — the `(pred, ih)` successor arm of the `Nat` eliminator.
+/// The static two-binder arity — the `(head, tail)` cons arms of the `Bytes`/`List` case splits.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Two;
@@ -66,24 +66,6 @@ impl Two {
 }
 
 impl Arity for Two {
-    type Params<'a, T: ?Sized + 'a> = &'a [&'a T; Self::ARITY];
-
-    fn arity(&self) -> usize {
-        Self::ARITY
-    }
-}
-
-/// The static three-binder arity — the `(head, tail, ih)` cons arms of the `Bytes`/`List` eliminators.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-#[curios_archive::archived]
-pub struct Three;
-
-impl Three {
-    /// The binder count as a constant, so `Params` can be the fixed-size array type `[&T; 3]`.
-    pub(crate) const ARITY: usize = 3;
-}
-
-impl Arity for Three {
     type Params<'a, T: ?Sized + 'a> = &'a [&'a T; Self::ARITY];
 
     fn arity(&self) -> usize {
@@ -730,10 +712,6 @@ impl<A: Arity, B: Bound> Scope<A, B> {
 
     pub fn second_hint(&self) -> Option<&'static str> {
         self.hint(1)
-    }
-
-    pub fn third_hint(&self) -> Option<&'static str> {
-        self.hint(2)
     }
 
     pub fn hint_iter(&self) -> impl Iterator<Item = Option<&'static str>> {

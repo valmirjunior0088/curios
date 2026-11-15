@@ -10,7 +10,7 @@ fn a_bound_over_a_recursion_returning_a_literal_discharges() {
         use /std/{Str, Nat};
         use /std/Bool/{Holds};
         let f(k : Nat, n : Nat) -> Nat =
-            match k | 0 => 5 | j + 1; ih => f(j, n) end;
+            match k | 0 => 5 | j + 1 => f(j, n) end;
         let bound(n : Nat) -> Holds(5 <= f(0, n)) = Nat/le/refl(5);
         /std/print("ok")
         "#),
@@ -26,7 +26,7 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
         use /std/{Str, Nat};
         use /std/Bool/{Holds};
         let f(k : Nat, n : Nat) -> Nat =
-            match k | 0 => n | j + 1; ih => f(j, n) end;
+            match k | 0 => n | j + 1 => f(j, n) end;
         let bound(n : Nat) -> Holds(n <= f(0, n)) = Nat/le/refl(n);
         /std/print("ok")
         "#),
@@ -114,7 +114,7 @@ fn a_bound_over_a_diverging_subject_is_refused_by_name() {
         100_000,
         r#"
         use /std/{Nat, Int};
-        let spin(n : Nat) -> Int = match n | 0 => +0 | p + 1; _ => spin(p + 1) end;
+        let spin(n : Nat) -> Int = match n | 0 => +0 | p + 1 => spin(p + 1) end;
         let k : Nat = Int/to_nat(spin(3));
         /std/print("unreachable")
         "#,
@@ -156,7 +156,7 @@ fn a_bound_on_a_computed_subject_evaluates_it() {
         r#"
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
-            match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
+            match i | 0 => acc | k + 1 => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(100000, x[]);
         let head = Bytes/slice(built, 0, 10);
         /std/print("unreachable")
@@ -178,7 +178,7 @@ fn a_bound_on_a_small_computed_subject_discharges() {
         r#"
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
-            match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
+            match i | 0 => acc | k + 1 => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(2000, x[]);
         let head = Bytes/slice(built, 0, 10);
         /std/print("ok")
@@ -197,7 +197,7 @@ fn a_bound_behind_a_parameter_evaluates_nothing() {
         r#"
         use /std/{Bytes, Nat, Str};
         let go(i : Nat, acc : Bytes) -> Bytes =
-            match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
+            match i | 0 => acc | k + 1 => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
             match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
         let built = go(100000, x[]);

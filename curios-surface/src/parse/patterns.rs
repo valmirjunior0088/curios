@@ -2,9 +2,9 @@ use {
     super::{
         BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PATTERN_TAKES_NO_USE,
         Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led, member_ends, members,
-        parse_char_value, parse_cons_ih, parse_identifier, parse_keyword, parse_label,
-        parse_literal, parse_mark, parse_name, parse_named_premise, parse_nat_digits, parse_place,
-        parse_qualified_name, parse_word_raw, refused, require_space,
+        parse_char_value, parse_identifier, parse_keyword, parse_label, parse_literal, parse_mark,
+        parse_name, parse_named_premise, parse_nat_digits, parse_place, parse_qualified_name,
+        parse_word_raw, refused, require_space,
     },
     crate::{
         Binder, BytesPattern, FieldSugarParam, FuncParam, FuncType, FuncTypeParam, Label,
@@ -380,7 +380,7 @@ pub fn parse_nat_zero_match_pattern<'a, D: Grammar>(
         .parse(state)
 }
 
-// The `pred + 1; ih` leaf of a `Nat` match-arm pattern, with the same optional `; ih` as the `List`/`Bytes` cons leaves below (`parse_cons_ih`). Tried after the constructor pattern and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name+1;ih` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace), so a glued `pred+1` is no successor pattern, and neither is a step past one; `refuse_misread_successor` refuses each by name.
+// The `pred + 1` leaf of a `Nat` match-arm pattern. Tried after the constructor pattern and before the generic `Binder` fallback in `parse_match_pattern`: it shares a leading identifier with both, so `Binder` would otherwise silently swallow every `name + 1` input before this ever gets a chance to commit. A space is required on each side of `+` (mirroring `parse_infix_op`'s own space-sensitivity, via the same `preceded_by_space`/`require_space` intrinsics and a `take_exact` operator token that doesn't itself eat trailing whitespace), so a glued `pred+1` is no successor pattern, and neither is a step past one; `refuse_misread_successor` refuses each by name.
 pub fn parse_nat_succ_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
@@ -389,10 +389,7 @@ pub fn parse_nat_succ_match_pattern<'a, D: Grammar>(
         .and_drop(take_exact("+"))
         .and_drop(require_space)
         .and_drop(parse_step_of_one)
-        .and(parse_cons_ih::<D>)
-        .map(|(pred_label, ih): (Binder<D>, Option<Pattern<D>>)| {
-            MatchPattern::Nat(NatPattern::Succ { pred_label, ih })
-        })
+        .map(|pred_label: Binder<D>| MatchPattern::Nat(NatPattern::Succ { pred_label }))
         .parse(state)
 }
 
@@ -446,7 +443,7 @@ fn refuse_misread_successor<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a
         .parse(state)
 }
 
-// The literal-dispatch leaf `k` of a `Nat` match-arm pattern (`| 5 =>`, `| 0x90 =>`). Reads the numeral by value, so hex literals dispatch by value; a column of these (with no `pred + 1; ih` arm) lowers to a `switch`. `0` is rejected here: it is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one canonical leaf per value. Tried before the generic `Binder` fallback, which would otherwise swallow a bare digit as an identifier.
+// The literal-dispatch leaf `k` of a `Nat` match-arm pattern (`| 5 =>`, `| 0x90 =>`). Reads the numeral by value, so hex literals dispatch by value; a column of these (with no `pred + 1` arm) lowers to a `switch`. `0` is rejected here: it is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one canonical leaf per value. Tried before the generic `Binder` fallback, which would otherwise swallow a bare digit as an identifier.
 //
 // The numeral is kept whole, never narrowed to the erased `u32` here; `NatPattern::Lit` says why.
 pub fn parse_nat_lit_match_pattern<'a, D: Grammar>(
@@ -511,7 +508,7 @@ fn parse_leaf_operand<'a, D: Grammar>(
     }
 }
 
-// The `[head, ..tail][; ih]` leaf of a nested `List` pattern.
+// The `[head, ..tail]` leaf of a nested `List` pattern.
 pub fn parse_list_cons_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
@@ -521,12 +518,10 @@ pub fn parse_list_cons_match_pattern<'a, D: Grammar>(
         .and_drop(parse_literal(".."))
         .and(parse_leaf_operand::<D>("]", LIST_LEAF_TAKES_BINDERS))
         .and_drop(parse_literal("]"))
-        .and(parse_cons_ih::<D>)
-        .map(|((head_label, tail_label), ih)| {
+        .map(|(head_label, tail_label)| {
             MatchPattern::List(ListPattern::Cons {
                 head_label,
                 tail_label,
-                ih,
             })
         })
         .parse(state)
@@ -541,7 +536,7 @@ pub fn parse_bytes_end_match_pattern<'a, D: Grammar>(
         .parse(state)
 }
 
-// The `x[head, ..tail][; ih]` leaf of a nested `Bytes` pattern — the packed counterpart of `parse_list_cons_match_pattern`, differing only in the letter glued to the bracket.
+// The `x[head, ..tail]` leaf of a nested `Bytes` pattern — the packed counterpart of `parse_list_cons_match_pattern`, differing only in the letter glued to the bracket.
 pub fn parse_bytes_byte_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
@@ -551,12 +546,10 @@ pub fn parse_bytes_byte_match_pattern<'a, D: Grammar>(
         .and_drop(parse_literal(".."))
         .and(parse_leaf_operand::<D>("]", BYTES_LEAF_TAKES_BINDERS))
         .and_drop(parse_literal("]"))
-        .and(parse_cons_ih::<D>)
-        .map(|((head_label, tail_label), ih)| {
+        .map(|(head_label, tail_label)| {
             MatchPattern::Bytes(BytesPattern::Atom {
                 head_label,
                 tail_label,
-                ih,
             })
         })
         .parse(state)

@@ -16,20 +16,20 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
         end
 
         let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T)(n)} =
-            match l | [] => (0, Vec/nil()) | [x, .._]; (m, v) => (m + 1, Vec/cons(x, v)) end;
+            match l | [] => (0, Vec/nil()) | [x, ..t] => let (m, v) = of_list(t); (m + 1, Vec/cons(x, v)) end;
 
         let to_list(@T: Type, @n: Nat, v: Vec(T)(n)) -> List(T) =
             match v: (_, _) => List(T) | nil() => [] | cons(@_, x, xs) => [x, ..to_list(xs)] end;
 
         let resize(w: Nat, @w0: Nat, v: Vec(Char)(w0)) -> Vec(Char)(w) =
-            (match w: (k) => (n: Nat, Vec(Char)(n)) -> Vec(Char)(k)
-            | 0 => (n, x) => Vec/nil()
-            | p + 1; ih => (n, x) =>
-                match x
-                | nil() => Vec/cons('.', ih(0, Vec/nil()))
-                | cons(@m, y, ys) => Vec/cons(y, ih(m, ys))
+            match w
+            | 0 => Vec/nil()
+            | p + 1 =>
+                match v
+                | nil() => Vec/cons('.', resize(p, Vec/nil()))
+                | cons(@m, y, ys) => Vec/cons(y, resize(p, ys))
                 end
-            end)(w0, v);
+            end;
 
         let codes(s: Str) -> List(Char) =
             let go(b: Bytes, acc: List(Char)) -> List(Char) =
