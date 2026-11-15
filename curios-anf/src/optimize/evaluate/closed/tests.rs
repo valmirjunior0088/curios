@@ -1,7 +1,9 @@
 use {
     super::*,
     crate::*,
+    curios_abi::{ForeignFunction, WireResults, WireReturn, WireSignature, WireType},
     curios_num::{Binary, Natural},
+    std::sync::Arc,
 };
 
 /// `make(x) = (y) => x + y`, bound as an item.
@@ -623,5 +625,285 @@ fn a_description_whose_performance_ends_still_folds() {
         live_functions(&module) - before,
         1,
         "one copy of the performance:\n{module}"
+    );
+}
+
+/// `walk(n, acc) = match n | 0 => acc | _ => walk(n - 1, acc + 1)`, bound as an item: a recursion whose every call is its body's tail.
+fn define_walk(builder: &mut Builder) -> FunctionId {
+    let walk = builder.reserve_function();
+    let n = builder.value(Some("n".into()));
+    let acc = builder.value(Some("acc".into()));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
+
+    builder.open_block();
+    let base = builder.seal_block(Terminator::Return(Atom::Value(acc)));
+    builder.open_block();
+    let less = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatSub,
+            operands: vec![Atom::Value(n), Atom::Constant(one)],
+        },
+    );
+    let more = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(acc), Atom::Constant(one)],
+        },
+    );
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(walk),
+            arguments: vec![Atom::Value(less), Atom::Value(more)],
+        },
+    );
+    let step = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    builder.open_block();
+    let switched = builder.let_value(
+        None,
+        Rhs::SwitchNat {
+            scrutinee: Atom::Value(n),
+            cases: vec![NatCase {
+                key: Natural::from(0u32),
+                block: base,
+            }],
+            default: step,
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(switched)));
+    builder.define_function(walk, Some("walk".into()), vec![n, acc], body);
+    builder.item_functions(vec![walk]);
+    walk
+}
+
+/// `climb(n) = match n | 0 => 0 | _ => climb(n - 1) + 1`, bound as an item: the same descent, its call waiting on its answer.
+fn define_climb(builder: &mut Builder) -> FunctionId {
+    let climb = builder.reserve_function();
+    let n = builder.value(Some("n".into()));
+    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+    let one = builder.constant(Constant::Nat(Natural::from(1u32)));
+
+    builder.open_block();
+    let base = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    builder.open_block();
+    let less = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatSub,
+            operands: vec![Atom::Value(n), Atom::Constant(one)],
+        },
+    );
+    let below = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(climb),
+            arguments: vec![Atom::Value(less)],
+        },
+    );
+    let above = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(below), Atom::Constant(one)],
+        },
+    );
+    let step = builder.seal_block(Terminator::Return(Atom::Value(above)));
+    builder.open_block();
+    let switched = builder.let_value(
+        None,
+        Rhs::SwitchNat {
+            scrutinee: Atom::Value(n),
+            cases: vec![NatCase {
+                key: Natural::from(0u32),
+                block: base,
+            }],
+            default: step,
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(switched)));
+    builder.define_function(climb, Some("climb".into()), vec![n], body);
+    builder.item_functions(vec![climb]);
+    climb
+}
+
+/// A module whose item `answer` applies `callee` to `arguments`, the entry returning it.
+fn applying(build: impl FnOnce(&mut Builder) -> (FunctionId, Vec<Atom>)) -> (Module, ValueId) {
+    let mut builder = Builder::new();
+    let (callee, arguments) = build(&mut builder);
+    let answer = builder.item_value(
+        Some("answer".into()),
+        Rhs::Apply {
+            callee: Atom::Function(callee),
+            arguments,
+        },
+    );
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(answer)));
+    builder.set_entry(entry);
+    (builder.finalize().expect("the fixture verifies"), answer)
+}
+
+/// What the item binding `value` is bound to.
+fn bound_to(module: &Module, value: ValueId) -> &Rhs {
+    module
+        .items()
+        .iter()
+        .find_map(|&item| match module.statement(item) {
+            Some(Statement::Let { result, rhs }) if *result == value => Some(rhs),
+            _ => None,
+        })
+        .expect("the item is bound")
+}
+
+/// The constant `atom` is, where it is one.
+fn constant_of(module: &Module, atom: &Atom) -> Option<Constant> {
+    match atom {
+        Atom::Constant(constant) => module.constant(*constant).cloned(),
+        _ => None,
+    }
+}
+
+/// A call in its body's tail takes its caller's place, so a walk of a thousand calls, past the depth a call that waits may reach, is computed whole: `walk(1000, 0)` is `1000`. Mutation-checked: entering each tail call as a call that waits declines it at the depth cap.
+#[test]
+fn a_walk_of_tail_calls_past_the_depth_cap_is_computed() {
+    let (mut module, answer) = applying(|builder| {
+        let walk = define_walk(builder);
+        let thousand = builder.constant(Constant::Nat(Natural::from(1000u32)));
+        let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
+        (walk, vec![Atom::Constant(thousand), Atom::Constant(zero)])
+    });
+
+    assert!(evaluate_closed_terms(&mut module), "the walk folds");
+    module.verify().expect("the folded module verifies");
+    assert!(
+        matches!(bound_to(&module, answer), Rhs::Alias(atom) if constant_of(&module, atom) == Some(Constant::Nat(Natural::from(1000u32)))),
+        "the walk is its answer:\n{module}"
+    );
+}
+
+/// A call that waits on its answer still takes a frame, so the same descent written that way stops at the cap — `climb(100)` folds and `climb(1000)` is left to run.
+#[test]
+fn a_recursion_whose_calls_wait_past_the_depth_cap_is_left_to_run() {
+    for (depth, folds) in [(100u32, true), (1000, false)] {
+        let (mut module, _) = applying(|builder| {
+            let climb = define_climb(builder);
+            let n = builder.constant(Constant::Nat(Natural::from(depth)));
+            (climb, vec![Atom::Constant(n)])
+        });
+        assert_eq!(
+            evaluate_closed_terms(&mut module),
+            folds,
+            "climb({depth}):\n{module}"
+        );
+    }
+}
+
+/// An effect a function reached by tail calls cannot leave for run time itself is left as a call of the last item the walk reached, with what it was handed: `relay(3, 7)` hands on to itself three times and then to `emit(7)`, whose host call is not its tail, and the candidate becomes `emit(7)`.
+#[test]
+fn an_effect_past_a_walk_of_tail_calls_is_left_as_the_call_that_reached_it() {
+    let mut emitted = None;
+    let (mut module, answer) = applying(|builder| {
+        let row = Arc::new(ForeignFunction {
+            name: "/beep".into(),
+            signature: WireSignature {
+                params: vec![],
+                returns: WireReturn::Answers(WireResults::single(WireType::Nat)),
+            },
+        });
+        let foreign = builder.foreign(row);
+        let lane = builder.item_value(
+            None,
+            Rhs::Sequence {
+                operation: SequenceOp::ListBuild,
+                operands: vec![],
+            },
+        );
+        let asking = builder.constant(Constant::Bool(false));
+        let one = builder.constant(Constant::Nat(Natural::from(1u32)));
+
+        let emit = builder.reserve_function();
+        let x = builder.value(Some("x".into()));
+        builder.open_block();
+        let heard = builder.let_value(
+            None,
+            Rhs::Foreign {
+                foreign,
+                operands: vec![Atom::Value(lane), Atom::Constant(asking)],
+            },
+        );
+        let sum = builder.let_value(
+            None,
+            Rhs::Operation {
+                operation: Operation::NatAdd,
+                operands: vec![Atom::Value(heard), Atom::Value(x)],
+            },
+        );
+        let body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+        builder.define_function(emit, Some("emit".into()), vec![x], body);
+        builder.item_functions(vec![emit]);
+
+        let relay = builder.reserve_function();
+        let n = builder.value(Some("n".into()));
+        let carried = builder.value(Some("carried".into()));
+        builder.open_block();
+        let emitting = builder.let_value(
+            None,
+            Rhs::Apply {
+                callee: Atom::Function(emit),
+                arguments: vec![Atom::Value(carried)],
+            },
+        );
+        let base = builder.seal_block(Terminator::Return(Atom::Value(emitting)));
+        builder.open_block();
+        let less = builder.let_value(
+            None,
+            Rhs::Operation {
+                operation: Operation::NatSub,
+                operands: vec![Atom::Value(n), Atom::Constant(one)],
+            },
+        );
+        let relayed = builder.let_value(
+            None,
+            Rhs::Apply {
+                callee: Atom::Function(relay),
+                arguments: vec![Atom::Value(less), Atom::Value(carried)],
+            },
+        );
+        let step = builder.seal_block(Terminator::Return(Atom::Value(relayed)));
+        builder.open_block();
+        let switched = builder.let_value(
+            None,
+            Rhs::SwitchNat {
+                scrutinee: Atom::Value(n),
+                cases: vec![NatCase {
+                    key: Natural::from(0u32),
+                    block: base,
+                }],
+                default: step,
+            },
+        );
+        let body = builder.seal_block(Terminator::Return(Atom::Value(switched)));
+        builder.define_function(relay, Some("relay".into()), vec![n, carried], body);
+        builder.item_functions(vec![relay]);
+
+        emitted = Some(emit);
+        let three = builder.constant(Constant::Nat(Natural::from(3u32)));
+        let seven = builder.constant(Constant::Nat(Natural::from(7u32)));
+        (relay, vec![Atom::Constant(three), Atom::Constant(seven)])
+    });
+
+    assert!(evaluate_closed_terms(&mut module), "the walk residualizes");
+    module.verify().expect("the folded module verifies");
+    let emit = emitted.expect("the fixture built `emit`");
+    assert!(
+        matches!(
+            bound_to(&module, answer),
+            Rhs::Apply { callee: Atom::Function(callee), arguments }
+                if *callee == emit
+                    && matches!(arguments.as_slice(), [seven] if constant_of(&module, seven) == Some(Constant::Nat(Natural::from(7u32))))
+        ),
+        "the candidate is the call that reached the effect:\n{module}"
     );
 }

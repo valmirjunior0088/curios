@@ -1,6 +1,6 @@
 //! The deterministic fuel that bounds compile-time evaluation.
 //!
-//! Every limit is a fixed constant, so a compile is reproducible regardless of machine or timing. A format-string parse over a short literal runs hundreds of steps and its UTF-8 revalidation a few thousand, so the per-candidate step budget is generous while the shared pass pool caps the whole-module cost. The call-depth cap bounds native recursion (each interpreted call recurses into a host Rust frame); the reify caps bound one replacement. Exhaustion bails to leave the candidate untouched — never a panic.
+//! Every limit is a fixed constant, so a compile is reproducible regardless of machine or timing. A format-string parse over a short literal runs hundreds of steps and its UTF-8 revalidation a few thousand, so the per-candidate step budget is generous while the shared pass pool caps the whole-module cost. The call-depth cap bounds native recursion (each interpreted call that waits on its answer recurses into a host Rust frame, where a tail call takes its caller's place); the reify caps bound one replacement. Exhaustion bails to leave the candidate untouched — never a panic.
 
 use super::Bail;
 
@@ -10,9 +10,9 @@ pub const STEP_BUDGET: usize = 50_000;
 /// Shared step pool for the whole pass — the hard compile-time ceiling.
 pub const PASS_BUDGET: usize = 500_000;
 
-/// Call-nesting cap: each interpreted call recurses into a host Rust frame.
+/// Call-nesting cap: each interpreted call that waits on its answer recurses into a host Rust frame.
 ///
-/// No candidate in `programs/` reaches it — the depth bails each round's profile ledger samples stay at zero — so a recursive walk deeper than this, a hand-written one over a literal longer than 256 elements, is left unfolded and nothing in the corpus is.
+/// A call in its function body's tail takes no frame — it takes its caller's place in the loop running the body — so a walk written as a tail recursion meets the step budget and never this. What it bounds is a recursion whose calls wait, one deeper than this left unfolded; no candidate in `programs/` reaches it, the depth bails each round's profile ledger samples staying at zero.
 pub const MAX_CALL_DEPTH: usize = 256;
 
 /// Caps on one replacement: materialized nodes, and packed payload bytes plus list elements.

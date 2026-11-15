@@ -181,6 +181,7 @@ fn plan(
                 Kind::Foreign(foreign, operands)
             }
             Outcome::Stuck(Residual::Call(function, operands)) => Kind::Call(function, operands),
+            Outcome::Jump(_) => unreachable!("an evaluation ends on no jump"),
             Outcome::Bail(bail) => {
                 planned.push(Err(bail));
                 continue;

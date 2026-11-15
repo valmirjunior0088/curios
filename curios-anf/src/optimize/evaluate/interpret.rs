@@ -2,6 +2,8 @@
 //!
 //! The interpreter walks blocks — statements then a terminator — so tail position, the only place an effect may residualize, is the statement whose result the block returns. ANF hoists every effect into a `Let`, so a `Foreign` feeding a block's `Return` is a tail-position effect and residualizes to a single host call — exactly the `Handle/write(<bytes>)` the `Fmt` collapse produces.
 //!
+//! **A call in its function body's tail takes its caller's place.** Such a call is handed back as a jump rather than entered, and the loop running the body runs the callee next in the same host frame, so a walk of any length costs one call's depth — the run-time meaning of a tail call, which is what makes a recursion written as one a loop. Only a call that waits on its answer takes a frame, and only such calls meet the depth cap; the steps every body walks are charged as ever.
+//!
 //! Closedness and scope: a candidate call is evaluated from an empty frame; every atom it transitively reads must resolve to a constant, a module function, or a top-level item value (a CAF forced on demand and memoized), never a runtime binder. A function reference closes on demand against the current frame. Scalar and packed-binary operations fold through [`Semantics`] — the single source of truth under the numeric law — while list operations, closures, and `ListMap` are interpreted directly.
 
 use {
@@ -56,6 +58,30 @@ pub enum Outcome {
     /// A tail-position effect reached with fully-evaluated inputs.
     Stuck(Residual),
     Bail(Bail),
+    /// A call in its function body's tail, handed to the loop running that body ([`Evaluator::enter`]) to take its caller's place, as a tail call does. It never leaves the function whose body made it, so no evaluation ends on one.
+    Jump(Jump),
+}
+
+/// A call a function body hands on in its tail: what it calls, what with, and — where its callee is a function an item binds — that function, which an effect the call cannot leave for run time is left as a call of.
+pub struct Jump {
+    closure: Rc<Closure>,
+    arguments: Vec<Value>,
+    item: Option<FunctionId>,
+}
+
+/// Where an evaluation stands: in the candidate's tail, where an effect may be left for run time, and in its function body's tail, where a call takes the caller's place. A statement whose value its block does not return stands in neither.
+#[derive(Clone, Copy)]
+struct Position {
+    candidate: bool,
+    body: bool,
+}
+
+impl Position {
+    /// Neither tail: a value something after it reads.
+    const INNER: Self = Self {
+        candidate: false,
+        body: false,
+    };
 }
 
 /// A residual installed in place of a folded candidate: a tail-position host call, or a tail call to a module function whose body performs an effect it cannot residualize itself.
@@ -140,7 +166,12 @@ impl<'m> Evaluator<'m> {
     pub fn evaluate(&mut self, callee: Atom, arguments: &[Atom]) -> Outcome {
         self.budget.restart();
         let mut frame = Frame::new();
-        self.eval_apply(callee, arguments, &mut frame, true)
+        // The candidate's own call stands in its tail, and in no body: nothing is running to hand it on to.
+        let at = Position {
+            candidate: true,
+            body: false,
+        };
+        self.eval_apply(callee, arguments, &mut frame, at)
     }
 
     fn eval_atom(&mut self, atom: Atom, frame: &Frame) -> Result<Value, Bail> {
@@ -190,8 +221,8 @@ impl<'m> Evaluator<'m> {
             return Err(Bail::Cycle);
         }
         let outcome = match source {
-            CafSource::Rhs(rhs) => self.eval_rhs(rhs, &mut Frame::new(), false),
-            CafSource::Block(block) => self.eval_block(block, &mut Frame::new(), false),
+            CafSource::Rhs(rhs) => self.eval_rhs(rhs, &mut Frame::new(), Position::INNER),
+            CafSource::Block(block) => self.eval_block(block, &mut Frame::new(), Position::INNER),
         };
         let result = match outcome {
             Outcome::Done(held) => Ok(held),
@@ -200,23 +231,25 @@ impl<'m> Evaluator<'m> {
                 return Err(Bail::Fuel);
             }
             Outcome::Stuck(_) | Outcome::Bail(_) => Err(Bail::Unknown),
+            Outcome::Jump(_) => unreachable!("a value forced in no body's tail makes no jump"),
         };
         self.forcing.remove(&value);
         self.cache.insert(value, result.clone().ok());
         result
     }
 
-    /// Evaluate a block in non-tail position, where the result must be a value: a `Stuck` cannot arise (an effect outside the tail bails).
+    /// Evaluate a block in non-tail position, where the result must be a value: a `Stuck` cannot arise (an effect outside the tail bails), and neither can a `Jump`.
     fn value_of_block(&mut self, block: BlockId, frame: &mut Frame) -> Result<Value, Bail> {
-        match self.eval_block(block, frame, false) {
+        match self.eval_block(block, frame, Position::INNER) {
             Outcome::Done(held) => Ok(held),
             Outcome::Stuck(_) => unreachable!("non-tail evaluation never residualizes"),
+            Outcome::Jump(_) => unreachable!("non-tail evaluation makes no jump"),
             Outcome::Bail(bail) => Err(bail),
         }
     }
 
-    /// Evaluate a block: statements in order, then the terminator. In tail position the last statement — when it defines the returned value — is evaluated in tail position, so a `Foreign` there residualizes.
-    fn eval_block(&mut self, block: BlockId, frame: &mut Frame, tail: bool) -> Outcome {
+    /// Evaluate a block: statements in order, then the terminator. The last statement — when it defines the returned value — stands where the block does, so a `Foreign` there residualizes in the candidate's tail and a call there is a jump in its body's.
+    fn eval_block(&mut self, block: BlockId, frame: &mut Frame, at: Position) -> Outcome {
         if let Err(bail) = self.budget.charge() {
             return Outcome::Bail(bail);
         }
@@ -236,16 +269,20 @@ impl<'m> Evaluator<'m> {
         for (index, &statement) in block.statements.iter().enumerate() {
             match module.statement(statement) {
                 Some(Statement::Let { result, rhs }) => {
-                    let is_tail = tail && Some(index) == last && returned == Atom::Value(*result);
-                    match self.eval_rhs(rhs, frame, is_tail) {
+                    let returns = Some(index) == last && returned == Atom::Value(*result);
+                    let inner = match returns {
+                        true => at,
+                        false => Position::INNER,
+                    };
+                    match self.eval_rhs(rhs, frame, inner) {
                         Outcome::Done(held) => {
-                            if is_tail {
+                            if returns {
                                 frame.restore(mark);
                                 return Outcome::Done(held);
                             }
                             frame.push(*result, held);
                         }
-                        outcome @ (Outcome::Stuck(_) | Outcome::Bail(_)) => {
+                        outcome @ (Outcome::Stuck(_) | Outcome::Bail(_) | Outcome::Jump(_)) => {
                             frame.restore(mark);
                             return outcome;
                         }
@@ -275,13 +312,13 @@ impl<'m> Evaluator<'m> {
         }
     }
 
-    fn eval_rhs(&mut self, rhs: &Rhs, frame: &mut Frame, tail: bool) -> Outcome {
+    fn eval_rhs(&mut self, rhs: &Rhs, frame: &mut Frame, at: Position) -> Outcome {
         if let Err(bail) = self.budget.charge() {
             return Outcome::Bail(bail);
         }
         match rhs {
             Rhs::Alias(atom) => outcome(self.eval_atom(*atom, frame)),
-            Rhs::Apply { callee, arguments } => self.eval_apply(*callee, arguments, frame, tail),
+            Rhs::Apply { callee, arguments } => self.eval_apply(*callee, arguments, frame, at),
             Rhs::Operation {
                 operation,
                 operands,
@@ -314,7 +351,7 @@ impl<'m> Evaluator<'m> {
                 arms,
                 default,
                 ..
-            } => self.eval_match(*scrutinee, arms, *default, frame, tail),
+            } => self.eval_match(*scrutinee, arms, *default, frame, at),
             Rhs::SwitchBool {
                 scrutinee,
                 if_false,
@@ -323,9 +360,7 @@ impl<'m> Evaluator<'m> {
                 .eval_atom(*scrutinee, frame)
                 .and_then(|held| held.bool_())
             {
-                Ok(chosen) => {
-                    self.eval_block(if chosen { *if_true } else { *if_false }, frame, tail)
-                }
+                Ok(chosen) => self.eval_block(if chosen { *if_true } else { *if_false }, frame, at),
                 Err(bail) => Outcome::Bail(bail),
             },
             Rhs::SwitchNat {
@@ -338,7 +373,7 @@ impl<'m> Evaluator<'m> {
                         .iter()
                         .find(|case| case.key == key)
                         .map_or(*default, |case| case.block);
-                    self.eval_block(block, frame, tail)
+                    self.eval_block(block, frame, at)
                 }
                 Ok(_) => Outcome::Bail(Bail::Unsupported),
                 Err(bail) => Outcome::Bail(bail),
@@ -359,10 +394,12 @@ impl<'m> Evaluator<'m> {
                 scrutinee,
                 empty,
                 cons,
-            } => self.eval_uncons_sequence(*grain, *scrutinee, *empty, cons, frame),
+            } => self.eval_uncons_sequence(*grain, *scrutinee, *empty, cons, frame, at),
             // A host call is an effect: it residualizes in tail position with evaluated operands, and bails everywhere else.
             Rhs::Foreign { foreign, operands } => match self.eval_operands(operands, frame) {
-                Ok(operands) if tail => Outcome::Stuck(Residual::Foreign(*foreign, operands)),
+                Ok(operands) if at.candidate => {
+                    Outcome::Stuck(Residual::Foreign(*foreign, operands))
+                }
                 Ok(_) => Outcome::Bail(Bail::Effect),
                 Err(bail) => Outcome::Bail(bail),
             },
@@ -389,7 +426,7 @@ impl<'m> Evaluator<'m> {
         callee: Atom,
         arguments: &[Atom],
         frame: &mut Frame,
-        tail: bool,
+        at: Position,
     ) -> Outcome {
         let head = match self.eval_atom(callee, frame) {
             Ok(head) => head,
@@ -402,38 +439,74 @@ impl<'m> Evaluator<'m> {
         let Value::Closure(closure) = head else {
             return Outcome::Bail(Bail::Unsupported);
         };
+        // A residual call names an *item-bound* function — in scope at every candidate site — and never a locally bound one, which would be out of scope where the residual installs.
+        let item = match callee {
+            Atom::Function(function) if self.item_functions.contains(&function) => Some(function),
+            _ => None,
+        };
 
-        match self.enter(&closure, args.clone(), tail) {
-            // Boundary conversion: the callee performs an effect it cannot residualize itself, but this call is the candidate's tail and names an *item-bound* function — in scope at every candidate site — so the call with its evaluated arguments is the residual, rerunning the callee in full at this point. A locally bound callee would be out of scope where the residual installs.
-            Outcome::Bail(Bail::Effect) if tail => match callee {
-                Atom::Function(function) if self.item_functions.contains(&function) => {
-                    Outcome::Stuck(Residual::Call(function, args))
-                }
-                _ => Outcome::Bail(Bail::Effect),
+        if at.body {
+            return Outcome::Jump(Jump {
+                closure,
+                arguments: args,
+                item,
+            });
+        }
+        match self.enter(&closure, args.clone(), at.candidate) {
+            // Boundary conversion: the callee performs an effect it cannot residualize itself, but this call is the candidate's tail and names an item-bound function, so the call with its evaluated arguments is the residual, rerunning the callee in full at this point.
+            Outcome::Bail(Bail::Effect) if at.candidate => match item {
+                Some(function) => Outcome::Stuck(Residual::Call(function, args)),
+                None => Outcome::Bail(Bail::Effect),
             },
             other => other,
         }
     }
 
-    fn enter(&mut self, closure: &Closure, args: Vec<Value>, tail: bool) -> Outcome {
-        let Some(function) = self.module.function(closure.function) else {
-            return Outcome::Bail(Bail::Unknown);
-        };
-        if function.params.len() != args.len() {
-            return Outcome::Bail(Bail::Arity);
-        }
+    /// Run `closure` on `args`, at the depth of one call however many calls its body hands on in its tail: each takes its caller's place in this loop rather than a frame of its own (`MAX_CALL_DEPTH`), while every block each body walks still charges the step budget. In the candidate's tail, an effect a function the loop reached cannot leave for run time is left as a call of the last item-bound function a jump reached, with what it was handed — the site the boundary conversion in [`Evaluator::eval_apply`] would have been at had each jump been entered.
+    fn enter(&mut self, closure: &Closure, args: Vec<Value>, candidate: bool) -> Outcome {
         if let Err(bail) = self.budget.enter() {
             return Outcome::Bail(bail);
         }
-        let mut frame = Frame {
-            values: closure.env.borrow().clone(),
+        let module = self.module;
+        let mut function_id = closure.function;
+        let mut env = closure.env.borrow().clone();
+        let mut args = args;
+        let mut reached: Option<(FunctionId, Vec<Value>)> = None;
+        let outcome = loop {
+            let Some(function) = module.function(function_id) else {
+                break Outcome::Bail(Bail::Unknown);
+            };
+            if function.params.len() != args.len() {
+                break Outcome::Bail(Bail::Arity);
+            }
+            let mut frame = Frame { values: env };
+            for (&param, arg) in function.params.iter().zip(args) {
+                frame.push(param, arg);
+            }
+            let at = Position {
+                candidate,
+                body: true,
+            };
+            match self.eval_block(function.body, &mut frame, at) {
+                Outcome::Jump(jump) => {
+                    if let Some(item) = jump.item {
+                        reached = Some((item, jump.arguments.clone()));
+                    }
+                    function_id = jump.closure.function;
+                    env = jump.closure.env.borrow().clone();
+                    args = jump.arguments;
+                }
+                Outcome::Bail(Bail::Effect) if candidate => {
+                    break match reached {
+                        Some((function, args)) => Outcome::Stuck(Residual::Call(function, args)),
+                        None => Outcome::Bail(Bail::Effect),
+                    };
+                }
+                other => break other,
+            }
         };
-        for (&param, arg) in function.params.iter().zip(args) {
-            frame.push(param, arg);
-        }
-        let result = self.eval_block(function.body, &mut frame, tail);
         self.budget.leave();
-        result
+        outcome
     }
 
     fn eval_operation(
@@ -492,7 +565,7 @@ impl<'m> Evaluator<'m> {
         arms: &[VariantArm],
         default: Option<BlockId>,
         frame: &mut Frame,
-        tail: bool,
+        at: Position,
     ) -> Outcome {
         let (constructor, payload) = match self.eval_atom(scrutinee, frame) {
             Ok(Value::Construct(constructor, payload)) => (constructor, payload),
@@ -507,11 +580,11 @@ impl<'m> Evaluator<'m> {
             for (&binder, held) in arm.bindings.iter().zip(payload.iter()) {
                 frame.push(binder, held.clone());
             }
-            let result = self.eval_block(arm.block, frame, tail);
+            let result = self.eval_block(arm.block, frame, at);
             frame.restore(mark);
             result
         } else if let Some(default) = default {
-            self.eval_block(default, frame, tail)
+            self.eval_block(default, frame, at)
         } else {
             Outcome::Bail(Bail::Unsupported)
         }
@@ -601,6 +674,7 @@ impl<'m> Evaluator<'m> {
         empty: BlockId,
         cons: &UnconsSequenceStep,
         frame: &mut Frame,
+        at: Position,
     ) -> Outcome {
         let sequence = match self.eval_atom(scrutinee, frame) {
             Ok(sequence) => sequence,
@@ -611,11 +685,9 @@ impl<'m> Evaluator<'m> {
             Err(bail) => return Outcome::Bail(bail),
         };
 
+        // Each arm stands where the peel does, as a dispatch's arms do, so a walk over a sequence that hands its suffix on in its tail is a loop here as it is at run time.
         let Some((element, suffix)) = peeled else {
-            return match self.value_of_block(empty, frame) {
-                Ok(held) => Outcome::Done(held),
-                Err(bail) => Outcome::Bail(bail),
-            };
+            return self.eval_block(empty, frame, at);
         };
 
         if let Err(bail) = self.budget.charge() {
@@ -625,13 +697,9 @@ impl<'m> Evaluator<'m> {
         let mark = frame.mark();
         frame.push(cons.element, element);
         frame.push(cons.suffix, suffix);
-        let result = self.value_of_block(cons.block, frame);
+        let result = self.eval_block(cons.block, frame, at);
         frame.restore(mark);
-
-        match result {
-            Ok(held) => Outcome::Done(held),
-            Err(bail) => Outcome::Bail(bail),
-        }
+        result
     }
 
     fn eval_map(&mut self, operands: &[Atom], frame: &mut Frame) -> Outcome {
@@ -657,6 +725,7 @@ impl<'m> Evaluator<'m> {
             match self.enter(&mapper, vec![element.clone()], false) {
                 Outcome::Done(held) => mapped.push(held),
                 Outcome::Stuck(_) => unreachable!("non-tail evaluation never residualizes"),
+                Outcome::Jump(_) => unreachable!("an entered call makes no jump of its own"),
                 Outcome::Bail(bail) => return Outcome::Bail(bail),
             }
         }
