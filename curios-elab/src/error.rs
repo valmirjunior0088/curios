@@ -435,7 +435,8 @@ macro_rules! shown_terms {
             | Self::WitnessNotAConcept { found, .. }
             | Self::UseParameterNotAConcept { found, .. }
             | Self::ImplicitConceptMemberUnfillable { found } => $visit(found),
-            Self::MatrixStructHead { scrutinee, .. } => $visit(scrutinee),
+            Self::MatrixStructHead { scrutinee, .. }
+            | Self::MatrixLiteralColumn { scrutinee, .. } => $visit(scrutinee),
             Self::InformativePropStruct { field_type, .. } => $visit(field_type),
             Self::NotStrictlyPositive { site_type, .. } => $visit(site_type),
             Self::OperatorUndefined { type_, .. } => $visit(type_),
@@ -748,6 +749,15 @@ pub enum Error {
     MatrixStructHead {
         head: String,
         scrutinee: Box<Term>,
+    },
+    /// A literal or a successor pattern over a column whose type takes none: a `Nat` and a `Byte` are taken apart by their values, and no other type is. `pattern` is the arm as written, and `scrutinee` the column's type.
+    MatrixLiteralColumn {
+        pattern: String,
+        scrutinee: Box<Term>,
+    },
+    /// A successor pattern over a `Byte`, which a match takes apart by its values and never peels. `successor` is the arm as written.
+    MatrixByteSuccessor {
+        successor: String,
     },
     /// A `Nat` column mixing a successor arm with a literal one. A literal peels no successor, so the two are the fold and the dispatch, and one column is one of them. `successor` and `literal` are an arm of each as written, and each stands where its body is written, which the report notes.
     MatrixMixedNatDispatch {

@@ -130,7 +130,7 @@ The values no decimal spells have literals of their own, each with a required si
 
 ### Character and string literals
 
-A character literal holds one Unicode scalar value or one escape. Like a numeral, it takes its type from where it stands: a `Char`, certified by proof, where nothing pins it, and its code point where a `Nat`, a `Byte` or an `Int` is expected. A `Byte` refuses a code point past `255`, and neither `Bool` nor `Flt` takes a character. `Char` excludes the surrogates and everything past `U+10FFFF`. `Char/to_nat` converts a value whose type is already fixed. In a `match`, a character literal is a `Nat` dispatch case ([Natural-number dispatch](#natural-number-dispatch)).
+A character literal holds one Unicode scalar value or one escape. Like a numeral, it takes its type from where it stands: a `Char`, certified by proof, where nothing pins it, and its code point where a `Nat`, a `Byte` or an `Int` is expected. A `Byte` refuses a code point past `255`, and neither `Bool` nor `Flt` takes a character. `Char` excludes the surrogates and everything past `U+10FFFF`. `Char/to_nat` converts a value whose type is already fixed. In a `match`, a character literal is a dispatch case of a `Nat` or a `Byte` ([Natural-number dispatch](#natural-number-dispatch)).
 
 ```text
 'c'
@@ -889,6 +889,19 @@ One match does not mix a successor arm and literal arms.
 
 A dispatch literal is any natural, written whole, as a numeral or as a character literal, which matches its scalar value: `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, the conversion visible at the head.
 
+A `Byte` is dispatched on literals as a `Nat` is, a numeral from `0` through `255` or a character whose code point fits a byte, as a [packed literal](#packed-literals)'s constant entries are. Its `0` is a literal like any other, and a byte takes no successor pattern.
+
+```crs
+use /std/{Byte, Nat};
+
+pub let class(b: Byte) -> Nat =
+    match b
+    | 0 => 0
+    | '\n' => 1
+    | _ => 2
+    end;
+```
+
 ### List case split
 
 A list pattern is a run, written as the [list literal](#list-literals) that builds the value: `[]`, `[a, b]` for a list of exactly those elements, and `[a, b, ..rest]` for a list they begin. Each element is a pattern at the element's type. The rest stands last, after one element at least, and is a name or `_`.
@@ -923,7 +936,7 @@ A run takes its elements from the front, so a rest written before an element is 
 
 ### Packed case split
 
-A `Bytes` pattern is a [run](#list-case-split) under the bracket `x[`, as the [packed literal](#packed-literals) is, with every rule of a list's, each element a pattern at `Byte`.
+A `Bytes` pattern is a [run](#list-case-split) under the bracket `x[`, as the [packed literal](#packed-literals) is, with every rule of a list's, each element a pattern at `Byte`, a byte's literals among them ([Natural-number dispatch](#natural-number-dispatch)).
 
 ```crs
 use /std/{Byte, Bytes, Nat};
@@ -944,6 +957,13 @@ pub let second_or_zero(bytes: Bytes) -> Nat =
     match bytes
     | x[_, second, .._] => Byte/to_nat(second)
     | _ => 0
+    end;
+
+pub let escapes(bytes: Bytes) -> Nat =
+    match bytes
+    | x[] => 0
+    | x['%', _, _, ..rest] => 1 + escapes(rest)
+    | x[_, ..rest] => escapes(rest)
     end;
 ```
 

@@ -236,7 +236,7 @@ fn a_false_float_comparison_arm_learns_no_mirror() {
     );
 }
 
-// A literal dispatch is `Nat`'s alone. Over a float it would read IEEE's `==`, which takes `-0.0` at the arm `0` while that arm's case states the scrutinee is the literal, `+0.0`: an arm proving `Eq()(f, +0.0)` would prove it of `-0.0`. The control dispatches a `Nat`.
+// A literal dispatch is a `Nat`'s or a `Byte`'s alone. Over a float it would read IEEE's `==`, which takes `-0.0` at the arm `0` while that arm's case states the scrutinee is the literal, `+0.0`: an arm proving `Eq()(f, +0.0)` would prove it of `-0.0`. The control dispatches a `Nat`.
 #[test]
 fn a_literal_dispatch_reads_no_float() {
     control(
@@ -256,7 +256,7 @@ fn a_literal_dispatch_reads_no_float() {
     ])
     .by_elaborator_in(
         "/tag",
-        |error| matches!(error, Error::NotNatType { head_type } if pinned(head_type) == "Flt"),
+        |error| matches!(error, Error::MatrixLiteralColumn { scrutinee, .. } if pinned(scrutinee) == "Flt"),
     );
 }
 

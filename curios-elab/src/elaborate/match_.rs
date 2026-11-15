@@ -39,6 +39,30 @@ impl Scrutinee {
         })
     }
 
+    /// Whether the scrutinee is a byte, which a dispatch on its literals reads as the natural it is ([`Scrutinee::of_byte`]).
+    pub fn is_byte(&self) -> bool {
+        matches!(&*self.type_, Subterm::Intrinsic(Intrinsic::ByteType))
+    }
+
+    /// Whether the scrutinee is a natural, or of a type nothing has decided yet, which a literal decides as one.
+    pub fn takes_naturals(&self, context: &Context) -> bool {
+        matches!(&*self.type_, Subterm::Intrinsic(Intrinsic::NatType))
+            || stuck_on_metavar(context, &self.type_)
+    }
+
+    /// The byte as the natural it is, `Byte/to_nat` of it: a dispatch on a byte's literals is a natural's, so Core and the certifier hold nothing new for it.
+    pub fn of_byte(self) -> Self {
+        Self {
+            term: Term::intrinsic(Intrinsic::ByteToNat(self.term)),
+            type_: Term::intrinsic(Intrinsic::NatType),
+        }
+    }
+
+    /// The type the scrutinee is read at.
+    pub fn type_(&self) -> &Term {
+        &self.type_
+    }
+
     /// The rebuilt scrutinee and its type, required to be the given intrinsic type; any other is refused as `eliminator` refuses it. A type nothing has decided yet, stuck on a metavariable — a written goal's stand-in is one — is held to that type, which the arms name, as a checked term's is.
     fn of_intrinsic(
         self,

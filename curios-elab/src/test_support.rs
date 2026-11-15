@@ -96,6 +96,8 @@ variants!(Error {
     MatrixArmsMeet,
     MatrixAlternativesMeet,
     MatrixStructHead,
+    MatrixLiteralColumn,
+    MatrixByteSuccessor,
     MatrixMixedNatDispatch,
     NotAInductType,
     LargeElimOfProp,

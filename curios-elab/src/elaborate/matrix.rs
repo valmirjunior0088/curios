@@ -1118,7 +1118,7 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// Rows over a `Nat` column, in one of two forms the rows that write a case choose: dispatch where a row writes a literal past `0`, over the literals written, with the rows that write a binder as what any other value takes, and a case split otherwise, `0` and `n + 1`, a row that writes a binder under both. A literal beside a successor is refused: no one form peels a successor and dispatches on a value.
+    /// Rows over a column of naturals or of bytes, in one of two forms the rows that write a case choose: dispatch where a row writes a literal past `0`, or the column is a byte, over the literals written, with the rows that write a binder as what any other value takes, and a case split otherwise, `0` and `n + 1`, a row that writes a binder under both. A literal beside a successor is refused: no one form peels a successor and dispatches on a value. A byte is dispatched as the natural it is, and a column of any other type takes no literal.
     fn naturals(
         &mut self,
         context: &mut Context,
@@ -1131,29 +1131,47 @@ impl<'m> Compiler<'m> {
         let rest = columns;
         self.joined(context, &mut lines, &column);
 
-        let writes = |alike: fn(&Pattern) -> bool| {
-            lines.iter().any(|line| {
-                line.cells[0].is_some_and(|(shape, _)| shape.pattern().is_some_and(alike))
-            })
+        let first = |alike: fn(&Pattern) -> bool| {
+            lines
+                .iter()
+                .find(|line| {
+                    line.cells[0].is_some_and(|(shape, _)| shape.pattern().is_some_and(alike))
+                })
+                .map(|line| line.row)
         };
-        let peels = writes(|pattern| matches!(pattern, Pattern::Succ { .. }));
+        let peels = first(|pattern| matches!(pattern, Pattern::Succ { .. }));
         let dispatches =
-            writes(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
-        if peels && dispatches {
-            let first = |alike: fn(&Pattern) -> bool| {
-                lines
-                    .iter()
-                    .find(|line| {
-                        line.cells[0].is_some_and(|(shape, _)| shape.pattern().is_some_and(alike))
-                    })
-                    .map(|line| line.row)
-                    .expect("a row writes the kind the column was found to hold")
-            };
-            let successor = first(|pattern| matches!(pattern, Pattern::Succ { .. }));
-            let literal =
-                first(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
-            let place = |row: usize| self.row(row).body.extent();
+            first(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
+        let place = |row: usize| self.row(row).body.extent();
 
+        // What a column's literals are is its type's: a byte's are dispatched as the natural it is, and a type that is neither takes none.
+        let scrutinee = Scrutinee::read(context, &column.term)?;
+        let byte = scrutinee.is_byte();
+        if !byte && !scrutinee.takes_naturals(context) {
+            let row = lines
+                .iter()
+                .find(|line| line.cells[0].is_some())
+                .map(|line| line.row)
+                .expect("a row writes the literal the column was split for");
+            let pattern = self.written(row);
+
+            return Err(
+                pending(context, [scrutinee.type_()], move |reporting, [type_]| {
+                    Error::MatrixLiteralColumn {
+                        pattern,
+                        scrutinee: Box::new(resolved_for_display(reporting, &type_)),
+                    }
+                })
+                .at_opt(place(row)),
+            );
+        }
+        if byte && let Some(successor) = peels {
+            return Err(Error::MatrixByteSuccessor {
+                successor: self.written(successor),
+            }
+            .at_opt(place(successor)));
+        }
+        if let (Some(successor), Some(literal)) = (peels, dispatches) {
             return Err(Error::MatrixMixedNatDispatch {
                 successor: self.written(successor),
                 literal: self.written(literal),
@@ -1162,14 +1180,30 @@ impl<'m> Compiler<'m> {
             });
         }
 
-        // `0` and a binder are induction's two cases, so `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its successor arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal.
-        if dispatches {
+        // `0` and a binder are induction's two cases, so `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its successor arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal. A byte has no successor, so its `0` is a literal.
+        if byte || dispatches.is_some() {
             let literal = |shape: Shape<'m>| match shape {
                 Shape::Pattern(Pattern::Zero) => Natural::zero(),
                 Shape::Pattern(Pattern::Literal(value)) => value.clone(),
                 Shape::Pattern(Pattern::Character(character)) => Natural::from(*character as u32),
                 _ => unreachable!("every row of the column writes a `Nat`"),
             };
+            // A byte's literals are its values, as a packed literal's constant entries are.
+            if byte {
+                let past = lines.iter().find_map(|line| {
+                    let (shape, _) = line.cells[0]?;
+                    (literal(shape) > Natural::from(u32::from(u8::MAX)))
+                        .then_some((shape, line.row))
+                });
+                if let Some((shape, row)) = past {
+                    let value = match shape {
+                        Shape::Pattern(Pattern::Character(character)) => format!("{character:?}"),
+                        _ => literal(shape).to_string(),
+                    };
+
+                    return Err(Error::ByteLiteralOutOfRange { value }.at_opt(place(row)));
+                }
+            }
             let mut groups: BTreeMap<Natural, Vec<Line<'m>>> = lines
                 .iter()
                 .filter_map(|line| line.cells[0].map(|(shape, _)| (literal(shape), Vec::new())))
@@ -1189,17 +1223,27 @@ impl<'m> Compiler<'m> {
                     }
                 }
             }
-            // No set of literals covers every natural: the least one no row writes is a value no arm matches.
+            // No set of literals covers every natural: the least one no row writes is a value no arm matches. A byte's dispatch is a natural's, so it too takes its other values at a binder, written `_` where every byte has an arm.
             if others.is_empty() {
-                let least = (0u32..)
-                    .map(Natural::from)
-                    .find(|literal| !groups.contains_key(literal))
-                    .expect("a match writes finitely many literals");
+                let missing = match byte {
+                    true => (0..=u32::from(u8::MAX))
+                        .map(Natural::from)
+                        .find(|literal| !groups.contains_key(literal))
+                        .map_or(Seen::Any, |least| Seen::Leaf(least.to_string())),
+                    false => {
+                        let least = (0u32..)
+                            .map(Natural::from)
+                            .find(|literal| !groups.contains_key(literal))
+                            .expect("a match writes finitely many literals");
 
-                return Err(self.uncovered(&column, Seen::Leaf(least.to_string()), false));
+                        Seen::Leaf(least.to_string())
+                    }
+                };
+
+                return Err(self.uncovered(&column, missing, false));
             }
 
-            let scrutinee = Scrutinee::read(context, &column.term)?;
+            let scrutinee = dispatched(scrutinee);
             let goal = Term::hole(context.mint_metavar());
 
             return context.awaiting(|context| {
@@ -1249,7 +1293,6 @@ impl<'m> Compiler<'m> {
             return Err(self.uncovered(&column, Seen::Leaf("0".to_string()), false));
         }
 
-        let scrutinee = Scrutinee::read(context, &column.term)?;
         let goal = Term::hole(context.mint_metavar());
 
         context.awaiting(|context| {
@@ -1819,7 +1862,12 @@ impl<'m> Compiler<'m> {
                         let scrutinee = Scrutinee::read(context, &column)?;
                         let goal = Term::hole(context.mint_metavar());
 
-                        Rc::new(SwitchSplit::resolve(context, scrutinee, &goal, &mode)?)
+                        Rc::new(SwitchSplit::resolve(
+                            context,
+                            dispatched(scrutinee),
+                            &goal,
+                            &mode,
+                        )?)
                     }
                 };
 
@@ -1846,6 +1894,18 @@ impl<'m> Compiler<'m> {
                     None => {
                         let scrutinee = Scrutinee::read(context, &column)?;
                         let goal = Term::hole(context.mint_metavar());
+                        // A byte has no successor, so its `0` is a literal's case, as the tree read it.
+                        if scrutinee.is_byte() {
+                            let split =
+                                SwitchSplit::resolve(context, scrutinee.of_byte(), &goal, &mode)?;
+                            walk_awaited(context, awaits, |context| {
+                                split.arm(context, &Natural::zero(), |context, expected| {
+                                    arm(self, context, columns, line, expected)
+                                })
+                            })?;
+
+                            return Ok(walked.expect("the arm of a row's case is its walk"));
+                        }
 
                         Rc::new(NatSplit::resolve(context, scrutinee, &goal, &mode)?)
                     }
@@ -2141,5 +2201,13 @@ fn opening(sequence: Sequence) -> &'static str {
     match sequence {
         Sequence::List => "[",
         Sequence::Bytes => "x[",
+    }
+}
+
+/// The scrutinee a dispatch on literals reads: a byte as the natural it is, and any other as it stands.
+fn dispatched(scrutinee: Scrutinee) -> Scrutinee {
+    match scrutinee.is_byte() {
+        true => scrutinee.of_byte(),
+        false => scrutinee,
     }
 }

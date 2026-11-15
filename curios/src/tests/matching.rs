@@ -2,6 +2,7 @@
 
 mod alternative_tests;
 mod binder_tests;
+mod byte_tests;
 mod goal_tests;
 mod guard_tests;
 mod headless_tests;

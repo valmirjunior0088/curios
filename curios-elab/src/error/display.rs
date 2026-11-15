@@ -1245,6 +1245,21 @@ impl Displayed<'_> {
                 ));
                 f.stating(format_args!("scrutinee: {}", scrutinee.spelled(spelling)));
             }
+            Error::MatrixLiteralColumn { pattern, scrutinee } => {
+                f.text("no literal pattern");
+                f.stating(format_args!(
+                    "`{pattern}` takes a `Nat` or a `Byte` apart by its value"
+                ));
+                f.stating(format_args!("scrutinee: {}", scrutinee.spelled(spelling)));
+                f.stating("match a natural the value gives, or test it in a guard");
+            }
+            Error::MatrixByteSuccessor { successor } => {
+                f.text("no successor pattern");
+                f.stating(format_args!(
+                    "`{successor}` peels a successor, and a `Byte` is taken apart by its value"
+                ));
+                f.stating("write the byte's literals beside `_`");
+            }
             Error::MatrixMixedNatDispatch {
                 successor, literal, ..
             } => {
