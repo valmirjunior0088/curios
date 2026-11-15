@@ -25,18 +25,7 @@ pub let head(
     @t: List(T),
     whole: Pairwise(le)([h, ..t]),
 ) -> (y: T, Member()(y, t)) -> Bool/Holds(le(h, y)) =
-    leading(whole);
-
--- What a pairwise list's first element is owed: nothing of no elements, and of a cons that it stands in `le` to every later one.
-let Leading(@T: Type, le: (T, T) -> Bool, l: List(T)) -> Prop =
-    match l
-    | [] => Bool/True
-    | [k, ..r] => (y: T, Member()(y, r)) -> Bool/Holds(le(k, y))
-    end;
-
--- `head` of any pairwise list, whose index the match on `whole` substitutes where a cons's would not be.
-let leading(@T: Type, @le: (T, T) -> Bool, @l: List(T), whole: Pairwise(le)(l)) -> Leading(le, l) =
-    match whole | empty() => Bool/True/qed() | cons(head, _) => head end;
+    match whole | cons(head, _) => head end;
 
 --- The tail of a pairwise list is pairwise.
 pub let tail(
@@ -46,20 +35,7 @@ pub let tail(
     @t: List(T),
     whole: Pairwise(le)([h, ..t]),
 ) -> Pairwise(le)(t) =
-    trailing(whole);
-
--- What a pairwise list's tail is: nothing of no elements, and of a cons pairwise.
-let Trailing(@T: Type, le: (T, T) -> Bool, l: List(T)) -> Prop =
-    match l | [] => Bool/True | [_, ..r] => Pairwise(le)(r) end;
-
--- `tail` of any pairwise list, whose index the match on `whole` substitutes where a cons's would not be.
-let trailing(
-    @T: Type,
-    @le: (T, T) -> Bool,
-    @l: List(T),
-    whole: Pairwise(le)(l),
-) -> Trailing(le, l) =
-    match whole | empty() => Bool/True/qed() | cons(_, rest) => rest end;
+    match whole | cons(_, rest) => rest end;
 
 -- An element that leads a list in order stands in a transitive `le` to each of its members.
 let below(

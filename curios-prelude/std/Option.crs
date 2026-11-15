@@ -67,25 +67,11 @@ pub let get(@A: Sort, m: Option(A), @ok: IsSome(m)) -> A =
     | none() => match ok end
     end;
 
--- What an equation between two options says of what they hold: at two values, that they are one.
-let SameValue(@A: Sort, a: Option(A), b: Option(A)) -> Prop =
-    match a
-    | some(x) => match b | some(y) => Eq()(x, y) | none() => Bool/True end
-    | none() => Bool/True
-    end;
-
-let same_value_refl(@A: Sort, m: Option(A)) -> SameValue(m, m) =
-    match m | some(_) => Eq/refl() | none() => Bool/True/qed() end;
-
 --- `some` is injective: two equal options that each hold a value hold one value.
 ---
 --- What takes an encoding apart with no value invented. A reader that answers an option is one function of every input, so `Eq/cong` carries an equation between two encodings to one between what it reads from each, and this carries that to the values read.
 pub let some_injective(@A: Sort, @x: A, @y: A, same: Eq()(some(x), some(y))) -> Eq()(x, y) =
-    same_value(same);
-
--- What an equation between any two options says, whose indices the match on `same` substitutes where two `some`s would not be.
-let same_value(@A: Sort, @a: Option(A), @b: Option(A), same: Eq()(a, b)) -> SameValue(a, b) =
-    match same | refl(@value) => same_value_refl(value) end;
+    match same | refl() => Eq/refl() end;
 
 satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {
     ..

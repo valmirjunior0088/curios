@@ -29,21 +29,7 @@ pub let uncons(
     head: (Eq()(x, h)) -> P,
     tail: (Member()(x, l)) -> P,
 ) -> P =
-    unconsed(i)(head, tail);
-
--- What a member of `m` gives a proof of `P` to take apart: nothing of no elements, and of a cons its head or its tail.
-let Unconsed(@T: Type, P: Prop, x: T, m: List(T)) -> Prop =
-    match m
-    | [] => Bool/True
-    | [k, ..r] => (head: (Eq()(x, k)) -> P, tail: (Member()(x, r)) -> P) -> P
-    end;
-
--- `uncons` over a member of any list, whose indices the match on `i` substitutes where a cons's would not be.
-let unconsed(@T: Type, @P: Prop, @x: T, @m: List(T), i: Member()(x, m)) -> Unconsed(P, x, m) =
-    match i
-    | here() => (head, _) => head(Eq/refl())
-    | there(rest) => (_, tail) => tail(rest)
-    end;
+    match i | here() => head(Eq/refl()) | there(rest) => tail(rest) end;
 
 --- A member of `a` is a member of `a` followed by `b`.
 pub let left(

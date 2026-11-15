@@ -410,26 +410,7 @@ let layered_over(
     @rest: List(Option(List(T))),
     layered: Layered(second)([top, ..rest]),
 ) -> Across(second, flat(rest), held(top)) =
-    topmost(layered);
-
--- What a layered stack's top lies across from: nothing of no runs, and of a level the runs beneath it.
-let Topmost(@T: Type, second: (T, T) -> Bool, s: List(Option(List(T)))) -> Prop =
-    match s
-    | [] => Bool/True
-    | [t, ..r] => Across(second, flat(r), held(t))
-    end;
-
--- `layered_over` of any layered stack, whose index the match on `layered` substitutes where a cons's would not be.
-let topmost(
-    @T: Type,
-    @second: (T, T) -> Bool,
-    @s: List(Option(List(T))),
-    layered: Layered(second)(s),
-) -> Topmost(second, s) =
-    match layered
-    | bottom() => Bool/True/qed()
-    | level(over, _) => over
-    end;
+    match layered | level(over, _) => over end;
 
 let layered_below(
     @T: Type,
@@ -438,23 +419,7 @@ let layered_below(
     @rest: List(Option(List(T))),
     layered: Layered(second)([top, ..rest]),
 ) -> Layered(second)(rest) =
-    beneath(layered);
-
--- What lies beneath a layered stack's top: nothing of no runs, and of a level a layered stack.
-let Beneath(@T: Type, second: (T, T) -> Bool, s: List(Option(List(T)))) -> Prop =
-    match s | [] => Bool/True | [_, ..r] => Layered(second)(r) end;
-
--- `layered_below` of any layered stack, whose index the match on `layered` substitutes where a cons's would not be.
-let beneath(
-    @T: Type,
-    @second: (T, T) -> Bool,
-    @s: List(Option(List(T))),
-    layered: Layered(second)(s),
-) -> Beneath(second, s) =
-    match layered
-    | bottom() => Bool/True/qed()
-    | level(_, below) => below
-    end;
+    match layered | level(_, below) => below end;
 
 -- A push keeps the stack layered, under a run the stack lies across from.
 let push_layered(
