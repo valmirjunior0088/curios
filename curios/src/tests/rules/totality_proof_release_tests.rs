@@ -135,9 +135,9 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
     });
 }
 
-// An intrinsic fold binder as the head. `List`'s cons arm takes its element type from the carrier rather than from any declaration, so this is a different source of binder types than the inductive arm above and fails independently.
+// A sequence case split's binder as the head. `List`'s cons arm takes its element type from the carrier rather than from any declaration, so this is a different source of binder types than the inductive arm above and fails independently.
 #[test]
-fn a_proof_at_a_fold_binder_head_is_rejected() {
+fn a_proof_at_a_sequence_arm_binder_head_is_rejected() {
     control(
         r#"
         let apply_it(fs : /std/List((/std/Bool/True) -> /std/Nat)) -> /std/Nat =
