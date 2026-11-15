@@ -33,7 +33,7 @@ fn nest(module: &mut Module, depth: usize) -> FunctionId {
                 params: vec![param],
                 return_cont,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         if level > 0 {
@@ -123,7 +123,7 @@ fn called_twice(depth: usize, first: usize, second: usize, named: bool) -> (Modu
             params: vec![a],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);

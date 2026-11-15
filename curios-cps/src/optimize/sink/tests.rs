@@ -45,7 +45,7 @@ fn edge(target: ContinuationId, args: Vec<Atom>) -> Edge {
 }
 
 /// `name(param) = return param`, droppable as `droppable` says.
-fn identity(module: &mut Module, name: &str, droppable: bool) -> FunctionId {
+fn identity(module: &mut Module, name: &str, droppable: Droppable) -> FunctionId {
     let function = module.reserve_function();
     let return_cont = module.reserve_continuation();
     let param = value(module, "m");
@@ -80,7 +80,7 @@ fn main(
         params,
         return_cont,
         body,
-        droppable: false,
+        droppable: Droppable::Never,
     });
     module.set_entry(main);
     main
@@ -147,7 +147,7 @@ fn a_construction_one_arm_reads_moves_into_that_arm() {
 #[test]
 fn a_call_a_conjunctions_second_operand_reads_runs_only_where_the_first_holds() {
     let mut module = Module::new();
-    let g = identity(&mut module, "g", true);
+    let g = identity(&mut module, "g", Droppable::ALWAYS);
     let return_cont = module.reserve_continuation();
     let a = value(&mut module, "a");
     let n = value(&mut module, "n");
@@ -196,7 +196,7 @@ fn a_call_a_conjunctions_second_operand_reads_runs_only_where_the_first_holds() 
 #[test]
 fn a_disjunction_runs_its_second_operand_where_the_first_is_false() {
     let mut module = Module::new();
-    let g = identity(&mut module, "g", true);
+    let g = identity(&mut module, "g", Droppable::ALWAYS);
     let return_cont = module.reserve_continuation();
     let a = value(&mut module, "a");
     let n = value(&mut module, "n");
@@ -325,7 +325,7 @@ fn a_closure_and_what_it_captures_move_into_the_arm_that_calls_it() {
             params: vec![],
             return_cont: f_return,
             body: f_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let zero = jump(&mut module, return_cont, vec![nat(0)]);
@@ -363,7 +363,7 @@ fn a_closure_and_what_it_captures_move_into_the_arm_that_calls_it() {
 #[test]
 fn work_that_may_trap_does_not_move_past_a_call_where_total_work_does() {
     let mut module = Module::new();
-    let h = identity(&mut module, "h", false);
+    let h = identity(&mut module, "h", Droppable::Never);
     let return_cont = module.reserve_continuation();
     let a = value(&mut module, "a");
     let q = value(&mut module, "q");
@@ -425,7 +425,7 @@ fn work_that_may_trap_does_not_move_past_a_call_where_total_work_does() {
 #[test]
 fn work_every_run_reads_stays_where_it_is() {
     let mut module = Module::new();
-    let h = identity(&mut module, "h", false);
+    let h = identity(&mut module, "h", Droppable::Never);
     let return_cont = module.reserve_continuation();
     let a = value(&mut module, "a");
     let s = value(&mut module, "s");
@@ -460,7 +460,7 @@ fn work_every_run_reads_stays_where_it_is() {
 /// `main(a, n)`: `r = h(n)`, then `a` chooses between returning `0` and returning `r`. A call of a function that may not be dropped stays where it was made; one of a function that may be moves into the arm, as its tail call, and `h`'s definition with it.
 #[test]
 fn only_a_droppable_call_moves_into_the_arm_that_reads_it() {
-    for droppable in [false, true] {
+    for (droppable, moves) in [(Droppable::Never, false), (Droppable::ALWAYS, true)] {
         let mut module = Module::new();
         let h = identity(&mut module, "h", droppable);
         let return_cont = module.reserve_continuation();
@@ -489,11 +489,11 @@ fn only_a_droppable_call_moves_into_the_arm_that_reads_it() {
         let held = holding(&mut module, vec![resume], call);
         main(&mut module, vec![a, n], return_cont, vec![h], held);
 
-        assert_eq!(sink_computations(&mut module), droppable);
+        assert_eq!(sink_computations(&mut module), moves);
         assert_eq!(
             holder_of(&module, call) == Some(returns_result),
-            droppable,
-            "droppable: {droppable}"
+            moves,
+            "moves: {moves}"
         );
         module.verify().unwrap();
     }

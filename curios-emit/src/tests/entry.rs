@@ -35,7 +35,7 @@ fn registered_entry(suspended: bool, construct: bool) -> curios_cps::Module {
             params: vec![],
             return_cont: ret,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);

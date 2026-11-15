@@ -1,6 +1,6 @@
 //! Placement: a computation the program may drop where nothing reads it runs only where something does.
 //!
-//! **The licence is the dead call's.** A construction, an intrinsic, a group of functions that carries one and a call of a [`Function::droppable`](crate::Function::droppable) function are each work a path that never reads it need not do, by the rule [`eliminate_dead_calls`](super::eliminate_dead_calls) already applies to a call no path reads. A trap is not an event that keeps such work in place; an effect, a divergence and a mutable allocation are, and none of these nodes has one.
+//! **The licence is the dead call's.** A construction, an intrinsic, a group of functions that carries one and a call [`Module::may_drop_call`](crate::Module::may_drop_call) admits are each work a path that never reads it need not do, by the rule [`eliminate_dead_calls`](super::eliminate_dead_calls) already applies to a call no path reads. A trap is not an event that keeps such work in place; an effect, a divergence and a mutable allocation are, and none of these nodes has one.
 //!
 //! **A binding's scope is its dominance region** (`cse.rs` states why), so the latest point every reader still follows is the innermost continuation holding them all: no dominator tree is built, and the work moves there, at the head of that continuation's body, where some run that does the work leaves the function without entering it. Where every run enters it, the work is read on every path and stays: moving it would save nothing, and would take a continuation that only hands values on away from the forwarding that threads its jumps through it. A reader inside a function defined below the work reads it where that function is bound, since a closure may run any number of times; and a continuation on a cycle that does not pass through the work's own continuation is never a destination, since the work would run once a turn of a loop it ran once before.
 //!
@@ -628,13 +628,10 @@ impl<'m> Sink<'m> {
             }
             Node::ApplyFun {
                 callee: Callee::Known(callee),
+                args,
                 return_to,
-                ..
             } => {
-                let droppable = self
-                    .module
-                    .function(*callee)
-                    .is_some_and(|function| function.droppable);
+                let droppable = self.module.may_drop_call(*callee, args);
                 let resume = self.module.continuation(*return_to)?;
                 let entered_once = self
                     .transfers

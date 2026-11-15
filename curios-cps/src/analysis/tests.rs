@@ -30,7 +30,7 @@ fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, Functi
             params: vec![p],
             return_cont: a_return,
             body: a_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -50,7 +50,7 @@ fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, Functi
             params: vec![q],
             return_cont: b_return,
             body: b_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -71,7 +71,7 @@ fn two_functions_passing_references(mutual: bool) -> (Module, FunctionId, Functi
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -132,7 +132,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
             params: vec![],
             return_cont: f_return,
             body: f_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -176,7 +176,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
             params: vec![p, n],
             return_cont: g_return,
             body: g_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -202,7 +202,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
             params: vec![],
             return_cont: h_return,
             body: h_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -230,7 +230,7 @@ fn a_member_fed_one_function(shape: FeedShape, recursive: bool) -> (Module, Valu
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -306,7 +306,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
             params: vec![],
             return_cont: f_return,
             body: f_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -374,7 +374,7 @@ fn a_loop_handed_a_function(f_first: bool) -> (Module, ValueId) {
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -471,7 +471,7 @@ fn known_continuation_values_are_not_substituted_across_scopes() {
             params: vec![seed],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -524,7 +524,7 @@ fn known_value_analysis_records_a_continuation_parameter_every_jump_passes_the_s
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -561,7 +561,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
             params: vec![],
             return_cont: callee_return,
             body: callee_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let join = module.reserve_continuation();
@@ -639,7 +639,7 @@ fn a_join_also_reached_by_a_call_result_learns_nothing_from_a_jump() {
             params: vec![chooser],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -747,7 +747,7 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
             params: vec![chooser],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -787,7 +787,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
             params: vec![],
             return_cont: h_return,
             body: h_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let return_h = module.add_node(Node::ApplyCont(Edge {
@@ -805,7 +805,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
             params: vec![],
             return_cont: g_return,
             body: g_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let f_body = module.add_node(Node::ApplyFun {
@@ -820,7 +820,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
             params: vec![],
             return_cont: f_return,
             body: f_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let entry = module.reserve_function();
@@ -841,7 +841,7 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
             params: vec![],
             return_cont: entry_return,
             body: entry_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);

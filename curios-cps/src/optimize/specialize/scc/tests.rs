@@ -110,7 +110,7 @@ fn many_independent_contexts_advance_without_a_one_context_per_round_throttle() 
                 params: vec![param],
                 return_cont: helper_ret,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         helpers.push(helper);
@@ -344,7 +344,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
                 params: vec![next, x],
                 return_cont: function_return,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         function
@@ -371,7 +371,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
             params: vec![m],
             return_cont: again_return,
             body: again_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let apply = module.add_node(Node::ApplyFun {
@@ -390,7 +390,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
             params: vec![op, n],
             return_cont: g_return,
             body: g_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -435,7 +435,7 @@ fn a_component_recursive_through_a_function_it_defines() -> (Module, NodeId, Nod
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -531,7 +531,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
             params: vec![k, n],
             return_cont: walk_return,
             body: walk_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -576,7 +576,7 @@ fn a_loop_passing_on_the_literal_each_call_hands_it() -> (Module, FunctionId, No
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);

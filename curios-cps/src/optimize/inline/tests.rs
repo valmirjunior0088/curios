@@ -44,7 +44,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
             params: vec![callee_param],
             return_cont: callee_return,
             body: callee_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -63,7 +63,7 @@ fn known_call_inlining_clones_recursive_local_continuations() {
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -137,7 +137,7 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
             params: vec![p],
             return_cont: callee_return,
             body: callee_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -157,7 +157,7 @@ fn a_call_handing_a_filler_to_an_applied_parameter_is_declined_without_minting()
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -216,7 +216,7 @@ fn calls_handing_a_function(
             params: vec![value, step],
             return_cont: callee_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     pad(&mut module, callee, nodes);
@@ -235,7 +235,7 @@ fn calls_handing_a_function(
                 params: vec![param],
                 return_cont: function_return,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         function
@@ -289,7 +289,7 @@ fn calls_handing_a_function(
             params: vec![input],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -393,7 +393,7 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
             params: vec![param],
             return_cont: callee_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     pad(&mut module, callee, nodes);
@@ -453,7 +453,7 @@ fn sized_calls(nodes: usize, sites: usize, escaping: bool) -> (Module, FunctionI
             params: vec![input],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -522,7 +522,7 @@ fn a_callee_enlarged_earlier_in_the_sweep_is_measured_at_its_current_extent() {
             params: vec![param],
             return_cont: helper_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     pad(&mut module, helper, MULTI_SITE_INLINE_LIMIT + 1);

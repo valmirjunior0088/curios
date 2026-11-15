@@ -41,7 +41,7 @@ fn minimal_module() -> Module {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(fun);
@@ -340,7 +340,7 @@ fn verifier_rejects_shared_return_continuations() {
             params: vec![],
             return_cont: shared_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     assert!(
@@ -368,7 +368,7 @@ fn verifier_rejects_another_functions_return_target() {
             params: vec![],
             return_cont: second_return,
             body: second_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let entry = module.entry().unwrap();
@@ -493,7 +493,7 @@ fn a_cycle_naming_a_member_the_module_does_not_hold_is_refused() {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);

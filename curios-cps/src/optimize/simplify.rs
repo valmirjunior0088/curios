@@ -58,7 +58,7 @@ pub fn rewrite_atoms(module: &mut Module, known: &BTreeMap<ValueId, Atom>) -> bo
             }
         }
     }
-    changed
+    module.substitute_claims(known) || changed
 }
 pub fn forward_continuations(module: &mut Module) -> bool {
     let forwarding = module
@@ -723,16 +723,13 @@ pub fn eliminate_dead_calls(module: &mut Module) -> bool {
     for (id, node) in module.live_nodes() {
         let Node::ApplyFun {
             callee: Callee::Known(callee),
+            args,
             return_to,
-            ..
         } = node
         else {
             continue;
         };
-        if !module
-            .function(*callee)
-            .is_some_and(|function| function.droppable)
-        {
+        if !module.may_drop_call(*callee, args) {
             continue;
         }
         let Some(resume) = module.continuation(*return_to) else {

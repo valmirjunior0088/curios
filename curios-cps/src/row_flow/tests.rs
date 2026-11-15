@@ -27,7 +27,7 @@ fn resumed_with(
             params: Vec::new(),
             return_cont: producer_ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -48,7 +48,7 @@ fn resumed_with(
                     params: Vec::new(),
                     return_cont: middle_ret,
                     body: call,
-                    droppable: false,
+                    droppable: Droppable::Never,
                 },
             );
             middle
@@ -84,7 +84,7 @@ fn resumed_with(
             params: Vec::new(),
             return_cont: entry_ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -189,7 +189,7 @@ fn a_heap_call_answers_any_row_its_continuation_may() {
             params: vec![closure],
             return_cont: entry_ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);

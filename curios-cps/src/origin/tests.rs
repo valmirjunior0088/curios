@@ -186,7 +186,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
             params: vec![callee_param],
             return_cont: callee_ret,
             body: callee_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -234,7 +234,7 @@ fn a_call_result_is_opaque_and_poisons_what_it_reaches() {
             params: vec![argument],
             return_cont: caller_ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(caller);
@@ -260,7 +260,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
                 params: vec![callee_param],
                 return_cont: callee_ret,
                 body: callee_exit,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
 
@@ -305,7 +305,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
                 params: vec![],
                 return_cont: caller_ret,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         module.set_entry(caller);

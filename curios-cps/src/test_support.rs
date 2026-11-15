@@ -46,7 +46,7 @@ pub fn module_with(body_of: impl FnOnce(&mut Module) -> NodeId) -> Module {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(function);
@@ -93,7 +93,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
                 params: vec![param],
                 return_cont: function_return,
                 body: function_body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         function
@@ -173,7 +173,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
             params: vec![op, n],
             return_cont: loop_return,
             body: loop_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -219,7 +219,7 @@ pub fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop 
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -261,7 +261,7 @@ pub fn helper_called(two_sites: bool) -> (Module, FunctionId) {
             params: vec![x],
             return_cont: helper_return,
             body: helper_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -308,7 +308,7 @@ pub fn helper_called(two_sites: bool) -> (Module, FunctionId) {
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -339,7 +339,7 @@ pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
             params: vec![x],
             return_cont: helper_return,
             body: helper_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -356,7 +356,7 @@ pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
             params: vec![y],
             return_cont: owner_return,
             body: owner_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -381,7 +381,7 @@ pub fn capture_unmentioned_by_owner() -> (Module, FunctionId, FunctionId) {
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -463,7 +463,7 @@ pub fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, F
             params: vec![t],
             return_cont: consume_return,
             body: consume_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -536,7 +536,7 @@ pub fn tagged_consumer(padding: usize, sites: &[u32]) -> (Module, Vec<NodeId>, F
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -574,7 +574,7 @@ pub fn unary_intrinsic_module(op: Intrinsic, args: Vec<Atom>) -> (Module, NodeId
             params: vec![x],
             return_cont,
             body: intrinsic,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -629,7 +629,7 @@ pub fn duplicate_pair_module(
             params: vec![x, y],
             return_cont,
             body: first_node,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -798,7 +798,7 @@ pub fn tagged_join() -> (Module, ContinuationId, NodeId, NodeId, ValueId) {
             params: vec![x],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -821,7 +821,7 @@ pub fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> Fun
             params: vec![],
             return_cont: inner_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let outer = module.reserve_function();
@@ -841,7 +841,7 @@ pub fn nest_helpers(module: &mut Module, owner: FunctionId, nodes: usize) -> Fun
             params: vec![],
             return_cont: outer_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let body = module.add_node(Node::LetFun {

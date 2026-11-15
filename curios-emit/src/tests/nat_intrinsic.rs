@@ -182,7 +182,7 @@ fn a_boxed_shift_count_crosses_as_a_wide_count_in_both_carriers() {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         });
         module.set_entry(main);
         let wat = wat(&module);

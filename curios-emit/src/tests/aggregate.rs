@@ -39,7 +39,7 @@ fn a_tuple_type_is_declared_for_each_arity_the_module_builds() {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -79,7 +79,7 @@ fn small_packed_literal_rides_the_immediate() {
             params: Vec::new(),
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -155,7 +155,7 @@ fn an_aggregate_read_at_a_raw_carrier_is_refused() {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -211,7 +211,7 @@ fn a_region_aggregate_read_at_a_raw_carrier_is_refused() {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -266,7 +266,7 @@ fn an_aggregate_reaching_a_parameter_read_as_a_float_leaves_it_a_reference() {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -319,7 +319,7 @@ fn a_variant_is_built_and_read_at_its_family_type() {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -366,7 +366,7 @@ fn a_short_variant_construction_is_refused() {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -434,7 +434,7 @@ fn a_rebuild_writes_its_slots_and_declares_only_them_mutable() {
             params: vec![],
             return_cont,
             body: add,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);

@@ -22,7 +22,7 @@ fn module_with(body_of: impl FnOnce(&mut Module, ContinuationId) -> NodeId) -> M
             params: Vec::new(),
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -53,7 +53,7 @@ fn representative() -> Module {
                 params: vec![n],
                 return_cont: helper_return,
                 body: helper_body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
 
@@ -296,7 +296,7 @@ fn a_call_returning_to_the_sentinel_prints_as_a_tail_call() {
                 params: Vec::new(),
                 return_cont: callee_return,
                 body: callee_body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -539,7 +539,7 @@ fn a_function_the_walk_never_reaches_still_prints() {
             params: Vec::new(),
             return_cont: orphan_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -704,7 +704,7 @@ fn a_function_group_prints_as_one_and_chain() {
                     params: Vec::new(),
                     return_cont: function_return,
                     body,
-                    droppable: false,
+                    droppable: Droppable::Never,
                 },
             );
             members.push(function);

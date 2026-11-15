@@ -230,7 +230,7 @@ fn a_value_free_in_another_function_is_held_at_its_own_carrier() {
             params: vec![],
             return_cont: callee_return,
             body: callee_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 

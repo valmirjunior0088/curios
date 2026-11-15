@@ -302,7 +302,11 @@ pub fn inline_call(
         );
     }
     // Each nested definition is copied into the caller alongside the body that introduces it. Its return sentinel stays a reserved, bodyless identity, which is what the verifier requires of one.
+    // A capture the call hands a function is discharged by it: a fold's loop, copied into the call handing it a pure stepper, is droppable there.
     for (&old, definition) in &nested_defs {
+        let droppable = definition
+            .droppable
+            .mapped(module, |value| map_atom(&Atom::Value(value)));
         module.define_function(
             functions[&old],
             Function {
@@ -310,7 +314,7 @@ pub fn inline_call(
                 params: definition.params.iter().map(|id| map_value(*id)).collect(),
                 return_cont: returns[&definition.return_cont],
                 body: node_map[&definition.body],
-                droppable: definition.droppable,
+                droppable,
             },
         );
     }

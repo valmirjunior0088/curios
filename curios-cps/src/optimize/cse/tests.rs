@@ -162,7 +162,7 @@ fn reaches_a_dominated_continuation_but_not_a_sibling() {
             params: vec![x],
             return_cont,
             body: bind,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);

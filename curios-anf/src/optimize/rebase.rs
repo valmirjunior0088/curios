@@ -23,7 +23,7 @@ use {
     crate::{
         Atom, Block, BlockId, Constant, FreeMonoidPart, Function, FunctionId, Module, Operation,
         Rhs, Role, Semantics, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
-        droppable_functions, self_references,
+        ValueId, droppable_functions, self_references,
     },
     curios_num::Binary,
     std::collections::{BTreeMap, BTreeSet},
@@ -368,7 +368,7 @@ fn rebase_one(
     module: &mut Module,
     binding: StatementId,
     function: FunctionId,
-    droppable: &mut Option<BTreeMap<FunctionId, bool>>,
+    droppable: &mut Option<BTreeMap<FunctionId, Option<BTreeSet<ValueId>>>>,
 ) {
     let Some(definition) = module.function(function) else {
         return;
@@ -387,12 +387,12 @@ fn rebase_one(
         Leaf::Combine { context, .. } => context.decided,
         Leaf::Bare { .. } | Leaf::Base { .. } => true,
     });
+    // Its own call hands what it was handed, so placement runs it as a tail call only where it is droppable whatever it is handed.
     if decided
         && droppable
             .get_or_insert_with(|| droppable_functions(module))
             .get(&function)
-            .copied()
-            .unwrap_or(false)
+            .is_some_and(|given| given.as_ref().is_some_and(BTreeSet::is_empty))
     {
         return;
     }

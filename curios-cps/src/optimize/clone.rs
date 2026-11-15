@@ -397,7 +397,9 @@ pub fn copy_bodies(module: &mut Module, plan: CopyPlan) -> Copies {
                     params: def.params.iter().map(|&p| map_value(p)).collect(),
                     return_cont: returns[&def.return_cont],
                     body: nodes[&def.body],
-                    droppable: def.droppable,
+                    droppable: def
+                        .droppable
+                        .mapped(module, |value| Atom::Value(map_value(value))),
                 },
             )
         })

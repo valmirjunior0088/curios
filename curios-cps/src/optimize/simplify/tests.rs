@@ -4,7 +4,7 @@ use {
     super::*,
     crate::*,
     curios_num::{Floating, Natural},
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 #[test]
@@ -59,7 +59,7 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -127,7 +127,7 @@ fn forwarding_a_nan_literal_settles_in_one_round() {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -204,7 +204,7 @@ fn a_closure_call_of_a_function_of_another_arity_is_unreachable() {
             params: vec![first, second],
             return_cont: target_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let forced = module.add_node(Node::ApplyFun {
@@ -243,7 +243,7 @@ fn calling_join(known: bool) -> (Module, NodeId, FunctionId, ContinuationId) {
             params: vec![arm_param],
             return_cont: arm_return,
             body: arm_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -291,7 +291,7 @@ fn calling_join(known: bool) -> (Module, NodeId, FunctionId, ContinuationId) {
             params: entry_params,
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -347,7 +347,7 @@ fn returning_call(
             params: vec![],
             return_cont: callee_return,
             body: callee_body,
-            droppable: true,
+            droppable: Droppable::ALWAYS,
         },
     );
     let main_return = module.reserve_continuation();
@@ -388,7 +388,7 @@ fn returning_call(
             params: vec![],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -440,7 +440,7 @@ fn dead_calls_keep_a_call_when_only_its_second_result_is_read() {
 #[test]
 fn dead_calls_require_the_callees_proof_of_omission() {
     let (mut module, call, callee, _) = returning_call(1, None);
-    module.function_mut(callee).unwrap().droppable = false;
+    module.function_mut(callee).unwrap().droppable = Droppable::Never;
     assert!(!eliminate_dead_calls(&mut module));
     assert!(matches!(module.node(call), Some(Node::ApplyFun { .. })));
     module.verify().unwrap();
@@ -483,4 +483,121 @@ fn dead_calls_keep_unknown_closure_calls() {
     module.verify().unwrap();
     assert!(!eliminate_dead_calls(&mut module));
     module.verify().unwrap();
+}
+
+/// `main` calls `fold(stepper)` and reads nothing it returns; `fold(f) = f(0)` names what a call must hand it — its parameter `f` where `names_its_parameter`, and otherwise `x`, a value no call of it hands — and `stepper(x) = x` is droppable as `stepper` says.
+fn handing(stepper: Droppable, names_its_parameter: bool) -> (Module, NodeId, FunctionId, ValueId) {
+    let mut module = Module::new();
+    let stepping = module.reserve_function();
+    let stepping_return = module.reserve_continuation();
+    let x = module.add_value(Some("x".into()));
+    let stepping_body = module.add_node(Node::ApplyCont(Edge {
+        target: stepping_return,
+        args: vec![Atom::Value(x)],
+    }));
+    module.define_function(
+        stepping,
+        Function {
+            debug_name: Some("stepper".into()),
+            params: vec![x],
+            return_cont: stepping_return,
+            body: stepping_body,
+            droppable: stepper,
+        },
+    );
+
+    let fold = module.reserve_function();
+    let fold_return = module.reserve_continuation();
+    let f = module.add_value(Some("f".into()));
+    let fold_body = module.add_node(Node::ApplyFun {
+        callee: Callee::Closure(f),
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
+        return_to: fold_return,
+    });
+    let named = match names_its_parameter {
+        true => f,
+        false => x,
+    };
+    module.define_function(
+        fold,
+        Function {
+            debug_name: Some("fold".into()),
+            params: vec![f],
+            return_cont: fold_return,
+            body: fold_body,
+            droppable: Droppable::Given(BTreeSet::from([named])),
+        },
+    );
+
+    let main = module.reserve_function();
+    let main_return = module.reserve_continuation();
+    let resume = module.reserve_continuation();
+    let unread = module.add_value(None);
+    let resume_body = module.add_node(Node::ApplyCont(Edge {
+        target: main_return,
+        args: vec![Atom::Literal(Literal::Nat(Natural::from(0u32)))],
+    }));
+    module.define_continuation(
+        resume,
+        Continuation {
+            debug_name: Some("resume".into()),
+            params: vec![unread],
+            body: resume_body,
+        },
+    );
+    let call = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(fold),
+        args: vec![Atom::Fun(stepping)],
+        return_to: resume,
+    });
+    let resuming = module.add_node(Node::LetCont {
+        continuations: vec![resume],
+        body: call,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![stepping, fold],
+        body: resuming,
+    });
+    module.define_function(
+        main,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: main_return,
+            body,
+            droppable: Droppable::Never,
+        },
+    );
+    module.set_entry(main);
+    module.verify().unwrap();
+    (module, call, stepping, named)
+}
+
+/// A call of a function droppable given its parameter goes where it hands that parameter a function droppable at every call, and stays where it hands one that is not. A value named that is no parameter of the callee is one no call hands, so the call stays whatever it hands.
+#[test]
+fn dead_calls_go_by_what_they_hand() {
+    for (stepper, names_its_parameter, goes) in [
+        (Droppable::ALWAYS, true, true),
+        (Droppable::Never, true, false),
+        (Droppable::ALWAYS, false, false),
+    ] {
+        let (mut module, call, ..) = handing(stepper.clone(), names_its_parameter);
+        assert_eq!(
+            eliminate_dead_calls(&mut module),
+            goes,
+            "{stepper:?}, names its parameter: {names_its_parameter}"
+        );
+        assert_eq!(matches!(module.node(call), Some(Node::ApplyCont(_))), goes);
+        module.verify().unwrap();
+    }
+}
+
+/// What a round knows of a value reaches the claims naming it: `fold`'s claim names a value no call of it hands, so its call stays, until the round knows that value for a function droppable at every call, and then the call goes. Mutation-checked: rewriting the nodes alone keeps the call.
+#[test]
+fn a_claim_follows_what_the_round_knows_of_what_it_names() {
+    let (mut module, call, stepping, named) = handing(Droppable::ALWAYS, false);
+    assert!(!eliminate_dead_calls(&mut module));
+    rewrite_atoms(&mut module, &BTreeMap::from([(named, Atom::Fun(stepping))]));
+    assert!(eliminate_dead_calls(&mut module));
+    assert!(matches!(module.node(call), Some(Node::ApplyCont(_))));
 }

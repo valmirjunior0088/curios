@@ -41,7 +41,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             params: vec![step_param],
             return_cont: step_sentinel,
             body: step_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -63,7 +63,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             params: vec![leader_param],
             return_cont: leader_sentinel,
             body: leader_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -83,7 +83,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             params: vec![forwarder_param],
             return_cont: forwarder_sentinel,
             body: forwarder_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -129,7 +129,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
                         params: vec![],
                         return_cont: nested_sentinel,
                         body: nested_body,
-                        droppable: false,
+                        droppable: Droppable::Never,
                     },
                 );
                 let kept = module.add_value(Some("kept".into()));
@@ -240,7 +240,7 @@ fn chain(leader_use: Use, forwarder_use: Use) -> (Module, FunctionId, FunctionId
             params: vec![],
             return_cont: entry_sentinel,
             body: entry_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -440,7 +440,7 @@ fn a_forwarded_application_declines_uncurrying() {
             params: vec![inner_param],
             return_cont: inner_ret,
             body: inner_exit,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -458,7 +458,7 @@ fn a_forwarded_application_declines_uncurrying() {
             params: vec![produced_param],
             return_cont: producer_ret,
             body: producer_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -511,7 +511,7 @@ fn a_forwarded_application_declines_uncurrying() {
             params: vec![argument],
             return_cont: caller_ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(caller);
@@ -549,7 +549,7 @@ fn unary(module: &mut Module, name: &str) -> FunctionId {
             params: vec![param],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     function
@@ -571,7 +571,7 @@ fn returning(module: &mut Module, name: &str, returned: FunctionId) -> FunctionI
             params: vec![param],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     function
@@ -685,7 +685,7 @@ fn shared_resume(beside: Beside) -> (Module, FunctionId) {
             params: vec![argument],
             return_cont: caller_ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(caller);
@@ -888,7 +888,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
             params: vec![n, through],
             return_cont: producer_ret,
             body: producer_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -931,7 +931,7 @@ fn two_armed(arm: Arm) -> (Module, FunctionId) {
             params: vec![argument],
             return_cont: caller_ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(caller);

@@ -28,9 +28,9 @@ pub use module::{FieldGroup, Module, Row, Slot};
 mod node;
 use node::*;
 pub use node::{
-    Atom, Callee, CellOp, ChannelOp, Continuation, ContinuationId, ENVELOPE_BITS, Edge, Function,
-    FunctionId, IntrinsicCall, Literal, MemberId, Node, NodeId, Panic, Register, RowId, UseTarget,
-    ValueDef, ValueExpr, ValueId, atoms, int_is_small, nat_is_small,
+    Atom, Callee, CellOp, ChannelOp, Continuation, ContinuationId, Droppable, ENVELOPE_BITS, Edge,
+    Function, FunctionId, IntrinsicCall, Literal, MemberId, Node, NodeId, Panic, Register, RowId,
+    UseTarget, ValueDef, ValueExpr, ValueId, atoms, int_is_small, nat_is_small,
 };
 
 mod optimize;

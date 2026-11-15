@@ -78,7 +78,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
             params: vec![],
             return_cont: producer_ret,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     let entry = module.reserve_function();
@@ -117,7 +117,7 @@ fn an_internally_consumed_suspension_executes_with_the_direct_abi() {
             params: vec![],
             return_cont: ret,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(entry);

@@ -80,7 +80,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
             params: vec![n],
             return_cont: count_return,
             body: count_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -100,7 +100,7 @@ fn counting(tail: bool) -> (Module, FunctionId) {
             params: vec![],
             return_cont: main_return,
             body: main_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);

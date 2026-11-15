@@ -27,7 +27,7 @@ fn returning_callee(module: &mut Module, name: &str) -> FunctionId {
             params: vec![field],
             return_cont: sentinel,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     function
@@ -117,7 +117,7 @@ fn calling_function(
             params: vec![argument],
             return_cont: sentinel,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     function
@@ -178,7 +178,7 @@ fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() 
             params: vec![argument],
             return_cont: sentinel,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(caller);
@@ -270,7 +270,7 @@ fn a_callee_the_entry_tail_calls_keeps_the_host_protocol() {
             params: vec![argument],
             return_cont: sentinel,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -314,7 +314,7 @@ fn an_escaping_callee_stays_a_tuple() {
             params: vec![argument],
             return_cont: sentinel,
             body: capture,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -360,7 +360,7 @@ fn row_returning_callee(module: &mut Module, name: &str, row: RowId) -> Function
             params: vec![field],
             return_cont: sentinel,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     function

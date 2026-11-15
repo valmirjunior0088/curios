@@ -49,7 +49,7 @@ fn called_both_ways() -> Module {
             params: vec![t],
             return_cont: bump_return,
             body: read_tag,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let exit = module.add_node(halt_zero());
@@ -105,7 +105,7 @@ fn called_both_ways() -> Module {
             params: vec![],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -164,7 +164,7 @@ fn handed_back_by(switch: bool, fresh: bool) -> Module {
             params: vec![t],
             return_cont: pick_return,
             body: read_tag,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -235,7 +235,7 @@ fn handed_back_by(switch: bool, fresh: bool) -> Module {
             params: vec![],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -335,7 +335,7 @@ fn read_beside_a_construction(looped: bool) -> Module {
             params: vec![],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -404,7 +404,7 @@ fn built_over_a_value_read_again(taken_apart: bool) -> Module {
             params: vec![t],
             return_cont: bump_return,
             body: read_tag,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -460,7 +460,7 @@ fn built_over_a_value_read_again(taken_apart: bool) -> Module {
             params: vec![],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -631,7 +631,7 @@ fn arms_of_a_round(back: bool) -> Module {
             params: vec![],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -750,7 +750,7 @@ fn built_over_a_number_handed_twice() -> Module {
             params: vec![],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);

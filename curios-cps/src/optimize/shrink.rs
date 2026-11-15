@@ -13,8 +13,8 @@ mod tests;
 
 use {
     crate::{
-        Atom, Callee, ContinuationId, Edge, FunctionId, Intrinsic, Literal, Module, Node, NodeId,
-        ValueExpr, ValueId, analyze_calls, atoms, collect_control_targets, evaluate,
+        Atom, Callee, ContinuationId, Droppable, Edge, FunctionId, Intrinsic, Literal, Module,
+        Node, NodeId, ValueExpr, ValueId, analyze_calls, atoms, collect_control_targets, evaluate,
         visit_atoms_mut,
     },
     curios_num::{Integer, Natural},
@@ -98,6 +98,8 @@ struct Census {
     /// The `LetCont` binding each continuation.
     held: BTreeMap<ContinuationId, NodeId>,
     parent: BTreeMap<NodeId, Referrer>,
+    /// The functions whose claims name each value ([`Droppable::Given`]), which a substitution of the value maps as it rewrites its sites.
+    claims: BTreeMap<ValueId, BTreeSet<FunctionId>>,
 }
 
 /// Everything one node refers to, which the census files under the node.
@@ -305,6 +307,11 @@ impl<'m> Shrink<'m> {
                 .parent
                 .insert(definition.body, Referrer::Function(function));
             pending.push(Redex::Function(function));
+            if let Droppable::Given(values) = &definition.droppable {
+                for &value in values {
+                    census.claims.entry(value).or_default().insert(function);
+                }
+            }
         }
         let recursive = analyze_calls(module).recursive;
         let looping = looping_continuations(module);
@@ -445,6 +452,7 @@ impl<'m> Shrink<'m> {
 
     /// Name `replacement` wherever `value` is named, where each site stands: the census moves the site from `value` to what replaces it, and nothing else about the site changes. A closure call whose callee becomes a function is a call of it, or stands where no run arrives when the function takes another number of arguments ([`Module::applies`]).
     fn substitute(&mut self, value: ValueId, replacement: &Atom) {
+        self.substitute_claims(value, replacement);
         let Some(sites) = self.census.uses.remove(&value) else {
             return;
         };
@@ -504,6 +512,39 @@ impl<'m> Shrink<'m> {
                 Atom::Literal(_) | Atom::Filler => {}
             }
             self.pending.push(Redex::Node(site));
+        }
+    }
+
+    /// Map the claims naming `value` as its sites are, keeping the census of what each claim names exact.
+    fn substitute_claims(&mut self, value: ValueId, replacement: &Atom) {
+        let Some(claimants) = self.census.claims.remove(&value) else {
+            return;
+        };
+        for function in claimants {
+            let Some(claim) = self
+                .module
+                .function(function)
+                .map(|definition| definition.droppable.clone())
+            else {
+                continue;
+            };
+            let droppable = claim.mapped(self.module, |named| match named == value {
+                true => replacement.clone(),
+                false => Atom::Value(named),
+            });
+            if let Droppable::Given(values) = &droppable {
+                for &named in values {
+                    self.census
+                        .claims
+                        .entry(named)
+                        .or_default()
+                        .insert(function);
+                }
+            }
+            self.module
+                .function_mut(function)
+                .expect("a function whose claim is mapped is live")
+                .droppable = droppable;
         }
     }
 

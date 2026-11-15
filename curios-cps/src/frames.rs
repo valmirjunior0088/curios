@@ -17,9 +17,9 @@ mod tests;
 
 use {
     super::{
-        Atom, CallAnalysis, Callee, Continuation, ContinuationId, CopyPlan, Edge, Function,
-        FunctionId, Intrinsic, IntrinsicCall, Literal, Mapping, Module, Node, NodeId, ValueExpr,
-        ValueId, analyze_calls, analyze_sccs, clone_node, copy_bodies, function_nodes,
+        Atom, CallAnalysis, Callee, Continuation, ContinuationId, CopyPlan, Droppable, Edge,
+        Function, FunctionId, Intrinsic, IntrinsicCall, Literal, Mapping, Module, Node, NodeId,
+        ValueExpr, ValueId, analyze_calls, analyze_sccs, clone_node, copy_bodies, function_nodes,
         prune_unreachable,
     },
     curios_num::Natural,
@@ -514,7 +514,7 @@ impl Twin<'_> {
         let (sentinel, body) = {
             let definition = self.module.function_mut(twin).unwrap();
             definition.params.push(k);
-            definition.droppable = false;
+            definition.droppable = Droppable::Never;
             definition.debug_name = Some(heap_named(definition.debug_name.as_deref()));
             (definition.return_cont, definition.body)
         };
@@ -562,7 +562,7 @@ impl Twin<'_> {
                                 params: continuation.params.clone(),
                                 return_cont,
                                 body: continuation.body,
-                                droppable: false,
+                                droppable: Droppable::Never,
                             });
                             lifted.insert(id, function);
                             work.push((continuation.body, return_cont));
@@ -969,7 +969,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
         params: vec![image],
         return_cont: resumed,
         body: append,
-        droppable: false,
+        droppable: Droppable::Never,
     });
     let element = module.add_value(None);
     let apply = module.add_node(Node::Intrinsic {
@@ -1032,7 +1032,7 @@ fn heap_map(module: &mut Module, list: Atom, mapper: Atom, then: Atom, to: Conti
             params: vec![position, mapped, k],
             return_cont: returned,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -1088,7 +1088,7 @@ fn handing_back(
         params,
         return_cont,
         body,
-        droppable: false,
+        droppable: Droppable::Never,
     });
     if returns == 1 {
         return (handed, return_to);

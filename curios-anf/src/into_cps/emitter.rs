@@ -238,6 +238,11 @@ impl<'a> Emitter<'a> {
         }
     }
 
+    /// What `arena` was lowered to, where it has been.
+    pub fn lowered(&self, arena: ValueId) -> Option<&curios_cps::Atom> {
+        self.values.get(&arena)
+    }
+
     pub fn lower_atom(&self, atom: Atom) -> curios_cps::Atom {
         match atom {
             Atom::Value(value) => self
@@ -561,7 +566,7 @@ impl<'a> Emitter<'a> {
                 return_cont,
                 body,
                 // The private memoization effects must survive even when this particular read's result is unused.
-                droppable: false,
+                droppable: curios_cps::Droppable::Never,
             },
         );
     }

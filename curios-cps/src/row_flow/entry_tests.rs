@@ -31,7 +31,7 @@ fn entry_with(
             params,
             return_cont: ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -53,7 +53,7 @@ fn define(
             params: vec![],
             return_cont: ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     function
@@ -270,7 +270,7 @@ fn a_recursive_component_propagates_its_returned_row() {
                 params: vec![],
                 return_cont: first_ret,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         let body = module.add_node(Node::ApplyFun {
@@ -285,7 +285,7 @@ fn a_recursive_component_propagates_its_returned_row() {
                 params: vec![],
                 return_cont: second_ret,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -316,7 +316,7 @@ fn a_recursive_component_that_never_returns_contributes_no_row() {
                 params: vec![],
                 return_cont: sentinel,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         let call = module.add_node(Node::ApplyFun {
@@ -443,7 +443,7 @@ fn escaping_parameters_are_unknown_even_at_a_known_call() {
                 params: vec![param],
                 return_cont: sentinel,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         let escaped = module.add_value(None);

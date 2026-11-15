@@ -2,7 +2,7 @@ use {
     super::*,
     crate::{test_support::*, *},
     curios_num::{Floating, Integer, Natural, Rounding},
-    std::collections::BTreeMap,
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 fn nat(value: u32) -> Atom {
@@ -43,7 +43,7 @@ fn entry(
             params,
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -288,7 +288,7 @@ fn continuation_beta_rewrites_parameters_captured_by_nested_functions() {
             params: vec![],
             return_cont: nested_return,
             body: nested_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let return_nested = jump(&mut module, return_cont, vec![Atom::Fun(nested)]);
@@ -470,7 +470,7 @@ fn function_nest(levels: usize) -> (Module, ValueId) {
             params: vec![innermost_param],
             return_cont: innermost_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     for level in (0..levels - 1).rev() {
@@ -488,7 +488,7 @@ fn function_nest(levels: usize) -> (Module, ValueId) {
                 params: vec![param],
                 return_cont: lambda_return,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
     }
@@ -681,7 +681,7 @@ fn a_function_whose_one_call_is_its_own_stays_where_it_is() {
             params: vec![x],
             return_cont: f_return,
             body: step,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let deliver = jump(&mut module, main_return, vec![Atom::Value(a)]);
@@ -703,4 +703,73 @@ fn a_function_whose_one_call_is_its_own_stays_where_it_is() {
         module.node(call),
         Some(Node::ApplyFun { callee: Callee::Known(callee), .. }) if *callee == f
     ));
+}
+
+/// A claim follows the substitution of what it names: `go` captures `f` and is droppable given it, and once the continuation binding `f` is put in place with a function droppable at every call, `go` is too; handed one that is not, `go` is never. Mutation-checked: a substitution that leaves claims as they stand keeps `go`'s naming `f`, which no call can hand.
+#[test]
+fn a_claim_follows_the_substitution_of_what_it_names() {
+    for (stepper, after) in [
+        (Droppable::ALWAYS, Droppable::ALWAYS),
+        (Droppable::Never, Droppable::Never),
+    ] {
+        let mut module = Module::new();
+        let main = module.reserve_function();
+        let return_cont = module.reserve_continuation();
+
+        let stepping = module.reserve_function();
+        let stepping_return = module.reserve_continuation();
+        let x = module.add_value(Some("x".into()));
+        let stepping_body = jump(&mut module, stepping_return, vec![Atom::Value(x)]);
+        module.define_function(
+            stepping,
+            Function {
+                debug_name: Some("stepper".into()),
+                params: vec![x],
+                return_cont: stepping_return,
+                body: stepping_body,
+                droppable: stepper,
+            },
+        );
+
+        let f = module.add_value(Some("f".into()));
+        let go = module.reserve_function();
+        let go_return = module.reserve_continuation();
+        let go_body = module.add_node(Node::ApplyFun {
+            callee: Callee::Closure(f),
+            args: vec![nat(0)],
+            return_to: go_return,
+        });
+        module.define_function(
+            go,
+            Function {
+                debug_name: Some("go".into()),
+                params: vec![],
+                return_cont: go_return,
+                body: go_body,
+                droppable: Droppable::Given(BTreeSet::from([f])),
+            },
+        );
+        let return_go = jump(&mut module, return_cont, vec![Atom::Fun(go)]);
+        let scope_body = module.add_node(Node::LetFun {
+            functions: vec![go],
+            body: return_go,
+        });
+        let scope = continuation(&mut module, vec![f], scope_body);
+        let call = jump(&mut module, scope, vec![Atom::Fun(stepping)]);
+        let held = holding(&mut module, vec![scope], call);
+        let body = module.add_node(Node::LetFun {
+            functions: vec![stepping],
+            body: held,
+        });
+        entry(&mut module, main, vec![], return_cont, body);
+        module.verify().unwrap();
+
+        assert!(shrink(&mut module));
+        assert_eq!(
+            module.function(go).map(|go| &go.droppable),
+            Some(&after),
+            "{module}"
+        );
+        module.verify().unwrap();
+    }
 }

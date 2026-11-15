@@ -666,3 +666,59 @@ fn an_unread_call_through_a_total_definitions_local_loop_is_dropped() {
         "and the partial definition's is kept:\n{module}"
     );
 }
+
+/// An unread fold handed a pure stepper is dropped, though the fold applies a function it was handed: the summary names what it applies, and the call hands a function droppable at every call ([`curios_cps::Droppable`]). A fold handed a stepper that may never return is kept. Mutation-checked: a function applying its parameter judged an unknown keeps the pure ones.
+#[test]
+fn an_unread_fold_handed_a_pure_stepper_is_dropped() {
+    const FOLDS: &str = r#"
+        use /std/{Nat, List, Bytes, Proc};
+        let spin(k: Nat) -> Nat = spin(k + 30023);
+        let tally(bytes: Bytes, arguments: List(Bytes)) -> Nat =
+            let unread_bytes = Bytes/fold(bytes, 0, (b, acc) => acc + 30017);
+            let unread_list = List/fold(arguments, 0, (s, acc) => acc + 30019);
+            List/len(arguments);
+        let churn(bytes: Bytes) -> Nat =
+            let unread_partial = Bytes/fold(bytes, 0, (b, acc) => spin(acc));
+            Bytes/len(bytes);
+        let entry() -> /std/Io({}) =
+            let arguments = Proc/args()!;
+            let bytes = Bytes/flatten(arguments);
+            /std/print(Nat/to_str(tally(bytes, arguments) + churn(bytes)));
+        entry()
+        "#;
+
+    let module = cps_optm_module(FOLDS);
+    assert!(
+        !reads_nat(&module, 30017),
+        "the unread fold over bytes is dropped:\n{module}"
+    );
+    assert!(
+        !reads_nat(&module, 30019),
+        "and the one over a list:\n{module}"
+    );
+    assert!(
+        reads_nat(&module, 30023),
+        "and the one handed a stepper that may never return is kept:\n{module}"
+    );
+}
+
+/// A fold the program calls once is moved into its call, its stepper put in place of its parameter, and the loop it defines, droppable given that parameter, is then droppable given the stepper: the caller reads nothing of it, so the call to the loop goes ([`curios_cps::Droppable::mapped`]). Mutation-checked: a claim left naming the parameter the move put the stepper in place of keeps the loop.
+#[test]
+fn an_unread_fold_inlined_into_its_one_caller_is_dropped() {
+    const FOLD: &str = r#"
+        use /std/{Nat, List, Bytes, Proc};
+        let tally(bytes: Bytes) -> Nat =
+            let unread = Bytes/fold(bytes, 0, (b, acc) => acc + 30029);
+            Bytes/len(bytes);
+        let entry() -> /std/Io({}) =
+            let bytes = Bytes/flatten(Proc/args()!);
+            /std/print(Nat/to_str(tally(bytes)));
+        entry()
+        "#;
+
+    let module = cps_optm_module(FOLD);
+    assert!(
+        !reads_nat(&module, 30029),
+        "the unread fold is dropped:\n{module}"
+    );
+}

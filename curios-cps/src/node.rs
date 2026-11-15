@@ -1,11 +1,15 @@
 //! What the graph is made of: the identities, the operands, and the nodes that bind a value or transfer control.
 
 use {
-    super::{Intrinsic, Repr},
+    super::{Intrinsic, Module, Repr},
     curios_abi::ForeignFunction,
     curios_common::id,
     curios_num::{Binary, Floating, Integer, Natural},
-    std::{collections::BTreeMap, fmt, sync::Arc},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        fmt,
+        sync::Arc,
+    },
 };
 
 /// How many value bits a small `Nat` or `Int` holds — the width of an `i31ref`'s payload, read signed, and the one width in the whole pipeline that is a fact about the target rather than about the language.
@@ -305,12 +309,54 @@ pub struct Function {
     pub params: Vec<ValueId>,
     pub return_cont: ContinuationId,
     pub body: NodeId,
-    /// Whether a call of this function whose result nothing reads may simply not happen: it terminates, and running it a second time — or not at all — is not an event a program can observe.
+    /// Whether a call of this function whose result nothing reads may simply not happen: it terminates, and running it a second time — or not at all — is not an event a program can observe. See [`Droppable`].
     ///
     /// **A conclusion, not a fact this stage could reach.** Termination is the size-change engine's, decided above Core and carried down; freedom from effects is the erased stage's interprocedural summary. Both are in hand at the lowering that builds this, and only their conjunction crosses, so nothing here needs a lattice or a notion of purity of its own. A trap or a divergence is *not* excluded by it — an occurrence that already ran is what licenses dropping a later one, and a dead call has no dominating occurrence, so this must mean total.
     ///
-    /// False is the safe reading and the default: a function this could not be filled from is kept.
-    pub droppable: bool,
+    /// [`Droppable::Never`] is the safe reading: a function this could not be filled from is kept.
+    pub droppable: Droppable,
+}
+
+/// What a call of a function must hand it for the call, its result unread, to go: the conclusion [`Function::droppable`] carries.
+///
+/// A function applying what it is handed does what that does, so the erased stage's summary names those values rather than calling the function unknown: a fold is droppable given its stepper. A call decides it from its arguments ([`Module::may_drop_call`]), and a copy or a substitution that puts a function in place of one of the values discharges it there ([`Droppable::mapped`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Droppable {
+    /// Every call is kept.
+    Never,
+    /// A call may go where each value named is a parameter of the function and the call hands it a function droppable whatever it is handed. Of no values, the function is droppable at every call.
+    Given(BTreeSet<ValueId>),
+}
+
+impl Droppable {
+    /// Droppable at every call, whatever it hands.
+    pub const ALWAYS: Self = Self::Given(BTreeSet::new());
+
+    /// Whether every call may go, whatever it hands.
+    pub fn always(&self) -> bool {
+        matches!(self, Self::Given(values) if values.is_empty())
+    }
+
+    /// The same claim over a copy, which renames what this names or hands a function for it: a value renamed is named as renamed, one handed a function droppable at every call is discharged, and one handed anything else is no longer one a call can hand.
+    pub fn mapped(&self, module: &Module, atom: impl Fn(ValueId) -> Atom) -> Self {
+        let Self::Given(values) = self else {
+            return Self::Never;
+        };
+        let mut given = BTreeSet::new();
+        for &value in values {
+            match atom(value) {
+                Atom::Value(renamed) => {
+                    given.insert(renamed);
+                }
+                Atom::Fun(function)
+                    if module
+                        .function(function)
+                        .is_some_and(|definition| definition.droppable.always()) => {}
+                Atom::Fun(_) | Atom::Literal(_) | Atom::Filler => return Self::Never,
+            }
+        }
+        Self::Given(given)
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -4,9 +4,9 @@
 
 use {
     super::{
-        Atom, Callee, Continuation, ContinuationId, Edge, Function, FunctionId, Intrinsic, Literal,
-        MemberId, Node, NodeId, Repr, RowId, UseTarget, ValueDef, ValueExpr, ValueId, atoms,
-        nodes_from, visit_atoms_mut,
+        Atom, Callee, Continuation, ContinuationId, Droppable, Edge, Function, FunctionId,
+        Intrinsic, Literal, MemberId, Node, NodeId, Repr, RowId, UseTarget, ValueDef, ValueExpr,
+        ValueId, atoms, nodes_from, visit_atoms_mut,
     },
     curios_common::{Arena, ArenaId},
     curios_num::{Floating, Natural},
@@ -297,6 +297,54 @@ impl Module {
 
     pub fn function(&self, id: FunctionId) -> Option<&Function> {
         self.functions.get(id)
+    }
+
+    /// Whether a call of `callee` handing `arguments`, its result unread, may simply not happen: [`Function::droppable`] names what it must be handed, each a parameter handed a function droppable at every call. A value named that is no parameter is one this call cannot hand, so the call is kept: a name a pass renamed without the claim, or a capture no copy or substitution has put a function in place of yet.
+    pub fn may_drop_call(&self, callee: FunctionId, arguments: &[Atom]) -> bool {
+        let Some(function) = self.function(callee) else {
+            return false;
+        };
+        let Droppable::Given(values) = &function.droppable else {
+            return false;
+        };
+        values.iter().all(|value| {
+            function
+                .params
+                .iter()
+                .position(|param| param == value)
+                .and_then(|position| arguments.get(position))
+                .is_some_and(|argument| match argument {
+                    Atom::Fun(handed) => self
+                        .function(*handed)
+                        .is_some_and(|definition| definition.droppable.always()),
+                    Atom::Value(_) | Atom::Literal(_) | Atom::Filler => false,
+                })
+        })
+    }
+
+    /// Map every claim naming a value `known` replaces, as [`Droppable::mapped`] maps a copy's, answering whether one changed: a claim follows a substitution of what it names, as each site naming the value does, or it would go on naming a value no call can hand.
+    pub(crate) fn substitute_claims(&mut self, known: &BTreeMap<ValueId, Atom>) -> bool {
+        let mapped = self
+            .live_functions()
+            .filter_map(|(id, function)| match &function.droppable {
+                Droppable::Given(values)
+                    if values.iter().any(|value| known.contains_key(value)) =>
+                {
+                    let droppable = function.droppable.mapped(self, |value| {
+                        known.get(&value).cloned().unwrap_or(Atom::Value(value))
+                    });
+                    Some((id, droppable))
+                }
+                Droppable::Given(_) | Droppable::Never => None,
+            })
+            .collect::<Vec<_>>();
+        let changed = !mapped.is_empty();
+        for (id, droppable) in mapped {
+            self.function_mut(id)
+                .expect("a function mapped is live")
+                .droppable = droppable;
+        }
+        changed
     }
 
     /// Whether a closure call passing `arguments` may become a known call of `function`: it takes that many parameters.

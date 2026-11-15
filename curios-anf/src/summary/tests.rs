@@ -113,7 +113,7 @@ fn only_a_total_and_effect_free_function_crosses_as_droppable() {
             .functions()
             .iter()
             .flatten()
-            .any(|function| function.droppable);
+            .any(|function| function.droppable.always());
         assert_eq!(droppable, expected, "{label}");
     }
 }
@@ -207,4 +207,65 @@ fn a_call_through_a_constructed_products_field_is_judged_as_that_field() {
         LocalBehavior::unknown(),
         "a field of a parameter is whatever the caller passes",
     );
+}
+
+/// `apply(f, x) = f(x)`, proved total, and `pick(g, x) = let h = g(x); h(x)`, applying a value it computed.
+fn applying() -> (Module, FunctionId, ValueId, FunctionId) {
+    let mut builder = Builder::new();
+    let apply = builder.reserve_function();
+    let f = builder.value(Some("f".into()));
+    let x = builder.value(Some("x".into()));
+    builder.open_block();
+    let applied = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Value(f),
+            arguments: vec![Atom::Value(x)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(applied)));
+    builder.define_function(apply, Some("apply".into()), vec![f, x], body);
+
+    let pick = builder.reserve_function();
+    let g = builder.value(Some("g".into()));
+    let y = builder.value(Some("y".into()));
+    builder.open_block();
+    let computed = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Value(g),
+            arguments: vec![Atom::Value(y)],
+        },
+    );
+    let applied = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Value(computed),
+            arguments: vec![Atom::Value(y)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(applied)));
+    builder.define_function(pick, Some("pick".into()), vec![g, y], body);
+
+    builder.open_block();
+    builder.let_functions(vec![apply, pick]);
+    let entry = builder.seal_block(Terminator::Return(Atom::Function(apply)));
+    builder.set_entry(entry);
+    let mut module = builder.finalize().expect("the fixture verifies");
+    module.mark_total(apply);
+    module.mark_total(pick);
+    (module, apply, f, pick)
+}
+
+/// A function applying a parameter does what the call hands it, so it crosses as droppable given that parameter rather than as an unknown; one applying a value it computed applies what nothing here can name, and crosses as never droppable. Mutation-checked: judging every applied value an unknown leaves `apply` never droppable.
+#[test]
+fn a_function_applying_its_parameter_is_droppable_given_it() {
+    let (module, apply, f, pick) = applying();
+    let droppable = droppable_functions(&module);
+    assert_eq!(
+        droppable[&apply],
+        Some(std::collections::BTreeSet::from([f])),
+        "droppable given the function it applies"
+    );
+    assert_eq!(droppable[&pick], None, "a computed callee is an unknown");
 }

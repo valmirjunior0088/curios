@@ -132,7 +132,7 @@ fn guarded(start: u32, entry: Entry, nested: bool) -> (Module, ValueId, ValueId)
             params: vec![length],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);

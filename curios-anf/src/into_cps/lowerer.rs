@@ -14,13 +14,16 @@ use {
     curios_abi::ForeignFunction,
     curios_common::recurse,
     curios_num::Natural,
-    std::{collections::BTreeMap, sync::Arc},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    },
 };
 
 pub struct Lowerer<'a> {
     source: &'a Module,
-    /// Whether a call of each source function, its result unread, may simply not happen — the conjunction of the carried termination verdict and this stage's effect summary, which is the only form of either fact that crosses into CPS.
-    droppable: BTreeMap<FunctionId, bool>,
+    /// Whether a call of each source function, its result unread, may simply not happen, and given which of the values it applies — the conjunction of the carried termination verdict and this stage's effect summary, which is the only form of either fact that crosses into CPS.
+    droppable: BTreeMap<FunctionId, Option<BTreeSet<ValueId>>>,
     /// Use counts over the finished arena, read only to decline emitting a binding nothing reads. The module does not change during lowering, so one analysis taken at entry stays exact throughout.
     analysis: Analysis,
     /// The sequence-usage census's verdicts, read at every construction site to settle the stores into indexed-only fields.
@@ -85,7 +88,7 @@ impl<'a> Lowerer<'a> {
                 return_cont,
                 body,
                 // The entry is the program; nothing calls it, so whether it could be dropped is not a question.
-                droppable: false,
+                droppable: curios_cps::Droppable::Never,
             },
         );
         self.emitter.set_entry(main);
@@ -180,6 +183,21 @@ impl Lowerer<'_> {
         }
     }
 
+    /// What a call of `arena` must hand it to go, its result unread, over the values the lowering bound for what it applies: one lowered to no value of its own is one no call can hand, and the function is then kept.
+    fn droppable(&self, arena: FunctionId) -> curios_cps::Droppable {
+        let Some(Some(given)) = self.droppable.get(&arena) else {
+            return curios_cps::Droppable::Never;
+        };
+        given
+            .iter()
+            .map(|&value| match self.emitter.lowered(value) {
+                Some(curios_cps::Atom::Value(lowered)) => Some(*lowered),
+                _ => None,
+            })
+            .collect::<Option<_>>()
+            .map_or(curios_cps::Droppable::Never, curios_cps::Droppable::Given)
+    }
+
     /// Reserve every function of a group before defining any, so a member body can reference itself and its siblings; return the CPS ids in group order.
     fn lower_function_group(&mut self, functions: &[FunctionId]) -> Vec<curios_cps::FunctionId> {
         let ids: Vec<curios_cps::FunctionId> = functions
@@ -216,7 +234,7 @@ impl Lowerer<'_> {
                 params,
                 return_cont,
                 body,
-                droppable: self.droppable.get(&arena).copied().unwrap_or(false),
+                droppable: self.droppable(arena),
             },
         );
     }
@@ -393,7 +411,7 @@ impl Lowerer<'_> {
                 return_cont,
                 body,
                 // Forcing owns whether initialization is needed; dropping this call independently would leave the result empty after its initializer was consumed.
-                droppable: false,
+                droppable: curios_cps::Droppable::Never,
             },
         );
         thunk
@@ -802,7 +820,7 @@ impl Lowerer<'_> {
                 return_cont,
                 body,
                 // It reads and builds, and nothing else: a carry nothing reads may simply not happen.
-                droppable: true,
+                droppable: curios_cps::Droppable::ALWAYS,
             },
         );
         self.emitter.keep_out_of_line(carry);
@@ -878,7 +896,7 @@ impl Lowerer<'_> {
                 return_cont,
                 body,
                 // It applies a closure, whose totality is nothing this lowering states.
-                droppable: false,
+                droppable: curios_cps::Droppable::Never,
             },
         );
         self.emitter.keep_out_of_line(later);

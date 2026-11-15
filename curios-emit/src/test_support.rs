@@ -96,7 +96,7 @@ pub fn intrinsic_main(
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -131,7 +131,7 @@ pub fn tuple_project() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -164,7 +164,7 @@ pub fn list_len() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -200,7 +200,7 @@ pub fn bytes_len() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -262,7 +262,7 @@ pub fn cell_roundtrip() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -323,7 +323,7 @@ pub fn channel_roundtrip() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -381,7 +381,7 @@ pub fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cps::Module {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -417,7 +417,7 @@ fn indirect_application(discard_result: bool) -> curios_cps::Module {
             params: vec![],
             return_cont: target_return,
             body: target_body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
 
@@ -435,7 +435,7 @@ fn indirect_application(discard_result: bool) -> curios_cps::Module {
             params: vec![closure],
             return_cont: apply_return,
             body: apply_body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
 
@@ -480,7 +480,7 @@ fn indirect_application(discard_result: bool) -> curios_cps::Module {
             params: vec![],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -519,7 +519,7 @@ pub fn list_read() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -559,7 +559,7 @@ pub fn list_settle() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -585,7 +585,7 @@ pub fn list_map() -> curios_cps::Module {
             params: vec![element],
             return_cont: mapper_return,
             body: mapper_body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
 
@@ -623,7 +623,7 @@ pub fn list_map() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -659,7 +659,7 @@ pub fn deep_bytes_chain(depth: usize) -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: next,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -702,7 +702,7 @@ pub fn reducible_loop() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -773,7 +773,7 @@ pub fn irreducible_pair() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -812,7 +812,7 @@ pub fn constant_tuple_pair() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: build_first,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -862,7 +862,7 @@ pub fn constant_tuple_across_a_jump() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -902,7 +902,7 @@ pub fn runtime_tuple() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: compute,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -935,7 +935,7 @@ pub fn big_tuple() -> curios_cps::Module {
             params: vec![],
             return_cont,
             body: build,
-            droppable: false,
+            droppable: curios_cps::Droppable::Never,
         },
     );
     module.set_entry(main);

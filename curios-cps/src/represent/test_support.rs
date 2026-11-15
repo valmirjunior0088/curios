@@ -14,7 +14,7 @@ pub fn entry(module: &mut Module, params: Vec<ValueId>, body: NodeId) {
             params,
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(function);
@@ -54,7 +54,7 @@ pub fn define(
             params,
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 }

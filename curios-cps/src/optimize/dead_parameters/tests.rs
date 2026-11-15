@@ -21,7 +21,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
             params: vec![kept, removed],
             return_cont: callee_return,
             body: callee_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let main_return = module.reserve_continuation();
@@ -44,7 +44,7 @@ fn dead_parameter_elimination_rewrites_known_calls() {
             params: vec![],
             return_cont: main_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);
@@ -102,7 +102,7 @@ impl Program {
                 params,
                 return_cont: returned,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         function
@@ -142,7 +142,7 @@ impl Program {
                 params: vec![],
                 return_cont: self.returned,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         self.module.set_entry(self.entry);
@@ -233,7 +233,7 @@ fn inert_arguments_into_a_retained_signature_become_fillers() {
             params: worker_params.clone(),
             return_cont: returned,
             body: inside,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let call = p.module.add_node(Node::ApplyFun {
@@ -278,7 +278,7 @@ fn an_indirect_callee_keeps_its_binding_and_arguments() {
             params: params.clone(),
             return_cont: returned,
             body: inside,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let call = p.module.add_node(Node::ApplyFun {
@@ -519,7 +519,7 @@ fn nested_function_operands_are_repaired_without_losing_live_captures() {
             params: vec![],
             return_cont: returned,
             body: nested_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let end = p.module.add_node(Node::ApplyCont(Edge {
@@ -686,7 +686,7 @@ fn a_self_call_filters_its_original_argument_positions() {
             params: params.clone(),
             return_cont: returned,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let enter = p.module.add_node(Node::ApplyFun {
@@ -733,7 +733,7 @@ fn mutually_recursive_signatures_are_repaired_together() {
             params: a.clone(),
             return_cont: fr,
             body: fg,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let gf = p.module.add_node(Node::ApplyFun {
@@ -776,7 +776,7 @@ fn mutually_recursive_signatures_are_repaired_together() {
             params: b.clone(),
             return_cont: gr,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let enter = p.module.add_node(Node::ApplyFun {
@@ -893,7 +893,7 @@ fn every_returning_operation_retains_its_result_receiver() {
                 params: params.clone(),
                 return_cont: returned,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
         let enter = p.module.add_node(Node::ApplyFun {

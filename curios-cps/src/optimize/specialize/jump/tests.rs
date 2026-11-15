@@ -96,7 +96,7 @@ fn joins(chained: bool) -> (Module, [ContinuationId; 2], [NodeId; 2]) {
             params: vec![choice],
             return_cont: ret,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(main);

@@ -1,0 +1,18 @@
+# An unread call is dropped by what it hands
+
+**Decision.** Whether a call whose result nothing reads may simply not happen is decided at the call, from the callee and what the call hands it. `curios-anf`'s summary (`summary.rs`) states what a function's body does apart from applying the values it was handed, its parameters and its captures, beside the values among those it applies; a function proved total whose body does nothing observable besides crosses into CPS as droppable given those values, `curios_cps::Droppable::Given`, and any other as `Droppable::Never`. A call may go where each value named is a parameter of the callee and the call hands it a function droppable whatever it is handed (`Module::may_drop_call`), which `eliminate_dead_calls` and `sink_computations` both ask. A copy that hands a function for a value named discharges it there (`Droppable::mapped`): the inliner, copying a loop that captures a parameter of the function it inlines, hands the loop what the call handed. A claim follows every substitution of what it names, as each site naming the value does: `rewrite_atoms` maps the claims through what a round knows, and `shrink` maps those naming a value it substitutes, which its census indexes — as when it moves a fold into its one call and puts the stepper in place of the parameter its loop captures.
+
+**Rationale.**
+
+- **A higher-order function does what it is handed.** A fold applies its stepper, so judged alone it applies an unknown and is never droppable, and an unread fold handed a pure stepper ran to the end; what it does is its own work and the stepper's, which only the call knows. That is effect polymorphism, which Koka states in a function's type, its effect row a variable the argument's effect fills ([*Koka: Programming with Row Polymorphic Effect Types*](https://arxiv.org/abs/1406.2061), MSFP 2014); here the summary states it of a function's body, with the values it applies as the variables.
+- **The conclusion still crosses alone.** CPS keeps no lattice and no notion of purity: what crosses is the conjunction of the certifier's termination verdict and the summary, now naming the values it waits on, and a call reads it off its own arguments.
+- **A name no call can hand refuses.** A value named that is not a parameter of the callee, a capture no copy has handed a function yet or a parameter a pass renamed without the claim, keeps the call, so a pass that copies or rewrites a function without mapping the claim loses precision and never soundness.
+- **A handed function must be droppable whatever it is handed**, since what the callee hands it is the callee's to choose, and nothing at the call says.
+
+**Rejected.**
+
+- **A flag on each call, decided where the lowering knows the arguments**: inlining a fold copies the call its body makes to its loop, whose arguments name no stepper, so the flag the copy carries is the fold's, unknown.
+- **CPS deriving purity again after inlining**: a second effect lattice over a second representation, which the two stages' summaries would drift apart in.
+- **One mapping walking every claim at each substitution**: `shrink` substitutes a value at each reduction, so it would walk every function's claim at each; its census already indexes what names each value, and indexes what each claim names beside it.
+- **Dead-call elimination run again after inlining**, before contification: what kept the loop a moved fold defines was its claim, still naming the parameter the move substituted, not the order of the passes.
+- **Only what a function applies of its parameters**: the loops `/std` writes inside a fold capture its stepper rather than take it, so the loop a call keeps would stay unknown.

@@ -25,7 +25,7 @@ fn module_naming(names: &[Option<&str>]) -> Module {
                 params: vec![],
                 return_cont,
                 body,
-                droppable: false,
+                droppable: Droppable::Never,
             },
         );
     }

@@ -42,7 +42,7 @@ fn construction(
         params: vec![],
         return_cont,
         body,
-        droppable: false,
+        droppable: curios_cps::Droppable::Never,
     });
     module.set_entry(main);
     wat(&module)

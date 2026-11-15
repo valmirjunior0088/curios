@@ -19,7 +19,7 @@ fn nesting_module() -> (Module, FunctionId, FunctionId) {
             params: vec![],
             return_cont: inner_sentinel,
             body: inner_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -45,7 +45,7 @@ fn nesting_module() -> (Module, FunctionId, FunctionId) {
             params: vec![param],
             return_cont: outer_sentinel,
             body: outer_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(outer);
@@ -114,7 +114,7 @@ fn planning_closes_nested_definitions_transitively_without_minting() {
             params: vec![],
             return_cont,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let binding = module.add_node(Node::LetFun {
@@ -161,7 +161,7 @@ fn function_recursion_follows_the_copy_and_external_callees_stay_shared() {
             params: vec![],
             return_cont: external_return,
             body: external_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let inner_body = module.function(inner).unwrap().body;

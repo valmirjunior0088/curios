@@ -56,7 +56,7 @@ fn contifies_a_single_entry_tail_loop_and_hands_its_returns_to_the_call() {
             params: vec![loop_param],
             return_cont: loop_return,
             body: loop_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     let call = module.add_node(Node::ApplyFun {
@@ -75,7 +75,7 @@ fn contifies_a_single_entry_tail_loop_and_hands_its_returns_to_the_call() {
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -135,7 +135,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
             params: vec![y],
             return_cont: inner_return,
             body: inner_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -157,7 +157,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
             params: vec![x],
             return_cont: outer_return,
             body: outer_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -178,7 +178,7 @@ fn contifies_a_chain_of_single_call_helpers_in_one_sweep() {
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -394,7 +394,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
             params: vec![loop_param],
             return_cont: loop_return,
             body: loop_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -434,7 +434,7 @@ fn loop_called(calls: usize) -> (Module, FunctionId, Vec<NodeId>) {
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
@@ -602,7 +602,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
             params: vec![x],
             return_cont: walker_return,
             body: walker_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -626,7 +626,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
             params: vec![y],
             return_cont: owner_return,
             body: owner_body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
 
@@ -650,7 +650,7 @@ fn calling_back(defined_by_owner: bool) -> (Module, FunctionId) {
             params: vec![],
             return_cont: entry_return,
             body,
-            droppable: false,
+            droppable: Droppable::Never,
         },
     );
     module.set_entry(entry);
