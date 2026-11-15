@@ -38,8 +38,8 @@ use layout::*;
 mod manifest;
 use manifest::*;
 pub use manifest::{
-    Delivery, Dependency, Executable, Foreign, Gateway, LIBRARY, MANIFEST, Module, PAGE_FILES,
-    Package, Snapshot, Target, Umbrella,
+    Delivery, Dependency, EXTENSION, Executable, Foreign, Gateway, LIBRARY, MANIFEST, Module,
+    PAGE_FILES, Package, Snapshot, Target, Umbrella,
 };
 
 mod new;

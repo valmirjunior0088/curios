@@ -8,6 +8,8 @@
 //!
 //! **Every notification is answered by a check, and a save asks about every open document.** A check reads more than the overlay — the disk under every file no editor holds, a file looked for and missing, the manifests a document's placement walks — so an overlay equal to the last check's says nothing of whether that check's answer stands, and a skip keyed on it would answer a save from a check the disk has since moved under. Whether anything moved is the fold's to decide (`curios-verdict`): a unit the store holds is handed back where the disk still holds what its record says it read, and any other is compiled over the last unit the session kept for it, redoing what moved, so a check under which nothing moved costs little, and a save's check files the text the save put on disk. A keystroke asks about the document it edits, which is where the editor is looking. A save is the editor's gesture for the disk having moved, under the files no editor holds and under the readers of the document saved, so it asks about every document the editor holds.
 //!
+//! **A change on disk the editor watched is answered as a save.** A checkout, a rebase, another editor or a formatter run from a terminal moves the disk with no save, so where the client watches files on request the server registers, before it reads a notification, for every module and every manifest under the workspace, and a change the client reports is answered as a save is: one check of every open document against the overlay as it stands. A client that does not watch on request is asked for nothing, and the save stays its gesture. `curios-wonder`'s README says why the watching is the client's and why every open document is checked rather than the readers of the paths that changed.
+//!
 //! **The analyst warms when it has nothing else to do.** On `initialize` it is handed a check of the package governing the workspace root, whose answer is thrown away: nothing is open yet, so there is no document to publish about, and what the check leaves behind is the point — on this thread the restored archive, the compiler's identity settled against the store, and every module the package declares in the parse memo; and in the store every unit it compiled from the disk, a dependency above all, which the first document's check and the next session's then start from. It is an ordinary check rather than a list of steps so that it cannot drift from what a real one warms.
 //!
 //! **And it is dropped the moment a document is waiting.** The compiler is on one thread, so a document that arrived while the warming check was queued would wait the whole of it: the warming *and* the document rather than either. Its own check warms this thread for everything after it, so the work is not lost, only unqueued. What this leaves standing is the case warming was for: an editor that opens a folder and no file, where the first document opened later finds the thread warm.
@@ -25,23 +27,28 @@ use {
     curios_common::{Source, Span},
     curios_core::Declared,
     curios_module::Overlay,
-    curios_package::{FormatSettings, Selection, Spelling},
+    curios_package::{EXTENSION, FormatSettings, MANIFEST, Selection, Spelling},
     curios_surface::Formatted,
     curios_verdict::Session,
     lsp_server::{Connection, Message, RequestId, Response},
     lsp_types::{
         Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DidChangeTextDocumentParams,
+        DidChangeWatchedFilesParams, DidChangeWatchedFilesRegistrationOptions,
         DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
         DocumentFormattingParams, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse,
-        GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
-        HoverProviderCapability, InitializeParams, Location, MarkupContent, MarkupKind, OneOf,
-        Position, PublishDiagnosticsParams, Range, ServerCapabilities, SymbolKind,
-        TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Uri,
+        FileSystemWatcher, GlobPattern, GotoDefinitionParams, GotoDefinitionResponse, Hover,
+        HoverContents, HoverParams, HoverProviderCapability, InitializeParams, Location,
+        MarkupContent, MarkupKind, OneOf, Position, PublishDiagnosticsParams, Range, Registration,
+        RegistrationParams, ServerCapabilities, SymbolKind, TextDocumentSyncCapability,
+        TextDocumentSyncKind, TextEdit, Uri,
         notification::{
-            DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, DidSaveTextDocument,
-            Notification, PublishDiagnostics,
+            DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument,
+            DidOpenTextDocument, DidSaveTextDocument, Notification, PublishDiagnostics,
         },
-        request::{DocumentSymbolRequest, Formatting, GotoDefinition, HoverRequest, Request},
+        request::{
+            DocumentSymbolRequest, Formatting, GotoDefinition, HoverRequest, RegisterCapability,
+            Request,
+        },
     },
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -82,6 +89,10 @@ pub fn serve(budget: u64, manifest: Option<&Path>) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     let params: InitializeParams =
         serde_json::from_value(initialization).map_err(|error| error.to_string())?;
+    // Asked once the session is initialized and before any notification is read, so no change on disk falls between the two.
+    if watches_on_request(&params) {
+        register_watchers(&connection)?;
+    }
 
     let (jobs, inbox) = mpsc::channel();
     let answers = Answers::default();
@@ -143,6 +154,48 @@ fn shutting_down(connection: &Connection, message: &Message) -> Result<bool, Str
             .map_err(|error| error.to_string()),
         _ => Ok(false),
     }
+}
+
+/// Whether the client watches the disk for a server that asks it to, at a registration made while the session runs.
+fn watches_on_request(params: &InitializeParams) -> bool {
+    params
+        .capabilities
+        .workspace
+        .as_ref()
+        .and_then(|workspace| workspace.did_change_watched_files.as_ref())
+        .and_then(|watched| watched.dynamic_registration)
+        .unwrap_or(false)
+}
+
+/// Ask the client to report each change to a module or a manifest under the workspace. Nothing a check writes matches either glob, and a dependency's text a fetch writes is one a check should answer. The client's answer is a response the loop drops.
+fn register_watchers(connection: &Connection) -> Result<(), String> {
+    let watchers = [format!("**/*.{EXTENSION}"), format!("**/{MANIFEST}")]
+        .into_iter()
+        .map(|glob| FileSystemWatcher {
+            glob_pattern: GlobPattern::String(glob),
+            kind: None,
+        })
+        .collect();
+    let registration = Registration {
+        id: DidChangeWatchedFiles::METHOD.to_string(),
+        method: DidChangeWatchedFiles::METHOD.to_string(),
+        register_options: Some(
+            serde_json::to_value(DidChangeWatchedFilesRegistrationOptions { watchers })
+                .expect("watchers serialize"),
+        ),
+    };
+    let request = lsp_server::Request::new(
+        RequestId::from(RegisterCapability::METHOD.to_string()),
+        RegisterCapability::METHOD.to_string(),
+        RegistrationParams {
+            registrations: vec![registration],
+        },
+    );
+
+    connection
+        .sender
+        .send(Message::Request(request))
+        .map_err(|error| error.to_string())
 }
 
 /// What the protocol thread asks of the analyst: check each of `paths` against the overlay as it stood.
@@ -271,6 +324,15 @@ impl Server {
                         self.documents.insert(path, text);
                     }
                     // Every open document, the saved one among them: see the module documentation.
+                    self.check(self.documents.keys().cloned().collect(), Raised::Document)?;
+                }
+            }
+            // The disk moved under the files a client watched, as a save says it did: answered as a save is.
+            DidChangeWatchedFiles::METHOD => {
+                if serde_json::from_value::<DidChangeWatchedFilesParams>(params)
+                    .inspect_err(dropped)
+                    .is_ok()
+                {
                     self.check(self.documents.keys().cloned().collect(), Raised::Document)?;
                 }
             }

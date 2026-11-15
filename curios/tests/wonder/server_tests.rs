@@ -206,6 +206,65 @@ fn a_save_after_the_disk_moved_under_a_closed_file_is_answered_again() {
     );
 }
 
+/// A client that watches files on request is asked to watch every module and manifest, and a change it reports is answered as a save is: `helper.crs` is rewritten to a declaration that does not check, with no save, and the watched change publishes the refusal. What proves it is what arrives ahead of the edit behind the change, which reads no helper: the refusal, where a change left unanswered leaves the edit's answer to arrive first. A client that states no such capability is asked for nothing, which every other test here holds, reading a publish where a registration would arrive.
+#[test]
+fn a_change_the_client_watched_on_disk_is_answered_as_a_save() {
+    let root = temporary("watched");
+    write(&root, "helper.crs", "pub let word : /std/Str = \"fine\";\n");
+    write(
+        &root,
+        "scratch.crs",
+        "mod helper;\n\n/std/print(/helper/word)\n",
+    );
+    let helper = format!("file://{}", root.join("helper.crs").display());
+    let uri = format!("file://{}", root.join("scratch.crs").display());
+
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{"workspace":{"didChangeWatchedFiles":{"dynamicRegistration":true}}}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    let registration = editor.receive();
+    for asked in [
+        r#""method":"client/registerCapability""#,
+        r#""method":"workspace/didChangeWatchedFiles""#,
+        r#""globPattern":"**/*.crs""#,
+        r#""globPattern":"**/curios.toml""#,
+    ] {
+        assert!(registration.contains(asked), "{registration}");
+    }
+    let id = registration
+        .split_once(r#""id":"#)
+        .and_then(|(_, rest)| rest.split_once(','))
+        .map(|(id, _)| id)
+        .expect("the registration is a request");
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","id":${id},"result":null}"#, id));
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"${uri}","languageId":"curios","version":1,"text":"mod helper;\n\n/std/print(/helper/word)\n"}}}"#, uri));
+    let opened = editor.receive();
+    assert!(opened.contains(r#""diagnostics":[]"#), "{opened}");
+
+    write(&root, "helper.crs", "pub let word : /std/Str = 1;\n");
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"workspace/didChangeWatchedFiles","params":{"changes":[{"uri":"${helper}","type":2}]}}"#, helper));
+    thread::sleep(QUIET);
+
+    editor.send(&fill!(r#"{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"${uri}","version":2},"contentChanges":[{"text":"let m : /std/Nat = ?;\n/std/print(\"\")\n"}]}}"#, uri));
+    let ahead = editor.ahead_of("` expected");
+    assert!(
+        ahead.iter().any(
+            |published| published.contains("helper.crs") && published.contains("type mismatch")
+        ),
+        "the watched change was left unanswered: {ahead:?}"
+    );
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 /// A refusal the last check published on a file no editor holds is cleared by the save after the file is fixed on disk, though the open document reads as it did — the case a skip asking whether the last check's reads still stand would miss, since a refused unit leaves no record of what it read. What proves it is what arrives ahead of the edit behind the save, which still reads the helper: the save clearing `helper.crs` and then answering for `scratch.crs`, where a save left unanswered leaves the edit to clear `helper.crs` alone.
 #[test]
 fn a_refusal_on_a_closed_file_fixed_on_disk_is_cleared_by_a_save() {
