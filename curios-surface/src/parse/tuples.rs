@@ -2,13 +2,13 @@ use {
     super::{
         Grammar, TUPLE_FIELD_TAKES_NO_MARK, begins_a_name, digit_led, members,
         parse_apply_argument, parse_block_string_literal, parse_bool_intrinsic,
-        parse_bytes_literal, parse_char_lit, parse_decorated_binder, parse_func_param,
+        parse_bytes_literal, parse_char_lit, parse_decorated_binder, parse_func_pattern_param,
         parse_func_type_param, parse_held, parse_identifier, parse_list_literal, parse_literal,
         parse_mark, parse_name, parse_number, parse_string_literal, parse_word_raw,
         refuse_dangling_dot,
     },
     crate::{
-        Binder, FieldSugarParam, FuncTypeParam, StructLit, StructLitEntry, Subterm, Term, Tuple,
+        Binder, FuncParam, FuncTypeParam, StructLit, StructLitEntry, Subterm, Term, Tuple,
         TupleField, TupleType, TupleTypeParam, parse_identifier_raw, parse_term, parse_whitespace,
         reserved_keyword,
     },
@@ -158,7 +158,7 @@ pub fn parse_tuple_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Te
 }
 
 // A parsed labeled-field prefix: the label and, for the definition sugar, the written lambda-parameter list.
-type TupleFieldPrefix<D> = (String, Option<Vec<FieldSugarParam<D>>>);
+type TupleFieldPrefix<D> = (String, Option<Vec<FuncParam<D>>>);
 
 // The committing prefix of a labeled tuple/struct-literal field: `label =` or the definition sugar `label(params) =`. It fails recoverably, so a positional field that merely starts with an identifier or an application backtracks cleanly; the `=` is guarded against `==` and `=>` via `not_ahead`, mirroring the bind arm's idiom, since `(a == b, 2)` is a positional field whose value begins with a name and must not be read as the label `a`. The sugar's list is a call's as far as its closing parenthesis — `f(@A, use dict, x)` is both — so a member the sugar refuses is held until the `=` and raised past it.
 pub fn parse_tuple_field_prefix<'a, D: Grammar>(
@@ -167,7 +167,9 @@ pub fn parse_tuple_field_prefix<'a, D: Grammar>(
     parse_identifier
         .and(
             parse_literal("(")
-                .and_keep(sep_by0_trailing(parse_func_param, || parse_literal(",")))
+                .and_keep(sep_by0_trailing(parse_func_pattern_param, || {
+                    parse_literal(",")
+                }))
                 .and_drop(parse_literal(")"))
                 .map(Some)
                 .or(pure(None)),

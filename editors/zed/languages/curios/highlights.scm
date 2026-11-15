@@ -58,7 +58,7 @@
 (parameter pattern: (identifier) @variable)
 (function_type_parameter name: (identifier) @variable)
 (lambda_parameter pattern: (identifier) @variable)
-(sugar_parameter name: (identifier) @variable)
+(sugar_parameter pattern: (identifier) @variable)
 (successor_pattern predecessor: (identifier) @variable)
 (list_pattern (identifier) @variable)
 (packed_pattern (identifier) @variable)

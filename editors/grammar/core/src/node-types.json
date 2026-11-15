@@ -5826,12 +5826,28 @@
     "type": "sugar_parameter",
     "named": true,
     "fields": {
-      "name": {
-        "multiple": false,
+      "pattern": {
+        "multiple": true,
         "required": true,
         "types": [
           {
+            "type": "decorator",
+            "named": true
+          },
+          {
             "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "parenthesized_pattern",
+            "named": true
+          },
+          {
+            "type": "struct_pattern",
+            "named": true
+          },
+          {
+            "type": "tuple_pattern",
             "named": true
           }
         ]

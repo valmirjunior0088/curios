@@ -281,7 +281,7 @@ module.exports = grammar({
     sugar_parameter: ($) =>
       seq(
         optional(choice("@", "use")),
-        field("name", $._name),
+        field("pattern", $._pattern),
         optional(seq(":", field("type", $._term))),
       ),
 

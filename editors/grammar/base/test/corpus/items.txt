@@ -481,6 +481,65 @@ and (@B: Type) => Show(B) {
                 (identifier)))))))))
 
 ================================================================================
+A field sugar's parameter is a pattern
+================================================================================
+
+satisfy Program({Nat, Nat}) { execute((a, b)) = Io/pure(()) }
+satisfy Program({}) { execute(()) = Io/pure(()) }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (satisfy_item
+    (satisfy_member
+      (path
+        (identifier))
+      (arguments
+        (argument
+          (tuple_type
+            (field_declaration
+              (path
+                (identifier)))
+            (field_declaration
+              (path
+                (identifier))))))
+      (field_definition
+        (identifier)
+        (sugar_parameters
+          (sugar_parameter
+            (tuple_pattern
+              (pattern_field
+                (identifier))
+              (pattern_field
+                (identifier)))))
+        (call
+          (path
+            (identifier)
+            (identifier))
+          (arguments
+            (argument
+              (unit)))))))
+  (satisfy_item
+    (satisfy_member
+      (path
+        (identifier))
+      (arguments
+        (argument
+          (tuple_type)))
+      (field_definition
+        (identifier)
+        (sugar_parameters
+          (sugar_parameter
+            (tuple_pattern)))
+        (call
+          (path
+            (identifier)
+            (identifier))
+          (arguments
+            (argument
+              (unit))))))))
+
+================================================================================
 Witnesses, bare and parameterized
 ================================================================================
 

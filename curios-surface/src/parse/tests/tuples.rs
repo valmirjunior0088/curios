@@ -142,6 +142,25 @@ fn the_tuple_of_no_fields_is_a_pattern() {
     }
 }
 
+// A field's definition sugar takes a lambda's parameters, patterns among them, and prints them back as it reads them.
+#[test]
+fn a_field_definition_takes_patterns() {
+    for (source, written) in [
+        ("(g((a, b)) = a + b)", "g((a, b))"),
+        ("S { g((a, _): {Nat, Nat}) = a, h(()) = 1 }", "h(())"),
+        ("(g(@A, (x, y)) = x)", "g(@A, (x, y))"),
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        let printed = term.to_string();
+        assert!(printed.contains(written), "{source}: {printed}");
+        assert_eq!(
+            printed.parse::<Term>().unwrap(),
+            term,
+            "{source}: {printed}"
+        );
+    }
+}
+
 #[test]
 fn parse_one_tuple() {
     assert_eq!(

@@ -226,7 +226,11 @@ fn function_field_sugar_in_values() {
     assert_eq!(fields[0].label.as_deref(), Some("bump"));
     assert_eq!(
         fields[0].func_params,
-        Some(vec![(Plicity::Explicit, "x".into(), None)]),
+        Some(vec![FuncParam {
+            plicity: Plicity::Explicit,
+            pattern: Pattern::Binder("x".into()),
+            annotation: None,
+        }]),
     );
     assert!(matches!(fields[0].value.as_subterm(), Subterm::Apply(_)));
     assert!(matches!(
@@ -241,9 +245,9 @@ fn function_field_sugar_in_values() {
     };
     assert_eq!(fields.len(), 1);
     let params = fields[0].func_params.as_ref().unwrap();
-    assert_eq!(params[0].0, Plicity::Explicit);
-    assert_eq!(params[0].1, "x");
-    assert!(params[0].2.is_some());
+    assert_eq!(params[0].plicity, Plicity::Explicit);
+    assert_eq!(params[0].pattern, Pattern::Binder("x".into()));
+    assert!(params[0].annotation.is_some());
 
     let term = "Api { ping(x) = f(x) }".parse::<Term>().unwrap();
     let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {

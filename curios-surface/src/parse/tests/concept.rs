@@ -134,8 +134,8 @@ fn parse_witness_item() {
     assert_eq!(cmp.label, "cmp");
     let params = cmp.func_params.as_ref().unwrap();
     assert_eq!(params.len(), 2);
-    assert_eq!(params[0].1, "a");
-    assert_eq!(params[1].1, "b");
+    assert_eq!(params[0].pattern, Pattern::Binder("a".into()));
+    assert_eq!(params[1].pattern, Pattern::Binder("b".into()));
     assert!(matches!(cmp.value.as_subterm(), Subterm::Apply(_)));
 }
 

@@ -14,5 +14,5 @@ pub use Program/*;
 
 --- A program that closes with `()` has done what it does by its last `!`.
 satisfy Program({}) {
-    execute(_) = Io/pure(()),
+    execute(()) = Io/pure(()),
 }

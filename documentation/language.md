@@ -396,7 +396,7 @@ pub let five: Nat =
     increment(4);
 ```
 
-The parameters of a `let` or a `satisfy` are a signature, written as a [function type](#function-types)'s, except that a plain or `@` parameter is always named, since the body uses it. One the body never names is `_: type`: `let positive(n: Nat, @_: Holds(0 < n)) -> Nat = n;` takes its bound as an implicit argument, which the body has as a fact. A witness parameter is `use Concept(args)`. A field written `label(params) = value` inside a tuple, a structure or a witness binds as a [lambda](#lambdas) does: a binder, marked `@` or not, its annotation optional, or `use _`.
+The parameters of a `let` or a `satisfy` are a signature, written as a [function type](#function-types)'s, except that a plain or `@` parameter is always named, since the body uses it. One the body never names is `_: type`: `let positive(n: Nat, @_: Holds(0 < n)) -> Nat = n;` takes its bound as an implicit argument, which the body has as a fact. A witness parameter is `use Concept(args)`. A field written `label(params) = value` inside a tuple, a structure or a witness binds as a [lambda](#lambdas) does: a name or a [pattern](#irrefutable-binder-patterns), marked `@` or not, its annotation optional, or `use _`.
 
 A binder may be an irrefutable tuple or structure pattern:
 

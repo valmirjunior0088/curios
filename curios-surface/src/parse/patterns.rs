@@ -7,7 +7,7 @@ use {
         parse_word_raw, refused, require_space,
     },
     crate::{
-        Binder, Elements, FieldSugarParam, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
+        Binder, Elements, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
         MatchPatternField, NatLiteral, NatPattern, Pattern, PatternField, Subterm, Term,
         parse_term, parse_whitespace,
     },
@@ -88,7 +88,7 @@ pub fn parse_func_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Ter
     .parse(state)
 }
 
-// A binder name: a plain identifier (`_` to ignore). The `label(params) = value`/`label(params) -> type` definition-sugar parameter lists stay single-name-only — see `parse_func_param` below. `let`, lambda, and function-definition-sugar parameters accept a full `Pattern` instead (see `parse_pattern`); match arms accept a full `MatchPattern` instead (see `parse_match_pattern`).
+// A binder name: a plain identifier (`_` to ignore). `let`, lambda, function-definition-sugar and field-sugar parameters accept a full `Pattern` instead (see `parse_pattern`); match arms accept a full `MatchPattern` instead (see `parse_match_pattern`).
 pub fn parse_binder<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
     parse_label.parse(state)
 }
@@ -310,7 +310,7 @@ pub fn parse_struct_match_pattern<'a, D: Grammar>(
         .parse(state)
 }
 
-// A constructor match pattern `tag(p, …)` — `nil()` for the nullary case. The `(` immediately after the tag is the commit point, distinguishing it from a bare name. Unlike `parse_func_param`'s definition-sugar arguments, each argument here is itself a full `MatchPattern`, so a constructor's payload can nest arbitrarily (`some(some(x))`, `pair(some(x), y)`, …). Each argument retains its plicity: a payload slot the constructor declared `@` must be matched `@name`. `use` is refused where it stands — a payload is plain or `@`, and no pattern or term begins with the word, so nothing else could be meant.
+// A constructor match pattern `tag(p, …)` — `nil()` for the nullary case. The `(` immediately after the tag is the commit point, distinguishing it from a bare name. Each argument is itself a full `MatchPattern`, so a constructor's payload can nest arbitrarily (`some(some(x))`, `pair(some(x), y)`, …). Each argument retains its plicity: a payload slot the constructor declared `@` must be matched `@name`. `use` is refused where it stands — a payload is plain or `@`, and no pattern or term begins with the word, so nothing else could be meant.
 pub fn parse_ctor_arg<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, (Plicity, MatchPattern<D>)> {
@@ -608,14 +608,7 @@ pub fn parse_numbered_binder<'a, T: 'a, D: Grammar>(state: ParserState<'a>) -> P
         .parse(state)
 }
 
-// One parameter of the definition sugar `label(params) = value` (tuple, struct, and witness fields). Like a lambda binder it retains its mark — `@name`, or `use _` — which is copied onto the generated function value's slot, so a hidden-binder field type (`pure : (@A, x) -> M(A)`) can be implemented as `pure(@A, x) = …` rather than losing the mark.
-pub fn parse_func_param<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, Read<FieldSugarParam<D>>> {
-    parse_bound_member(parse_binder, || Label::from("_")).parse(state)
-}
-
-// A lambda parameter with an optional domain annotation and a binder pattern in place of a plain name — the pattern-accepting counterpart of `parse_func_param`, which serves the single-name-only `label(params) = value` definition sugar (`parse_tuple_field_prefix`). `(x)` is sugar for `(x : _)`; the annotation, when present, parses as an arbitrary term and stops at the closing `)` (mirrors `parse_func_type_param`).
+// A lambda parameter with an optional domain annotation and a binder pattern, which the definition sugar `label(params) = value` of a tuple, a structure and a witness reads too (`parse_tuple_field_prefix`), since the sugar lowers to a lambda. It retains its mark — `@name`, or `use _` — so a hidden-binder field type (`pure : (@A, x) -> M(A)`) can be implemented as `pure(@A, x) = …` rather than losing the mark. `(x)` is sugar for `(x : _)`; the annotation, when present, parses as an arbitrary term and stops at the closing `)` (mirrors `parse_func_type_param`).
 pub fn parse_func_pattern_param<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, Read<FuncParam<D>>> {

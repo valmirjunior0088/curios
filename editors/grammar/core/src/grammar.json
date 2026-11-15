@@ -1872,10 +1872,10 @@
         },
         {
           "type": "FIELD",
-          "name": "name",
+          "name": "pattern",
           "content": {
             "type": "SYMBOL",
-            "name": "_name"
+            "name": "_pattern"
           }
         },
         {

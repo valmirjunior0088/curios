@@ -221,8 +221,8 @@ pub struct TupleType<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleField<D: Dialect = Program> {
     pub label: Option<String>,
-    /// `Some` for the definition sugar `label(params) = value` — the written parameter list (each `(plicity, name, annotation)`), kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label = (params) => value` (see `TupleField::desugared_value`), the plicity marks carried onto the generated lambda's slots. Always paired with a label.
-    pub func_params: Option<Vec<FieldSugarParam<D>>>,
+    /// `Some` for the definition sugar `label(params) = value` — the written parameter list, each a lambda's parameter, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label = (params) => value` (see `TupleField::desugared_value`). Always paired with a label.
+    pub func_params: Option<Vec<FuncParam<D>>>,
     pub value: Term<D>,
 }
 
@@ -230,16 +230,8 @@ impl<D: Dialect> TupleField<D> {
     /// The field's value with the definition sugar undone: the written value when the field is plain, the lambda `(params) => value` when it was written `label(params) = value`.
     pub fn desugared_value(&self) -> Term<D> {
         match &self.func_params {
-            // This sugar's binders stay plain-name-only (it is not one of the pattern-accepting sites) but each retains its plicity mark, so a `@`/`use` written in the sugar is carried onto the generated lambda's slot rather than dropped.
             Some(params) => Subterm::Func(Func {
-                params: params
-                    .iter()
-                    .map(|(plicity, name, ty)| FuncParam {
-                        plicity: *plicity,
-                        pattern: Pattern::Binder(name.clone().into()),
-                        annotation: ty.clone(),
-                    })
-                    .collect(),
+                params: params.clone(),
                 body: self.value.clone(),
             })
             .into(),
@@ -247,9 +239,6 @@ impl<D: Dialect> TupleField<D> {
         }
     }
 }
-
-/// One parameter of the definition sugar `label(params) = value`, as written: its mark, its binder and its annotation where it has one.
-pub type FieldSugarParam<D = Program> = (Plicity, Label, Option<Term<D>>);
 
 /// A tuple / anonymous-record literal `(a, snd = b)` — see [`TupleField`] for the per-field grammar. Struct literals do not reuse this node: a named head is a [`StructLit`], validated against its declared type.
 #[derive(Debug, Clone, PartialEq)]

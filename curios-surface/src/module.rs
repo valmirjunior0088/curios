@@ -1,6 +1,6 @@
 use {
     super::{
-        Argument, Dialect, FieldSugarParam, FuncSugarParam, FuncTypeParam, Intrinsic, Label,
+        Argument, Dialect, FuncParam, FuncSugarParam, FuncTypeParam, Intrinsic, Label,
         LetSignature, Name, Program, Subterm, Term, Tuple, TupleType, TupleTypeParam,
         clear_comments, parse_file_head, parse_optional_term, parse_program_end, parse_term,
         parse_top_item, print_module_items, print_term, signature_type, take_comments,
@@ -244,7 +244,7 @@ pub struct TopConcept<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WitnessField {
     pub label: String,
-    pub func_params: Option<Vec<FieldSugarParam>>,
+    pub func_params: Option<Vec<FuncParam>>,
     pub value: Term,
 }
 

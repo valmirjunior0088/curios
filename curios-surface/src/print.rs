@@ -14,10 +14,10 @@ use {
     super::{
         Alternative, Apply, Argument, Binder, BytesSegment, CasePayloadParam, ConceptField,
         CoreEntry, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText, CoreValue,
-        Decorated, DecoratorField, Dialect, Doc, Elements, Field, FieldSugarParam, Func, FuncParam,
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm, HeadlessMatch,
-        InductIndex, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, Literal,
-        Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
+        Decorated, DecoratorField, Dialect, Doc, Elements, Field, Func, FuncParam, FuncSugarParam,
+        FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm, HeadlessMatch, InductIndex, Infix,
+        Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, Literal, Match,
+        MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
         PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm, StructField, StructLit,
         StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet,
         TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
@@ -860,15 +860,6 @@ impl<D: Layout> TreePrinter<D> {
         flat([print_plicity(plicity), member])
     }
 
-    /// One lambda parameter: the binder name with its optional domain annotation.
-    fn func_param(self, (plicity, name, annotation): FieldSugarParam<D>) -> Printer {
-        let bound = match annotation {
-            Some(ty) => flat([pure(name), pure(": "), self.term(ty)]),
-            None => pure(name),
-        };
-        flat([print_plicity(plicity), bound])
-    }
-
     /// A tuple-literal / struct-literal field: positional, `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
     fn tuple_field(self, field: TupleField<D>) -> Printer {
         match (field.label, field.func_params) {
@@ -878,7 +869,7 @@ impl<D: Layout> TreePrinter<D> {
                     "(",
                     params
                         .into_iter()
-                        .map(|param| self.func_param(param))
+                        .map(|param| self.func_pattern_param(param))
                         .collect(),
                     ")",
                 ),
@@ -899,7 +890,7 @@ impl<D: Layout> TreePrinter<D> {
         }
     }
 
-    /// One lambda parameter: its plicity mark (`@`/`use`), the binder pattern, and its optional domain annotation — the pattern-accepting counterpart of [`TreePrinter::func_param`], forked for the same reason `parse_func_pattern_param` is (see `parse.rs`). A lambda's `use` member is `use _`, the wildcard holding its place.
+    /// One lambda parameter, which the definition sugar `label(params) = value` writes too: its plicity mark (`@`/`use`), the binder pattern, and its optional domain annotation. A lambda's `use` member is `use _`, the wildcard holding its place.
     fn func_pattern_param(self, param: FuncParam<D>) -> Printer {
         let FuncParam {
             plicity,
@@ -2218,7 +2209,7 @@ fn print_witness_entry(field: WitnessField) -> Printer {
                 "(",
                 params
                     .into_iter()
-                    .map(|param| PROGRAM.func_param(param))
+                    .map(|param| PROGRAM.func_pattern_param(param))
                     .collect(),
                 ")",
             ),
