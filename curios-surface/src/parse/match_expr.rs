@@ -57,19 +57,10 @@ fn refuse_braced_match<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, ()>
     .parse(state)
 }
 
-// The head of a `match` past its keyword, `head [: motive]`. The motive is an ordinary term — a term of the eliminator's motive type, with no grammar of its own and so no disambiguation rule: `parse_term` is called directly and there is nothing to backtrack. It cannot run into the arms because `|` is not an infix operator (`parse_infix_symbol` has `||` but no bare `|`), so a motive term always terminates at the first `|`.
-fn parse_match_head<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, (Term<D>, Option<Term<D>>)> {
+// The head of a `match` past its keyword. It cannot run into the arms because `|` is not an infix operator (`parse_infix_symbol` has `||` but no bare `|`), so the head always terminates at the first `|`.
+fn parse_match_head<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     refuse_braced_match::<D>
         .and_keep(parse_term::<D>)
-        .and(
-            parse_literal(":")
-                // The `:` is what introduces a motive, so past it a term must follow. Recoverable, a malformed motive would be read as no motive at all and the arms' `end` would complain at the colon.
-                .and_keep(commit(parse_term::<D>))
-                .map(Some)
-                .or(pure(None)),
-        )
         .parse(state)
 }
 
@@ -222,7 +213,7 @@ fn parse_headed_match<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term
     parse_match_head::<D>
         .and(many0(parse_induct_match_branch::<D>))
         .and_drop(parse_keyword("end"))
-        .map(|((head, motive), arms)| Subterm::Match(Match { head, motive, arms }).into())
+        .map(|(head, arms)| Subterm::Match(Match { head, arms }).into())
         .parse(state)
 }
 

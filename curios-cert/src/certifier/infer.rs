@@ -32,12 +32,11 @@ use {
     curios_common::recurse,
     curios_core::{
         Bound, CallMatrix, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType,
-        Intrinsic, LetBinding, Lockstep, Many, MatchResult, Nat, Produced, Proj, Quality, Reducer,
-        Scope, Step, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType,
-        Variant, foreign_operands, foreign_signature,
+        Intrinsic, LetBinding, Lockstep, Many, Nat, Produced, Proj, Quality, Reducer, Scope, Step,
+        Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Variant,
+        foreign_operands, foreign_signature, goal_at,
     },
     curios_num::{Binary, Natural},
-    std::convert::Infallible,
 };
 
 /// The type of `term`.
@@ -398,45 +397,31 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             .into())
         }
 
-        // An elimination's type is its result at this scrutinee: a motive binds the family's indices and then the scrutinee itself, so opening it at those is the rule for the *type*; an ambient goal is that type as written.
+        // An elimination's type is its goal as written.
         //
-        // Whether the term deserves that type is `eliminate`'s job: each arm must inhabit the result at its own constructor's index targets, and a proposition may not be eliminated into a relevant result unless it carries nothing to extract.
+        // Whether the term deserves that type is `eliminate`'s job: each arm must inhabit the goal at its own constructor's index targets, and a proposition may not be eliminated into a relevant result unless it carries nothing to extract.
         //
-        // **The scrutinee is typed where it stands and read by value, and so is the result.** The rule decides by the scrutinee's spelling — a variable is solved and the goal read over it, an expression has its equation recorded and an ambient goal's occurrences of it replaced. A `let`-bound name in either would hide what each of those reads: under `let m = n`, an arm of `match n` solves `n`, and a goal that spells `m` is one the solution does not reach. So both are read as a substituted `let` leaves them, and the arms are typed by name.
+        // **The scrutinee is typed where it stands and read by value, and so is the goal.** The rule decides by the scrutinee's spelling — a variable is solved and the goal read over it, an expression has its equation recorded and the goal's occurrences of it replaced. A `let`-bound name in either would hide what each of those reads: under `let m = n`, an arm of `match n` solves `n`, and a goal that spells `m` is one the solution does not reach. So both are read as a substituted `let` leaves them, and the arms are typed by name.
         Subterm::Match(m) => {
             let scrutinee_type = infer(certifier, &m.head)?;
             let scrutinee_type = certifier.reduce_forced(scrutinee_type)?;
             let head = certifier.by_value(&m.head);
-            let result = result_by_value(certifier, &m.result);
+            let goal = certifier.by_value(&m.goal);
             let family = match &*scrutinee_type {
                 Subterm::InductType(family) => Some(family.clone()),
                 _ => None,
             };
-            let indices = family
-                .as_ref()
-                .map(|family| family.indices.clone())
-                .unwrap_or_default();
-
-            if let Some(motive) = result.family()
-                && motive.arity() != indices.len() + 1
-            {
-                return Err(Error::Arity {
-                    counted: Counted::MotiveBinders,
-                    expected: indices.len() + 1,
-                    actual: motive.arity(),
-                });
-            }
 
             check_cases(
                 certifier,
                 family.as_ref(),
-                &result,
+                &goal,
                 &m.cases,
                 &head,
                 &scrutinee_type,
             )?;
 
-            Ok(result.of(&head, &indices))
+            Ok(goal)
         }
 
         // The tail's type may name the binders, which close with the `let`: it is stated by value, while they stand.
@@ -495,100 +480,45 @@ pub fn infer_type(certifier: &mut Certifier, type_: &Term) -> Result<Sort, Error
     as_sort(certifier, &inferred)
 }
 
-/// A motive is a claim the term makes about its own result, and two rules downstream read it: `infer` takes the elimination's type from it, and `Sort::of` classifies a type-valued `match` by it. Nothing established that the claim is true — the arms are checked *against* the motive, which a lie survives, because a motive reduces honestly at each arm's concrete case while reading as whatever it states at the abstract binders. So the motive is checked here, generically, and required to land in a sort.
+/// A goal is a claim the term makes about its own type, and two rules downstream read it: `infer` takes the elimination's type from it, and `Sort::of` classifies a type-valued `match` by it. So it is checked here, where it stands, and required to land in a sort, whose answer the large-elimination guard needs: a goal stating `Prop` while its arms inhabit `Type` would skip the guard, which returns immediately when the result is not relevant, and certify a two-constructor proposition eliminated into `Nat`. Coq's `type_of_case` is this clause.
 ///
-/// Coq's `type_of_case` is this clause: compute the predicate's type, reduce it, `destSort` it, and refuse with a dedicated `error_elim_arity` otherwise. Without it a motive may state `Prop` while its arms inhabit `Type`, and `guard_large_elimination` — which returns immediately when the result is not relevant, because a proposition eliminated into a proposition needs no condition — never runs, which would certify a two-constructor proposition eliminated into `Nat`.
+/// Placed before the dispatch in [`check_cases`], so it covers every `Cases` form with one clause and does not inherit `check_induct_arms`'s skip for a vacuous elimination: an elimination that cannot run still hands its caller its goal as its type.
 ///
-/// The binders are the motive's real ones: the family's own index domains, then the scrutinee at the family instantiated *at those binders* rather than at the elimination's actual indices. Opening at the actuals instead would check the motive at one instance and miss exactly the lie, since a motive scrutinising its own index binder reduces once that index is concrete.
+/// The goal's own sort *is* its type read as one: a goal typed `Prop` is a proposition, a goal typed `Type u` is relevant. So the well-formedness check and the answer the guard needs are one step.
 ///
-/// Placed before the dispatch in [`check_cases`], so it covers every `Cases` form with one clause and does not inherit `check_induct_arms`'s skip for a vacuous elimination: an elimination that cannot run still hands its caller a type read off this motive. No exploit through that path was demonstrated; what makes it unconditional is that the type propagates whether or not the elimination runs.
-///
-/// The sort it derives is handed to the guard, so the question is asked once, under the real binders.
-fn check_motive(
-    certifier: &mut Certifier,
-    family: Option<&InductType>,
-    result: &MatchResult,
-    scrutinee_type: &Term,
-) -> Result<Sort, Error> {
-    // An ambient goal was typed where it stands, so its well-formedness is asked in the ambient context and under no binder; what the guard needs is still its sort.
-    let motive = match result {
-        MatchResult::Family(motive) => motive,
-        MatchResult::Ambient(goal) => return motive_sort(certifier, goal),
-    };
-
-    certifier.scoped(|certifier| {
-        let mut opened: Vec<Term> = Vec::new();
-
-        match family {
-            Some(family) => {
-                let indices = certifier.induct_at(family)?.indices();
-                let mut cursor = indices.cursor();
-                while let Some((_, domain)) = cursor.entry() {
-                    let binder = certifier.advance_assumed(&mut cursor, &domain);
-                    opened.push(Term::free_var(&binder));
-                }
-
-                let at_binders = Term::induct_type_at(
-                    family.name,
-                    family.universes.clone(),
-                    family.params.clone(),
-                    opened.clone(),
-                );
-                let binder = certifier.fresh(None);
-                certifier.assume(&binder, &at_binders);
-                opened.push(Term::free_var(&binder));
-            }
-            None => {
-                let binder = certifier.fresh(None);
-                certifier.assume(&binder, scrutinee_type);
-                opened.push(Term::free_var(&binder));
-            }
-        }
-
-        let refs = opened.iter().collect::<Vec<_>>();
-        let body = motive.open(&refs);
-
-        motive_sort(certifier, &body)
-    })
-}
-
-/// The sort `stated` lands in, where `stated` is a motive's body under its binders or an ambient goal where it stands.
-///
-/// The motive's own sort *is* its type read as one: a body typed `Prop` is a proposition, a body typed `Type u` is relevant. So the well-formedness check and the answer the guard needs are one step.
-///
-/// A budget failure is not a malformed motive, so it keeps its own diagnostic — on the way to the type and on the way from the type to its sort alike, the second being a reduction as the first is. Every other refusal is reported as the rule that was violated rather than as whichever mismatch happened to expose it.
-fn motive_sort(certifier: &mut Certifier, stated: &Term) -> Result<Sort, Error> {
+/// A budget failure is not a malformed goal, so it keeps its own diagnostic — on the way to the type and on the way from the type to its sort alike, the second being a reduction as the first is. Every other refusal is reported as the rule that was violated rather than as whichever mismatch happened to expose it.
+fn goal_sort(certifier: &mut Certifier, goal: &Term) -> Result<Sort, Error> {
     let refusal = |error| match error {
         error @ Error::Reduce(_) => error,
-        refusal => Error::NotAMotive {
-            stated: stated.clone(),
+        refusal => Error::NotAGoal {
+            stated: goal.clone(),
             refusal: Box::new(refusal),
         },
     };
 
-    let type_ = infer(certifier, stated).map_err(refusal)?;
+    let type_ = infer(certifier, goal).map_err(refusal)?;
     as_sort(certifier, &type_).map_err(refusal)
 }
 
-/// Check an elimination's arms against its motive.
+/// Check an elimination's arms against its goal.
 ///
-/// A nominal elimination is verified in full, each arm at its own constructor's index targets. The intrinsic carriers are verified at their case values: `Bool`'s two literals, a `Switch`'s enumerated literals (its default at the scrutinee's own instance, the only one it has), and the free-monoid carriers' identity and cons arms — the typing face of the fact `uncons` computes with and `close` traverses by, that every carrier value is the identity or one generator over a shorter value. A variable scrutinee *is* the case's value within an arm, so every arm is checked with that equation substituted, the zero-index instance of the specialization `eliminate` gives nominal arms. An arm of a fold is the exception ([`check_free_monoid`]): reduction takes it at every tail, where the scrutinee is no case of it.
+/// A nominal elimination is verified in full, each arm at its own constructor's index targets. The intrinsic carriers are verified at their case values: `Bool`'s two literals, a `Switch`'s enumerated literals (its default at the scrutinee's own instance, the only one it has), and the free-monoid carriers' identity and cons arms — the typing face of the fact `uncons` computes with and `close` traverses by, that every carrier value is the identity or one generator over a shorter value. A variable scrutinee *is* the case's value within an arm, so every arm is checked with that equation substituted, the zero-index instance of the specialization `eliminate` gives nominal arms.
 fn check_cases(
     certifier: &mut Certifier,
     family: Option<&InductType>,
-    result: &MatchResult,
+    goal: &Term,
     cases: &Cases,
     scrutinee: &Term,
     scrutinee_type: &Term,
 ) -> Result<(), Error> {
-    let motive_sort = check_motive(certifier, family, result, scrutinee_type)?;
+    let goal_sort = goal_sort(certifier, goal)?;
 
     // An arm taken once, at the scrutinee itself: not typed where a scrutinee that already is another case never takes it, and otherwise at its case, the scrutinee standing refined to it.
     let at = |certifier: &mut Certifier, value: Term, body: &Term| {
         if eliminate::never_taken(certifier, scrutinee, &value, &[])? {
             return Ok(());
         }
-        let expected = result.at(scrutinee, &[], &[], &value);
+        let expected = goal_at(goal, scrutinee, &[], &[], &value);
 
         let mut assumed = Vec::new();
         let checked = certifier.tried(|certifier| {
@@ -625,23 +555,23 @@ fn check_cases(
             }
             let at = certifier.induct_at(family)?;
 
-            // A match with no arms and no catch-all is a vacuous elimination: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The guard exists for eliminations that can run; this one cannot. It sits here rather than inside the arm rule because the sort it consumes is derived here, by `check_motive`, and a second derivation is what this clause exists to avoid.
+            // A match with no arms and no catch-all is a vacuous elimination: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The guard exists for eliminations that can run; this one cannot. It sits here rather than inside the arm rule because the sort it consumes is derived here, by `goal_sort`, and a second derivation is what this clause exists to avoid.
             if !(cases.is_empty() && default.is_none()) {
-                eliminate::guard_large_elimination(certifier, &at, family, motive_sort)?;
+                eliminate::guard_large_elimination(certifier, &at, family, goal_sort)?;
             }
 
             check_induct_arms(
                 certifier,
                 &at,
                 family,
-                result,
+                goal,
                 cases,
                 default.as_ref(),
                 scrutinee,
             )
         }
 
-        // The carrier a case form names is a claim about the scrutinee, established here for the same reason [`check_free_monoid`] establishes its own: the arms are typed at the case values while the result is typed at the motive of the *scrutinee*, so a form that does not match the carrier types the arms at one type and runs them at another.
+        // The carrier a case form names is a claim about the scrutinee, established here for the same reason [`check_free_monoid`] establishes its own: the arms are typed at the case values while the match is typed at its goal, so a form that does not match the carrier types the arms at one type and runs them at another.
         Cases::Bool {
             false_case,
             true_case,
@@ -669,7 +599,7 @@ fn check_cases(
             }
 
             // The default stands for every value not enumerated, so the only instance of the result it can be checked at is the scrutinee's — which refines nothing. Enumerating zero is what rules zero out of it, which a call inside may descend on.
-            let expected = result.of(scrutinee, &[]);
+            let expected = goal.clone();
             certifier.scoped(|certifier| {
                 if let Subterm::Var(var) = &**scrutinee
                     && let Some(binder) = var.as_free()
@@ -683,7 +613,7 @@ fn check_cases(
         }
 
         Cases::FreeMonoid { carrier } => {
-            check_free_monoid(certifier, result, scrutinee, scrutinee_type, carrier, &at)
+            check_free_monoid(certifier, goal, scrutinee, scrutinee_type, carrier, &at)
         }
     }
 }
@@ -693,7 +623,7 @@ fn check_cases(
 /// The carrier's own element type must agree with the scrutinee's: the arms are typed against the carrier's copy, and a value flowing through the match carries the scrutinee's, so a disagreement would type the arms at one type and run them at another.
 fn check_free_monoid(
     certifier: &mut Certifier,
-    result: &MatchResult,
+    goal: &Term,
     scrutinee: &Term,
     scrutinee_type: &Term,
     carrier: &Carrier,
@@ -721,7 +651,7 @@ fn check_free_monoid(
                 return Ok(());
             }
 
-            let expected = result.at(scrutinee, &[], &[], &cons_value);
+            let expected = goal_at(goal, scrutinee, &[], &[], &cons_value);
 
             let mut assumed = Vec::new();
             let checked = certifier.tried(|certifier| {
@@ -930,19 +860,6 @@ fn under_bindings<T>(
             judge(certifier, &tail.open(&refs))
         })
     })
-}
-
-/// An elimination's result by value: the ambient goal, or the motive's body under its binders — see the `Match` rule.
-fn result_by_value(certifier: &Certifier, result: &MatchResult) -> MatchResult {
-    match result {
-        MatchResult::Ambient(goal) => MatchResult::Ambient(certifier.by_value(goal)),
-        MatchResult::Family(motive) => {
-            let Ok(motive) =
-                motive.try_map_body(|body| Ok::<_, Infallible>(certifier.by_value(body)));
-
-            MatchResult::Family(motive)
-        }
-    }
 }
 
 /// [`check`]'s rules, past the position it records: `let`'s descent, Π- and Σ-introduction, and inference for the rest.

@@ -18,7 +18,7 @@ fn mismatched(verdicts: &[Verdict], name: &str) -> bool {
 const A_TARGET_NAMING_A_LATER_DEFINITION: &str = r#"
 let /E : (x: #{node = InductType} /F()(0)) -> /std/Bool/False =
     (x: #{node = InductType} /F()(0)) =>
-        #{result = Ambient(/std/Bool/False)}
+        #{goal = /std/Bool/False}
         match x
         end;
 let /D : #NatType = 0;
@@ -84,7 +84,7 @@ fn a_prop_record_read_by_irrelevance_before_it_is_judged_is_refused_for_its_info
 const A_SINGLETON_READ_BEFORE_ITS_TARGET_IS_TYPED: &str = r#"
 let /E : (p: #{node = InductType} /P()(5)) -> #BoolType =
     (p: #{node = InductType} /P()(5)) =>
-        #{result = Ambient(#BoolType)}
+        #{goal = #BoolType}
         match p
         | mk(b) => b
         end;
@@ -107,7 +107,7 @@ fn a_singleton_read_off_an_index_before_its_family_types_the_target_is_refused_a
 const A_RUN_BEFORE_THE_MARKS_ARE_STATED: &str = r#"
 let /E : /std/Bool/Holds(
     #NatEql(
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match
             #{node = Variant}
             /F/c(#NatAdd(2, 3), #{node = Variant} /std/Bool/True/qed())
@@ -131,7 +131,7 @@ induct /F: pub Type
 end
 let /E : /std/Bool/Holds(
     #NatEql(
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match
             #{node = Variant}
             /F/c(#NatAdd(2, 3), #{node = Variant} /std/Bool/True/qed())
@@ -237,7 +237,7 @@ const A_DESCENT_THROUGH_A_LATER_OVERSIZED_PAYLOAD: &str = r#"
 #{node = Rec}
 let /loop : (x: #{node = InductType} /F()) -> /std/Bool/False =
     (x: #{node = InductType} /F()) =>
-        #{result = Ambient(/std/Bool/False)}
+        #{goal = /std/Bool/False}
         match x
         | c(f) => /loop(f(#{node = InductType} /F())(x))
         end;
@@ -275,14 +275,14 @@ induct /B: pub Type
 | b(x: #{node = StructType} /A())
 end
 ((sa: (x: #{node = InductType} /B()) -> #{node = InductType} /E()) =>
-    #{result = Ambient(/std/Bool/False)}
+    #{goal = /std/Bool/False}
     match sa(
         #{node = Variant}
         /B/b(/A() { sa })
     )
     end)(
     (x: #{node = InductType} /B()) =>
-        #{result = Ambient(#{node = InductType} /E())}
+        #{goal = #{node = InductType} /E()}
         match x
         | b(y) => (#{field = Struct(/A, 0)} y.0)(x)
         end

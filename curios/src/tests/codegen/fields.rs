@@ -18,7 +18,7 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
         let Shape(b: Bool) -> Type =
             match b | true => {Nat, Nat} | false => {Nat, Nat, Nat} end;
         let make(b: Bool, n: Nat) -> Shape(b) =
-            match b: (tag) => Shape(tag)
+            match b
             | true => (n, 2)
             | false => (n, 4, 5)
             end;

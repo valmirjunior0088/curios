@@ -1,4 +1,4 @@
--- `a_guard_settled_where_its_operands_are_units.crs` typed through a motive, so no declared result settles the guard before the split: `inside` asks for the guard's spelling in the split's `true` arm, where `p` and `q` are units and it is `k(0)`. The recorded guard steps aside in that arm and is settled only outside it, with `c` open, where `h(p)` and `h(q)` are apart, so `after` is refused at `Holds(k(0))`.
+-- `a_guard_settled_where_its_operands_are_units.crs` typed through a function of the guard's proof, so no declared result settles the guard before the split: `inside` asks for the guard's spelling in the split's `true` arm, where `p` and `q` are units and it is `k(0)`. The recorded guard steps aside in that arm and is settled only outside it, with `c` open, where `h(p)` and `h(q)` are apart, so `after` is refused at `Holds(k(0))`.
 use /std/{Nat, Bool};
 use /std/Bool/{True, False, Holds};
 
@@ -14,7 +14,7 @@ let f(
     q: F(c),
     into: (Holds(k(0))) -> P(k),
 ) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =
-    match match h(p) == h(q) | true => k(0) | false => k(1) end: (b) => (Holds(b)) -> P(k)
+    match match h(p) == h(q) | true => k(0) | false => k(1) end
     | true =>
         (_: Holds(true)) =>
             let split: {} =

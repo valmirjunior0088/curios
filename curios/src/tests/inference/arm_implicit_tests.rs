@@ -19,7 +19,7 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
             match l | [] => (0, Vec/nil()) | [x, ..t] => let (m, v) = of_list(t); (m + 1, Vec/cons(x, v)) end;
 
         let to_list(@T: Type, @n: Nat, v: Vec(T)(n)) -> List(T) =
-            match v: (_, _) => List(T) | nil() => [] | cons(@_, x, xs) => [x, ..to_list(xs)] end;
+            match v | nil() => [] | cons(@_, x, xs) => [x, ..to_list(xs)] end;
 
         let resize(w: Nat, @w0: Nat, v: Vec(Char)(w0)) -> Vec(Char)(w) =
             match w
@@ -104,23 +104,6 @@ const SIZES: &str = r#"
 
     let tree: Shape = Shape/node(Shape/leaf(), Shape/node(Shape/leaf(), Shape/leaf()));
     "#;
-
-// The arm above under a written motive, which makes the result a family rather than the ambient goal. Both checkers re-type locals in every arm by the one rule, `curios_analysis::retyped`, so `z` is not left `Sizes(s)` in the metavariable's birth context for `Vec/append`'s length to refuse `Total(a, z.0)`.
-#[test]
-fn an_implicit_solves_in_an_arm_whose_written_motive_leaves_the_hypothesis_ambient() {
-    let source = format!(
-        r#"{SIZES}
-        let built(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =
-            match s : (_) => Vec(Nat, Total(s, z))
-            | leaf() => Vec/replicate(z, 0)
-            | node(a, b) => Vec/append(build(a, z.0), build(b, z.1))
-            end;
-
-        /std/print(Nat/to_str(Vec/len(built(tree, (2, (3, 4))))))
-        "#
-    );
-    assert_eq!(run(&source), b"9");
-}
 
 // The arm above learning its shape from inside an index. `w(a, b)` targets `node(node(a, b), leaf())` against the actual `node(s, leaf())`, so the case solves the outer `s := node(a, b)` — a variable that is neither the scrutinee nor an index. Both checkers re-type by the case's whole solution through `curios_analysis::retyped`, so `z : Sizes(s)` is not left for the metavariable to read.
 #[test]

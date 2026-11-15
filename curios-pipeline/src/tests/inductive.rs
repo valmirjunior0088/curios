@@ -3,8 +3,8 @@
 use {super::test_support::*, curios_surface::Entrypoint};
 
 #[test]
-fn omitted_motive_mentioning_a_type_param_lowers() {
-    // `pick` is polymorphic in `A`, and the `match c` omits its motive. The motive metavar is solved to `A` — a binder local to `pick`'s telescope. zonk must realign that solution to the enclosing binders when it splices it back in; otherwise `A` dangles as a free var after the module is re-closed and `erase` rejects it with `unbound variable`. Guards zonk's binder realignment.
+fn a_goal_mentioning_a_type_param_lowers() {
+    // `pick` is polymorphic in `A`, and the `match c` has nothing expected of it. Its goal metavariable is solved to `A` — a binder local to `pick`'s telescope. zonk must realign that solution to the enclosing binders when it splices it back in; otherwise `A` dangles as a free var after the module is re-closed and `erase` rejects it with `unbound variable`. Guards zonk's binder realignment.
     let source = r#"
         use /std/{Bool};
         let pick(A : Type, a : A, b : A, c : Bool) -> A =
@@ -61,7 +61,7 @@ fn match_arm_arity_is_checked_statically() {
         use /std/{Result};
         use /std/{Nat, Bytes};
         let f(r : Result(Nat, Bytes)) -> Nat =
-            match r : (_) => Nat
+            match r
             | success(value, extra) => value
             | failure(_) => 0
             end;
@@ -85,7 +85,7 @@ fn non_pub_inductive_constructors_are_usable_in_the_declaring_module() {
         | none()
         | some(Nat)
         end
-        let subject : /std/Nat = match Opt/some(7) : (_) => Nat
+        let subject : /std/Nat = match Opt/some(7)
         | none() => 0
         | some(n) => n
         end;
@@ -115,7 +115,7 @@ fn match_on_a_non_inductive_scrutinee_is_rejected_directly() {
     // Matching inductive constructors on a non-inductive value reports the real problem rather than a downstream projection error.
     let source = r#"
         use /std/{Nat};
-        match 7 : (_) => Nat
+        match 7
         | success(value) => value
         end
     "#;
@@ -135,7 +135,7 @@ fn new_style_inductive_match_lowers_end_to_end() {
         use /std/{Result};
         use /std/{Nat, Bytes};
         let f(r : Result(Bytes, Nat)) -> Nat =
-            match r : (_) => Nat
+            match r
             | success(value) => value
             | failure(_) => 0
             end;
@@ -148,7 +148,7 @@ fn new_style_inductive_match_lowers_end_to_end() {
 
 #[test]
 fn indexed_inductive_declares_constructs_and_matches() {
-    // Indexed inductives, end to end: an indexed `Vec` declares (head index telescope, named/`@` payload binders, per-case targets), constructs with `@T`/`@m` inferred — `Nat/succ(?m)` unifies against the annotation's `2` — and matches under a constant motive (Rung 0: arms are typed from the constructor telescopes; indices ride along), lowering through to wasm.
+    // Indexed inductives, end to end: an indexed `Vec` declares (head index telescope, named/`@` payload binders, per-case targets), constructs with `@T`/`@m` inferred — `Nat/succ(?m)` unifies against the annotation's `2` — and matches at a goal that names no index (Rung 0: arms are typed from the constructor telescopes; indices ride along), lowering through to wasm.
     let source = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -156,7 +156,7 @@ fn indexed_inductive_declares_constructs_and_matches() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         let len(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | nil() => 0
             | cons(@m, x, xs) => Nat/add(len(xs), 1)
             end;
@@ -178,7 +178,7 @@ fn indexed_inductive_without_params_and_unnamed_index_lowers() {
         | b() : (7)
         end
         let t : Tag(7) = Tag/b();
-        let subject : /std/Bytes = match t : (_, _) => Bytes
+        let subject : /std/Bytes = match t
         | a() => /std/Str/to_bytes("a")
         | b() => /std/Str/to_bytes("b")
         end;
@@ -189,8 +189,8 @@ fn indexed_inductive_without_params_and_unnamed_index_lowers() {
 }
 
 #[test]
-fn indexed_inductive_motive_binds_the_index() {
-    // The motive `(k, v) => Vec(T)(Nat/add(k, m))` binds the length index ahead of the scrutinee; each arm checks against the motive at that case's target index (`0` for nil, `Nat/succ(j)` for cons), and the whole match at the scrutinee's actual index. The cons arm converges via `Nat/add`'s definitional successor peeling.
+fn indexed_inductive_goal_reads_the_index() {
+    // The goal `Vec(T)(Nat/add(n, m))` names the length index; each arm checks against the goal at that case's target index (`0` for nil, `Nat/succ(j)` for cons), and the whole match at the scrutinee's actual index. The cons arm converges via `Nat/add`'s definitional successor peeling.
     let source = r#"
         use /std/{Nat};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -198,7 +198,7 @@ fn indexed_inductive_motive_binds_the_index() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T)(n), w : Vec(T)(m)) -> Vec(T)(Nat/add(n, m)) =
-            match v : (k, v) => Vec(T)(Nat/add(k, m))
+            match v
             | nil() => w
             | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
             end;
@@ -212,68 +212,10 @@ fn indexed_inductive_motive_binds_the_index() {
 }
 
 #[test]
-fn motive_binder_count_is_checked_against_the_index_telescope() {
-    // A motive binds the scrutinee's indices and then the scrutinee — two names for a one-index `Vec`. Binding too few or too many is reported as itself, at the motive, rather than as a domain mismatch downstream.
-    let inductive_decl = r#"
-        use /std/{Nat, Bytes};
-        induct Vec(T : Type) : (n : Nat) -> Type
-        | nil() : (0)
-        | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
-        end
-    "#;
-
-    let under = format!(
-        r#"{inductive_decl}
-        let f(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
-            match v : (_) => Nat
-            | nil() => 0
-            | cons(@m, x, xs) => 1
-            end;
-        0
-    "#
-    );
-    let error = compile(&under).unwrap_err();
-    assert!(
-        error.contains("the motive binds 1 name") && error.contains("needs 2"),
-        "unexpected error: {error}"
-    );
-
-    let over = format!(
-        r#"{inductive_decl}
-        let f(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
-            match v : (_, _, _) => Nat
-            | nil() => 0
-            | cons(@m, x, xs) => 1
-            end;
-        0
-    "#
-    );
-    let error = compile(&over).unwrap_err();
-    assert!(
-        error.contains("the motive binds 3 names") && error.contains("needs 2"),
-        "unexpected error: {error}"
-    );
-
-    // Parameters are not motive binders at all, so the family a written scrutinee-binder annotation names is checked by ordinary conversion: annotating at the wrong parameter is a plain type mismatch.
-    let wrong_annotation = format!(
-        r#"{inductive_decl}
-        let f(@n : Nat, v : Vec(Nat)(n)) -> Nat =
-            match v : (k, w : Vec(Bytes)(k)) => Nat
-            | nil() => 0
-            | cons(@m, x, xs) => 1
-            end;
-        /std/Io/pure(())
-    "#
-    );
-    let error = compile(&wrong_annotation).unwrap_err();
-    assert!(error.contains("mismatch"), "unexpected error: {error}");
-}
-
-#[test]
 fn index_refinement_learns_inside_the_arm() {
     // Index refinement: a scrutinee index that is a stable key is refined to the case's target inside the arm. Three faces of it:
-    // - `subst` casts `Vec(Bytes)(n)` to `Vec(Bytes)(m)` through an `Eq(Nat)(n, m)` under a *constant* motive — the equality is learned (`n := z`, `m := z`), not eliminated;
-    // - `sym` is J-style elimination from the pattern motive alone;
+    // - `subst` casts `Vec(Bytes)(n)` to `Vec(Bytes)(m)` through an `Eq(Nat)(n, m)` at a goal that names no index — the equality is learned (`n := z`, `m := z`), not eliminated;
+    // - `sym` is J-style elimination at its goal alone;
     // - `f`'s nil arm uses a hypothesis demanding `Vec(T)(0)` — legal because the arm refines `n := 0`.
     let source = r#"
         use /std/{Nat, Bytes};
@@ -285,16 +227,16 @@ fn index_refinement_learns_inside_the_arm() {
         | refl(z : A) : (z, z)
         end
         let subst(@n : Nat, @m : Nat, p : Eq(Nat)(n, m), v : Vec(Bytes)(n)) -> Vec(Bytes)(m) =
-            match p : (_, _, _) => Vec(Bytes)(m)
+            match p
             | refl(z) => v
             end;
         let sym(@A : Type, @x : A, @y : A, p : Eq(A)(x, y)) -> Eq(A)(y, x) =
-            match p : (s, t, q) => Eq(A)(t, s)
+            match p
             | refl(z) => Eq/refl(z)
             end;
         let zonly(@T : Type, v : Vec(T)(0)) -> Nat = 9;
         let f(@T : Type, @n : Nat, v : Vec(T)(n), w : Vec(T)(n)) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | nil() => zonly(w)
             | cons(@j, x, xs) => 1
             end;
@@ -311,12 +253,12 @@ fn index_refinement_learns_inside_the_arm() {
 
 #[test]
 fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
-    // An inductive may declare zero cases — `False`. Its eliminator is a match with zero arms: every omission is vacuously justified, so the match checks at any motive and lowers through erasure and codegen.
+    // An inductive may declare zero cases — `False`. Its eliminator is a match with zero arms: every omission is vacuously justified, so the match checks at any goal and lowers through erasure and codegen.
     let source = r#"
         induct False : Type
         end
         let absurd(A : Type, v : False) -> A =
-            match v : (_) => A
+            match v
             end;
         let subject : /std/Nat = 5;
         /std/Io/pure(())
@@ -335,11 +277,11 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         let first(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> T =
-            match v : (_, _) => T
+            match v
             | cons(@j, x, xs) => x
             end;
         let rest(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> Vec(T)(n) =
-            match v : (_, _) => Vec(T)(n)
+            match v
             | cons(@j, x, xs) => xs
             end;
         let v : Vec(Bytes)(2) = Vec/cons(/std/Str/to_bytes("a"), Vec/cons(/std/Str/to_bytes("b"), Vec/nil()));
@@ -361,7 +303,7 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         let first(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> T =
-            match v : (_, _) => T
+            match v
             | cons(@j, x, xs) => x
             end;
         /std/Io/bind(/std/Try/run(/std/Io/read(/std/Proc/stdin, 16)), (arrived) =>
@@ -393,7 +335,7 @@ fn omission_requires_a_definite_clash() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         let f(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | cons(@j, x, xs) => 1
             end;
         /std/Io/pure(())
@@ -412,7 +354,7 @@ fn omission_requires_a_definite_clash() {
         | diff() : (0, 1)
         end
         let f(a : Nat, b : Nat, q : Foo(a, b)) -> Bytes =
-            match q : (_, _, _) => Bytes
+            match q
             | diff() => /std/Str/to_bytes("d")
             end;
         /std/Io/pure(())
@@ -431,7 +373,7 @@ fn omission_requires_a_definite_clash() {
         | diff() : (0, 1)
         end
         let f(q : Foo(3, 4)) -> Bytes =
-            match q : (_, _, _) => Bytes
+            match q
             | diff() => /std/Str/to_bytes("d")
             end;
         /std/Io/pure(())
@@ -445,7 +387,7 @@ fn omission_requires_a_definite_clash() {
         | diff() : (0, 1)
         end
         let g(q : Foo(5, 5)) -> Bytes =
-            match q : (_, _, _) => Bytes
+            match q
             | same(z) => /std/Str/to_bytes("s")
             end;
         let subject : /std/Bytes = g(Foo/same(5));
@@ -553,7 +495,7 @@ fn payload_relying_on_implicit_insertion_is_rebuilt() {
         | mk(p : Eq()(0, 0))
         end
         let b : Box = Box/mk(Eq/refl(0));
-        let subject : /std/Nat = match b : (_) => Nat
+        let subject : /std/Nat = match b
         | mk(p) => 7
         end;
         /std/Io/pure(())

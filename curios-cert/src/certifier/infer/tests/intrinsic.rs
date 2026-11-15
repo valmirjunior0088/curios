@@ -106,15 +106,15 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
     );
 }
 
-/// A free-monoid cons arm is checked under its binders — the peeled generator and the tail — against the motive at one generator over the tail, and a body of the wrong type at the case's instance is refused.
+/// A free-monoid cons arm is checked under its binders — the peeled generator and the tail — against the goal at one generator over the tail, and a body of the wrong type at the case's instance is refused.
 #[test]
-fn a_free_monoid_arm_must_inhabit_the_motive_at_its_case() {
+fn a_free_monoid_arm_must_inhabit_the_goal_at_its_case() {
     let mut certifier = certifier();
-    // Motive `(m) => Nat`: the zero arm at `Nat` and the succ arm's predecessor at `Nat`; then a succ arm that produces a Bool where the motive demands a Nat, and a zero arm of the wrong type — the identity case is a case like any other.
+    // Goal `Nat`: the zero arm at `Nat` and the succ arm's predecessor at `Nat`; then a succ arm that produces a Bool where the goal demands a Nat, and a zero arm of the wrong type — the identity case is a case like any other.
     let [counts, wrong, wrong_zero] = under(
         &mut certifier,
         "n: #NatType",
-        "match n: (m) => #NatType | 0 => 0 | pred + 1 => pred end, match n: (m) => #NatType | 0 => 0 | pred + 1 => true end, match n: (m) => #NatType | 0 => true | pred + 1 => pred end",
+        "#{goal = #NatType} match n | 0 => 0 | pred + 1 => pred end, #{goal = #NatType} match n | 0 => 0 | pred + 1 => true end, #{goal = #NatType} match n | 0 => true | pred + 1 => pred end",
     );
 
     assert_eq!(infer(&mut certifier, &counts), Ok(term("#NatType")));
@@ -136,7 +136,7 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
     let [mismatched] = under(
         &mut certifier,
         "xs: #ListType(#NatType)",
-        "#{cases = {carrier = {elem = #BoolType}}} match xs: (m) => #NatType | [] => 0 | [head, ..tail] => 0 end,",
+        "#{goal = #NatType, cases = {carrier = {elem = #BoolType}}} match xs | [] => 0 | [head, ..tail] => 0 end,",
     );
 
     assert!(matches!(
@@ -149,7 +149,7 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
 ///
 /// `check_free_monoid` establishes it — `Carrier::Nat` matches the scrutinee's type against `NatType`, `Carrier::Bytes` against `BytesType`, and `Carrier::List` converts its carried element type against the scrutinee's — and `Cases::Induct` gets it from needing an `InductType` to read a declaration off at all. The boolean and dispatch forms establish it against `Bool` and `Nat`: no typing rule looks at a case form otherwise, so no ordering discipline would catch a claim left unchecked.
 ///
-/// What it costs is the discipline the free-monoid rule states for itself: the arms are typed at the *case values* — `false` and `true`, or the enumerated literals — while the result is typed at `motive(scrutinee)` and a value flowing through the match carries the scrutinee's type, so a disagreement types the arms at one carrier and runs them at another. `curios-elab` refuses both spellings at `check_intrinsic_head`, so no surface program reaches them.
+/// What it costs is the discipline the free-monoid rule states for itself: the arms are typed at the *case values* — `false` and `true`, or the enumerated literals — while the result is typed at the goal and a value flowing through the match carries the scrutinee's type, so a disagreement types the arms at one carrier and runs them at another. `curios-elab` refuses both spellings at `check_intrinsic_head`, so no surface program reaches them.
 #[test]
 fn a_boolean_elimination_requires_a_boolean_scrutinee() {
     let mut certifier = certifier();
@@ -157,7 +157,7 @@ fn a_boolean_elimination_requires_a_boolean_scrutinee() {
     assert!(
         infer(
             &mut certifier,
-            &term("match 0: (_) => #NatType | false => 1 | true => 2 end")
+            &term("#{goal = #NatType} match 0 | false => 1 | true => 2 end")
         )
         .is_err(),
         "the certifier typed a boolean elimination of a `Nat`",
@@ -172,7 +172,7 @@ fn a_dispatch_requires_a_natural_scrutinee() {
     assert!(
         infer(
             &mut certifier,
-            &term("match true: (_) => #NatType | 0 => 1 | _ => 2 end")
+            &term("#{goal = #NatType} match true | 0 => 1 | _ => 2 end")
         )
         .is_err(),
         "the certifier typed a `Nat` dispatch on a `Bool`",
@@ -183,7 +183,7 @@ fn a_dispatch_requires_a_natural_scrutinee() {
 const HELD: &str = "pair: ${pair}, record: ${record}, refuted: ${refuted}, truth: ${truth}, count: ${count}, list: ${list}";
 
 /// Each form that takes a value apart, over the values [`HELD`] holds: a tuple's and a record's projection, a match on an empty family, a boolean elimination, a dispatch, a natural-number fold and a list fold.
-const FORMS: &str = "pair.0, #{field = Struct(/Boxed, 0)} record.0, match refuted: (_) => #NatType end, match truth: (_) => #NatType | false => 0 | true => 1 end, match count: (_) => #NatType | 0 => 1 | _ => 2 end, match count: (_) => #NatType | 0 => 0 | head + 1 => 1 end, #{cases = {carrier = {elem = #NatType}}} match list: (_) => #NatType | [] => 0 | [head, ..tail] => 1 end";
+const FORMS: &str = "pair.0, #{field = Struct(/Boxed, 0)} record.0, #{goal = #NatType} match refuted end, #{goal = #NatType} match truth | false => 0 | true => 1 end, #{goal = #NatType} match count | 0 => 1 | _ => 2 end, #{goal = #NatType} match count | 0 => 0 | head + 1 => 1 end, #{goal = #NatType, cases = {carrier = {elem = #NatType}}} match list | [] => 0 | [head, ..tail] => 1 end";
 
 /// A description, a cell and a channel are eliminated by nothing, so no term reads the value one holds or describes: each form that takes a value apart — a tuple's or a record's projection, a match on a family, and each carrier's own case forms — is refused over one, however well its arms would type at what it carries. Read, a description of `{False, Nat}` that exits would hand back the `False` it never returns.
 #[test]
@@ -254,14 +254,14 @@ fn each_intrinsic_elimination_at_its_own_carrier_is_still_accepted() {
     assert_eq!(
         infer(
             &mut certifier,
-            &term("match true: (_) => #NatType | false => 1 | true => 2 end")
+            &term("#{goal = #NatType} match true | false => 1 | true => 2 end")
         ),
         Ok(nat.clone())
     );
     assert_eq!(
         infer(
             &mut certifier,
-            &term("match 0: (_) => #NatType | 0 => 1 | _ => 2 end")
+            &term("#{goal = #NatType} match 0 | 0 => 1 | _ => 2 end")
         ),
         Ok(nat)
     );

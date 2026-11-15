@@ -90,7 +90,7 @@ fn a_tuple_payload_waits_for_the_index_that_types_it() {
         use /std/{Nat, Str, Io};
         induct Labels : pub Type | nil() | cons(Str, Labels) end
         let Count(L : Labels) -> Type =
-            match L : (_) => Type
+            match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
             end;
@@ -109,7 +109,7 @@ fn a_payload_stuck_on_a_rigid_index_is_refused_at_the_literal() {
         use /std/{Nat, Str, Io};
         induct Labels : pub Type | nil() | cons(Str, Labels) end
         let Count(L : Labels) -> Type =
-            match L : (_) => Type
+            match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
             end;
@@ -133,7 +133,7 @@ fn a_settled_index_measures_the_literal_against_the_type_it_computes() {
         use /std/{Nat, Str, Io};
         induct Labels : pub Type | nil() | cons(Str, Labels) end
         let Count(L : Labels) -> Type =
-            match L : (_) => Type
+            match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
             end;

@@ -137,7 +137,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
         end
         let make : (n : Type) -> Boxed = (n) => Boxed/box(n, 5);
         let get : (b : Boxed) -> Nat = (b) =>
-            match b : (_) => Nat
+            match b
             | box(ghost, val) => val
             end;
         let r : Nat = get(make(Nat));
@@ -155,7 +155,7 @@ fn erased_void_discharges_to_relevant_result() {
         use /std/{Io};
         use /std/Bool/{False};
         let absurd(@A : Type, c : False) -> A = match c end;
-        let direct(@A : Type, c : False) -> A = match c : (_) => A end;
+        let direct(@A : Type, c : False) -> A = match c end;
         let via_absurd(@A : Type, c : False) -> A = absurd(c);
         let proofs = (direct, via_absurd);
         /std/print("ok")
@@ -173,7 +173,7 @@ fn erased_indexed_relevant_repro() {
         end
         let f(m : Type, k : Nat) -> Box(m) =
             let go =
-                match k : (k) => (d : Nat) -> Box(m)
+                match k
                 | 0 => (d) => Box/mk(m)
                 | kp + 1 => (d) => Box/mk(m)
                 end;

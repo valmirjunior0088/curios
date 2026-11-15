@@ -100,7 +100,7 @@ const KEY_ENCODED: &str = r#"
 use /std/{Str, Nat, Bytes, Hash, Option, Io};
 
 let walk(n: Nat, x: Nat, s: Nat) -> Nat =
-    match n: (_) => Nat
+    match n
     | 0 => s
     | k + 1 =>
         let y = 75 * x % 65537;
@@ -110,11 +110,11 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
 let entry() -> /std/Io({}) =
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
+    match input
     | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
+        match Str/of_bytes(bytes)
         | success(str) =>
-            match Nat/of_str(Str/trim(str)): (_) => Io({})
+            match Nat/of_str(Str/trim(str))
             | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
             | none() => /std/print("bad input\n")
             end
@@ -129,7 +129,7 @@ const KEY_CONTROL: &str = r#"
 use /std/{Str, Nat, Bytes, Option, Io};
 
 let walk(n: Nat, x: Nat, s: Nat) -> Nat =
-    match n: (_) => Nat
+    match n
     | 0 => s
     | k + 1 =>
         let y = 75 * x % 65537;
@@ -139,11 +139,11 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
 let entry() -> /std/Io({}) =
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
+    match input
     | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
+        match Str/of_bytes(bytes)
         | success(str) =>
-            match Nat/of_str(Str/trim(str)): (_) => Io({})
+            match Nat/of_str(Str/trim(str))
             | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
             | none() => /std/print("bad input\n")
             end

@@ -1,4 +1,4 @@
-//! A match on a proof, put to the certifier where the elaborator refuses first: the sort its motive is held to, a universe among the relevant ones, and the instance a closed one states.
+//! A match on a proof, put to the certifier where the elaborator refuses first: the sort its goal is held to, a universe among the relevant ones, and the instance a closed one states.
 
 use {
     super::test_support::*,
@@ -7,9 +7,9 @@ use {
     curios_core::Reducer,
 };
 
-/// A motive whose sort its index binder decides is no motive. `Side : (Bool) -> Prop | left : (true) | right : (false)` is eliminated at `(i, s) => match i : (c) => (match c : (_) => Type 1 | false => Type | true => Prop end) | false => Nat | true => Unit end`: at `left`'s case the result is the proposition `Unit`, and at `right`'s it is `Nat`, the data a proposition of two constructors is not taken into. Typed under its binder `i` it lands in no sort, so the match is refused before the guard or either arm is asked. `curios`'s `tests::rules::large_elimination_tests` puts the same motive to the elaborator under this name.
+/// A goal whose sort its scrutinee's index decides is no goal. `Side : (Bool) -> Prop | left : (true) | right : (false)` is eliminated at `subject : Side(j)` into `match j | false => Nat | true => Unit end`: at `left`'s case the result is the proposition `Unit`, and at `right`'s it is `Nat`, the data a proposition of two constructors is not taken into. Typed at the open `j` its type is `match j | false => Type | true => Prop end`, which lands in no sort, so the match is refused before the guard or either arm is asked. `curios`'s `tests::rules::large_elimination_tests` puts the same goal to the elaborator under this name.
 #[test]
-fn a_motive_whose_sort_its_index_decides_is_no_motive() {
+fn a_goal_whose_sort_its_index_decides_is_no_goal() {
     let mut certifier = certifier();
     declare(&mut certifier, "Unit", "", "Prop", &["u()"]);
     declare(
@@ -19,18 +19,20 @@ fn a_motive_whose_sort_its_index_decides_is_no_motive() {
         "Prop",
         &["left(): (true)", "right(): (false)"],
     );
-    let motive = fill!(
-        "match i: (c) => match c: (_) => #{level = 1} Type | false => Type | true => Prop end | false => #NatType | true => ${unit} end",
+    let goal = fill!(
+        "#{goal = #{goal = #{level = 1} Type} match j | false => Type | true => Prop end} match j | false => #NatType | true => ${unit} end",
         unit = family_at("Unit", "")
     );
     let [matched] = under(
         &mut certifier,
-        &fill!("subject: ${side}", side = family_at("Side", "false")),
+        &fill!(
+            "j: #BoolType, subject: ${side}",
+            side = family_at("Side", "j")
+        ),
         &fill!(
             "${matched},",
             matched = eliminating(
-                "i, s",
-                &motive,
+                &goal,
                 &["left() => #{node = Variant} /Unit/u()", "right() => 7"]
             )
         ),
@@ -38,7 +40,7 @@ fn a_motive_whose_sort_its_index_decides_is_no_motive() {
 
     assert!(matches!(
         infer(&mut certifier, &matched),
-        Err(Error::NotAMotive { refusal, .. }) if matches!(*refusal, Error::NotASort(_))
+        Err(Error::NotAGoal { refusal, .. }) if matches!(*refusal, Error::NotASort(_))
     ));
 }
 
@@ -67,7 +69,6 @@ fn a_proposition_with_two_constructors_does_not_eliminate_into_a_universe() {
         &fill!(
             "${matched},",
             matched = eliminating(
-                "i, s",
                 "Prop",
                 &[
                     &fill!("here() => ${target}", target = family_at("Target", "0")),
@@ -101,7 +102,6 @@ fn a_proposition_with_one_bare_constructor_eliminates_into_a_universe() {
         &fill!(
             "${matched},",
             matched = eliminating(
-                "i, s",
                 "Prop",
                 &[&fill!(
                     "it() => ${target}",
@@ -126,7 +126,7 @@ fn a_closed_match_stating_an_instance_its_scrutinee_is_not_at_is_refused() {
         &["same(z: #NatType): (z, z)"],
     );
     let matched = term(&fill!(
-        "#{cases = {stated = ${stated}}} match #{node = Variant} /Same/same(0): (i, j, s) => #NatType | same(z) => z end",
+        "#{goal = #NatType, cases = {stated = ${stated}}} match #{node = Variant} /Same/same(0) | same(z) => z end",
         stated = family_at("Same", "1, 1")
     ));
 

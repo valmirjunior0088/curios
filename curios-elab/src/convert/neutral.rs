@@ -6,10 +6,10 @@
 mod tests;
 
 use {
-    crate::{Context, EveryPosition, Structural, reduce, reduce_forced},
+    crate::{Context, EveryPosition, Structural, reduce},
     curios_core::{
-        Argument, Families, Field, Free, FuncType, InductType, Instance, Level, Match, MatchResult,
-        Proj, Quality, ReduceError, StructType, Subterm, Term, TupleType, UniverseConstraintKind,
+        Argument, Families, Field, Free, FuncType, Instance, Level, Match, Proj, Quality,
+        ReduceError, StructType, Subterm, Term, TupleType, UniverseConstraintKind,
         UniverseConstraintOrigin, instantiate_universes,
     },
     std::{collections::HashMap, rc::Rc},
@@ -462,28 +462,8 @@ pub fn synth_neutral(
                 _ => Ok(None),
             }
         }
-        // A stuck elimination's type is its result at its scrutinee: its ambient goal as written, or its motive opened at the indices the scrutinee's type carries and then at the scrutinee. The elimination was checked against that result where it was typed, so this reads what typing established, as a variable's type is read off its binder; the certifier's lookup reads the same.
-        Subterm::Match(Match { head, result, .. }) => {
-            let mut indices = Vec::new();
-            if let MatchResult::Family(motive) = result {
-                if motive.arity() > 1 {
-                    let Some(head_type) = synth_neutral(context, binders, opened, head)? else {
-                        return Ok(None);
-                    };
-                    if let Subterm::InductType(InductType {
-                        indices: actual, ..
-                    }) = &*reduce_forced(context, head_type)?
-                    {
-                        indices.clone_from(actual);
-                    }
-                }
-                if indices.len() + 1 != motive.arity() {
-                    return Ok(None);
-                }
-            }
-
-            Ok(Some(result.of(head, &indices)))
-        }
+        // A stuck elimination's type is its goal as written. The elimination was checked against it where it was typed, so this reads what typing established, as a variable's type is read off its binder; the certifier's lookup reads the same.
+        Subterm::Match(Match { goal, .. }) => Ok(Some(goal.clone())),
         // A metavariable's type is the one it was born at, which no solution changes, so a neutral it heads is typed before it is solved: a method read off a witness resolution has not answered yet, whose bound is a proposition by the concept's word whichever witness arrives.
         Subterm::Metavar(metavar) => Ok(context.metavar_type_at(metavar)),
         _ => Ok(None),

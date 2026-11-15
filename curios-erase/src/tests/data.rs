@@ -329,7 +329,6 @@ entry
 fn a_bool_match_erases_to_a_switch_bool() {
     let body = curios_core::Term::bool_match(
         curios_core::Term::intrinsic(curios_core::Intrinsic::Bool(true)),
-        None,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         nat_lit(10),
         nat_lit(20),
@@ -363,7 +362,6 @@ fn a_nat_match_peels_to_a_dispatch() {
     )];
     let body = curios_core::Term::nat_match(
         reference("n"),
-        None,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         nat_lit(0),
         &pred,
@@ -407,7 +405,6 @@ fn a_list_match_erases_to_one_peel() {
     let body = curios_core::Term::list_match(
         reference("xs"),
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
-        None,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         nat_lit(0),
         &[&h, &t],
@@ -446,7 +443,6 @@ fn a_variant_match_binds_payload_without_projections() {
     );
     let body = curios_core::Term::induct_match(
         scrutinee,
-        None,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         [
             ("none", Vec::<curios_core::Free>::new(), nat_lit(0)),
@@ -520,7 +516,6 @@ fn an_effectful_scrutinee_is_erased_once() {
     )];
     let body = curios_core::Term::nat_match(
         io_read,
-        None,
         curios_core::Term::intrinsic(curios_core::Intrinsic::NatType),
         nat_lit(0),
         &pred,

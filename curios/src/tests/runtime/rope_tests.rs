@@ -21,10 +21,10 @@ fn a_flattening_writes_every_element_where_it_stands() {
         use /std/{Str, Nat, List, Io};
 
         let leaning(k: Nat, acc: List(Nat)) -> List(Nat) =
-            match k: (_) => List(Nat) | 0 => acc | m + 1 => leaning(m, [..acc, m]) end;
+            match k | 0 => acc | m + 1 => leaning(m, [..acc, m]) end;
 
         let halves(lo: Nat, k: Nat) -> List(Nat) =
-            match k: (_) => List(Nat)
+            match k
             | 0 => []
             | 1 => [lo]
             | _ =>

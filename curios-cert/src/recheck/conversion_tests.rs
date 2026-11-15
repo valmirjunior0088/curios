@@ -7,7 +7,7 @@ const STEPPING: &str = r#"
 #{node = Rec}
 let /g : (_x: #NatType, y: #NatType, z: #NatType) -> #NatType =
     (_x: #NatType, y: #NatType, z: #NatType) =>
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match #NatEql(z, 0)
         | false =>
             /g(y, 0, #NatSub(z, 1))

@@ -117,6 +117,9 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
         let head_of(x: Bytes) -> Byte =
             match x | x[] => 0 | x[h, .._] => h end;
 
+        let heads_agree(@s: Bytes, @t: Bytes, p: Eq()(s, t)) -> Eq()(head_of(s), head_of(t)) =
+            match p | refl(@z) => Eq/refl() end;
+
         let cons_inj_head(
             @h1: Byte,
             @t1: Bytes,
@@ -124,7 +127,7 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
             @t2: Bytes,
             p: Eq()(x[h1, ..t1], x[h2, ..t2]),
         ) -> Eq()(h1, h2) =
-            match p: (s, t, q) => Eq()(head_of(s), head_of(t)) | refl(@z) => Eq/refl() end;
+            heads_agree(p);
 
         let raw(x: Bytes) -> Bytes =
             match x

@@ -350,7 +350,7 @@ fn an_operator_in_a_dependent_type_elaborates_after_its_witness_row() {
          pub let join(a : Box, b : Box) -> Box =
              Box/box();
          pub let Probe(b : Box) -> Type =
-             match b : (_) => Type | box() => One end;
+             match b | box() => One end;
          pub let probe(a : Box, b : Box) -> Probe(a + b) =
              One/point();
          satisfy Add(Box) {

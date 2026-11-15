@@ -226,8 +226,7 @@ let arrived(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
         end
     | success(inputs) =>
         let rest = Reader/held(s.input)!;
-        match Bytes/len(rest) == 0 || s.support.keyboard: (_) =>
-            Try(Io, Io/Error, Option(List(Input)))
+        match Bytes/len(rest) == 0 || s.support.keyboard
         | true => Try/pure(Option/some(inputs))
         | false =>
             let more = Io/timeout(Duration/of_millis(30), arrival)!;

@@ -247,7 +247,7 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
             let taint = List/len(Proc/args()!);
             let flag : Bool = taint == 0;
             let decide(n : Nat, acc : Nat) -> Nat =
-                match n : (_) => Nat
+                match n
                 | 0 => acc
                 | m + 1 =>
                     let chosen : Pair = match flag | true => Pair/left(m) | false => Pair/right(m) end;
@@ -287,7 +287,7 @@ fn a_tuple_is_read_at_its_own_final_type() {
         let entry() -> /std/Io({}) =
             let taint = List/len(Proc/args()!);
             let build(n : Nat, acc : Chain) -> Chain =
-                match n : (_) => Chain
+                match n
                 | 0 => acc
                 | m + 1 => build(m, Chain/link(m, acc))
                 end;
@@ -485,7 +485,7 @@ fn a_monomorphic_slot_carries_its_own_type() {
         let entry() -> /std/Io({}) =
             let taint = List/len(Proc/args()!);
             let build(n : Nat, acc : Chain) -> Chain =
-                match n : (_) => Chain
+                match n
                 | 0 => acc
                 | m + 1 => build(m, Chain/link(m, acc))
                 end;

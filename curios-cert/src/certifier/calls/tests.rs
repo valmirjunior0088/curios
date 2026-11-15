@@ -22,8 +22,7 @@ fn group(body: &str) -> Term {
 }
 
 /// The two-arm split of `${scrutinee}` at `Type`: `Nat` when it is zero, `${cons}` when it is `pred + 1`.
-const SPLIT: &str =
-    "#{result = Ambient(Type)} match ${scrutinee} | 0 => #NatType | pred + 1 => ${cons} end";
+const SPLIT: &str = "#{goal = Type} match ${scrutinee} | 0 => #NatType | pred + 1 => ${cons} end";
 
 /// [`SPLIT`] of `scrutinee` with `cons` in its successor arm.
 fn split(scrutinee: &str, cons: &str) -> String {
@@ -62,7 +61,8 @@ fn a_guard_behind_a_definition_establishes_what_its_arm_descends_on() {
         "let /is_zero: (x: #NatType) -> #BoolType = (x: #NatType) => #NatEql(x, 0);",
     );
 
-    let body = "#{result = Ambient(Type)} match /is_zero(n) | false => f(#NatSub(n, 1)) | true => #NatType end";
+    let body =
+        "#{goal = Type} match /is_zero(n) | false => f(#NatSub(n, 1)) | true => #NatType end";
 
     assert!(infer(&mut certifier, &group(body)).is_ok());
 }
@@ -177,7 +177,7 @@ fn a_refused_walk_takes_back_the_calls_it_recorded() {
 fn an_arm_no_reduction_takes_records_no_call() {
     let closes = |argument: &str| {
         let body = fill!(
-            "#{result = Ambient(Type)} match ((c: #BoolType) => #{result = Ambient(#BoolType)} match c | false => true | true => false end)(${argument}) | false => #NatType | true => (x: f(n)) -> 0(0) end",
+            "#{goal = Type} match ((c: #BoolType) => #{goal = #BoolType} match c | false => true | true => false end)(${argument}) | false => #NatType | true => (x: f(n)) -> 0(0) end",
             argument
         );
 

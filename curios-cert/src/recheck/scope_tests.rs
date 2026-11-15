@@ -466,7 +466,7 @@ let /std/Bool/Holds : (b: #BoolType) -> Prop =
     (b: #BoolType) => /std/Bool/True;
 let /G : (b2: #BoolType) -> Prop =
     (b3: #BoolType) =>
-        #{result = Ambient(Prop)}
+        #{goal = Prop}
         match b3
         | false => /std/Bool/False
         | true => /std/Bool/True

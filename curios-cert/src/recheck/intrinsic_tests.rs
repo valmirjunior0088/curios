@@ -122,9 +122,9 @@ let /matched : (
         )
     ) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /std/Bool/False())}
+                /std/Bool/False()}
         match io
         | mk(a) =>
             a
@@ -146,7 +146,7 @@ let /projected : (
         (io).0;
 let /split : (io: #IoType(#BoolType)) -> #BoolType =
     (io: #IoType(#BoolType)) =>
-        #{result = Ambient(#BoolType)}
+        #{goal = #BoolType}
         match io
         | false =>
             false

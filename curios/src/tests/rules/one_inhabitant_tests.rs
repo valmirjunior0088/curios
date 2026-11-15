@@ -212,33 +212,26 @@ fn two_neutrals_stay_apart_where_a_lookup_gives_them_a_type_with_a_relevant_fiel
         use /std/{Eq, Nat, Bool};
 
         let apart(b : Bool, r : {{}, {}}, s : {{}, {}})
-            -> Eq(@(Nat))((match b: (_) => {{{}, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1,
-                          (match b: (_) => {{{}, {}}, Nat} | true => (s, 1) | false => (s, 2) end).1)
+            -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
+                          (match b | true => (s, 1) | false => (s, 2) end).1)
             = Eq/refl();
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[
-        ("r : {{}, {}}, s : {{}, {}}", "r : {Nat, {}}, s : {Nat, {}}"),
-        ("{{{}, {}}, Nat} | true => (r, 1)", "{{Nat, {}}, Nat} | true => (r, 1)"),
-        ("{{{}, {}}, Nat} | true => (s, 1)", "{{Nat, {}}, Nat} | true => (s, 1)"),
-    ])
+    .refused(&[("r : {{}, {}}, s : {{}, {}}", "r : {Nat, {}}, s : {Nat, {}}")])
     .by_elaborator_in("/apart", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
 }
 
-// **A lookup types every side a position can hold without inferring, and a binder conversion opens carries its type.** Where a child is compared with no type, each checker read what a type directs off the type a lookup gave both sides, and three sides had none. A stuck elimination, so that one at a proposition met neither a variable at it nor an elimination of another scrutinee: its type is its result at its scrutinee. A constructor's value, so that a proof built by one did not meet a proof a variable names: its type is its declaration's. And a binder an arm opened, which the certifier assumed at a stand-in and the elaborator recorded no type for: it is opened at its constructor's field type, so two proofs an arm binds are one. Each program sets its pair as a tuple literal's component in a stuck elimination's arm, a child no type reaches.
+// **A lookup types every side a position can hold without inferring, and a binder conversion opens carries its type.** Where a child is compared with no type, each checker read what a type directs off the type a lookup gave both sides, and three sides had none. A stuck elimination, so that one at a proposition met neither a variable at it nor an elimination of another scrutinee: its type is its goal. A constructor's value, so that a proof built by one did not meet a proof a variable names: its type is its declaration's. And a binder an arm opened, which the certifier assumed at a stand-in and the elaborator recorded no type for: it is opened at its constructor's field type, so two proofs an arm binds are one. Each program sets its pair as a tuple literal's component in a stuck elimination's arm, a child no type reaches.
 //
 // The refusal beside each is the same pair at a relevant type.
 #[test]
-fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
-    assert_eq!(
-        run(A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE),
-        b"1"
-    );
+fn a_stuck_elimination_is_typed_by_its_goal() {
+    assert_eq!(run(A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_GOAL), b"1");
 }
 
 // Each control is the same pair at a proposition.
@@ -249,22 +242,17 @@ fn a_stuck_elimination_at_a_relevant_type_stays_apart_from_a_variable() {
         use /std/{Eq, Nat, Bool};
 
         let apart(b : Bool, c : Bool, m : Eq()(0, 0), n : Eq()(0, 0))
-            -> Eq(@(Nat))((match c: (_) => {Eq()(0, 0), Nat}
-                           | true => (match b: (_) => Eq()(0, 0) | true => m | false => n end, 1)
+            -> Eq(@(Nat))((match c
+                           | true => (match b | true => m | false => n end, 1)
                            | false => (m, 2) end).1,
-                          (match c: (_) => {Eq()(0, 0), Nat} | true => (m, 1) | false => (m, 2) end).1)
+                          (match c | true => (m, 1) | false => (m, 2) end).1)
             = Eq/refl();
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[
-        ("m : Eq()(0, 0), n : Eq()(0, 0)", "m : Nat, n : Nat"),
-        ("{Eq()(0, 0), Nat}\n", "{Nat, Nat}\n"),
-        ("(_) => Eq()(0, 0) | true => m", "(_) => Nat | true => m"),
-        ("{Eq()(0, 0), Nat} | true => (m, 1)", "{Nat, Nat} | true => (m, 1)"),
-    ])
+    .refused(&[("m : Eq()(0, 0), n : Eq()(0, 0)", "m : Nat, n : Nat")])
     .by_elaborator_in("/apart", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -282,8 +270,8 @@ fn a_constructors_value_at_a_relevant_family_stays_apart_from_a_variable() {
         use /std/{Eq, Nat, Bool, Option};
 
         let apart(b : Bool, o : Eq()(0, 0))
-            -> Eq(@(Nat))((match b: (_) => {Eq()(0, 0), Nat} | true => (o, 1) | false => (o, 2) end).1,
-                          (match b: (_) => {Eq()(0, 0), Nat} | true => (Eq/refl(), 1) | false => (Eq/refl(), 2) end).1)
+            -> Eq(@(Nat))((match b | true => (o, 1) | false => (o, 2) end).1,
+                          (match b | true => (Eq/refl(@Nat, @0), 1) | false => (Eq/refl(@Nat, @0), 2) end).1)
             = Eq/refl();
 
         /std/print("ok")
@@ -292,8 +280,10 @@ fn a_constructors_value_at_a_relevant_family_stays_apart_from_a_variable() {
     )
     .refused(&[
         ("o : Eq()(0, 0)", "o : Option(Nat)"),
-        ("{Eq()(0, 0), Nat} | true => (o, 1)", "{Option(Nat), Nat} | true => (o, 1)"),
-        ("{Eq()(0, 0), Nat} | true => (Eq/refl(), 1) | false => (Eq/refl(), 2)", "{Option(Nat), Nat} | true => (Option/some(0), 1) | false => (Option/some(0), 2)"),
+        (
+            "(Eq/refl(@Nat, @0), 1) | false => (Eq/refl(@Nat, @0), 2)",
+            "(Option/some(0), 1) | false => (Option/some(0), 2)",
+        ),
     ])
     .by_elaborator_in("/apart", |error| {
         matches!(error, Error::TypeMismatch { .. })
@@ -319,28 +309,18 @@ fn two_binders_of_an_arm_at_a_relevant_type_stay_apart() {
         end
 
         let apart(t : Two)
-            -> Eq(@(Nat))((match t: (_) => {Eq()(0, 0), Nat} | two(m, n) => (m, 1) end).1,
-                          (match t: (_) => {Eq()(0, 0), Nat} | two(m, n) => (n, 1) end).1)
+            -> Eq(@(Nat))((match t | two(m, n) => (m, 1) end).1,
+                          (match t | two(m, n) => (n, 1) end).1)
             = Eq/refl();
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[
-        (
-            "two(m : Eq()(0, 0), n : Eq()(0, 0))",
-            "two(m : Nat, n : Nat)",
-        ),
-        (
-            "{Eq()(0, 0), Nat} | two(m, n) => (m, 1)",
-            "{Nat, Nat} | two(m, n) => (m, 1)",
-        ),
-        (
-            "{Eq()(0, 0), Nat} | two(m, n) => (n, 1)",
-            "{Nat, Nat} | two(m, n) => (n, 1)",
-        ),
-    ])
+    .refused(&[(
+        "two(m : Eq()(0, 0), n : Eq()(0, 0))",
+        "two(m : Nat, n : Nat)",
+    )])
     .by_elaborator_in("/apart", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });

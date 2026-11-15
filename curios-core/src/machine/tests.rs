@@ -101,11 +101,6 @@ fn bytes(data: Vec<u8>) -> Term {
     Term::intrinsic(Intrinsic::Bytes(Binary::from_bytes(data)))
 }
 
-fn motive() -> Scope<Many> {
-    let m = binder(100, "m");
-    Scope::close(Many(1), &[&m], nat_type())
-}
-
 /// The non-tail form: a structural recursion whose cons arm combines the call at the tail, `count(x[]) = 0`, `count(x[h, ..t]) = count(t) + 1`. Its depth is the nesting of calls — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
 #[test]
 fn a_non_tail_recursion_costs_transitions_rather_than_frames() {
@@ -140,9 +135,9 @@ fn non_tail(data: Vec<u8>, empty: Term, cons: impl Fn(Term) -> Term) -> Term {
 
     let body = Term::func(
         [(b, bytes_type())],
-        Term::bytes_match_scoped(
+        Term::bytes_match(
             Term::free_var(&b),
-            motive(),
+            nat_type(),
             empty,
             &[&h, &t],
             cons(Term::apply(Term::free_var(&count), [Term::free_var(&t)])),
@@ -203,9 +198,9 @@ fn tail_fold(data: Vec<u8>, combine: impl Fn(Term, Term) -> Term) -> Term {
 
     let body = Term::func(
         [(acc, nat_type()), (b, bytes_type())],
-        Term::bytes_match_scoped(
+        Term::bytes_match(
             Term::free_var(&b),
-            motive(),
+            nat_type(),
             Term::free_var(&acc),
             &[&h, &t],
             Term::apply(
@@ -237,9 +232,9 @@ fn whnf_keeps_a_recursive_application_folded() {
 
     let body = Term::func(
         [(b, bytes_type())],
-        Term::bytes_match_scoped(
+        Term::bytes_match(
             Term::free_var(&b),
-            motive(),
+            nat_type(),
             nat(0),
             &[&h, &t],
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
@@ -286,9 +281,9 @@ fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
 
     let body = Term::func(
         [(b, bytes_type())],
-        Term::bytes_match_scoped(
+        Term::bytes_match(
             Term::free_var(&b),
-            motive(),
+            nat_type(),
             nat(0),
             &[&h, &t],
             Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
@@ -580,7 +575,6 @@ fn a_let_and_an_arm_bind_a_proof_as_written() {
     let name = crate::Global::Authored(curios_common::Qualifier::from(["Box"]));
     let matched = Term::induct_match(
         Term::variant(name, Vec::<Term>::new(), "box", [unaffordable()]),
-        None,
         nat_type(),
         // A second arm, so this is a match that reads its scrutinee: with one arm naming no payload it is that arm's body, and nothing is bound.
         [("box", vec![x], nat(5)), ("empty", Vec::new(), nat(6))],
@@ -611,10 +605,9 @@ fn a_let_and_an_arm_bind_a_proof_as_written() {
 #[test]
 fn a_match_that_reads_nothing_of_its_scrutinee_does_not_evaluate_it() {
     let x = binder(0, "x");
-    let unread = Term::induct_match(unaffordable(), None, nat_type(), [("box", vec![x], nat(5))]);
+    let unread = Term::induct_match(unaffordable(), nat_type(), [("box", vec![x], nat(5))]);
     let read = Term::induct_match(
         unaffordable(),
-        None,
         nat_type(),
         [("box", vec![x], Term::free_var(&x))],
     );
@@ -636,7 +629,6 @@ fn an_arm_that_names_its_payload_is_bound_to_what_the_host_states() {
     let read = || {
         Term::induct_match(
             unaffordable(),
-            None,
             nat_type(),
             [("box", vec![x], Term::free_var(&x))],
         )

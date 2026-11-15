@@ -136,17 +136,12 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
     let (x, y) = (context.fresh(Some("x")), context.fresh(Some("y")));
     let result = Term::tuple_type([(x, proposition.clone()), (y, nat_type())]);
     let handing_on = |context: &mut Context, through_the_hole: bool| {
-        let (a, b, m) = (
-            context.fresh(Some("a")),
-            context.fresh(Some("b")),
-            context.fresh(Some("m")),
-        );
+        let (a, b) = (context.fresh(Some("a")), context.fresh(Some("b")));
         // `match ?0 | 0 => a | pred + 1 => a end`, stuck until the metavariable is solved.
-        let (inner, pred) = (context.fresh(Some("m")), context.fresh(Some("pred")));
+        let pred = context.fresh(Some("pred"));
         let handed = match through_the_hole {
             true => Term::nat_match(
                 Term::hole(0),
-                Some(&inner),
                 proposition.clone(),
                 Term::free_var(&a),
                 &pred,
@@ -157,7 +152,6 @@ fn a_goal_surrendered_under_a_binder_is_retried_under_it() {
 
         Term::induct_match(
             Term::free_var(&scrutinee),
-            Some(&m),
             result.clone(),
             [("two", vec![a, b], Term::tuple([handed, nat(1)]))],
         )

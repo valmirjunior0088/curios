@@ -30,7 +30,7 @@ end
 #{universe_context = {parameter_count = 1, constraints = [u + 1 <= 2]}}
 let /f: (x: #NatType) -> #{node = InductType} /E() =
     (x: #NatType) =>
-        match x: (s) => #{node = InductType} /E()
+        #{goal = #{node = InductType} /E()} match x
         | 0 => #{node = Variant} /E/wrap(#{level = u} Type)
         | _ => #{node = Variant} /E/wrap(Type)
         end;
@@ -474,7 +474,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
 ///
 /// A store keying both sides through `project_erased_universes` — which rebuilds every `Type` payload at one canonical ground level, a projection written for the Core-to-ANF hand-off where levels really are irrelevant — would read that projection as a quotient by definitional equality, and it is not one: `Type 0` and `Type 1` are distinct terms, and the whole universe hierarchy is the claim that they are not interchangeable. Scrutinizing `f<0>(x)` would record the equation under the key `f(x)`, and the *unrelated* stuck term `f<1>(x)` would probe to that same key and be refined to the arm's `wrap(T)` — a case value it was never shown to have.
 ///
-/// Level 1 is what makes the two indices genuinely different rather than merely differently spelled: `f`'s body carries its parameter into a constructor payload, so `f<0>(x)` and `f<1>(x)` reduce to `wrap(Type 0)` and `wrap(Type 1)`. [`Route::Direct`] below is that fact stated as an assertion — with no arm open, the certifier refuses the very same coercion — so the arm is the whole of what admitted it. The premise "a universe argument cannot affect computation" is false: Core has no eliminator *over* levels, but `Type u` embeds one in a term, and a payload position is where it becomes a value difference.
+/// Level 1 is what makes the two indices genuinely different rather than merely differently spelled: `f`'s body carries its parameter into a constructor payload, so `f<0>(x)` and `f<1>(x)` reduce to `wrap(Type 0)` and `wrap(Type 1)`. The row with no arm open below is that fact stated as an assertion — the certifier refuses the very same coercion — so the arm is the whole of what admitted it. The premise "a universe argument cannot affect computation" is false: Core has no eliminator *over* levels, but `Type u` embeds one in a term, and a payload position is where it becomes a value difference.
 ///
 /// It is a constructed module and never a `.crs`: the elaborator mints its own levels, so no surface program spells the two instances this pair needs.
 ///
@@ -489,7 +489,7 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
         (
             "through the arm",
             fill!(
-                "match (#{universes = {levels = [0]}} /f)(x): (s) =>\n            ${at_one}\n        | wrap(T) => q\n        end",
+                "#{goal = ${at_one}}\n        match (#{universes = {levels = [0]}} /f)(x)\n        | wrap(T) => q\n        end",
                 at_one
             ),
         ),
@@ -519,7 +519,7 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
 
 /// The control: an equation still refines the occurrence the arm actually scrutinized.
 ///
-/// [`Route::DependentMotive`] is the shape where the equation is load-bearing rather than incidental — the arm body is `q : Q(f<0>(x))` and the motive puts it at `Q(wrap(T))`, and nothing but `f<0>(x) ≡ wrap(T)` bridges those. So a key strict enough to refuse the witness above and *also* strict enough to miss its own scrutinee would fail here, which is the brick this fixture exists to catch: the convoy pattern is what the store is for, and refusing everything would take it with the fix.
+/// A goal over the scrutinee is the shape where the equation is load-bearing rather than incidental — the arm body is `q : Q(f<0>(x))` and the goal puts it at `Q(wrap(T))`, and nothing but `f<0>(x) ≡ wrap(T)` bridges those. So a key strict enough to refuse the witness above and *also* strict enough to miss its own scrutinee would fail here, which is the brick this fixture exists to catch: the convoy pattern is what the store is for, and refusing everything would take it with the fix.
 ///
 /// Mutation-checked: emptying `Scope::refinement_of` to `None` leaves the witness above passing and fails this, so the two are not testing one thing twice.
 #[test]
@@ -529,7 +529,7 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
     assert_eq!(
         text_certified_within(
             &fill!(
-                "${WRAPPED}\nlet /coerce: (x: #NatType, q: ${at_zero}) -> ${at_zero} =\n    (x: #NatType, q: ${at_zero}) =>\n        match (#{universes = {levels = [0]}} /f)(x): (s) => #{node = InductType} /Q()(s) | wrap(T) => q end;",
+                "${WRAPPED}\nlet /coerce: (x: #NatType, q: ${at_zero}) -> ${at_zero} =\n    (x: #NatType, q: ${at_zero}) =>\n        #{goal = ${at_zero}} match (#{universes = {levels = [0]}} /f)(x) | wrap(T) => q end;",
                 WRAPPED,
                 at_zero
             ),
@@ -886,8 +886,8 @@ fn a_verdict_under_one_declarations_constraints_is_no_answer_under_anothers() {
     );
 }
 
-/// `Nested@{u}` stores a group nested in a group's member, and `Motive@{u}` a group a match's motive names; forced, each is `Type (u + 1)`. Each reader pins its own level at zero, the level a reading under its constraints would hand the group, and states `{5}`.
-const GROUPS_IN_A_GROUP_AND_A_MOTIVE: &str = r#"
+/// `Nested@{u}` stores a group nested in a group's member, and `Goal@{u}` a group a match's goal names; forced, each is `Type (u + 1)`. Each reader pins its own level at zero, the level a reading under its constraints would hand the group, and states `{5}`.
+const GROUPS_IN_A_GROUP_AND_A_GOAL: &str = r#"
 #{universe_context = {parameter_count = 1}}
 let /Nested : #{level = u + 2} Type =
     #{node = Rec}
@@ -899,7 +899,7 @@ let /Nested : #{level = u + 2} Type =
         inner);
     outer);
 #{universe_context = {parameter_count = 1}}
-let /Motive : #{level = u + 2} Type =
+let /Goal : #{level = u + 2} Type =
     #{node = Rec}
     (let m: #{level = u + 2} Type =
         #{level = u + 1}
@@ -910,9 +910,9 @@ let /nestedHonest : #{universes = {levels = [5]}} /Nested = #{level = 5} Type;
 #{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
 let /nestedLowered : #{universes = {levels = [5]}} /Nested = #{level = 6} Type;
 #{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
-let /motiveHonest : (n: #NatType) -> #{level = 6} Type =
+let /goalHonest : (n: #NatType) -> #{level = 6} Type =
     (n: #NatType) =>
-        #{result = Ambient(#{universes = {levels = [5]}} /Motive)}
+        #{goal = #{universes = {levels = [5]}} /Goal}
         match n
         | 0 =>
             #{level = 5}
@@ -922,9 +922,9 @@ let /motiveHonest : (n: #NatType) -> #{level = 6} Type =
             Type
         end;
 #{universe_context = {parameter_count = 1, constraints = [u <= 0]}}
-let /motiveLowered : (n: #NatType) -> #{level = 7} Type =
+let /goalLowered : (n: #NatType) -> #{level = 7} Type =
     (n: #NatType) =>
-        #{result = Ambient(#{universes = {levels = [5]}} /Motive)}
+        #{goal = #{universes = {levels = [5]}} /Goal}
         match n
         | 0 =>
             #{level = 6}
@@ -936,18 +936,18 @@ let /motiveLowered : (n: #NatType) -> #{level = 7} Type =
 /std/Bool/False
 "#;
 
-/// A group nested in a group, and a group a motive names, are read at the levels the instance of the declaration holding them states, as the four sites [`a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels`] and its neighbours hold read a group standing alone: `Type 5` inhabits `Nested@{5}` and an arm of `Type 5` stands at `Motive@{5}`, where `Type 6` does neither, whatever the reader's own level is held to.
+/// A group nested in a group, and a group a goal names, are read at the levels the instance of the declaration holding them states, as the four sites [`a_declared_type_that_is_a_bare_projection_is_read_at_its_instances_levels`] and its neighbours hold read a group standing alone: `Type 5` inhabits `Nested@{5}` and an arm of `Type 5` stands at `Goal@{5}`, where `Type 6` does neither, whatever the reader's own level is held to.
 ///
-/// Mutation-checked: with `RecGroup::traverse` visiting no member scope where `instantiate_universes` substitutes, `nestedHonest` and `motiveHonest` are refused.
+/// Mutation-checked: with `RecGroup::traverse` visiting no member scope where `instantiate_universes` substitutes, `nestedHonest` and `goalHonest` are refused.
 #[test]
-fn a_group_nested_in_a_group_or_named_by_a_motive_is_read_at_its_instances_levels() {
+fn a_group_nested_in_a_group_or_named_by_a_goal_is_read_at_its_instances_levels() {
     let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${GROUPS_IN_A_GROUP_AND_A_MOTIVE}",
+        "${PROPOSITIONS}\n${GROUPS_IN_A_GROUP_AND_A_GOAL}",
         PROPOSITIONS,
-        GROUPS_IN_A_GROUP_AND_A_MOTIVE
+        GROUPS_IN_A_GROUP_AND_A_GOAL
     ));
 
-    for symbol in ["nestedLowered", "motiveLowered"] {
+    for symbol in ["nestedLowered", "goalLowered"] {
         assert!(
             verdicts
                 .iter()
@@ -956,7 +956,7 @@ fn a_group_nested_in_a_group_or_named_by_a_motive_is_read_at_its_instances_level
             "{symbol}: {verdicts:?}"
         );
     }
-    for symbol in ["Nested", "Motive", "nestedHonest", "motiveHonest"] {
+    for symbol in ["Nested", "Goal", "nestedHonest", "goalHonest"] {
         assert!(
             verdicts
                 .iter()

@@ -82,7 +82,7 @@ fn a_scrutinee_is_read_under_an_arms_equation() {
         run(r#"
         use /std/{Bool, Eq, Nat};
         let in_arm(x: Nat, y: Nat, c: Bool) -> Nat =
-            match x < y: (_) => Nat
+            match x < y
             | true =>
                 let e: Eq()(match c || (x < y) | true => 1 | false => 2 end, 1) = Eq/refl();
                 1

@@ -75,7 +75,7 @@ fn a_local_recursive_definition_computes_in_a_type_where_it_is_declared() {
     assert_eq!(run(source), b"6");
 }
 
-/// A recursive definition whose result is a function computes when applied past its own parameters, at the top level, locally, and as the loop `Nat/descend` runs when its motive is a function: `f(3)(1)` is the call `f(3)` applied to what is left, and a demand for its value unfolds that call rather than stopping at the outer application. A symbolic argument past the parameters rides along, so the last claim is a law rather than a sample.
+/// A recursive definition whose result is a function computes when applied past its own parameters, at the top level, locally, and as the loop `Nat/descend` runs when its family is a function: `f(3)(1)` is the call `f(3)` applied to what is left, and a demand for its value unfolds that call rather than stopping at the outer application. A symbolic argument past the parameters rides along, so the last claim is a law rather than a sample.
 #[test]
 fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
     let source = r#"

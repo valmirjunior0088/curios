@@ -1,14 +1,14 @@
-//! Verifying an elimination: that each arm inhabits the motive at its own case, and that a proposition is not eliminated into a relevant result.
+//! Verifying an elimination: that each arm inhabits the goal at its own case, and that a proposition is not eliminated into a relevant result.
 //!
-//! An elimination is the only term form whose *type* says nothing about whether it is sound. `infer` reads the result off the motive, and the motive is whatever the term claims — so the whole content of the rule is here.
+//! An elimination is the only term form whose *type* says nothing about whether it is sound. `infer` reads the type off the goal, and the goal is whatever the term claims — so the whole content of the rule is here.
 //!
 //! # The arm rule
 //!
-//! For each constructor, the arm body must inhabit the motive **at that constructor's own index targets**, not at the scrutinee's. `Vec/nil` targets index `0` and `Vec/cons` targets `succ(n)`, so the two arms are checked against two different instances of the motive, and that is exactly what makes a dependent elimination worth having. Checking every arm at the scrutinee's indices would be both wrong and useless.
+//! For each constructor, the arm body must inhabit the goal **at that constructor's own index targets**, not at the scrutinee's: each variable actual index stands for its target and a variable scrutinee for the constructed value ([`curios_core::goal_at`]). `Vec/nil` targets index `0` and `Vec/cons` targets `succ(n)`, so the two arms are checked against two different instances of the goal, and that is exactly what makes a dependent elimination worth having. Checking every arm at the scrutinee's indices would be both wrong and useless.
 //!
 //! # Context specialization
 //!
-//! Opening the motive at the case's targets teaches the *goal* the case's equations, and nothing else: the ambient locals, the body's occurrences of outer variables, and the scrutinee variable itself would all stay at their unrefined types. The other half of the rule is [`specialize`]: the arm is checked in a context specialized by the most-general solution of `actual indices ~ case targets` (plus `scrutinee ~ constructed value` when the scrutinee is a variable). Definitional K — `Eq : Prop` plus proof irrelevance, recorded permanent in `documentation/design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md` — is the license for solving those equations by first-order unification and binding each solved variable to its solution.
+//! Reading the goal at the case's targets teaches the *goal* the case's equations, and nothing else: the ambient locals, the body's occurrences of outer variables, and the scrutinee variable itself would all stay at their unrefined types. The other half of the rule is [`specialize`]: the arm is checked in a context specialized by the most-general solution of `actual indices ~ case targets` (plus `scrutinee ~ constructed value` when the scrutinee is a variable). Definitional K — `Eq : Prop` plus proof irrelevance, recorded permanent in `documentation/design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md` — is the license for solving those equations by first-order unification and binding each solved variable to its solution.
 //!
 //! Both directions run the *shared* unifier from [`curios_analysis::invert_indices`]. Pinning an arm binder to the rigid actual it must equal is the call as the elaborator makes it; refining an outer variable to the target it must equal is the same call with its sides swapped, and the swap lands the guards exactly right — the occurs check refuses the parameter cycle (`b := b + 1` through a family parameter), and the top guard leaves the variable-variable case to the first direction. Both directions and their composition are one shared function, [`curios_analysis::solve_indices`], which the elaborator calls too: it records the solution in its counterfactual refinement store, while the certifier binds each solved variable to its solution as a `let` binds a local, so the arm is checked as written and every reader reads it by value ([`bind_solutions`]). Which locals the solution re-types, and at what type, is shared as well ([`curios_analysis::retyped`], which [`Certifier::bind`] applies wherever it binds over a local that stood for nothing), and so is the scrutinee's own solution ([`curios_analysis::scrutinee_solution`]); the existing `mark`/`retract` bracket scopes the bindings and the re-typed entries exactly to the arm.
 //!
@@ -39,28 +39,28 @@ use {
     crate::{Certifier, Counted, EnteredArm, Error, InductAt, Sort},
     curios_analysis::{Invert, another_case, scrutinee_solution, solve_indices, wholly_pinned},
     curios_core::{
-        Atom, Bound, Exhaustion, Free, InductArm, InductType, MatchResult, Probe, ReduceError,
-        Reducer, Subterm, Telescope, Term, Variant,
+        Atom, Bound, Exhaustion, Free, InductArm, InductType, Probe, ReduceError, Reducer, Subterm,
+        Telescope, Term, Variant, goal_at,
     },
 };
 
-/// Check every arm of an elimination of `scrutinee_type` at `result`.
+/// Check every arm of an elimination of `scrutinee_type` at `goal`.
 pub fn check_induct_arms(
     certifier: &mut Certifier,
     at: &InductAt,
     family: &InductType,
-    result: &MatchResult,
+    goal: &Term,
     cases: &[(Atom, InductArm)],
     default: Option<&Term>,
     scrutinee: &Term,
 ) -> Result<(), Error> {
     for (tag, arm) in cases {
-        check_arm(certifier, at, family, result, scrutinee, tag, arm)?;
+        check_arm(certifier, at, family, goal, scrutinee, tag, arm)?;
     }
 
     // A catch-all binds nothing and stands for the scrutinee itself, so it is checked at the scrutinee's own indices *and at the scrutinee* — the one arm with no case value of its own, and therefore the one whose instance can only come from the term being eliminated. That is the instance `infer` reads the elimination's type off, so any other one proves something other than what the elimination hands its caller.
     if let Some(default) = default {
-        check(certifier, default, &result.of(scrutinee, &family.indices))?;
+        check(certifier, default, goal)?;
 
         return Ok(());
     }
@@ -99,12 +99,12 @@ pub fn check_induct_arms(
     Ok(())
 }
 
-/// One arm: open the constructor's payload under fresh binders at its declared field types, specialize the context by this case's forced equations, then require the body to inhabit the motive at this constructor's index targets and at the value it constructs.
+/// One arm: open the constructor's payload under fresh binders at its declared field types, specialize the context by this case's forced equations, then require the body to inhabit the goal at this constructor's index targets and at the value it constructs.
 fn check_arm(
     certifier: &mut Certifier,
     at: &InductAt,
     family: &InductType,
-    result: &MatchResult,
+    goal: &Term,
     scrutinee: &Term,
     tag: &Atom,
     arm: &InductArm,
@@ -161,7 +161,7 @@ fn check_arm(
 
                     let refs = payload.iter().collect::<Vec<_>>();
                     let body = arm.open(&refs);
-                    let expected = result.at(scrutinee, &family.indices, targets, &value);
+                    let expected = goal_at(goal, scrutinee, &family.indices, targets, &value);
                     bind_solutions(certifier, &solutions)?;
 
                     check(certifier, &body, &expected)
@@ -277,7 +277,7 @@ pub fn unless_never_taken(
 
 /// Whether the arm of a case split at `value` is one reduction never takes: the scrutinee already is a literal or a constructed value of another case than `value` ([`another_case`]). Such an arm is not typed.
 ///
-/// **Nothing reads it.** A value is its case under every substitution, so a case split over one is its one arm wherever it stands: reduction opens no other, and conversion compares none, since the elimination is never stuck. Typing the arm would establish a term no rule reads, and would refuse one that was typed already: an arm is typed under the equation between its scrutinee and its case, an equation between two values is recorded nowhere ([`records_case_equation`](curios_analysis::records_case_equation)), and the result an arm is checked at puts a case in its scrutinee's place through the goal ([`MatchResult::at`]), an elimination of that scrutinee inside the goal among it. A proof that stood under that elimination's other arm, resting on its guard, then stands under a literal.
+/// **Nothing reads it.** A value is its case under every substitution, so a case split over one is its one arm wherever it stands: reduction opens no other, and conversion compares none, since the elimination is never stuck. Typing the arm would establish a term no rule reads, and would refuse one that was typed already: an arm is typed under the equation between its scrutinee and its case, an equation between two values is recorded nowhere ([`records_case_equation`](curios_analysis::records_case_equation)), and the result an arm is checked at puts a case in its scrutinee's place through the goal ([`goal_at`]), an elimination of that scrutinee inside the goal among it. A proof that stood under that elimination's other arm, resting on its guard, then stands under a literal.
 ///
 /// **The scrutinee is read as it stands and not computed here.** Computing it would decide more — an elimination over `0 < 0` is its `false` arm — and typing must not evaluate a term that runs to accept what it accepts without: that is asked only of an arm that was refused ([`unless_never_taken`]). The shared [`another_case`] answers of a term as it stands.
 pub fn never_taken(
@@ -376,20 +376,20 @@ fn open_payload<T, B: Bound>(
 
 /// Refuse eliminating a proposition into a relevant result unless the family declares no constructor, or one whose every payload its index targets pin.
 ///
-/// The guard fires only when both halves hold: the scrutinee's family is `Prop`-sorted, and the motive lands in `Type`. A proposition eliminated into another proposition is always fine — irrelevance makes the result indistinguishable either way.
+/// The guard fires only when both halves hold: the scrutinee's family is `Prop`-sorted, and the goal lands in `Type`. A proposition eliminated into another proposition is always fine — irrelevance makes the result indistinguishable either way.
 pub fn guard_large_elimination(
     certifier: &mut Certifier,
     at: &InductAt,
     family: &InductType,
-    motive_sort: Sort,
+    goal_sort: Sort,
 ) -> Result<(), Error> {
     let scrutinee_type: Term = Subterm::InductType(family.clone()).into();
     if !Sort::of(certifier, &scrutinee_type)?.is_prop() {
         return Ok(());
     }
 
-    // The motive's sort is taken from `check_motive`, which derived it by typing the motive under its real binders. Re-asking `Sort::of` under binders assumed at `Type` would be a second reading of a question already answered, and one that can be lied to: a motive stating `Prop` over arms inhabiting `Type` would read `Prop` here and skip the whole guard.
-    if motive_sort.is_prop() {
+    // The goal's sort is taken from `goal_sort`, which derived it by typing the goal where it stands, the one reading of that question.
+    if goal_sort.is_prop() {
         return Ok(());
     }
 

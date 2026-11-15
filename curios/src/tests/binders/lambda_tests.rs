@@ -170,7 +170,7 @@ fn waiting_at(arrow: &str) -> String {
     fill!(
         r#"
         use /std/{Nat, Bool, Eq, print};
-        let F(b: Bool) -> Type = match b: (_) => Type
+        let F(b: Bool) -> Type = match b
             | true => ${arrow}
             | false => Nat
             end;
@@ -195,7 +195,7 @@ fn bare_reference_waits_at_an_expectation_stuck_on_a_metavariable() {
 fn bare_reference_at_an_expectation_never_decided_names_what_was_never_solved() {
     let source = r#"
         use /std/{Nat, Bool, print};
-        let F(b: Bool) -> Type = match b: (_) => Type
+        let F(b: Bool) -> Type = match b
             | true => (x: Nat) -> Nat
             | false => Nat
             end;

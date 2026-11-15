@@ -1,12 +1,12 @@
-//! An inductive match: its coverage and default, its motive over an indexed family, and the hidden payloads an arm leaves out or names under their mark.
+//! An inductive match: its coverage and default, its goal over an indexed family, and the hidden payloads an arm leaves out or names under their mark.
 
 use {
     crate::elaborate::test_support::*,
     crate::*,
     curios_common::{Plicity, Qualifier},
     curios_core::{
-        Atom, Cases, Free, InductArm, InductDecl, Many, Match, MatchResult, Scope, Subterm,
-        Telescope, Term, UniverseContext,
+        Atom, Cases, Free, InductArm, InductDecl, Many, Match, Scope, Subterm, Telescope, Term,
+        UniverseContext,
     },
 };
 
@@ -14,12 +14,10 @@ use {
 fn inductive_match_default_relaxes_coverage() {
     let mut context = context();
     register_opt(&mut context);
-    let motive = context.fresh(Some("m"));
 
-    // `match some(5) : Nat | none() => 0 | _ => 99 end` — only `none` is enumerated; the un-written `some` constructor is covered by the catch-all, so this otherwise-incomplete match elaborates, at the motive's type.
+    // `#{goal = Nat} match some(5) | none() => 0 | _ => 99 end` — only `none` is enumerated; the un-written `some` constructor is covered by the catch-all, so this otherwise-incomplete match elaborates, at its goal.
     let term = Term::induct_match_default(
         Term::variant(nominal("Opt"), Vec::<Term>::new(), "some", [nat_lit(5)]),
-        Some(&motive),
         nat(),
         [("none", Vec::<Free>::new(), nat_lit(0))],
         nat_lit(99),
@@ -33,12 +31,10 @@ fn inductive_match_default_relaxes_coverage() {
 fn inductive_match_missing_arm_without_default_is_rejected() {
     let mut context = context();
     register_opt(&mut context);
-    let motive = context.fresh(Some("m"));
 
     // The same match without the catch-all: `some` is genuinely missing from an unindexed inductive, so coverage fails.
     let term = Term::induct_match(
         Term::variant(nominal("Opt"), Vec::<Term>::new(), "some", [nat_lit(5)]),
-        Some(&motive),
         nat(),
         [("none", Vec::<Free>::new(), nat_lit(0))],
     );
@@ -74,9 +70,8 @@ fn register_tagged(context: &mut Context) {
         .unwrap();
 }
 
-// `match tag(3, 5) : Nat | tag(<binders>) => <body> end`, the arm's binders under the marks written.
-fn match_tagged(context: &mut Context, binders: &[(Plicity, &Free)], body: Term) -> Term {
-    let motive = context.fresh(Some("m"));
+// `#{goal = Nat} match tag(3, 5) | tag(<binders>) => <body> end`, the arm's binders under the marks written.
+fn match_tagged(binders: &[(Plicity, &Free)], body: Term) -> Term {
     let names = binders.iter().map(|(_, name)| *name).collect::<Vec<_>>();
     Subterm::Match(Match {
         head: Term::variant(
@@ -85,7 +80,7 @@ fn match_tagged(context: &mut Context, binders: &[(Plicity, &Free)], body: Term)
             "tag",
             [nat_lit(3), nat_lit(5)],
         ),
-        result: MatchResult::Family(Scope::close(Many(1), &[&motive], nat())),
+        goal: nat(),
         cases: Cases::Induct {
             cases: Vec::from([(
                 Atom::from("tag"),
@@ -119,7 +114,7 @@ fn an_arm_leaves_a_hidden_payload_out() {
     let mut context = context();
     register_tagged(&mut context);
     let x = context.fresh(Some("x"));
-    let term = match_tagged(&mut context, &[(Plicity::Explicit, &x)], Term::free_var(&x));
+    let term = match_tagged(&[(Plicity::Explicit, &x)], Term::free_var(&x));
 
     let (elaborated, type_) = elaborate(&mut context, &term, Mode::Infer).unwrap();
     assert_eq!(type_, nat());
@@ -140,7 +135,6 @@ fn an_arm_names_a_hidden_payload_under_its_mark() {
     let n = context.fresh(Some("n"));
     let x = context.fresh(Some("x"));
     let term = match_tagged(
-        &mut context,
         &[(Plicity::Implicit, &n), (Plicity::Explicit, &x)],
         Term::free_var(&n),
     );
@@ -161,7 +155,7 @@ fn an_arm_that_misaligns_is_refused_as_a_lambda_is() {
     let n = context.fresh(Some("n"));
     let x = context.fresh(Some("x"));
     let mut refusal = |binders: &[(Plicity, &Free)]| {
-        let term = match_tagged(&mut context, binders, nat_lit(0));
+        let term = match_tagged(binders, nat_lit(0));
         elaborate(&mut context, &term, Mode::Infer).unwrap_err()
     };
 
@@ -207,11 +201,7 @@ fn an_arm_that_misaligns_is_refused_as_a_lambda_is() {
     ));
 }
 
-// induct Flag : (b : Nat) -> Type | off() : (0) | on() : (1) end — the minimal indexed family, for the motive binders a catch-all has to ride along with.
-fn flag_type(index: Term) -> Term {
-    Term::induct_type(nominal("Flag"), Vec::<Term>::new(), vec![index])
-}
-
+// induct Flag : (b : Nat) -> Type | off() : (0) | on() : (1) end — the minimal indexed family, for the indices a catch-all is checked at.
 fn register_flag(context: &mut Context) {
     let index = context.fresh(Some("b"));
     context
@@ -252,10 +242,8 @@ fn register_flag(context: &mut Context) {
 fn inductive_match_default_is_allowed_on_an_indexed_family() {
     let mut context = context();
     register_flag(&mut context);
-    let index = context.fresh(Some("b"));
-    let motive = context.fresh(Some("m"));
 
-    // A `| _ =>` catch-all over an indexed family. Every motive binds its indices whether or not the body uses them, so there is no "pattern motive" for a default to conflict with: the enumerated arm is checked at its own case target index and the default at the scrutinee's actual one.
+    // A `| _ =>` catch-all over an indexed family: the enumerated arm is checked at its own case target index and the default at the scrutinee's actual one.
     let term: Term = Subterm::Match(Match {
         head: Term::variant(
             nominal("Flag"),
@@ -263,7 +251,7 @@ fn inductive_match_default_is_allowed_on_an_indexed_family() {
             "on",
             Vec::<Term>::new(),
         ),
-        result: MatchResult::Family(Scope::close(Many(2), &[&index, &motive], nat())),
+        goal: nat(),
         cases: Cases::Induct {
             cases: Vec::from([(
                 Atom::from("on"),
@@ -277,43 +265,4 @@ fn inductive_match_default_is_allowed_on_an_indexed_family() {
 
     let (_, type_) = elaborate(&mut context, &term, Mode::Infer).unwrap();
     assert_eq!(type_, nat());
-}
-
-#[test]
-fn motive_binder_count_is_checked_against_the_index_telescope() {
-    let mut context = context();
-    register_flag(&mut context);
-    let motive = context.fresh(Some("m"));
-
-    // The same match with an arity-1 motive: `Flag` has one index, so its eliminator's motive binds two names. A written motive that binds one is reported as itself, not as a downstream domain mismatch.
-    let term: Term = Subterm::Match(Match {
-        head: Term::variant(
-            nominal("Flag"),
-            Vec::<Term>::new(),
-            "on",
-            Vec::<Term>::new(),
-        ),
-        result: MatchResult::Family(Term::match_motive_written(Term::func(
-            [(motive, flag_type(nat_lit(1)))],
-            nat(),
-        ))),
-        cases: Cases::Induct {
-            cases: Vec::from([(
-                Atom::from("on"),
-                InductArm::new(Scope::close(Many(0), &[], nat_lit(0)), vec![]),
-            )]),
-            default: Some(nat_lit(1)),
-            stated: None,
-        },
-    })
-    .into();
-
-    assert!(matches!(
-        elaborate(&mut context, &term, Mode::Infer),
-        Err(Error::MotiveBinderCount {
-            expected: 2,
-            written: 1,
-            ..
-        })
-    ));
 }

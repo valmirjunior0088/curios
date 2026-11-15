@@ -837,14 +837,6 @@ impl<D: Layout> TreePrinter<D> {
         ]))
     }
 
-    /// Prints a match's optional motive — ` : ` and the written term (ordinarily a lambda, `(k, v) => P`) — or nothing at all when the motive was omitted in the source.
-    fn motive(self, motive: Option<Term<D>>) -> Printer {
-        match motive {
-            Some(motive) => flat([pure(": "), self.term(motive)]),
-            None => pure(""),
-        }
-    }
-
     /// One argument of an application, under the mark it was written with.
     fn argument(self, argument: Argument<D>) -> Printer {
         flat([print_plicity(argument.plicity), self.term(argument.term)])
@@ -1176,16 +1168,15 @@ impl<D: Layout> TreePrinter<D> {
             ]),
             // An arm ladder is width-adaptive: `match carry | true => x[\\1] | false => x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
             //
-            // Two ladders are broken regardless of width, by [`is_ladder`]. Laid out at a width, a ladder stays on one line only within [`FLAT_MATCH_SHARE`] of it, and one with an arm and a motive, or guards after an arm's patterns, never does: each stands between a pattern and its body, crowding a line however short the line is. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
-            Subterm::Match(Match { head, motive, arms }) => {
+            // Two ladders are broken regardless of width, by [`is_ladder`]. Laid out at a width, a ladder stays on one line only within [`FLAT_MATCH_SHARE`] of it, and one with guards after an arm's patterns never does: they stand between a pattern and its body, crowding a line however short the line is. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
+            Subterm::Match(Match { head, arms }) => {
                 let forced =
                     arms.len() > MAX_FLAT_ARMS || arms.iter().map(|arm| &arm.body).any(is_ladder);
                 let separator = match forced {
                     true => hard_line,
                     false => line,
                 };
-                let crowded = !arms.is_empty()
-                    && (motive.is_some() || arms.iter().any(|arm| !arm.guards.is_empty()));
+                let crowded = arms.iter().any(|arm| !arm.guards.is_empty());
                 let within = match crowded {
                     true => 0,
                     false => FLAT_MATCH_SHARE,
@@ -1195,7 +1186,6 @@ impl<D: Layout> TreePrinter<D> {
                     flat([
                         pure("match "),
                         self.term(head),
-                        self.motive(motive),
                         flat(
                             arms.into_iter()
                                 .map(|arm| {

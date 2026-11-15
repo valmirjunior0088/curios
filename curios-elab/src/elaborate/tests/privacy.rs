@@ -72,13 +72,11 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
 
     let empty = Term::induct_match(
         Term::free_var(&scrutinee),
-        Some(&scrutinee),
         nat(),
         Vec::<(Atom, Vec<Free>, Term)>::new(),
     );
     let named = Term::induct_match(
         Term::free_var(&scrutinee),
-        Some(&scrutinee),
         nat(),
         [
             ("none", Vec::<Free>::new(), nat_lit(0)),
@@ -87,7 +85,6 @@ fn opaque_inductive_eliminators_are_rejected_before_shape_analysis() {
     );
     let defaulted = Term::induct_match_default(
         Term::free_var(&scrutinee),
-        Some(&scrutinee),
         nat(),
         [("none", Vec::<Free>::new(), nat_lit(0))],
         nat_lit(1),

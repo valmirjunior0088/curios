@@ -1,4 +1,4 @@
-//! The matrix form's own rules: consistent arity, no duplicate row or tag, where a motive may sit, and where the row that cannot fail is typed.
+//! The matrix form's own rules: consistent arity, no duplicate row or tag, and where the row that cannot fail is typed.
 
 use crate::tests::test_support::*;
 
@@ -78,26 +78,6 @@ fn a_duplicate_arm_is_reported_at_the_later_arm() {
     );
 }
 
-// A dependent motive requires the head to dispatch on a constructor tag directly — there is no core `Match` node for a tuple-headed match to attach it to.
-#[test]
-fn match_rejects_a_motive_on_tuple_head() {
-    // A tuple-headed matrix explodes into projections and builds no core `Match` node, so there is no eliminator for a motive to be checked against. Rejected rather than silently discarded.
-    let source = r#"
-        use /std/{Nat};
-        let f(p : { Nat, Nat }) -> Nat =
-            match p : (q) => Nat
-            | (x, y) => x
-            end;
-        /std/print(Nat/to_str(f((3, 4))))
-        "#;
-
-    let error = error(source);
-    assert!(
-        error.contains("misplaced motive"),
-        "unexpected error: {error}"
-    );
-}
-
 // A `Nat` column missing its `0` case entirely, reported as the value no arm matches.
 #[test]
 fn match_rejects_incomplete_nat_pattern() {
@@ -117,13 +97,13 @@ fn match_rejects_incomplete_nat_pattern() {
     );
 }
 
-// A dependent motive is legal on a top-level `Nat` head too, not just a constructor head. The arms are written succ-case-first, which changes nothing: the full-enumeration matrix gives rows no priority order.
+// A `Nat` match may write its successor arm first: the full-enumeration matrix gives rows no priority order.
 #[test]
-fn match_allows_dependent_motive_on_nat_head() {
+fn a_nat_match_may_write_its_successor_arm_first() {
     let source = r#"
         use /std/{Nat};
         let f(n : Nat) -> Nat =
-            match n : (m) => Nat
+            match n
             | m + 1 => m
             | 0 => 0
             end;

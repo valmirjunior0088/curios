@@ -5,17 +5,16 @@
 use {
     super::{Misaligned, Mode, align, elaborate, stands_at},
     crate::{
-        BinderSite, Context, Error, MotiveShape, check, check_is_sort, check_motive, dead_guard,
-        decided_sort_of, expect, hold_prop, is_prop, pending, probe_open_sort, quality_of,
-        reduce_with, refine_head, resolved_for_display, same_uncommitted, stuck_on_metavar,
-        zonk_solved_term_metas,
+        BinderSite, Context, Error, check, check_is_sort, dead_guard, decided_sort_of, expect,
+        hold_prop, is_prop, pending, probe_open_sort, quality_of, reduce_with, refine_head,
+        resolved_for_display, same_uncommitted, stuck_on_metavar, zonk_solved_term_metas,
     },
     curios_analysis::{Invert, retyped, scrutinee_solution, solve_indices, wholly_pinned},
     curios_common::Plicity,
     curios_core::{
         Advance, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType, Intrinsic,
-        IntrinsicHead, Many, Match, MatchResult, Nat, One, Quality, Scope, Subterm, Telescope,
-        Term, Two, Universes,
+        IntrinsicHead, Many, Match, Nat, One, Quality, Scope, Subterm, Telescope, Term, Two,
+        Universes, goal_at,
     },
     curios_num::{Binary, Natural},
     std::collections::{HashMap, HashSet},
@@ -32,7 +31,7 @@ impl Scrutinee {
     pub fn read(context: &mut Context, head: &Term) -> Result<Self, Error> {
         let (head, head_type) = elaborate(context, head, Mode::Infer)?;
 
-        // The scrutinee is read with its solved metavariables substituted, and so is the goal an arm is checked at: an arm's goal takes the case where the scrutinee occurs in it (`MatchResult::at`), found by identity, and an operator reaches its concept through a witness metavariable of its own, solved and not yet spliced, so two spellings of one comparison are two terms until both are substituted.
+        // The scrutinee is read with its solved metavariables substituted, and so is the goal an arm is checked at: an arm's goal takes the case where the scrutinee occurs in it (`goal_at`), found by identity, and an operator reaches its concept through a witness metavariable of its own, solved and not yet spliced, so two spellings of one comparison are two terms until both are substituted.
         Ok(Self {
             term: zonk_solved_term_metas(context, &head),
             type_: reduce_with(context, &head_type)?,
@@ -101,56 +100,26 @@ fn refused_scrutinee(context: &mut Context, eliminator: Eliminator, type_: &Term
     })
 }
 
-/// When a match is elaborated in checking mode, solve its motive against the expected type *before* the arms are checked. An omitted motive is a constant scope wrapping a fresh metavar (`Term::match_motive_written`), so `motive.open` is that bare metavar and this pins it to `expected` up front — checking-only arms (tuples, constructors) then see a concrete target instead of an unsolved hole, and a result mentioning an enclosing type variable is taken straight from `expected` rather than inverted out of an arm. For an explicit motive it is the same consistency check that the `Check` turnaround would otherwise run post-hoc on the match's type (`elaborate_subterm`), only earlier.
-fn seed_motive(
-    context: &mut Context,
-    term: &Term,
-    motive: &Scope<Many>,
-    head: &Term,
-    mode: &Mode,
-) -> Result<(), Error> {
-    if let Mode::Check(expected) = mode {
-        expect(context, term, &motive.open(&[head]), expected)?;
+/// The goal a match's arms inhabit, `written` being the goal lowering minted or a rebuilt match holds: the expected type where the match is checked, which each arm inhabits at its case with the scrutinee standing for it, and where it is inferred the written goal checked as a type, which the arms then solve. A match whose arms answer types that depend on their case is therefore checked, as a `let` or a signature checks it.
+fn resolve_goal(context: &mut Context, written: &Term, mode: &Mode) -> Result<Term, Error> {
+    match mode {
+        Mode::Check(expected) => Ok(zonk_solved_term_metas(context, expected)),
+        Mode::Infer => Ok(check_is_sort(context, written)?.0),
     }
-
-    Ok(())
-}
-
-/// Resolve the (arity-one) motive of an intrinsic eliminator that keeps a family: one whose motive is written or inferred — an elided one checked against an expected type is otherwise ambient (`resolve_intrinsic_result`). An elided motive checked against an expected type and matched on a *bare variable* scrutinee is synthesised dependent — abstracting that variable out of the expected type — so each arm checks against the goal specialised at its constructor (`0` / `pred + 1`, `x[]` / `head :: tail`, `false` / `true`, ...) rather than the unspecialised expected a constant motive would leave.
-///
-/// This complements `solve`'s occurrence abstraction (`convert.rs`), which already derives the dependent motive for a *compound* scrutinee: there the scrutinee is a clean abstraction subject in the motive metavar's spine, whereas a bare variable coincides with its own context binder — a duplicated, non-invertible spine entry that `solve` must leave alone. So anything but an elided-checking-mode-bare-variable match keeps the metavar path verbatim, letting `solve` (or the constant motive) do its job.
-fn resolve_intrinsic_motive(
-    context: &mut Context,
-    head_type: &Term,
-    head: &Term,
-    motive: &Scope<Many>,
-    mode: &Mode,
-) -> Result<Scope<Many>, Error> {
-    let shape = MotiveShape::Intrinsic(head_type);
-
-    if let (Mode::Check(expected), Subterm::Var(var)) = (mode, &**head)
-        && is_elided_motive(motive)
-        && let Some(binder) = var.as_free()
-    {
-        let synthesized = Scope::close(Many(1), &[binder], expected.clone());
-        return check_motive(context, &shape, &synthesized);
-    }
-
-    check_motive(context, &shape, motive)
 }
 
 /// One arm of a free-monoid case split, at its case value: `body` is handed the type the arm is typed at and answers the arm, with the scrutinee refined to the case, the locals its solution re-types re-assumed, and the result taken there.
 fn split_arm(
     context: &mut Context,
     head: &Term,
-    result: &MatchResult,
+    goal: &Term,
     value: &Term,
     body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
 ) -> Result<Term, Error> {
     open_arm(context, head, value)
         .and_then(|()| {
             retype_locals(context, head, value, Vec::new());
-            body(context, result.at(head, &[], &[], value))
+            body(context, goal_at(goal, head, &[], &[], value))
         })
         .map_err(|error| from_arm(context, head, value, error))
 }
@@ -173,32 +142,21 @@ fn from_arm(context: &mut Context, head: &Term, value: &Term, error: Error) -> E
 /// A `Nat` case split with its scrutinee and its result resolved: `0` and `predecessor + 1`.
 pub struct NatSplit {
     head: Term,
-    result: MatchResult,
+    goal: Term,
 }
 
 impl NatSplit {
     pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
-        motive: &Scope<Many>,
-        term: &Term,
+        goal: &Term,
         mode: &Mode,
     ) -> Result<Self, Error> {
         let (head, _) = scrutinee.of_intrinsic(context, Eliminator::Nat, IntrinsicHead::Nat)?;
 
-        // The *rebuilt* motive throughout, as [`resolve_intrinsic_result`] states, or the ambient goal.
-        let result = resolve_intrinsic_result(
-            context,
-            &Subterm::Intrinsic(Intrinsic::NatType).into(),
-            &head,
-            motive,
-            mode,
-        )?;
-        if let Some(motive) = result.family() {
-            seed_motive(context, term, motive, &head, mode)?;
-        }
+        let goal = resolve_goal(context, goal, mode)?;
 
-        Ok(Self { head, result })
+        Ok(Self { head, goal })
     }
 
     /// The case `0`: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm. The scrutinee is refined to the case (as `Bool`/`Switch` do), so a hypothesis whose type mentions it reduces at the arm's value with no hand-written convoy.
@@ -209,7 +167,7 @@ impl NatSplit {
     ) -> Result<Term, Error> {
         let value: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))).into();
 
-        context.with_frame(|context| split_arm(context, &self.head, &self.result, &value, body))
+        context.with_frame(|context| split_arm(context, &self.head, &self.goal, &value, body))
     }
 
     /// The case `predecessor + 1`, under the binder it opens.
@@ -228,21 +186,21 @@ impl NatSplit {
             ))
             .into();
 
-            split_arm(context, &self.head, &self.result, &value, body)
+            split_arm(context, &self.head, &self.goal, &value, body)
         })
     }
 
     /// The match's own type: the result at the scrutinee as it stands.
     pub fn result_type(&self) -> Term {
-        self.result.of(&self.head, &[])
+        self.goal.clone()
     }
 
     /// The match over the two arms, the second closed over the binder it was entered under.
     pub fn rebuild(&self, zero: Term, predecessor: &Free, successor: Term) -> (Term, Term) {
-        let result_type = self.result.of(&self.head, &[]);
+        let result_type = self.goal.clone();
         let rebuilt = Subterm::Match(Match {
             head: self.head.clone(),
-            result: self.result.clone(),
+            goal: self.goal.clone(),
             // `Nat` is the free monoid on one payload-less generator: its cons arm binds just the predecessor, so the carrier is `Nat` and the head is absent.
             cases: Cases::FreeMonoid {
                 carrier: Carrier::Nat {
@@ -260,13 +218,12 @@ impl NatSplit {
 fn elaborate_nat_match(
     context: &mut Context,
     scrutinee: Scrutinee,
-    motive: &Scope<Many>,
+    goal: &Term,
     zero_case: &Term,
     succ_case: &Scope<One>,
-    term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let split = NatSplit::resolve(context, scrutinee, motive, term, &mode)?;
+    let split = NatSplit::resolve(context, scrutinee, goal, &mode)?;
     let zero = split.zero(context, |context, expected| {
         check(context, zero_case, expected)
     })?;
@@ -299,7 +256,7 @@ pub struct SequenceSplit {
     head: Term,
     head_type: Term,
     atoms: Atoms,
-    result: MatchResult,
+    goal: Term,
 }
 
 impl SequenceSplit {
@@ -307,8 +264,8 @@ impl SequenceSplit {
         context: &mut Context,
         sequence: Sequence,
         scrutinee: Scrutinee,
-        motive: &Scope<Many>,
-        (term, mode): (&Term, &Mode),
+        goal: &Term,
+        mode: &Mode,
     ) -> Result<Self, Error> {
         let (head, head_type, atoms) = match sequence {
             // `List` carries an element type the eliminator must read off the scrutinee (unlike `Nat`, whose carrier is parameterless) — its type must be `List(elem)`.
@@ -346,17 +303,13 @@ impl SequenceSplit {
                 (head, head_type, Atoms::Bytes)
             }
         };
-        // The *rebuilt* motive throughout, as [`resolve_intrinsic_result`] states, or the ambient goal.
-        let result = resolve_intrinsic_result(context, &head_type, &head, motive, mode)?;
-        if let Some(motive) = result.family() {
-            seed_motive(context, term, motive, &head, mode)?;
-        }
+        let goal = resolve_goal(context, goal, mode)?;
 
         Ok(Self {
             head,
             head_type,
             atoms,
-            result,
+            goal,
         })
     }
 
@@ -375,7 +328,7 @@ impl SequenceSplit {
         })
         .into();
 
-        context.with_frame(|context| split_arm(context, &self.head, &self.result, &value, body))
+        context.with_frame(|context| split_arm(context, &self.head, &self.goal, &value, body))
     }
 
     /// The case of an atom ahead of a tail, under the two binders it opens.
@@ -422,18 +375,18 @@ impl SequenceSplit {
             context.assume(atom, &atom_type);
             context.assume(tail, &self.head_type);
 
-            split_arm(context, &self.head, &self.result, &value, body)
+            split_arm(context, &self.head, &self.goal, &value, body)
         })
     }
 
     /// The match's own type: the result at the scrutinee as it stands.
     pub fn result_type(&self) -> Term {
-        self.result.of(&self.head, &[])
+        self.goal.clone()
     }
 
     /// The match over the two arms, the second closed over the binders it was entered under.
     pub fn rebuild(&self, empty: Term, [atom, tail]: &[Free; 2], cons: Term) -> (Term, Term) {
-        let result_type = self.result.of(&self.head, &[]);
+        let result_type = self.goal.clone();
         let cons_case = Scope::close(Two, &[atom, tail], cons);
         let carrier = match &self.atoms {
             Atoms::List { element } => Carrier::List {
@@ -448,7 +401,7 @@ impl SequenceSplit {
         };
         let rebuilt = Subterm::Match(Match {
             head: self.head.clone(),
-            result: self.result.clone(),
+            goal: self.goal.clone(),
             cases: Cases::FreeMonoid { carrier },
         })
         .into();
@@ -460,38 +413,29 @@ impl SequenceSplit {
 fn elaborate_list_match(
     context: &mut Context,
     scrutinee: Scrutinee,
-    motive: &Scope<Many>,
+    goal: &Term,
     empty_case: &Term,
     cons_case: &Scope<Two>,
-    term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     elaborate_sequence_match(
         context,
         Sequence::List,
         scrutinee,
-        motive,
+        goal,
         (empty_case, cons_case),
-        (term, mode),
+        mode,
     )
 }
 
 fn elaborate_bytes_match(
     context: &mut Context,
     scrutinee: Scrutinee,
-    motive: &Scope<Many>,
+    goal: &Term,
     cases: (&Term, &Scope<Two>),
-    term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    elaborate_sequence_match(
-        context,
-        Sequence::Bytes,
-        scrutinee,
-        motive,
-        cases,
-        (term, mode),
-    )
+    elaborate_sequence_match(context, Sequence::Bytes, scrutinee, goal, cases, mode)
 }
 
 /// A case split of a list or a packed sequence written one level deep: each arm is its lowered body, checked.
@@ -499,11 +443,11 @@ fn elaborate_sequence_match(
     context: &mut Context,
     sequence: Sequence,
     scrutinee: Scrutinee,
-    motive: &Scope<Many>,
+    goal: &Term,
     (empty_case, cons_case): (&Term, &Scope<Two>),
-    (term, mode): (&Term, Mode),
+    mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let split = SequenceSplit::resolve(context, sequence, scrutinee, motive, (term, &mode))?;
+    let split = SequenceSplit::resolve(context, sequence, scrutinee, goal, &mode)?;
     let empty = split.empty(context, |context, expected| {
         check(context, empty_case, expected)
     })?;
@@ -522,57 +466,24 @@ fn elaborate_sequence_match(
     Ok(split.rebuild(empty, &binders, cons))
 }
 
-/// The result of an intrinsic elimination — `Bool`, `Switch`, and the case splits of `Nat`, `List` and `Bytes`: an elided motive checked against an expected type takes that type as its ambient result, whatever the scrutinee, and anything else resolves as an intrinsic motive.
-///
-/// An expression scrutinee takes the ambient form as a variable does: each arm checks against the goal with the scrutinee's syntactic occurrences standing for the case (`MatchResult::at`), and the arm's refinement reduces any occurrence the goal reaches only by unfolding. A family solved by `solve`'s occurrence abstraction instead sees the goal as it arrives reduced at its root, and an occurrence spelled through a `let` there escapes the abstraction while the application the refinement is keyed on has been unfolded away, which would leave an arm less than the unabstracted goal gives it.
-///
-/// The rebuilt motive is what everything below opens: insertion saturates applications during elaboration, and a lowered (under-applied) motive body reaching the reducer would open a telescope at the wrong arity.
-fn resolve_intrinsic_result(
-    context: &mut Context,
-    head_type: &Term,
-    head: &Term,
-    motive: &Scope<Many>,
-    mode: &Mode,
-) -> Result<MatchResult, Error> {
-    if let Mode::Check(expected) = mode
-        && is_elided_motive(motive)
-    {
-        return Ok(MatchResult::Ambient(zonk_solved_term_metas(
-            context, expected,
-        )));
-    }
-    resolve_intrinsic_motive(context, head_type, head, motive, mode).map(MatchResult::Family)
-}
-
 /// A `Nat` dispatch with its scrutinee and its result resolved: a case for each literal written, and the default any other value takes.
 pub struct SwitchSplit {
     head: Term,
-    result: MatchResult,
+    goal: Term,
 }
 
 impl SwitchSplit {
     pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
-        motive: &Scope<Many>,
-        term: &Term,
+        goal: &Term,
         mode: &Mode,
     ) -> Result<Self, Error> {
         let (head, _) = scrutinee.of_intrinsic(context, Eliminator::Nat, IntrinsicHead::Nat)?;
 
-        // The *rebuilt* motive throughout, as [`resolve_intrinsic_result`] states, or the ambient goal.
-        let result = resolve_intrinsic_result(
-            context,
-            &Subterm::Intrinsic(Intrinsic::NatType).into(),
-            &head,
-            motive,
-            mode,
-        )?;
-        if let Some(motive) = result.family() {
-            seed_motive(context, term, motive, &head, mode)?;
-        }
+        let goal = resolve_goal(context, goal, mode)?;
 
-        Ok(Self { head, result })
+        Ok(Self { head, goal })
     }
 
     /// The case at the literal `value`: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
@@ -588,7 +499,7 @@ impl SwitchSplit {
             .with_frame(|context| {
                 open_arm(context, &self.head, &literal)?;
                 retype_locals(context, &self.head, &literal, Vec::new());
-                body(context, self.result.at(&self.head, &[], &[], &literal))
+                body(context, goal_at(&self.goal, &self.head, &[], &[], &literal))
             })
             .map_err(|error| from_arm(context, &self.head, &literal, error))
     }
@@ -599,20 +510,20 @@ impl SwitchSplit {
         context: &mut Context,
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
     ) -> Result<Term, Error> {
-        body(context, self.result.of(&self.head, &[]))
+        body(context, self.goal.clone())
     }
 
     /// The match's own type: the result at the scrutinee as it stands.
     pub fn result_type(&self) -> Term {
-        self.result.of(&self.head, &[])
+        self.goal.clone()
     }
 
     /// The match over `cases`, which arrive strictly ascending as `Cases::Switch` states them, and the default.
     pub fn rebuild(&self, cases: Vec<(Natural, Term)>, default: Term) -> (Term, Term) {
-        let result_type = self.result.of(&self.head, &[]);
+        let result_type = self.goal.clone();
         let rebuilt = Subterm::Match(Match {
             head: self.head.clone(),
-            result: self.result.clone(),
+            goal: self.goal.clone(),
             cases: Cases::Switch { cases, default },
         })
         .into();
@@ -624,13 +535,12 @@ impl SwitchSplit {
 fn elaborate_switch(
     context: &mut Context,
     scrutinee: Scrutinee,
-    motive: &Scope<Many>,
+    goal: &Term,
     cases: &[(Natural, Term)],
     default: &Term,
-    term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let split = SwitchSplit::resolve(context, scrutinee, motive, term, &mode)?;
+    let split = SwitchSplit::resolve(context, scrutinee, goal, &mode)?;
 
     // The arms keep the order they arrived in, which `Cases::Switch` states is strictly ascending — elaborating an arm rewrites its body, never its key.
     let mut cases_elaborated = Vec::with_capacity(cases.len());
@@ -662,13 +572,14 @@ pub fn elaborate_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // A rebuilt match coming back through re-elaboration at its ambient goal: the goal *is* the expected type it was elaborated against, so it re-elaborates as the elided motive it came from, checked against that goal. Checked at another spelling of that type — the one an arm around it specializes now, where its first elaboration met the scrutinee behind a metavariable not yet substituted — it keeps the goal it holds, so elaborating what elaboration built gives it back: conversion compares two goals with no arm's equation, and a rebuilt copy of a recursive member that differed from the member in a goal's spelling would be another term to it.
-    let mode = match (&m.result, mode) {
-        (MatchResult::Ambient(goal), Mode::Infer) => Mode::Check(goal.clone()),
-        (MatchResult::Ambient(goal), Mode::Check(expected))
-            if *goal != expected && kept_goal(context, goal, &expected)? =>
+    // A rebuilt match coming back through re-elaboration at its goal: the goal *is* the expected type it was elaborated against, so it re-elaborates checked against that goal, where lowering's goal is a hole the mode decides. Checked at another spelling of that type — the one an arm around it specializes now, where its first elaboration met the scrutinee behind a metavariable not yet substituted — it keeps the goal it holds, so elaborating what elaboration built gives it back: conversion compares two goals with no arm's equation, and a rebuilt copy of a recursive member that differed from the member in a goal's spelling would be another term to it.
+    let written = !matches!(&*m.goal, Subterm::Metavar(metavar) if metavar.is_hole());
+    let mode = match (written, mode) {
+        (true, Mode::Infer) => Mode::Check(m.goal.clone()),
+        (true, Mode::Check(expected))
+            if m.goal != expected && kept_goal(context, &m.goal, &expected)? =>
         {
-            Mode::Check(goal.clone())
+            Mode::Check(m.goal.clone())
         }
         (_, mode) => mode,
     };
@@ -687,32 +598,22 @@ fn eliminate(
     mode: Mode,
     scrutinee: Scrutinee,
 ) -> Result<(Term, Term), Error> {
-    let Match { result, cases, .. } = m;
-    let elided;
-    let motive = match result {
-        MatchResult::Family(motive) => motive,
-        MatchResult::Ambient(_) => {
-            elided = Term::match_motive_written(Term::hole(context.mint_metavar()));
-            &elided
-        }
-    };
+    let Match { goal, cases, .. } = m;
 
     match cases {
         Cases::Bool {
             false_case,
             true_case,
-        } => elaborate_bool_match(
-            context, scrutinee, motive, false_case, true_case, term, mode,
-        ),
+        } => elaborate_bool_match(context, scrutinee, goal, false_case, true_case, mode),
         Cases::Switch { cases, default } => {
-            elaborate_switch(context, scrutinee, motive, cases, default, term, mode)
+            elaborate_switch(context, scrutinee, goal, cases, default, mode)
         }
         // The instance a match states is this elaboration's to write, off the type its scrutinee is elaborated at: one read back is written again.
         Cases::Induct { cases, default, .. } => elaborate_induct_match(
             context,
             InductMatchInput {
                 scrutinee,
-                motive,
+                goal,
                 cases,
                 default: default.as_ref(),
                 term,
@@ -725,9 +626,7 @@ fn eliminate(
                     empty_case,
                     cons_case,
                 },
-        } => elaborate_nat_match(
-            context, scrutinee, motive, empty_case, cons_case, term, mode,
-        ),
+        } => elaborate_nat_match(context, scrutinee, goal, empty_case, cons_case, mode),
         Cases::FreeMonoid {
             carrier:
                 Carrier::List {
@@ -735,29 +634,20 @@ fn eliminate(
                     cons_case,
                     ..
                 },
-        } => elaborate_list_match(
-            context, scrutinee, motive, empty_case, cons_case, term, mode,
-        ),
+        } => elaborate_list_match(context, scrutinee, goal, empty_case, cons_case, mode),
         Cases::FreeMonoid {
             carrier:
                 Carrier::Bytes {
                     empty_case,
                     cons_case,
                 },
-        } => elaborate_bytes_match(
-            context,
-            scrutinee,
-            motive,
-            (empty_case, cons_case),
-            term,
-            mode,
-        ),
+        } => elaborate_bytes_match(context, scrutinee, goal, (empty_case, cons_case), mode),
     }
 }
 
 struct InductMatchInput<'a> {
     scrutinee: Scrutinee,
-    motive: &'a Scope<Many>,
+    goal: &'a Term,
     cases: &'a [(Atom, InductArm)],
     default: Option<&'a Term>,
     term: &'a Term,
@@ -766,32 +656,21 @@ struct InductMatchInput<'a> {
 /// A `Bool` elimination with its scrutinee and its result resolved: the two cases.
 pub struct BoolSplit {
     head: Term,
-    result: MatchResult,
+    goal: Term,
 }
 
 impl BoolSplit {
     pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
-        motive: &Scope<Many>,
-        term: &Term,
+        goal: &Term,
         mode: &Mode,
     ) -> Result<Self, Error> {
         let (head, _) = scrutinee.of_intrinsic(context, Eliminator::Bool, IntrinsicHead::Bool)?;
 
-        // The *rebuilt* motive throughout, as [`resolve_intrinsic_result`] states, or the ambient goal.
-        let result = resolve_intrinsic_result(
-            context,
-            &Subterm::Intrinsic(Intrinsic::BoolType).into(),
-            &head,
-            motive,
-            mode,
-        )?;
-        if let Some(motive) = result.family() {
-            seed_motive(context, term, motive, &head, mode)?;
-        }
+        let goal = resolve_goal(context, goal, mode)?;
 
-        Ok(Self { head, result })
+        Ok(Self { head, goal })
     }
 
     /// The case at `value`: `body` is handed the type the arm is typed at, in the frame it is typed in, and answers the arm.
@@ -807,22 +686,22 @@ impl BoolSplit {
             .with_frame(|context| {
                 open_arm(context, &self.head, &literal)?;
                 retype_locals(context, &self.head, &literal, Vec::new());
-                body(context, self.result.at(&self.head, &[], &[], &literal))
+                body(context, goal_at(&self.goal, &self.head, &[], &[], &literal))
             })
             .map_err(|error| from_arm(context, &self.head, &literal, error))
     }
 
     /// The match's own type: the result at the scrutinee as it stands.
     pub fn result_type(&self) -> Term {
-        self.result.of(&self.head, &[])
+        self.goal.clone()
     }
 
     /// The match over the two arms.
     pub fn rebuild(&self, false_case: Term, true_case: Term) -> (Term, Term) {
-        let result_type = self.result.of(&self.head, &[]);
+        let result_type = self.goal.clone();
         let rebuilt = Subterm::Match(Match {
             head: self.head.clone(),
-            result: self.result.clone(),
+            goal: self.goal.clone(),
             cases: Cases::Bool {
                 false_case,
                 true_case,
@@ -837,13 +716,12 @@ impl BoolSplit {
 fn elaborate_bool_match(
     context: &mut Context,
     scrutinee: Scrutinee,
-    motive: &Scope<Many>,
+    goal: &Term,
     false_case: &Term,
     true_case: &Term,
-    term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let split = BoolSplit::resolve(context, scrutinee, motive, term, &mode)?;
+    let split = BoolSplit::resolve(context, scrutinee, goal, &mode)?;
     let false_case = split.arm(context, false, |context, expected| {
         check(context, false_case, expected)
     })?;
@@ -887,7 +765,7 @@ fn singleton_eliminable(
 ///
 /// The intrinsic eliminator's typing rule. Arm binders are typed directly from the constructor's registry telescope instantiated at the scrutinee type's parameters — no projections from a stuck payload — and each arm's written binders are aligned to that telescope's marks, a hidden payload left out bound all the same.
 ///
-/// The motive binds the scrutinee's indices and then the scrutinee, whatever its body does with them: each arm checks against the motive at *that case's* target indices, the whole match types at the scrutinee's *actual* indices, and a catch-all default — which binds nothing and refines no index — checks at the actual indices too.
+/// Each arm checks against the goal at *that case's* target indices, its variable indices and scrutinee standing for the case, the whole match types at the goal itself, and a catch-all default — which binds nothing and refines no index — checks at the goal too.
 pub struct NominalSplit {
     head: Term,
     head_type: Term,
@@ -896,9 +774,8 @@ pub struct NominalSplit {
     params: Vec<Term>,
     /// The scrutinee's indices, each reduced where the match stands.
     actual_indices: Vec<Term>,
-    result: MatchResult,
-    /// The match's own type: the result at the scrutinee's actual indices and the scrutinee itself.
-    result_type: Term,
+    /// The goal, and the match's own type.
+    goal: Term,
     /// Whether the scrutinee's family is a proposition.
     proposition: bool,
     /// Whether it is one whose one constructor has every payload pinned: the only kind a match may take into data once it has an arm, and the kind whose arms are written over what their equations state.
@@ -910,8 +787,8 @@ impl NominalSplit {
     pub fn resolve(
         context: &mut Context,
         scrutinee: Scrutinee,
-        motive: &Scope<Many>,
-        (term, mode): (&Term, &Mode),
+        goal: &Term,
+        mode: &Mode,
         vacuous: bool,
     ) -> Result<Self, Error> {
         let Scrutinee {
@@ -945,12 +822,12 @@ impl NominalSplit {
             return Err(Error::unknown_declaration(name));
         };
         let (rep_public, module) = (family.rep_public(), family.module());
-        // The family's constraints instantiated where the scrutinee stands, once, with the facet the motive reads: every later read of the family is of the constructors the arms name, at these universes.
-        let indices = context
-            .induct_facet(&name, &universes, |at| at.indices_at(&params))
+        // The family's constraints instantiated where the scrutinee stands, once: every later read of the family is of the constructors the arms name, at these universes.
+        context
+            .induct_facet(&name, &universes, |_| Ok(()))
             .expect("a family the registry holds is read at an occurrence's universes")?;
 
-        // Opacity covers every eliminator, including defaults and vacuous or inversion-discharged matches. Check before motives, coverage, or index refinement can reveal representation facts.
+        // Opacity covers every eliminator, including defaults and vacuous or inversion-discharged matches. Check before coverage or index refinement can reveal representation facts.
         if !rep_public
             && context
                 .island()
@@ -959,29 +836,7 @@ impl NominalSplit {
             return Err(Error::private_representation(name));
         }
 
-        // The motive abstracts the index telescope instantiated at the scrutinee's actual parameters, then the scrutinee.
-        let shape = MotiveShape::Induct {
-            name: &name,
-            universes: &universes,
-            params: &params,
-            indices,
-        };
-
-        // An elided motive checked against an expected type takes that type as its *ambient* result: each arm is checked against the expected type with the scrutinee and its variable indices standing for the arm's case, and the match's result is the expected type itself. That is what a hand-written convoy arranges, with no convoy: the ambient form needs no family to close, so a hypothesis whose type mentions the scrutinee rides along unchanged — see `MatchResult::Ambient`. An expression scrutinee takes it too, its syntactic occurrences standing for the case and the arm's refinement reducing the rest, for the reason `resolve_intrinsic_result` gives. A written motive, and inference mode, are a family, checked or solved.
-        let result = match mode {
-            Mode::Check(expected) if is_elided_motive(motive) => {
-                MatchResult::Ambient(zonk_solved_term_metas(context, expected))
-            }
-            _ => MatchResult::Family(check_motive(context, &shape, motive)?),
-        };
-
-        // The match's own type: the result at the scrutinee's actual indices and the scrutinee itself — opened from the *rebuilt* motive, as [`resolve_intrinsic_result`] states, or the ambient goal as written.
-        let result_type = result.of(&head, &actual_indices);
-
-        // The seed (`seed_motive`'s job, generalized over the pattern binders): in checking mode, pin the motive — a bare metavar when elided — to the expected type before the arms are checked. An ambient result is that type already, and the expectation is met by construction.
-        if let Mode::Check(expected) = mode {
-            expect(context, term, &result_type, expected)?;
-        }
+        let goal = resolve_goal(context, goal, mode)?;
 
         let proposition = is_prop(context, &head_type)?;
         let pinned = proposition && singleton_eliminable(context, &name, &universes, &params)?;
@@ -993,8 +848,7 @@ impl NominalSplit {
             universes,
             params,
             actual_indices,
-            result,
-            result_type,
+            goal,
             proposition,
             pinned,
         })
@@ -1002,7 +856,7 @@ impl NominalSplit {
 
     /// The match's own type: the result at the scrutinee's actual indices and the scrutinee itself.
     pub fn result_type(&self) -> Term {
-        self.result_type.clone()
+        self.goal.clone()
     }
 
     /// The large-elimination guard, asked before an arm is read: a strict proposition may not be eliminated into a relevant (data) result — observing which inhabitant it was would break proof irrelevance. Permitted only by *empty* elimination (no arm, every constructor ruled out) or by the elimination of a family with one constructor whose every payload its indices pin. `armless` says the match writes no arm and `defaulted` that it writes a catch-all.
@@ -1020,13 +874,13 @@ impl NominalSplit {
         Ok(match self.proposition && !permitted {
             false => false,
             true => {
-                let quality = quality_of(context, &self.result_type)?;
+                let quality = quality_of(context, &self.goal)?;
                 probe_open_sort(context, "elaborate_induct_match", quality);
                 match quality {
                     Quality::Prop => false,
                     Quality::Meta(_) => true,
                     Quality::Type | Quality::Param(_) => {
-                        return Err(eliminated_into_data(context, &self.name, &self.result_type));
+                        return Err(eliminated_into_data(context, &self.name, &self.goal));
                     }
                 }
             }
@@ -1182,7 +1036,7 @@ impl NominalSplit {
         let payload_plicities = payload.marks();
         let vars = labels.iter().map(Term::free_var).collect::<Vec<_>>();
 
-        // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope below. Built at the scrutinee's own universe levels, because this value outlives the refinement: the motive is opened on it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq()(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the certifier) refuses it.
+        // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope below. Built at the scrutinee's own universe levels, because this value outlives the refinement: the goal is read at it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq()(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the certifier) refuses it.
         let ctor_val = Term::variant_at(
             self.name,
             self.universes.clone(),
@@ -1198,7 +1052,7 @@ impl NominalSplit {
                 let ix_c = assume_payload(context, payload, labels);
                 open_arm(context, &self.head, &ctor_val)?;
 
-                // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the certifier's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved, and an error it raises is reported as one in an arm that may be left out. Refinements never justify the typing (the motive application does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
+                // The index equations: the most-general solution of `actual indices ~ case targets`, both directions — arm binders pinned to the actuals they must equal, outer variables refined to the targets they must equal — by the certifier's own function, and recorded as the same frame-scoped refinements. A definite clash means the arm is unreachable; it was written, so it is simply checked as is, with nothing solved, and an error it raises is reported as one in an arm that may be left out. Refinements never justify the typing (the goal at the case does); they are convertibility aids, so the body's occurrences of a solved variable reduce at the arm's indices.
                 let solutions = match solve_indices(context, &self.actual_indices, &ix_c, labels)? {
                     Invert::Solved(solutions) => solutions,
                     Invert::Impossible => {
@@ -1223,10 +1077,14 @@ impl NominalSplit {
                     context.refine(name, solution);
                 }
 
-                // The result at this case: a family's index binders take the case's target indices and its scrutinee binder the constructed value; an ambient goal has the case's targets and value substituted for its variable indices and scrutinee.
-                let expected = self
-                    .result
-                    .at(&self.head, &self.actual_indices, &ix_c, &ctor_val);
+                // The goal at this case: the case's targets and value substituted for its variable indices and scrutinee.
+                let expected = goal_at(
+                    &self.goal,
+                    &self.head,
+                    &self.actual_indices,
+                    &ix_c,
+                    &ctor_val,
+                );
                 // What the equations hold each payload binder to, kept for the arm that is rebuilt below.
                 let held = solutions
                     .iter()
@@ -1265,7 +1123,7 @@ impl NominalSplit {
         context: &mut Context,
         body: impl FnOnce(&mut Context, Term) -> Result<Term, Error>,
     ) -> Result<Term, Error> {
-        context.with_frame(|context| body(context, self.result_type.clone()))
+        context.with_frame(|context| body(context, self.goal.clone()))
     }
 
     /// The match over `cases`, in the order [`NominalSplit::cases`] gives, and the catch-all where one is written. `undecided` is what [`NominalSplit::admit`] answered, and `term` the match a sort decided here is reported with.
@@ -1277,8 +1135,8 @@ impl NominalSplit {
         undecided: bool,
         term: &Term,
     ) -> Result<(Term, Term), Error> {
-        if undecided && !hold_prop(context, &self.result_type, term.extent())? {
-            return Err(eliminated_into_data(context, &self.name, &self.result_type));
+        if undecided && !hold_prop(context, &self.goal, term.extent())? {
+            return Err(eliminated_into_data(context, &self.name, &self.goal));
         }
 
         // A match with one arm over a proposition whose indices pin its payload states the instance it eliminates: reduction fires it on that instance and reads no binder's type, so what it is moves with the term and with nothing else.
@@ -1286,7 +1144,7 @@ impl NominalSplit {
             (self.pinned && default.is_none() && cases.len() == 1).then(|| self.head_type.clone());
         let rebuilt = Subterm::Match(Match {
             head: self.head.clone(),
-            result: self.result.clone(),
+            goal: self.goal.clone(),
             cases: Cases::Induct {
                 cases,
                 default,
@@ -1295,7 +1153,7 @@ impl NominalSplit {
         })
         .into();
 
-        Ok((rebuilt, self.result_type.clone()))
+        Ok((rebuilt, self.goal.clone()))
     }
 }
 
@@ -1348,7 +1206,7 @@ fn elaborate_induct_match(
 ) -> Result<(Term, Term), Error> {
     let InductMatchInput {
         scrutinee,
-        motive,
+        goal,
         cases,
         default,
         term,
@@ -1356,7 +1214,7 @@ fn elaborate_induct_match(
 
     // A match with no arms is a vacuous elimination — either of an empty inductive (`False`) or of one whose every constructor inversion-clashes at the scrutinee's indices. Such a match compiles to unreachable code that never inspects the scrutinee. A proof/type scrutinee carries no runtime content (sort-driven erasure), so an empty match discharging an erased witness of falsity into a relevant result is sound without a usage discipline.
     let vacuous = cases.is_empty() && default.is_none();
-    let split = NominalSplit::resolve(context, scrutinee, motive, (term, &mode), vacuous)?;
+    let split = NominalSplit::resolve(context, scrutinee, goal, &mode, vacuous)?;
     let undecided = split.admit(context, cases.is_empty(), default.is_some())?;
     split.declared(context, cases.iter().map(|(tag, _)| tag))?;
 
@@ -1472,10 +1330,4 @@ fn retype_locals(
         .collect::<Vec<_>>();
     let retyped = retyped(&*context, &locals, &solutions);
     context.assume_all(retyped);
-}
-
-/// Whether a motive scope is the lowering's elided form — a bare metavariable body (`match s | ..` or the explicit hole `match s : _ | ..`), as opposed to a user-written constant or scrutinee-binding motive. Only the elided form takes the ambient result; everything else is taken verbatim.
-fn is_elided_motive(motive: &Scope<Many>) -> bool {
-    // A silent hole only: a written `?` motive is a user-written motive the author is asking about, checked against the eliminator's motive type like any other and reported by zonk (`MetavarOrigin` states the rule).
-    matches!(&**motive.body(), Subterm::Metavar(metavar) if metavar.is_hole())
 }

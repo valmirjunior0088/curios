@@ -82,7 +82,7 @@ fn iota_selects_an_inductive_arm_and_binds_its_payload() {
     let mut certifier = certifier();
 
     let matched = term(
-        "match #{node = Variant} /E/some(42): (m) => #NatType | none() => 0 | some(a) => a end",
+        "#{goal = #NatType} match #{node = Variant} /E/some(42) | none() => 0 | some(a) => a end",
     );
 
     assert_eq!(whnf(&mut certifier, matched), Ok(term("42")));
@@ -93,7 +93,7 @@ fn iota_peels_one_successor_off_a_nat() {
     let mut certifier = certifier();
 
     // `match 3 { 0 => 0 | succ(pred, _) => pred }` peels exactly one layer.
-    let matched = term("match 3: (m) => #NatType | 0 => 0 | pred + 1 => pred end");
+    let matched = term("#{goal = #NatType} match 3 | 0 => 0 | pred + 1 => pred end");
 
     assert_eq!(whnf(&mut certifier, matched), Ok(term("2")));
 }
@@ -101,7 +101,7 @@ fn iota_peels_one_successor_off_a_nat() {
 /// The switch of `scrutinee` over the literals `1` and `2`, falling through to `99`.
 fn switch(scrutinee: &str) -> Term {
     term(&fill!(
-        "match ${scrutinee}: (m) => #NatType | 1 => 10 | 2 => 20 | _ => 99 end",
+        "#{goal = #NatType} match ${scrutinee} | 1 => 10 | 2 => 20 | _ => 99 end",
         scrutinee
     ))
 }
@@ -133,7 +133,7 @@ fn a_switch_on_a_symbolic_scrutinee_stays_stuck() {
 fn a_bool_match_dispatches_on_a_literal() {
     let mut certifier = certifier();
 
-    let matched = term("match true: (m) => #NatType | false => 0 | true => 1 end");
+    let matched = term("#{goal = #NatType} match true | false => 0 | true => 1 end");
 
     assert_eq!(whnf(&mut certifier, matched), Ok(term("1")));
 }
@@ -252,7 +252,7 @@ fn a_recursive_application_stays_folded_until_forced() {
     let mut certifier = certifier();
     let countdown = |argument: &str| {
         term(&fill!(
-            "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1 => countdown(pred) end; countdown(${argument}))",
+            "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => #{goal = #NatType} match n | 0 => 0 | pred + 1 => countdown(pred) end; countdown(${argument}))",
             argument
         ))
     };
@@ -278,7 +278,7 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     let [y, applied] = under(
         &mut certifier,
         "y: #NatType",
-        "y, #{node = Rec} (let f: (n: #NatType) -> (x: #NatType) -> #NatType = (n: #NatType) => match n: (m) => (x: #NatType) -> #NatType | 0 => (x: #NatType) => x | pred + 1 => (x: #NatType) => f(pred)(x) end; f(2)(y))",
+        "y, #{node = Rec} (let f: (n: #NatType) -> (x: #NatType) -> #NatType = (n: #NatType) => #{goal = (x: #NatType) -> #NatType} match n | 0 => (x: #NatType) => x | pred + 1 => (x: #NatType) => f(pred)(x) end; f(2)(y))",
     );
 
     assert_eq!(certifier.reduce_forced(applied), Ok(y));

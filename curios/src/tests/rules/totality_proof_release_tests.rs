@@ -297,7 +297,7 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
         ),
         (
             "let held = f;\n\n        /std/print(\"ok\")",
-            "/std/print(match f(0) : (_) => Str end)",
+            "/std/print(match f(0) end)",
         ),
     ])
     .by_elaborator_in("/f", |error| {

@@ -236,7 +236,7 @@ fn a_universe_instance_over_a_bodiless_scheme_classifies_at_the_instances_level(
 const FAMILY: &str = r#"
 let /F: (n: #NatType) -> ${sort} =
     (n: #NatType) =>
-        #{result = Ambient(${sort})}
+        #{goal = ${sort}}
         match #NatLt(n, 10)
         | false => ${body}
         | true => ${body}

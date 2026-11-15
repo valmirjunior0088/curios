@@ -4,8 +4,8 @@
 
 use {
     crate::{
-        Atom, Bound, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Matrix, MetavarSpine,
-        One, Quality, Scope, Subterm, Telescope, Term, Two, Universes, Var, Visit,
+        Atom, CalleeId, Free, Global, Intrinsic, Label, Level, Many, Matrix, MetavarSpine, One,
+        Quality, Scope, Subterm, Telescope, Term, Two, Universes, Var, Visit,
         project_erased_universes,
     },
     curios_abi::ForeignFunction,
@@ -345,28 +345,18 @@ pub struct Struct {
     pub entries: Vec<StructEntry>,
 }
 
-/// The unified eliminator: every match form shares a scrutinee and a result and differs only in its [`Cases`] payload.
+/// The unified eliminator: every match form shares a scrutinee and a goal and differs only in its [`Cases`] payload.
+///
+/// The **goal** is what the arms inhabit: the expected type as it stood in the enclosing context, stated once there and inhabited by each arm under that case's specialization — the scrutinee standing for the case's value and each variable index for the case's target ([`goal_at`]). A hypothesis whose type mentions the scrutinee therefore follows it into each arm with no convoy. Elaboration takes the goal from the expected type in a checked position, and in an inferred one from a fresh metavariable the arms solve, so no match states a result beyond the goal's own spelling. A variable scrutinee is substituted for. Over an expression — written so, or reached by substitution, a `let` value into its tail or an argument into a body — the goal's syntactic occurrences of that expression stand for the case instead: the with-abstraction reading, a fixed operation on the spelling rather than a case equation the reducer may or may not meet, with an occurrence the spelling does not show left to the arm's case equation (see `documentation/design/theory/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Match {
     pub head: Term,
-    pub result: MatchResult,
+    pub goal: Term,
     pub cases: Cases,
 }
 
-/// What an elimination's arms inhabit, in one of two forms.
-///
-/// A **family** is a motive: a scope closed at the eliminator's own arity — the scrutinee's indices in declaration order, then the scrutinee — which is 1 for every intrinsic carrier and for an unindexed inductive, and `n_indices + 1` for an indexed one. Parameters are never abstracted, being uniform across constructors and fixed by the scrutinee's type, so the body refers to them through the ambient scope like any other term. Before elaboration a written motive is carried in an arity-0 scope instead — see `Term::match_motive_written`. A family is the only form that states a result beyond the goal's own spelling, and the only one an induction hypothesis can be typed from, so it is what a written motive lowers to and what every free-monoid fold whose arm reads its hypothesis carries.
-///
-/// The **ambient** form is the expected type as it stood in the enclosing context, stated once there and inhabited by each arm under that case's specialization: the scrutinee standing for the case's value and each variable index for the case's target. It exists because a family must typecheck under fresh binders *outside* any arm — where a hypothesis whose type mentions the scrutinee no longer matches the position it occupies in the goal — while the ambient goal was typed where it was written and needs no such check. That is the whole reason for the convoy pattern, which this form makes unnecessary. Elaboration builds it wherever a motive is elided in a checked position, over any scrutinee. A variable is substituted for. Over an expression — written so, or reached by substitution, a `let` value into its tail or an argument into a body — the goal's syntactic occurrences of that expression stand for the case instead: the with-abstraction reading, a fixed operation on the spelling rather than a case equation the reducer may or may not meet, with an occurrence the spelling does not show left to the arm's case equation (see `documentation/design/theory/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[curios_archive::archived]
-pub enum MatchResult {
-    Family(Scope<Many>),
-    Ambient(Term),
-}
-
-/// What one case substitutes in an ambient goal: each *variable* actual index for its target, and a variable scrutinee for the case's value. A repeated index variable takes its first target, exactly as an abstraction label binds it once; an expression index or scrutinee has nothing to substitute and is absent. It states the goal and nothing else: the locals an arm re-types are the ones its case's whole solution reaches, which both checkers compute with `curios_analysis::retyped` — this set is narrower, and holds even for a case whose index equations clash, where the solution is empty.
+/// What one case substitutes in a goal: each *variable* actual index for its target, and a variable scrutinee for the case's value. A repeated index variable takes its first target, exactly as an abstraction label binds it once; an expression index or scrutinee has nothing to substitute and is absent. It states the goal and nothing else: the locals an arm re-types are the ones its case's whole solution reaches, which both checkers compute with `curios_analysis::retyped` — this set is narrower, and holds even for a case whose index equations clash, where the solution is empty.
 pub fn case_substitution<'a>(
     head: &'a Term,
     actual_indices: &'a [Term],
@@ -391,89 +381,29 @@ pub fn case_substitution<'a>(
     substitution
 }
 
-impl MatchResult {
-    /// The family, when the result is one.
-    pub fn family(&self) -> Option<&Scope<Many>> {
-        match self {
-            MatchResult::Family(motive) => Some(motive),
-            MatchResult::Ambient(_) => None,
-        }
-    }
+/// The goal of a match on `head` at one case: the scrutinee standing for the case's value and each variable actual index for its target. A variable scrutinee is substituted for; an expression scrutinee has its syntactic occurrences in the goal replaced by the value, which is what a substitution into the variable form leaves behind and what with-abstraction reads. A repeated index variable takes its first target, exactly as an abstraction label binds it once; a non-variable index has nothing to substitute and the goal keeps its spelling there.
+pub fn goal_at(
+    goal: &Term,
+    head: &Term,
+    actual_indices: &[Term],
+    case_indices: &[Term],
+    case_value: &Term,
+) -> Term {
+    let substitution = case_substitution(head, actual_indices, case_indices, case_value);
+    let binders = substitution
+        .iter()
+        .map(|(name, _)| *name)
+        .collect::<Vec<_>>();
+    let values = substitution
+        .iter()
+        .map(|(_, value)| *value)
+        .collect::<Vec<_>>();
+    let goal = match &**head {
+        Subterm::Var(var) if var.as_free().is_some() => goal.clone(),
+        _ => goal.replace_term(head, case_value),
+    };
 
-    /// The ambient goal, when the result is one.
-    pub fn ambient(&self) -> Option<&Term> {
-        match self {
-            MatchResult::Family(_) => None,
-            MatchResult::Ambient(goal) => Some(goal),
-        }
-    }
-
-    /// The term under the result's binders, for a walk that reads names or tests a predicate and needs no instance.
-    pub fn body(&self) -> &Term {
-        match self {
-            MatchResult::Family(motive) => motive.body(),
-            MatchResult::Ambient(goal) => goal,
-        }
-    }
-
-    /// The result at one case: the family opened at the case's index targets then its value, or the ambient goal with the scrutinee standing for the value and each variable actual index for its target. A variable scrutinee is substituted for; an expression scrutinee has its syntactic occurrences in the goal replaced by the value, which is what a substitution into the variable form leaves behind and what with-abstraction reads. A repeated index variable takes its first target, exactly as an abstraction label binds it once; a non-variable index has nothing to substitute and the goal keeps its spelling there.
-    pub fn at(
-        &self,
-        head: &Term,
-        actual_indices: &[Term],
-        case_indices: &[Term],
-        case_value: &Term,
-    ) -> Term {
-        match self {
-            MatchResult::Family(motive) => {
-                let refs = case_indices.iter().chain([case_value]).collect::<Vec<_>>();
-                motive.open(&refs)
-            }
-            MatchResult::Ambient(goal) => {
-                let substitution =
-                    case_substitution(head, actual_indices, case_indices, case_value);
-                let binders = substitution
-                    .iter()
-                    .map(|(name, _)| *name)
-                    .collect::<Vec<_>>();
-                let values = substitution
-                    .iter()
-                    .map(|(_, value)| *value)
-                    .collect::<Vec<_>>();
-                let goal = match &**head {
-                    Subterm::Var(var) if var.as_free().is_some() => goal.clone(),
-                    _ => goal.replace_term(head, case_value),
-                };
-                Scope::close(Many(binders.len()), &binders, goal).open(&values)
-            }
-        }
-    }
-
-    /// The result at the scrutinee itself — the elimination's own type: the family opened at the actual indices then the head, or the ambient goal as written.
-    pub fn of(&self, head: &Term, actual_indices: &[Term]) -> Term {
-        match self {
-            MatchResult::Family(motive) => {
-                let refs = actual_indices.iter().chain([head]).collect::<Vec<_>>();
-                motive.open(&refs)
-            }
-            MatchResult::Ambient(goal) => goal.clone(),
-        }
-    }
-
-    /// The same form with its one term rewritten in place — a family's body under its binders, or the ambient goal.
-    pub fn try_map<E>(&self, f: impl FnOnce(&Term) -> Result<Term, E>) -> Result<Self, E> {
-        Ok(match self {
-            MatchResult::Family(motive) => MatchResult::Family(motive.try_map_body(f)?),
-            MatchResult::Ambient(goal) => MatchResult::Ambient(f(goal)?),
-        })
-    }
-
-    pub(crate) fn reach(&self) -> usize {
-        match self {
-            MatchResult::Family(motive) => motive.reach(),
-            MatchResult::Ambient(goal) => goal.reach(),
-        }
-    }
+    Scope::close(Many(binders.len()), &binders, goal).open(&values)
 }
 
 /// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction, erasure and conversion open the body positionally and never read the marks; the certifier holds them to the payload's where it types the arm. Kept beside the body (rather than in a second map) and sealed at the crate boundary behind [`InductArm::new`], so the two can never drift apart.
@@ -535,7 +465,7 @@ impl InductArm {
     }
 }
 
-/// The arm payload of a [`Match`] — the only part that differs between the elimination forms (the scrutinee and motive live on `Match` itself). Which variant a match carries decides both its reduction rule and how erasure lowers it.
+/// The arm payload of a [`Match`] — the only part that differs between the elimination forms (the scrutinee and goal live on `Match` itself). Which variant a match carries decides both its reduction rule and how erasure lowers it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Cases {
@@ -928,11 +858,11 @@ pub struct WitnessOrigin {
 
 /// Provenance of a metavariable — which mechanism minted it, deciding both how zonk reports it unsolved and what an elaboration site may do with it. An unsolved `Implicit`/`Witness` survivor names the slot it filled — by its binder, or by its role to the callee — an unsolved `Domain` the lambda parameter whose type was never determined, and an unsolved `Hole` is a bare "cannot infer", while a `Goal` is reported unconditionally.
 ///
-/// **A site may special-case a `Hole`; a `Goal` always takes the general path.** Inferring a binding over an elided annotation, synthesizing an elided motive, refusing a lambda whose domain nothing pins — each of those is a decision about a *silent* hole, and one matching any bare metavariable would discard a written `?` in those positions unelaborated and compile the program with a goal in it. [`Metavar::is_hole`] is the one predicate those sites ask, so the rule is stated in the type rather than re-derived per site.
+/// **A site may special-case a `Hole`; a `Goal` always takes the general path.** Inferring a binding over an elided annotation, solving a match's goal from its arms, refusing a lambda whose domain nothing pins — each of those is a decision about a *silent* hole, and one matching any bare metavariable would discard a written `?` in those positions unelaborated and compile the program with a goal in it. [`Metavar::is_hole`] is the one predicate those sites ask, so the rule is stated in the type rather than re-derived per site.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum MetavarOrigin {
-    /// A silent inference hole: an elided annotation, motive, lambda domain or element type (`into_core` mints it via `Term::hole`), or an elaborator placeholder with no provenance of its own — a parked problem's stand-in, a recursive group's slot, the type a goal in synthesis position stands over. Its solution is spliced without comment; unsolved, it is the bare "cannot infer".
+    /// A silent inference hole: an elided annotation, lambda domain or element type (`into_core` mints it via `Term::hole`), or an elaborator placeholder with no provenance of its own — the goal of a match nothing expects a type of, a parked problem's stand-in, a recursive group's slot, the type a goal in synthesis position stands over. Its solution is spliced without comment; unsolved, it is the bare "cannot infer".
     Hole,
     /// A settle-synthesized lambda's unannotated domain, named by its binder where it has a name: minted when a lambda whose expectation never gained structure is synthesized at a settle tier, replacing the silent hole (which is solved with it). Solved — by the body, or by whatever the settled type later unifies with — it splices silently like a hole; unsolved, zonk reports the parameter whose type was never determined, by name where it has one.
     Domain(Option<String>),

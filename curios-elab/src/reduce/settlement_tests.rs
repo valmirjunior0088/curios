@@ -38,7 +38,6 @@ fn below_ten(context: &mut Context) -> (Term, Term) {
             [(x, nat_type)],
             Term::bool_match(
                 truth(),
-                None,
                 bool_type,
                 Term::intrinsic(Intrinsic::Bool(false)),
                 Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&x), nat(10))),
@@ -51,7 +50,6 @@ fn below_ten(context: &mut Context) -> (Term, Term) {
 fn carrier(subject: Term) -> Term {
     Term::bool_match(
         Term::intrinsic(Intrinsic::nat_lt(subject, nat(10))),
-        None,
         Term::type_ground(),
         Term::intrinsic(Intrinsic::BoolType),
         Term::intrinsic(Intrinsic::NatType),

@@ -318,7 +318,7 @@ fn an_arm_matching_its_payload_still_reduces() {
 ///
 /// `at.rs` states the discipline: an occurrence is meaningful only once what it carries has been checked against what the declaration declares. The universe instance and the parameter and index *counts* are checked behind the handle; that each argument inhabits the domain the arity states it at is the third thing, and typing's. Counts are the boundary's job because no typing rule reads a length; a *shape* is typing's, and this one had no rule at all.
 ///
-/// The forgery is what reading one unestablished buys. `Eq(@True)(0, 1)` is admitted as a type — `Sort::of` consults the declaration for its `result_sort` and hands back `Prop`, having checked two counts and nothing else — although `0` and `1` are `Nat`s standing in a domain the declaration says is `True`. It is then *inhabited*, and by the rule working correctly: `induct_type_args` compares the indices at the declared domain, that domain is `Prop`-sorted, and proof irrelevance discharges both without looking, so `refl(True, qed())` subsumes into it. From there every step is ordinary. Eliminating the forged equation under the motive `(s, t, q) => (Held(s)) -> Held(t)` — where the same gap lets `s` and `t`, typed `True`, stand in `Held`'s `Nat` index — yields `(Held(0)) -> Held(1)`, and `Held(1)` is uninhabited by construction, so the vacuous elimination coverage licenses (its only constructor targets `0`, which the `Nat` peel clashes against `1`) proves `False`.
+/// The forgery is what reading one unestablished buys. `Eq(@True)(0, 1)` is admitted as a type — `Sort::of` consults the declaration for its `result_sort` and hands back `Prop`, having checked two counts and nothing else — although `0` and `1` are `Nat`s standing in a domain the declaration says is `True`. It is then *inhabited*, and by the rule working correctly: `induct_type_args` compares the indices at the declared domain, that domain is `Prop`-sorted, and proof irrelevance discharges both without looking, so `refl(True, qed())` subsumes into it. From there every step is ordinary. Eliminating the forged equation at the goal `(Held(0)) -> Held(1)`, whose indices the arm reads at its case — where the same gap lets them, typed `True`, stand in `Held`'s `Nat` index — yields `(Held(0)) -> Held(1)`, and `Held(1)` is uninhabited by construction, so the vacuous elimination coverage licenses (its only constructor targets `0`, which the `Nat` peel clashes against `1`) proves `False`.
 ///
 /// No surface program reaches it — `curios-elab` elaborates a nominal occurrence as an application against the arity's telescope and checks every argument — which is why this is built by hand.
 ///
@@ -340,8 +340,8 @@ let /forged: #{node = InductType} /Eq(#{node = InductType} /True())(0, 1) =
     #{node = Variant} /Eq/refl(@#{node = InductType} /True(), #{node = Variant} /True/qed());
 
 let /cast: (w: #{node = InductType} /Held()(0)) -> #{node = InductType} /Held()(1) =
-    match /forged: (s, t, q) =>
-        (w: #{node = InductType} /Held()(s)) -> #{node = InductType} /Held()(t)
+    #{goal = (w: #{node = InductType} /Held()(0)) -> #{node = InductType} /Held()(1)}
+    match /forged
     | refl(z) => (w2: #{node = InductType} /Held()(z)) => w2
     end;
 
@@ -349,7 +349,7 @@ let /held: #{node = InductType} /Held()(1) =
     /cast(#{node = Variant} /Held/yes());
 
 let /boom: #{node = InductType} /False() =
-    match /held: (n, w) => #{node = InductType} /False() end;
+    #{goal = #{node = InductType} /False()} match /held end;
 "#,
         EQUALITY
     ));

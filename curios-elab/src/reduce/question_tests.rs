@@ -566,10 +566,9 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
         ))
     };
     let nat_type = || Term::intrinsic(Intrinsic::NatType);
-    let on_bool = |scrutinee: Term| Term::bool_match(scrutinee, None, nat_type(), nat(2), nat(1));
+    let on_bool = |scrutinee: Term| Term::bool_match(scrutinee, nat_type(), nat(2), nat(1));
     let pred = context.fresh(Some("pred"));
-    let on_nat =
-        |scrutinee: Term| Term::nat_match(scrutinee, None, nat_type(), nat(10), &pred, nat(20));
+    let on_nat = |scrutinee: Term| Term::nat_match(scrutinee, nat_type(), nat(10), &pred, nat(20));
 
     let contradiction = on_bool(and(and(less(&a, &b), less(&c, &b)), not(less(&a, &b))));
     let successor = on_nat(product(1));
@@ -613,7 +612,6 @@ fn a_stuck_elimination_classes_its_scrutinees_atoms_in_a_judgments_reduction_alo
         );
         Term::bool_match(
             scrutinee,
-            None,
             Term::intrinsic(Intrinsic::NatType),
             nat(2),
             nat(1),

@@ -297,7 +297,7 @@ variants!(Error {
     OpenSort,
     AtSorts,
     TooManySorts,
-    NotAMotive,
+    NotAGoal,
     Mismatch,
     NotAFunction,
     NotATuple,

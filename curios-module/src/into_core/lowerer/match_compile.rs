@@ -6,7 +6,7 @@ use {
         Alternative, BytesPattern, Guard, HeadlessArm, HeadlessMatch, Label, ListPattern, Match,
         MatchPattern, MatchPatternField, MatrixArm, NatLiteral, NatPattern, Term,
     },
-    std::{collections::BTreeSet, mem},
+    std::collections::BTreeSet,
 };
 
 /// One unit of match lowering: borrows the [`Lowerer`] doing the surrounding term lowering — for name resolution, scoping, and recursing back into [`Lowerer::term`] or [`Lowerer::region`] at each arm's body — and writes a match as the matrix it is written as ([`curios_core::Matrix`]). The patterns are compiled where the scrutinee's type is known, by elaboration; what is decided here is what the syntax alone says.
@@ -36,7 +36,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         binds: &mut Vec<RegionFrame>,
     ) -> Result<curios_core::Term, Error> {
         let head = self.collect(&match_.head, binds)?;
-        self.headed(head, &match_.motive, &match_.arms, Self::region)
+        self.headed(head, &match_.arms, Self::region)
     }
 
     /// A match with no head inside a region: there is no scrutinee to run ahead of the arms, so nothing hoists, and each guard and each body is a region of its own.
@@ -58,7 +58,6 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         Ok(curios_core::Term::matrix(curios_core::Matrix {
             head: curios_core::Term::tuple(Vec::<curios_core::Term>::new()),
-            motive: None,
             arms: rows
                 .into_iter()
                 .map(|row| curios_core::Arm {
@@ -87,38 +86,22 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
     /// Lowers a headed match — its scrutinee already lowered — as the matrix of its arms, each as it is written. `leaf` is the per-body lowering — [`Self::term`] on the plain path, [`Self::region`] on the region path — so both share this, mirroring every other `Match` arm's `term`/`region` split.
     ///
-    /// Two refusals are read off the arms as they are written. A final arm that binds a name after arms that dispatch is a mistake where a default was meant ([`Error::MatchNamedCatchAll`]). And a written motive is only meaningful when the head itself dispatches on one carrier directly — every alternative's *top-level* pattern being the same dispatchable shape, a final `_` apart — since that is the only case where a core `Match` node exists for the *original* scrutinee to attach the motive to: a tuple/struct-headed or plain-binder match never builds one, and the motive would be silently discarded ([`Error::MatrixMotiveRequiresCtorHead`]).
+    /// A final arm that binds a name after arms that dispatch is refused, read off the arms as they are written: it is a mistake where a default was meant ([`Error::MatchNamedCatchAll`]).
     pub fn headed(
         &self,
         head: curios_core::Term,
-        motive: &Option<Term>,
         arms: &[MatrixArm],
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Term, Error> {
-        let mut patterns = dispatching(arms)?
-            .iter()
-            .flat_map(|arm| &arm.alternatives)
-            .map(|alternative| &alternative.pattern);
-        let homogeneous = patterns.next().is_none_or(|first| {
-            first.is_dispatchable()
-                && patterns.all(|pattern| mem::discriminant(pattern) == mem::discriminant(first))
-        });
-        if !homogeneous && let Some(motive) = motive {
-            return Err(placed(Error::MatrixMotiveRequiresCtorHead, motive.span()));
-        }
+        dispatching(arms)?;
 
         let arms = arms
             .iter()
             .map(|arm| self.arm(&arm.alternatives, &arm.guards, &arm.body, leaf))
             .collect::<Result<Vec<_>, Error>>()?;
-        let motive = motive
-            .as_ref()
-            .map(|motive| self.term(motive))
-            .transpose()?;
 
         Ok(curios_core::Term::matrix(curios_core::Matrix {
             head,
-            motive,
             arms,
         }))
     }
@@ -349,7 +332,7 @@ fn dispatching(arms: &[MatrixArm]) -> Result<&[MatrixArm], Error> {
     }
 }
 
-/// `error` at `span`, where the tree holds one: a refusal about a binder or a motive stands on it and not on the match around it, which is where an enclosing lowering places whatever reaches it bare.
+/// `error` at `span`, where the tree holds one: a refusal about a binder stands on it and not on the match around it, which is where an enclosing lowering places whatever reaches it bare.
 fn placed(error: Error, span: Option<&Span>) -> Error {
     match span {
         Some(span) => error.at(span.clone()),

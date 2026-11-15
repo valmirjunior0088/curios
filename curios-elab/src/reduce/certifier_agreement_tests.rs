@@ -91,12 +91,10 @@ fn zeta_agrees_despite_different_mechanisms() {
 #[test]
 fn iota_agrees_despite_different_arm_binding() {
     let mut context = context();
-    let m = context.fresh(Some("m"));
     let payload = context.fresh(Some("a"));
 
     agree(Term::induct_match(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
-        Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(0)),
@@ -112,12 +110,10 @@ fn iota_agrees_despite_different_arm_binding() {
 #[test]
 fn a_nat_case_split_agrees() {
     let mut context = context();
-    let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
 
     agree(Term::nat_match(
         nat(5),
-        Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         nat(0),
         &pred,
@@ -128,13 +124,11 @@ fn a_nat_case_split_agrees() {
 #[test]
 fn a_stuck_match_agrees() {
     let mut context = context();
-    let m = context.fresh(Some("m"));
     let n = context.fresh(Some("n"));
     let pred = context.fresh(Some("pred"));
 
     agree(Term::nat_match(
         Term::free_var(&n),
-        Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         nat(0),
         &pred,
@@ -175,7 +169,6 @@ fn a_slot_of_one_thing_over_a_literal_of_another_stays_stuck_in_both() {
 fn recursion_agrees_to_a_literal_and_stays_folded_otherwise() {
     let mut context = context();
     let n = context.fresh(Some("n"));
-    let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
     let countdown = context.fresh(Some("countdown"));
     let x = context.fresh(Some("x"));
@@ -185,7 +178,6 @@ fn recursion_agrees_to_a_literal_and_stays_folded_otherwise() {
         [(n, nat_type.clone())],
         Term::nat_match(
             Term::free_var(&n),
-            Some(&m),
             nat_type.clone(),
             nat(0),
             &pred,
@@ -234,7 +226,6 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
     // The carrier the unfolded guard picks: `Nat` below ten, `Bool` otherwise.
     let carrier = Term::bool_match(
         Term::intrinsic(Intrinsic::nat_lt(Term::free_var(&n), nat(10))),
-        None,
         Term::type_ground(),
         bool_type.clone(),
         nat_type.clone(),
@@ -251,7 +242,6 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
     certifier.assume(&n, &nat_type);
     let split = Term::bool_match(
         guard.clone(),
-        None,
         carrier.clone(),
         Term::intrinsic(Intrinsic::Bool(false)),
         nat(0),

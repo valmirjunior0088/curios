@@ -12,7 +12,7 @@ fn constructor_pattern_matches_an_implicit_payload() {
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
         let head3(v : Vec(Nat)(3)) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | cons(@m, x, xs) => x
             end;
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))
@@ -30,7 +30,7 @@ fn constructor_pattern_leaves_a_hidden_payload_out() {
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
         let head3(v : Vec(Nat)(3)) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | cons(x, xs) => x
             end;
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))
@@ -78,7 +78,7 @@ fn constructor_pattern_plain_binder_never_binds_a_hidden_payload() {
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
         let head3(v : Vec(Nat)(3)) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | cons(m, x, xs) => x
             end;
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))
@@ -100,7 +100,7 @@ fn constructor_pattern_hidden_binder_past_its_run_has_no_slot() {
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
         let head3(v : Vec(Nat)(3)) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | cons(x, xs, @m) => x
             end;
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))
@@ -144,7 +144,7 @@ fn constructor_pattern_mark_on_explicit_payload_is_rejected() {
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
         let head3(v : Vec(Nat)(3)) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | cons(@m, @x, xs) => x
             end;
         /std/print(Nat/to_str(head3(Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil()))))))

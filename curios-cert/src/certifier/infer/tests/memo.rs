@@ -229,7 +229,7 @@ const ALIAS: &str = "let /alias: Type = ();";
 const CHECKED_AT_ALIAS: &str = "((z: /alias) => 0)(())";
 
 /// `match not(true) | false => 0 | true => ${arm} end`: an arm no reduction takes, typed and refused, and withdrawn with what it recorded. Its scrutinee names no local, so no equation is in force inside it, and what it classifies is remembered for the declaration.
-const NEVER_TAKEN: &str = "match ((c: #BoolType) => match c: (_) => #BoolType | false => true | true => false end)(true): (_) => #NatType | false => 0 | true => ${arm} end";
+const NEVER_TAKEN: &str = "#{goal = #NatType} match ((c: #BoolType) => #{goal = #BoolType} match c | false => true | true => false end)(true) | false => 0 | true => ${arm} end";
 
 /// A classification that failed is asked again where its type is met next: a withdrawn arm checks a value at `alias` first, and the same check outside the match records the failure again, with the memos on as with them off.
 ///
@@ -281,7 +281,7 @@ fn a_check_remembered_under_an_arms_binding_does_not_outlive_it() {
         let (locals, [chosen]) = hypotheses(
             &mut certifier,
             "b: #BoolType",
-            "match b: (_) => Type | false => #BoolType | true => #NatType end,",
+            "#{goal = Type} match b | false => #BoolType | true => #NatType end,",
         );
         let zero = term("0");
 

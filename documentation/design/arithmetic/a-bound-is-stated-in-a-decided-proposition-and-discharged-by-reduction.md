@@ -13,7 +13,7 @@
 
 **Rejected.**
 
-- **The decision as an equation, `Eq()(b, true)`.** It subsumes the reflection logically, but a bound is used at a guard: `match a < b` is what the refinement store records and serves in both checkers, while an equation hypothesis is consumed by transport with a written motive, or by matching on it, which asks the inverter to refine an expression index. `Bool`'s `eq_of_holds` and `holds_of_eq` convert between the two.
+- **The decision as an equation, `Eq()(b, true)`.** It subsumes the reflection logically, but a bound is used at a guard: `match a < b` is what the refinement store records and serves in both checkers, while an equation hypothesis is consumed by transport along a family it is handed, or by matching on it, which asks the inverter to refine an expression index. `Bool`'s `eq_of_holds` and `holds_of_eq` convert between the two.
 - **An inductive order such as `Nat/le/Ind`**, alone or beside the decided one: call sites build evidence constructor by constructor, and two statements of one relation need bridges both ways.
 - **A decision procedure as the discharge rule.** The fill would become a search; the procedure stands beside it instead.
 - **A total `/std` face beside a proof-carrying one.** Both return the same type, so nothing pushes a caller to the checked one, and the bound reverts to discipline.

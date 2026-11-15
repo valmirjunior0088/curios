@@ -129,32 +129,8 @@ impl Eraser<'_> {
                 })
                 .into())
             }
-            // An elimination's type is its result at this scrutinee, which for a family is opened at the scrutinee's actual indices.
-            curios_core::Subterm::Match(curios_core::Match {
-                head,
-                result,
-                cases,
-            }) => {
-                let indices = match cases {
-                    curios_core::Cases::Induct { .. } => {
-                        let head_type = self.type_of(context, head)?;
-                        match &*reduced(context, &head_type)? {
-                            curios_core::Subterm::InductType(curios_core::InductType {
-                                indices,
-                                ..
-                            }) => indices.clone(),
-                            _ => unreachable!(
-                                "erase: inductive match scrutinee checked by elaborate"
-                            ),
-                        }
-                    }
-                    curios_core::Cases::Bool { .. }
-                    | curios_core::Cases::Switch { .. }
-                    | curios_core::Cases::FreeMonoid { .. } => Vec::new(),
-                };
-
-                Ok(result.of(head, &indices))
-            }
+            // An elimination's type is its goal.
+            curios_core::Subterm::Match(curios_core::Match { goal, .. }) => Ok(goal.clone()),
             // Each binding substituted away, which is the rule reduction uses, so the type names nothing the `let` bound.
             curios_core::Subterm::Let(block) => {
                 let (bindings, tail) = (block.bindings(), block.tail());

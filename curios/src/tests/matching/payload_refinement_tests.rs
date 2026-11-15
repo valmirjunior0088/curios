@@ -97,19 +97,19 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
         end
 
         let build(n : Nat, acc : L) -> L =
-            match n : (_) => L
+            match n
             | 0 => acc
             | m + 1 => build(m, L/cons(m, acc))
             end;
 
         let total(c : L, acc : Nat) -> Nat =
-            match c : (_) => Nat
+            match c
             | stop(z) => acc + z
             | cons(v, tail) => total(tail, acc + v)
             end;
 
         let entry() -> /std/Io({}) =
-            let bytes = match Try/run(Io/read(Proc/stdin, 16))! : (_) => Bytes
+            let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
                 | success(ended()) => x[]
                 | failure(_) => x[]

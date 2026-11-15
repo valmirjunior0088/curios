@@ -25,7 +25,7 @@ pub fn table(rows: &[&str], taint: bool) -> String {
         r#"
         use /std/{Nat, Int, Flt, Byte, Bytes, Str, Option, Io, Try, Proc};
         let entry() -> /std/Io({}) =
-        let bytes = match Try/run(Io/read(Proc/stdin, 16))! : (_) => Bytes
+        let bytes = match Try/run(Io/read(Proc/stdin, 16))!
             | success(bytes(b, @_)) => b
             | success(ended()) => x[]
             | failure(_) => x[]

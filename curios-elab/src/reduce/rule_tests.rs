@@ -29,7 +29,6 @@ fn apply_beta_reduces() {
 fn recursive_application_stays_folded_until_its_result_is_demanded() {
     let mut context = context();
     let n = context.fresh(Some("n"));
-    let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
     let countdown = context.fresh(Some("countdown"));
     let x = context.fresh(Some("x"));
@@ -38,7 +37,6 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
         [(n, nat_type.clone())],
         Term::nat_match(
             Term::free_var(&n),
-            Some(&m),
             nat_type.clone(),
             nat(0),
             &pred,
@@ -80,7 +78,6 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
 fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
     let mut context = context();
     let n = context.fresh(Some("n"));
-    let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
     let f = context.fresh(Some("f"));
     let x = context.fresh(Some("x"));
@@ -97,7 +94,6 @@ fn a_recursive_call_applied_past_its_parameters_unfolds_when_forced() {
         [(n, nat_type.clone())],
         Term::nat_match(
             Term::free_var(&n),
-            Some(&m),
             arrow.clone(),
             Term::func([(x, nat_type.clone())], Term::free_var(&x)),
             &pred,
@@ -150,13 +146,11 @@ fn an_application_whose_group_dissolved_to_its_member_still_unfolds() {
 #[test]
 fn inductive_match_selects_case_and_projects_payload() {
     let mut context = context();
-    let m = context.fresh(Some("m"));
     let x = context.fresh(Some("x"));
 
     // Dispatch inspects the reduced head's `Variant`; the arm's binder is bound call-by-name to the flat projection `head.1`, which then reduces to the payload component.
     let term: Term = Term::induct_match(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
-        Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(0)),
@@ -170,12 +164,10 @@ fn inductive_match_selects_case_and_projects_payload() {
 #[test]
 fn inductive_match_absent_tag_takes_default() {
     let mut context = context();
-    let m = context.fresh(Some("m"));
 
     // The scrutinee is `some(42)`, but only `none` has an explicit arm; the `some` tag is absent from the cases, so dispatch falls through to the binding-free `| _ =>` default (no payload projected).
     let term: Term = Term::induct_match_default(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
-        Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         [("none", Vec::<Free>::new(), nat(0))],
         nat(99),
@@ -187,13 +179,11 @@ fn inductive_match_absent_tag_takes_default() {
 #[test]
 fn inductive_match_present_tag_ignores_default() {
     let mut context = context();
-    let m = context.fresh(Some("m"));
     let x = context.fresh(Some("x"));
 
     // With the `some` arm present, dispatch selects it (binding the payload) rather than the default — the default is only for absent tags.
     let term: Term = Term::induct_match_default(
         Term::variant(nominal("E"), Vec::<Term>::new(), "some", [nat(42)]),
-        Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(0)),
@@ -238,7 +228,6 @@ fn a_proofs_match_stands_while_the_instance_it_states_is_open() {
     let eliminated = |proof: Term| {
         Term::induct_match(
             proof,
-            None,
             nat_type.clone(),
             [("zero", Vec::<Free>::new(), nat(7))],
         )
@@ -271,12 +260,10 @@ fn a_proofs_match_stands_while_the_instance_it_states_is_open() {
 #[test]
 fn nat_fold_zero_takes_the_zero_case() {
     let mut context = context();
-    let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
 
     let term: Term = Term::nat_match(
         Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-        Some(&m),
         Term::intrinsic(Intrinsic::BoolType),
         Term::intrinsic(Intrinsic::Bool(false)),
         &pred,
@@ -457,7 +444,6 @@ fn a_match_tower_reduces_without_overflowing() {
     for _ in 0..DEEP {
         term = Term::bool_match(
             term,
-            None,
             bool_type.clone(),
             Term::intrinsic(Intrinsic::Bool(false)),
             true_(),

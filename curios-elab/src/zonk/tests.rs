@@ -74,10 +74,8 @@ fn resolves_a_metavariable_in_an_inductive_match_default() {
 
     // The catch-all default is a real term position, so a solved metavar sitting in it is resolved like any other.
     let scrutinee = context.fresh(Some("r"));
-    let motive = context.fresh(Some("m"));
     let term = Term::induct_match_default(
         Term::free_var(&scrutinee),
-        Some(&motive),
         nat(),
         [("none", Vec::<Free>::new(), nat_lit(0))],
         Term::hole(0),
@@ -85,7 +83,6 @@ fn resolves_a_metavariable_in_an_inductive_match_default() {
 
     let expected = Term::induct_match_default(
         Term::free_var(&scrutinee),
-        Some(&motive),
         nat(),
         [("none", Vec::<Free>::new(), nat_lit(0))],
         nat_lit(7),

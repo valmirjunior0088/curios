@@ -155,7 +155,6 @@ variants!(Error {
     ImplicitConceptMemberUnfillable,
     NonRegularWitnessPremise,
     ExplicitWitnessParam,
-    MotiveBinderCount,
     MissingArmNotImpossible,
     Poisoned,
     Unfinished,

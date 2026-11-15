@@ -18,7 +18,7 @@ use {
 };
 
 /// Every function of the shared layer a judgment of this crate calls, by its crate's path.
-const ROSTER: [&str; 55] = [
+const ROSTER: [&str; 56] = [
     "curios_analysis::another_case",
     "curios_analysis::answers",
     "curios_analysis::answers_classed",
@@ -62,6 +62,7 @@ const ROSTER: [&str; 55] = [
     "curios_core::foreign_operands",
     "curios_core::foreign_signature",
     "curios_core::free_locals_of",
+    "curios_core::goal_at",
     "curios_core::instantiate_qualities",
     "curios_core::instantiate_universes",
     "curios_core::open_positions_of",

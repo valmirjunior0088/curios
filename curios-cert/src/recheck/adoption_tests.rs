@@ -394,7 +394,7 @@ end
 
 let /f: (X: ${assumed}, b: #{node = InductType} /Big()(X)) -> X =
     (X: ${assumed}, b: #{node = InductType} /Big()(X)) =>
-        #{result = Ambient(X)} match b | big() => ${body} end;
+        #{goal = X} match b | big() => ${body} end;
 "#;
 
 /// [`REFINING`] at `target`, `assumed` and `body`.
@@ -426,7 +426,7 @@ fn a_kept_index_refinement_above_the_variables_sort_reaches_no_closed_term() {
         "the arm is admitted",
     );
 
-    // What the publication cannot move: the arm's goal is the case's target at every sort the variable is assumed at, since `MatchResult::at` opens the goal at the targets and reads no sort. `Type 3` inhabits `Type 4` and `0` does not, whether the rule holds the target's sort below the variable's (`Type 5`) or not (`Type 0`, `Type 1`).
+    // What the publication cannot move: the arm's goal is the case's target at every sort the variable is assumed at, since `goal_at` reads the goal at the targets and reads no sort. `Type 3` inhabits `Type 4` and `0` does not, whether the rule holds the target's sort below the variable's (`Type 5`) or not (`Type 0`, `Type 1`).
     for assumed in ["Type", "#{level = 1} Type", "#{level = 5} Type"] {
         assert_eq!(
             text_verdicts(&refining("#{level = 4} Type", assumed, "#{level = 3} Type")),

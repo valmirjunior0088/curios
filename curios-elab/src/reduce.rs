@@ -34,12 +34,12 @@ use {
     curios_core::{
         Advance, Applications, Apply, Argument, Atom, Bound, Carrier, Cases, ClosedHost,
         ClosedMemo, Cost, Demand, Free, FreeMonoid, Func, FuncType, Global, InductDecl, InductType,
-        Instance, Intrinsic, Layer, Let, Match, MatchResult, Metavar, Nat, Polarity, Probe, Proj,
-        Quality, Rec, RecGroup, ReduceError, Reducer, Sort, Struct, StructDecl, StructType,
-        Subterm, Telescope, Term, Tuple, TupleType, UniverseConstraintKind,
-        UniverseConstraintOrigin, Universes, Var, Variant, Visit, accelerable, eta_head,
-        instantiate_universes, probe_spellings, project_erased_universes, project_literal,
-        reduce_closed, reduce_intrinsic, weak_head_value,
+        Instance, Intrinsic, Layer, Let, Match, Metavar, Nat, Polarity, Probe, Proj, Quality, Rec,
+        RecGroup, ReduceError, Reducer, Sort, Struct, StructDecl, StructType, Subterm, Telescope,
+        Term, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin, Universes, Var,
+        Variant, Visit, accelerable, eta_head, instantiate_universes, probe_spellings,
+        project_erased_universes, project_literal, reduce_closed, reduce_intrinsic,
+        weak_head_value,
     },
     std::{
         cell::OnceCell,
@@ -681,7 +681,7 @@ fn scrutinee_read(context: &mut Context, cases: &Cases, forced: Term) -> Result<
 /// Dispatch a `match` over its scrutinee's already-reduced-and-forced value, where `forced` is what `reduce_forced` produced for it.
 ///
 /// **Rejected — binding an arm to projections of the original scrutinee.** Taking the unreduced scrutinee alongside `forced` and opening the arm at `head.(i + 1)`, the flat view in [`reduce_proj`], would keep a reduced payload from carrying evaluated definition internals — local-`let` annotation holes elaboration never births — into types flowing on to `zonk`. It would buy that at the cost of emitting a term Core cannot type: `Proj` has no rule for an inductive value, so the residual is well-formed only to the untyped reducer. One escaping into a metavariable solution candidate is refused by the re-validation in `convert`'s `solve` as `NotATuple`, which is a *hard* verdict — the goal fails outright instead of parking, and an ordinary program comparing a matched payload against its value would be rejected. Binding the payload directly is also what the certifier does, so the two checkers agree here.
-fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
+fn reduce_match(forced: Term, goal: Term, cases: Cases) -> Reduce {
     match cases {
         Cases::Bool {
             false_case,
@@ -691,7 +691,7 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
             Subterm::Intrinsic(Intrinsic::Bool(true)) => Reduce::Continue(true_case),
             forced => Reduce::Break(Term::from(Subterm::Match(Match {
                 head: forced.into(),
-                result,
+                goal,
                 cases: Cases::Bool {
                     false_case,
                     true_case,
@@ -716,7 +716,7 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
                 }
                 false => Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee,
-                    result,
+                    goal,
                     cases: Cases::Switch { cases, default },
                 }))),
             }
@@ -743,7 +743,7 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
 
             Reduce::Break(Term::from(Subterm::Match(Match {
                 head: forced,
-                result,
+                goal,
                 cases: Cases::Induct {
                     cases,
                     default,
@@ -780,7 +780,7 @@ fn reduce_match(forced: Term, result: MatchResult, cases: Cases) -> Reduce {
                 }),
                 Layer::Stuck(scrutinee) => Reduce::Break(Term::from(Subterm::Match(Match {
                     head: scrutinee.into(),
-                    result,
+                    goal,
                     cases: Cases::FreeMonoid { carrier },
                 }))),
             }
@@ -1475,7 +1475,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
 
                             reduce_match(
                                 scrutinee_read(context, &m.cases, forced)?,
-                                m.result,
+                                m.goal,
                                 m.cases,
                             )
                         }

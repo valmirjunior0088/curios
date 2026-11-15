@@ -12,7 +12,7 @@ fn arguments_can_all_be_supplied_explicitly() {
         | none()
         end
         let id(@T : Type, x : T) -> T = x;
-        let subject : /std/Nat = match Opt/some(@Nat, id(@Nat, 1)) : (_) => Nat
+        let subject : /std/Nat = match Opt/some(@Nat, id(@Nat, 1))
         | some(value) => value
         | none() => 0
         end;
@@ -31,7 +31,7 @@ fn argument_is_inserted_and_inferred() {
         | some(A)
         | none()
         end
-        let subject : /std/Nat = match Opt/some(1) : (_) => Nat
+        let subject : /std/Nat = match Opt/some(1)
         | some(value) => value
         | none() => 0
         end;
@@ -91,7 +91,7 @@ fn trailing_implicit_is_pinned_by_the_expected_type() {
         end
         let nothing(n : Nat, @T : Type) -> Opt(T) = Opt/none(@T);
         let r : Opt(Nat) = nothing(0);
-        let subject : /std/Nat = match r : (_) => Nat
+        let subject : /std/Nat = match r
         | some(value) => value
         | none() => 9
         end;
@@ -111,7 +111,7 @@ fn an_all_implicit_parameter_list_takes_a_call_of_its_own() {
         end
         let bind : (@A : Type, @B : Type) -> (Id(A), (A) -> Id(B)) -> Id(B) =
             (@A, @B) => (m, f) =>
-                match m : (_) => Id(B)
+                match m
                 | wrap(x) => f(x)
                 end;
         satisfy Monad(Id) {
@@ -129,9 +129,9 @@ fn an_all_implicit_parameter_list_takes_a_call_of_its_own() {
                 let v = Id/wrap(3)!;
                 Id/wrap(v);
         let sugared = sugared_block(());
-        match sugared : (_) => Nat
+        match sugared
         | wrap(value) =>
-            match direct : (_) => Nat
+            match direct
             | wrap(other) => Nat/add(value, other)
             end
         end;

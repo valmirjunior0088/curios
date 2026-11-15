@@ -11,7 +11,7 @@ fn a_callee_is_typed_through_a_comparison_of_two_spellings_of_one_call() {
         use /std/{Nat, Bool};
 
         let Pick(c: Bool) -> Type =
-            match c: (_) => Type
+            match c
             | true => (Nat) -> Nat
             | false => Nat
             end;
@@ -33,7 +33,7 @@ fn a_callee_is_typed_through_an_arms_equation_met_at_another_spelling() {
         use /std/{Nat, Bool};
 
         let Pick(c: Bool) -> Type =
-            match c: (_) => Type
+            match c
             | true => (Nat) -> Nat
             | false => Nat
             end;
@@ -60,7 +60,7 @@ fn a_callee_is_typed_through_a_comparison_of_calls_differing_in_a_proof() {
         use /std/Bool/{True, Holds};
 
         let Pick(c: Bool) -> Type =
-            match c: (_) => Type
+            match c
             | true => (Nat) -> Nat
             | false => Nat
             end;
@@ -86,7 +86,7 @@ fn a_callee_is_typed_through_a_comparison_of_a_function_and_its_expansion() {
         use /std/{Nat, Bool};
 
         let Pick(c: Bool) -> Type =
-            match c: (_) => Type
+            match c
             | true => (Nat) -> Nat
             | false => Nat
             end;

@@ -183,13 +183,7 @@ fn a_term_with_nothing_to_state_is_handed_back_as_it_was() {
 fn a_literal_under_a_scope_of_unknown_types_is_still_asked() {
     let (scrutinee, payload, a) = (binder(0, "s"), binder(1, "x"), binder(2, "A"));
     let inner = Term::func([(a, Term::type_ground())], Term::free_var(&payload));
-    let matched = Term::bool_match(
-        Term::free_var(&scrutinee),
-        None,
-        nat_type(),
-        inner.clone(),
-        inner,
-    );
+    let matched = Term::bool_match(Term::free_var(&scrutinee), nat_type(), inner.clone(), inner);
     let outer = Term::func([(payload, nat_type())], matched);
 
     let stated = outer

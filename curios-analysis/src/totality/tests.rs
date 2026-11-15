@@ -666,7 +666,6 @@ fn a_walked_value_is_forgotten_past_its_tail() {
     let body = Term::tuple([
         Term::bool_match(
             Term::free_var(&b),
-            None,
             nat.clone(),
             call.clone(),
             Term::let_(&x, nat, call.clone(), Term::free_var(&x)),

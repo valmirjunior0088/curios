@@ -194,9 +194,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
                 .map(|index| format!("    | {index} => {}\n", index + 1))
                 .collect::<String>();
             program(
-                &format!(
-                    "let f(k: Nat) -> Nat =\n    match k: (_) => Nat\n{arms}    | _ => 0\n    end;\n"
-                ),
+                &format!("let f(k: Nat) -> Nat =\n    match k\n{arms}    | _ => 0\n    end;\n"),
                 "f(a)",
             )
         }
@@ -294,7 +292,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
                 .collect::<String>();
             program(
                 &format!(
-                    "induct K: Type\n{constructors}end\n\nlet f(k: K) -> Nat =\n    match k: (_) => Nat\n{arms}    end;\n"
+                    "induct K: Type\n{constructors}end\n\nlet f(k: K) -> Nat =\n    match k\n{arms}    end;\n"
                 ),
                 &format!("f(K/k{last}()) + a"),
             )
@@ -395,7 +393,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
         Growth::LeftPlus => program("", &format!("a{}", " + 1".repeat(size))),
         Growth::Matches => {
             let term = (0..size).fold("a".to_string(), |inner, index| {
-                format!("match a: (_) => Nat | 0 => {index} | _ => {inner} end")
+                format!("match a | 0 => {index} | _ => {inner} end")
             });
             program(&format!("let f(a: Nat) -> Nat = {term};\n"), "f(a)")
         }

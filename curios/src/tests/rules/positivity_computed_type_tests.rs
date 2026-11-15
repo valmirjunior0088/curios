@@ -88,7 +88,7 @@ fn a_negative_occurrence_behind_a_decided_type_level_match_is_rejected() {
         use /std/{Bool};
 
         let Pick(b : Bool, X : Type) -> Type =
-            match b : (_) => Type
+            match b
             | true => (X) -> Bool
             | false => X
             end;
@@ -121,7 +121,7 @@ fn an_occurrence_behind_a_stuck_type_level_match_is_rejected() {
         use /std/{Bool, Nat};
 
         let Pick(b : Bool, X : Type) -> Type =
-            match b : (_) => Type
+            match b
             | true => {Nat, X}
             | false => X
             end;
@@ -179,7 +179,7 @@ fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_at_mixed() {
         use /std/Bool/{True, False};
 
         induct F(@A: Sort, x: A, y: A, h: Eq()(x, y), B: Type): pub Type
-        | mk(f: match h: (_, _, _) => Prop | refl() => (B) -> False end)
+        | mk(f: match h | refl() => (B) -> False end)
         end
 
         induct G: pub Type
@@ -209,7 +209,7 @@ fn a_field_type_a_self_calling_rec_computes_is_admitted() {
         end
 
         let Count(L : Labels) -> Type =
-            match L : (_) => Type
+            match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
             end;
@@ -236,7 +236,7 @@ fn a_computed_field_type_under_a_parameterized_family_is_admitted() {
         end
 
         let Count(L : Labels) -> Type =
-            match L : (_) => Type
+            match L
             | nil() => {}
             | cons(l, rest) => Option(Count(rest))
             end;
@@ -262,7 +262,7 @@ fn a_computed_field_type_that_is_a_bare_recursive_call_is_admitted() {
         end
 
         let Count(L : Labels) -> Type =
-            match L : (_) => Type
+            match L
             | nil() => {}
             | cons(l, rest) => Count(rest)
             end;
@@ -283,7 +283,7 @@ fn a_field_type_computed_by_recursion_over_a_numeral_is_admitted() {
         use /std/{Nat, Bool};
 
         let Rep(n : Nat) -> Type =
-            match n : (_) => Type
+            match n
             | 0 => {}
             | p + 1 => {Bool, Rep(p)}
             end;
@@ -309,7 +309,7 @@ fn a_constructor_payload_a_self_calling_rec_computes_is_admitted() {
         end
 
         let Count(L : Labels) -> Type =
-            match L : (_) => Type
+            match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
             end;

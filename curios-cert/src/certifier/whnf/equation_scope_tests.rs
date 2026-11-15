@@ -520,7 +520,7 @@ fn a_restated_equation_naming_no_local_is_not_recorded() {
     });
 }
 
-/// An equation an arm restated steps aside for the whole arm, and answers again once the arm's bracket closes: where the restatement names no local and is not recorded, so the equation stack stands where it stood, a bracket the arm opens after binding its solution — a lambda, a `let`, a motive, an inner arm — revives nothing as it closes.
+/// An equation an arm restated steps aside for the whole arm, and answers again once the arm's bracket closes: where the restatement names no local and is not recorded, so the equation stack stands where it stood, a bracket the arm opens after binding its solution — a lambda, a `let`, an inner arm — revives nothing as it closes.
 ///
 /// Filed against the equation stack's depth, the restatement was revived by the first bracket the arm closed, its mark being that same depth, and `g(n) < 5` answered inside the arm, where `n` is bound by value.
 #[test]
@@ -567,7 +567,7 @@ fn a_remembered_reduct_does_not_outlive_the_types_a_binding_re_assumed_its_local
             &mut certifier,
             &fill!(
                 "b: #BoolType, f: (z: ${shaped}) -> #NatType, p: ${shaped}, q: ${shaped}",
-                shaped = "match b: (_) => Type | false => #NatType | true => {} end"
+                shaped = "#{goal = Type} match b | false => #NatType | true => {} end"
             ),
             "#NatEql(#NatAdd(f(p), f(q)), #NatAdd(f(p), f(p))),",
         );

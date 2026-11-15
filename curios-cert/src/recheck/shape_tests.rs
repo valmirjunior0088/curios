@@ -36,7 +36,7 @@ let /cast : (
             /S()
     ) =>
         /std/Bool/Holds(
-            #{result = Ambient(#BoolType)}
+            #{goal = #BoolType}
             match
                 #{field = Struct(/S, 0)}
                 (t).0
@@ -91,7 +91,7 @@ let /cast : (
             /S()
     ) =>
         /std/Bool/Holds(
-            #{result = Ambient(#BoolType)}
+            #{goal = #BoolType}
             match
                 #{field = Struct(/S, 0)}
                 (t).0
@@ -123,7 +123,7 @@ let /read : (
             /Q()(m)
     ) =>
         #{
-            result = Ambient(#NatType),
+            goal = #NatType,
             cases = {
                 stated =
                     #{node = InductType}
@@ -156,7 +156,7 @@ let /cast : (
             /Q()(5)
     ) =>
         /std/Bool/Holds(
-            #{result = Ambient(#BoolType)}
+            #{goal = #BoolType}
             match /read(5, q)
             | 0 =>
                 true
@@ -208,7 +208,7 @@ let /cast : (
             /P()
     ) =>
         /std/Bool/Holds(
-            #{result = Ambient(#BoolType)}
+            #{goal = #BoolType}
             match /get(p)
             | 0 =>
                 true
@@ -224,7 +224,7 @@ let /cast : (
 const A_SHAPE_ONE_ARM_DECIDES_ANSWERS_IN_NO_OTHER_ARM: &str = r#"
 let /T : (c: #BoolType) -> Type =
     (c: #BoolType) =>
-        #{result = Ambient(Type)}
+        #{goal = Type}
         match c
         | false =>
             {}
@@ -236,9 +236,9 @@ let /H : (c: #BoolType) ->
     Prop =
     (c: #BoolType) =>
         #{
-            result = Ambient(
+            goal = 
                 #{level = 1}
-                Prop)}
+                Prop}
         match c
         | false =>
             (
@@ -257,7 +257,7 @@ let /H : (c: #BoolType) ->
         end;
 let /leak : (c: #BoolType) -> /H(c) =
     (c: #BoolType) =>
-        match c: (c2) => /H(c2)
+        #{goal = /H(c)} match c
         | false =>
             (
                 x: /T(c),
@@ -285,9 +285,9 @@ let /M : (c: #BoolType) ->
     Type =
     (c: #BoolType) =>
         #{
-            result = Ambient(
+            goal = 
                 #{level = 1}
-                Type)}
+                Type}
         match c
         | false =>
             Prop
@@ -296,7 +296,7 @@ let /M : (c: #BoolType) ->
         end;
 let /F : (c: #BoolType) -> /M(c) =
     (c: #BoolType) =>
-        match c: (c2) => /M(c2)
+        #{goal = /M(c)} match c
         | false =>
             #{node = InductType}
             /std/Bool/True()
@@ -308,9 +308,9 @@ let /H : (c: #BoolType) ->
     Prop =
     (c: #BoolType) =>
         #{
-            result = Ambient(
+            goal = 
                 #{level = 1}
-                Prop)}
+                Prop}
         match c
         | false =>
             (
@@ -329,7 +329,7 @@ let /H : (c: #BoolType) ->
         end;
 let /leak : (c: #BoolType) -> /H(c) =
     (c: #BoolType) =>
-        match c: (c2) => /H(c2)
+        #{goal = /H(c)} match c
         | false =>
             (
                 x: /F(c),
@@ -357,9 +357,9 @@ let /M : (c: #BoolType) ->
     Type =
     (c: #BoolType) =>
         #{
-            result = Ambient(
+            goal = 
                 #{level = 1}
-                Type)}
+                Type}
         match c
         | false =>
             Prop
@@ -368,7 +368,7 @@ let /M : (c: #BoolType) ->
         end;
 let /F : (c: #BoolType) -> /M(c) =
     (c: #BoolType) =>
-        match c: (c2) => /M(c2)
+        #{goal = /M(c)} match c
         | false =>
             #{node = InductType}
             /std/Bool/True()
@@ -380,9 +380,9 @@ let /H : (c: #BoolType) ->
     Prop =
     (c: #BoolType) =>
         #{
-            result = Ambient(
+            goal = 
                 #{level = 1}
-                Prop)}
+                Prop}
         match c
         | false =>
             (
@@ -402,7 +402,7 @@ let /H : (c: #BoolType) ->
 let /leak : (c: #BoolType) -> /H(c) =
     (c: #BoolType) =>
         let T: /M(c) = /F(c);
-        match c: (c2) => /H(c2)
+        #{goal = /H(c)} match c
         | false =>
             (
                 x: T,

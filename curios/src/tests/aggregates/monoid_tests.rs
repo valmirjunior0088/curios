@@ -9,7 +9,7 @@ fn a_recursion_on_a_lists_tail_is_a_right_fold() {
         use /std/{Str, Nat, List, Io};
         let xs : List(Nat) = [1, 2, 3, 4];
         let digits_of(l : List(Nat)) -> Nat =
-            match l : (_) => Nat
+            match l
             | [] => 0
             | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
             end;
@@ -73,7 +73,7 @@ fn a_recursion_on_a_packed_tail_is_a_right_fold() {
         use /std/{Str, Nat, Byte, Bytes, Io};
         let bytes : Bytes = x[0x01, 0x02, 0x03, 0x04];
         let digits_of(b : Bytes) -> Nat =
-            match b : (_) => Nat
+            match b
             | x[] => 0
             | x[h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), Byte/to_nat(h))
             end;

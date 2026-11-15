@@ -39,7 +39,7 @@ fn let_chain() -> String {
     let lines = (1..=60)
         .map(|line| {
             fill!(
-                "let x${line}: #NatType = match g(b): (_) => #NatType | false => x${before} | true => x${before} end; ",
+                "let x${line}: #NatType = #{goal = #NatType} match g(b) | false => x${before} | true => x${before} end; ",
                 line,
                 before = line - 1
             )

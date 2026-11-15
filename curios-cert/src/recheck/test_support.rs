@@ -156,7 +156,7 @@ end
 
 let /std/Bool/Holds : (b: #BoolType) -> Prop =
     (b: #BoolType) =>
-        #{result = Ambient(Prop)}
+        #{goal = Prop}
         match b
         | false =>
             #{node = InductType}
@@ -180,7 +180,7 @@ induct /F: pub Type
 | mk(x: #NatType)
 end
 
-let /held: match #{node = Variant} /F/mk(3): (s) => Type | ${arm} => #NatType end =
+let /held: #{goal = Type} match #{node = Variant} /F/mk(3) | ${arm} => #NatType end =
     3;
 "#;
 

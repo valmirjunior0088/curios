@@ -23,12 +23,12 @@ induct Both: pub Type
 | both(first: Holds(0 < 10), second: Holds(0 < 10))
 end
 let through(n: Nat, e: Zero(n)) -> Nat = match e | zero() => 1 end;
-let into(n: Nat, e: Zero(n)) -> (Nat) -> Nat = match e: (_, _) => (Nat) -> Nat | zero() => (x: Nat) => x end;
-let pair(n: Nat, e: Zero(n)) -> {Nat, Nat} = match e: (_, _) => {Nat, Nat} | zero() => (1, 2) end;
+let into(n: Nat, e: Zero(n)) -> (Nat) -> Nat = match e | zero() => (x: Nat) => x end;
+let pair(n: Nat, e: Zero(n)) -> {Nat, Nat} = match e | zero() => (1, 2) end;
 let forward(h: (Nat) -> Nat) -> (Nat) -> Nat = h;
 let shifted(h: (Nat) -> Nat) -> (Nat) -> Nat = (x: Nat) => h(x + 1);
-let hold(@A: Type, a: A, count: Nat) -> A = match count: (_) => A | 0 => a | pred + 1 => a end;
-let carry(@A: Type, count: Nat, a: A) -> A = match count: (_) => A | 0 => a | pred + 1 => carry(pred, a) end;";
+let hold(@A: Type, a: A, count: Nat) -> A = match count | 0 => a | pred + 1 => a end;
+let carry(@A: Type, count: Nat, a: A) -> A = match count | 0 => a | pred + 1 => carry(pred, a) end;";
 
 /// The seeds at one type, under the binders they share.
 pub struct Seeds {
@@ -97,52 +97,44 @@ pub const SEEDS: &[Seeds] = &[
             miss("zeta, another value", "(let h = k; h)", "g"),
             held(
                 "iota at Bool",
-                "match true: (_) => (Nat) -> Nat | true => g | false => k end",
+                "match true | true => g | false => k end",
                 "g",
             ),
             miss(
                 "iota at Bool, the other arm",
-                "match false: (_) => (Nat) -> Nat | true => g | false => k end",
+                "match false | true => g | false => k end",
                 "g",
             ),
-            held(
-                "iota at Nat",
-                "match 0: (_) => (Nat) -> Nat | 0 => g | m + 1 => k end",
-                "g",
-            ),
+            held("iota at Nat", "match 0 | 0 => g | m + 1 => k end", "g"),
             miss(
                 "iota at Nat, the other arm",
-                "match 1: (_) => (Nat) -> Nat | 0 => g | m + 1 => k end",
+                "match 1 | 0 => g | m + 1 => k end",
                 "g",
             ),
-            held(
-                "iota at a literal",
-                "match 3: (_) => (Nat) -> Nat | 3 => g | _ => k end",
-                "g",
-            ),
+            held("iota at a literal", "match 3 | 3 => g | _ => k end", "g"),
             miss(
                 "iota at a literal, the default",
-                "match 4: (_) => (Nat) -> Nat | 3 => g | _ => k end",
+                "match 4 | 3 => g | _ => k end",
                 "g",
             ),
             held(
                 "iota at List",
-                "match [1]: (_) => (Nat) -> Nat | [] => k | [h, ..t] => g end",
+                "match [1] | [] => k | [h, ..t] => g end",
                 "g",
             ),
             miss(
                 "iota at List, the other arm",
-                "match [1]: (_) => (Nat) -> Nat | [] => g | [h, ..t] => k end",
+                "match [1] | [] => g | [h, ..t] => k end",
                 "g",
             ),
             held(
                 "iota at a family",
-                "match Option/some(0): (_) => (Nat) -> Nat | some(v) => g | none() => k end",
+                "match Option/some(0) | some(v) => g | none() => k end",
                 "g",
             ),
             miss(
                 "iota at a family, the other arm",
-                "match Option/none(@Nat): (_) => (Nat) -> Nat | some(v) => g | none() => k end",
+                "match Option/none(@Nat) | some(v) => g | none() => k end",
                 "g",
             ),
         ],
@@ -159,42 +151,42 @@ pub const SEEDS: &[Seeds] = &[
         seeds: &[
             held(
                 "iota at Bool over a contradiction",
-                "match b && Bool/not(b): (_) => (Nat) -> Nat | true => k | false => g end",
+                "match b && Bool/not(b) | true => k | false => g end",
                 "g",
             ),
             held(
                 "iota at Bool over a contradiction across connectives",
-                "match (b || c) && Bool/not(b) && Bool/not(c): (_) => (Nat) -> Nat | true => k | false => g end",
+                "match (b || c) && Bool/not(b) && Bool/not(c) | true => k | false => g end",
                 "g",
             ),
             held(
                 "iota at Bool over a tautology",
-                "match b || Bool/not(b): (_) => (Nat) -> Nat | true => g | false => k end",
+                "match b || Bool/not(b) | true => g | false => k end",
                 "g",
             ),
             held(
                 "iota at Bool over comparisons by what they state",
-                "match (x < y) && (y <= x): (_) => (Nat) -> Nat | true => k | false => g end",
+                "match (x < y) && (y <= x) | true => k | false => g end",
                 "g",
             ),
             held(
                 "iota at Bool over atoms conversion classes one",
-                "match h(n, @p) && Bool/not(h(n, @q)): (_) => (Nat) -> Nat | true => k | false => g end",
+                "match h(n, @p) && Bool/not(h(n, @q)) | true => k | false => g end",
                 "g",
             ),
             miss(
                 "iota at Bool over a connective the theory leaves open",
-                "match b && c: (_) => (Nat) -> Nat | true => k | false => g end",
+                "match b && c | true => k | false => g end",
                 "g",
             ),
             held(
                 "iota at Nat over a product of two sums",
-                "match (x + y + 1) * (y + x + 1): (_) => (Nat) -> Nat | 0 => k | m + 1 => g end",
+                "match (x + y + 1) * (y + x + 1) | 0 => k | m + 1 => g end",
                 "g",
             ),
             miss(
                 "iota at Nat over a product of two sums with no floor",
-                "match (x + y) * (y + x): (_) => (Nat) -> Nat | 0 => k | m + 1 => g end",
+                "match (x + y) * (y + x) | 0 => k | m + 1 => g end",
                 "g",
             ),
         ],
@@ -237,33 +229,33 @@ pub const SEEDS: &[Seeds] = &[
         seeds: &[
             held(
                 "a catch-all as a constructor's arm",
-                "match o: (_) => (Nat) -> Nat | some(v) => g | _ => k end",
-                "match o: (_) => (Nat) -> Nat | some(v) => g | none() => k end",
+                "match o | some(v) => g | _ => k end",
+                "match o | some(v) => g | none() => k end",
             ),
             miss(
                 "a catch-all as a constructor's arm, the other arm",
-                "match o: (_) => (Nat) -> Nat | some(v) => g | _ => g end",
-                "match o: (_) => (Nat) -> Nat | some(v) => g | none() => k end",
+                "match o | some(v) => g | _ => g end",
+                "match o | some(v) => g | none() => k end",
             ),
             held(
                 "two catch-alls, each the arm of the constructor the other names",
-                "match o: (_) => (Nat) -> Nat | some(v) => g | _ => k end",
-                "match o: (_) => (Nat) -> Nat | none() => k | _ => g end",
+                "match o | some(v) => g | _ => k end",
+                "match o | none() => k | _ => g end",
             ),
             miss(
                 "two catch-alls, each the arm of the constructor the other names, the other arm",
-                "match o: (_) => (Nat) -> Nat | some(v) => g | _ => k end",
-                "match o: (_) => (Nat) -> Nat | none() => g | _ => g end",
+                "match o | some(v) => g | _ => k end",
+                "match o | none() => g | _ => g end",
             ),
             held(
                 "a catch-all as a key's arm",
-                "match n: (_) => (Nat) -> Nat | 3 => g | 4 => k | _ => k end",
-                "match n: (_) => (Nat) -> Nat | 3 => g | _ => k end",
+                "match n | 3 => g | 4 => k | _ => k end",
+                "match n | 3 => g | _ => k end",
             ),
             miss(
                 "a catch-all as a key's arm, the other arm",
-                "match n: (_) => (Nat) -> Nat | 3 => g | 4 => g | _ => k end",
-                "match n: (_) => (Nat) -> Nat | 3 => g | _ => k end",
+                "match n | 3 => g | 4 => g | _ => k end",
+                "match n | 3 => g | _ => k end",
             ),
         ],
     },
@@ -275,13 +267,13 @@ pub const SEEDS: &[Seeds] = &[
         seeds: &[
             held(
                 "record eta against a stuck elimination",
-                "((match which: (_) => {Nat, Nat} | true => p | false => q end).0, (match which: (_) => {Nat, Nat} | true => p | false => q end).1)",
-                "match which: (_) => {Nat, Nat} | true => p | false => q end",
+                "((match which | true => p | false => q end).0, (match which | true => p | false => q end).1)",
+                "match which | true => p | false => q end",
             ),
             miss(
                 "record eta against a stuck elimination, its components swapped",
-                "((match which: (_) => {Nat, Nat} | true => p | false => q end).1, (match which: (_) => {Nat, Nat} | true => p | false => q end).0)",
-                "match which: (_) => {Nat, Nat} | true => p | false => q end",
+                "((match which | true => p | false => q end).1, (match which | true => p | false => q end).0)",
+                "match which | true => p | false => q end",
             ),
         ],
     },
@@ -292,13 +284,13 @@ pub const SEEDS: &[Seeds] = &[
         seeds: &[
             held(
                 "function eta against a stuck elimination",
-                "(x: Nat) => (match which: (_) => (Nat) -> Nat | true => g | false => k end)(x)",
-                "match which: (_) => (Nat) -> Nat | true => g | false => k end",
+                "(x: Nat) => (match which | true => g | false => k end)(x)",
+                "match which | true => g | false => k end",
             ),
             miss(
                 "function eta against a stuck elimination, its binder dropped",
-                "(x: Nat) => (match which: (_) => (Nat) -> Nat | true => g | false => k end)(0)",
-                "match which: (_) => (Nat) -> Nat | true => g | false => k end",
+                "(x: Nat) => (match which | true => g | false => k end)(0)",
+                "match which | true => g | false => k end",
             ),
         ],
     },
@@ -309,13 +301,13 @@ pub const SEEDS: &[Seeds] = &[
         seeds: &[
             held(
                 "struct eta against a stuck elimination",
-                "Record { a = (match which: (_) => Record | true => s | false => r end).a, b = (match which: (_) => Record | true => s | false => r end).b }",
-                "match which: (_) => Record | true => s | false => r end",
+                "Record { a = (match which | true => s | false => r end).a, b = (match which | true => s | false => r end).b }",
+                "match which | true => s | false => r end",
             ),
             miss(
                 "struct eta against a stuck elimination, its fields swapped",
-                "Record { a = (match which: (_) => Record | true => s | false => r end).b, b = (match which: (_) => Record | true => s | false => r end).a }",
-                "match which: (_) => Record | true => s | false => r end",
+                "Record { a = (match which | true => s | false => r end).b, b = (match which | true => s | false => r end).a }",
+                "match which | true => s | false => r end",
             ),
         ],
     },
@@ -513,23 +505,23 @@ pub const SEEDS: &[Seeds] = &[
         seeds: &[
             held(
                 "irrelevance where a lookup types a stuck elimination",
-                "(match c: (_) => {Holds(0 < 10), Nat} | true => (match d: (_) => Holds(0 < 10) | true => p | false => q end, 1) | false => (p, 2) end).1",
-                "(match c: (_) => {Holds(0 < 10), Nat} | true => (p, 1) | false => (p, 2) end).1",
+                "(match c | true => (match d | true => p | false => q end, 1) | false => (p, 2) end).1",
+                "(match c | true => (p, 1) | false => (p, 2) end).1",
             ),
             held(
                 "irrelevance where a lookup types a constructor's value",
-                "(match c: (_) => {Eq()(0, 0), Nat} | true => (Eq/refl(), 1) | false => (e, 2) end).1",
-                "(match c: (_) => {Eq()(0, 0), Nat} | true => (e, 1) | false => (e, 2) end).1",
+                "(match c | true => (Eq/refl(), 1) | false => (e, 2) end).1",
+                "(match c | true => (e, 1) | false => (e, 2) end).1",
             ),
             held(
                 "irrelevance between two proofs an arm binds",
-                "(match t: (_) => {Holds(0 < 10), Nat} | both(x, y) => (x, 1) end).1",
-                "(match t: (_) => {Holds(0 < 10), Nat} | both(x, y) => (y, 1) end).1",
+                "(match t | both(x, y) => (x, 1) end).1",
+                "(match t | both(x, y) => (y, 1) end).1",
             ),
             miss(
                 "relevance at an arm's tuple component",
-                "(match c: (_) => {Nat, Nat} | true => (m, 1) | false => (m, 2) end).1",
-                "(match c: (_) => {Nat, Nat} | true => (n, 1) | false => (m, 2) end).1",
+                "(match c | true => (m, 1) | false => (m, 2) end).1",
+                "(match c | true => (n, 1) | false => (m, 2) end).1",
             ),
         ],
     },

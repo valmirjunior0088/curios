@@ -20,7 +20,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
         | later(() -> Susp(A))
         end
         let force(@A : Type, s : Susp(A)) -> A =
-            match s : (_) => A
+            match s
             | now(a) => a
             | later(k) => force(k())
             end;
@@ -46,7 +46,7 @@ fn end_to_end() {
         end
         let pair : Pair = Pair/left(+42);
         let score : (_ : Pair) -> std/Int = (p) =>
-            match p : (_) => std/Int
+            match p
             | left(_) => +42
             | right(_) => +7
             end;
@@ -87,7 +87,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
 fn triangular_sum() {
     let source = r#"
         let triangle(n : std/Nat) -> std/Nat =
-            match n : (_) => std/Nat
+            match n
             | 0 => 0
             | pred + 1 => std/Nat/add(triangle(pred), pred)
             end;
@@ -319,12 +319,12 @@ fn a_closure_whose_arity_a_value_decides_is_called_at_each() {
         let Shape(b : Bool) -> Type =
             match b | true => (Nat) -> Nat | false => (Nat, Nat) -> Nat end;
         let pick(b : Bool) -> Shape(b) =
-            match b : (c) => Shape(c) | true => (x) => x + 1 | false => (x, y) => x + y end;
+            match b | true => (x) => x + 1 | false => (x, y) => x + y end;
         let apply(b : Bool, f : Shape(b)) -> Nat =
-            match b : (c) => (g : Shape(c)) -> Nat
-            | true => (g) => g(10)
-            | false => (g) => g(10, 20)
-            end(f);
+            match b
+            | true => f(10)
+            | false => f(10, 20)
+            end;
         let entry() -> /std/Io({}) =
             let args = /std/Proc/args()!;
             let b = List/len(args) == 0;

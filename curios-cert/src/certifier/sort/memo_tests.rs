@@ -170,7 +170,7 @@ fn family_over_a_proof(certifier: &mut Certifier) -> (Term, Term) {
         "(p: #{node = InductType} /P()) => #NatLt(/g(p), 10)",
     );
     let family = term(
-        "(x: #{node = InductType} /P()) -> #{result = Ambient(Type)} match #NatLt(/g(x), 10) | false => #NatType | true => #{node = InductType} /Q() end",
+        "(x: #{node = InductType} /P()) -> #{goal = Type} match #NatLt(/g(x), 10) | false => #NatType | true => #{node = InductType} /Q() end",
     );
     assert!(!family.has_local_free());
 

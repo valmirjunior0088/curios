@@ -6,8 +6,8 @@ use {
     curios_common::Qualifier,
     curios_core::{
         Cases, Constructors, DefinitionKind, Exhaustion, Free, Global, InductDecl, Intrinsic,
-        Match, MatchResult, MetavarId, StructDecl, StructType, Subterm, Telescope, Term,
-        UniverseContext, Universes,
+        Match, MetavarId, StructDecl, StructType, Subterm, Telescope, Term, UniverseContext,
+        Universes,
     },
 };
 
@@ -450,7 +450,7 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
         // `h(e: F) -> Nat = match e end`, an elimination with no arm, stuck on a variable.
         let eliminated = Term::from(Subterm::Match(Match {
             head: Term::free_var(&e),
-            result: MatchResult::Ambient(nat_type()),
+            goal: nat_type(),
             cases: Cases::Induct {
                 cases: Vec::new(),
                 default: None,
@@ -510,11 +510,7 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
     let function = Term::func_type([(z, nat_type())], unit.clone());
     // `rec F : (Nat) -> Type = (n) => match n | 0 => {} | pred + 1 => {a: F(pred)}; F`. `F(0)` unfolds to the unit, and `F(1)` to a record of it.
     let nested = {
-        let (f, n, motive) = (
-            context.fresh(Some("F")),
-            context.fresh(Some("n")),
-            context.fresh(Some("m")),
-        );
+        let (f, n) = (context.fresh(Some("F")), context.fresh(Some("n")));
         let pred = context.fresh(Some("pred"));
         let again = Term::apply(Term::free_var(&f), [Term::free_var(&pred)]);
         let family = Term::func_type([(n, nat_type())], Term::type_ground());
@@ -522,7 +518,6 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
             [(n, nat_type())],
             Term::nat_match(
                 Term::free_var(&n),
-                Some(&motive),
                 Term::type_ground(),
                 unit.clone(),
                 &pred,
@@ -562,7 +557,7 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
     let eliminated = |proof: &Term| {
         Term::from(Subterm::Match(Match {
             head: proof.clone(),
-            result: MatchResult::Ambient(nat_type()),
+            goal: nat_type(),
             cases: Cases::Induct {
                 cases: Vec::new(),
                 default: None,
@@ -688,7 +683,7 @@ fn eta_by_a_literal_is_taken_against_a_neutral_alone() {
     let stuck = |goal: Term| {
         Term::from(Subterm::Match(Match {
             head: Term::free_var(&c),
-            result: MatchResult::Ambient(goal),
+            goal,
             cases: Cases::Induct {
                 cases: Vec::new(),
                 default: None,

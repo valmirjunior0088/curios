@@ -9,9 +9,9 @@ use {
     curios_core::{
         Arm, Atom, CalleeId, Cases, Constructors, Definition, DefinitionKind, Definitions, Field,
         Free, Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam, Intrinsic, Item,
-        Let, Level, Match, MatchResult, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern,
-        Proj, Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm, Telescope,
-        Term, UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
+        Let, Level, Match, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality,
+        QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm, Telescope, Term,
+        UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -151,14 +151,14 @@ fn a_projection_out_of_a_record_states_the_record() {
     assert_eq!(written(&projection), "#{field = Struct(/Pair, 0)} p.0");
 }
 
-/// A match is written in the surface's spelling of its cases, and one with no motive states the goal its arms are checked against.
+/// A match is written in the surface's spelling of its cases, and states the goal its arms are checked against.
 #[test]
 fn a_match_states_the_goal_it_is_checked_against() {
     let b = Free::local(0, Some("b"));
     let number = |value: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
     let matched = Term::from(Subterm::Match(Match {
         head: Term::free_var(&b),
-        result: MatchResult::Ambient(nat_type()),
+        goal: nat_type(),
         cases: Cases::Bool {
             false_case: number(0),
             true_case: number(1),
@@ -167,7 +167,7 @@ fn a_match_states_the_goal_it_is_checked_against() {
 
     assert_eq!(
         written(&matched),
-        "#{result = Ambient(#NatType)} match b | false => 0 | true => 1 end"
+        "#{goal = #NatType} match b | false => 0 | true => 1 end"
     );
 }
 
@@ -410,7 +410,7 @@ fn every_node_written_reads_back_as_itself() {
             n,
             Term::from(Subterm::Match(Match {
                 head: Term::free_var(&n),
-                result: MatchResult::Ambient(nat_type()),
+                goal: nat_type(),
                 cases: Cases::Bool {
                     false_case: one(),
                     true_case: one(),
@@ -426,7 +426,6 @@ fn every_node_written_reads_back_as_itself() {
         // A match as it is written, an arm of two alternatives beside one of one, which states the rows each arm holds; and one of arms of one row each, which states none.
         Term::matrix(Matrix {
             head: one(),
-            motive: None,
             arms: vec![
                 Arm {
                     alternatives: vec![
@@ -453,7 +452,6 @@ fn every_node_written_reads_back_as_itself() {
         }),
         Term::matrix(Matrix {
             head: one(),
-            motive: None,
             arms: vec![
                 Arm {
                     alternatives: vec![Row {
@@ -474,7 +472,6 @@ fn every_node_written_reads_back_as_itself() {
         // A row with guards, each the function over the binders written before it: a condition over the pattern's, and a bind whose pattern binds nothing more, the body over them all.
         Term::matrix(Matrix {
             head: one(),
-            motive: None,
             arms: vec![
                 Arm {
                     alternatives: vec![Row {
@@ -501,7 +498,6 @@ fn every_node_written_reads_back_as_itself() {
         // A wildcard binds nothing, so its row's function binds nothing for it; a binder with no name is a place all the same, and a successor's predecessor is one whatever its word.
         Term::matrix(Matrix {
             head: one(),
-            motive: None,
             arms: vec![
                 Arm {
                     alternatives: vec![Row {
@@ -802,7 +798,6 @@ fn a_rows_places_are_its_functions_words_and_a_bare_underscore_is_a_wildcard() {
     let numeral = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
     let term = Term::matrix(Matrix {
         head: numeral(1),
-        motive: None,
         arms: vec![
             Arm {
                 alternatives: vec![Row {

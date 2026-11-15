@@ -15,7 +15,7 @@ end
 induct /False: pub Prop
 end
 let /std/Bool/Holds: (b: #BoolType) -> Prop =
-    (b: #BoolType) => match b: (_) => Prop | false => #{node = InductType} /False() | true => #{node = InductType} /std/Bool/True() end;
+    (b: #BoolType) => #{goal = Prop} match b | false => #{node = InductType} /False() | true => #{node = InductType} /std/Bool/True() end;
 "#;
 
 /// A certifier holding [`BOUNDS`].

@@ -263,7 +263,7 @@ fn what_a_suspension_holds_survives_the_collections_between_its_turns() {
         use /std/{Io, Nat, List};
         use /std/time/{Duration};
         let turn(n: Nat, held: List(Nat)) -> Io(Nat) =
-            match n: (_) => Io(Nat)
+            match n
             | 0 => Io/pure(List/len(held))
             | m + 1 =>
                 let garbage = List/range(0, 2000);

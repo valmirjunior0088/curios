@@ -7,12 +7,12 @@ use {
     curios_core::Term,
 };
 
-/// The elimination of a scrutinee at `${family}(0)` into `motive` by `arms`, opened in `certifier`, where the family is declared.
-fn at_zero(certifier: &mut Certifier, family: &str, motive: &str, arms: &[&str]) -> Term {
+/// The elimination of a scrutinee at `${family}(0)` into `goal` by `arms`, opened in `certifier`, where the family is declared.
+fn at_zero(certifier: &mut Certifier, family: &str, goal: &str, arms: &[&str]) -> Term {
     let [matched] = under(
         certifier,
         &fill!("subject: ${at}", at = family_at(family, "0")),
-        &fill!("${matched},", matched = eliminating("i, s", motive, arms)),
+        &fill!("${matched},", matched = eliminating(goal, arms)),
     );
 
     matched

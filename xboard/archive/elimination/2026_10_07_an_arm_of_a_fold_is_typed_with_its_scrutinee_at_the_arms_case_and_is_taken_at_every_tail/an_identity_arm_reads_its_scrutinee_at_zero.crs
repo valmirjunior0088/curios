@@ -3,7 +3,7 @@ use /std/{Nat};
 use /std/Bool/{True, False, Holds};
 
 let f(n: Nat, h: Holds(n == 2)) -> False =
-    match n: (m) => False
+    match n
     | 0 => h
     | k + 1; ih => ih
     end;

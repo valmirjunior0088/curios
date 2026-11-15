@@ -442,13 +442,9 @@ impl<'a> Zonk<'a> {
                 entries: entries.clone(),
             }),
 
-            Subterm::Match(Match {
-                head,
-                result,
-                cases,
-            }) => Subterm::Match(Match {
+            Subterm::Match(Match { head, goal, cases }) => Subterm::Match(Match {
                 head: self.zonk_term(head)?,
-                result: result.try_map(|b| self.zonk_term(b))?,
+                goal: self.zonk_term(goal)?,
                 cases: match cases {
                     Cases::Bool {
                         false_case,

@@ -331,13 +331,13 @@ induct /Two: pub Prop
 end
 let /T : (p: #{node = InductType} /Two()) -> Type =
     (p: #{node = InductType} /Two()) =>
-        #{result = Ambient(Type)}
+        #{goal = Type}
         match p
         | a() => #{node = InductType} /U()
         | b() => #{node = InductType} /E()
         end;
 ((h: (x: /T(#{node = Variant} /Two/a())) -> /T(#{node = Variant} /Two/b())) =>
-    #{result = Ambient(/std/Bool/False)}
+    #{goal = /std/Bool/False}
     match h(#{node = Variant} /U/u())
     end)(
     (x: /T(#{node = Variant} /Two/a())) => x
@@ -384,29 +384,29 @@ induct /Pin: (n: #BoolType) -> pub Prop
 end
 let /T : (b: #BoolType) -> Type =
     (b: #BoolType) =>
-        #{result = Ambient(Type)}
+        #{goal = Type}
         match b
         | false => #{node = InductType} /E()
         | true => #{node = InductType} /U()
         end;
 let /read : (p: #{node = InductType} /Bx()) -> #BoolType =
     (p: #{node = InductType} /Bx()) =>
-        #{result = Ambient(#BoolType)}
+        #{goal = #BoolType}
         match p
         | mk(n) => n
         end;
 let /readUnder : (x: #{node = InductType} /W(), p: #{node = InductType} /Under()(x)) -> #BoolType =
     (x: #{node = InductType} /W(), p: #{node = InductType} /Under()(x)) =>
-        match p: (y, z) => #BoolType
+        #{goal = #BoolType} match p
         | mk(n) => n
         end;
 let /readPin : (b: #BoolType, p: #{node = InductType} /Pin()(b)) -> #BoolType =
     (b: #BoolType, p: #{node = InductType} /Pin()(b)) =>
-        match p: (y, z) => #BoolType
+        #{goal = #BoolType} match p
         | mk(n) => n
         end;
 ((h: (x: /T(/read(#{node = Variant} /Bx/mk(true)))) -> /T(/read(#{node = Variant} /Bx/mk(false)))) =>
-    #{result = Ambient(/std/Bool/False)}
+    #{goal = /std/Bool/False}
     match h(#{node = Variant} /U/u())
     end)(
     (x: /T(/read(#{node = Variant} /Bx/mk(true)))) => x
@@ -458,7 +458,7 @@ induct /UsesW: pub Type
 | c(x: #{node = InductType} /W(#{node = InductType} /UsesW()))
 end
 induct /StuckMatch: pub Type
-| c(b: #BoolType, x: #{result = Ambient(Type)} match b | false => #{node = InductType} /E() | true => (y: #{node = InductType} /StuckMatch()) -> #{node = InductType} /E() end)
+| c(b: #BoolType, x: #{goal = Type} match b | false => #{node = InductType} /E() | true => (y: #{node = InductType} /StuckMatch()) -> #{node = InductType} /E() end)
 end
 induct /Projected: pub Type
 | c(x: ((y: #{node = InductType} /Projected()) -> #{node = InductType} /E(), #NatType).0)
@@ -522,7 +522,7 @@ end
 let /lower : (x: #{node = InductType, universes = {levels = [1]}} /A()) -> #{node = InductType, universes = {levels = [0]}} /A() =
     (x: #{node = InductType, universes = {levels = [1]}} /A()) => x;
 let /small : Type =
-    #{result = Ambient(Type)}
+    #{goal = Type}
     match
         /lower(
             #{node = Variant, universes = {levels = [1]}}
@@ -532,7 +532,7 @@ let /small : Type =
             )
         )
     | a(b) =>
-        #{result = Ambient(Type)}
+        #{goal = Type}
         match b
         | b(T) => T
         end
@@ -570,7 +570,7 @@ end
 #{node = Rec}
 let /down : (o: #{node = InductType} /O1()) -> /std/Bool/False =
     (o: #{node = InductType} /O1()) =>
-        match o: (x) => /std/Bool/False
+        #{goal = /std/Bool/False} match o
         | l(f) =>
             /down(f(#{node = InductType} /O1())(o))
         end;
@@ -581,7 +581,7 @@ let /spin : (n: #NatType) -> /std/Bool/False =
 #{node = Rec}
 let /count : (n: #NatType) -> /std/Bool/True =
     (n: #NatType) =>
-        #{result = Ambient(/std/Bool/True)}
+        #{goal = /std/Bool/True}
         match n
         | 0 => #{node = Variant} /std/Bool/True/qed()
         | _ => /count(/pred(n))
@@ -674,10 +674,10 @@ end
 induct /A: pub Prop
 | mk(b: #{node = InductType} /B((a: #{node = InductType} /A()) -> #{node = InductType} /std/Bool/False())(
     (a: #{node = InductType} /A()) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match a
         | mk(b2) =>
-            #{result = Ambient(#{node = InductType} /std/Bool/False())}
+            #{goal = #{node = InductType} /std/Bool/False()}
             match b2
             | c(k) =>
                 k(a)
@@ -696,10 +696,10 @@ end
 induct /A(P: Prop): pub Prop
 | mk(b: #{node = InductType} /B((a: #{node = InductType} /A(P)) -> P)(
     (a: #{node = InductType} /A(P)) =>
-        #{result = Ambient(P)}
+        #{goal = P}
         match a
         | mk(b2) =>
-            #{result = Ambient(P)}
+            #{goal = P}
             match b2
             | c(k) =>
                 k(a)
@@ -715,10 +715,10 @@ const A_GROUP_WHOSE_PAYLOAD_TYPES_ITSELF_THROUGH_AN_INDEX: &str = r#"
 induct /A: pub Prop
 | mk(b: #{node = InductType} /B()(
     (a: #{node = InductType} /A()) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match a
         | mk(b2) =>
-            #{result = Ambient(#{node = InductType} /std/Bool/False())}
+            #{goal = #{node = InductType} /std/Bool/False()}
             match b2
             | c(k) =>
                 k(a)

@@ -1,34 +1,31 @@
 //! A match as it is written: the form lowering hands elaboration before a pattern is compiled.
 //!
-//! Nothing here judges, reduces or binds. A [`Matrix`] is plain data over terms — its scrutinee, its motive, its rows' guards and their bodies — and a row's binders are its body's own: the body is an ordinary function over them, as a [`Bang`](crate::Bang)'s continuation is, and each guard a function over the binders written before it, so no walk of Core learns a binder from a pattern. A [`Pattern`] says where each of those binders stands, counted in the order the pattern writes them, and a bind guard's pattern after them.
+//! Nothing here judges, reduces or binds. A [`Matrix`] is plain data over terms — its scrutinee, its rows' guards and their bodies — and a row's binders are its body's own: the body is an ordinary function over them, as a [`Bang`](crate::Bang)'s continuation is, and each guard a function over the binders written before it, so no walk of Core learns a binder from a pattern. A [`Pattern`] says where each of those binders stands, counted in the order the pattern writes them, and a bind guard's pattern after them.
 
 use {
     crate::{Atom, Mention, Term},
     curios_common::Plicity,
     curios_num::Natural,
+    std::iter,
 };
 
-/// A match before its patterns are compiled: the scrutinee, the motive where one is written, and the arms in the order they are written. A match with no head is a match over `()` whose rows write `_`. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.
+/// A match before its patterns are compiled: the scrutinee and the arms in the order they are written. A match with no head is a match over `()` whose rows write `_`. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Matrix {
     pub head: Term,
-    /// The motive as it is written, and `None` where no `:` is.
-    pub motive: Option<Term>,
     pub arms: Vec<Arm>,
 }
 
 impl Matrix {
-    /// The direct child terms: the scrutinee, the motive, and each row's guards and body.
+    /// The direct child terms: the scrutinee, and each row's guards and body.
     pub fn subterms(&self) -> impl Iterator<Item = &Term> {
-        std::iter::once(&self.head)
-            .chain(&self.motive)
-            .chain(self.rows().flat_map(|row| {
-                row.guards
-                    .iter()
-                    .map(Guard::term)
-                    .chain(std::iter::once(&row.body))
-            }))
+        iter::once(&self.head).chain(self.rows().flat_map(|row| {
+            row.guards
+                .iter()
+                .map(Guard::term)
+                .chain(iter::once(&row.body))
+        }))
     }
 
     /// Every arm's rows, arm after arm.
@@ -40,7 +37,6 @@ impl Matrix {
     pub fn map_subterms(&self, f: &mut impl FnMut(&Term) -> Term) -> Matrix {
         Matrix {
             head: f(&self.head),
-            motive: self.motive.as_ref().map(&mut *f),
             arms: self
                 .arms
                 .iter()

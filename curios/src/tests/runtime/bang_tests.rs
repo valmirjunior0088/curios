@@ -60,7 +60,7 @@ fn std_parse_threads_bangs_left_to_right() {
         let parser() -> Parse/Parse(Bytes, Nat) =
             Parse/pure(Nat/sub(Byte/to_nat(Parse/bytes/byte!), Byte/to_nat(Parse/bytes/byte!)));
 
-        match Parse/run(parser(), /std/Str/to_bytes("BA")) : (_) => /std/Io({})
+        match Parse/run(parser(), /std/Str/to_bytes("BA"))
         | success(n) => /std/print(Nat/to_str(n))
         | failure(e) => /std/print(e.message)
         end
@@ -88,9 +88,9 @@ fn region_mixes_action_types() {
         let parser() -> Parse/Parse(Bytes, Bytes) =
             Parse/pure(x[..Parse/bytes/take_while(is_a)!, Parse/bytes/byte!]);
 
-        match Parse/run(parser(), /std/Str/to_bytes("AB")) : (_) => /std/Io({})
+        match Parse/run(parser(), /std/Str/to_bytes("AB"))
         | success(s) =>
-            match Str/of_bytes(s) : (_) => /std/Io({})
+            match Str/of_bytes(s)
             | success(t) => /std/print(t)
             | failure(_) => /std/print("invalid utf-8")
             end

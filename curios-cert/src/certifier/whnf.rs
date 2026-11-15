@@ -32,9 +32,9 @@ use {
     curios_common::recurse,
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, ClosedHost, ClosedMemo, Cost, Demand, Field, Free,
-        FreeMonoid, Func, Global, Instance, Intrinsic, Layer, Let, Match, MatchResult, Nat, Probe,
-        Proj, Rec, RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Universes, Var,
-        Variant, Visit, accelerable, instantiate_universes, probe_spellings, reduce_closed,
+        FreeMonoid, Func, Global, Instance, Intrinsic, Layer, Let, Match, Nat, Probe, Proj, Rec,
+        RecGroup, ReduceError, Reducer, Struct, Subterm, Term, Tuple, Universes, Var, Variant,
+        Visit, accelerable, instantiate_universes, probe_spellings, reduce_closed,
         reduce_intrinsic, weak_head_value,
     },
 };
@@ -205,11 +205,7 @@ fn whnf_within(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceErro
             Subterm::Let(let_) => Step::Continue(step_let(certifier, let_)?),
             Subterm::Instance(instance) => step_instance(certifier, instance)?,
             // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for.
-            Subterm::Match(Match {
-                head,
-                result,
-                cases,
-            }) => {
+            Subterm::Match(Match { head, goal, cases }) => {
                 // A match the instance it states decides does not reduce its scrutinee, and reads nothing of it. Closed, it is its arm: at no payload where the arm names none, as the closed machine takes it, and at the payload the stated instance's indices say where it names one. Open, stating an instance of a proposition whose indices pin its payload, it is its arm at that payload where the instance is the one the constructor builds there, and stands where it is not. A match that states none is reduced by its scrutinee's value.
                 let fired = match (cases.sole_arm(), cases.stated()) {
                     (None, _) => None,
@@ -229,16 +225,14 @@ fn whnf_within(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceErro
 
                 match fired {
                     Some(Some(body)) => Step::Continue(body),
-                    Some(None) => Step::Stop(Term::from(Subterm::Match(Match {
-                        head,
-                        result,
-                        cases,
-                    }))),
+                    Some(None) => {
+                        Step::Stop(Term::from(Subterm::Match(Match { head, goal, cases })))
+                    }
                     None => {
                         let value = whnf(certifier, head)?;
                         let forced = force(certifier, value)?;
 
-                        step_match(scrutinee_read(certifier, &cases, forced)?, result, cases)
+                        step_match(scrutinee_read(certifier, &cases, forced)?, goal, cases)
                     }
                 }
             }
@@ -659,7 +653,7 @@ fn scrutinee_read(
 /// An arm binds that value's payload components directly. They are themselves unreduced — a `Variant` is a weak-head normal form whose sub-terms this strategy never entered — so binding them is call-by-name, not call-by-value.
 ///
 /// The elaborator instead binds each arm to a *projection of the scrutinee as written*, because a reduced payload can carry annotation holes its zonker would then have to solve. The certifier has no zonker and no holes, so it takes the direct route.
-fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
+fn step_match(forced: Term, goal: Term, cases: Cases) -> Step {
     match cases {
         Cases::Bool {
             false_case,
@@ -669,7 +663,7 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
             Some(true) => Step::Continue(true_case),
             None => Step::Stop(Term::from(Subterm::Match(Match {
                 head: forced,
-                result,
+                goal,
                 cases: Cases::Bool {
                     false_case,
                     true_case,
@@ -692,7 +686,7 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
                 ),
                 false => Step::Stop(Term::from(Subterm::Match(Match {
                     head: forced,
-                    result,
+                    goal,
                     cases: Cases::Switch { cases, default },
                 }))),
             }
@@ -722,7 +716,7 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
 
             Step::Stop(Term::from(Subterm::Match(Match {
                 head: forced,
-                result,
+                goal,
                 cases: Cases::Induct {
                     cases,
                     default,
@@ -757,7 +751,7 @@ fn step_match(forced: Term, result: MatchResult, cases: Cases) -> Step {
                 }),
                 Layer::Stuck(stuck) => Step::Stop(Term::from(Subterm::Match(Match {
                     head: stuck.into(),
-                    result,
+                    goal,
                     cases: Cases::FreeMonoid { carrier },
                 }))),
             }

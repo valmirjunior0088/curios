@@ -24,8 +24,8 @@ use {
     },
     curios_common::{Plicity, recurse},
     curios_core::{
-        Arm, Atom, Free, Guard, InductArm, Many, Matrix, Mention, Pattern, Row, Scope, Slot,
-        StructType, Subterm, Telescope, Term, Tuple,
+        Arm, Atom, Free, Guard, InductArm, Matrix, Mention, Pattern, Row, Slot, StructType,
+        Subterm, Telescope, Term, Tuple,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
@@ -244,7 +244,7 @@ impl<'m> Compiler<'m> {
         }
     }
 
-    /// One step: the leftmost column is retired where no row takes it apart, flattened where the rows that do write a tuple or a struct, and otherwise split by what they write. `top` says no dispatch stands above the column: its dispatch is where a written motive attaches, the scrutinee being what a match that writes one dispatches on, and where the row that cannot fail is read, and `mode` is how what the rows come to is read: as the match is at its scrutinee, and against the type of its case beneath a dispatch.
+    /// One step: the leftmost column is retired where no row takes it apart, flattened where the rows that do write a tuple or a struct, and otherwise split by what they write. `top` says no dispatch stands above the column: its dispatch is where the row that cannot fail is read, and `mode` is how what the rows come to is read: as the match is at its scrutinee, and against the type of its case beneath a dispatch.
     fn columns(
         &mut self,
         context: &mut Context,
@@ -535,13 +535,10 @@ impl<'m> Compiler<'m> {
             let condition = Self::opened_at(condition, &line);
             line.guarded = false;
             let scrutinee = Scrutinee::read(context, &condition)?;
-            let motive = self.motive(context, false);
-            let term = self.term;
+            let goal = Term::hole(context.mint_metavar());
 
             return context.awaiting(|context| {
-                let split = Rc::new(BoolSplit::resolve(
-                    context, scrutinee, &motive, term, &mode,
-                )?);
+                let split = Rc::new(BoolSplit::resolve(context, scrutinee, &goal, &mode)?);
                 let false_case = split.arm(context, false, |context, expected| {
                     recurse(|| self.leaf(context, rest, Mode::Check(expected))).map(|(arm, _)| arm)
                 })?;
@@ -749,17 +746,13 @@ impl<'m> Compiler<'m> {
         }
 
         let scrutinee = Scrutinee::read(context, &column.term)?;
-        let motive = self.motive(context, top);
+        let goal = Term::hole(context.mint_metavar());
         let term = self.term;
 
         context.awaiting(|context| {
             let vacuous = groups.is_empty() && binders.is_empty();
             let split = Rc::new(NominalSplit::resolve(
-                context,
-                scrutinee,
-                &motive,
-                (term, &mode),
-                vacuous,
+                context, scrutinee, &goal, &mode, vacuous,
             )?);
             self.resolved(top, || {
                 (
@@ -993,13 +986,10 @@ impl<'m> Compiler<'m> {
         }
 
         let scrutinee = Scrutinee::read(context, &column.term)?;
-        let motive = self.motive(context, top);
-        let term = self.term;
+        let goal = Term::hole(context.mint_metavar());
 
         context.awaiting(|context| {
-            let split = Rc::new(BoolSplit::resolve(
-                context, scrutinee, &motive, term, &mode,
-            )?);
+            let split = Rc::new(BoolSplit::resolve(context, scrutinee, &goal, &mode)?);
             self.resolved(top, || {
                 (
                     Outermost::Bool(Rc::clone(&split)),
@@ -1065,8 +1055,6 @@ impl<'m> Compiler<'m> {
             });
         }
 
-        let term = self.term;
-
         // `0` and a binder are induction's two cases, so `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its successor arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal.
         if dispatches {
             let literal = |pattern: &Pattern| match pattern {
@@ -1105,12 +1093,10 @@ impl<'m> Compiler<'m> {
             }
 
             let scrutinee = Scrutinee::read(context, &column.term)?;
-            let motive = self.motive(context, top);
+            let goal = Term::hole(context.mint_metavar());
 
             return context.awaiting(|context| {
-                let split = Rc::new(SwitchSplit::resolve(
-                    context, scrutinee, &motive, term, &mode,
-                )?);
+                let split = Rc::new(SwitchSplit::resolve(context, scrutinee, &goal, &mode)?);
                 self.resolved(top, || {
                     (
                         Outermost::Switch(Rc::clone(&split)),
@@ -1160,10 +1146,10 @@ impl<'m> Compiler<'m> {
         }
 
         let scrutinee = Scrutinee::read(context, &column.term)?;
-        let motive = self.motive(context, top);
+        let goal = Term::hole(context.mint_metavar());
 
         context.awaiting(|context| {
-            let split = Rc::new(NatSplit::resolve(context, scrutinee, &motive, term, &mode)?);
+            let split = Rc::new(NatSplit::resolve(context, scrutinee, &goal, &mode)?);
             self.resolved(top, || {
                 (
                     Outermost::Nat(Rc::clone(&split)),
@@ -1293,16 +1279,11 @@ impl<'m> Compiler<'m> {
         }
 
         let scrutinee = Scrutinee::read(context, &column.term)?;
-        let motive = self.motive(context, top);
-        let term = self.term;
+        let goal = Term::hole(context.mint_metavar());
 
         context.awaiting(|context| {
             let split = Rc::new(SequenceSplit::resolve(
-                context,
-                sequence,
-                scrutinee,
-                &motive,
-                (term, &mode),
+                context, sequence, scrutinee, &goal, &mode,
             )?);
             self.resolved(top, || {
                 (
@@ -1560,7 +1541,6 @@ impl<'m> Compiler<'m> {
 
                 Term::bool_match(
                     condition,
-                    None,
                     Term::hole(context.mint_metavar()),
                     failed.clone(),
                     passed,
@@ -1582,7 +1562,6 @@ impl<'m> Compiler<'m> {
 
                 Term::matrix(Matrix {
                     head: value,
-                    motive: None,
                     arms: vec![
                         Arm {
                             alternatives: vec![Row {
@@ -1691,7 +1670,6 @@ impl<'m> Compiler<'m> {
             .cells
             .remove(0)
             .expect("a row alone writes every column it reads");
-        let term = self.term;
 
         match pattern {
             Pattern::Binder => {
@@ -1748,14 +1726,10 @@ impl<'m> Compiler<'m> {
                     Some(_) => unreachable!("a column is split by one shape"),
                     None => {
                         let scrutinee = Scrutinee::read(context, &column)?;
-                        let motive = self.motive(context, false);
+                        let goal = Term::hole(context.mint_metavar());
 
                         Rc::new(NominalSplit::resolve(
-                            context,
-                            scrutinee,
-                            &motive,
-                            (term, &mode),
-                            false,
+                            context, scrutinee, &goal, &mode, false,
                         )?)
                     }
                 };
@@ -1780,11 +1754,9 @@ impl<'m> Compiler<'m> {
                     Some(_) => unreachable!("a column is split by one shape"),
                     None => {
                         let scrutinee = Scrutinee::read(context, &column)?;
-                        let motive = self.motive(context, false);
+                        let goal = Term::hole(context.mint_metavar());
 
-                        Rc::new(BoolSplit::resolve(
-                            context, scrutinee, &motive, term, &mode,
-                        )?)
+                        Rc::new(BoolSplit::resolve(context, scrutinee, &goal, &mode)?)
                     }
                 };
 
@@ -1805,11 +1777,9 @@ impl<'m> Compiler<'m> {
                     Some(_) => unreachable!("a column is split by one shape"),
                     None => {
                         let scrutinee = Scrutinee::read(context, &column)?;
-                        let motive = self.motive(context, false);
+                        let goal = Term::hole(context.mint_metavar());
 
-                        Rc::new(SwitchSplit::resolve(
-                            context, scrutinee, &motive, term, &mode,
-                        )?)
+                        Rc::new(SwitchSplit::resolve(context, scrutinee, &goal, &mode)?)
                     }
                 };
 
@@ -1835,9 +1805,9 @@ impl<'m> Compiler<'m> {
                     Some(_) => unreachable!("a column is split by one shape"),
                     None => {
                         let scrutinee = Scrutinee::read(context, &column)?;
-                        let motive = self.motive(context, false);
+                        let goal = Term::hole(context.mint_metavar());
 
-                        Rc::new(NatSplit::resolve(context, scrutinee, &motive, term, &mode)?)
+                        Rc::new(NatSplit::resolve(context, scrutinee, &goal, &mode)?)
                     }
                 };
 
@@ -1871,14 +1841,10 @@ impl<'m> Compiler<'m> {
                     Some(_) => unreachable!("a column is split by one shape"),
                     None => {
                         let scrutinee = Scrutinee::read(context, &column)?;
-                        let motive = self.motive(context, false);
+                        let goal = Term::hole(context.mint_metavar());
 
                         Rc::new(SequenceSplit::resolve(
-                            context,
-                            sequence,
-                            scrutinee,
-                            &motive,
-                            (term, &mode),
+                            context, sequence, scrutinee, &goal, &mode,
                         )?)
                     }
                 };
@@ -1944,14 +1910,6 @@ impl<'m> Compiler<'m> {
         let name = context.fresh_written(hint.as_deref(), *written);
         line.taken[place] = Some(Term::free_var(&name));
         line.lets.push((name, value));
-    }
-
-    /// The motive of one split: the written one at the outermost, and elsewhere, or where none is written, a hole the arms settle.
-    fn motive(&self, context: &mut Context, top: bool) -> Scope<Many> {
-        Term::match_motive_written(match (top, &self.matrix.motive) {
-            (true, Some(motive)) => motive.clone(),
-            _ => Term::hole(context.mint_metavar()),
-        })
     }
 }
 

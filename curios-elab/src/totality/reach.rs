@@ -41,7 +41,7 @@ fn push(positions: &mut Vec<Position>, site: &Rc<ErasedSite>, term: &Term) {
 
 /// Every term in a type position.
 ///
-/// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match motive, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/std/Cli/WellFormed` into `/std/Cli/check/problems`.
+/// "Type position" is read syntactically and generously: a declared type, a binder annotation, a match's goal, a declaration telescope, a nominal type former, an intrinsic type former, and the *body* of any definition whose own type ends in a sort — the last being what reaches through `/std/Cli/WellFormed` into `/std/Cli/check/problems`.
 pub fn type_positions(definitions: &Definitions, entry: Option<&Entrypoint>) -> Vec<Position> {
     let mut positions = Vec::new();
 
@@ -150,7 +150,7 @@ fn ends_in_sort(type_: &Term) -> bool {
     }
 }
 
-/// Walk a term and mark every type written inside it: binder annotations, match motives, `let` and `rec` declared types, nominal and intrinsic type formers.
+/// Walk a term and mark every type written inside it: binder annotations, match goals, `let` and `rec` declared types, nominal and intrinsic type formers.
 fn annotations(term: &Term, site: &Rc<ErasedSite>, positions: &mut Vec<Position>) {
     // On the shared `Term::walk` driver, deduplicated on node identity, for one reason each. A string literal's UTF-8 derivation threads its scanner state forwards, so link `i` carries a `step(bᵢ₋₁, … step(b₀, lead))` of depth `i`: the chain is `O(n)` distinct nodes but `O(n²)` *paths* through them, and a walk that revisits shared nodes pays the square while recursing one native frame per link.
     //
@@ -184,8 +184,8 @@ fn annotate_node(term: &Term, site: &Rc<ErasedSite>, positions: &mut Vec<Positio
             entries(telescope, site, positions);
         }
 
-        Subterm::Match(Match { result, .. }) => {
-            push(positions, site, result.body());
+        Subterm::Match(Match { goal, .. }) => {
+            push(positions, site, goal);
         }
 
         Subterm::Let(block) => {

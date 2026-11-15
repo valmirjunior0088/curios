@@ -1,47 +1,32 @@
 //! A match, in the surface's spellings of its cases.
 //!
-//! **A match is `match head` and one arm per case, closed by `end`**: a boolean match's `| false` and `| true`, a dispatch's literal keys and its `| _`, a family's arms by their constructors' tags with their payloads' binders under their marks and its catch-all `| _`, and a case split's `| 0` and `| p + 1`, `| []` and `| [h, ..t]`, `| x[]` and `| x[h, ..t]`. **A written motive is `: (binders) => motive` and builds the family it states**; a match with none states the goal it is checked against, `#{result = Ambient(T)}`. What a match's cases hold beside their arms is set in its `cases` field: the instance a family's match states, `#{cases = {stated = T}}`, and a list split's element type, `#{cases = {carrier = {elem = T}}}`, which no arm writes.
+//! **A match is `match head` and one arm per case, closed by `end`**: a boolean match's `| false` and `| true`, a dispatch's literal keys and its `| _`, a family's arms by their constructors' tags with their payloads' binders under their marks and its catch-all `| _`, and a case split's `| 0` and `| p + 1`, `| []` and `| [h, ..t]`, `| x[]` and `| x[h, ..t]`. **A match states the goal its arms inhabit, `#{goal = T}`.** What a match's cases hold beside their arms is set in its `cases` field: the instance a family's match states, `#{cases = {stated = T}}`, and a list split's element type, `#{cases = {carrier = {elem = T}}}`, which no arm writes.
 
 use {
     super::{
-        Decoration, Fields, LabelRead, ReadError, Reader, Refusal, called, core_read, malformed,
-        nested, stated_proofs, tree, value, value_fields, value_term, value_variant, word,
+        Decoration, Fields, LabelRead, ReadError, Reader, Refusal, core_read, nested,
+        stated_proofs, tree, value, value_fields, value_term,
     },
     crate::{
-        Binder, BytesPattern, CoreText, DecoratorField, Frame, FuncParam, Label, ListPattern,
-        MatchPattern, MatrixArm, NatLiteral, NatPattern, Pattern, Radix, Rendered, label_terms,
-        sub,
+        Binder, BytesPattern, CoreText, DecoratorField, Frame, Label, ListPattern, MatchPattern,
+        MatrixArm, NatLiteral, NatPattern, Radix, Rendered, label_terms, sub,
     },
     curios_common::Plicity,
     curios_core::{
-        Arity, Atom, Carrier, Cases, Free, InductArm, Many, Match, MatchResult, One, Scope, Term,
-        Two,
+        Arity, Atom, Carrier, Cases, Free, InductArm, Many, Match, One, Scope, Term, Two,
     },
     std::{array, iter},
 };
 
-/// A match: its head and motive, then each arm.
+/// A match: its head and goal, then each arm.
 pub fn match_written<D: Rendered>(
-    Match {
-        head,
-        result,
-        cases,
-    }: Match,
+    Match { head, goal, cases }: Match,
     frame: Frame<'_, D>,
 ) -> crate::Term<D> {
     // Each part written in the order the reader meets it, the head first, so a node a part shares with a later one is named where the reader reads it.
     let head = sub(head, frame);
     let mut fields = Vec::<Decoration<D>>::new();
-    let motive = match result {
-        MatchResult::Family(motive) => Some(motive_written(motive, frame)),
-        MatchResult::Ambient(goal) => {
-            fields.push((
-                "result",
-                value(called(word("Ambient"), vec![sub(goal, frame)])),
-            ));
-            None
-        }
-    };
+    fields.push(("goal", value(sub(goal, frame))));
     let mut held = Vec::<Decoration<D>>::new();
     let arms = match cases {
         Cases::Bool {
@@ -143,7 +128,7 @@ pub fn match_written<D: Rendered>(
     if !held.is_empty() {
         fields.push(("cases", nested(held)));
     }
-    let elimination = tree(crate::Subterm::Match(crate::Match { head, motive, arms }));
+    let elimination = tree(crate::Subterm::Match(crate::Match { head, arms }));
 
     frame.decorated(fields, elimination)
 }
@@ -175,34 +160,6 @@ fn cores<'l, D: Rendered, const N: usize>(
 ) -> [Vec<DecoratorField<D>>; N] {
     let mut labels = labels.map(|label| frame.label_fields(label));
     array::from_fn(|_| labels.next().unwrap_or_default())
-}
-
-/// A written motive: the function over its binders the family it states is.
-fn motive_written<D: Rendered>(
-    motive: Scope<curios_core::Many>,
-    frame: Frame<'_, D>,
-) -> crate::Term<D> {
-    let cores = motive
-        .label_iter()
-        .map(|label| frame.label_fields(label))
-        .collect::<Vec<_>>();
-    let labels = frame.labels(motive.label_iter());
-    let terms = label_terms(&labels);
-    let opened = motive.open(&terms.iter().collect::<Vec<_>>());
-    let params = labels
-        .iter()
-        .zip(cores)
-        .map(|(label, core)| FuncParam {
-            plicity: Plicity::Explicit,
-            pattern: Pattern::Binder(decorated(core, label, frame)),
-            annotation: None,
-        })
-        .collect();
-
-    tree(crate::Subterm::Func(crate::Func {
-        params,
-        body: sub(opened, frame),
-    }))
 }
 
 /// One arm: its pattern, then its body.
@@ -253,9 +210,9 @@ fn constructor_arm<D: Rendered>(
     )
 }
 
-/// A match: its head, its motive where one is written, and its cases, read off the spelling its arms are written in — a boolean match's `false` and `true`, a dispatch's keys and its `_`, a family's tags and its `_`, a case split's `0` and `p + 1`, `[]` and `[h, ..t]`, `x[]` and `x[h, ..t]`. A match with no motive states the goal it is checked against, `#{result = Ambient(T)}`, and what its cases hold beside their arms is set in `cases`.
+/// A match: its head, its goal, and its cases, read off the spelling its arms are written in — a boolean match's `false` and `true`, a dispatch's keys and its `_`, a family's tags and its `_`, a case split's `0` and `p + 1`, `[]` and `[h, ..t]`, `x[]` and `x[h, ..t]`. A match states the goal its arms inhabit, `#{goal = T}`, and what its cases hold beside their arms is set in `cases`.
 pub fn match_read(
-    crate::Match { head, motive, arms }: &crate::Match<CoreText>,
+    crate::Match { head, arms }: &crate::Match<CoreText>,
     fields: &mut Fields<'_>,
     reader: &mut Reader<'_>,
 ) -> Result<Term, ReadError> {
@@ -266,21 +223,9 @@ pub fn match_read(
         return Err(refused("an elimination's arm, which writes no guard"));
     }
     let head_read = core_read(head, reader)?;
-    let result = match (motive, fields.take("result")) {
-        (Some(motive), None) => MatchResult::Family(motive_read(motive, reader)?),
-        (None, Some(value)) => match value_variant(value)? {
-            ("Ambient", held) => match held.as_slice() {
-                [goal] => MatchResult::Ambient(core_read(goal, reader)?),
-                _ => return Err(malformed("`Ambient(T)`", value)),
-            },
-            _ => return Err(malformed("`Ambient(T)`", value)),
-        },
-        (Some(_), Some(value)) => return Err(malformed("a motive or a goal, not both", value)),
-        (None, None) => {
-            return Err(refused(
-                "a match's motive, `: (…) => P`, or its goal, `#{result = Ambient(T)}`",
-            ));
-        }
+    let goal = match fields.take("goal") {
+        Some(value) => core_read(&value_term(value)?, reader)?,
+        None => return Err(refused("a match's goal, `#{goal = T}`")),
     };
     let (mut stated, mut carrier) = (None, None);
     if let Some(value) = fields.take("cases") {
@@ -432,34 +377,9 @@ pub fn match_read(
 
     Ok(Term::from(curios_core::Subterm::Match(Match {
         head: head_read,
-        result,
+        goal,
         cases,
     })))
-}
-
-/// A written motive, `(i, x) => P`: its binders, which state no domain, over the family it states.
-fn motive_read(
-    motive: &crate::Term<CoreText>,
-    reader: &mut Reader<'_>,
-) -> Result<Scope<Many>, ReadError> {
-    let refused = || {
-        ReadError::at(
-            Refusal::Malformed("a motive, `(binders) => P`"),
-            motive.span(),
-        )
-    };
-    let crate::Subterm::Func(crate::Func { params, body }) = motive.as_subterm() else {
-        return Err(refused());
-    };
-    let labels = params
-        .iter()
-        .map(|param| match (&param.pattern, &param.annotation) {
-            (Pattern::Binder(binder), None) => LabelRead::binder(binder),
-            _ => Err(refused()),
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    many_read(&labels, body, reader)
 }
 
 /// Whether `binder` is a default arm's `_` under no decorator: a default binds nothing in Core, so nothing is stated of its label.

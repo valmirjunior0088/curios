@@ -105,12 +105,12 @@ fn a_witness_keys_through_a_partially_applied_family() {
         satisfy (@S : Type) => Monad((A : Type) => Box(S, A)) {
             pure(@A, a) = Box/wrap(a),
             bind(@A, @B, m, f) =
-                match m : (_) => Box(S, B)
+                match m
                 | wrap(a) => f(a)
                 end,
         }
         let unwrap(@S : Type, @A : Type, m : Box(S, A)) -> A =
-            match m : (_) => A
+            match m
             | wrap(a) => a
             end;
         let doubled(@M : (Type) -> Type, use Monad(M), m : M(Nat)) -> M(Nat) =

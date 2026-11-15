@@ -158,7 +158,7 @@ pub struct Lowerer<'a, 'b> {
     context: &'a Context<'b>,
     /// The declaration this lowers, which a lint names its binders by: the one identity a later lowering of the declaration unchanged gives them too. `None` for an entry's final term.
     declaration: Option<curios_core::Global>,
-    /// The enclosing local binders (function and `let` binders, match-arm patterns, motive labels), innermost last. A bare reference whose spelling appears here resolves to the innermost such binder rather than a like-named module binding — see [`Self::resolve_name`]. Compiler-minted binders are never registered: nothing can write their name.
+    /// The enclosing local binders (function and `let` binders, match-arm patterns), innermost last. A bare reference whose spelling appears here resolves to the innermost such binder rather than a like-named module binding — see [`Self::resolve_name`]. Compiler-minted binders are never registered: nothing can write their name.
     scope: RefCell<LexicalScope>,
     /// Every written binder a reference could reach, with where it was written — the `unused-binder` lint's candidates, decided by [`Self::flush`] once the whole declaration is lowered, since a goal anywhere in it or a mention in its declared type is decided after the binder's scope closes.
     candidates: RefCell<Vec<Candidate>>,
@@ -680,12 +680,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Match(match_) => {
                 // A match is handed on as the matrix of its arms, each as it is written — see `MatchCompiler::headed`. Elaboration compiles the patterns, where the scrutinee's type is known.
                 let head = self.term(&match_.head)?;
-                MatchCompiler::new(self).headed(
-                    head,
-                    &match_.motive,
-                    &match_.arms,
-                    MatchCompiler::term,
-                )?
+                MatchCompiler::new(self).headed(head, &match_.arms, MatchCompiler::term)?
             }
             // A match with no head is the match of no columns — see `MatchCompiler::headless`.
             Subterm::HeadlessMatch(headless) => {
@@ -1327,7 +1322,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 } => {
                     let held = curios_core::Term::matrix(curios_core::Matrix {
                         head: curios_core::Term::var(curios_core::Var::free(binder)),
-                        motive: None,
                         arms: vec![curios_core::Arm {
                             alternatives: vec![curios_core::Row {
                                 pattern,
@@ -1458,7 +1452,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// The `Bytes` sibling of [`Self::lower_list_literal`]: a constant literal lowers to one packed value, and atom and spread segments splice into an n-ary `BytesConcat` (the shared internal intrinsic has no element-type slot). Adjacent constant atoms — the values [`Self::bytes_constant_atom`] recognizes — fold into packed runs as they are met, so `x[0x48, 0x69]` is the one packed value it is rather than a chain of appends.
     ///
-    /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BytesAppend` onto whatever precedes it, with no carve-out: `x[0x48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `x[h, ..t]` meets a refined motive without unfolding anything.
+    /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BytesAppend` onto whatever precedes it, with no carve-out: `x[0x48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `x[h, ..t]` meets a refined goal without unfolding anything.
     pub fn lower_bytes_literal(
         segments: &[BytesSegment],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,

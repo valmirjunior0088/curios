@@ -11,10 +11,10 @@ use {
     curios_common::{InfixOp, Plicity, Qualifier},
     curios_core::{
         Apply, Argument, Arm, Bang, Carrier, Cases, Field, Free, Global, Guard, InductArm,
-        InductType, Infix, Instance, Intrinsic, Level, Many, Match, MatchResult, Matrix, Metavar,
-        MetavarId, MetavarOrigin, MetavarSpine, Nat, One, Pattern, Proj, Row, Scope, Struct,
-        StructEntry, StructType, Subterm, Term, Totality, Transient, Tuple, Two, UniverseContext,
-        Universes, Variant,
+        InductType, Infix, Instance, Intrinsic, Level, Many, Match, Matrix, Metavar, MetavarId,
+        MetavarOrigin, MetavarSpine, Nat, One, Pattern, Proj, Row, Scope, Struct, StructEntry,
+        StructType, Subterm, Term, Totality, Transient, Tuple, Two, UniverseContext, Universes,
+        Variant,
     },
     curios_num::Natural,
     std::{collections::BTreeMap, slice, sync::Arc},
@@ -133,8 +133,6 @@ const FORMS: &[&str] = &[
     "a constructor",
     "a structure type",
     "a structure literal",
-    "a match at a motive",
-    "a match at an ambient goal",
     "a boolean match",
     "a dispatch",
     "a nominal match",
@@ -173,22 +171,16 @@ fn forms(term: &Term) -> Vec<&'static str> {
         Subterm::Variant(_) => vec!["a constructor"],
         Subterm::StructType(_) => vec!["a structure type"],
         Subterm::Struct(_) => vec!["a structure literal"],
-        Subterm::Match(Match { result, cases, .. }) => vec![
-            match result {
-                MatchResult::Family(_) => "a match at a motive",
-                MatchResult::Ambient(_) => "a match at an ambient goal",
+        Subterm::Match(Match { cases, .. }) => vec![match cases {
+            Cases::Bool { .. } => "a boolean match",
+            Cases::Switch { .. } => "a dispatch",
+            Cases::Induct { .. } => "a nominal match",
+            Cases::FreeMonoid { carrier } => match carrier {
+                Carrier::Nat { .. } => "a `Nat` eliminator",
+                Carrier::Bytes { .. } => "a `Bytes` eliminator",
+                Carrier::List { .. } => "a `List` eliminator",
             },
-            match cases {
-                Cases::Bool { .. } => "a boolean match",
-                Cases::Switch { .. } => "a dispatch",
-                Cases::Induct { .. } => "a nominal match",
-                Cases::FreeMonoid { carrier } => match carrier {
-                    Carrier::Nat { .. } => "a `Nat` eliminator",
-                    Carrier::Bytes { .. } => "a `Bytes` eliminator",
-                    Carrier::List { .. } => "a `List` eliminator",
-                },
-            },
-        ],
+        }],
         Subterm::Let(_) => vec!["a let"],
         Subterm::Rec(_) => vec!["a group"],
     }
@@ -215,7 +207,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
     let matching = |markers: &mut Markers, cases: Cases| -> Term {
         Subterm::Match(Match {
             head: markers.visited(),
-            result: MatchResult::Family(Scope::close(Many(1), &[&binder(1)], markers.visited())),
+            goal: markers.visited(),
             cases,
         })
         .into()
@@ -260,7 +252,6 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             Term::matrix(Matrix {
                 head: markers.visited(),
-                motive: Some(markers.visited()),
                 arms: vec![Arm {
                     alternatives: vec![
                         Row {
@@ -374,7 +365,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         Specimen::of(&mut markers, |markers| {
             Subterm::Match(Match {
                 head: markers.visited(),
-                result: MatchResult::Ambient(markers.visited()),
+                goal: markers.visited(),
                 cases: Cases::Bool {
                     false_case: markers.visited(),
                     true_case: markers.visited(),
@@ -597,7 +588,6 @@ fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
                 [(a, self_type.clone())],
                 Term::induct_match(
                     Term::free_var(&a),
-                    None,
                     nat(),
                     [("c", vec![g], Term::apply(Term::free_var(&f), [applied()]))],
                 ),
@@ -664,7 +654,7 @@ fn a_lambda_applied_to_the_arm_payload_descends() {
                 Term::func_type([(a, self_type.clone()), (b, self_type.clone())], nat()),
                 Term::func(
                     [(a, self_type.clone()), (b, self_type.clone())],
-                    Term::induct_match(Term::free_var(&a), None, nat(), [("c", vec![t], redex)]),
+                    Term::induct_match(Term::free_var(&a), nat(), [("c", vec![t], redex)]),
                 ),
             )],
             Term::free_var(&f),
@@ -720,7 +710,7 @@ fn a_let_alias_of_the_arm_payload_descends() {
                 Term::func_type([(a, self_type.clone()), (b, self_type.clone())], nat()),
                 Term::func(
                     [(a, self_type.clone()), (b, self_type.clone())],
-                    Term::induct_match(Term::free_var(&a), None, nat(), [("c", vec![t], arm)]),
+                    Term::induct_match(Term::free_var(&a), nat(), [("c", vec![t], arm)]),
                 ),
             )],
             Term::free_var(&f),
@@ -868,7 +858,6 @@ fn a_payload_stuck_on_a_neutral_is_read_at_mixed_and_refused() {
     let guard = Global::Authored(Qualifier::from(["g"]));
     let payload = Term::bool_match(
         Term::instance(guard, Universes::default()),
-        None,
         Term::type_ground(),
         Term::intrinsic(Intrinsic::NatType),
         bad_type,
@@ -918,7 +907,6 @@ fn a_call_argument_stuck_on_a_neutral_grades_unread() {
     let guard = Global::Authored(Qualifier::from(["g"]));
     let argument = Term::bool_match(
         Term::instance(guard, Universes::default()),
-        None,
         self_type.clone(),
         Term::free_var(&t),
         Term::free_var(&t),
@@ -931,7 +919,6 @@ fn a_call_argument_stuck_on_a_neutral_grades_unread() {
                 [(a, self_type.clone())],
                 Term::induct_match(
                     Term::free_var(&a),
-                    None,
                     nat(),
                     [("c", vec![t], Term::apply(Term::free_var(&f), [argument]))],
                 ),

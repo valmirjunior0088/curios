@@ -91,18 +91,18 @@ impl SeqCarrier<'_> {
     }
 }
 
-/// Where a match stands: its scrutinee, the result it is typed at, and the hint of the binding its value goes to. Every elimination form is erased against one.
+/// Where a match stands: its scrutinee, the goal it is typed at, and the hint of the binding its value goes to. Every elimination form is erased against one.
 #[derive(Clone, Copy)]
 struct Site<'a> {
     head: &'a curios_core::Term,
-    result: &'a curios_core::MatchResult,
+    goal: &'a curios_core::Term,
     hint: Option<&'a str>,
 }
 
-/// The match-wide data an inductive elimination threads to each arm. The result is taken at the scrutinee's indices and the head — the case's target indices and value in an enumerated arm, the actual ones in the default.
+/// The match-wide data an inductive elimination threads to each arm. The goal is read at the case's target indices and value in an enumerated arm, and as it stands in the default.
 struct InductMatch<'a> {
     head: &'a curios_core::Term,
-    result: &'a curios_core::MatchResult,
+    goal: &'a curios_core::Term,
     /// The scrutinee's type, the family at its universes, parameters and actual indices.
     family: &'a curios_core::InductType,
 }
@@ -137,12 +137,8 @@ impl Eraser<'_> {
         m: &curios_core::Match,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let curios_core::Match {
-            head,
-            result,
-            cases,
-        } = m;
-        let site = Site { head, result, hint };
+        let curios_core::Match { head, goal, cases } = m;
+        let site = Site { head, goal, hint };
 
         match cases {
             curios_core::Cases::Bool {
@@ -207,16 +203,16 @@ impl Eraser<'_> {
         Ok(Ok((curios_core::Term::free_var(&name), atom)))
     }
 
-    /// Open a fresh block, erase `body` as a tail refined by `head = value` and typed at the result at `value`, and seal it — the leaf-arm shape with no payload binders.
+    /// Open a fresh block, erase `body` as a tail refined by `head = value` and typed at the goal at `value`, and seal it — the leaf-arm shape with no payload binders.
     fn refined_arm(
         &mut self,
         context: &mut Reader,
         head: &curios_core::Term,
         value: &curios_core::Term,
-        result: &curios_core::MatchResult,
+        goal: &curios_core::Term,
         body: &curios_core::Term,
     ) -> Result<curios_anf::BlockId, Error> {
-        let expected = result.at(head, &[], &[], value);
+        let expected = curios_core::goal_at(goal, head, &[], &[], value);
         self.builder.open_block();
         let outcome = self.in_arm(context, |lowering, context| {
             refine(context, head, value)?;
@@ -245,7 +241,7 @@ impl Eraser<'_> {
         false_case: &curios_core::Term,
         true_case: &curios_core::Term,
     ) -> Result<Outcome, Error> {
-        let Site { head, result, hint } = site;
+        let Site { head, goal, hint } = site;
         // The form states its scrutinee's type, so none is read.
         let head_type = curios_core::Term::intrinsic(curios_core::Intrinsic::BoolType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
@@ -254,14 +250,14 @@ impl Eraser<'_> {
             context,
             head,
             &curios_core::Term::intrinsic(curios_core::Intrinsic::Bool(false)),
-            result,
+            goal,
             false_case,
         )?;
         let if_true = self.refined_arm(
             context,
             head,
             &curios_core::Term::intrinsic(curios_core::Intrinsic::Bool(true)),
-            result,
+            goal,
             true_case,
         )?;
 
@@ -283,7 +279,7 @@ impl Eraser<'_> {
         cases: &[(Natural, curios_core::Term)],
         default: &curios_core::Term,
     ) -> Result<Outcome, Error> {
-        let Site { head, result, hint } = site;
+        let Site { head, goal, hint } = site;
         let head_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
@@ -293,14 +289,14 @@ impl Eraser<'_> {
             let literal = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
                 curios_core::Nat::new(value.clone()),
             ));
-            let block = self.refined_arm(context, head, &literal, result, body)?;
+            let block = self.refined_arm(context, head, &literal, goal, body)?;
             nat_cases.push(curios_anf::NatCase {
                 key: value.clone(),
                 block,
             });
         }
 
-        let default_expected = result.of(head, &[]);
+        let default_expected = goal.clone();
         let default = self.open_arm(context, &default_expected, default)?;
 
         Ok(self.bind(
@@ -321,7 +317,7 @@ impl Eraser<'_> {
         empty_case: &curios_core::Term,
         cons_case: &curios_core::Scope<curios_core::One>,
     ) -> Result<Outcome, Error> {
-        let Site { head, result, hint } = site;
+        let Site { head, goal, hint } = site;
         let head_type = curios_core::Term::intrinsic(curios_core::Intrinsic::NatType);
         let scrutinee = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
@@ -331,7 +327,7 @@ impl Eraser<'_> {
             &curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::new(
                 0usize,
             ))),
-            result,
+            goal,
             empty_case,
         )?;
 
@@ -369,7 +365,7 @@ impl Eraser<'_> {
             refine(context, head, &successor)?;
 
             let peeled = cons_case.open(&[&pred_var]);
-            let expected = result.at(head, &[], &[], &successor);
+            let expected = curios_core::goal_at(goal, head, &[], &[], &successor);
             lowering.walk(context, &peeled, &expected, None)
         })?;
         let default = self.seal(outcome);
@@ -486,11 +482,11 @@ impl Eraser<'_> {
         empty_case: &curios_core::Term,
         cons_case: &curios_core::Scope<curios_core::Two>,
     ) -> Result<Outcome, Error> {
-        let Site { head, result, hint } = site;
+        let Site { head, goal, hint } = site;
         let head_type = carrier.sequence_type();
         let sequence = emitted!(self.walk(context, head, &head_type, Some("scrutinee"))?);
 
-        let empty = self.refined_arm(context, head, &carrier.empty_value(), result, empty_case)?;
+        let empty = self.refined_arm(context, head, &carrier.empty_value(), goal, empty_case)?;
 
         let element_hint = cons_case.first_hint().map(str::to_string);
         let suffix_hint = cons_case.second_hint().map(str::to_string);
@@ -517,7 +513,7 @@ impl Eraser<'_> {
             refine(context, head, &cons_value)?;
 
             let peeled = cons_case.open(&[&element_var, &suffix_var]);
-            let expected = result.at(head, &[], &[], &cons_value);
+            let expected = curios_core::goal_at(goal, head, &[], &[], &cons_value);
             lowering.walk(context, &peeled, &expected, None)
         })?;
         let cons_block = self.seal(outcome);
@@ -545,7 +541,7 @@ impl Eraser<'_> {
         cases: &[(curios_core::Atom, curios_core::InductArm)],
         default: Option<&curios_core::Term>,
     ) -> Result<Outcome, Error> {
-        let Site { head, result, hint } = site;
+        let Site { head, goal, hint } = site;
         if cases.is_empty() && default.is_none() {
             return Ok(Outcome::Diverged(curios_anf::Terminator::Unreachable));
         }
@@ -557,11 +553,7 @@ impl Eraser<'_> {
         };
         // Each arm reads its one constructor at the scrutinee's universes ([`InductMatch::payload`]), and the row is the family's at the sorts they state.
         let name = self.named(family.name, Sorts::of(&family.universes.qualities));
-        let m = InductMatch {
-            head,
-            result,
-            family,
-        };
+        let m = InductMatch { head, goal, family };
 
         // A proof/type scrutinee carries no runtime tag; its subsingleton elimination reduces to its single live arm, erased inline.
         if is_erasable(context, &head_type)? {
@@ -638,7 +630,7 @@ impl Eraser<'_> {
         ))
     }
 
-    /// One constructor arm: bind its payload (a kept field to a fresh value in payload order, an erased field to the unit constant), refine the scrutinee and indices, and erase the body as a tail at the opened motive.
+    /// One constructor arm: bind its payload (a kept field to a fresh value in payload order, an erased field to the unit constant), refine the scrutinee and indices, and erase the body as a tail at the goal at its case.
     fn variant_arm(
         &mut self,
         context: &mut Reader,
@@ -697,14 +689,14 @@ impl Eraser<'_> {
         })
     }
 
-    /// The catch-all default: binds nothing and sees the unrefined head, so the result is taken at the match's actual indices and head.
+    /// The catch-all default: binds nothing and sees the unrefined head, so it is typed at the goal as it stands.
     fn default_arm(
         &mut self,
         context: &mut Reader,
         m: &InductMatch<'_>,
         default: &curios_core::Term,
     ) -> Result<curios_anf::BlockId, Error> {
-        let expected = m.result.of(m.head, &m.family.indices);
+        let expected = m.goal.clone();
         self.open_arm(context, &expected, default)
     }
 
@@ -719,7 +711,7 @@ impl Eraser<'_> {
         // No enumerated arm — a bare `_` ladder over a subsingleton: the default is the single live result and binds nothing.
         let Some((tag, scope)) = cases.iter().next() else {
             let default = default.expect("erase: erasable match with no arms has a default");
-            let expected = m.result.of(m.head, &m.family.indices);
+            let expected = m.goal.clone();
             return self.walk(context, default, &expected, None);
         };
 
@@ -793,7 +785,8 @@ fn refine_arm(
         return Ok(None);
     }
 
-    Ok(Some(m.result.at(
+    Ok(Some(curios_core::goal_at(
+        m.goal,
         m.head,
         &m.family.indices,
         &entered.targets,

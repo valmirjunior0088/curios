@@ -91,8 +91,7 @@ fn every_law_between_truth_values_holds_under_a_match() {
                 let name = name(index, carrier);
                 (name.to_owned(), format!("{name}: {}", type_name(carrier)))
             });
-            let under =
-                |side: &str| format!("match {side}: (_) => Nat | true => 1 | false => 0 end");
+            let under = |side: &str| format!("match {side} | true => 1 | false => 0 end");
             (
                 binders,
                 format!("Eq()({}, {})", under(&left), under(&right)),
@@ -122,7 +121,7 @@ fn every_law_holds_at_a_product_of_two_sums_against_its_distribution_under_a_mat
                 let name = name(index, carrier);
                 (name.to_owned(), format!("{name}: {}", type_name(carrier)))
             });
-            let under = |side: &str| format!("match {side}: (_) => Nat | 0 => 0 | m + 1 => m end");
+            let under = |side: &str| format!("match {side} | 0 => 0 | m + 1 => m end");
             Some((
                 binders,
                 format!("Eq()({}, {})", under(&left), under(&right)),
@@ -311,7 +310,7 @@ fn every_law_holds_at_every_operand_written_two_ways() {
     held_at_two_spellings(|_| true);
 }
 
-/// Every law with each variable a stuck `match` spelled two ways: `match xc | true => x0 | false => x1 end` on the claim's left, and on its right the same `match` with its motive written, `match xc: (_) => Nat | …`. The two convert without being one term and hash apart, so the row holds only where each checker classes them, and, where a fold orients a magnitude by the order of its atoms, only where that fold is taken again over the classes. It is stated at several orders of its binders, since the order atoms are put in follows them.
+/// Every law with each variable a stuck `match` spelled two ways: `match xc | true => x0 | false => x1 end` on the claim's left, and on its right the same `match` at the goal `Same(T)`, a definition of `T` a `let`'s annotation states. The two convert without being one term and hash apart, so the row holds only where each checker classes them, and, where a fold orients a magnitude by the order of its atoms, only where that fold is taken again over the classes. It is stated at several orders of its binders, since the order atoms are put in follows them.
 #[test]
 fn every_law_holds_over_atoms_spelled_two_ways() {
     const ORDERS: usize = 6;
@@ -322,12 +321,12 @@ fn every_law_holds_over_atoms_spelled_two_ways() {
             let (binders, claim) = spell_sides(&row.law, |side, index, carrier| {
                 let name = name(index, carrier);
                 let of = type_name(carrier);
-                let motive = match side {
-                    Side::Left => String::new(),
-                    Side::Right => format!(": (_) => {of}"),
-                };
+                let matched = format!("match {name}c | true => {name}0 | false => {name}1 end");
                 (
-                    format!("(match {name}c{motive} | true => {name}0 | false => {name}1 end)"),
+                    match side {
+                        Side::Left => format!("({matched})"),
+                        Side::Right => format!("(let stated: Same({of}) = {matched}; stated)"),
+                    },
                     format!("{name}c: Bool, {name}0: {of}, {name}1: {of}"),
                 )
             });
@@ -369,7 +368,7 @@ fn every_law_holds_over_atoms_spelled_two_ways() {
                 (telescope, claim.clone())
             })
             .collect::<Vec<_>>();
-        if let Err(found) = closes(IMPORTS, &rows) {
+        if let Err(found) = closes(&format!("{IMPORTS}\nlet Same(T: Type) -> Type = T;"), &rows) {
             failures.push(format!("at order {order}:\n{}", found.join("\n")));
         }
     }

@@ -463,7 +463,7 @@ fn state(entry: &mut curios_core::Entrypoint, tail: &EntryTail, syntax: &SyntaxR
 
 /// `term` with each of its tails handed to `/std/Program`'s `execute`, which says what a value of the tail's type does as a whole program: the tail's type is the call's implicit, read by inference, and its witness is resolved as an operator's is.
 ///
-/// A tail is reached through a block of local definitions to what the block closes with, through a `!` to what its continuation closes with, and through a `match` that writes no motive to each of its arms. Anything else is one — a `match` whose motive is written among them, being one term of the type it states. A written goal is left as it stands, so it is asked at the entry's own type.
+/// A tail is reached through a block of local definitions to what the block closes with, through a `!` to what its continuation closes with, and through a `match` to each of its arms. Anything else is one. A written goal is left as it stands, so it is asked at the entry's own type.
 ///
 /// The whole term is not what is executed: a `!` reads its region from the type it is checked against, and a term handed to `execute` is checked against that call's unsolved implicit. With the tails executed, the entry's stated type is every region's on the way to them, as it is where nothing is executed.
 ///
@@ -482,10 +482,9 @@ fn executed(term: &Term, syntax: &SyntaxRegistry) -> Term {
         Subterm::Transient(Transient::Bang(bang)) => {
             Term::bang(bang.action.clone(), closing(&bang.continuation, syntax))
         }
-        Subterm::Transient(Transient::Matrix(matrix)) if matrix.motive.is_none() => {
+        Subterm::Transient(Transient::Matrix(matrix)) => {
             Term::from(Subterm::Transient(Transient::Matrix(Matrix {
                 head: matrix.head.clone(),
-                motive: None,
                 arms: matrix
                     .arms
                     .iter()

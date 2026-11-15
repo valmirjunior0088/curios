@@ -361,7 +361,7 @@ fn compared_in(context: &Context, parts: &[Term]) -> Option<BTreeSet<UniverseMet
 ///
 /// The body is read as a signature's parts are ([`compared_in`]), as it is written: a binder's annotation is unread, being the signature's to hold, and a member of a group is read as a `let` is, its siblings standing as the names they are assumed under. Where the body may hold any level, every level it mentions is held.
 ///
-/// `lifted` are the levels of the declaration's result sort alone, and none of them is held, nor any level conversion has joined to one: a body restates the sort it answers at wherever it says what it answers, in a match's motive, and cumulativity lifts the result there as at the signature's terminal.
+/// `lifted` are the levels of the declaration's result sort alone, and none of them is held, nor any level conversion has joined to one: a body restates the sort it answers at wherever it says what it answers, in a match's goal, and cumulativity lifts the result there as at the signature's terminal.
 pub fn body_levels(
     context: &Context,
     type_: &Term,

@@ -150,13 +150,13 @@ fn an_applied_match_breaks_its_arms_to_keep_the_argument_attached() {
     assert_eq!(
         canonical_within_width(
             "pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =\n\
-             match a: (s) => (Holds(s && b)) -> Holds(s) | true => (_) => True/qed() | false => (h) => h end(p);\n",
+             match a | true => (_) => True/qed() | false => (proof_of_a) => proof_of_a end(p);\n",
         ),
         concat!(
             "pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =\n",
-            "    match a: (s) => (Holds(s && b)) -> Holds(s)\n",
+            "    match a\n",
             "    | true => (_) => True/qed()\n",
-            "    | false => (h) => h\n",
+            "    | false => (proof_of_a) => proof_of_a\n",
             "    end(p);\n",
         )
     );

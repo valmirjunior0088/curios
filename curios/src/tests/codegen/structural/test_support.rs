@@ -21,7 +21,7 @@ use {
 pub const LCG: &str = r#"
     use /std/{Nat, List, Proc};
     let loop(k : Nat, x : Nat) -> Nat =
-        match k : (_) => Nat
+        match k
         | 0 => x
         | kp + 1 => loop(kp, 75 * x % 65537)
         end;
@@ -39,12 +39,12 @@ pub const TREES: &str = r#"
     | node(Nat, Tree, Tree)
     end
     let build(d : Nat, v : Nat) -> Tree =
-        match d : (_) => Tree
+        match d
         | 0 => Tree/leaf(v)
         | dp + 1 => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
         end;
     let sum(t : Tree) -> Nat =
-        match t : (_) => Nat
+        match t
         | leaf(n) => n % 1000003
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
         end;
@@ -58,7 +58,7 @@ pub const TREES: &str = r#"
 pub const HIGHER_ORDER: &str = r#"
     use /std/{Nat, Bool, List, Proc};
     let pick(b : Bool) -> (Nat) -> Nat =
-        match b : (_) => (Nat) -> Nat
+        match b
         | true => (y) => y + 1
         | false => (y) => y * 2
         end;
@@ -75,7 +75,7 @@ pub const DIRECT_ESCAPING: &str = r#"
     let inc(x : Nat) -> Nat = x + 1;
     let apply(g : (Nat) -> Nat, x : Nat) -> Nat = g(x);
     let select(b : Bool, g : (Nat) -> Nat) -> (Nat) -> Nat =
-        match b : (_) => (Nat) -> Nat
+        match b
         | true => g
         | false => (y) => y
         end;
@@ -90,7 +90,7 @@ pub const DIRECT_ESCAPING: &str = r#"
 pub const FUNCTION_ONLY: &str = r#"
     use /std/{Nat, List, Proc};
     let down(n : Nat, acc : Nat) -> Nat =
-        match n : (_) => Nat
+        match n
         | 0 => acc
         | p + 1 => down(p, acc + 1)
         end;
@@ -105,14 +105,14 @@ pub const FUNCTION_ONLY: &str = r#"
 pub const MUTUAL_RECURSION: &str = r#"
     use /std/{Nat, List, Proc};
     let ping(n : Nat) -> Nat =
-        match n : (_) => Nat | 0 => 0 | p + 1 => pong(p) end
+        match n | 0 => 0 | p + 1 => pong(p) end
     and pong(n : Nat) -> Nat =
-        match n : (_) => Nat | 0 => 1 | p + 1 => ping(p) end;
+        match n | 0 => 1 | p + 1 => ping(p) end;
     let entry() -> /std/Io({}) =
         let taint = List/len(Proc/args()!);
         let n : Nat = taint;
         let start = n <= 0;
-        /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end));
+        /std/print(Nat/to_str(match start | true => ping(n) | false => pong(n) end));
     entry()
     "#;
 
@@ -126,7 +126,7 @@ pub const SPLIT_RETURN: &str = r#"
     | done(Nat, Nat)
     end
     let advance(x : Nat) -> Step =
-        match x % 7 : (_) => Step
+        match x % 7
         | 0 => Step/done((x * 3 + 1) * 13 % 20011, (x * 7 + 3) % 20011)
         | k + 1 =>
             let u = (x * 5 + 7) % 20011;
@@ -135,12 +135,12 @@ pub const SPLIT_RETURN: &str = r#"
             Step/more((v * 9 + 4) % 20011, (w * 6 + 5) % 20011, (u * 2 + 9) % 20011)
         end;
     let first(a : Nat) -> Nat =
-        match advance(a) : (_) => Nat
+        match advance(a)
         | more(p, q, t) => (p + q + t) % 30011
         | done(r, s) => (r + s) % 30011
         end;
     let second(b : Nat) -> Nat =
-        match advance(b + 1) : (_) => Nat
+        match advance(b + 1)
         | more(p, q, t) => (p * 2 + q + t) % 40009
         | done(r, s) => (r * 3 + s) % 40009
         end;
@@ -161,7 +161,7 @@ pub const SPLIT_RETURN: &str = r#"
 pub const UNCURRY: &str = r#"
     use /std/{Nat, List, Proc};
     let walk(n : Nat) -> (Nat) -> Nat =
-        match n : (_) => (Nat) -> Nat
+        match n
         | 0 => (s) => (s * 7 + 13) % 30011
         | m + 1 => (s) =>
             let a = (s * 5 + 3) % 30011;
@@ -180,7 +180,7 @@ pub const UNCURRY: &str = r#"
 pub const UNCURRY_CAPTURED: &str = r#"
     use /std/{Nat, List, Str, Proc};
     let mk(n : Nat) -> (Nat) -> Nat =
-        match n : (_) => (Nat) -> Nat
+        match n
         | 0 => (m) => m
         | p + 1 =>
             let f = mk(p);
@@ -218,10 +218,10 @@ pub const UNCURRY_THROUGH_A_CALL: &str = r#"
 pub const LOOPED_PICK: &str = r#"
     use /std/{Nat, Bool, List, Proc};
     let spin(k : Nat, acc : Nat) -> Nat =
-        match k : (_) => Nat
+        match k
         | 0 => acc
         | p + 1 =>
-            let f = match acc % 2 <= 0 : (_) => (Nat) -> Nat
+            let f = match acc % 2 <= 0
                 | true => (y) => (y * 7 + 1) % 30011
                 | false => (y) => (y * 3 + 5) % 30011
                 end;
@@ -270,11 +270,11 @@ pub const LIST_EQUALITY: &str = r#"
 pub const VARIANT_FILLER: &str = r#"
     use /std/{Nat, Flt, Option, List, Proc};
     let spin(k : Nat, o : Option(Flt)) -> Flt =
-        match k : (_) => Flt
+        match k
         | 0 => Option/unwrap_or(o, +0.25) * +2.0
         | p + 1 =>
             let next =
-                match Nat/eql(p % 3, 0) : (_) => Option(Flt)
+                match Nat/eql(p % 3, 0)
                 | true => Option/some(Nat/to_flt(p) * +1.5 + +2.0)
                 | false => Option/none()
                 end;
@@ -469,16 +469,18 @@ pub const COMPUTED_TYPE: &str = r#"
     let Held(b : Bool) -> Type =
         match b | true => Flt | false => Str end;
     let held(b : Bool, n : Nat) -> Held(b) =
-        match b : (c) => Held(c)
+        match b
         | true => Nat/to_flt(n) * +1.5
         | false => Str/concat("text ", Nat/to_str(n))
         end;
     let told(b : Bool, n : Nat) -> Str =
         let v = held(b, n);
-        (match b : (c) => (Held(c)) -> Str
+        let tell: (Held(b)) -> Str =
+            match b
             | true => (x) => Flt/to_str(x + +0.5)
             | false => (x) => x
-            end)(v);
+            end;
+        tell(v);
     let entry() -> /std/Io({}) =
         let taint = List/len(Proc/args()!);
         /std/print(Str/join(" | ", [told(taint % 2 == 0, taint + 2), told(taint % 2 == 1, taint + 3)]));

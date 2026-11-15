@@ -1,16 +1,15 @@
-//! Inductive and matrix matches, motives, and patterns.
+//! Inductive and matrix matches, and patterns.
 
 use {crate::*, curios_common::Plicity, curios_num::Natural};
 
 #[test]
 fn inductive_match_nullary_and_unary() {
     assert_eq!(
-        "match v : Bin\n| null() => \"null\"\n| bool_(b) => b\nend"
+        "match v\n| null() => \"null\"\n| bool_(b) => b\nend"
             .parse::<Term>()
             .unwrap(),
         Subterm::Match(Match {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
-            motive: Some(Subterm::Name(Name::from(["Bin".to_string()])).into()),
             arms: vec![
                 MatrixArm::of(
                     MatchPattern::Variant {
@@ -35,12 +34,9 @@ fn inductive_match_nullary_and_unary() {
 #[test]
 fn inductive_match_multi_binder() {
     assert_eq!(
-        "match v : T\n| lit(a, b) => a\nend"
-            .parse::<Term>()
-            .unwrap(),
+        "match v\n| lit(a, b) => a\nend".parse::<Term>().unwrap(),
         Subterm::Match(Match {
             head: Subterm::Name(Name::from(["v".to_string()])).into(),
-            motive: Some(Subterm::Name(Name::from(["T".to_string()])).into()),
             arms: vec![MatrixArm::of(
                 MatchPattern::Variant {
                     tag: "lit".to_string(),
@@ -54,36 +50,6 @@ fn inductive_match_multi_binder() {
         })
         .into()
     );
-}
-
-#[test]
-fn match_omitted_motive() {
-    // Dropping the `: motive` clause entirely yields `motive: None`; the elaborator later lowers it to a fresh metavariable (sugar for `: _`).
-    assert_eq!(
-        "match x | foo(y) => y end".parse::<Term>().unwrap(),
-        Subterm::Match(Match {
-            head: Subterm::Name(Name::from(["x".to_string()])).into(),
-            motive: None,
-            arms: vec![MatrixArm::of(
-                MatchPattern::Variant {
-                    tag: "foo".to_string(),
-                    args: vec![(Plicity::Explicit, MatchPattern::Binder("y".into()))],
-                },
-                Subterm::Name(Name::from(["y".to_string()])).into()
-            )],
-        })
-        .into()
-    );
-}
-
-#[test]
-fn omitted_motive_round_trips() {
-    let term = "match x | foo(y) => y end".parse::<Term>().unwrap();
-    let printed = term.to_string();
-    // An omitted motive prints back without the `: …` clause …
-    assert!(!printed.contains(" : "));
-    // … and re-parses to the same tree.
-    assert_eq!(printed.parse::<Term>().unwrap(), term);
 }
 
 #[test]
@@ -163,7 +129,7 @@ fn matrix_match_round_trips() {
         "match p | (a, b) => a end",
         "match p | Point { a, b } => a end",
         // The spec's own motivating example: a single tupled head, four fully-enumerated rows over two independent `Option`-shaped columns.
-        "match p : R\n\
+        "match p\n\
          | (some(x), some(y)) => f(x, y)\n\
          | (some(x), none()) => g(x)\n\
          | (none(), some(y)) => h(y)\n\
@@ -190,35 +156,6 @@ fn matrix_match_round_trips() {
             term.to_string().parse::<Term>().unwrap(),
             term,
             "matrix match round-trip failed for {source:?}"
-        );
-    }
-}
-
-// The motive is an ordinary term, so every spelling it can take must survive print → re-parse with arms following it. There is no motive grammar and no backtracking: a motive term always terminates at the first `|`, because `|` is not an infix operator.
-#[test]
-fn match_motive_spellings_round_trip() {
-    for source in [
-        // Binders only, one per index then the scrutinee.
-        "match p : (s, t, q) => Eq(t, s)\n| refl(z) => e\nend",
-        // Written binder annotations, including one naming earlier binders.
-        "match p : (s : A, t : A, q : Eq(s, t)) => Eq(t, s)\n| refl(z) => e\nend",
-        // A constant motive: a lambda whose binders are all `_`.
-        "match v : (_, _) => Nat\n| nil() => a\n| cons(m, x, xs) => b\nend",
-        // A motive naming a top-level family, eta-expanded by elaboration.
-        "match p : discriminates_eq\n| refl(z) => e\nend",
-        // A motive whose body is itself a Π type, which no reading by shape can tell from a constant motive.
-        "match b : (_) => (Nat) -> Nat\n| true => f\n| false => g\nend",
-        // A motive on each hardcoded carrier, whose arity is 1 throughout.
-        "match n : (m) => P(m)\n| 0 => a\n| p + 1 => b\nend",
-        "match xs : (l) => P(l)\n| [] => a\n| [h, ..t] => b\nend",
-        // Omitted entirely: no `:` at all, faithfully recorded as `None`.
-        "match v\n| nil() => a\n| cons(m, x, xs) => b\nend",
-    ] {
-        let term = source.parse::<Term>().unwrap();
-        assert_eq!(
-            term.to_string().parse::<Term>().unwrap(),
-            term,
-            "motive round-trip failed for {source:?}"
         );
     }
 }

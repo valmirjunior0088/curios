@@ -47,7 +47,7 @@ fn large_elimination_of_a_prop_is_rejected() {
         | s(@a : Nat, @b : Nat, prev : Le(a, b)): (a + 1, b + 1)
         end
         let bad(a : Nat, b : Nat, p : Le(a, b)) -> Nat =
-            match p : (_, _, _) => Nat
+            match p
             | z(@_) => 0
             | s(@_, @_, _) => 1
             end;

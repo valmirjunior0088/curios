@@ -34,7 +34,7 @@ fn io_read() {
     run_text(
         r#"
         let entry() -> /std/Io({}) =
-            match /std/Try/run(std/Io/read(std/Proc/stdin, 1024))! : (_) => /std/Io({})
+            match /std/Try/run(std/Io/read(std/Proc/stdin, 1024))!
             | success(bytes(b, @_)) => let w = /std/Try/run(std/Io/write(std/Proc/stdout, b))!; /std/Io/pure(())
             | success(ended()) => /std/Io/pure(())
             | failure(_) => /std/Io/pure(())
@@ -53,7 +53,7 @@ fn io_read_short_reads_and_eof() {
     let source = r#"
         use /std/{Io, Try, Result, Proc};
         let show(r : Result(Io/Error, Io/Chunk)) -> Io({}) =
-            match r : (_) => Io({})
+            match r
             | success(bytes(b, @_)) => let _ = Try/run(Io/write(Proc/stdout, b))!; /std/Io/pure(())
             | success(ended()) => /std/print("1")
             | failure(_) => /std/print("e")

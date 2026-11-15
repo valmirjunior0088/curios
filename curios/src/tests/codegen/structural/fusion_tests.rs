@@ -103,7 +103,7 @@ fn regrown_field_store_stays_lazy() {
         let entry() -> /std/Io({}) =
             let taint = List/len(Proc/args()!);
             let grow(n: Nat, acc: Acc) -> Acc =
-                match n: (_) => Acc
+                match n
                 | 0 => acc
                 | m + 1 =>
                     match acc

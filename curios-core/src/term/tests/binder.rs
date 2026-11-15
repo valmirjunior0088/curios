@@ -167,7 +167,6 @@ fn inductive_match_case_binders_are_captured() {
     // match r : #m => Type; | success(value) => value;
     let term = Term::induct_match(
         Term::free_var(&r),
-        None,
         Term::type_ground(),
         [("success", vec![value], Term::free_var(&value))],
     );

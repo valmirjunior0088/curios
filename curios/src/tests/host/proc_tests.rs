@@ -37,7 +37,7 @@ fn env_found_unwraps_to_some() {
         r#"
         use /std/{Io, Try};
         let entry() -> /std/Io({}) =
-            match /std/Proc/env("HOME")! : (_) => Io({})
+            match /std/Proc/env("HOME")!
             | some(v) => let _ = Try/run(std/Io/write(std/Proc/stdout, v))!; /std/Io/pure(())
             | none() => let _ = /std/print("missing")!; /std/Io/pure(())
             end;
@@ -56,7 +56,7 @@ fn env_absent_is_none() {
         run(r#"
         use /std/{Io, Try};
         let entry() -> /std/Io({}) =
-            match /std/Proc/env("NOPE")! : (_) => Io({})
+            match /std/Proc/env("NOPE")!
             | some(v) => let _ = Try/run(std/Io/write(std/Proc/stdout, v))!; /std/Io/pure(())
             | none() => let _ = /std/print("missing")!; /std/Io/pure(())
             end;

@@ -313,16 +313,9 @@ fn an_elimination_reads_its_scrutinee_as_the_algebra_decides_it() {
         _ => unreachable!("a match"),
     };
     let nat_type = || Term::intrinsic(Intrinsic::NatType);
-    let bools = cases_of(Term::bool_match(
-        truth(true),
-        None,
-        nat_type(),
-        nat(2),
-        nat(1),
-    ));
+    let bools = cases_of(Term::bool_match(truth(true), nat_type(), nat(2), nat(1)));
     let naturals = cases_of(Term::nat_match(
         nat(0),
-        None,
         nat_type(),
         nat(10),
         &Free::local(5, Some("pred")),

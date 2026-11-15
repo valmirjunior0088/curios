@@ -216,13 +216,13 @@ induct F: Type
 end
 
 let build(n: Nat, acc: List(F)) -> List(F) =
-    match n: (_) => List(F)
+    match n
     | 0 => acc
     | m + 1 => build(m, [..acc, match m % 2 | 0 => F/left() | _ => F/right() end])
     end;
 
 let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
-    match r: (_) => Nat
+    match r
     | 0 => s
     | q + 1 =>
         rounds(q, l, List/fold(l, s, (e, t) =>
@@ -232,11 +232,11 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
 let entry() -> /std/Io({}) =
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
+    match input
     | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
+        match Str/of_bytes(bytes)
         | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            match Nat/of_str(Str/trim(s))
             | some(r) => /std/print(Str/concat(Nat/to_str(rounds(r, build(65536, []), 0)), "\n"))
             | none() => /std/print("bad\n")
             end
@@ -256,13 +256,13 @@ induct F: Type
 end
 
 let build(n: Nat, acc: List(F)) -> List(F) =
-    match n: (_) => List(F)
+    match n
     | 0 => acc
     | m + 1 => build(m, [..acc, match m % 2 | 0 => F/left(m) | _ => F/right(m) end])
     end;
 
 let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
-    match r: (_) => Nat
+    match r
     | 0 => s
     | q + 1 =>
         rounds(q, l, List/fold(l, s, (e, t) =>
@@ -272,11 +272,11 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
 let entry() -> /std/Io({}) =
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
+    match input
     | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
+        match Str/of_bytes(bytes)
         | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            match Nat/of_str(Str/trim(s))
             | some(r) => /std/print(Str/concat(Nat/to_str(rounds(r, build(65536, []), 0)), "\n"))
             | none() => /std/print("bad\n")
             end

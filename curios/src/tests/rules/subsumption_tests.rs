@@ -520,7 +520,7 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
         use /std/Bool/{True};
 
         let S(c: Bool) -> Type = match c | true => Prop | false => Type end;
-        let F(c: Bool) -> S(c) = match c: (d) => S(d) | true => True | false => Nat end;
+        let F(c: Bool) -> S(c) = match c | true => True | false => Nat end;
 
         let one(x: F(true), y: F(true)) -> Eq()(x, y) = Eq/refl();
         print("ok")
@@ -540,7 +540,7 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
         use /std/Bool/{True};
 
         let S(c: Bool) -> Type = match c | true => Prop | false => Type end;
-        let F(c: Bool) -> S(c) = match c: (d) => S(d) | true => True | false => Nat end;
+        let F(c: Bool) -> S(c) = match c | true => True | false => Nat end;
 
         let either(c: Bool, x: S(c)) -> Bool = c;
         print("")

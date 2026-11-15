@@ -1,4 +1,4 @@
-//! A case read at its scrutinee's own instance: the parameters it opens at, the arms that instance excuses, the variable an arm refines and the motive it is checked at, each of a module the elaborator would not build, written as Core text and put to the certifier with nothing in scope, declaring the propositions it uses.
+//! A case read at its scrutinee's own instance: the parameters it opens at, the arms that instance excuses, the variable an arm refines and the goal it is checked at, each of a module the elaborator would not build, written as Core text and put to the certifier with nothing in scope, declaring the propositions it uses.
 
 use {
     super::test_support::*,
@@ -31,7 +31,7 @@ end
         #{node = InductType}
         /A(0)
 ) =>
-    match x: (x2) => /std/Bool/False
+    #{goal = /std/Bool/False} match x
     | mkA(h, o) =>
         h
     end)(
@@ -86,12 +86,12 @@ let /read : (
             #{node = InductType, universes = {levels = [0]}}
             /Lift()(X)
     ) =>
-        #{
+        #{goal = #{level = 1} Type, 
             cases = {
                 stated =
                     #{node = InductType, universes = {levels = [${level}]}}
                     /Lift()(X)}}
-        match p: (T, s) => #{level = 1} Type
+        match p
         | mk(B) =>
             B
         end;
@@ -157,7 +157,7 @@ let /Code : (
             #{node = InductType}
             /T()(x)
     ) =>
-        #{result = Ambient(Prop)}
+        #{goal = Prop}
         match t
         | ta() =>
             #{node = InductType}
@@ -174,7 +174,7 @@ let /Code : (
             /Two/a()
         )
 ) =>
-    match t: (x, s) => /Code(x, s)
+    #{goal = /Code(#{node = Variant} /Two/a(), t)} match t
     | ta() =>
         /std/Bool/True/qed()
     end)(
@@ -215,11 +215,10 @@ end
 let /prop :
     #{node = InductType}
     /std/Bool/True() =
+    #{goal = #{node = InductType} /std/Bool/True()}
     match
         #{node = Variant}
-        /Two/a(): (s) =>
-        #{node = InductType}
-        /std/Bool/True()
+        /Two/a()
     | a() =>
         /std/Bool/True/qed()
     | b() =>
@@ -228,11 +227,10 @@ let /prop :
 let /data :
     #{node = InductType}
     /std/Bool/True() =
+    #{goal = #{node = InductType} /std/Bool/True()}
     match
         #{node = Variant}
-        /Pick/l(): (s) =>
-        #{node = InductType}
-        /std/Bool/True()
+        /Pick/l()
     | l() =>
         /std/Bool/True/qed()
     | r() =>
@@ -291,7 +289,7 @@ let /through : (
                 #{node = InductType}
                 /Code()(Y)
         ) =>
-            match c2: (T, s) => (a: T) -> T
+            #{goal = (a: Y) -> Y} match c2
             | big() =>
                 (A: X) => A
             end)(c);
@@ -326,50 +324,6 @@ fn a_refinement_read_through_a_let_is_kept_only_where_its_target_fits_its_variab
     );
 }
 
-/// `Box` has a parameter and no index, so its motive binds the scrutinee alone; this one also binds the parameter, as a motive abstracting it would, and opened at the arm's one case value it has a binder no term stands for.
-const A_MOTIVE_BINDING_A_PARAMETER: &str = r#"
-induct /Box(A: Type): pub Type
-| mk(x: A)
-end
-((
-    b:
-        #{node = InductType}
-        /Box(#BoolType)
-) =>
-    match b: (A, s) => #BoolType
-    | mk(x) =>
-        x
-    end)(
-    #{node = Variant}
-    /Box/mk(@#BoolType, true)
-)
-"#;
-
-// A motive binds one name per index and then the scrutinee, a count `infer` holds it to before the motive is opened anywhere.
-#[test]
-fn a_motive_that_binds_a_parameter_is_refused() {
-    let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${A_MOTIVE_BINDING_A_PARAMETER}",
-        PROPOSITIONS,
-        A_MOTIVE_BINDING_A_PARAMETER
-    ));
-
-    assert!(
-        matches!(
-            &verdicts[..],
-            [Verdict {
-                name: None,
-                error: Error::Arity {
-                    counted: Counted::MotiveBinders,
-                    expected: 1,
-                    actual: 2,
-                },
-            }]
-        ),
-        "{verdicts:?}"
-    );
-}
-
 /// `Ix` at `j + j`, a sum that is `0` at `j = 0` and a successor at every other `j`, so each case's target may meet it, and at `j + 1`, a successor no `zero` meets.
 const AN_ARM_ABSENT_WHERE_A_SUM_MAY_MEET_ITS_TARGET: &str = r#"
 induct /Ix: (i: #NatType) -> pub Type
@@ -388,7 +342,7 @@ let /only_zero : (
             #{node = InductType}
             /Ix()(#NatAdd(j, j))
     ) =>
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match v
         | zero() =>
             0
@@ -405,7 +359,7 @@ let /only_succ : (
             #{node = InductType}
             /Ix()(#NatAdd(j, j))
     ) =>
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match v
         | succ(k) =>
             k
@@ -422,7 +376,7 @@ let /excused : (
             #{node = InductType}
             /Ix()(#NatAdd(j, 1))
     ) =>
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match v
         | succ(k) =>
             k
@@ -469,7 +423,7 @@ let /always : (n: #NatType) -> #BoolType =
     (n: #NatType) => true;
 let /zero : (n: #NatType) -> #BoolType =
     (n: #NatType) =>
-        #{result = Ambient(#BoolType)}
+        #{goal = #BoolType}
         match n
         | 0 =>
             true
@@ -481,9 +435,9 @@ let /excused : (n: #NatType) ->
     /std/Bool/True() =
     (n: #NatType) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /std/Bool/True())}
+                /std/Bool/True()}
         match /never(n)
         | false =>
             #{node = Variant}
@@ -496,9 +450,9 @@ let /taken : (n: #NatType) ->
     /std/Bool/True() =
     (n: #NatType) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /std/Bool/True())}
+                /std/Bool/True()}
         match /always(n)
         | false =>
             #{node = Variant}
@@ -511,9 +465,9 @@ let /undecided : (n: #NatType) ->
     /std/Bool/True() =
     (n: #NatType) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /std/Bool/True())}
+                /std/Bool/True()}
         match /zero(n)
         | false =>
             #{node = Variant}
@@ -575,7 +529,7 @@ let /sum : (
             #{node = InductType}
             /Ix()(#NatAdd(a, b))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /product : (
     a: #NatType,
@@ -591,7 +545,7 @@ let /product : (
             #{node = InductType}
             /Ix()(#NatMul(a, b))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /difference : (
     a: #NatType,
@@ -607,7 +561,7 @@ let /difference : (
             #{node = InductType}
             /Ix()(#NatSub(a, b))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /power : (
     a: #NatType,
@@ -623,7 +577,7 @@ let /power : (
             #{node = InductType}
             /Iz()(#NatPow(a, #NatAdd(b, 1)))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /window : (
     xs: #BytesType,
@@ -643,7 +597,7 @@ let /window : (
             #{node = InductType}
             /By()(#BytesSlice(xs, s, l, p))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /chunks : (
     xs: #BytesType,
@@ -659,7 +613,7 @@ let /chunks : (
             #{node = InductType}
             /By()(#BytesConcat([xs, ys]))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /fill : (
     n: #NatType,
@@ -675,7 +629,7 @@ let /fill : (
             #{node = InductType}
             /By()(#BytesReplicate(n, c))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /successor : (
     a: #NatType,
@@ -689,7 +643,7 @@ let /successor : (
             #{node = InductType}
             /Iz()(#NatAdd(a, 1))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /trailing : (
     xs: #BytesType,
@@ -703,7 +657,7 @@ let /trailing : (
             #{node = InductType}
             /By()(#BytesConcat([xs, x[0x01]]))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /single : (
     xs: #BytesType,
@@ -719,7 +673,7 @@ let /single : (
             #{node = InductType}
             /By()(#BytesAppend(xs, c))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /filled : (
     n: #NatType,
@@ -735,7 +689,7 @@ let /filled : (
             #{node = InductType}
             /By()(#BytesReplicate(#NatAdd(n, 1), c))
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 /sum(
     1,
@@ -818,7 +772,7 @@ let /absurd : (
                 )
             )
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 let /apart : (
     v:
@@ -842,7 +796,7 @@ let /apart : (
                 )
             )
     ) =>
-        match v: (i, w) => /std/Bool/False
+        #{goal = /std/Bool/False} match v
         end;
 /absurd(/Ix/mk())
 "#;
@@ -892,7 +846,7 @@ let /drain : (
         v: #{node = InductType} /Wit(),
         q: #{node = InductType} /Q()(/Wit/s(v))
     ) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match q
         | cons(w, inner) => /drain(w, inner)
         end;
@@ -983,49 +937,49 @@ const RECURSIONS_OMITTING_BASE: &str = r#"
 #{node = Rec, proof = true}
 let /fbox : (p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))) -> #{node = InductType} /std/Bool/False() =
     (p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match p
         | step(q) => /fbox(q)
         end;
 #{node = Rec, proof = true}
 let /ftuple : (p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))) -> #{node = InductType} /std/Bool/False() =
     (p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match p
         | step(q) => /ftuple(q)
         end;
 #{node = Rec, proof = true}
 let /fopt : (p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))) -> #{node = InductType} /std/Bool/False() =
     (p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match p
         | step(q) => /fopt(q)
         end;
 #{node = Rec, proof = true}
 let /fhigh : (p: #{node = InductType} /Phigh()(/High/hb())) -> #{node = InductType} /std/Bool/False() =
     (p: #{node = InductType} /Phigh()(/High/hb())) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match p
         | step(q) => /fhigh(q)
         end;
 #{node = Rec, proof = true}
 let /fgroup : (p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))) -> #{node = InductType} /std/Bool/False() =
     (p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match p
         | step(q) => /fgroup(q)
         end;
 #{node = Rec, proof = true}
 let /fstated : (p: #{node = InductType} /Pwit()(/Wit/b())) -> #{node = InductType} /std/Bool/False() =
     (p: #{node = InductType} /Pwit()(/Wit/b())) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False()), cases = {stated = #{node = InductType} /Pwit()(/Wit/a())}}
+        #{goal = #{node = InductType} /std/Bool/False(), cases = {stated = #{node = InductType} /Pwit()(/Wit/a())}}
         match p
         | step(q) => /fstated(q)
         end;
 #{node = Rec, proof = true}
 let /falias : (p: /Alias(/Wit/b())) -> #{node = InductType} /std/Bool/False() =
     (p: /Alias(/Wit/b())) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match p
         | step(q) => /falias(q)
         end;
@@ -1037,7 +991,7 @@ const RECURSIONS_WRITING_BASE: &str = r#"
 #{node = Rec, proof = true}
 let /fbox : (p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))) -> #{node = InductType} /std/Bool/True() =
     (p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        #{goal = #{node = InductType} /std/Bool/True()}
         match p
         | base() => /std/Bool/True/qed()
         | step(q) => /fbox(q)
@@ -1045,7 +999,7 @@ let /fbox : (p: #{node = InductType} /Pbox()(/Box/box(/Wit/b()))) -> #{node = In
 #{node = Rec, proof = true}
 let /ftuple : (p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))) -> #{node = InductType} /std/Bool/True() =
     (p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        #{goal = #{node = InductType} /std/Bool/True()}
         match p
         | base() => /std/Bool/True/qed()
         | step(q) => /ftuple(q)
@@ -1053,7 +1007,7 @@ let /ftuple : (p: #{node = InductType} /Ptuple()((/Wit/b(), /Wit/b()))) -> #{nod
 #{node = Rec, proof = true}
 let /fopt : (p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))) -> #{node = InductType} /std/Bool/True() =
     (p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wit(), /Wit/b()))) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        #{goal = #{node = InductType} /std/Bool/True()}
         match p
         | base() => /std/Bool/True/qed()
         | step(q) => /fopt(q)
@@ -1061,7 +1015,7 @@ let /fopt : (p: #{node = InductType} /Popt()(/Opt/some(@#{node = InductType} /Wi
 #{node = Rec, proof = true}
 let /fhigh : (p: #{node = InductType} /Phigh()(/High/hb())) -> #{node = InductType} /std/Bool/True() =
     (p: #{node = InductType} /Phigh()(/High/hb())) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        #{goal = #{node = InductType} /std/Bool/True()}
         match p
         | base() => /std/Bool/True/qed()
         | step(q) => /fhigh(q)
@@ -1069,7 +1023,7 @@ let /fhigh : (p: #{node = InductType} /Phigh()(/High/hb())) -> #{node = InductTy
 #{node = Rec, proof = true}
 let /fgroup : (p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))) -> #{node = InductType} /std/Bool/True() =
     (p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        #{goal = #{node = InductType} /std/Bool/True()}
         match p
         | base() => /std/Bool/True/qed()
         | step(q) => /fgroup(q)
@@ -1077,7 +1031,7 @@ let /fgroup : (p: #{node = InductType} /Pgroup()(/G/gb(/G2/d()))) -> #{node = In
 #{node = Rec, proof = true}
 let /fstated : (p: #{node = InductType} /Pwit()(/Wit/b())) -> #{node = InductType} /std/Bool/True() =
     (p: #{node = InductType} /Pwit()(/Wit/b())) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/True()), cases = {stated = #{node = InductType} /Pwit()(/Wit/a())}}
+        #{goal = #{node = InductType} /std/Bool/True(), cases = {stated = #{node = InductType} /Pwit()(/Wit/a())}}
         match p
         | base() => /std/Bool/True/qed()
         | step(q) => /fstated(q)
@@ -1085,7 +1039,7 @@ let /fstated : (p: #{node = InductType} /Pwit()(/Wit/b())) -> #{node = InductTyp
 #{node = Rec, proof = true}
 let /falias : (p: /Alias(/Wit/b())) -> #{node = InductType} /std/Bool/True() =
     (p: /Alias(/Wit/b())) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/True())}
+        #{goal = #{node = InductType} /std/Bool/True()}
         match p
         | base() => /std/Bool/True/qed()
         | step(q) => /falias(q)
@@ -1189,14 +1143,14 @@ end
 let /swapped : (
     v: #{node = InductType} /Ix()(#List(#{node = InductType} /Pr(), [/Pr/b(), /Pr/a()]))) -> /std/Bool/False =
     (v: #{node = InductType} /Ix()(#List(#{node = InductType} /Pr(), [/Pr/b(), /Pr/a()]))) =>
-        match v: (i, w) => /std/Bool/False end;
+        #{goal = /std/Bool/False} match v end;
 let /mixed : (
     v: #{node = InductType} /Mx()(#List({#{node = InductType} /Pr(), #NatType}, [(/Pr/b(), 0)]))) -> /std/Bool/False =
     (v: #{node = InductType} /Mx()(#List({#{node = InductType} /Pr(), #NatType}, [(/Pr/b(), 0)]))) =>
-        match v: (i, w) => /std/Bool/False end;
+        #{goal = /std/Bool/False} match v end;
 let /open : (x: #NatType, v: #{node = InductType} /Ln()(#List(#NatType, [x]))) -> /std/Bool/False =
     (x: #NatType, v: #{node = InductType} /Ln()(#List(#NatType, [x]))) =>
-        match v: (i, w) => /std/Bool/False end;
+        #{goal = /std/Bool/False} match v end;
 let /spread : (
     x: #NatType,
     xs: #ListType(#NatType),
@@ -1205,7 +1159,7 @@ let /spread : (
         x: #NatType,
         xs: #ListType(#NatType),
         v: #{node = InductType} /Ln()(#ListConcat(#NatType, [#List(#NatType, [x]), xs]))) =>
-        match v: (i, w) => /std/Bool/False end;
+        #{goal = /std/Bool/False} match v end;
 let /appended : (
     x: #NatType,
     xs: #ListType(#NatType),
@@ -1214,7 +1168,7 @@ let /appended : (
         x: #NatType,
         xs: #ListType(#NatType),
         v: #{node = InductType} /Ln()(#ListAppend(#NatType, xs, x))) =>
-        match v: (i, w) => /std/Bool/False end;
+        #{goal = /std/Bool/False} match v end;
 let /window : (
     xs: #ListType(#NatType),
     s: #NatType,
@@ -1225,14 +1179,14 @@ let /window : (
         s: #NatType,
         p: /std/Bool/Holds(#NatLe(#NatAdd(s, 1), #ListLen(#NatType, xs))),
         v: #{node = InductType} /Ln()(#ListSlice(#NatType, xs, s, 1, p))) =>
-        match v: (i, w) => /std/Bool/False end;
+        #{goal = /std/Bool/False} match v end;
 let /twice : (
     v: #{node = InductType} /D()(#List(#{node = InductType} /Pr(), [/Pr/a()]), #List(#{node = InductType} /Pr(), [/Pr/b()]))) -> /std/Bool/False =
     (v: #{node = InductType} /D()(#List(#{node = InductType} /Pr(), [/Pr/a()]), #List(#{node = InductType} /Pr(), [/Pr/b()]))) =>
-        match v: (i, j, w) => /std/Bool/False end;
+        #{goal = /std/Bool/False} match v end;
 let /bytes : (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(x[], c), x[0x01])) -> /std/Bool/False =
     (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(x[], c), x[0x01])) =>
-        match v: (i, j, w) => /std/Bool/False end;
+        #{goal = /std/Bool/False} match v end;
 /swapped(#{node = Variant} /Ix/mk())
 "#;
 
@@ -1277,7 +1231,7 @@ induct /Box: pub Type
 end
 let /pick : (b: #{node = InductType} /Box()) -> #BoolType =
     (b: #{node = InductType} /Box()) =>
-        #{result = Ambient(#BoolType)}
+        #{goal = #BoolType}
         match b
         | mk(x, y) => y
         end;

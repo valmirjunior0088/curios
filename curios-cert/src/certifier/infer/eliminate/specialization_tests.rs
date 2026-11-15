@@ -7,9 +7,9 @@ use {
     curios_core::{Reducer, Term},
 };
 
-/// The arm rule specializes the *context*, not just the motive. Matching `s(p) : Ix(p + 1)` against a scrutinee typed `Ix(b)` forces `b ≡ p + 1`, so a hypothesis at `P(b)` inhabits the arm's expectation `P(p + 1)`.
+/// The arm rule specializes the *context*, not just the goal. Matching `s(p) : Ix(p + 1)` against a scrutinee typed `Ix(b)` forces `b ≡ p + 1`, so a hypothesis at `P(b)` inhabits the arm's expectation `P(p + 1)`.
 ///
-/// This is the shape transitivity over an inductive order needs, where matching the first proof pins the index the second proof's type names: the equation refines an *outer* binder, which no motive opening reaches and no arm binder owns.
+/// This is the shape transitivity over an inductive order needs, where matching the first proof pins the index the second proof's type names: the equation refines an *outer* binder, which no goal at the case reaches and no arm binder owns.
 #[test]
 fn a_forced_index_equation_refines_an_outer_hypothesis() {
     let mut certifier = certifier();
@@ -23,7 +23,7 @@ fn a_forced_index_equation_refines_an_outer_hypothesis() {
         ),
         &fill!(
             "${matched}, /P(b)",
-            matched = eliminating("i, s", "/P(i)", &["s(p) => w"])
+            matched = eliminating("/P(b)", &["s(p) => w"])
         ),
     );
 
@@ -45,7 +45,7 @@ fn a_cyclic_index_equation_refines_nothing() {
         ),
         &fill!(
             "${matched},",
-            matched = eliminating("i, s", "/P(i)", &["mk() => w"])
+            matched = eliminating("/P(b)", &["mk() => w"])
         ),
     );
     declare(
@@ -73,7 +73,7 @@ fn a_bool_arm_sees_its_scrutinee_at_the_literal() {
     let [matched, at_h] = under(
         &mut certifier,
         "h: #BoolType, w: /P(h)",
-        "match h: (x) => /P(x) | false => w | true => w end, /P(h)",
+        "#{goal = /P(h)} match h | false => w | true => w end, /P(h)",
     );
 
     assert_eq!(infer(&mut certifier, &matched), Ok(at_h));
@@ -141,10 +141,7 @@ fn a_clash_between_two_forcings_of_one_binder_excuses_the_arm() {
                 "subject: ${same}",
                 same = family_at("Same", &fill!("${a}, ${b}", a, b))
             ),
-            &fill!(
-                "${matched},",
-                matched = eliminating("i, j, s", "#NatType", &[])
-            ),
+            &fill!("${matched},", matched = eliminating("#NatType", &[])),
         );
 
         omitted(&mut certifier, label, omission_stands, &matched);
@@ -177,10 +174,7 @@ fn an_outer_variable_forced_two_ways_excuses_the_arm() {
                 bit,
                 apart = family_at("Apart", "x, x")
             ),
-            &fill!(
-                "${matched},",
-                matched = eliminating("i, j, s", "#NatType", &[])
-            ),
+            &fill!("${matched},", matched = eliminating("#NatType", &[])),
         );
 
         omitted(&mut certifier, label, omission_stands, &matched);
@@ -206,14 +200,14 @@ fn over_same(
     stated: Option<&str>,
     body: &str,
 ) -> [Term; 2] {
-    let matched = eliminating("i, j, s", "#NatType", &[&fill!("same(z) => ${body}", body)]);
+    let arm = fill!("same(z) => ${body}", body);
     let matched = match stated {
         Some(stated) => fill!(
-            "#{cases = {stated = ${instance}}} ${matched}",
+            "#{goal = #NatType, cases = {stated = ${instance}}} match subject | ${arm} end",
             instance = family_at("Same", stated),
-            matched
+            arm
         ),
-        None => matched,
+        None => eliminating("#NatType", &[&arm]),
     };
 
     under(

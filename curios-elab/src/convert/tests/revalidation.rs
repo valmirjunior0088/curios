@@ -147,7 +147,7 @@ fn a_metavariable_born_in_an_arm_is_restricted_to_the_candidate_that_embeds_it()
     assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
-/// A silent hole — an elided annotation, motive or element type — is restricted like an omitted implicit, while a parked check's placeholder, minted the same way, waits: its check reads any solution as the check discharged and would never elaborate its term. The two share their origin and differ in kind. Mutation-checked: restricting a placeholder commits the control.
+/// A silent hole — an elided annotation or element type — is restricted like an omitted implicit, while a parked check's placeholder, minted the same way, waits: its check reads any solution as the check discharged and would never elaborate its term. The two share their origin and differ in kind. Mutation-checked: restricting a placeholder commits the control.
 #[test]
 fn a_silent_hole_is_restricted_where_a_parked_checks_placeholder_waits() {
     let embedding = |placeholder: bool| {

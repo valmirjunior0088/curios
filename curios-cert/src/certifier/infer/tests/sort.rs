@@ -101,7 +101,7 @@ fn a_definition_naming_a_sort_or_a_function_type_is_subsumed_as_what_it_names() 
 }
 
 /// Over the locals a type is read under where a split has put `k(0)` at `true` — `k: (Nat) -> Bool`, a proposition `P`, a family of small types `f: (Nat) -> Type 0` and a predicate `g: (Nat) -> Prop` — `match k(0) | false => 0 | true => let u: decided = ${held}; 0 end`, where `decided` is `match k(0) | false => Nat | true => ${upper} end` at `Type 2`: `upper` where the split's equation is in force, and neither a sort nor a function type while `k(0)` is open.
-const HOLDING: &str = "(k: (n: #NatType) -> #BoolType, P: Prop, f: (n: #NatType) -> Type, g: (n: #NatType) -> Prop) => match k(0): (_) => #NatType | false => 0 | true => (let u: match k(0): (_) => #{level = 2} Type | false => #NatType | true => ${upper} end = ${held}; 0) end";
+const HOLDING: &str = "(k: (n: #NatType) -> #BoolType, P: Prop, f: (n: #NatType) -> Type, g: (n: #NatType) -> Prop) => #{goal = #NatType} match k(0) | false => 0 | true => (let u: #{goal = #{level = 2} Type} match k(0) | false => #NatType | true => ${upper} end = ${held}; 0) end";
 
 /// A type that is a sort or a function type only where an arm's case equation is in force is subsumed there as the one the case makes it, cumulatively and holding no proposition: under `k(0) = true`, `decided(Type 1)` takes `Nat` and refuses `P`, and `decided((n: Nat) -> Type 1)` takes the family of small types `f` and refuses the predicate `g`. `curios`'s `tests::rules::subsumption_tests` puts the same propositions to the elaborator under this name.
 ///

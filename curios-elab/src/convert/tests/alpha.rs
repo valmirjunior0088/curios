@@ -228,19 +228,16 @@ fn plicity_distinguishes_two_function_types() {
 }
 
 #[test]
-fn inductive_match_compares_cases_and_motive() {
+fn inductive_match_compares_cases() {
     let mut context = context();
     let r = context.fresh(Some("r"));
-    let m = context.fresh(Some("m"));
-    let n = context.fresh(Some("n"));
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
 
-    let make = |motive_label: &Free, binder: &Free| {
+    let make = |binder: &Free| {
         let binder = *binder;
         Term::induct_match(
             Term::free_var(&r),
-            Some(motive_label),
             Term::intrinsic(Intrinsic::NatType),
             [
                 ("none", Vec::<Free>::new(), nat(0)),
@@ -249,12 +246,11 @@ fn inductive_match_compares_cases_and_motive() {
         )
     };
 
-    // Alpha-equivalent binders and motive labels are convertible.
-    assert_eq!(conv(&mut context, &make(&m, &x), &make(&n, &y)), Ok(true));
+    // Alpha-equivalent binders are convertible.
+    assert_eq!(conv(&mut context, &make(&x), &make(&y)), Ok(true));
 
     let different = Term::induct_match(
         Term::free_var(&r),
-        Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(1)),
@@ -262,19 +258,17 @@ fn inductive_match_compares_cases_and_motive() {
         ],
     );
 
-    assert_eq!(conv(&mut context, &make(&m, &x), &different), Ok(false));
+    assert_eq!(conv(&mut context, &make(&x), &different), Ok(false));
 }
 
 #[test]
 fn inductive_match_compares_default() {
     let mut context = context();
     let r = context.fresh(Some("r"));
-    let m = context.fresh(Some("m"));
 
     let with_default = |d: usize| {
         Term::induct_match_default(
             Term::free_var(&r),
-            Some(&m),
             Term::intrinsic(Intrinsic::NatType),
             [("none", Vec::<Free>::new(), nat(0))],
             nat(d),
@@ -296,7 +290,6 @@ fn inductive_match_compares_default() {
     // A defaulted match never converts with an otherwise-identical bare one: presence of the catch-all is itself a difference.
     let bare = Term::induct_match(
         Term::free_var(&r),
-        Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         [("none", Vec::<Free>::new(), nat(0))],
     );

@@ -185,15 +185,15 @@ let /self_app : (
             /Bad()
     ) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /sys/Bool/False())}
+                /sys/Bool/False()}
         match b
         | c(m) =>
             #{
-                result = Ambient(
+                goal = 
                     #{node = InductType}
-                    /sys/Bool/False())}
+                    /sys/Bool/False()}
             match m
             | mk(f) =>
                 f(b)
@@ -237,21 +237,21 @@ let /self_app : (
             /Bad()
     ) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /sys/Bool/False())}
+                /sys/Bool/False()}
         match b
         | c(m) =>
             #{
-                result = Ambient(
+                goal = 
                     #{node = InductType}
-                    /sys/Bool/False())}
+                    /sys/Bool/False()}
             match m
             | w(i) =>
                 #{
-                    result = Ambient(
+                    goal = 
                         #{node = InductType}
-                        /sys/Bool/False())}
+                        /sys/Bool/False()}
                 match i
                 | mk(f) =>
                     f(b)
@@ -403,9 +403,9 @@ let /app/unbox : (
             /app/Box()
     ) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /sys/Bool/False())}
+                /sys/Bool/False()}
         match b
         | box(p) =>
             p
@@ -584,7 +584,7 @@ let /lib/unbox : (
             #{node = InductType, universes = {levels = [u]}}
             /lib/Box(P)
     ) =>
-        #{result = Ambient(P)}
+        #{goal = P}
         match b
         | box(p) =>
             p
@@ -644,9 +644,9 @@ let /lib/f : (
             /lib/T()
     ) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /lib/Q()(t))}
+                /lib/Q()(t)}
         match t
         | a() =>
             /lib/Q/qa()

@@ -318,7 +318,7 @@ fn a_call_through_a_constructor_payload_descends() {
             n : Nat,
             acc : Accessible((a : Nat, b : Nat) => Holds(a < b))(n),
         ) -> P(n) =
-            match acc : (w, _) => P(w)
+            match acc
             | intro(@w, below) => step(w, (m, lt) => strong(P, step, m, below(m, lt)))
             end;
 
@@ -372,9 +372,9 @@ fn the_library_recursion_on_a_bound_serves_a_proof() {
     assert_eq!(run(source), b"b");
 }
 
-// The same recursion at a motive that is a type depending on its argument: `pick(n)` has type `Shape(n)`, the unit type at zero and `Nat` above it. Written in a type, `pick(5)` puts `recurse` and its local loop under obligation (T), and the checkers reduce it on the bound to `4` with no proof read; the running program computes the same value with the bound's proofs erased.
+// The same recursion at a family that is a type depending on its argument: `pick(n)` has type `Shape(n)`, the unit type at zero and `Nat` above it. Written in a type, `pick(5)` puts `recurse` and its local loop under obligation (T), and the checkers reduce it on the bound to `4` with no proof read; the running program computes the same value with the bound's proofs erased.
 #[test]
-fn the_library_recursion_on_a_bound_computes_at_a_dependent_motive() {
+fn the_library_recursion_on_a_bound_computes_at_a_dependent_family() {
     let source = r#"
         use /std/{Nat, Eq};
         let Shape(n: Nat) -> Type = match n | 0 => {} | _ + 1 => Nat end;
@@ -594,9 +594,9 @@ fn a_recursion_that_hands_its_arguments_on_exchanged_does_not_descend() {
     });
 }
 
-// A member named only in its own motive is a call, at an argument nothing is below. `curios_cert`'s `recheck::recursion_tests` puts the module to the certifier under this name. The control's motive names no member.
+// A member named only in its own goal is a call, at an argument nothing is below. `curios_cert`'s `recheck::recursion_tests` puts the module to the certifier under this name. The control's goal names no member.
 #[test]
-fn a_member_named_only_in_its_own_motive_is_a_call_its_group_must_descend_on() {
+fn a_member_named_only_in_its_own_goal_is_a_call_its_group_must_descend_on() {
     control(
         r#"
         use /std/{Nat};
@@ -605,16 +605,18 @@ fn a_member_named_only_in_its_own_motive_is_a_call_its_group_must_descend_on() {
         pub let Const(_: True) -> Prop = True;
 
         pub let g(n: Nat) -> True =
-            match n: (m) => Const(True/qed())
-            | 0 => True/qed()
-            | _ + 1 => True/qed()
-            end;
+            let held: Const(True/qed()) =
+                match n
+                | 0 => True/qed()
+                | _ + 1 => True/qed()
+                end;
+            held;
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("(m) => Const(True/qed())", "(m) => Const(g(m))")])
+    .refused(&[("let held: Const(True/qed())", "let held: Const(g(n))")])
     .by_elaborator_in("/g", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     });

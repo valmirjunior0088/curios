@@ -89,7 +89,7 @@ fn a_bang_sequences_in_a_two_parameter_monad_region() {
         satisfy (@S : Type) => Monad((A : Type) => Box(S, A)) {
             pure(@A, a) = Box/wrap(a),
             bind(@A, @B, m, f) =
-                match m : (_) => Box(S, B)
+                match m
                 | wrap(a) => f(a)
                 end,
         }
@@ -97,7 +97,7 @@ fn a_bang_sequences_in_a_two_parameter_monad_region() {
             let v = Monad/pure(3)!;
             Monad/pure(Nat/add(v, v));
         let out =
-            match prog() : (_) => Nat
+            match prog()
             | wrap(value) => value
             end;
         /std/print(Nat/to_str(out))

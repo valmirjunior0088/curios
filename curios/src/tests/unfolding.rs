@@ -85,11 +85,11 @@ fn grammar(rules: usize, inner: Inner) -> String {
 const ENTRY: &str = r#"let entry() -> /std/Io({}) =
 let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
 let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-match input: (_) => Io({})
+match input
 | some(bytes) =>
-    match Parse/run(top, bytes): (_) => Io({})
+    match Parse/run(top, bytes)
     | success(out) =>
-        match Str/of_bytes(out): (_) => Io({})
+        match Str/of_bytes(out)
         | success(s) => /std/print(s)
         | failure(_) => /std/print("invalid utf-8\n")
         end
@@ -148,13 +148,13 @@ fn consumer(suffix: &str, consumed: Consumed) -> String {
     match consumed {
         Consumed::Applied => format!("let probe{suffix}(n: Nat) -> Bool = top{suffix}(n);\n\n"),
         Consumed::Scrutinized => format!(
-            "let probe{suffix}(n: Nat) -> Str =\n    match top{suffix}(n): (_) => Str | true => \"y\" | false => \"n\" end;\n\n"
+            "let probe{suffix}(n: Nat) -> Str =\n    match top{suffix}(n) | true => \"y\" | false => \"n\" end;\n\n"
         ),
         Consumed::ScrutinizedClosed => format!(
-            "let probe{suffix}(n: Nat) -> Str =\n    match top{suffix}(7): (_) => Str | true => \"y\" | false => \"n\" end;\n\n"
+            "let probe{suffix}(n: Nat) -> Str =\n    match top{suffix}(7) | true => \"y\" | false => \"n\" end;\n\n"
         ),
         Consumed::Proved => format!(
-            "let probe{suffix}(n: Nat, e: Eq()(top{suffix}(n), true)) -> Str =\n    match e: (_, _, _) => Str | refl(@z) => \"y\" end;\n\n"
+            "let probe{suffix}(n: Nat, e: Eq()(top{suffix}(n), true)) -> Str =\n    match e | refl(@z) => \"y\" end;\n\n"
         ),
     }
 }
@@ -418,7 +418,7 @@ fn scrutinee_refinement_measurements() {
 fn numerics(rules: usize) -> String {
     let mut source = numeric_web(rules, "use /std/{Str, Nat, Eq};\n\n");
     source.push_str(
-        "let probe(n: Nat, e: Eq()(top(n), 0)) -> Str =\n    match e: (_, _, _) => Str | refl(@z) => \"y\" end;\n\n",
+        "let probe(n: Nat, e: Eq()(top(n), 0)) -> Str =\n    match e | refl(@z) => \"y\" end;\n\n",
     );
     source.push_str(TAIL);
     source

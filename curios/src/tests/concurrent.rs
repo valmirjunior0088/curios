@@ -42,7 +42,7 @@ fn a_stream_read_sequences_into_a_write() {
         use /std/{Io, Try, Proc};
         let program() -> Io({}) =
             let r = Try/run(Io/read(Proc/stdin, 1024))!;
-            match r : (_) => Io({})
+            match r
             | success(bytes(bytes, @_)) => Io/bind(Try/run(Io/write(Proc/stdout, bytes)), (_) => Io/pure(()))
             | success(ended()) => Io/pure(())
             | failure(_) => Io/pure(())
@@ -160,7 +160,7 @@ fn constructing_a_read_performs_no_effect() {
         let discarded: Try(Io, Io/Error, Io/Chunk) = Io/read(Proc/stdin, 100);
         let entry() -> /std/Io({}) =
             let r = Try/run(Io/read(Proc/stdin, 100))!;
-            match r : (_) => /std/Io({})
+            match r
             | success(bytes(bytes, @_)) => Io/bind(Try/run(Io/write(Proc/stdout, bytes)), (_) => Io/pure(()))
             | success(ended()) => /std/print("<eof>")
             | failure(_) => /std/print("<err>")
@@ -272,10 +272,12 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
             [(Nat, Susp/now(7)), ({}, Susp/now(()))];
         let entry() -> /std/Io({}) =
             let stepped = List/map(boxes, (b : Box) =>
-                match b.t : (_) => Box
-                | now(a) => (b.A, Susp/now(a))
-                | later(k) => (b.A, k())
-                end);
+                let next: Box =
+                    match b.t
+                    | now(a) => (b.A, Susp/now(a))
+                    | later(k) => (b.A, k())
+                    end;
+                next);
             let _ = /std/print(Nat/to_str(List/len(stepped)))!;
             /std/Io/pure(());
         entry()
@@ -336,7 +338,7 @@ fn timeout_answers_some_when_the_body_finishes_first() {
         use /std/time/{Duration};
         let program() -> Io({}) =
             let r = Io/timeout(Duration/of_secs(5), Io/pure(42))!;
-            match r : (_) => Io({})
+            match r
             | some(v) => /std/print(Nat/to_str(v))
             | none() => /std/print("none")
             end;
@@ -364,7 +366,7 @@ fn timeout_cancels_the_body_and_runs_its_release_before_answering_none() {
             /std/print(match ended | finished() => "finished;" | cancelled() => "cancelled;" end);
         let program() -> Io({}) =
             let r = Io/timeout(Duration/of_secs(2), Io/Scope/run((scope) => Io/bind(Io/Scope/defer(scope, released), (_) => body())))!;
-            match r : (_) => Io({})
+            match r
             | some(v) => /std/print("some")
             | none() => /std/print("none;")
             end;

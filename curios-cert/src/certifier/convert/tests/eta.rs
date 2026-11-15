@@ -337,7 +337,7 @@ end
 "#;
 
 /// `match c end` at an ambient goal `${goal}`: an elimination with no arm, stuck on a variable.
-const STUCK: &str = "#{result = Ambient(${goal})} match c end";
+const STUCK: &str = "#{goal = ${goal}} match c end";
 
 /// A literal's eta is taken against every neutral inhabitant, a term whose head does not show its type, and against no other. A stuck elimination is one as a variable is: a lambda, a tuple literal and a struct literal each converge with the stuck elimination they expand, where no type directs the rule and at the struct's own type — the lambda past a fold, since one that only forwards reduces to what it forwards — and each near miss beside them — a binder dropped, two components swapped, two fields swapped — is refused. Against a head that shows another type — a number, a lambda, a constructor's value — the rule is not taken, and the unit literal's empty walk equates it with nothing. The elaborator's twin of this proposition shares the name.
 ///

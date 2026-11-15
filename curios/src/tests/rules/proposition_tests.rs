@@ -229,7 +229,7 @@ fn a_declaration_into_prop_may_not_hand_a_relevant_value_back() {
         use /std/Bool/{True};
 
         pub let P(b : Bool) -> Prop =
-            match b: (_) => Prop
+            match b
             | true => True
             | false => True
             end;

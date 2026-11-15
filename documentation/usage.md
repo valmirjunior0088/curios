@@ -455,7 +455,7 @@ A lint is an exact finding the compilation already has and nothing stops on: `ru
 | Lint | Reports | Kept by |
 | --- | --- | --- |
 | `unused-import` | a `use` selector, or a glob, that no reference resolved through; a `pub use` is a re-export and its own use | deleting it |
-| `unused-binder` | a parameter, `let` binder, pattern binder or motive label nothing references, implicit or shadowed included; a hypothesis a proof the elaborator wrote from the facts in scope reads is referenced, though no written name reaches it, and a declaration holding a written goal reports none, since its binders are the goal's scope | writing `_` in its name's place |
+| `unused-binder` | a parameter, `let` binder or pattern binder nothing references, implicit or shadowed included; a hypothesis a proof the elaborator wrote from the facts in scope reads is referenced, though no written name reaches it, and a declaration holding a written goal reports none, since its binders are the goal's scope | writing `_` in its name's place |
 | `unused-declaration` | a non-`pub` `let`, `foreign`, `induct`, `struct` or `concept` unreachable from the unit's roots — its exported surface, its tests, its witnesses, the declarations a `_` keeps unused and its program's tail; a private `mod` none of whose declarations is reached is reported once, at the `mod` | deleting it, `pub`, or naming it `_x` |
 | `unused-dependency` | a `[dependencies]` row whose package no reference in the library or any executable resolved into; decided over the package, so reported only by the package-entire form | deleting the row |
 

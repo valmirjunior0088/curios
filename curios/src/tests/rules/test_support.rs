@@ -321,7 +321,7 @@ pub const A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM: &str = r#"
     end
 
     let f(w : Ind(Pair/mk(0))) -> Nat =
-        match w : (x, q) => Nat
+        match w
         | left() => 0
         end;
 
@@ -402,13 +402,13 @@ pub const A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_CASE: &s
     induct Read: (Bool) -> Prop | mk(x: Bool): (x) end
 
     let direct(g: (Bool) -> Bool, b: Bool, p: Read(b),
-          guard: Holds(match p: (i, q) => Bool | mk(x) => g(x) end)) -> Holds(g(b)) =
+          guard: Holds(match p | mk(x) => g(x) end)) -> Holds(g(b)) =
         guard;
 
     let split(g: (Bool) -> Bool, b: Bool, p: Read(b),
-          guard: Holds(match p: (i, q) => Bool | mk(x) => g(x) end),
+          guard: Holds(match p | mk(x) => g(x) end),
           chosen: Holds(b)) -> Holds(g(b)) =
-        match (match p: (i, q) => Bool | mk(x) => g(x) end)
+        match (match p | mk(x) => g(x) end)
         | false => match guard end
         | true => match b | false => match chosen end | true => True/qed() end
         end;
@@ -455,7 +455,7 @@ pub const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"
     end
 
     let same(t : Three) -> Eq()(t, t) =
-        match t : (q) => Eq()(q, q)
+        match t
         | a() => Eq/refl()
         | _ => Eq/refl()
         end;
@@ -497,37 +497,37 @@ pub const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let hold(@A : Type, a : A, count : Nat) -> A =
-        match count: (_) => A | 0 => a | pred + 1 => a end;
+        match count | 0 => a | pred + 1 => a end;
 
     let in_an_arm(b : Bool, p : {Nat, Nat})
-        -> Eq()(match b: (_) => {Nat, Nat} | true => (p.0, p.1) | false => p end,
-                match b: (_) => {Nat, Nat} | true => p | false => p end)
+        -> Eq()(match b | true => (p.0, p.1) | false => p end,
+                match b | true => p | false => p end)
         = Eq/refl();
 
     let in_a_successor_arm(n : Nat, p : {Nat, Nat})
-        -> Eq()(match n: (_) => {Nat, Nat} | 0 => (p.0, p.1) | m + 1 => p end,
-                match n: (_) => {Nat, Nat} | 0 => p | m + 1 => p end)
+        -> Eq()(match n | 0 => (p.0, p.1) | m + 1 => p end,
+                match n | 0 => p | m + 1 => p end)
         = Eq/refl();
 
     let under_a_projection(b : Bool, p : {Nat, Nat})
-        -> Eq()((match b: (_) => {Nat, Nat} | true => (p.0, p.1) | false => p end).0,
-                (match b: (_) => {Nat, Nat} | true => p | false => p end).0)
+        -> Eq()((match b | true => (p.0, p.1) | false => p end).0,
+                (match b | true => p | false => p end).0)
         = Eq/refl();
 
     let under_a_lambda(b : Bool, p : {Nat, Nat})
-        -> Eq()(match b: (_) => (Nat) -> {Nat, Nat}
+        -> Eq()(match b
                 | true => (x : Nat) => (p.0, p.1)
                 | false => (x : Nat) => p
                 end,
-                match b: (_) => (Nat) -> {Nat, Nat}
+                match b
                 | true => (x : Nat) => p
                 | false => (x : Nat) => p
                 end)
         = Eq/refl();
 
     let a_function(b : Bool, g : (Nat) -> Nat)
-        -> Eq()(match b: (_) => (Nat) -> Nat | true => (x : Nat) => g(x + 0) | false => g end,
-                match b: (_) => (Nat) -> Nat | true => g | false => g end)
+        -> Eq()(match b | true => (x : Nat) => g(x + 0) | false => g end,
+                match b | true => g | false => g end)
         = Eq/refl();
 
     let through_a_definition(p : {Nat, Nat}, count : Nat)
@@ -559,23 +559,23 @@ pub const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
         = Eq/refl();
 
     let two_stuck_matches(b : Bool, r : {}, s : {})
-        -> Eq(@({}))(match b: (_) => {} | true => r | false => r end,
-                     match b: (_) => {} | true => s | false => s end)
+        -> Eq(@({}))(match b | true => r | false => r end,
+                     match b | true => s | false => s end)
         = Eq/refl();
 
     let two_stuck_matches_at_a_struct(b : Bool, r : U, s : U)
-        -> Eq(@(U))(match b: (_) => U | true => r | false => r end,
-                    match b: (_) => U | true => s | false => s end)
+        -> Eq(@(U))(match b | true => r | false => r end,
+                    match b | true => s | false => s end)
         = Eq/refl();
 
     let two_stuck_matches_at_a_record_of_units(b : Bool, r : {{}, {}}, s : {{}, {}})
-        -> Eq(@({{}, {}}))(match b: (_) => {{}, {}} | true => r | false => r end,
-                           match b: (_) => {{}, {}} | true => s | false => s end)
+        -> Eq(@({{}, {}}))(match b | true => r | false => r end,
+                           match b | true => s | false => s end)
         = Eq/refl();
 
     let two_stuck_matches_at_a_function_into_a_unit(b : Bool, f : (Nat) -> {}, g : (Nat) -> {})
-        -> Eq(@((Nat) -> {}))(match b: (_) => (Nat) -> {} | true => f | false => f end,
-                              match b: (_) => (Nat) -> {} | true => g | false => g end)
+        -> Eq(@((Nat) -> {}))(match b | true => f | false => f end,
+                              match b | true => g | false => g end)
         = Eq/refl();
 
     /std/print(Nat/to_str(1))
@@ -607,8 +607,8 @@ pub const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r#"
         = Eq/refl();
 
     let two_stuck_matches(b : Bool, r : W, s : W)
-        -> Eq(@(W))(match b: (_) => W | true => r | false => r end,
-                    match b: (_) => W | true => s | false => s end)
+        -> Eq(@(W))(match b | true => r | false => r end,
+                    match b | true => s | false => s end)
         = Eq/refl();
 
     let at_a_struct_nested_in_its_own_parameter(r : Pair(Pair({})), s : Pair(Pair({})))
@@ -632,7 +632,7 @@ pub const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
 
     struct Pair(A: Type): pub Type { a: A, b: A }
 
-    let Tower(n : Nat) -> Type = match n: (_) => Type | 0 => {} | p + 1 => Pair(Tower(p)) end;
+    let Tower(n : Nat) -> Type = match n | 0 => {} | p + 1 => Pair(Tower(p)) end;
 
     let at_a_member(r : Inner, s : Inner) -> Same()(r, s) = Same/same();
 
@@ -645,8 +645,8 @@ pub const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
         = Eq/refl();
 
     let where_a_lookup_reads_the_type(b : Bool, r : Outer, s : Outer)
-        -> Eq(@(Nat))((match b: (_) => {Outer, Nat} | true => (r, 1) | false => (r, 2) end).1,
-                      (match b: (_) => {Outer, Nat} | true => (s, 1) | false => (s, 2) end).1)
+        -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
+                      (match b | true => (s, 1) | false => (s, 2) end).1)
         = Eq/refl();
 
     /std/print(Nat/to_str(1))
@@ -658,52 +658,52 @@ pub const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABIT
     struct W: pub Type { u: {} }
 
     let at_a_record_of_units(b : Bool, r : {{}, {}}, s : {{}, {}})
-        -> Eq(@(Nat))((match b: (_) => {{{}, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1,
-                      (match b: (_) => {{{}, {}}, Nat} | true => (s, 1) | false => (s, 2) end).1)
+        -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
+                      (match b | true => (s, 1) | false => (s, 2) end).1)
         = Eq/refl();
 
     let at_a_function_into_a_unit(b : Bool, r : (Nat) -> {}, s : (Nat) -> {})
-        -> Eq(@(Nat))((match b: (_) => {(Nat) -> {}, Nat} | true => (r, 1) | false => (r, 2) end).1,
-                      (match b: (_) => {(Nat) -> {}, Nat} | true => (s, 1) | false => (s, 2) end).1)
+        -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
+                      (match b | true => (s, 1) | false => (s, 2) end).1)
         = Eq/refl();
 
     let at_a_struct_of_a_unit(b : Bool, r : W, s : W)
-        -> Eq(@(Nat))((match b: (_) => {W, Nat} | true => (r, 1) | false => (r, 2) end).1,
-                      (match b: (_) => {W, Nat} | true => (s, 1) | false => (s, 2) end).1)
+        -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
+                      (match b | true => (s, 1) | false => (s, 2) end).1)
         = Eq/refl();
 
     let at_a_proposition_whose_implicit_is_solved(b : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
-        -> Eq(@(Nat))((match b: (_) => {Eq()(0, 0), Nat} | true => (p, 1) | false => (p, 2) end).1,
-                      (match b: (_) => {Eq()(0, 0), Nat} | true => (q, 1) | false => (p, 2) end).1)
+        -> Eq(@(Nat))((match b | true => (p, 1) | false => (p, 2) end).1,
+                      (match b | true => (q, 1) | false => (p, 2) end).1)
         = Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
 
-pub const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_RESULT_AT_ITS_SCRUTINEE: &str = r#"
+pub const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_GOAL: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let against_a_variable(b : Bool, c : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
-        -> Eq(@(Nat))((match c: (_) => {Eq()(0, 0), Nat}
-                       | true => (match b: (_) => Eq()(0, 0) | true => p | false => q end, 1)
+        -> Eq(@(Nat))((match c
+                       | true => (match b | true => p | false => q end, 1)
                        | false => (p, 2) end).1,
-                      (match c: (_) => {Eq()(0, 0), Nat} | true => (p, 1) | false => (p, 2) end).1)
+                      (match c | true => (p, 1) | false => (p, 2) end).1)
         = Eq/refl();
 
     let of_two_scrutinees(a : Bool, b : Bool, c : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
-        -> Eq(@(Nat))((match c: (_) => {Eq()(0, 0), Nat}
-                       | true => (match a: (_) => Eq()(0, 0) | true => p | false => q end, 1)
+        -> Eq(@(Nat))((match c
+                       | true => (match a | true => p | false => q end, 1)
                        | false => (p, 2) end).1,
-                      (match c: (_) => {Eq()(0, 0), Nat}
-                       | true => (match b: (_) => Eq()(0, 0) | true => q | false => p end, 1)
+                      (match c
+                       | true => (match b | true => q | false => p end, 1)
                        | false => (p, 2) end).1)
         = Eq/refl();
 
     let at_a_record_of_units(b : Bool, c : Bool, r : {{}, {}}, s : {{}, {}})
-        -> Eq(@(Nat))((match c: (_) => {{{}, {}}, Nat}
-                       | true => (match b: (_) => {{}, {}} | true => r | false => s end, 1)
+        -> Eq(@(Nat))((match c
+                       | true => (match b | true => r | false => s end, 1)
                        | false => (r, 2) end).1,
-                      (match c: (_) => {{{}, {}}, Nat} | true => (r, 1) | false => (r, 2) end).1)
+                      (match c | true => (r, 1) | false => (r, 2) end).1)
         = Eq/refl();
 
     /std/print(Nat/to_str(1))
@@ -713,8 +713,8 @@ pub const A_CONSTRUCTORS_VALUE_IS_TYPED_BY_ITS_DECLARATION: &str = r#"
     use /std/{Eq, Nat, Bool};
 
     let a_proof_built_against_one_named(b : Bool, p : Eq()(0, 0))
-        -> Eq(@(Nat))((match b: (_) => {Eq()(0, 0), Nat} | true => (p, 1) | false => (p, 2) end).1,
-                      (match b: (_) => {Eq()(0, 0), Nat} | true => (Eq/refl(), 1) | false => (Eq/refl(), 2) end).1)
+        -> Eq(@(Nat))((match b | true => (p, 1) | false => (p, 2) end).1,
+                      (match b | true => (Eq/refl(@Nat, @0), 1) | false => (Eq/refl(@Nat, @0), 2) end).1)
         = Eq/refl();
 
     /std/print(Nat/to_str(1))
@@ -728,8 +728,8 @@ pub const AN_ARMS_BINDERS_ARE_OPENED_AT_THE_TYPES_THEIR_CONSTRUCTOR_GIVES_THEM: 
     end
 
     let either_proof(t : Two)
-        -> Eq(@(Nat))((match t: (_) => {Eq()(0, 0), Nat} | two(p, q) => (p, 1) end).1,
-                      (match t: (_) => {Eq()(0, 0), Nat} | two(p, q) => (q, 1) end).1)
+        -> Eq(@(Nat))((match t | two(p, q) => (p, 1) end).1,
+                      (match t | two(p, q) => (q, 1) end).1)
         = Eq/refl();
 
     /std/print(Nat/to_str(1))
@@ -741,55 +741,55 @@ pub const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
     struct Record: pub Type { a: Nat, b: Nat }
 
     let hold(@A: Type, a: A, count: Nat) -> A =
-        match count: (_) => A | 0 => a | pred + 1 => a end;
+        match count | 0 => a | pred + 1 => a end;
 
     let a_tuple_in_an_arm(b : Bool, c : Bool, p : {Nat, Nat}, q : {Nat, Nat})
         -> Eq(@({Nat, Nat}))(
-            match b: (_) => {Nat, Nat}
-            | true => ((match c: (_) => {Nat, Nat} | true => p | false => q end).0,
-                       (match c: (_) => {Nat, Nat} | true => p | false => q end).1)
+            match b
+            | true => ((match c | true => p | false => q end).0,
+                       (match c | true => p | false => q end).1)
             | false => p
             end,
-            match b: (_) => {Nat, Nat}
-            | true => match c: (_) => {Nat, Nat} | true => p | false => q end
+            match b
+            | true => match c | true => p | false => q end
             | false => p
             end)
         = Eq/refl();
 
     let a_tuple_against_a_definition_that_unfolds_to_one(b : Bool, n : Nat, p : {Nat, Nat})
         -> Eq(@({Nat, Nat}))(
-            match b: (_) => {Nat, Nat} | true => (hold(p, n).0, hold(p, n).1) | false => p end,
-            match b: (_) => {Nat, Nat} | true => hold(p, n) | false => p end)
+            match b | true => (hold(p, n).0, hold(p, n).1) | false => p end,
+            match b | true => hold(p, n) | false => p end)
         = Eq/refl();
 
     let a_lambda_in_an_arm(b : Bool, c : Bool, g : (Nat) -> Nat, k : (Nat) -> Nat)
         -> Eq(@((Nat) -> Nat))(
-            match b: (_) => (Nat) -> Nat
-            | true => (x : Nat) => (match c: (_) => (Nat) -> Nat | true => g | false => k end)(x + 0)
+            match b
+            | true => (x : Nat) => (match c | true => g | false => k end)(x + 0)
             | false => g
             end,
-            match b: (_) => (Nat) -> Nat
-            | true => match c: (_) => (Nat) -> Nat | true => g | false => k end
+            match b
+            | true => match c | true => g | false => k end
             | false => g
             end)
         = Eq/refl();
 
     let a_struct_at_its_own_type(c : Bool, s : Record, r : Record)
         -> Eq(@(Record))(
-            Record { a = (match c: (_) => Record | true => s | false => r end).a,
-                     b = (match c: (_) => Record | true => s | false => r end).b },
-            match c: (_) => Record | true => s | false => r end)
+            Record { a = (match c | true => s | false => r end).a,
+                     b = (match c | true => s | false => r end).b },
+            match c | true => s | false => r end)
         = Eq/refl();
 
     let a_struct_in_an_arm(b : Bool, c : Bool, s : Record, r : Record)
         -> Eq(@(Record))(
-            match b: (_) => Record
-            | true => Record { a = (match c: (_) => Record | true => s | false => r end).a,
-                               b = (match c: (_) => Record | true => s | false => r end).b }
+            match b
+            | true => Record { a = (match c | true => s | false => r end).a,
+                               b = (match c | true => s | false => r end).b }
             | false => s
             end,
-            match b: (_) => Record
-            | true => match c: (_) => Record | true => s | false => r end
+            match b
+            | true => match c | true => s | false => r end
             | false => s
             end)
         = Eq/refl();
@@ -847,10 +847,10 @@ pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_BY_THEIR_SPINES_AT_ANY_TYPE: &str 
     end
 
     let into(n : Nat, e : Z(n)) -> (Nat) -> Nat =
-        match e: (_, _) => (Nat) -> Nat | mk() => (x : Nat) => x end;
+        match e | mk() => (x : Nat) => x end;
 
     let pair(n : Nat, e : Z(n)) -> {Nat, Nat} =
-        match e: (_, _) => {Nat, Nat} | mk() => (1, 2) end;
+        match e | mk() => (1, 2) end;
 
     let through(n : Nat, e : Z(n)) -> Nat = match e | mk() => 1 end;
 
@@ -881,10 +881,10 @@ pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
     let through(n : Nat, e : Zero(n)) -> Nat = match e | zero() => 1 end;
 
     let into(n : Nat, e : Zero(n)) -> (Nat) -> Nat =
-        match e: (_, _) => (Nat) -> Nat | zero() => (x : Nat) => x end;
+        match e | zero() => (x : Nat) => x end;
 
     let pair(n : Nat, e : Zero(n)) -> {Nat, Nat} =
-        match e: (_, _) => {Nat, Nat} | zero() => (1, 2) end;
+        match e | zero() => (1, 2) end;
 
     let a_curried_call(n : Nat, p : Zero(n), q : Zero(n))
         -> Eq(@(Nat))(into(n, p)(3), into(n, q)(3)) = Eq/refl();
@@ -903,8 +903,8 @@ pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
         -> Eq(@(List(Nat)))([through(n, p)], [through(n, q)]) = Eq/refl();
 
     let as_a_scrutinee(n : Nat, p : Zero(n), q : Zero(n))
-        -> Eq(@(Nat))(match through(n, p): (_) => Nat | 0 => 0 | pred + 1 => 1 end,
-                      match through(n, q): (_) => Nat | 0 => 0 | pred + 1 => 1 end)
+        -> Eq(@(Nat))(match through(n, p) | 0 => 0 | pred + 1 => 1 end,
+                      match through(n, q) | 0 => 0 | pred + 1 => 1 end)
         = Eq/refl();
 
     let as_an_operand(n : Nat, p : Zero(n), q : Zero(n))
@@ -915,8 +915,8 @@ pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
 
     let past_a_stuck_head(n : Nat, b : Bool, f : (Zero(n)) -> Nat, g : (Zero(n)) -> Nat,
                           p : Zero(n), q : Zero(n),
-                          x : Eq()((match b: (_) => (Zero(n)) -> Nat | true => f | false => g end)(p), 0))
-        -> Eq()((match b: (_) => (Zero(n)) -> Nat | true => f | false => g end)(q), 0) = x;
+                          x : Eq()((match b | true => f | false => g end)(p), 0))
+        -> Eq()((match b | true => f | false => g end)(q), 0) = x;
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1013,7 +1013,7 @@ pub const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
     use /std/{Eq, Nat};
 
     let slow(n : Nat) -> Eq()(n, n) =
-        match n : (k) => Eq()(k, k)
+        match n
         | 0 => Eq/refl()
         | k + 1 => Eq/cong((m : Nat) => m + 1, slow(k))
         end;
@@ -1072,7 +1072,7 @@ pub const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
     | t()
     end
 
-    let spin(n : Nat) -> T = match n : (_) => T | 0 => T/t() | k + 1 => spin(k) end;
+    let spin(n : Nat) -> T = match n | 0 => T/t() | k + 1 => spin(k) end;
 
     let within(y : T, w : Same(@T)(y, y)) -> Nat =
         let _v : Same(@T)(spin(100000000000), y) = w;

@@ -35,25 +35,25 @@ let cells: Nat = 10000;
 let ballast_cells: Nat = BALLAST_CELLS;
 
 let build(n: Nat, x: Nat, acc: Chain) -> Chain =
-    match n: (_) => Chain
+    match n
     | 0 => acc
     | m + 1 => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
 let step(rest: Chain, acc: Chain) -> Chain =
-    match rest: (_) => Chain
+    match rest
     | nil() => acc
     | cons(v, tail) => step(tail, Chain/cons((75 * v + 13) % 65537, acc))
     end;
 
 let rounds(k: Nat, c: Chain) -> Chain =
-    match k: (_) => Chain
+    match k
     | 0 => c
     | m + 1 => rounds(m, step(c, Chain/nil()))
     end;
 
 let total(c: Chain, acc: Nat) -> Nat =
-    match c: (_) => Nat
+    match c
     | nil() => acc
     | cons(v, tail) => total(tail, (acc + v) % 1000003)
     end;
@@ -61,11 +61,11 @@ let total(c: Chain, acc: Nat) -> Nat =
 let entry() -> /std/Io({}) =
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
+    match input
     | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
+        match Str/of_bytes(bytes)
         | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            match Nat/of_str(Str/trim(s))
             | some(k) =>
                 let ballast = total(build(ballast_cells, (k + 2) % 65537, Chain/nil()), 0);
                 let chain = rounds(k, build(cells, (k + 1) % 65537, Chain/nil()));
@@ -225,19 +225,19 @@ end
 let ballast_cells: Nat = BALLAST_CELLS;
 
 let build(n: Nat, x: Nat, acc: Chain) -> Chain =
-    match n: (_) => Chain
+    match n
     | 0 => acc
     | m + 1 => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
 let drain(c: Chain, acc: Nat) -> Nat =
-    match c: (_) => Nat
+    match c
     | nil() => acc
     | cons(v, tail) => drain(tail, (acc + v) % 1000003)
     end;
 
 let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
-    match n: (_) => Map(Bytes, Nat)
+    match n
     | 0 => m
     | k + 1 =>
         let y = 75 * x % 65537;
@@ -247,11 +247,11 @@ let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
 let entry() -> /std/Io({}) =
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
+    match input
     | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
+        match Str/of_bytes(bytes)
         | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            match Nat/of_str(Str/trim(s))
             | some(n) =>
                 let ballast = drain(build(ballast_cells, (n + 2) % 65537, Chain/nil()), 0);
                 let m = walk(n, 0, (n + 1) % 65537, Map/empty());
@@ -320,7 +320,7 @@ fn spines_collection_decomposition() {
 const SPINES_KEYED: &str = r#"use /std/{Str, Nat, Map, Io, Bytes};
 
 let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
-    match n: (_) => Map(Bytes, Nat)
+    match n
     | 0 => m
     | k + 1 =>
         let y = 75 * x % 65537;
@@ -330,11 +330,11 @@ let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
 let entry() -> /std/Io({}) =
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
+    match input
     | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
+        match Str/of_bytes(bytes)
         | success(s) =>
-            match Nat/of_str(Str/trim(s)): (_) => Io({})
+            match Nat/of_str(Str/trim(s))
             | some(n) =>
                 let m = walk(n, 0, (n + 1) % 65537, Map/empty());
                 /std/print(

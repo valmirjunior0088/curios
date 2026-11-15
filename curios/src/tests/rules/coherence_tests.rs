@@ -167,7 +167,7 @@ fn parametric_witnesses_over_one_family_still_collide() {
         satisfy (@S : Type) => Monad((A : Type) => Box(S, A)) {
             pure(@A, a) = Box/wrap(a),
             bind(@A, @B, m, f) =
-                match m : (_) => Box(S, B)
+                match m
                 | wrap(a) => f(a)
                 end,
         }
@@ -176,7 +176,7 @@ fn parametric_witnesses_over_one_family_still_collide() {
         b"ok",
     )
     .refused(&[
-        ("        /std/print(\"ok\")", "        satisfy Monad((A : Type) => Box(Str, A)) {\n            pure(@A, a) = Box/wrap(a),\n            bind(@A, @B, m, f) =\n                match m : (_) => Box(Str, B)\n                | wrap(a) => f(a)\n                end,\n        }\n        /std/print(\"ok\")"),
+        ("        /std/print(\"ok\")", "        satisfy Monad((A : Type) => Box(Str, A)) {\n            pure(@A, a) = Box/wrap(a),\n            bind(@A, @B, m, f) =\n                match m\n                | wrap(a) => f(a)\n                end,\n        }\n        /std/print(\"ok\")"),
     ])
     .by_elaborator_in("/witness~/std/Monad/Monad(/Box)#1", |error| {
         matches!(error, Error::DuplicateWitness { .. })

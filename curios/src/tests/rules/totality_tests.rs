@@ -51,7 +51,7 @@ const BUILT_AT_AN_INFERRED_POSITION: &str = r#"
     struct Box : pub Type { p : True }
     let build(n : Nat) -> Box = Box { p = True/qed() };
     let conjured : Nat =
-        match build(0).p : (_) => Nat | qed() => 7
+        match build(0).p | qed() => 7
         end;
     /std/print(Nat/to_str(conjured))
     "#;
@@ -308,7 +308,7 @@ fn a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits() {
         end
 
         let drain(v: Wit, q: Q(Wit/s(v))) -> True =
-            match q: (_, _) => True | nil() => True/qed()
+            match q | nil() => True/qed()
             | cons(w, inner) => drain(w, inner)
             end;
 
@@ -321,7 +321,7 @@ fn a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits() {
     .refused(&[
         ("{True, False}", "{False}"),
         ("-> True =", "-> False ="),
-        ("(_, _) => True | nil() => True/qed()", "(_, _) => False"),
+        ("match q | nil() => True/qed()", "match q"),
         ("bad: True", "bad: False"),
     ])
     .by_elaborator_in("/drain", |error| {
@@ -657,7 +657,7 @@ fn a_partial_inhabitant_of_an_impossible_index_proves_nothing() {
         end
         let spin(n : Nat) -> Pin(n) = spin(n);
         let bad(n : Nat, pin : Pin(n + 1)) -> False =
-            match pin : (i, p) => False
+            match pin
             end;
         /std/print("ok")
         "#,
@@ -665,7 +665,7 @@ fn a_partial_inhabitant_of_an_impossible_index_proves_nothing() {
     )
     .refused(&[
         ("bad(n : Nat, pin : Pin(n + 1))", "bad(n : Nat)"),
-        ("match pin :", "match spin(n + 1) :"),
+        ("match pin", "match spin(n + 1)"),
     ])
     .by_elaborator_in("/bad", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })

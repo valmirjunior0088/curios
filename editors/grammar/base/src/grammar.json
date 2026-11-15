@@ -2477,31 +2477,6 @@
                   }
                 },
                 {
-                  "type": "CHOICE",
-                  "members": [
-                    {
-                      "type": "SEQ",
-                      "members": [
-                        {
-                          "type": "STRING",
-                          "value": ":"
-                        },
-                        {
-                          "type": "FIELD",
-                          "name": "motive",
-                          "content": {
-                            "type": "SYMBOL",
-                            "name": "_term"
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "type": "BLANK"
-                    }
-                  ]
-                },
-                {
                   "type": "REPEAT",
                   "content": {
                     "type": "SYMBOL",
@@ -4949,10 +4924,6 @@
     }
   ],
   "conflicts": [
-    [
-      "lambda_parameters",
-      "unit"
-    ],
     [
       "struct_literal",
       "struct_pattern"

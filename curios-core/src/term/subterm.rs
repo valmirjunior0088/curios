@@ -6,9 +6,9 @@ use {
     super::{Mentions, Union},
     crate::{
         Apply, Argument, Bound, Carrier, Cases, Foreign, Free, Func, FuncType, Global, InductType,
-        Instance, Intrinsic, Let, LetBinding, Level, Match, MatchResult, Mention, Metavar, Method,
-        Nat, Proj, Quality, Rec, RecGroup, Sort, Struct, StructType, Term, Transient, Tuple,
-        TupleType, UniverseMetaId, Universes, Var, Variant, Visit,
+        Instance, Intrinsic, Let, LetBinding, Level, Match, Mention, Metavar, Method, Nat, Proj,
+        Quality, Rec, RecGroup, Sort, Struct, StructType, Term, Transient, Tuple, TupleType,
+        UniverseMetaId, Universes, Var, Variant, Visit,
     },
     curios_common::SyntaxRegistry,
     curios_num::{Floating, Integer},
@@ -235,13 +235,9 @@ impl Subterm {
                     .iter()
                     .for_each(|f| f.collect_construction_names(names));
             }
-            Subterm::Match(Match {
-                head,
-                result,
-                cases,
-            }) => {
+            Subterm::Match(Match { head, goal, cases }) => {
                 head.collect_construction_names(names);
-                result.body().collect_construction_names(names);
+                goal.collect_construction_names(names);
                 match cases {
                     Cases::Bool {
                         false_case,
@@ -351,13 +347,9 @@ impl Subterm {
             Subterm::Struct(Struct { params, fields, .. }) => {
                 params.iter().any(&mut *pred) || fields.iter().any(&mut *pred)
             }
-            Subterm::Match(Match {
-                head,
-                result,
-                cases,
-            }) => {
+            Subterm::Match(Match { head, goal, cases }) => {
                 pred(head)
-                    || pred(result.body())
+                    || pred(goal)
                     || match cases {
                         Cases::Bool {
                             false_case,
@@ -673,16 +665,9 @@ impl Bound for Subterm {
                 fields: fields.iter().map(|f| visit.visit_subterm(f)).collect(),
                 entries: entries.clone(),
             }),
-            Subterm::Match(Match {
-                head,
-                result,
-                cases,
-            }) => Subterm::Match(Match {
+            Subterm::Match(Match { head, goal, cases }) => Subterm::Match(Match {
                 head: visit.visit_subterm(head),
-                result: match result {
-                    MatchResult::Family(motive) => MatchResult::Family(visit.visit_scope(motive)),
-                    MatchResult::Ambient(goal) => MatchResult::Ambient(visit.visit_subterm(goal)),
-                },
+                goal: visit.visit_subterm(goal),
                 cases: match cases {
                     Cases::Bool {
                         false_case,
@@ -836,46 +821,44 @@ impl Bound for Subterm {
             Subterm::Struct(Struct { params, fields, .. }) => {
                 max_reach(params).max(max_reach(fields))
             }
-            Subterm::Match(Match {
-                head,
-                result,
-                cases,
-            }) => head.reach().max(result.reach()).max(match cases {
-                Cases::Bool {
-                    false_case,
-                    true_case,
-                } => false_case.reach().max(true_case.reach()),
-                Cases::Switch { cases, default } => {
-                    max_reach(cases.iter().map(|(_, b)| b)).max(default.reach())
-                }
-                Cases::Induct {
-                    cases,
-                    default,
-                    stated,
-                } => cases
-                    .iter()
-                    .map(|(_, s)| s.reach())
-                    .max()
-                    .unwrap_or(0)
-                    .max(default.as_ref().map_or(0, |d| d.reach()))
-                    .max(stated.as_ref().map_or(0, |s| s.reach())),
-                Cases::FreeMonoid { carrier } => match carrier {
-                    Carrier::Nat {
-                        empty_case,
-                        cons_case,
-                    } => empty_case.reach().max(cons_case.reach()),
-                    Carrier::Bytes {
-                        empty_case,
-                        cons_case,
-                        ..
-                    } => empty_case.reach().max(cons_case.reach()),
-                    Carrier::List {
-                        elem,
-                        empty_case,
-                        cons_case,
-                    } => elem.reach().max(empty_case.reach()).max(cons_case.reach()),
-                },
-            }),
+            Subterm::Match(Match { head, goal, cases }) => {
+                head.reach().max(goal.reach()).max(match cases {
+                    Cases::Bool {
+                        false_case,
+                        true_case,
+                    } => false_case.reach().max(true_case.reach()),
+                    Cases::Switch { cases, default } => {
+                        max_reach(cases.iter().map(|(_, b)| b)).max(default.reach())
+                    }
+                    Cases::Induct {
+                        cases,
+                        default,
+                        stated,
+                    } => cases
+                        .iter()
+                        .map(|(_, s)| s.reach())
+                        .max()
+                        .unwrap_or(0)
+                        .max(default.as_ref().map_or(0, |d| d.reach()))
+                        .max(stated.as_ref().map_or(0, |s| s.reach())),
+                    Cases::FreeMonoid { carrier } => match carrier {
+                        Carrier::Nat {
+                            empty_case,
+                            cons_case,
+                        } => empty_case.reach().max(cons_case.reach()),
+                        Carrier::Bytes {
+                            empty_case,
+                            cons_case,
+                            ..
+                        } => empty_case.reach().max(cons_case.reach()),
+                        Carrier::List {
+                            elem,
+                            empty_case,
+                            cons_case,
+                        } => elem.reach().max(empty_case.reach()).max(cons_case.reach()),
+                    },
+                })
+            }
             // Binding `i` sits under `i` binders, so its reach past the block boundary is `reach - i`; `Scope::reach` handles the tail's own arity. A flat forward max — no inner-to-outer unwind — because the block is flat, not a nest of arity-subtracting scopes.
             Subterm::Let(block) => {
                 let (bindings, tail) = (block.bindings(), block.tail());

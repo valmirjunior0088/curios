@@ -11,13 +11,13 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         | refl(@z : A) : (z, z)
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2()(x, y)) -> Eq2()(y, x) =
-            match p : (s, t, q) => Eq2()(t, s)
+            match p
             | refl(@z) => Eq2/refl()
             end;
         let direct : Eq2()(2, 2) = sym2(Eq2/refl());
         let chained : Eq2()(3, 3) = sym2(sym2(Eq2/refl()));
         let entry() -> /std/Io({}) =
-            match chained : (_, _, _) => /std/Io({})
+            match chained
             | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
             end;
         entry()
@@ -98,7 +98,7 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
         let use_(@B : Type, l : List(B)) -> List(B) = l;
         let v : List({ Nat, Nat }) = use_(mk((1, 2)));
         let entry() -> /std/Io({}) =
-            match v : (_) => /std/Io({})
+            match v
             | [] => /std/Io/pure(())
             | [p, ..rest] => let _ = /std/print(Nat/to_str(p.1))!; /std/Io/pure(())
             end;

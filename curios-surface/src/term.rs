@@ -351,8 +351,6 @@ pub struct StructLit<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Match<D: Dialect = Program> {
     pub head: Term<D>,
-    /// The written motive, a term checked against the eliminator's motive type `(ī : Ī(p̄)) -> I(p̄, ī) -> Sort` — ordinarily a lambda binding the scrutinee's indices and then the scrutinee. `None` records that no `:` was written, and lowering mints a silent metavariable for it.
-    pub motive: Option<Term<D>>,
     /// The arms, in source order. Each pairs a (possibly nested, across constructors/tuples/structs — see [`MatchPattern`]) pattern with its body; zero arms is legal (a vacuous elimination, e.g. of `False`). Arms have no priority: two may match one value only where the first is a case of the other, and elaboration rejects an arm no value reaches and a value no arm matches (see `curios-elab`'s matrix compiler).
     pub arms: Vec<MatrixArm<D>>,
 }
@@ -481,7 +479,7 @@ pub enum MatchPattern<D: Dialect = Program> {
 }
 
 impl<D: Dialect> MatchPattern<D> {
-    /// Whether this leaf is a genuine single-dispatch shape (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`), as opposed to `Binder`/`Tuple`/`Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections) — so there is nothing for a dependent motive to attach to. Used by the matrix compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`List`/`Bytes` each nest their own sub-pattern, so a plain [`std::mem::discriminant`] comparison on the outer variant already treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same dispatchable shape, with no separate classifier needed.
+    /// Whether this leaf is a genuine single-dispatch shape (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`), as opposed to `Binder`/`Tuple`/`Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections). The matrix compiler (`into_core::match_compile`) reads a final `_` after arms that each dispatch as their default.
     pub fn is_dispatchable(&self) -> bool {
         !matches!(
             self,

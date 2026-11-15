@@ -6,7 +6,7 @@ use {super::test_support::*, crate::tests::test_support::*, curios_native::test_
 fn vec_cons_with_nat_succ() {
     let source = r#"
         let Vec(T : Type, n : std/Nat) -> Type =
-            match n : (_) => Type
+            match n
             | 0 => {}
             | pred + 1 => { T, Vec(T, pred) }
             end;
@@ -29,7 +29,7 @@ fn vec_cons_with_nat_succ() {
 
 #[test]
 fn indexed_vec_append_executes() {
-    // A motive binding an index, *executed*: `append`'s motive binds the length index (`(v : Vec(T)(k)) => Vec(T)(Nat/add(k, m))`), the `cons` arm meets it through the definitional successor-peeling of `Nat/add`, and the implicit index arguments of the recursive call are solved to the arm's *first* binder. Running (not just compiling) guards the zonk realignment of multi-binder arm scopes: with the in-group order flipped, the solved indices would silently reference the wrong binder and the program would trap at runtime.
+    // A goal naming an index, *executed*: `append`'s goal names the length index (`Vec(T)(Nat/add(n, m))`), the `cons` arm meets it through the definitional successor-peeling of `Nat/add`, and the implicit index arguments of the recursive call are solved to the arm's *first* binder. Running (not just compiling) guards the zonk realignment of multi-binder arm scopes: with the in-group order flipped, the solved indices would silently reference the wrong binder and the program would trap at runtime.
     let source = r#"
         use /std/{Nat, Bytes, Io};
         induct Vec(T : Type) : (n : Nat) -> Type
@@ -37,12 +37,12 @@ fn indexed_vec_append_executes() {
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
         let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T)(n), w : Vec(T)(m)) -> Vec(T)(Nat/add(n, m)) =
-            match v : (k, v) => Vec(T)(Nat/add(k, m))
+            match v
             | nil() => w
             | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
             end;
         let total(@n : Nat, v : Vec(Nat)(n), acc : Nat) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;
@@ -116,7 +116,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
         let entry() -> /std/Io({}) =
             let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-            match input: (_) => Io({})
+            match input
             | some(bytes) =>
                 /std/print(
                     Str/join(" ", [

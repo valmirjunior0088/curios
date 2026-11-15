@@ -72,7 +72,7 @@ end
 #{node = Rec}
 let /stall : (n: #NatType) -> /std/Bool/Holds(true) =
     (n: #NatType) =>
-        match n: (x2) => /std/Bool/Holds(true)
+        #{goal = /std/Bool/Holds(true)} match n
         | 0 =>
             /std/Bool/True/qed()
         | k + 1 =>
@@ -81,7 +81,7 @@ let /stall : (n: #NatType) -> /std/Bool/Holds(true) =
 let /lemma : (
     c: #BoolType,
     h: /std/Bool/Holds(
-        #{result = Ambient(#BoolType)}
+        #{goal = #BoolType}
         match /Pk/mk(
             /stall(100000000000),
             c
@@ -95,7 +95,7 @@ let /lemma : (
     (
         c: #BoolType,
         h: /std/Bool/Holds(
-            #{result = Ambient(#BoolType)}
+            #{goal = #BoolType}
             match /Pk/mk(
                 /stall(100000000000),
                 c
@@ -130,7 +130,7 @@ const A_WITNESS_AT_AN_INSTANCE_BESIDE_THE_DATA_READ: &str = r#"
 #{node = Rec}
 let /count : (n: #NatType) -> #NatType =
     (n: #NatType) =>
-        match n: (x2) => #NatType
+        #{goal = #NatType} match n
         | 0 =>
             0
         | k + 1 =>
@@ -191,7 +191,7 @@ end
 #{node = Rec}
 let /stall_r2 : (n: #NatType) -> #{node = InductType} /R2()(5, 9) =
     (n: #NatType) =>
-        match n: (x2) => #{node = InductType} /R2()(5, 9)
+        #{goal = #{node = InductType} /R2()(5, 9)} match n
         | 0 =>
             /R2/mk(5, 9)
         | k + 1 =>
@@ -200,7 +200,7 @@ let /stall_r2 : (n: #NatType) -> #{node = InductType} /R2()(5, 9) =
 #{node = Rec}
 let /stall_same : (n: #NatType) -> #{node = InductType} /Same()(true, true) =
     (n: #NatType) =>
-        match n: (x2) => #{node = InductType} /Same()(true, true)
+        #{goal = #{node = InductType} /Same()(true, true)} match n
         | 0 =>
             /Same/refl(@true)
         | k + 1 =>
@@ -210,7 +210,7 @@ let /lemma : (
     c: #BoolType,
     h: /std/Bool/Holds(
         #{
-            result = Ambient(#BoolType),
+            goal = #BoolType,
             cases = {
                 stated =
                     #{node = InductType}
@@ -221,7 +221,7 @@ let /lemma : (
             #BoolOr(
                 #BoolOr(#NatNeq(x, 5), #NatNeq(y, 9)),
                 #{
-                    result = Ambient(#BoolType),
+                    goal = #BoolType,
                     cases = {
                         stated =
                             #{node = InductType}
@@ -239,7 +239,7 @@ let /lemma : (
         c: #BoolType,
         h: /std/Bool/Holds(
             #{
-                result = Ambient(#BoolType),
+                goal = #BoolType,
                 cases = {
                     stated =
                         #{node = InductType}
@@ -250,7 +250,7 @@ let /lemma : (
                 #BoolOr(
                     #BoolOr(#NatNeq(x, 5), #NatNeq(y, 9)),
                     #{
-                        result = Ambient(#BoolType),
+                        goal = #BoolType,
                         cases = {
                             stated =
                                 #{node = InductType}
@@ -290,7 +290,7 @@ induct /R2: (n: #NatType, m: #NatType) -> pub Prop
 end
 let /elsewhere : /std/Bool/Holds(
     #{
-        result = Ambient(#BoolType),
+        goal = #BoolType,
         cases = {
             stated =
                 #{node = InductType}
@@ -388,7 +388,7 @@ end
 let /lemma : (
     c: #BoolType,
     h: /std/Bool/Holds(
-        #{result = Ambient(#BoolType)}
+        #{goal = #BoolType}
         match /Bx/mk(
             @#BoolType,
             @true,
@@ -405,7 +405,7 @@ let /lemma : (
     (
         c: #BoolType,
         h: /std/Bool/Holds(
-            #{result = Ambient(#BoolType)}
+            #{goal = #BoolType}
             match /Bx/mk(
                 @#BoolType,
                 @true,
@@ -443,7 +443,7 @@ const TWO_CALLS_AT_BOTH_DEMANDS_IN_ONE_RUN: &str = r#"
 #{node = Rec}
 let /parity : (n: #NatType) -> #NatType =
     (n: #NatType) =>
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match n
         | 0 =>
             0
@@ -510,7 +510,7 @@ let /w : {
 } =
     (
         (c0: #BoolType) =>
-            match /dispatch(c0): (b) => #BoolType
+            #{goal = #BoolType} match /dispatch(c0)
             | false =>
                 false
             | true =>
@@ -550,12 +550,12 @@ const A_MATCH_OR_A_PROJECTION_ON_A_FOLD_THAT_ANSWERS_A_RECURSIVE_CALL: &str = r#
 #{node = Rec}
 let /f : (n: #NatType) -> #NatType =
     (n: #NatType) =>
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match n
         | 0 =>
             0
         | k + 1 =>
-            #{result = Ambient(#NatType)}
+            #{goal = #NatType}
             match #ListFold(#NatType, #NatType, #List(#NatType, [5]), /f(k), (a: #NatType, b: #NatType) => b)
             | 0 =>
                 7
@@ -568,14 +568,14 @@ let /y : /std/Bool/Holds(#NatEql(/f(1), 7)) =
 #{node = Rec}
 let /member : (n: #NatType) -> #NatType =
     (n: #NatType) =>
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match n
         | 0 =>
             0
         | k + 1 =>
             /member(k)
         end;
-let /c3 : #{result = Ambient(Type)}
+let /c3 : #{goal = Type}
     match #ListFold(#NatType, #NatType, #List(#NatType, [5]), /member(3), (a: #NatType, b: #NatType) => b)
     | 0 =>
         #BoolType
@@ -583,7 +583,7 @@ let /c3 : #{result = Ambient(Type)}
         #NatType
     end =
     true;
-let /S : #{result = Ambient(#{level = 1} Type)}
+let /S : #{goal = #{level = 1} Type}
     match #ListFold(#NatType, #NatType, #List(#NatType, [5]), /member(3), (a: #NatType, b: #NatType) => b)
     | 0 =>
         Type
@@ -596,7 +596,7 @@ let /s : /S =
 #{node = Rec}
 let /pair : (n: #NatType) -> {#NatType, #NatType} =
     (n: #NatType) =>
-        #{result = Ambient({#NatType, #NatType})}
+        #{goal = {#NatType, #NatType}}
         match n
         | 0 =>
             (0, 1)
@@ -671,11 +671,11 @@ end
 let /loop : (u: {}) -> #{node = InductType} /F()(1) =
     (u: {}) => /loop(u);
 let /forged : #{node = InductType} /std/Bool/False() =
-    #{result = Ambient(#{node = InductType} /std/Bool/False())}
+    #{goal = #{node = InductType} /std/Bool/False()}
     match /loop(())
     | c() => /std/Bool/True/qed()
     end;
-let /typed : #{result = Ambient(Prop)} match /loop(()) | c() => #{node = InductType} /std/Bool/True() end =
+let /typed : #{goal = Prop} match /loop(()) | c() => #{node = InductType} /std/Bool/True() end =
     /std/Bool/True/qed();
 /forged
 "#;

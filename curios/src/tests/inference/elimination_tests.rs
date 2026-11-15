@@ -1,12 +1,12 @@
 //! What an elimination tells the elaborator.
 //!
-//! Two things, and they are why the motive may be omitted at all: the result type inferred from the arms, and the definitional refinement each arm carries for its own body. A guard is the same mechanism written after an arm's pattern.
+//! Two things, and they are why a match writes no result: the result type inferred from the arms, and the definitional refinement each arm carries for its own body. A guard is the same mechanism written after an arm's pattern.
 
 use crate::tests::test_support::*;
 
 #[test]
-fn match_omitted_motive_infers() {
-    // The same recursion as `triangular_sum`, but with the motive omitted. It is non-dependent (every arm has type `std/Nat`), so the synthesized metavar motive is solved by the arms — no explicit `: std/Nat` needed.
+fn a_recursion_matches_at_its_declared_result() {
+    // The same recursion as `triangular_sum`: the match is checked at the declared result, `std/Nat`, and each arm at it.
     let source = r#"
         let triangle(n : std/Nat) -> std/Nat =
             match n
@@ -24,12 +24,12 @@ fn match_omitted_motive_infers() {
 }
 
 #[test]
-fn omitted_motive_infers_over_a_compound_scrutinee() {
-    // The motive hole's scope is opened with the scrutinee — a non-pattern spine entry when the scrutinee is compound. Occurrence abstraction in `solve` rewrites the scrutinee's occurrences in the expected type to the motive binder, so the dependent motive infers without being spelled.
+fn a_goal_over_a_compound_scrutinee_is_read_at_each_case() {
+    // The goal `Vec(Nat, Nat/add(k, k))` writes the compound scrutinee, so each arm reads it with its case in the scrutinee's place: `Vec(Nat, 0)`, and `Vec(Nat, pred + 1)`.
     let source = r#"
         use /std/{Nat, Vec, Io};
         let build(n : Nat) -> Vec(Nat, n) =
-            match n : (m) => Vec(Nat, m)
+            match n
             | 0 => Vec/nil()
             | pred + 1 => Vec/cons(0, build(pred))
             end;
@@ -51,7 +51,7 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
         use /std/{Nat, Option};
         use /std/Bool/{True, False};
         let AtMost(a : Nat, hi : Nat) -> Prop =
-            match a <= hi : (_) => Prop
+            match a <= hi
             | false => False
             | true => True
             end;

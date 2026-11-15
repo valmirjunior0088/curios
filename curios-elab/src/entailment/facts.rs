@@ -2230,17 +2230,17 @@ fn open_until<T>(
     Ok(None)
 }
 
-/// `match head | true => true_case | false => false_case end`, its motive elided as a written one is, so elaboration checks each arm against the expected type with `head` refined.
+/// `match head | true => true_case | false => false_case end`, its goal a hole as lowering mints one, so elaboration checks each arm against the expected type with `head` refined.
 pub fn split(context: &mut Context, head: &Term, false_case: Term, true_case: Term) -> Term {
-    let motive = Term::match_motive_written(Term::hole(context.mint_metavar()));
-    Term::bool_match_scoped(head.clone(), motive, false_case, true_case)
+    let goal = Term::hole(context.mint_metavar());
+    Term::bool_match(head.clone(), goal, false_case, true_case)
 }
 
 /// `match refuted end`: a proof whose type reduces to an empty proposition, eliminated in the place of whatever is expected.
 pub fn eliminate(context: &mut Context, refuted: Term) -> Term {
-    let motive = Term::match_motive_written(Term::hole(context.mint_metavar()));
+    let goal = Term::hole(context.mint_metavar());
     let cases = Vec::<(curios_core::Atom, Vec<(Plicity, Free)>, Term)>::new();
-    Term::induct_match_scoped_marked(refuted, motive, cases, None)
+    Term::induct_match_marked(refuted, goal, cases, None)
 }
 
 /// `let x: statement = body; x`: `body` elaborated against `statement` rather than against whatever position it is put in.

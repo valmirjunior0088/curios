@@ -85,7 +85,6 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
                 [(k, nat_type.clone())],
                 curios_core::Term::nat_match(
                     curios_core::Term::free_var(&k),
-                    None,
                     bool_type.clone(),
                     curios_core::Term::intrinsic(curios_core::Intrinsic::Bool(true)),
                     &pred,
@@ -113,7 +112,6 @@ fn a_decided_bounds_stand_in_reads_nothing_of_its_subject() {
                 [(b, bool_type.clone())],
                 curios_core::Term::bool_match(
                     curios_core::Term::free_var(&b),
-                    None,
                     curios_core::Term::prop(),
                     top.clone(),
                     top,
@@ -281,7 +279,6 @@ fn a_slot_typed_by_a_match_with_a_function_arm_holds_a_function_stand_in() {
             [(b, bool_type), (p, family)],
             curios_core::Term::bool_match(
                 curios_core::Term::free_var(&b),
-                None,
                 curios_core::Term::prop(),
                 top,
                 curios_core::Term::func_type(

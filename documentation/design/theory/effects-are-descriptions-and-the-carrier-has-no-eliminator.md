@@ -16,6 +16,6 @@ A row that does not return is declared `-> Never`, and its declaration takes the
 
 - **Effect rows, effect annotations on arrows, or any effect information in types beyond `Io`**: a row sort in `curios-core`, row equality re-derived in the certifier, and a second constraint domain in the elaborator, for no written program this design accepts whose author wanted it rejected.
 - **Algebraic effects with handlers and a host-side step interpreter**: reifying continuations and interpreting descriptions on the host multiplies allocation and boundary crossings for a generality the library does not use.
-- **Monad laws in definitional equality, and a dependent `bind`**: `IoPure` and `IoBind` reduce their operands and rebuild, and a motive-carrying sequencing waits for a consumer.
+- **Monad laws in definitional equality, and a dependent `bind`**: `IoPure` and `IoBind` reduce their operands and rebuild, and a sequencing whose result depends on the value it binds waits for a consumer.
 - **Restricting which type `exit` may be given**: refusing a `Prop`-sorted result leaves an exit at a constructor-free `Empty : Type`, which eliminates into `Prop` unguarded since zero constructors leave the large-elimination guard no arm to check.
 - **A core bottom `Never` with `Never ≤ A`**, which puts an uninhabited `Type`-sorted carrier into the erased program; **a unit payload, `Io({})`**, which refuses every exiting arm whose region is not unit; **a `Nat` code**, which lets `exit(256)` report a success.

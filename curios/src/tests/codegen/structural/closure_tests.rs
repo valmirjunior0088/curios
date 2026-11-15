@@ -173,9 +173,9 @@ fn a_convoy_in_a_hot_loop_allocates_no_closure() {
     const CONVOY: &str = r#"
         use /std/{Nat, Bool, Eq, List, Proc};
         let step(x: Nat) -> Nat =
-            match x % 2 == 0: (even) => (e: Eq()(x % 2 == 0, even)) -> Nat
-            | true => (_) => x / 2
-            | false => (_) => 3 * x + 1
+            match x % 2 == 0
+            | true => (_: Eq()(x, x)) => x / 2
+            | false => (_: Eq()(x, x)) => 3 * x + 1
             end(Eq/refl());
         let loop(k: Nat, x: Nat) -> Nat =
             match k | 0 => x | kp + 1 => loop(kp, step(x) % 65537) end;

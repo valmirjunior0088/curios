@@ -23,7 +23,7 @@ induct /False: pub Prop
 end
 
 let /unbox: (b: #{node = InductType} /Box()) -> Type =
-    (b: #{node = InductType} /Box()) => match b: (s) => Type | mk(a) => a end;
+    (b: #{node = InductType} /Box()) => #{goal = Type} match b | mk(a) => a end;
 
 let /boxes_equal: (A: Type, B: Type) ->
     #{node = InductType}
@@ -33,13 +33,14 @@ let /boxes_equal: (A: Type, B: Type) ->
 
 let /types_equal: (A: Type, B: Type) -> #{node = InductType} /Eq(Type)(A, B) =
     (A: Type, B: Type) =>
-        match /boxes_equal(A, B): (x, y, q) => #{node = InductType} /Eq(Type)(/unbox(x), /unbox(y))
+        #{goal = #{node = InductType} /Eq(Type)(/unbox(#{node = Variant} /Box/mk(A)), /unbox(#{node = Variant} /Box/mk(B)))}
+        match /boxes_equal(A, B)
         | refl(z) => #{node = Variant} /Eq/refl(@Type, /unbox(z))
         end;
 
 let /cast: (A: Type, B: Type, v: A) -> B =
     (A: Type, B: Type, v: A) =>
-        match /types_equal(A, B): (x, y, q) => (w: x) -> y | refl(z) => (w2: z) => w2 end(v);
+        (#{goal = (w: A) -> B} match /types_equal(A, B) | refl(z) => (w2: z) => w2 end)(v);
 
 let /forged: #{node = InductType} /False() =
     /cast({}, #{node = InductType} /False(), ());
@@ -157,7 +158,7 @@ induct /Held: (n: #NatType) -> pub Type
 end
 
 struct /Wrap(b: #BoolType): pub Prop {
-    held: match b: (x) => Prop | false => #NatType | true => #NatType end,
+    held: #{goal = Prop} match b | false => #NatType | true => #NatType end,
 }
 
 let /forged:
@@ -166,10 +167,11 @@ let /forged:
     #{node = Variant} /Eq/refl(@#{node = StructType} /Wrap(true), /Wrap(true) { 0 });
 
 let /cast: (w: #{node = InductType} /Held()(0)) -> #{node = InductType} /Held()(1) =
-    match /forged: (s, t, q) =>
-        (w: #{node = InductType} /Held()(#{field = Struct(/Wrap, 0)} s.0)) ->
+    #{goal =
+        (w: #{node = InductType} /Held()(#{field = Struct(/Wrap, 0)} (/Wrap(true) { 0 }).0)) ->
             #{node = InductType}
-            /Held()(#{field = Struct(/Wrap, 0)} t.0)
+            /Held()(#{field = Struct(/Wrap, 0)} (/Wrap(true) { 1 }).0)}
+    match /forged
     | refl(z) => (w2: #{node = InductType} /Held()(#{field = Struct(/Wrap, 0)} z.0)) => w2
     end;
 
@@ -177,22 +179,22 @@ let /held: #{node = InductType} /Held()(1) =
     /cast(#{node = Variant} /Held/yes());
 
 let /boom: #{node = InductType} /False() =
-    match /held: (n, w) => #{node = InductType} /False() end;
+    #{goal = #{node = InductType} /False()} match /held end;
 "#;
 
 /// A declaration's domains are typed whatever sort the declaration lands in, a `Prop`-sorted one included.
 ///
 /// `check_signature` owes clause 6 two things — that every constructor or field domain is *well-sorted*, and that a `Type`-sorted one sits at or below the family's declared level — and the first must not run inside the second, which reads a domain only where the result reduces to a sort. Nothing else covers those positions: `check_arity` reaches an `induct`'s parameters and indices but not its constructor telescopes, a `struct` reaches no `check_arity` at all, and `check_non_informative` only *classifies* each field with `Sort::of`, the lookup that reads a claim rather than checking one.
 ///
-/// The claim it reads is what turns the gap into a forgery. `Sort::of` classifies a stuck type-valued `match` by its **motive** — the same reading `check_motive` closes for the large-elimination guard by typing the motive where `infer` meets the elimination. A field type is never met by `infer`, so the lie is available there: `struct Wrap(b : Bool) : Prop { held : match b : Prop | false => Nat | true => Nat end }` classifies `Prop`, so the non-informativeness rule excuses the field, while `Wrap(true)` really carries a `Nat`.
+/// The claim it reads is what turns the gap into a forgery. `Sort::of` classifies a stuck type-valued `match` by its **goal** — the same reading `goal_sort` closes for the large-elimination guard by typing the goal where `infer` meets the elimination. A field type is never met by `infer`, so the lie is available there: `struct Wrap(b : Bool) : Prop { held : match b : Prop | false => Nat | true => Nat end }` classifies `Prop`, so the non-informativeness rule excuses the field, while `Wrap(true)` really carries a `Nat`.
 ///
-/// From there the derivation is the one `check_non_informative`'s own documentation predicts. `Wrap(true)` is `Prop`-sorted, so irrelevance identifies `Wrap(true){0}` with `Wrap(true){1}`, and `refl(Wrap(true), Wrap(true){0})` therefore inhabits `Eq(@Wrap(true))(Wrap(true){0}, Wrap(true){1})` — the indices being compared at a `Prop`-sorted domain, which is the rule working correctly. Transporting along it under the *honest* motive `(s, t, q) => (Held(s.0)) -> Held(t.0)` yields `(Held(0)) -> Held(1)`, and `Held`'s only constructor targets `0`, so the vacuous elimination coverage licenses proves `False`.
+/// From there the derivation is the one `check_non_informative`'s own documentation predicts. `Wrap(true)` is `Prop`-sorted, so irrelevance identifies `Wrap(true){0}` with `Wrap(true){1}`, and `refl(Wrap(true), Wrap(true){0})` therefore inhabits `Eq(@Wrap(true))(Wrap(true){0}, Wrap(true){1})` — the indices being compared at a `Prop`-sorted domain, which is the rule working correctly. Transporting along it at the *honest* goal `(Held(Wrap(true) { 0 }.0)) -> Held(Wrap(true) { 1 }.0)`, whose indices the arm reads at its case, yields `(Held(0)) -> Held(1)`, and `Held`'s only constructor targets `0`, so the vacuous elimination coverage licenses proves `False`.
 ///
 /// No surface program reaches it, because `curios-elab` keeps the two clauses apart: `check_telescope_entries` types every declaration domain through `check_is_sort`, and `size_domains` is a separate walk, which returns early only where the result is no sort. So this is written as Core text.
 ///
 /// Its control is [`a_proposition_carrying_a_computed_proof_is_still_accepted`], the same computed field type with arms that really are propositions: a fix refusing every `Prop`-sorted declaration, or every field type it could not read off syntactically, would fail it.
 ///
-/// The refusal is required to name `Wrap` and not merely to exist, because every later item in the derivation is built on the forged field and would mismatch for a downstream reason once anything at all went wrong. What has to be refused is the *declaration*, at the arm the motive lied about: a `Nat` at `Type 0` checked against the `Prop` the motive claims.
+/// The refusal is required to name `Wrap` and not merely to exist, because every later item in the derivation is built on the forged field and would mismatch for a downstream reason once anything at all went wrong. What has to be refused is the *declaration*, at the arm the goal lied about: a `Nat` at `Type 0` checked against the `Prop` the goal claims.
 #[test]
 fn a_proposition_may_not_carry_a_computed_relevant_field() {
     let verdicts = text_verdicts(A_COMPUTED_RELEVANT_FIELD);
@@ -213,7 +215,7 @@ induct /True: pub Prop
 end
 
 struct /Wrap(b: #BoolType): pub Prop {
-    held: match b: (x) => Prop
+    held: #{goal = Prop} match b
     | false => #{node = InductType} /True()
     | true => #{node = InductType} /True()
     end,
@@ -223,7 +225,7 @@ let /wrapped: #{node = StructType} /Wrap(true) =
     /Wrap(true) { #{node = Variant} /True/qed() };
 "#;
 
-/// The control: the same computed field type with `Prop`-sorted arms still declares, so the guard above refuses a motive that lies rather than every field a declaration has to reduce to read.
+/// The control: the same computed field type with `Prop`-sorted arms still declares, so the guard above refuses a goal that lies rather than every field a declaration has to reduce to read.
 #[test]
 fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     assert_eq!(text_verdicts(A_COMPUTED_PROOF), Vec::new());
@@ -331,7 +333,7 @@ let /H : (
             #{node = InductType, universes = {qualities = [Type]}}
             /Box(#BoolType)
     ) =>
-        match b: (b2) => Prop
+        #{goal = Prop} match b
         | box(x) =>
             /std/Bool/Holds(x)
         end;
@@ -593,7 +595,7 @@ let /f : (
             #{node = InductType, universes = {levels = [0, 0]}}
             /Accessible(#NatType, /R)(n)
     ) =>
-        #{result = Ambient(#NatType)}
+        #{goal = #NatType}
         match a
         | intro(@x, below) =>
             /f(#NatAdd(n, 1), lt, below(#NatAdd(n, 1), lt(n)))

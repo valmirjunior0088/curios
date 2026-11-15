@@ -65,8 +65,8 @@ fn an_expansion_that_drops_its_binder_is_not_eta_in_an_arm() {
         use /std/{Eq, Nat, Bool};
 
         let dropped(b : Bool, g : (Nat) -> Nat)
-            -> Eq()(match b: (_) => (Nat) -> Nat | true => (x : Nat) => g(x + 0) | false => g end,
-                    match b: (_) => (Nat) -> Nat | true => g | false => g end)
+            -> Eq()(match b | true => (x : Nat) => g(x + 0) | false => g end,
+                    match b | true => g | false => g end)
             = Eq/refl();
 
         /std/print("ok")
@@ -87,8 +87,8 @@ fn an_expansion_that_swaps_its_components_is_not_eta_in_an_arm() {
         use /std/{Eq, Nat, Bool};
 
         let swapped(b : Bool, p : {Nat, Nat})
-            -> Eq()(match b: (_) => {Nat, Nat} | true => (p.0, p.1) | false => p end,
-                    match b: (_) => {Nat, Nat} | true => p | false => p end)
+            -> Eq()(match b | true => (p.0, p.1) | false => p end,
+                    match b | true => p | false => p end)
             = Eq/refl();
 
         /std/print("ok")
@@ -121,13 +121,13 @@ fn a_tuple_that_swaps_a_stuck_eliminations_components_is_not_its_eta() {
 
         let apart(b : Bool, c : Bool, p : {Nat, Nat}, q : {Nat, Nat})
             -> Eq(@({Nat, Nat}))(
-                match b: (_) => {Nat, Nat}
-                | true => ((match c: (_) => {Nat, Nat} | true => p | false => q end).0,
-                           (match c: (_) => {Nat, Nat} | true => p | false => q end).1)
+                match b
+                | true => ((match c | true => p | false => q end).0,
+                           (match c | true => p | false => q end).1)
                 | false => p
                 end,
-                match b: (_) => {Nat, Nat}
-                | true => match c: (_) => {Nat, Nat} | true => p | false => q end
+                match b
+                | true => match c | true => p | false => q end
                 | false => p
                 end)
             = Eq/refl();
@@ -153,9 +153,9 @@ fn a_struct_that_swaps_a_stuck_eliminations_fields_is_not_its_eta() {
 
         let apart(c : Bool, s : Record, r : Record)
             -> Eq(@(Record))(
-                Record { a = (match c: (_) => Record | true => s | false => r end).a,
-                         b = (match c: (_) => Record | true => s | false => r end).b },
-                match c: (_) => Record | true => s | false => r end)
+                Record { a = (match c | true => s | false => r end).a,
+                         b = (match c | true => s | false => r end).b },
+                match c | true => s | false => r end)
             = Eq/refl();
 
         /std/print("ok")

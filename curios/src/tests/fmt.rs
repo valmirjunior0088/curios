@@ -26,9 +26,9 @@ fn print_partial_evaluation_reduces_residual() {
         use /std/{Str, Bytes, Fmt, Io, Try, Proc};
 
         let entry() -> /std/Io({}) =
-            match Try/run(Io/read(Proc/stdin, 1024))! : (_) => /std/Io({})
+            match Try/run(Io/read(Proc/stdin, 1024))!
             | success(bytes(bytes, @_)) =>
-                match Str/of_bytes(bytes) : (_) => /std/Io({})
+                match Str/of_bytes(bytes)
                 | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
                 | failure(_) => /std/print("invalid input")
                 end
@@ -73,9 +73,9 @@ fn print_runtime_args_specializes_spine() {
         use /std/{Str, Bytes, Fmt, Io, Try, Proc};
 
         let entry() -> /std/Io({}) =
-            match Try/run(Io/read(Proc/stdin, 1024))! : (_) => /std/Io({})
+            match Try/run(Io/read(Proc/stdin, 1024))!
             | success(bytes(bytes, @_)) =>
-                match Str/of_bytes(bytes) : (_) => /std/Io({})
+                match Str/of_bytes(bytes)
                 | success(s) => Fmt/print("% is %")(Str/trim(s))(30)
                 | failure(_) => /std/print("invalid input")
                 end
@@ -260,9 +260,9 @@ fn a_runtime_format_string_is_refused_by_its_written_type() {
         use /std/{Str, Fmt, Io, Try, Proc};
 
         let entry() -> /std/Io({}) =
-            match Try/run(Io/read(Proc/stdin, 1024))! : (_) => /std/Io({})
+            match Try/run(Io/read(Proc/stdin, 1024))!
             | success(bytes(bytes, @_)) =>
-                match Str/of_bytes(bytes) : (_) => /std/Io({})
+                match Str/of_bytes(bytes)
                 | success(s) => Fmt/print(s)(3)
                 | failure(_) => /std/print("invalid input")
                 end

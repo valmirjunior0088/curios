@@ -483,7 +483,7 @@ No program with a goal compiles. The other declarations are still checked in the
 
 ### Whole-term forms and operand positions
 
-A `let`, a lambda and a function type are whole-term forms: a body or a tail extends to the end of the term around it. There is no ascription `term: type`: a `:` annotation stands only at a binder, a signature and a motive.
+A `let`, a lambda and a function type are whole-term forms: a body or a tail extends to the end of the term around it. There is no ascription `term: type`: a `:` annotation stands only at a binder and a signature.
 
 An infix operand is an atom — a literal, a name, a sort (`Type`, `Prop` or `Sort`), a tuple, a tuple type, a structure literal, a goal, a `match`, or a term in parentheses — followed by any chain of calls, projections and postfix `!`. A `match`, headed or not, is an atom because `end` closes it. A whole-term form is no operand until it is put in parentheses.
 
@@ -607,48 +607,42 @@ Embeddings never chain. With `Monad/Lift(Io, Job)` and `Monad/Lift(Job, Sched)` 
 
 ## Pattern matching
 
-### Match shell and motives
+### Match shell and goals
 
-A `match` has a scrutinee, an optional motive, an arm `| pattern => body` for each case — or for several, written as [alternatives](#alternatives) — and a closing `end`.
+A `match` has a scrutinee, an arm `| pattern => body` for each case — or for several, written as [alternatives](#alternatives) — and a closing `end`.
 
-An arm may be left out where its constructor's indices provably cannot meet the scrutinee's: a match over a `Sized(T)(n + 1)` needs no `empty()` arm. Where that is not provable, the match is refused, naming the value no arm matches as a pattern. A scrutinee whose type reduces to an inductive with no constructors takes no arms: `match contradiction end` discharges a proof of an empty type, with a motive where the result has to be spelled. Where the facts in scope contradict each other and no written term says so, `proved(@False)` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
+An arm may be left out where its constructor's indices provably cannot meet the scrutinee's: a match over a `Sized(T)(n + 1)` needs no `empty()` arm. Where that is not provable, the match is refused, naming the value no arm matches as a pattern. A scrutinee whose type reduces to an inductive with no constructors takes no arms: `match contradiction end` discharges a proof of an empty type wherever a type is expected. Where the facts in scope contradict each other and no written term says so, `proved(@False)` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
-The motive states the result type as a family. It is an ordinary term, checked against a function of the scrutinee's indices, in their declared order, and of the scrutinee:
-
-```text
-(indices) -> Scrutinee(indices) -> Sort
-```
-
-What follows the `:` is read as a term, up to the first arm, since `|` is no infix operator. Why: [A motive is a term, not a grammar](design/theory/a-motive-is-a-term-not-a-grammar.md).
-
-```text
-match b: (_) => Nat                                -- result ignores the scrutinee
-match n: (m) => P(m)                               -- result depends on it
-match p: (s, t, q) => Eq()(t, s)                   -- an indexed family
-match p: (s: A, t: A, q: Eq()(s, t)) => Eq()(t, s) -- with written annotations
-match p: discriminates_eq                          -- a named family
-match v                                            -- omitted; inferred
-```
-
-The motive binds one name per index, then one for the scrutinee. A scrutinee with no indices — every intrinsic type, and every inductive declared without an index telescope — takes one, so a result that ignores it is `(_) => T`. The `Sized` of [Inductive declarations](#inductive-declarations) has one index and takes two binders, and `Eq` has two and takes three.
-
-A type's parameters are never binders: they are the same in every constructor and fixed by the scrutinee's type, so the motive reaches them from the scope around it, as a constructor's target states only its indices.
-
-A binder is a name, `_`, or annotated. An annotation is an ordinary type, checked against the binder's expected type, and may name the binders before it. Annotating the scrutinee's binder spells the family on the motive line:
-
-```text
-match p: (s, t, q: Eq()(s, t)) => Eq()(t, s)
-```
-
-Each arm is checked against the motive at its constructor's indices, and the match as a whole at the scrutinee's. A `| _ =>` arm binds nothing and refines no index, so it is checked at the scrutinee's indices too.
+A match's result is its goal, the type expected where it stands, as written. Each arm is checked against the goal with the scrutinee standing for the arm's case: a variable scrutinee and its variable indices are substituted, an expression scrutinee's written occurrences are replaced, and inside the arm the scrutinee reduces to the case wherever else it is met, so a hypothesis about the scrutinee needs no help to follow it. A `| _ =>` arm binds nothing and refines no index, so it is checked at the goal as written.
 
 An arm's body is typed under the cases its own pattern states and nothing else, once for each of its [alternatives](#alternatives). What a body may rest on — the case of its scrutinee, a bound a case decides, the indices a constructor fixes — is what its own arm writes, whatever other arms the match holds: an arm that writes a binder where another names a constructor learns nothing of that constructor.
 
-Without a motive, the compiler infers one, and that is the form to prefer. Where the match has an expected type, the result is that type as written, and each arm is checked against it with the scrutinee standing for the arm's case: a variable scrutinee and its variable indices are substituted, an expression scrutinee's written occurrences are replaced, and inside the arm the scrutinee reduces to the case wherever else it is met, so a hypothesis about the scrutinee needs no help to follow it.
+Where nothing is expected, the arms decide the result, and it depends on no case: each arm answers the one type. A result that depends on the scrutinee is stated where the match stands — a declared result, a `let`'s annotation, or a helper whose signature states the family over the scrutinee's indices:
 
-A motive is written where the result depends on the scrutinee and nothing states it — a match in inference position whose arms answer different types — and where the result depends on the scrutinee beyond its written occurrences. A match at the type level needs none, in a signature or in another match's motive, since its arms decide the sort it lands in.
+```crs
+use /std/{Eq, List};
+use /std/Bool/{True};
 
-A motive is written only where every arm's top-level pattern, in each of its alternatives, is the same constructor shape of the scrutinee. A match over a tuple of scrutinees, over a structure, or with a binder alone for its pattern takes no motive.
+pub induct In(@T: Type): (T, List(T)) -> pub Prop
+| here(@x: T, @l: List(T)): (x, [x, ..l])
+| there(@x: T, @y: T, @l: List(T), rest: In()(x, l)): (x, [y, ..l])
+end
+
+-- What a member of `m` gives a proof of `P` to take apart: nothing of no elements, and of a cons its head or its tail.
+pub let Unconsed(@T: Type, P: Prop, x: T, m: List(T)) -> Prop =
+    match m
+    | [] => True
+    | [k, ..r] => (head: (Eq()(x, k)) -> P, tail: (In()(x, r)) -> P) -> P
+    end;
+
+pub let unconsed(@T: Type, @P: Prop, @x: T, @m: List(T), i: In()(x, m)) -> Unconsed(P, x, m) =
+    match i
+    | here() => (head, _) => head(Eq/refl())
+    | there(rest) => (_, tail) => tail(rest)
+    end;
+```
+
+A match at the type level, in a signature or in another match's goal, lands in the sort its arms decide. Why a match writes no result of its own: [An arm is checked in a context specialized by index inversion](design/theory/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md).
 
 ### Inductive patterns
 
@@ -957,7 +951,7 @@ The final term is performed through `/std/Program`, the concept whose `execute` 
 - a `/std/Test({})` is reported as `curios test` reports one, and ends the program with status `1` where it did not hold;
 - a `()` is an empty program.
 
-Each tail of the final term closes the program: a tail is reached through a local `let`, and through a `match` that writes no motive to each of its arms, so two arms may close one program at two types. A `match` with a written motive is one term of the type it states, and a written goal is asked at `Io({})`. A program's function keeps its own result type and is called as the final term, which `/std/Program` performs with no `Program/execute` written:
+Each tail of the final term closes the program: a tail is reached through a local `let`, and through a `match` to each of its arms, so two arms may close one program at two types. A written goal is asked at `Io({})`. A program's function keeps its own result type and is called as the final term, which `/std/Program` performs with no `Program/execute` written:
 
 ```crs
 use /std/{Io, Try, File, Path, print};
@@ -1565,7 +1559,7 @@ Propositional equality, `Eq`, is an ordinary indexed inductive proposition of `/
 use /std/{Eq};
 
 pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
-    match proof: (left, right, _) => Eq()(right, left)
+    match proof
     | refl() => Eq/refl()
     end;
 ```

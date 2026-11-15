@@ -115,14 +115,12 @@ fn transient_written_as_core<D: Rendered>(
     }
 }
 
-/// A match as it was written: its head and motive, then each arm as its alternatives over the names their rows' bodies bind, and the guards and the body the first row's opening is — in Core text, each row an arm of its own, its pattern over places and each guard and its body as the function over its binders it is, each over the domain Core holds for it, the field `arms` saying how many rows each arm holds where one holds more than one. A reader is shown a match over `()` whose rows write an unnamed `_`, every one but the last guarded, as the match with no head it was lowered from.
+/// A match as it was written: its head, then each arm as its alternatives over the names their rows' bodies bind, and the guards and the body the first row's opening is — in Core text, each row an arm of its own, its pattern over places and each guard and its body as the function over its binders it is, each over the domain Core holds for it, the field `arms` saying how many rows each arm holds where one holds more than one. A reader is shown a match over `()` whose rows write an unnamed `_`, every one but the last guarded, as the match with no head it was lowered from.
 fn matrix_written<D: Rendered>(
-    Matrix { head, motive, arms }: Matrix,
+    Matrix { head, arms }: Matrix,
     frame: Frame<'_, D>,
 ) -> crate::Term<D> {
-    let unheaded =
-        motive.is_none() && matches!(&*head, Subterm::Tuple(tuple) if tuple.fields.is_empty());
-    let motive = motive.map(|motive| sub(motive, frame));
+    let unheaded = matches!(&*head, Subterm::Tuple(tuple) if tuple.fields.is_empty());
     let arms = match frame.core_text() {
         true => arms
             .into_iter()
@@ -205,7 +203,6 @@ fn matrix_written<D: Rendered>(
 
     tree(crate::Subterm::Match(crate::Match {
         head: sub(head, frame),
-        motive,
         arms,
     }))
 }
@@ -376,7 +373,7 @@ pub fn node_transient_read(
             })
         }
         ("Method", _) => return Err(refused("a method by its path, `/C/field`")),
-        ("Matrix", crate::Subterm::Match(crate::Match { head, motive, arms })) => {
+        ("Matrix", crate::Subterm::Match(crate::Match { head, arms })) => {
             let rows = arms
                 .iter()
                 .map(|arm| {
@@ -462,10 +459,6 @@ pub fn node_transient_read(
 
             Transient::Matrix(Matrix {
                 head: core_read(head, reader)?,
-                motive: motive
-                    .as_ref()
-                    .map(|motive| core_read(motive, reader))
-                    .transpose()?,
                 arms,
             })
         }

@@ -27,21 +27,21 @@ fn an_implicit_solves_against_a_reduction_through_a_let() {
 
 #[test]
 fn implicit_inductive_type_param_executes() {
-    // A `@`-marked inductive parameter is implicit at the type constructor too: `Eq2(2, 2)` infers `A` from the indices, `Eq2(@Nat, 3, 3)` pins it, and the eliminator's motive type-pattern still spells every slot. Running (not just checking) also guards metavariable spines through the Π-domain close/reopen round trip: a solved implicit type-arg's solution names a sibling binder, and without the delayed substitution the two spellings of the same domain compare as distinct.
+    // A `@`-marked inductive parameter is implicit at the type constructor too: `Eq2(2, 2)` infers `A` from the indices, `Eq2(@Nat, 3, 3)` pins it, and an elimination still reads every slot. Running (not just checking) also guards metavariable spines through the Π-domain close/reopen round trip: a solved implicit type-arg's solution names a sibling binder, and without the delayed substitution the two spellings of the same domain compare as distinct.
     let source = r#"
         use /std/{Nat, Bytes, Io};
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
         let sym2(@A : Type, @x : A, @y : A, p : Eq2()(x, y)) -> Eq2()(y, x) =
-            match p : (s, t, q) => Eq2()(t, s)
+            match p
             | refl(@z) => Eq2/refl()
             end;
         let pinned : Eq2(@Nat)(3, 3) = Eq2/refl();
         let proof : Eq2()(2, 2) = Eq2/refl();
         let inferred : Eq2()(2, 2) = sym2(proof);
         let entry() -> /std/Io({}) =
-            match inferred : (_, _, _) => /std/Io({})
+            match inferred
             | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
             end;
         entry()
@@ -68,9 +68,9 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
     error(source);
 }
 
-// An `Eq/subst` whose motive contains `Eq()(_, _)` — whose `@A` is implicit — inserts that implicit when the motive is instantiated. Dropping it would leave `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which panics `reduce_apply` with a telescope arity mismatch.
+// An `Eq/subst` whose family contains `Eq()(_, _)` — whose `@A` is implicit — inserts that implicit when the family is instantiated. Dropping it would leave `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which panics `reduce_apply` with a telescope arity mismatch.
 #[test]
-fn subst_motive_inserts_implicit_in_eq() {
+fn subst_family_inserts_implicit_in_eq() {
     let source = r#"
         use /std/{Eq, Nat, Io};
         let g(n : Nat) -> Nat = n;
@@ -258,7 +258,7 @@ fn a_solution_met_against_a_projection_off_a_local_definition_is_that_projection
     assert!(!row.contains(" + 1; "), "{row}");
 }
 
-/// A solution that holds a call of a recursive function is that call, where the function's body holds a proof the elaborator wrote. `of` leaves the bound of `of(n / 2)` to the elaborator, whose proof splits on the bound's decision and eliminates a contradiction under an elided motive, and `Eq/refl`'s implicit is solved to `of(n, @ok).count`. Committed as the copy of `of`'s group its reduct holds, the solution was re-validated by elaborating that group again, an inner goal came back in another spelling, and conversion unfolded the two groups side by side over arguments that grow until the budget was spent — so the budget here is one the program fits many times over and the regress does not.
+/// A solution that holds a call of a recursive function is that call, where the function's body holds a proof the elaborator wrote. `of` leaves the bound of `of(n / 2)` to the elaborator, whose proof splits on the bound's decision and eliminates a contradiction at its goal, and `Eq/refl`'s implicit is solved to `of(n, @ok).count`. Committed as the copy of `of`'s group its reduct holds, the solution was re-validated by elaborating that group again, an inner goal came back in another spelling, and conversion unfolded the two groups side by side over arguments that grow until the budget was spent — so the budget here is one the program fits many times over and the regress does not.
 #[test]
 fn a_solution_holding_a_call_whose_body_holds_a_proof_the_elaborator_wrote_is_that_call() {
     typecheck_within(

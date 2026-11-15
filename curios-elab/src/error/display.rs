@@ -1923,27 +1923,6 @@ impl Displayed<'_> {
                 f.stating("a witness's parameters are implicit, `@`, or `use` premises");
                 f.stating("nothing supplies explicit arguments during resolution");
             }
-            Error::MotiveBinderCount {
-                name,
-                expected,
-                written,
-            } => {
-                let subject = match name {
-                    Some(name) => format!("eliminating `{}`", spelling.symbol(name)),
-                    None => "this eliminator".to_string(),
-                };
-                let shape = match expected {
-                    1 => "just the scrutinee".to_string(),
-                    2 => "one index, then the scrutinee".to_string(),
-                    n => format!("{} indices, then the scrutinee", n - 1),
-                };
-                f.text("binder count mismatch");
-                f.stating(format_args!(
-                    "the motive binds {}",
-                    counted(*written, "name")
-                ));
-                f.stating(format_args!("{subject} needs {expected}: {shape}"));
-            }
             Error::MissingArmNotImpossible { tag } => {
                 f.text("missing arm");
                 f.stating(format_args!("no arm matches `{tag}`"));

@@ -17,7 +17,7 @@ fn an_indexed_family_recursing_at_a_computed_index_is_admitted() {
 
         let two : Run(2) = Run/more(Run/more(Run/stop()));
 
-        match two : (k, r) => /std/Io({})
+        match two
         | more(@_, _) => /std/print("indexed")
         end
         "#;
@@ -140,7 +140,7 @@ fn a_family_is_indexed_by_nothing_that_holds_it() {
 
 // The other skipped index position, and the one that stays admitted: a constructor's index *targets*. `labelled` ignores the telescope's terminal, so the recursive occurrence in `c`'s target is never walked and `Bad`'s diagonal comes out `Unused`.
 //
-// That is sound for the same reason as the binder types, and it is worth stating because the declaration looks alarming: an index is not stored. `c()` carries nothing, and eliminating a `Bad(t)` refines the motive's `t` to the target — which makes `(Bad(Nat)) -> Bool` a *goal* the arm must discharge, never a value the match hands back. The declaration is consistent, and `Bad(Nat)` is simply an empty type, no constructor targeting that index.
+// That is sound for the same reason as the binder types, and it is worth stating because the declaration looks alarming: an index is not stored. `c()` carries nothing, and eliminating a `Bad(t)` refines the goal's `t` to the target — which makes `(Bad(Nat)) -> Bool` a *goal* the arm must discharge, never a value the match hands back. The declaration is consistent, and `Bad(Nat)` is simply an empty type, no constructor targeting that index.
 //
 // It is here as the counterweight to the two rejections above: the skip is not a hole to be plugged by walking index positions, and a change that started walking them would reject this.
 #[test]

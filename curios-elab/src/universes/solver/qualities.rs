@@ -53,7 +53,7 @@ impl UniverseSolver {
             .collect();
     }
 
-    /// Mint the quality of a sort left to inference: an unannotated binder's type's, an elided motive's result's, a parked term's, a sort a use of another declaration states.
+    /// Mint the quality of a sort left to inference: an unannotated binder's type's, a match's goal's where nothing expects a type, a parked term's, a sort a use of another declaration states.
     pub fn fresh_quality(&mut self, origin: Option<UniverseConstraintOrigin>) -> Quality {
         let id = QualityMetaId(self.qualities.len());
         self.qualities.push(QualityMeta {

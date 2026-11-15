@@ -84,7 +84,7 @@ const FORMER_STATED_OTHERWISE: &str = r#"
 induct /E: pub Prop
 end
 ((x: /E) =>
-    #{result = Ambient(/std/Bool/False)}
+    #{goal = /std/Bool/False}
     match x
     end)(
     #{node = Variant}
@@ -119,7 +119,7 @@ induct /D: pub Type
 | mk()
 | mk(h: /std/Bool/False)
 end
-#{result = Ambient(/std/Bool/False)}
+#{goal = /std/Bool/False}
 match
     #{node = Variant}
     /D/mk()

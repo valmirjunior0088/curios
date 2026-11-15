@@ -1,4 +1,4 @@
-//! The families, motives and opaque type formers the elimination suites eliminate over, each written as Core text.
+//! The families, goals and opaque type formers the elimination suites eliminate over, each written as Core text.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across `eliminate`, and nothing outside it.
 
@@ -50,19 +50,14 @@ pub fn family_at(path: &str, indices: &str) -> String {
     }
 }
 
-/// `match subject : (${binders}) => ${motive} | arms end`, the elimination of a scrutinee `subject`: its motive written over its index binders and then the scrutinee's, each arm `tag(binders) => body`.
-pub fn eliminating(binders: &str, motive: &str, arms: &[&str]) -> String {
+/// `#{goal = ${goal}} match subject | arms end`, the elimination of a scrutinee `subject`: its goal stated at the scrutinee's own indices, each arm `tag(binders) => body`.
+pub fn eliminating(goal: &str, arms: &[&str]) -> String {
     let arms = arms
         .iter()
         .map(|arm| fill!(" | ${arm}", arm))
         .collect::<String>();
 
-    fill!(
-        "match subject: (${binders}) => ${motive}${arms} end",
-        binders,
-        motive,
-        arms
-    )
+    fill!("#{goal = ${goal}} match subject${arms} end", goal, arms)
 }
 
 /// A name `path` at `type_` with no body, declared in `certifier` as a judgment declares one before its body: an opaque type former, for observing which instance a term checks at.

@@ -91,10 +91,10 @@ fn bytes(data: &[u8]) -> String {
 }
 
 /// `go`, a member walking a `Bytes` to its end, as the projection out of its group a call names it by.
-const WALK: &str = "#{node = Rec} (let go: (b: #BytesType) -> #NatType = (b: #BytesType) => match b: (m) => #NatType | x[] => 0 | x[h, ..t] => go(t) end; go)";
+const WALK: &str = "#{node = Rec} (let go: (b: #BytesType) -> #NatType = (b: #BytesType) => #{goal = #NatType} match b | x[] => 0 | x[h, ..t] => go(t) end; go)";
 
 /// `member`, which descends from `n` to its zero case, answering `${zero}` at `${result}` there and `${step}` at each successor over `pred`, as the projection out of its group a call names it by.
-const DESCENT: &str = "#{node = Rec} (let member: (n: #NatType) -> ${result} = (n: #NatType) => match n: (m) => ${result} | 0 => ${zero} | pred + 1 => ${step} end; member)";
+const DESCENT: &str = "#{node = Rec} (let member: (n: #NatType) -> ${result} = (n: #NatType) => #{goal = ${result}} match n | 0 => ${zero} | pred + 1 => ${step} end; member)";
 
 /// **The differential fixture that holds the machine to the strategy.** The same closed terms are put to a certifier with the closed machine and to one without it — the recursive strategy — and the reducts must be identical, term for term, **at both demands**. The battery covers each rule the machine implements on its own: beta over eagerly-evaluated arguments, zeta's left-to-right release, all four match families, projection, recursive unfolding to a value, and the two recursion shapes over a packed carrier. Both evaluators determine these completely — a first-order value at the forced demand, and at the plain one either that or the folded spelling the demand stops at — so equality here is syntactic rather than up-to-anything.
 ///
@@ -102,24 +102,24 @@ const DESCENT: &str = "#{node = Rec} (let member: (n: #NatType) -> ${result} = (
 #[test]
 fn the_closed_machine_agrees_with_the_strategy() {
     let non_tail = fill!(
-        "#{node = Rec} (let count: (b: #BytesType) -> #NatType = (b: #BytesType) => match b: (m) => #NatType | x[] => 0 | x[h, ..t] => #NatAdd(count(t), 1) end; count(${bytes}))",
+        "#{node = Rec} (let count: (b: #BytesType) -> #NatType = (b: #BytesType) => #{goal = #NatType} match b | x[] => 0 | x[h, ..t] => #NatAdd(count(t), 1) end; count(${bytes}))",
         bytes = bytes(&[7; 40])
     );
 
     let tail_fold = fill!(
-        "#{node = Rec} (let go: (acc: #NatType, b: #BytesType) -> #NatType = (acc: #NatType, b: #BytesType) => match b: (m) => #NatType | x[] => acc | x[h, ..t] => go(#NatAdd(acc, #ByteToNat(h)), t) end; go(0, ${bytes}))",
+        "#{node = Rec} (let go: (acc: #NatType, b: #BytesType) -> #NatType = (acc: #NatType, b: #BytesType) => #{goal = #NatType} match b | x[] => acc | x[h, ..t] => go(#NatAdd(acc, #ByteToNat(h)), t) end; go(0, ${bytes}))",
         bytes = bytes(&[3; 40])
     );
 
-    let countdown = "#{node = Rec} (let member: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1 => member(pred) end; member(9))";
+    let countdown = "#{node = Rec} (let member: (n: #NatType) -> #NatType = (n: #NatType) => #{goal = #NatType} match n | 0 => 0 | pred + 1 => member(pred) end; member(9))";
 
     let beta_zeta = "((x: #NatType, y: #NatType) => let y: #NatType = #NatAdd(x, 3); y)(2, 0)";
 
-    let switch = "match 2: (m) => #NatType | 1 => 10 | 2 => 20 | _ => 99 end";
+    let switch = "#{goal = #NatType} match 2 | 1 => 10 | 2 => 20 | _ => 99 end";
 
     let projection = "(10, 20, 30).2";
 
-    let induct = "match #{node = Variant} /E/some(#NatAdd(40, 2)): (m) => #NatType | none() => 0 | some(a) => a end";
+    let induct = "#{goal = #NatType} match #{node = Variant} /E/some(#NatAdd(40, 2)) | none() => 0 | some(a) => a end";
 
     // A run that forces a *bare* member selection and then asks a plain demand for a call on the same member. Both demands are exercised in one term, so that one run records at the first and is probed at the second: the `let` value is an intrinsic operand, which is forced, and its tail is an ordinary application, which must come back folded. Keyed on the term alone, the memo would answer a projection recorded at the forced demand to the plain probe, and the machine would run the whole fold where the strategy stops at the folded spelling.
     let call = fill!("(${go})(${bytes})", go = WALK, bytes = bytes(&[1, 2, 3]));
@@ -137,7 +137,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         )
     };
     let matched_call = fill!(
-        "match true: (m) => #NatType | false => 0 | true => ${call} end",
+        "#{goal = #NatType} match true | false => 0 | true => ${call} end",
         call
     );
 
@@ -227,7 +227,7 @@ fn the_closed_machine_reads_runs_past_the_fusion_cap_as_the_strategy_does() {
         .sum::<usize>();
 
     let summed = fill!(
-        "#{node = Rec} (let sum: (b: #BytesType) -> #NatType = (b: #BytesType) => match b: (m) => #NatType | x[] => 0 | x[h, ..t] => #NatAdd(#ByteToNat(h), sum(t)) end; sum(${xor}))",
+        "#{node = Rec} (let sum: (b: #BytesType) -> #NatType = (b: #BytesType) => #{goal = #NatType} match b | x[] => 0 | x[h, ..t] => #NatAdd(#ByteToNat(h), sum(t)) end; sum(${xor}))",
         xor
     );
 
@@ -246,12 +246,12 @@ fn the_closed_machine_reads_runs_past_the_fusion_cap_as_the_strategy_does() {
     }
 }
 
-/// A closed one-arm match on a proof of a proposition whose index pins its payload fires on the *stated* instance with the proof unevaluated — `ClosedHost::stated_payload` — and the machine and the strategy bind the same payload and reach the same value. The arm reads its payload, so the rule's second clause runs rather than the `unread` one: `match mk(5) at P(5) : (i, q) => Nat | mk(x) => x end` is `5` under both. A machine that read the payload off the scrutinee while the strategy read it off the stated instance (or the reverse) would answer a closed computation in a type with a value reduction of the same term would not.
+/// A closed one-arm match on a proof of a proposition whose index pins its payload fires on the *stated* instance with the proof unevaluated — `ClosedHost::stated_payload` — and the machine and the strategy bind the same payload and reach the same value. The arm reads its payload, so the rule's second clause runs rather than the `unread` one: `match mk(5) at P(5) | mk(x) => x end` is `5` under both. A machine that read the payload off the scrutinee while the strategy read it off the stated instance (or the reverse) would answer a closed computation in a type with a value reduction of the same term would not.
 #[test]
 fn the_closed_machine_reads_a_stated_proof_payload_as_the_strategy_does() {
     let family = "induct /P: (i: #NatType) -> pub Prop\n| mk(x: #NatType): (x)\nend";
     let matched = term(
-        "#{cases = {stated = #{node = InductType} /P()(5)}} match #{node = Variant} /P/mk(5): (_, _) => #NatType | mk(x) => x end",
+        "#{goal = #NatType, cases = {stated = #{node = InductType} /P()(5)}} match #{node = Variant} /P/mk(5) | mk(x) => x end",
     );
 
     let mut machined = certifier();
@@ -398,7 +398,7 @@ fn an_operand_a_fold_reads_plainly_is_not_served_its_forced_value() {
 fn a_match_or_a_projection_forces_what_an_intrinsic_answers() {
     let pair = "{first: #NatType, second: #NatType}";
     let matched = term(&fill!(
-        "match ${folded}: (m) => #NatType | 0 => 7 | pred + 1 => 9 end",
+        "#{goal = #NatType} match ${folded} | 0 => 7 | pred + 1 => 9 end",
         folded = folded("5", "#NatType", "0")
     ));
     let projected = term(&fill!("${folded}.0", folded = folded("5", pair, "(0, 1)")));

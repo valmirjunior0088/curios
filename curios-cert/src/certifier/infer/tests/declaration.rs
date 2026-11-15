@@ -34,15 +34,15 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
     ));
 }
 
-/// An elimination's type is its motive at the scrutinee.
+/// An elimination's type is its goal.
 #[test]
-fn an_elimination_has_the_type_its_motive_states() {
+fn an_elimination_has_the_type_its_goal_states() {
     let mut certifier = certifier();
 
     assert_eq!(
         infer(
             &mut certifier,
-            &term("match 3: (m) => #NatType | 0 => 0 | pred + 1 => pred end")
+            &term("#{goal = #NatType} match 3 | 0 => 0 | pred + 1 => pred end")
         ),
         Ok(term("#NatType"))
     );

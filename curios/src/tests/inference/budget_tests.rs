@@ -13,7 +13,7 @@ fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
             let go : Bool = go;
             go;
         let bad : Type =
-            match spin : (_) => Type
+            match spin
             | true => {}
             | false => {}
             end;

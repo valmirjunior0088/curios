@@ -29,7 +29,7 @@ fn read_all_of_a_missing_path_is_not_found() {
             match Try/run(File/read_all(Path/of_str("nope.txt")))!
             | success(_) => /std/print("contents")
             | failure(e) =>
-                match e : (_) => /std/Io({})
+                match e
                 | not_found() => /std/print("not found")
                 | permission_denied() => /std/print("denied")
                 | already_exists() => /std/print("already exists")

@@ -9,7 +9,7 @@ fn bool_logic_and_of_str() {
         use /std/{Bool, Str, Option, Io};
         let entry() -> /std/Io({}) =
             let computed = Bool/and(Bool/or(false, true), Bool/not(false));
-            let parsed = match Bool/of_str("false") : (_) => Bool
+            let parsed = match Bool/of_str("false")
                 | some(b) => b
                 | none() => true
                 end;
@@ -61,7 +61,7 @@ fn nat_bitwise_ops_execute() {
         r#"
         use /std/{Byte, Bytes, Nat, Str, Option, Io, Try, Proc};
         let entry() -> /std/Io({}) =
-            let bytes = match Try/run(Io/read(Proc/stdin, 16))! : (_) => Bytes
+            let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
                 | success(ended()) => x[]
                 | failure(_) => x[]
@@ -93,7 +93,7 @@ fn int_bitwise_ops_execute() {
         r#"
         use /std/{Byte, Bytes, Nat, Int, Str, Option, Io, Try, Proc};
         let entry() -> /std/Io({}) =
-            let bytes = match Try/run(Io/read(Proc/stdin, 16))! : (_) => Bytes
+            let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
                 | success(ended()) => x[]
                 | failure(_) => x[]

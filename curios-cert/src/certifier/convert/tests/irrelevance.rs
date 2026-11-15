@@ -4,7 +4,7 @@ use {
     crate::certifier::convert::test_support::*,
     crate::{test_support::*, *},
     curios_common::fill,
-    curios_core::{Free, Term},
+    curios_core::Term,
 };
 
 /// Proof irrelevance: at a `Prop`-sorted type any two terms convert, *without* either being examined. This is what licenses erasure to drop proofs wholesale.
@@ -21,7 +21,7 @@ fn any_two_inhabitants_of_a_proposition_convert() {
 }
 
 /// `${name}(e: ${family}) -> ${result} = match e end`, an elimination with no arm, stuck on a variable.
-const STUCK_ON_ITS_ARGUMENT: &str = "let /${name}: (e: ${family}) -> ${result} = (e: ${family}) => #{result = Ambient(${result})} match e end;";
+const STUCK_ON_ITS_ARGUMENT: &str = "let /${name}: (e: ${family}) -> ${result} = (e: ${family}) => #{goal = ${result}} match e end;";
 
 /// **Two applications of one definition are compared by their spines before either is unfolded**, so two proofs passed to it meet irrelevance at the parameter's own type, and neither call is opened to say so. `tests::rules`'s row of the same name is the program.
 ///
@@ -135,8 +135,8 @@ fn a_spines_arguments_are_typed_under_a_curried_and_a_projected_head() {
     assert_eq!(judged("Type"), [Ok(false), Ok(false)]);
 }
 
-/// `#{result = Ambient(#NatType)} match ${scrutinee} end`, an elimination with no arm at `Nat`.
-const AT_A_NUMBER: &str = "#{result = Ambient(#NatType)} match ${scrutinee} end";
+/// `#{goal = #NatType} match ${scrutinee} end`, an elimination with no arm at `Nat`.
+const AT_A_NUMBER: &str = "#{goal = #NatType} match ${scrutinee} end";
 
 /// Where a child is compared with no type, what a type directs between two neutrals is read off the type a lookup gives both: two proofs of one proposition converge at `Type`, and so do two variables at the empty record, at a record of units, at a function into a unit, at a struct that declares no field, at a struct of a unit and at a recursive definition's call that unfolds to one of these, at whatever depth; and two eliminations of two such proofs, whose scrutinees are compared with no type, are one term. It is what keeps a verdict from following whether a definition's call was unfolded before the pair was posed. The elaborator's twin of this proposition shares the name.
 ///
@@ -153,7 +153,7 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
         "struct /U: pub Type {}\nstruct /W: pub Type {\n    u: {},\n}",
     );
     // `rec F : (Nat) -> Type = (n) => match n | 0 => {} | pred + 1 => {a: F(pred)}; F`. `F(0)` unfolds to the unit, and `F(1)` to a record of it.
-    let nested = "#{node = Rec} (let F: (n: #NatType) -> Type = (n: #NatType) => match n: (m) => Type | 0 => {} | pred + 1 => {a: F(pred)} end; F)";
+    let nested = "#{node = Rec} (let F: (n: #NatType) -> Type = (n: #NatType) => #{goal = Type} match n | 0 => {} | pred + 1 => {a: F(pred)} end; F)";
     let hypotheses = fill!(
         "p: ${proposition}, q: ${proposition}, r: ${another}, u: {}, v: {}, s: #{node = StructType} /U(), t: #{node = StructType} /U(), x: {a: #NatType, b: {}}, y: {a: #NatType, b: {}}, f: (x: #NatType) -> {}, g: (x: #NatType) -> {}, a: #NatType, b: #NatType, c: {a: {}, b: {}}, d: {a: {}, b: {}}, w: #{node = StructType} /W(), z: #{node = StructType} /W(), h: (${nested})(0), k: (${nested})(0), i: (${nested})(1), j: (${nested})(1)",
         proposition,
@@ -231,41 +231,25 @@ fn two_neutrals_converge_where_a_lookup_gives_them_a_type_with_one_inhabitant() 
     );
 }
 
-/// A stuck elimination is typed by its result at its scrutinee: an ambient goal as written, and a family opened at the indices its scrutinee's type carries and then at the scrutinee. So where a child is compared with no type, an elimination at a proposition converges with a variable at it and with an elimination of another scrutinee, one at a record of units with a variable at it, and an indexed family's elimination is read at its scrutinee's index. The elaborator's twin of this proposition shares the name.
+/// A stuck elimination is typed by its goal as written. So where a child is compared with no type, an elimination at a proposition converges with a variable at it and with an elimination of another scrutinee, and one at a record of units with a variable at it. The elaborator's twin of this proposition shares the name.
 ///
 /// The refusals are what the type does not decide: an elimination at a relevant type against a variable at it, and one at a proposition against a variable at another.
 ///
-/// Mutation-checked: with no type read off an elimination the four held goals are refused, and with a family read at its scrutinee alone the indexed one is.
+/// Mutation-checked: with no type read off an elimination the three held goals are refused.
 #[test]
-fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
+fn a_stuck_elimination_is_typed_by_its_goal() {
     let mut certifier = certifier();
     let proposition = declare(&mut certifier, "P", "Prop");
     let another = declare(&mut certifier, "Q", "Prop");
     let empty = declare(&mut certifier, "E", "Type");
-    // `induct Ix : (n : Nat) -> Type`, a family with one index and no constructor.
-    declared(&mut certifier, "induct /Ix: (n: #NatType) -> pub Type\nend");
     let units = "{a: {}, b: {}}";
     let eliminated = |scrutinee: &str, goal: &str| {
-        fill!(
-            "#{result = Ambient(${goal})} match ${scrutinee} end",
-            scrutinee,
-            goal
-        )
+        fill!("#{goal = ${goal}} match ${scrutinee} end", scrutinee, goal)
     };
-    let [
-        c_at_p,
-        p,
-        d_at_p,
-        c_at_units,
-        r,
-        over_its_index,
-        c_at_a_number,
-        n,
-        q,
-    ] = under(
+    let [c_at_p, p, d_at_p, c_at_units, r, c_at_a_number, n, q] = under(
         &mut certifier,
         &fill!(
-            "c: ${empty}, d: ${empty}, p: ${proposition}, q: ${another}, r: ${units}, n: #NatType, s: #{node = InductType} /Ix()(3)",
+            "c: ${empty}, d: ${empty}, p: ${proposition}, q: ${another}, r: ${units}, n: #NatType",
             empty,
             proposition,
             another,
@@ -277,8 +261,6 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
             eliminated("d", &proposition),
             eliminated("c", units),
             "r".to_string(),
-            // `match s : (i, x) => P end`, whose result is a family over the index and the scrutinee.
-            fill!("match s: (i, x) => ${proposition} end", proposition),
             eliminated("c", "#NatType"),
             "n".to_string(),
             "q".to_string(),
@@ -289,13 +271,8 @@ fn a_stuck_elimination_is_typed_by_its_result_at_its_scrutinee() {
     let mut at = |this: &Term, that: &Term| convert(&mut certifier, &ground, this, that);
 
     assert_eq!(
-        [
-            at(&c_at_p, &p),
-            at(&c_at_p, &d_at_p),
-            at(&c_at_units, &r),
-            at(&over_its_index, &p),
-        ],
-        [Ok(true), Ok(true), Ok(true), Ok(true)]
+        [at(&c_at_p, &p), at(&c_at_p, &d_at_p), at(&c_at_units, &r),],
+        [Ok(true), Ok(true), Ok(true)]
     );
     assert_eq!(
         [at(&c_at_a_number, &n), at(&c_at_p, &q)],
@@ -313,7 +290,7 @@ fn two_eliminations_are_compared_at_the_instance_they_state() {
     let another = declare(&mut certifier, "Q", "Prop");
     let stating = |proof: &str, instance: &str| {
         fill!(
-            "#{result = Ambient(#NatType), cases = {stated = ${instance}}} match ${proof} end",
+            "#{goal = #NatType, cases = {stated = ${instance}}} match ${proof} end",
             proof,
             instance
         )
@@ -418,7 +395,7 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
         // `match t | two(a, b) => (<chosen>, 1) end`, at the ambient `{F, Nat}`.
         let handing_on = |scrutinee: &str, chosen: &str| {
             fill!(
-                "match ${scrutinee}: (m) => ${result} | two(a, b) => (${chosen}, 1) end",
+                "#{goal = ${result}} match ${scrutinee} | two(a, b) => (${chosen}, 1) end",
                 scrutinee,
                 result,
                 chosen
@@ -427,7 +404,7 @@ fn an_arms_binders_are_opened_at_the_types_their_constructor_gives_them() {
         // `match l | [] => (p, 0) | h ++ t; ih => (<chosen>, 1) end`.
         let folding = |chosen: &str| {
             fill!(
-                "#{cases = {carrier = {elem = ${held}}}} match l: (m) => ${result} | [] => (p, 0) | [h, ..t] => (${chosen}, 1) end",
+                "#{goal = ${result}, cases = {carrier = {elem = ${held}}}} match l | [] => (p, 0) | [h, ..t] => (${chosen}, 1) end",
                 held,
                 result,
                 chosen
@@ -483,9 +460,9 @@ fn does_not_leak_into_a_relevant_type() {
 /// `S(c)`, the propositions at `true` and the types at `false`, and `F(c) : S(c)`, `P` at `true` and `Nat` at `false`.
 const SORT_COMPUTED: &str = r#"
 let /S: (c: #BoolType) -> #{level = 1} Type =
-    (c: #BoolType) => match c: (_) => #{level = 1} Type | false => Type | true => Prop end;
+    (c: #BoolType) => #{goal = #{level = 1} Type} match c | false => Type | true => Prop end;
 let /F: (c: #BoolType) -> /S(c) =
-    (c: #BoolType) => match c: (d) => /S(d) | false => #NatType | true => ${proposition} end;
+    (c: #BoolType) => #{goal = /S(c)} match c | false => #NatType | true => ${proposition} end;
 "#;
 
 /// A declaration whose codomain is a sort its argument computes lands in `Prop` where the argument decides one and nowhere else. `F(c) : S(c)`, with `S(true)` the propositions and `S(false)` the types, is known for a proposition at `true` by its declaration, before `F(true)` is reduced, and at `false` its two values stay apart: what the declaration says of an application is read at the arguments the application states. `curios`'s `tests::rules::subsumption_tests` holds the program under this name, where a binder at `F(c)` with `c` open is no type at all.
@@ -572,7 +549,7 @@ fn a_constructor_payload_at_a_proposition_is_not_read() {
     );
 }
 
-/// Two inhabitants of `match b | false => ${false} | true => ${true} end` at `${sort}`, its motive's sort, over a `Bool` `b`: the type, and the two.
+/// Two inhabitants of `match b | false => ${false} | true => ${true} end` at `${sort}`, its goal, over a `Bool` `b`: the type, and the two.
 fn inhabitants_of_a_computed_type(
     certifier: &mut Certifier,
     sort: &str,
@@ -580,7 +557,7 @@ fn inhabitants_of_a_computed_type(
     if_true: &str,
 ) -> [Term; 3] {
     let computed = fill!(
-        "match b: (_) => ${sort} | false => ${if_false} | true => ${if_true} end",
+        "#{goal = ${sort}} match b | false => ${if_false} | true => ${if_true} end",
         sort,
         if_false,
         if_true
@@ -595,11 +572,11 @@ fn inhabitants_of_a_computed_type(
 
 /// Definitional proof irrelevance at a *computed* proposition — the shape every real firing takes.
 ///
-/// `any_two_inhabitants_of_a_proposition_convert` above uses a nominal `Prop`-sorted family, which is the easy rung: the registry says outright that the type is a proposition. The elaborator's firings are at types that only *compute* to one — a stuck `match` at motive `Prop`, which is how `/std/Cli`'s `Clear` states that a command line has no problems. Here the rule is inert over every program, because a proof reaching conversion in this crate does so in an untyped child position compared at `Type`; so nothing in any program brings the rule and the shape together, and only a fixture can.
+/// `any_two_inhabitants_of_a_proposition_convert` above uses a nominal `Prop`-sorted family, which is the easy rung: the registry says outright that the type is a proposition. The elaborator's firings are at types that only *compute* to one — a stuck `match` at goal `Prop`, which is how `/std/Cli`'s `Clear` states that a command line has no problems. Here the rule is inert over every program, because a proof reaching conversion in this crate does so in an untyped child position compared at `Type`; so nothing in any program brings the rule and the shape together, and only a fixture can.
 ///
-/// The shape is worth its own fixture because of what irrelevance trusts. It accepts *without inspecting either term*, and `Sort::of` classifies a stuck `match` by its **motive** rather than by its arms — a claim the term makes about itself, which is exactly why `check_motive` exists to type a motive under its real binders before any rule reads it. At a computed proposition the motive is therefore the whole of what this rule rests on.
+/// The shape is worth its own fixture because of what irrelevance trusts. It accepts *without inspecting either term*, and `Sort::of` classifies a stuck `match` by its **goal** rather than by its arms — a claim the term makes about itself, which is exactly why `goal_sort` types the goal before any rule reads it. At a computed proposition the goal is therefore the whole of what this rule rests on.
 ///
-/// The control is the identical construction with the motive at `Type` and relevant arms in both, which must *not* converge. It separates "reads the motive" from "accepts every stuck match", and without it a rule that skipped the sort test entirely would satisfy the witness.
+/// The control is the identical construction with the goal at `Type` and relevant arms in both, which must *not* converge. It separates "reads the goal" from "accepts every stuck match", and without it a rule that skipped the sort test entirely would satisfy the witness.
 #[test]
 fn fires_at_a_computed_proposition() {
     let mut certifier = certifier();
@@ -611,11 +588,11 @@ fn fires_at_a_computed_proposition() {
     assert_eq!(
         convert(&mut certifier, &computed, &left, &right),
         Ok(true),
-        "two inhabitants of a proposition the motive computes did not convert",
+        "two inhabitants of a proposition the goal computes did not convert",
     );
 }
 
-/// The control for the fixture above: the same stuck `match`, with the motive at `Type` and relevant arms, must still distinguish its inhabitants.
+/// The control for the fixture above: the same stuck `match`, with the goal at `Type` and relevant arms, must still distinguish its inhabitants.
 #[test]
 fn does_not_fire_at_a_computed_relevant_type() {
     let mut certifier = certifier();
@@ -627,19 +604,19 @@ fn does_not_fire_at_a_computed_relevant_type() {
     assert_eq!(
         convert(&mut certifier, &computed, &left, &right),
         Ok(false),
-        "irrelevance leaked into a relevant type the motive computes",
+        "irrelevance leaked into a relevant type the goal computes",
     );
 }
 
 /// **The stand-in a binder is opened at where no lookup types its elimination's scrutinee, held against the types such a binder could really carry.**
 ///
-/// A motive's and an arm's binders are opened at the types their position gives them, read off the scrutinee's looked-up type. Where it has none, `ground_arm` and `motive_binders` open them at one shared set of binders and assume every one of them at `Type`, whatever it really is. The recorded type is not inert: [`synth_neutral`](crate::certifier::sort::synth_neutral) reads the same recorded type through `Certifier::type_of`, so it reaches `Sort::of`, and `Sort::of` is what [`compare`] asks before *every* goal: the proof-irrelevance test at the top of the rule.
+/// An arm's binders are opened at the types their position gives them, read off the scrutinee's looked-up type. Where it has none, `ground_arm` opens them at one shared set of binders and assume every one of them at `Type`, whatever it really is. The recorded type is not inert: [`synth_neutral`](crate::certifier::sort::synth_neutral) reads the same recorded type through `Certifier::type_of`, so it reaches `Sort::of`, and `Sort::of` is what [`compare`] asks before *every* goal: the proof-irrelevance test at the top of the rule.
 ///
 /// What actually holds the stand-in up is narrower, and is about the value rather than about the readers: `Type` is the least informative answer `Sort::of` can return for a binder. Irrelevance fires on `Sort::Prop(_)` and on nothing else, and eta dispatches on the goal type's own *shape* rather than on the binder's, so a binder recorded at `Type` can only lose the accepting rules, never gain one. This walks one goal at each type the binder could really carry and records what each decides.
 ///
 /// The grid is two side-pairs against four assumed types, because a single pair cannot separate the two things being asked. Distinct sides expose which types *discharge* the goal without comparing — only `Prop` does — and convertible-but-not-identical sides expose which types get as far as comparing at all. The stand-in's row matches the relevant-sort row in both, which is the null: it decides every goal the way a real relevant type decides it.
 ///
-/// **One row is not a forfeiture, and it is the one to carry forward.** A binder whose real type is not a sort at all leaves `Sort::of` with nothing to decode, and the typed opening refuses the whole certification with `NotASort` — while the stand-in classifies it `Type 0` and goes on to accept. There the stand-in is strictly *more* permissive than the truth. Nothing in the stand-in fences that off; what does is a property of its callers, the same shape as the one `struct_eta`'s neutral restriction rests on. A match motive is typed under its real binders by `infer`'s `check_motive` before any comparison grounds it, so a motive using a `Bool`-typed binder as a type never reaches here. Under the typed opening the row does not arise: the binder carries its real type, and the goal is refused as the typed row is.
+/// **One row is not a forfeiture, and it is the one to carry forward.** A binder whose real type is not a sort at all leaves `Sort::of` with nothing to decode, and the typed opening refuses the whole certification with `NotASort` — while the stand-in classifies it `Type 0` and goes on to accept. There the stand-in is strictly *more* permissive than the truth. Nothing in the stand-in fences that off; what does is a property of its callers, the same shape as the one `struct_eta`'s neutral restriction rests on. A match's goal is typed by `infer`'s `goal_sort` before any comparison reads it, so a goal using a `Bool`-typed binder as a type never reaches here. Under the typed opening the row does not arise: the binder carries its real type, and the goal is refused as the typed row is.
 #[test]
 fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
     // Two words nothing is assumed of, and two sides convertible without being syntactically equal, so the goal survives `compare`'s reflexivity fast path and has to be decided by a rule.
@@ -701,89 +678,6 @@ fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
         at("#NatType", convertible),
         not_a_sort(),
         "the non-sort row stopped being the one place the stand-in is the more permissive of the two",
-    );
-}
-
-/// `Wit(P : Prop) : (p : P)`, a family whose index type *is* its own parameter, `Q`, a proposition, and `Ix : (R : Prop) -> Type`, a family indexed by a proposition.
-///
-/// `induct_type_args` compares two index actuals at the type the declaration's telescope assigns, opened at the left instance's preceding actuals, so at `Wit` the index pair is compared at whatever term stands in the parameter position. That makes the parameter's assumed type the whole of what decides the index goal, which is exactly the question a binder opened at a stand-in answers with the stand-in.
-const INDEXED_BY_A_PROPOSITION: &str = r#"
-induct /Wit(P: Prop): (p: P) -> pub Type
-end
-induct /Q: pub Prop
-end
-induct /Ix: (R: Prop) -> pub Type
-end
-"#;
-
-/// A motive's binders are opened at the types its family gives them: the index domains, and the scrutinee at the family over those binders.
-///
-/// Two stuck eliminations of one scrutinee at a family indexed by a proposition, differing only inside their motives. Each motive body is `Wit(<index binder>, i)`, and `Wit`'s index type is its own parameter, so the index pair is compared at the motive's index binder — which is opened at `Prop`, its real type, and is a proposition there: the pair is discharged by irrelevance, as it is where the motive was typed.
-///
-/// The fallback is the second half: over a scrutinee no lookup types, the binders are opened at the stand-in, the index pair is compared at a binder recorded at `Type`, and the two stay apart, which is the grid's stand-in row above. The control beside each is a motive pair that differs only by a beta redex, which converges under either opening.
-///
-/// The counterfactual is the last: the name the fallback's binder was opened under, assumed at `Prop` once that binder is closed, is a proposition, and the two bodies compared directly are discharged by irrelevance. So the verdict moves with the binder's type, toward refusal at the stand-in; and a sort read under the closed binder does not answer for the name assumed again.
-///
-/// The locals are written by the identities they are minted at, which is what the reasoning reads.
-///
-/// Mutation-checked: with every motive binder at the stand-in the first typed goal is refused; and with a remembered sort answering without asking whether its binders stand, the sort the fallback read under its closed binder answers for the name opened again, and a goal after it is refused.
-#[test]
-fn a_motives_binders_are_opened_at_the_types_its_family_gives_them() {
-    let mut certifier = certifier();
-    declared(&mut certifier, INDEXED_BY_A_PROPOSITION);
-    let local = |index: u32, word: &str| fill!("#{binding = Free(${index})} ${word}", index, word);
-    // The names the certifier is not handed sit below the one it is, so no binder it mints meets one of them.
-    certifier.assume(
-        &Free::local(80, Some("s")),
-        &term("#{node = InductType} /Ix()(#{node = InductType} /Q())"),
-    );
-    let (typed, untyped, u, v) = (
-        local(80, "s"),
-        local(70, "t"),
-        local(71, "u"),
-        local(72, "v"),
-    );
-
-    // `match s : (R, x) => Wit(R, <index>) end`.
-    let elimination = |scrutinee: &str, index: &str| {
-        term(&fill!(
-            "match ${scrutinee}: (R, x) => #{node = InductType} /Wit(R)(${index}) end",
-            scrutinee,
-            index
-        ))
-    };
-    let redex = |name: &str| fill!("((x: #NatType) => x)(${name})", name);
-    let ground = term("Type");
-    let mut at = |scrutinee: &str, this: &str, that: &str| {
-        convert(
-            &mut certifier,
-            &ground,
-            &elimination(scrutinee, this),
-            &elimination(scrutinee, that),
-        )
-    };
-
-    // The fallback's goals are put first, so that the first binder the certifier mints — the name after the scrutinee's — is the motive's, opened at the stand-in.
-    let fallback = [at(&untyped, &u, &v), at(&untyped, &u, &redex(&u))];
-    assert_eq!(
-        [at(&typed, &u, &v), at(&typed, &u, &redex(&u))],
-        [Ok(true), Ok(true)]
-    );
-    assert_eq!(fallback, [Ok(false), Ok(true)]);
-
-    // That binder is closed, and its name is handed in again at `Prop`.
-    certifier.assume(&Free::local(81, Some("R")), &term("Prop"));
-    let body = |index: &str| {
-        term(&fill!(
-            "#{node = InductType} /Wit(${carried})(${index})",
-            carried = local(81, "R"),
-            index
-        ))
-    };
-
-    assert_eq!(
-        convert(&mut certifier, &ground, &body(&u), &body(&v)),
-        Ok(true)
     );
 }
 

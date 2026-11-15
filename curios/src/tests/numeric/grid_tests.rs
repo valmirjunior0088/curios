@@ -55,9 +55,9 @@ let row(pair: Str) -> Str =
 let entry() -> /std/Io({}) =
     let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
     let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-    match input: (_) => Io({})
+    match input
     | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
+        match Str/of_bytes(bytes)
         | success(s) => print(Str/join("\n", List/map(Str/split(Str/trim(s), ";"), row)))
         | failure(_) => print("invalid utf-8")
         end

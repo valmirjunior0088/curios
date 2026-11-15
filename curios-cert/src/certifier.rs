@@ -105,8 +105,6 @@ pub enum Counted {
     Payload,
     /// A tuple or structure value's fields, against its telescope.
     Fields,
-    /// A motive's binders, against the family's indices plus the scrutinee.
-    MotiveBinders,
     /// An arm's binders, against the constructor's signature.
     ArmBinders,
 }
@@ -122,7 +120,6 @@ impl fmt::Display for Counted {
             Counted::Components => "components",
             Counted::Payload => "constructor payload",
             Counted::Fields => "fields",
-            Counted::MotiveBinders => "motive binders",
             Counted::ArmBinders => "arm binders",
         })
     }
@@ -154,10 +151,10 @@ pub enum Error {
     },
     /// A declaration leaving more sorts to its caller than [`UniverseContext::QUALITY_LIMIT`]: judging it at every assignment is two to that count judgments.
     TooManySorts { stated: usize },
-    /// An elimination's motive is not a well-typed function landing in a sort. The motive is a claim the term makes about its own result — `infer` reads the elimination's type off it and `Sort::of` classifies a type-valued `match` by it — so a motive stating one sort while its arms inhabit another would be believed by both.
-    NotAMotive {
+    /// An elimination's goal is not a well-typed term landing in a sort. The goal is a claim the term makes about its own type — `infer` reads the elimination's type off it and `Sort::of` classifies a type-valued `match` by it — so a goal stating one sort while its arms inhabit another would be believed by both.
+    NotAGoal {
         stated: Term,
-        /// What typing the motive, or reading its type as a sort, met.
+        /// What typing the goal, or reading its type as a sort, met.
         refusal: Box<Error>,
     },
     /// A term arrived with a type other than the one required of it.
@@ -195,7 +192,7 @@ pub enum Error {
     IndexedByItsGroup { member: Global },
     /// A term whose typing needs its own type while that typing is in progress, every local it names standing at the binder it stood at where that typing began: a derivation resting on its own conclusion, whose regress a walk would follow a level a turn.
     NeedsItsOwnTyping(Term),
-    /// An elimination with no arm for this constructor, no catch-all, and no clash making the case impossible at the scrutinee's indices. An arm may be legitimately absent only when its index targets cannot equal the actuals; anything else is a stuck term inhabiting the motive.
+    /// An elimination with no arm for this constructor, no catch-all, and no clash making the case impossible at the scrutinee's indices. An arm may be legitimately absent only when its index targets cannot equal the actuals; anything else is a stuck term inhabiting the goal.
     MissingArm { family: Global, tag: Atom },
     /// A value of a case, or an arm of an elimination, at a tag its family does not declare: the family is held, and has no case of that name.
     UndeclaredCase { family: Global, tag: Atom },
@@ -341,11 +338,11 @@ impl fmt::Display for Displayed<'_> {
                 "this declaration leaves {stated} sorts to its caller, past the {} one declaration may",
                 UniverseContext::QUALITY_LIMIT,
             ),
-            Error::NotAMotive { stated, refusal } => {
+            Error::NotAGoal { stated, refusal } => {
                 let stated = notation.term(stated);
                 write!(
                     formatter,
-                    "`{stated}` is not a valid motive, which is well typed and lands in a sort: ",
+                    "`{stated}` is not a valid goal, which is well typed and lands in a sort: ",
                 )?;
                 Displayed(refusal, notation, None).fmt(formatter)
             }

@@ -7,8 +7,8 @@ use {
     super::probe_level_fallback,
     crate::{Binders, Context, Opened, probe_open_sort, reduce, reduce_forced, synth_neutral},
     curios_core::{
-        Bound, FuncType, InductType, Instance, Intrinsic, Level, MatchResult, Produced, Quality,
-        ReduceError, Sort, StructType, Subterm, Term, TupleType, instantiate_universes,
+        Bound, FuncType, InductType, Instance, Intrinsic, Level, Produced, Quality, ReduceError,
+        Sort, StructType, Subterm, Term, TupleType, instantiate_universes,
     },
 };
 
@@ -296,17 +296,8 @@ fn classify_under(
                 level: Level::max(domains),
             }
         }
-        // A type-valued match (`Lt = match _ : Prop | ..`): its sort is its result — a constant `Prop` when the result is a proposition.
-        Subterm::Match(m) => match &m.result {
-            MatchResult::Family(motive) => {
-                let vars: Vec<Term> = (0..motive.arity())
-                    .map(|_| Term::free_var(&context.fresh(None)))
-                    .collect();
-                let refs: Vec<&Term> = vars.iter().collect();
-                sort_from_universe(context, &motive.open(&refs))?
-            }
-            MatchResult::Ambient(goal) => sort_from_universe(context, goal)?,
-        },
+        // A type-valued match (`Lt = match _ | ..` at `Prop`): its sort is its goal — `Prop` when the arms are propositions.
+        Subterm::Match(m) => sort_from_universe(context, &m.goal)?,
         // A neutral type (a `Prop` hypothesis, or a stuck family application): its synthesized type is its sort.
         Subterm::Var(_) | Subterm::Instance(_) | Subterm::Apply(_) | Subterm::Proj(_) => {
             match synth_neutral(context, binders, opened, &reduced)? {
@@ -424,7 +415,7 @@ pub fn published_sort(context: &mut Context, type_: &Term) -> Result<Option<Sort
     sort_from_universe(context, &sort).map(Some)
 }
 
-/// Decode a universe term — a kind's codomain, a match motive, or a synthesized neutral type — into its sort. Distinct from [`sort_of`], which classifies an arbitrary *type*: `from_universe(Prop) = Prop`, whereas `of(Prop) = Type` (the universe `Prop` is itself `Type`-sorted).
+/// Decode a universe term — a kind's codomain, a match's goal, or a synthesized neutral type — into its sort. Distinct from [`sort_of`], which classifies an arbitrary *type*: `from_universe(Prop) = Prop`, whereas `of(Prop) = Type` (the universe `Prop` is itself `Type`-sorted).
 fn sort_from_universe(context: &mut Context, universe: &Term) -> Result<Sort, ReduceError> {
     let reduced = reduce(context, universe.clone())?;
     Ok(match &*reduced {

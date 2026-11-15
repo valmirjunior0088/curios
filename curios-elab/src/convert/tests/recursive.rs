@@ -14,13 +14,11 @@ use {
 /// `λx. match x | none() => <none_value> | some(p) => head(p) end` — stuck at a neutral scrutinee, with a `head`-call in an arm to make unfolding self-feeding.
 fn recursive_matcher(context: &mut Context, head: &Free, none_value: usize) -> Term {
     let scrutinee = context.fresh(Some("x"));
-    let motive = context.fresh(Some("m"));
     let payload = context.fresh(Some("p"));
     Term::func(
         [(scrutinee, Term::intrinsic(Intrinsic::NatType))],
         Term::induct_match(
             Term::free_var(&scrutinee),
-            Some(&motive),
             Term::intrinsic(Intrinsic::NatType),
             [
                 ("none", Vec::<Free>::new(), nat(none_value)),
@@ -39,7 +37,6 @@ fn folded_recursive_call_against_its_unfolding() {
     let mut context = context();
     let f = context.fresh(Some("f"));
     let a = context.fresh(Some("a"));
-    let m = context.fresh(Some("m"));
     let p = context.fresh(Some("p"));
     let z = context.fresh(Some("z"));
     let body = recursive_matcher(&mut context, &f, 0);
@@ -50,7 +47,6 @@ fn folded_recursive_call_against_its_unfolding() {
     // The literal stuck body, spelled reducibly (the η-redex around `p`) so the sides are not syntactically equal: the folded call meets a non-apply shape, lazy delta unfolds it once, and the two stuck matches compare structurally.
     let unfolded = Term::induct_match(
         Term::free_var(&a),
-        Some(&m),
         Term::intrinsic(Intrinsic::NatType),
         [
             ("none", Vec::<Free>::new(), nat(0)),
@@ -154,7 +150,6 @@ fn distinct_recursive_heads_with_differing_bodies_is_false() {
 fn stepping(context: &mut Context, base: usize, by: usize, commuted: bool) -> Term {
     let member = context.fresh(Some("f"));
     let n = context.fresh(Some("n"));
-    let motive = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
     let call = Term::apply(Term::free_var(&member), [Term::free_var(&pred)]);
     let step = match commuted {
@@ -170,7 +165,6 @@ fn stepping(context: &mut Context, base: usize, by: usize, commuted: bool) -> Te
                 [(n, nat_type())],
                 Term::nat_match(
                     Term::free_var(&n),
-                    Some(&motive),
                     nat_type(),
                     nat(base),
                     &pred,
@@ -226,7 +220,6 @@ fn two_groups_whose_bodies_part_are_apart() {
 fn handing_back(context: &mut Context, flipped: bool) -> Term {
     let member = context.fresh(Some("f"));
     let (n, x) = (context.fresh(Some("n")), context.fresh(Some("x")));
-    let motive = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
     let ordered = |n: Term, x: Term| match flipped {
         false => [n, x],
@@ -245,7 +238,6 @@ fn handing_back(context: &mut Context, flipped: bool) -> Term {
                 parameters,
                 Term::nat_match(
                     Term::free_var(&n),
-                    Some(&motive),
                     nat_type(),
                     Term::free_var(&x),
                     &pred,
@@ -268,7 +260,6 @@ fn shifting(context: &mut Context) -> Term {
         context.fresh(Some("y")),
         context.fresh(Some("z")),
     );
-    let motive = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
     let parameters = [(x, nat_type()), (y, nat_type()), (z, nat_type())];
 
@@ -280,7 +271,6 @@ fn shifting(context: &mut Context) -> Term {
                 parameters,
                 Term::nat_match(
                     Term::free_var(&z),
-                    Some(&motive),
                     nat_type(),
                     nat(0),
                     &pred,
@@ -320,7 +310,6 @@ fn growing_recursive_unfolding_spends_the_budget() {
     // Its own small budget: the subject here is that the budget stops an unfolding that grows without bound, which a budget well under the shipped default shows as surely and sooner.
     let mut context = Context::new(20_000, SYNTAX);
     let x = context.fresh(Some("x"));
-    let m = context.fresh(Some("m"));
     let s = context.fresh(Some("s"));
     let p = context.fresh(Some("p"));
     let f = context.fresh(Some("f"));
@@ -332,7 +321,6 @@ fn growing_recursive_unfolding_spends_the_budget() {
             [(x, Term::intrinsic(Intrinsic::NatType))],
             Term::induct_match(
                 Term::free_var(&x),
-                Some(&m),
                 Term::intrinsic(Intrinsic::NatType),
                 [
                     (
@@ -510,7 +498,6 @@ fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term
     let t = context.fresh(Some("t"));
     let x = context.fresh(Some("x"));
     let y = context.fresh(Some("y"));
-    let motive = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
     let sort = Term::type_at(level);
 
@@ -518,7 +505,6 @@ fn polymorphic_fold(context: &mut Context, level: Level, zero_arm: Term) -> Term
         [(t, sort.clone()), (x, nat_type()), (y, nat_type())],
         Term::nat_match(
             Term::free_var(&y),
-            Some(&motive),
             nat_type(),
             zero_arm,
             &pred,

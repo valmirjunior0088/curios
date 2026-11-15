@@ -48,7 +48,7 @@ fn a_term_whose_type_reduces_to_a_sort_is_a_type_position() {
         let _U(k: /std/Nat) -> Type = match k | 0 => Type | _ + 1 => Type end;
 
         let _T(k: /std/Nat) -> _U(k) =
-            match k: (m) => _U(m)
+            match k
             | 0 => /std/Nat
             | j + 1 => match j | 0 => /std/Nat | _ + 1 => _T(j) end
             end;
@@ -239,7 +239,7 @@ fn a_partial_definition_stays_usable_in_a_program() {
     assert_eq!(run(source), b"8");
 }
 
-// (T) is seeded two ways, because neither reaches what the other does. The walk finds types where they are *written* — annotations, motives, telescopes, and the body of any definition whose type ends in a sort. It has no case for an application's arguments, so a type handed to a function is written nowhere it looks. The settle records find those, because a term whose own type is a sort is a type wherever it appears.
+// (T) is seeded two ways, because neither reaches what the other does. The walk finds types where they are *written* — annotations, goals, telescopes, and the body of any definition whose type ends in a sort. It has no case for an application's arguments, so a type handed to a function is written nowhere it looks. The settle records find those, because a term whose own type is a sort is a type wherever it appears.
 //
 // The argument form is the one that reaches this gate at all. Written as an annotation, `Shape(inf)` is *forced* while the binder elaborates and the step budget stops it there — fail-closed, but before any whole-module pass runs. Passed as a type argument it is never forced, so elaboration succeeds and only the gate is left, which the settle records are what reach.
 //

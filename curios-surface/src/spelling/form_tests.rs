@@ -412,7 +412,6 @@ fn a_match_with_a_default_prints_its_catch_all_last() {
     let b = Free::local(2, Some("b"));
     let term = Term::induct_match_default(
         Term::free_var(&r),
-        None,
         Term::type_ground(),
         [("none", Vec::<Free>::new(), Term::free_var(&a))],
         Term::free_var(&b),
@@ -495,7 +494,6 @@ fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_
 
     let headed = Term::matrix(Matrix {
         head: numeral(1),
-        motive: None,
         arms: vec![
             row(
                 Pattern::Binder,
@@ -518,7 +516,6 @@ fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_
 
     let headless = Term::matrix(Matrix {
         head: Term::tuple(Vec::<Term>::new()),
-        motive: None,
         arms: vec![
             row(
                 Pattern::Wildcard,

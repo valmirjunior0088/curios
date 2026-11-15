@@ -94,26 +94,26 @@ fn a_collapsed_wrapper_survives_storage_and_retrieval() {
         let entry() -> /std/Io({}) =
             let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-            match input : (_) => Io({})
+            match input
             | some(bytes) =>
-                match Str/of_bytes(bytes) : (_) => Io({})
+                match Str/of_bytes(bytes)
                 | success(s) =>
-                    match Nat/of_str(Str/trim(s)) : (_) => Io({})
+                    match Nat/of_str(Str/trim(s))
                     | some(d) =>
                         let stored : List(Meters) = [Meters/m(d), Meters/m(d + 1)];
                         let sum = List/fold(stored, 0, (x, acc) =>
-                            match x : (_) => Nat
+                            match x
                             | m(n) => acc + n
                             end);
                         let extra =
-                            match Both/both(d + 2, Meters/m(d + 3)) : (_) => Nat
+                            match Both/both(d + 2, Meters/m(d + 3))
                             | both(a, w) =>
-                                match w : (_) => Nat
+                                match w
                                 | m(n) => a + n
                                 end
                             end;
                         let z =
-                            match Only/only() : (_) => Nat
+                            match Only/only()
                             | only() => d
                             end;
                         /std/print(Nat/to_str(sum + extra + z))
@@ -143,23 +143,23 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
         | node(Nat, Tree, Tree)
         end
         let build(d : Nat, v : Nat) -> Tree =
-            match d : (_) => Tree
+            match d
             | 0 => Tree/leaf(v)
             | dp + 1 => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
             end;
         let sum(t : Tree) -> Nat =
-            match t : (_) => Nat
+            match t
             | leaf(n) => n % 1000003
             | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
             end;
         let entry() -> /std/Io({}) =
             let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-            match input : (_) => Io({})
+            match input
             | some(bytes) =>
-                match Str/of_bytes(bytes) : (_) => Io({})
+                match Str/of_bytes(bytes)
                 | success(s) =>
-                    match Nat/of_str(Str/trim(s)) : (_) => Io({})
+                    match Nat/of_str(Str/trim(s))
                     | some(d) => /std/print(Nat/to_str(sum(build(d, 1))))
                     | none() => /std/print("bad input")
                     end
@@ -202,7 +202,7 @@ fn arena_pure_computation_hugs_a_host_effect() {
     let source = r#"
         use /std/{Nat, Str, Io};
         let triangle(n : Nat) -> Nat =
-            match n : (_) => Nat
+            match n
             | 0 => 0
             | p + 1 => n + triangle(p)
             end;
@@ -231,12 +231,12 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
             r#"
         use /std/{Nat, Str, Bytes, Io};
         let count(b : Bytes) -> Nat =
-            match b : (_) => Nat
+            match b
             | x[] => 0
             | x[h, ..t] => count(t) + 1
             end;
         let build(n : Nat, acc : Bytes) -> Bytes =
-            match n : (_) => Bytes
+            match n
             | 0 => acc
             | p + 1 => build(p, x[0x61, ..acc])
             end;
@@ -274,9 +274,9 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
         let entry() -> /std/Io({}) =
             let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
-            match input: (_) => Io({})
+            match input
             | some(bytes) =>
-                match Str/of_bytes(bytes): (_) => Io({})
+                match Str/of_bytes(bytes)
                 | success(s) =>
                     let run = Str/span(s, At/start(s), (c) => Char/to_nat(c) != 10);
                     /std/print(Nat/to_str(run.past.offset))

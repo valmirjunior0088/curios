@@ -155,10 +155,10 @@ A match is an atom: an operand, a callee, a projected value
       (field_identifier))))
 
 ================================================================================
-Match with a motive and every leaf shape
+Match with every leaf shape
 ================================================================================
 
-match (n, xs, bs): (_) => Nat
+match (n, xs, bs)
 | (0, [], x[]) => 0
 | (p + 1, [h, ..t], x[y, ..ys]) => p
 | (some(@k, v), Point { x, y = z }, true) => v
@@ -179,12 +179,6 @@ end
       (tuple_field
         (path
           (identifier))))
-    (lambda
-      (lambda_parameters
-        (lambda_parameter
-          (identifier)))
-      (path
-        (identifier)))
     (match_arm
       (tuple_match_pattern
         (match_pattern_field

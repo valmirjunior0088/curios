@@ -4,7 +4,7 @@
 //!
 //! # Reading a disagreement
 //!
-//! A refusal here is *not* automatically an elaborator bug, and treating it as one would be the wrong reflex. The certifier is deliberately incomplete in one place — conversion compares a stuck elimination's scrutinee, motive and arms, and a projection's or an instance's head, at `Type` rather than at their real types, forfeiting type-directed eta and goal-level irrelevance there — and that refuses valid programs. So a disagreement is a question, and the two answers are "the certifier needs strengthening here" and "the elaborator admitted something it should not have". Both are worth knowing, which is why this runs at all.
+//! A refusal here is *not* automatically an elaborator bug, and treating it as one would be the wrong reflex. The certifier is deliberately incomplete in one place — conversion compares a stuck elimination's scrutinee, goal and arms, and a projection's or an instance's head, at `Type` rather than at their real types, forfeiting type-directed eta and goal-level irrelevance there — and that refuses valid programs. So a disagreement is a question, and the two answers are "the certifier needs strengthening here" and "the elaborator admitted something it should not have". Both are worth knowing, which is why this runs at all.
 //!
 //! What a disagreement is *never* is noise to be suppressed. If a rule here has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in a decision file of its own under `documentation/design/soundness/`, beside `an-independent-certifier-re-checks-what-the-elaborator-accepts.md`.
 //!

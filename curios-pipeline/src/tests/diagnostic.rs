@@ -162,12 +162,12 @@ fn a_rigid_mismatch_still_reports_as_a_mismatch() {
 
 #[test]
 fn goal_reports_spell_no_universe_instances() {
-    // A goal under a match motive over a universe-polymorphic family must not report an instance such as `Eq.{?u311}(…)` — a spelling the surface language does not even have. Report display erases universe instances, so no `.{` (and no `?u`) ever appears.
+    // A goal under a match over a universe-polymorphic family must not report an instance such as `Eq.{?u311}(…)` — a spelling the surface language does not even have. Report display erases universe instances, so no `.{` (and no `?u`) ever appears.
     let source = r#"
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = n + n;
         let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
-            match n : (m) => Eq()(m + m, m * 2)
+            match n
             | 0 => ?
             | p + 1 => ?
             end;

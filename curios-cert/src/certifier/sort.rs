@@ -26,9 +26,8 @@ use {
     super::{Certifier, Counted, Error, infer_type, whnf},
     curios_common::recurse,
     curios_core::{
-        Bound, Field, FuncType, InductType, Instance, Intrinsic, Level, Match, MatchResult,
-        Produced, Proj, Quality, Reducer, StructType, Subterm, Telescope, Term, TupleType,
-        instantiate_universes,
+        Bound, Field, FuncType, Instance, Intrinsic, Level, Match, Produced, Proj, Quality,
+        Reducer, StructType, Subterm, Telescope, Term, TupleType, instantiate_universes,
     },
 };
 
@@ -68,7 +67,7 @@ pub fn arity_matches(counted: Counted, expected: usize, actual: usize) -> Result
     }
 }
 
-/// Decode a term that is *already* a universe — a kind's codomain, a match motive, a synthesized neutral's type — into the sort it names.
+/// Decode a term that is *already* a universe — a kind's codomain, a match's goal, a synthesized neutral's type — into the sort it names.
 ///
 /// Distinct from [`Sort::of`], which classifies an arbitrary type: `as_sort(Prop)` is `Prop`, whereas `Sort::of(Prop)` is `Type 0`, since the universe `Prop` is itself `Type`-sorted.
 pub fn as_sort(certifier: &mut Certifier, universe: &Term) -> Result<Sort, Error> {
@@ -160,19 +159,8 @@ impl Sort {
 
             Subterm::Intrinsic(intrinsic) => sort_of_intrinsic(certifier, intrinsic),
 
-            // A type-valued `match` (`rec Lt = match n : Prop | ..`): its result is the sort, which every arm shares.
-            Subterm::Match(m) => match &m.result {
-                MatchResult::Family(motive) => {
-                    let binders = (0..motive.arity())
-                        .map(|_| Term::free_var(&certifier.fresh(None)))
-                        .collect::<Vec<_>>();
-                    let refs = binders.iter().collect::<Vec<_>>();
-                    let motive = motive.open(&refs);
-
-                    as_sort(certifier, &motive)
-                }
-                MatchResult::Ambient(goal) => as_sort(certifier, goal),
-            },
+            // A type-valued `match` (`rec Lt = match n | ..` at `Prop`): its goal is the sort, which every arm shares.
+            Subterm::Match(m) => as_sort(certifier, &m.goal),
 
             // A neutral type — a `Prop` hypothesis, or a family application stuck on a variable. A universe instance reduction left standing is one too, read at the levels the occurrence states: a local head, whose binder answers whatever they are, or a scheme declared without a body, instantiated at them.
             Subterm::Var(_) | Subterm::Apply(_) | Subterm::Proj(_) | Subterm::Instance(_) => {
@@ -488,28 +476,8 @@ pub fn synth_neutral(certifier: &mut Certifier, term: &Term) -> Result<Option<Te
             }
         }
 
-        // A stuck elimination's type is its result at its scrutinee: its ambient goal as written, or its motive opened at the indices the scrutinee's type carries and then at the scrutinee. The elimination was checked against that result where it was typed, and the motive under its real binders (`check_motive`), so this reads what typing established, as a variable's type is read off its binder.
-        Subterm::Match(Match { head, result, .. }) => {
-            let mut indices = Vec::new();
-            if let MatchResult::Family(motive) = result {
-                if motive.arity() > 1 {
-                    let Some(head_type) = synth_neutral(certifier, head)? else {
-                        return Ok(None);
-                    };
-                    if let Subterm::InductType(InductType {
-                        indices: actual, ..
-                    }) = &*certifier.reduce_forced(head_type)?
-                    {
-                        indices.clone_from(actual);
-                    }
-                }
-                if indices.len() + 1 != motive.arity() {
-                    return Ok(None);
-                }
-            }
-
-            Ok(Some(result.of(head, &indices)))
-        }
+        // A stuck elimination's type is its goal as written. The elimination was checked against it where it was typed (`goal_sort`), so this reads what typing established, as a variable's type is read off its binder.
+        Subterm::Match(Match { goal, .. }) => Ok(Some(goal.clone())),
 
         _ => Ok(None),
     }

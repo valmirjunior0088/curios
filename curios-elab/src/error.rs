@@ -1060,12 +1060,6 @@ pub enum Error {
     },
     /// A witness telescope declares an explicit parameter; nothing could supply it at resolution time.
     ExplicitWitnessParam,
-    /// A written motive binds the wrong number of names. An eliminator's motive abstracts the scrutinee's indices, in declaration order, and then the scrutinee — `expected` of them. `name` is the eliminated family when there is one to name (an intrinsic carrier has none).
-    MotiveBinderCount {
-        name: Option<Global>,
-        expected: usize,
-        written: usize,
-    },
     /// An arm of an indexed-inductive match was omitted, but inversion could not prove the case impossible at the scrutinee's indices.
     MissingArmNotImpossible {
         tag: Atom,
@@ -1813,14 +1807,6 @@ impl Error {
     pub fn non_regular_witness_premise<T: Into<Term>>(premise: T) -> Self {
         Self::NonRegularWitnessPremise {
             premise: Box::new(premise.into()),
-        }
-    }
-
-    pub fn motive_binder_count(name: Option<Global>, expected: usize, written: usize) -> Self {
-        Self::MotiveBinderCount {
-            name,
-            expected,
-            written,
         }
     }
 

@@ -4,8 +4,8 @@
 
 use {
     super::{
-        Apply, Ascribed, Bang, Func, FuncType, Global, Infix, Intrinsic, Level, Many, Matrix,
-        NumLit, Scope, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
+        Apply, Ascribed, Bang, Func, FuncType, Global, Infix, Intrinsic, Level, Matrix, NumLit,
+        Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Universes,
     },
     curios_common::{InfixOp, Sign, StringSyntax, SyntaxName},
     curios_num::{Binary, Natural, Rounding},
@@ -261,16 +261,6 @@ impl Term {
     /// A match as it is written ([`Transient::Matrix`]) — elaboration-transient, consumed by `elaborate_matrix`, which compiles its patterns.
     pub fn matrix(matrix: Matrix) -> Self {
         Self::from(Subterm::Transient(Transient::Matrix(matrix)))
-    }
-
-    /// Carry a *written* motive — the surface term `into_core` lowered, before elaboration has closed it into a scope — as an arity-0 [`Scope`].
-    ///
-    /// Lowering cannot close the scope itself: the motive's arity is `n_indices + 1`, and the eliminated family is only known once the scrutinee's type is inferred. Arity 0 is a free tag for "not yet scoped" because no elaborated motive can have it — every eliminator binds at least the scrutinee, so `check_motive` always re-closes at arity 1 or more. `Scope::constant` performs no capture, so the term goes in and comes back out of `body()` untouched.
-    pub fn match_motive_written<M>(motive: M) -> Scope<Many>
-    where
-        M: Into<Term>,
-    {
-        Scope::constant(Many(0), motive.into())
     }
 
     /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_num_lit`.

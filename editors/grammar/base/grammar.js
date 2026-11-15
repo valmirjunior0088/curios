@@ -22,7 +22,6 @@ module.exports = grammar({
   inline: ($) => [$._declared_name, $._result_sort],
 
   conflicts: ($) => [
-    [$.lambda_parameters, $.unit],
     [$.struct_literal, $.struct_pattern],
     [$.lambda_parameter, $.parenthesized_pattern],
     [$.lambda_parameter, $.pattern_field],
@@ -379,11 +378,7 @@ module.exports = grammar({
       seq(
         "match",
         choice(
-          seq(
-            field("scrutinee", $._term),
-            optional(seq(":", field("motive", $._term))),
-            repeat($.match_arm),
-          ),
+          seq(field("scrutinee", $._term), repeat($.match_arm)),
           repeat1($.guarded_arm),
         ),
         "end",

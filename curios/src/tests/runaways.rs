@@ -307,13 +307,13 @@ const A_CLASH_OVER_AN_EQUATION_A_LEMMA_INHABITS: &str = r#"
     use /std/Bool/{False};
 
     let countdown(n : Nat) -> Nat =
-        match n : (_) => Nat
+        match n
         | 0 => 0
         | k + 1 => countdown(k)
         end;
 
     let zero(n : Nat) -> Eq()(countdown(n), 0) =
-        match n : (m) => Eq()(countdown(m), 0)
+        match n
         | 0 => Eq/refl()
         | k + 1 => zero(k)
         end;
@@ -342,13 +342,13 @@ const TWO_RECURSIONS_COLD: &str = r#"
     use /std/{Nat, Eq, Io};
 
     let f(n : Nat) -> Nat =
-        match n : (_) => Nat
+        match n
         | 0 => 0
         | k + 1 => f(k)
         end;
 
     let g(n : Nat) -> Nat =
-        match n : (_) => Nat
+        match n
         | 0 => 1
         | k + 1 => g(k)
         end;
@@ -363,13 +363,13 @@ const TWO_RECURSIONS_WARMED: &str = r#"
     use /std/{Nat, Eq, Io};
 
     let f(n : Nat) -> Nat =
-        match n : (_) => Nat
+        match n
         | 0 => 0
         | k + 1 => f(k)
         end;
 
     let g(n : Nat) -> Nat =
-        match n : (_) => Nat
+        match n
         | 0 => 1
         | k + 1 => g(k)
         end;

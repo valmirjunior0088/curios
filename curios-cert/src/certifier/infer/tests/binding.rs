@@ -10,7 +10,7 @@ use {
 /// `match v | true => Nat | false => Bool`: a type that is `Nat` exactly where `v` is `true`, which every fixture here reads a `Bool` through.
 fn family(v: &str) -> String {
     fill!(
-        "match ${v}: (_) => Type | false => #BoolType | true => #NatType end",
+        "#{goal = Type} match ${v} | false => #BoolType | true => #NatType end",
         v
     )
 }
@@ -57,7 +57,7 @@ fn a_lambda_checks_against_a_let_bound_function_type() {
 }
 
 /// `(b: Bool) => ${lets} match b | false => 0 | true => let z: ${family} = ${value}; 0 end`: the split every fixture below reads a `let` across.
-const SPLIT: &str = "(b: #BoolType) => (${lets} match b: (_) => #NatType | false => 0 | true => (let z: ${family} = ${value}; 0) end)";
+const SPLIT: &str = "(b: #BoolType) => (${lets} #{goal = #NatType} match b | false => 0 | true => (let z: ${family} = ${value}; 0) end)";
 
 /// An arm binds again the `let` its solution moves. `c` stands for `b`, and in the arm where `b` is `true` it stands for `true`: a substituted `let` would have had the solution substituted through its value, and a bound one is bound again at it.
 ///
@@ -97,16 +97,15 @@ fn a_let_an_arm_retypes_keeps_its_value() {
     // `Bool` under either case, and stuck on a variable: a type that names `b` and says nothing more.
     let carrier = |at: &str| {
         fill!(
-            "match ${at}: (_) => Type | false => #BoolType | true => #BoolType end",
+            "#{goal = Type} match ${at} | false => #BoolType | true => #BoolType end",
             at
         )
     };
     let split = fill!(
         SPLIT,
         lets = fill!(
-            "let c: ${type_} = match b: (v) => ${carried} | false => false | true => true end;",
-            type_ = carrier("b"),
-            carried = carrier("v")
+            "let c: ${type_} = #{goal = ${type_}} match b | false => false | true => true end;",
+            type_ = carrier("b")
         ),
         family = family("c"),
         value = "3"
@@ -123,9 +122,8 @@ fn a_let_bound_again_is_typed_again() {
     let split = fill!(
         SPLIT,
         lets = fill!(
-            "let w: ${at_b} = match b: (v) => ${at_v} | false => true | true => 3 end; let before: ${at_b} = w;",
-            at_b = family("b"),
-            at_v = family("v")
+            "let w: ${at_b} = #{goal = ${at_b}} match b | false => true | true => 3 end; let before: ${at_b} = w;",
+            at_b = family("b")
         ),
         family = "#NatType",
         value = "w"
@@ -140,7 +138,7 @@ fn a_let_bound_again_is_typed_again() {
 #[test]
 fn an_elimination_reads_a_let_bound_scrutinee_by_value() {
     let eliminated = fill!(
-        "(g: (v: #BoolType) -> #BoolType, b: #BoolType) => (let x: #BoolType = g(b); match x: (_) => #NatType | false => 0 | true => (let z: ${family} = 3; 0) end)",
+        "(g: (v: #BoolType) -> #BoolType, b: #BoolType) => (let x: #BoolType = g(b); #{goal = #NatType} match x | false => 0 | true => (let z: ${family} = 3; 0) end)",
         family = family("g(b)")
     );
 
@@ -151,10 +149,10 @@ fn an_elimination_reads_a_let_bound_scrutinee_by_value() {
 #[test]
 fn a_guard_read_through_a_let_answers_a_split_inside_its_arm_and_nothing_after_it() {
     let claimed = family("k(true)");
-    // match c : Nat | false => 0 | true => let u : family(k(true)) = 3; 0 end, inside the arm of a guard over `y`, then `after`.
+    // #{goal = Nat} match c | false => 0 | true => let u : family(k(true)) = 3; 0 end, inside the arm of a guard over `y`, then `after`.
     let forged = |after: &str| {
         term(&fill!(
-            "(c: #BoolType, k: (v: #BoolType) -> #BoolType) => (let y: #BoolType = c; match match y: (_) => #BoolType | false => k(false) | true => k(true) end: (_) => #NatType | false => 0 | true => (let w: #NatType = match c: (_) => #NatType | false => 0 | true => (let u: ${claimed} = 3; 0) end; ${after}) end)",
+            "(c: #BoolType, k: (v: #BoolType) -> #BoolType) => (let y: #BoolType = c; #{goal = #NatType} match #{goal = #BoolType} match y | false => k(false) | true => k(true) end | false => 0 | true => (let w: #NatType = #{goal = #NatType} match c | false => 0 | true => (let u: ${claimed} = 3; 0) end; ${after}) end)",
             claimed,
             after
         ))
@@ -220,7 +218,7 @@ fn a_position_over_a_let_bound_partial_group_says_so() {
 }
 
 /// `countdown`, descending from its argument, whose step at `pred` is `${step}`, then `${tail}`.
-const COUNTDOWN: &str = "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => match n: (m) => #NatType | 0 => 0 | pred + 1 => ${step} end; ${tail})";
+const COUNTDOWN: &str = "#{node = Rec} (let countdown: (n: #NatType) -> #NatType = (n: #NatType) => #{goal = #NatType} match n | 0 => 0 | pred + 1 => ${step} end; ${tail})";
 
 /// The verdict filed for the group `term` states, once `term` is typed in `certifier` at `Nat`.
 fn verdict_once_typed(certifier: &mut Certifier, term: &Term, group: &Term) -> Option<Totality> {
@@ -408,7 +406,7 @@ fn a_let_an_arm_moves_stands_for_its_value_in_the_sibling_arm() {
     };
     let split = |if_false: &str, if_true: &str| {
         term(&fill!(
-            "(b: #BoolType) => (let c: #BoolType = b; match b: (_) => #NatType | false => ${if_false} | true => ${if_true} end)",
+            "(b: #BoolType) => (let c: #BoolType = b; #{goal = #NatType} match b | false => ${if_false} | true => ${if_true} end)",
             if_false = at(if_false),
             if_true = at(if_true)
         ))

@@ -273,7 +273,7 @@ pub fn check_type_totality(
 
 /// The terms elaboration settled *at a sort* — a term whose type is `Type` or `Prop` is itself a type, wherever it was written.
 ///
-/// This is the half [`type_positions`] structurally cannot reach. That walk is a syntactic reading of where types are *written*: an annotation, a motive, a declaration telescope, a definition whose type ends in a sort. A type passed as an *argument* is written nowhere it looks — `annotations` has no case for an application's parameters — so `ignore(@Shape(inf), 5)` would hand a partial value to a type-level function with nothing seeded, while the same type in an annotation is rejected.
+/// This is the half [`type_positions`] structurally cannot reach. That walk is a syntactic reading of where types are *written*: an annotation, a match's goal, a declaration telescope, a definition whose type ends in a sort. A type passed as an *argument* is written nowhere it looks — `annotations` has no case for an application's parameters — so `ignore(@Shape(inf), 5)` would hand a partial value to a type-level function with nothing seeded, while the same type in an annotation is rejected.
 ///
 /// The two seedings are **incomparable**, not nested: the walk sees definition bodies whose type ends in a sort, and no typing judgment classifies those as type positions; this sees type arguments, which no syntactic walk can find without re-deriving the head's telescope. Taking the union costs one pass over already-recorded terms and needs neither.
 fn checked_type_positions(

@@ -1,10 +1,10 @@
-//! A proposition taken apart into data: the sort the guard reads off a motive however the motive is spelled, a universe among the data, what the singleton rung counts as pinned, the instance a match on a proof fires on, and the sizing that keeps a cast from unfolding without end and a tree from holding itself.
+//! A proposition taken apart into data: the sort the guard reads off a goal however a term computes it, a universe among the data, what the singleton rung counts as pinned, the instance a match on a proof fires on, and the sizing that keeps a cast from unfolding without end and a tree from holding itself.
 
 use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
-// The guard reads the result's sort off the motive typed under its own binders, and a motive is held to land in a sort there. `F(i)` is the proposition `True` at `true` and `Nat` at `false`, so read at each arm's case the motive would pass the guard at `qa` and type `qb`'s arm as data out of a proposition of two constructors. Typed at the binder `i` it lands in no sort, and the match is refused at its motive before either arm is read. `curios-cert`'s `certifier::infer::eliminate::proof_match_tests` puts the same motive to the certifier under this name. The control's motive is a proposition at every index.
+// The guard reads the result's sort off the goal, and a goal is held to land in a sort. `F(b)` is the proposition `True` at `true` and `Nat` at `false`, so read at each arm's case the goal would pass the guard at `qa` and type `qb`'s arm as data out of a proposition of two constructors. At the open index `b` it lands in no sort, and the declaration stating it is refused before the match is read. `curios-cert`'s `certifier::infer::eliminate::proof_match_tests` puts the same goal to the certifier under this name. The control's goal is a proposition at every index.
 #[test]
-fn a_motive_whose_sort_its_index_decides_is_no_motive() {
+fn a_goal_whose_sort_its_index_decides_is_no_goal() {
     control(
         r#"
         use /std/{Nat, Bool};
@@ -17,18 +17,18 @@ fn a_motive_whose_sort_its_index_decides_is_no_motive() {
 
         let S(b: Bool) -> Type = match b | true => Prop | false => Type end;
 
-        let F(b: Bool) -> S(b) = match b : (c) => S(c) | true => True | false => Nat end;
+        let F(b: Bool) -> S(b) = match b | true => True | false => Nat end;
 
-        let read(t: Q(false)) -> True = match t : (i, _) => True | qa() => True/qed() | qb() => True/qed() end;
+        let read(b: Bool, t: Q(b)) -> True = match t | qa() => True/qed() | qb() => True/qed() end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[
-        ("-> True = match t : (i, _) => True | qa() => True/qed() | qb() => True/qed() end", "-> Nat = match t : (i, _) => F(i) | qa() => True/qed() | qb() => 7 end"),
+        ("-> True = match t | qa() => True/qed() | qb() => True/qed() end", "-> F(b) = match t | qa() => True/qed() | qb() => 7 end"),
     ])
-    .by_elaborator_in("/read", |error| matches!(error, Error::TypeMismatch { inferred, .. } if pinned(inferred) == "/S(i)"));
+    .by_elaborator_in("/read", |error| matches!(error, Error::TypeMismatch { inferred, .. } if pinned(inferred) == "/S(b)"));
 }
 
 // A clash is concluded between two forcings of one binder only where they do not convert. `refl(@A)` forces `A` to `Nat` and to `Id(Nat)`, which are one type through `Id`'s definition, so the deletion rule keeps one and the arm stays mandatory: excused, `absurd(TEq/refl(@Nat))` is a closed inhabitant of `False`. The control writes the arm.
@@ -227,9 +227,9 @@ fn a_proposition_with_one_bare_constructor_eliminates_into_a_universe() {
     );
 }
 
-// A motive is a term, so the result an elimination states may be computed by one: a definition named in its place, a function value a local binds, or a family the caller hands in. Each is typed under the motive's binders before the guard reads its sort, so each is the large elimination the written `(_) => Prop` above is, and the caller's family is held at the `Type` its parameter states. Each control's `Two` has one bare constructor.
+// A goal is a term, so the result an elimination states may be computed by one: a definition applied to the scrutinee, or a family the caller hands in. The guard reads the sort of the goal as typed, so each is the large elimination `-> Prop` above is, and the caller's family is held at the `Type` its parameter states. Each control's `Two` has one bare constructor.
 #[test]
-fn a_motive_computed_by_a_term_meets_the_guard_however_it_is_spelled() {
+fn a_goal_computed_by_a_term_meets_the_guard() {
     control(
         r#"
         use /std/Bool/{False, True};
@@ -240,34 +240,7 @@ fn a_motive_computed_by_a_term_meets_the_guard_however_it_is_spelled() {
 
         let Universe(s: Two) -> Type = Prop;
 
-        let F(t: Two) -> Prop = match t : Universe | a() => True end;
-
-        /std/print("ok")
-        "#,
-        b"ok",
-    )
-    .refused(&[
-        (
-            "        | a()\n        end",
-            "        | a()\n        | b()\n        end",
-        ),
-        ("| a() => True end", "| a() => True | b() => False end"),
-    ])
-    .by_elaborator_in(
-        "/F",
-        |error| matches!(error, Error::LargeElimOfProp { name } if *name == global("/Two")),
-    );
-    control(
-        r#"
-        use /std/Bool/{False, True};
-
-        induct Two: Prop
-        | a()
-        end
-
-        let F(t: Two) -> Prop =
-            let m = (s: Two) => Prop;
-            match t : m | a() => True end;
+        let F(t: Two) -> Universe(t) = match t | a() => True end;
 
         /std/print("ok")
         "#,
@@ -291,7 +264,7 @@ fn a_motive_computed_by_a_term_meets_the_guard_however_it_is_spelled() {
         end
 
         let elim(P: (Two) -> Type, x: P(Two/a()), t: Two) -> P(t) =
-            match t : P | a() => x end;
+            match t | a() => x end;
 
         /std/print("ok")
         "#,
@@ -363,7 +336,7 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
         let by_subst(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
             -> Eq()(Eq/subst(P, p, v), v) = Eq/refl();
         let by_match(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
-            -> Eq()(match p : (x, y, _) => P(y) | refl(@z) => v end, v) = Eq/refl();
+            -> Eq()(match p | refl(@z) => v end, v) = Eq/refl();
         let by_lemma(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
             -> Eq()(cast(P, p, v), v) = Eq/refl();
         let by_sym(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
@@ -371,7 +344,7 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
         let by_trans(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
             -> Eq()(cast(P, Eq/trans(p, Eq/refl()), v), v) = Eq/refl();
         let by_match_sym(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
-            -> Eq()(match Eq/sym(Eq/sym(p)) : (x, y, _) => P(y) | refl(@z) => v end, v) = Eq/refl();
+            -> Eq()(match Eq/sym(Eq/sym(p)) | refl(@z) => v end, v) = Eq/refl();
 
         /std/print("ok")
         "#),
@@ -388,7 +361,7 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
         let u_subst(a: Nat, b: Nat, p: Eq()(a, a), v: Nat)
             -> Eq()(Eq/subst((_) => Nat, p, v), v) = Eq/refl();
         let u_match(a: Nat, b: Nat, p: Eq()(a, a), v: Nat)
-            -> Eq()(match p : (x, y, _) => Nat | refl(@z) => v end, v) = Eq/refl();
+            -> Eq()(match p | refl(@z) => v end, v) = Eq/refl();
         let u_lemma(a: Nat, b: Nat, p: Eq()(a, a), v: Nat)
             -> Eq()(cast((_) => Nat, p, v), v) = Eq/refl();
         let u_sym(a: Nat, b: Nat, p: Eq()(a, a), v: Nat)
@@ -429,7 +402,7 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
         ),
         (
             "/u_match",
-            "/std/Eq/Eq(Nat)(match p: (x, y, x2) => Nat | refl(@z) => v end, v)",
+            "/std/Eq/Eq(Nat)(match p | refl(@z) => v end, v)",
         ),
         (
             "/u_lemma",

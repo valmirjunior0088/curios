@@ -92,11 +92,6 @@ fn trailing_comma_accepted_in_every_comma_list() {
             "match o | some(x,) => x | none() => y end",
             "match o | some(x) => x | none() => y end",
         ),
-        // A motive binder's annotation.
-        (
-            "match p : (x, y, q : Eq(A, x, y,)) => T | refl(v) => e end",
-            "match p : (x, y, q : Eq(A, x, y)) => T | refl(v) => e end",
-        ),
         // Local function-definition sugar.
         (
             "let f(x : Nat,) -> Nat = x; f(1)",
@@ -238,7 +233,7 @@ fn a_comment_opens_with_a_space_or_ends_its_line() {
 
 /// A malformed construct reports inside itself, not at the delimiter that opens it.
 ///
-/// Each of these has a prefix that nothing else in the grammar may follow — `Name {`, a lambda's `=>`, a motive's `:`, a field's `:`/`->`/`=`, a constructor target's `:`, a block string's opener, a witness's concept name. Left to backtrack, the construct would be re-read as something shorter (a bare name, a parenthesized term, no motive, a positional field) and the enclosing form would complain about a token the reader had written correctly.
+/// Each of these has a prefix that nothing else in the grammar may follow — `Name {`, a lambda's `=>`, a field's `:`/`->`/`=`, a constructor target's `:`, a block string's opener, a witness's concept name. Left to backtrack, the construct would be re-read as something shorter (a bare name, a parenthesized term, a positional field) and the enclosing form would complain about a token the reader had written correctly.
 #[test]
 fn a_construct_with_a_discriminating_prefix_reports_inside_itself() {
     for (source, expected) in [
@@ -247,11 +242,6 @@ fn a_construct_with_a_discriminating_prefix_reports_inside_itself() {
         ("P { x = @ }", "expected: a term\n│  obtained: `@`"),
         // A lambda, past its `=>`.
         ("(x) => @", "expected: a term\n│  obtained: `@`"),
-        // A motive, past its `:`.
-        (
-            "match b: @ | true => 1 end",
-            "expected: a term\n│  obtained: `@`",
-        ),
         // A tuple-type field, past its `:`.
         ("{ x: @ }", "expected: a term\n│  obtained: `@`"),
         // A labeled tuple field, past its guarded `=`.
@@ -279,7 +269,7 @@ fn a_shorter_reading_still_wins_where_the_prefix_is_absent() {
         "(1,)",
         "()",
         "(1)",
-        // A motive is optional.
+        // A match writes no result.
         "match b | true => 1 | false => 0 end",
         // Definition sugar and spreads in a literal.
         "(bump(x) = x, base = 3)",

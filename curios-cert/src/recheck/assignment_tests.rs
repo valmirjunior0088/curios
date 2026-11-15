@@ -48,7 +48,7 @@ induct /Through(A: Sort): pub Type
 end
 let /get : (t: #{node = InductType, universes = {qualities = [Type]}} /Through(#BoolType)) -> #BoolType =
     (t: #{node = InductType, universes = {qualities = [Type]}} /Through(#BoolType)) =>
-        #{result = Ambient(#BoolType)}
+        #{goal = #BoolType}
         match t
         | through(x) => x
         end;
@@ -146,7 +146,7 @@ let /bad : (
                 /Two/b()
             )
     ) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match w
         end;
 /bad(
@@ -177,7 +177,7 @@ let /a_value_stating_two : #{node = InductType, universes = {qualities = [Type]}
 /std/Bool/True/qed()
 "#;
 
-/// Each declaration leaves one sort, `Param(0)`, and states `Param(1)`, which nothing binds, at one route: a group's member, a `let`'s annotation, a record's field, the instance a match states, a motive, and an occurrence's instance. Read at every assignment of the one sort it leaves, each would still hold `Param(1)`, judged at a sort that is neither `Prop` nor `Type`.
+/// Each declaration leaves one sort, `Param(0)`, and states `Param(1)`, which nothing binds, at one route: a group's member, a `let`'s annotation, a record's field, the instance a match states, a goal, and an occurrence's instance. Read at every assignment of the one sort it leaves, each would still hold `Param(1)`, judged at a sort that is neither `Prop` nor `Type`.
 const A_SORT_NO_DECLARATION_BINDS: &str = r#"
 #{universe_context = {quality_count = 1}}
 induct /Same(@A: Sort): (x: A, y: A) -> pub Prop
@@ -198,14 +198,14 @@ struct /InAField(A: Sort): pub #{level = 1} Type { f: #{quality = Param(1)} Sort
 #{universe_context = {quality_count = 1}}
 let /in_a_stated_instance : (@A: Sort, x: A, y: A, h: #{node = InductType, universes = {qualities = [Param(0)]}} /Same(A)(x, y)) -> #NatType =
     (@A: Sort, x: A, y: A, h: #{node = InductType, universes = {qualities = [Param(0)]}} /Same(A)(x, y)) =>
-        #{result = Ambient(#NatType), cases = {stated = #{node = InductType, universes = {qualities = [Param(1)]}} /Same(A)(x, y)}}
+        #{goal = #NatType, cases = {stated = #{node = InductType, universes = {qualities = [Param(1)]}} /Same(A)(x, y)}}
         match h
         | refl(@z) => 0
         end;
 #{universe_context = {quality_count = 1}}
-let /in_a_motive : (@A: Sort, x: A, y: A, h: #{node = InductType, universes = {qualities = [Param(0)]}} /Same(A)(x, y)) -> Prop =
+let /in_a_goal : (@A: Sort, x: A, y: A, h: #{node = InductType, universes = {qualities = [Param(0)]}} /Same(A)(x, y)) -> Prop =
     (@A: Sort, x: A, y: A, h: #{node = InductType, universes = {qualities = [Param(0)]}} /Same(A)(x, y)) =>
-        match h: (x2, y2, h2) => #{level = 1, quality = Param(1)} Sort
+        #{goal = #{level = 1, quality = Param(1)} Sort} match h
         | refl(@z) =>
             #{node = InductType}
             /std/Bool/True()
@@ -247,8 +247,8 @@ induct /F(
 ): pub Type
 | mk(
     f:
-        #{cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Same(A)(x, y)}}
-        match h: (x2, y2, h2) => Prop
+        #{goal = Prop, cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Same(A)(x, y)}}
+        match h
         | refl(@z) =>
             (b: B) ->
                 #{node = InductType}
@@ -285,10 +285,10 @@ let /neg : (
             #{node = InductType}
             /G()
     ) =>
-        #{result = Ambient(#{node = InductType} /std/Bool/False())}
+        #{goal = #{node = InductType} /std/Bool/False()}
         match x
         | g(w) =>
-            #{result = Ambient(#{node = InductType} /std/Bool/False())}
+            #{goal = #{node = InductType} /std/Bool/False()}
             match w
             | mk(f) => f(x)
             end
@@ -313,7 +313,7 @@ let /neg : (
 )
 "#;
 
-/// `/Lv`'s level `u` stands only in the arm of a match on `h`, an equation between two values of a sort its caller states, and its motive sits a level above it: where the caller states `Prop` the match is its arm, so `u` sizes the payload, and as stated the match stands holding it. `/up` takes an `/Lv` at `Prop` at `0` for one at `1`.
+/// `/Lv`'s level `u` stands only in the arm of a match on `h`, an equation between two values of a sort its caller states, and its goal sits a level above it: where the caller states `Prop` the match is its arm, so `u` sizes the payload, and as stated the match stands holding it. `/up` takes an `/Lv` at `Prop` at `0` for one at `1`.
 const A_LEVEL_IN_THE_ARM_OF_A_MATCH: &str = r#"
 #{universe_context = {quality_count = 1}}
 induct /Same(@A: Sort): (x: A, y: A) -> pub Prop
@@ -330,8 +330,8 @@ induct /Lv(
 ): pub #{level = u + 2} Type
 | mk(
     f:
-        #{cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Same(A)(x, y)}}
-        match h: (x2, y2, h2) => #{level = u + 2} Type
+        #{goal = #{level = u + 2} Type, cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Same(A)(x, y)}}
+        match h
         | refl(@z) =>
             #{level = u} Type
         end
@@ -511,7 +511,7 @@ fn a_sort_no_declaration_binds_is_refused_at_every_route_before_any_judgment() {
         "in_a_let",
         "InAField",
         "in_a_stated_instance",
-        "in_a_motive",
+        "in_a_goal",
         "in_an_instance",
     ] {
         assert!(
@@ -557,7 +557,7 @@ fn a_parameter_a_sort_left_to_a_caller_would_uncover_is_read_at_mixed() {
     );
 }
 
-/// A level only the arm of a match on an equation at a sort left to the caller holds is a level of the family: where the caller states `Prop` the arm is what the match is, and as stated the match stands holding it, so the variance walk reads every part of it. `sort_tests::a_level_a_standing_match_carries_is_held_by_its_family` holds a level the motive carries at `Type`.
+/// A level only the arm of a match on an equation at a sort left to the caller holds is a level of the family: where the caller states `Prop` the arm is what the match is, and as stated the match stands holding it, so the variance walk reads every part of it. `sort_tests::a_level_a_standing_match_carries_is_held_by_its_family` holds a level the goal carries at `Type`.
 ///
 /// Mutation-check: have the variance walk read a match as mentioning no level, and `/up` is accepted.
 #[test]

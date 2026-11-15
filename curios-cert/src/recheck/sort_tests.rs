@@ -337,7 +337,7 @@ end
 #{universe_context = {quality_count = 1}}
 let /pick: (A: Sort, t: #{node = InductType} /Two(), x: A, y: A) -> A =
     (A: Sort, t: #{node = InductType} /Two(), x: A, y: A) =>
-        match t: (s) => A | a() => x | b() => y end;
+        #{goal = A} match t | a() => x | b() => y end;
 "#,
     );
 
@@ -451,8 +451,8 @@ induct /Bad(
 ): pub Type
 | c(
         f:
-            #{cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y)}}
-            match h: (x2, x3, x4) => Prop
+            #{goal = Prop, cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y)}}
+            match h
             | refl(@z) =>
                 (
                     b:
@@ -472,7 +472,7 @@ end
     );
 }
 
-/// A level carried only by a match that stands is held: `induct Lv(@A: Sort, x: A, y: A, h: Eq(x, y)): Type u | mk(f: match h : (_, _, _) => Type u | refl(@z) => Nat end) end` holds `u` in its motive alone, where conversion compares two such matches, since at `Type` a match on `h` stands whatever `x` and `y` are. So two instances of `Lv` at `Type` apart in `u` are two types, and a value of one is no value of the other.
+/// A level carried only by a match that stands is held: `induct Lv(@A: Sort, x: A, y: A, h: Eq(x, y)): Type u | mk(f: match h | refl(@z) => Nat end) end` holds `u` in its goal alone, where conversion compares two such matches, since at `Type` a match on `h` stands whatever `x` and `y` are. So two instances of `Lv` at `Type` apart in `u` are two types, and a value of one is no value of the other.
 #[test]
 fn a_level_a_standing_match_carries_is_held_by_its_family() {
     let verdicts = text_verdicts(
@@ -491,8 +491,8 @@ induct /Lv(
 ): pub #{level = u} Type
 | mk(
         f:
-            #{cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y)}}
-            match h: (x2, x3, x4) => #{level = u} Type | refl(@z) => #NatType end)
+            #{goal = #{level = u} Type, cases = {stated = #{node = InductType, universes = {qualities = [Param(0)]}} /Eq(A)(x, y)}}
+            match h | refl(@z) => #NatType end)
 end
 
 let /coerce: (
@@ -535,7 +535,7 @@ induct /Box(A: Sort): pub Type
 | box(x: A)
 end
 ((h: /std/Bool/Holds(
-    #{result = Ambient(#BoolType)}
+    #{goal = #BoolType}
     match (
         #{universes = {qualities = [Type]}}
         /Box/box)(@#BoolType, false)

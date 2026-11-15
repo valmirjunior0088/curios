@@ -8,7 +8,7 @@
 //!
 //! **Payloads.** Every derivation reads a declaration the same way: the constructor telescopes (or the field telescope) opened at the key's parameters, one binder minted per payload, each classified by its type under the binders before it. A plain payload that is itself a type is refused, and a hidden one takes part as a plain one does where it is a value, written under its mark, and none where it is a type or a proof, which the text read back infers; a proof payload takes no part beyond what the derivation states for it; every other payload takes part through the concept's own method — `Spell/spell`, `Eql/eql`, `Ord/ord` — applied with a `use` argument the body supplies as a witness goal of its own — resolved by ordinary resolution in the witness's scope (a telescope premise, the witness's own entry, an `and` sibling), and reported unresolved under a provenance naming the constructor and the payload, with the telescope premise to add when the payload's type is a telescope variable. A field or payload the lowerer named `_{position}` had no written label, which is the one mark Core keeps of it.
 //!
-//! **The `Spell` body.** One match arm per constructor in declaration order, the motive omitted as a written match omits it, and per arm a single renderer application over structured pieces: `Spell/call("Tree/node", [spell(l), …])` for a constructor, `Spell/record("Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its type's name and constructor tag applied to its payloads, a hidden one under its mark (`Spell/hidden`), so the text re-parses wherever the type's name is visible unqualified; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
+//! **The `Spell` body.** One match arm per constructor in declaration order, its goal a hole as a written match's is, and per arm a single renderer application over structured pieces: `Spell/call("Tree/node", [spell(l), …])` for a constructor, `Spell/record("Point", [("x", spell(x)), …])` for a struct, whose fields are projected. A value therefore spells as its type's name and constructor tag applied to its payloads, a hidden one under its mark (`Spell/hidden`), so the text re-parses wherever the type's name is visible unqualified; a struct spells labeled, or positionally where its field has no label; a proof payload spells as the written goal `"?"`.
 //!
 //! **The `Eql` body.** `eql` matches its two arguments in turn: an arm per constructor on the first, and inside it a one-arm match on the second at the same constructor — its payloads compared pairwise through `Eql/eql` under `&&`, `true` when there is nothing to compare — with a `| _ => false` default for every other constructor. A struct compares its projections the same way, with no match. Proofs do not take part. `neq` negates the same comparison, built a second time over binders of its own.
 //!
@@ -22,9 +22,9 @@ use {
         Qualifier, Sign, SpellDerivation, StringSyntax, SyntaxRegistry,
     },
     curios_core::{
-        CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Many,
-        Mention, MetavarOrigin, Method, Scope, StructDecl, StructEntry, StructType, Subterm, Term,
-        WitnessOrigin, str_literal, syn_call,
+        CalleeId, Extent, Free, Global, InductDecl, InductParam, InductType, Intrinsic, Mention,
+        MetavarOrigin, Method, StructDecl, StructEntry, StructType, Subterm, Term, WitnessOrigin,
+        str_literal, syn_call,
     },
     curios_num::Natural,
     curios_surface::Spellable,
@@ -215,9 +215,9 @@ fn list(context: &mut Context, items: Vec<Term>) -> Term {
     })
 }
 
-/// An omitted motive, as the lowerer carries one: a hole the arms pin.
-fn motive(context: &mut Context) -> Scope<Many> {
-    Term::match_motive_written(Term::hole(context.mint_metavar()))
+/// A match's goal, as the lowerer carries one: a hole the mode decides.
+fn goal(context: &mut Context) -> Term {
+    Term::hole(context.mint_metavar())
 }
 
 /// Where a payload sits, for the provenance a missing witness is reported under and the label a struct field spells with.
@@ -596,10 +596,10 @@ fn spell_body(
                 ));
             }
 
-            let motive = motive(context);
-            site.at(Term::induct_match_scoped_marked(
+            let goal = goal(context);
+            site.at(Term::induct_match_marked(
                 Term::free_var(&value),
-                motive,
+                goal,
                 arms,
                 None,
             ))
@@ -684,10 +684,10 @@ fn hash_body(
                 ));
             }
 
-            let motive = motive(context);
-            site.at(Term::induct_match_scoped_marked(
+            let goal = goal(context);
+            site.at(Term::induct_match_marked(
                 Term::free_var(&value),
-                motive,
+                goal,
                 arms,
                 None,
             ))
@@ -711,9 +711,9 @@ fn eql_body(
         let compared = compare(context, site, subject, row.eql, &left, &right)?;
         let body = match negated {
             false => compared,
-            true => site.at(Term::bool_match_scoped(
+            true => site.at(Term::bool_match(
                 compared,
-                motive(context),
+                goal(context),
                 Term::intrinsic(Intrinsic::Bool(true)),
                 Term::intrinsic(Intrinsic::Bool(false)),
             )),
@@ -797,9 +797,9 @@ fn compare(
                 let plicities = constructor.plicities();
 
                 // The inner match names the one constructor the outer arm already committed to; every other tag is the default.
-                let inner = site.at(Term::induct_match_scoped_marked(
+                let inner = site.at(Term::induct_match_marked(
                     Term::free_var(right),
-                    motive(context),
+                    goal(context),
                     [(
                         tag.clone(),
                         plicities.iter().copied().zip(rights).collect::<Vec<_>>(),
@@ -814,10 +814,10 @@ fn compare(
                 ));
             }
 
-            let motive = motive(context);
-            Ok(site.at(Term::induct_match_scoped_marked(
+            let goal = goal(context);
+            Ok(site.at(Term::induct_match_marked(
                 Term::free_var(left),
-                motive,
+                goal,
                 arms,
                 None,
             )))
@@ -916,10 +916,10 @@ fn order(
                     ));
                 }
 
-                let motive = motive(context);
-                site.at(Term::induct_match_scoped_marked(
+                let goal = goal(context);
+                site.at(Term::induct_match_marked(
                     Term::free_var(value),
-                    motive,
+                    goal,
                     arms,
                     None,
                 ))
@@ -946,9 +946,9 @@ fn order(
                 let plicities = constructor.plicities();
 
                 // The default is unreachable — `by_tag` consults this term only where the ordinals already agreed, so the right is at the same constructor — but a one-arm match still owes one.
-                let inner = site.at(Term::induct_match_scoped_marked(
+                let inner = site.at(Term::induct_match_marked(
                     Term::free_var(right),
-                    motive(context),
+                    goal(context),
                     [(
                         tag.clone(),
                         plicities.iter().copied().zip(rights).collect::<Vec<_>>(),
@@ -966,10 +966,10 @@ fn order(
                 ));
             }
 
-            let motive = motive(context);
-            let same = site.at(Term::induct_match_scoped_marked(
+            let goal = goal(context);
+            let same = site.at(Term::induct_match_marked(
                 Term::free_var(left),
-                motive,
+                goal,
                 arms,
                 None,
             ));

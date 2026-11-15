@@ -479,53 +479,6 @@ impl Term {
         }
     }
 
-    /// Build the `Bytes` case split ([`Carrier::Bytes`]) over an already-built motive scope: an empty arm plus a cons arm closed over `cons_binders`, `(head, tail)`.
-    pub fn bytes_match_scoped<H, EC, CC>(
-        head: H,
-        motive: Scope<Many>,
-        empty_case: EC,
-        cons_binders: &[&Free; 2],
-        cons_case: CC,
-    ) -> Self
-    where
-        H: Into<Term>,
-        EC: Into<Term>,
-        CC: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::FreeMonoid {
-                carrier: Carrier::Bytes {
-                    empty_case: empty_case.into(),
-                    cons_case: Scope::close(Two, cons_binders, cons_case.into()),
-                },
-            },
-        )
-    }
-
-    /// [`Term::bool_match`] over an already-built motive scope.
-    pub fn bool_match_scoped<H, F, T>(
-        head: H,
-        motive: Scope<Many>,
-        false_case: F,
-        true_case: T,
-    ) -> Self
-    where
-        H: Into<Term>,
-        F: Into<Term>,
-        T: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::Bool {
-                false_case: false_case.into(),
-                true_case: true_case.into(),
-            },
-        )
-    }
-
     /// Build a function literal from `(plicity, label, annotation)` binders, each entry of its telescope under its mark. The all-explicit shorthand is [`Term::func`].
     pub fn func_marked<I, T, B>(params: I, body: B) -> Self
     where
@@ -558,59 +511,6 @@ impl Term {
         }))
     }
 
-    /// [`Term::list_match`] over an already-built motive scope.
-    pub fn list_match_scoped<H, EL, EC, CC>(
-        head: H,
-        elem: EL,
-        motive: Scope<Many>,
-        empty_case: EC,
-        cons_binders: &[&Free; 2],
-        cons_case: CC,
-    ) -> Self
-    where
-        H: Into<Term>,
-        EL: Into<Term>,
-        EC: Into<Term>,
-        CC: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::FreeMonoid {
-                carrier: Carrier::List {
-                    elem: elem.into(),
-                    empty_case: empty_case.into(),
-                    cons_case: Scope::close(Two, cons_binders, cons_case.into()),
-                },
-            },
-        )
-    }
-
-    /// [`Term::nat_match`] over an already-built motive scope.
-    pub fn nat_match_scoped<H, ZC, SC>(
-        head: H,
-        motive: Scope<Many>,
-        zero_case: ZC,
-        pred_binder: &Free,
-        succ_case: SC,
-    ) -> Self
-    where
-        H: Into<Term>,
-        ZC: Into<Term>,
-        SC: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::FreeMonoid {
-                carrier: Carrier::Nat {
-                    empty_case: zero_case.into(),
-                    cons_case: Scope::close(One, &[pred_binder], succ_case.into()),
-                },
-            },
-        )
-    }
-
     pub fn struct_at<I, P, J, Q>(
         name: Global,
         universes: impl Into<Universes>,
@@ -630,31 +530,6 @@ impl Term {
             fields: fields.into_iter().map(|f| f.into()).collect(),
             entries: vec![],
         }))
-    }
-
-    /// [`Term::switch`] over an already-built motive scope.
-    pub fn switch_scoped<H, I, K, B, D>(head: H, motive: Scope<Many>, cases: I, default: D) -> Self
-    where
-        H: Into<Term>,
-        K: Into<Natural>,
-        I: IntoIterator<Item = (K, B)>,
-        B: Into<Term>,
-        D: Into<Term>,
-    {
-        Self::match_scoped(
-            head.into(),
-            motive,
-            Cases::Switch {
-                // Through a `BTreeMap` so the arms come out strictly ascending whatever order the caller enumerated them in — the canonical form [`Cases::Switch`] states.
-                cases: cases
-                    .into_iter()
-                    .map(|(n, b)| (n.into(), b.into()))
-                    .collect::<BTreeMap<_, _>>()
-                    .into_iter()
-                    .collect(),
-                default: default.into(),
-            },
-        )
     }
 
     pub fn variant_at<I, P, A, J, Q>(
@@ -844,7 +719,7 @@ impl Term {
         Self::from(Subterm::Transient(Transient::Method(Method::from(field))))
     }
 
-    /// A bare silent hole, as `into_core` mints one for a desugared omission (an omitted annotation, motive, or lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and [`MetavarOrigin::Hole`], so its solution is spliced silently at zonk.
+    /// A bare silent hole, as `into_core` mints one for a desugared omission (an omitted annotation, a match's goal, or a lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and [`MetavarOrigin::Hole`], so its solution is spliced silently at zonk.
     pub fn hole(id: impl Into<MetavarId>) -> Self {
         Self::metavar_birthed(id, MetavarOrigin::Hole, Vec::new())
     }
@@ -1040,68 +915,42 @@ impl Term {
         Self::struct_at(name, Vec::<Level>::new(), params, fields)
     }
 
-    /// Build the intrinsic eliminator of a nominal inductive ([`Cases::Induct`]): one arm per constructor tag, each closed over its payload binders (all-explicit). `Term::induct_match_marked` carries per-binder plicity.
-    pub fn induct_match<H, M, I, A, B>(
-        head: H,
-        motive_binder: Option<&Free>,
-        motive: M,
-        cases: I,
-    ) -> Self
+    /// Build the intrinsic eliminator of a nominal inductive ([`Cases::Induct`]) at `goal`: one arm per constructor tag, each closed over its payload binders (all-explicit). `Term::induct_match_marked` carries per-binder plicity.
+    pub fn induct_match<H, G, I, A, B>(head: H, goal: G, cases: I) -> Self
     where
         H: Into<Term>,
-        M: Into<Term>,
+        G: Into<Term>,
         I: IntoIterator<Item = (A, Vec<Free>, B)>,
         A: Into<Atom>,
         B: Into<Term>,
     {
         Self::induct_match_marked(
             head,
-            motive_binder,
-            motive,
+            goal,
             cases
                 .into_iter()
                 .map(|(atom, binders, body)| (atom, explicit_arm(binders), body)),
-        )
-    }
-
-    /// [`Term::induct_match`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
-    pub(crate) fn induct_match_marked<H, M, I, A, B>(
-        head: H,
-        motive_binder: Option<&Free>,
-        motive: M,
-        cases: I,
-    ) -> Self
-    where
-        H: Into<Term>,
-        M: Into<Term>,
-        I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
-        A: Into<Atom>,
-        B: Into<Term>,
-    {
-        Self::induct_match_scoped_marked(
-            head,
-            Self::motive_scope(motive_binder, motive.into()),
-            cases,
             None,
         )
     }
 
-    /// `Term::induct_match_marked` over an already-built motive scope, with the optional `| _ =>` catch-all folded in — `into_core`'s single entry point for a nominal-inductive elimination.
-    pub fn induct_match_scoped_marked<H, I, A, B>(
+    /// [`Term::induct_match`] carrying the written constructor-pattern plicity of each payload binder, with the optional `| _ =>` catch-all folded in.
+    pub fn induct_match_marked<H, G, I, A, B>(
         head: H,
-        motive: Scope<Many>,
+        goal: G,
         cases: I,
         default: Option<Term>,
     ) -> Self
     where
         H: Into<Term>,
+        G: Into<Term>,
         I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
         A: Into<Atom>,
         B: Into<Term>,
     {
-        Self::match_scoped(
+        Self::match_at(
             head.into(),
-            motive,
+            goal.into(),
             Cases::Induct {
                 cases: Self::induct_cases_marked(cases),
                 default,
@@ -1115,11 +964,11 @@ impl Term {
         match Term::unwrap_or_clone(self) {
             Subterm::Match(Match {
                 head,
-                result,
+                goal,
                 cases: Cases::Induct { cases, default, .. },
             }) => Self::from(Subterm::Match(Match {
                 head,
-                result,
+                goal,
                 cases: Cases::Induct {
                     cases,
                     default,
@@ -1131,52 +980,21 @@ impl Term {
     }
 
     /// The intrinsic eliminator of a nominal inductive with an explicit `| _ =>` catch-all ([`Cases::Induct`]'s `default`): the enumerated arms plus a binding-free default standing in for every other constructor tag. The dispatching analogue of [`Term::induct_match`], mirroring how [`Term::switch`] relates to [`Term::nat_match`].
-    pub fn induct_match_default<H, M, I, A, B, D>(
-        head: H,
-        motive_binder: Option<&Free>,
-        motive: M,
-        cases: I,
-        default: D,
-    ) -> Self
+    pub fn induct_match_default<H, G, I, A, B, D>(head: H, goal: G, cases: I, default: D) -> Self
     where
         H: Into<Term>,
-        M: Into<Term>,
+        G: Into<Term>,
         I: IntoIterator<Item = (A, Vec<Free>, B)>,
         A: Into<Atom>,
         B: Into<Term>,
         D: Into<Term>,
     {
-        Self::induct_match_default_marked(
+        Self::induct_match_marked(
             head,
-            motive_binder,
-            motive,
+            goal,
             cases
                 .into_iter()
                 .map(|(atom, binders, body)| (atom, explicit_arm(binders), body)),
-            default,
-        )
-    }
-
-    /// [`Term::induct_match_default`] carrying the written constructor-pattern plicity of each payload binder — the matrix compiler's entry point.
-    pub(crate) fn induct_match_default_marked<H, M, I, A, B, D>(
-        head: H,
-        motive_binder: Option<&Free>,
-        motive: M,
-        cases: I,
-        default: D,
-    ) -> Self
-    where
-        H: Into<Term>,
-        M: Into<Term>,
-        I: IntoIterator<Item = (A, Vec<(Plicity, Free)>, B)>,
-        A: Into<Atom>,
-        B: Into<Term>,
-        D: Into<Term>,
-    {
-        Self::induct_match_scoped_marked(
-            head,
-            Self::motive_scope(motive_binder, motive.into()),
-            cases,
             Some(default.into()),
         )
     }
@@ -1204,117 +1022,133 @@ impl Term {
             .collect()
     }
 
-    /// Build a match's arity-1 motive scope from an optional source label: a named scope when the label is present, a constant one when not. Shared by every match constructor whose motive binds just the scrutinee — the canonical elaborated shape for an intrinsic carrier or an unindexed inductive.
-    fn motive_scope(motive_binder: Option<&Free>, motive: Term) -> Scope<Many> {
-        match motive_binder {
-            Some(binder) => Scope::close(Many(1), &[binder], motive),
-            None => Scope::constant(Many(1), motive),
-        }
+    /// Build a match node at `goal`.
+    fn match_at(head: Term, goal: Term, cases: Cases) -> Self {
+        Self::from(Subterm::Match(Match { head, goal, cases }))
     }
 
-    /// Build a match node around an already-built motive scope. The `*_scoped` constructors are `into_core`'s entry points: lowering carries the *written* motive term (see `Term::match_motive_written`) rather than a label and a body, because it cannot know the arity to close at. Every label-taking constructor above delegates here after building the canonical arity-1 scope.
-    fn match_scoped(head: Term, motive: Scope<Many>, cases: Cases) -> Self {
-        Self::from(Subterm::Match(Match {
-            head,
-            result: MatchResult::Family(motive),
-            cases,
-        }))
-    }
-
-    /// Build the dependent `Bool` eliminator ([`Cases::Bool`]): a false arm and a true arm, neither binding anything — the motive alone sees the scrutinee.
-    pub fn bool_match<H, M, F, T>(
-        head: H,
-        motive_binder: Option<&Free>,
-        motive: M,
-        false_case: F,
-        true_case: T,
-    ) -> Self
+    /// Build the `Bool` eliminator ([`Cases::Bool`]) at `goal`: a false arm and a true arm, neither binding anything.
+    pub fn bool_match<H, G, F, T>(head: H, goal: G, false_case: F, true_case: T) -> Self
     where
         H: Into<Term>,
-        M: Into<Term>,
+        G: Into<Term>,
         F: Into<Term>,
         T: Into<Term>,
     {
-        Self::bool_match_scoped(
-            head,
-            Self::motive_scope(motive_binder, motive.into()),
-            false_case,
-            true_case,
+        Self::match_at(
+            head.into(),
+            goal.into(),
+            Cases::Bool {
+                false_case: false_case.into(),
+                true_case: true_case.into(),
+            },
         )
     }
 
-    /// Build the `Nat` case split ([`Carrier::Nat`]): a zero arm plus a successor arm closed over its predecessor — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bytes`/`List`'s.
-    pub fn nat_match<H, M, ZC, SC>(
+    /// Build the `Nat` case split ([`Carrier::Nat`]) at `goal`: a zero arm plus a successor arm closed over its predecessor — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bytes`/`List`'s.
+    pub fn nat_match<H, G, ZC, SC>(
         head: H,
-        motive_binder: Option<&Free>,
-        motive: M,
+        goal: G,
         zero_case: ZC,
         pred_binder: &Free,
         succ_case: SC,
     ) -> Self
     where
         H: Into<Term>,
-        M: Into<Term>,
+        G: Into<Term>,
         ZC: Into<Term>,
         SC: Into<Term>,
     {
-        Self::nat_match_scoped(
-            head,
-            Self::motive_scope(motive_binder, motive.into()),
-            zero_case,
-            pred_binder,
-            succ_case,
+        Self::match_at(
+            head.into(),
+            goal.into(),
+            Cases::FreeMonoid {
+                carrier: Carrier::Nat {
+                    empty_case: zero_case.into(),
+                    cons_case: Scope::close(One, &[pred_binder], succ_case.into()),
+                },
+            },
         )
     }
 
-    /// Build the `List` case split ([`Carrier::List`]): the element type `elem`, an empty arm, and a cons arm closed over `cons_binders`, `(head, tail)`.
-    pub fn list_match<H, M, EL, EC, CC>(
+    /// Build the `List` case split ([`Carrier::List`]) at `goal`: the element type `elem`, an empty arm, and a cons arm closed over `cons_binders`, `(head, tail)`.
+    pub fn list_match<H, G, EL, EC, CC>(
         head: H,
         elem: EL,
-        motive_binder: Option<&Free>,
-        motive: M,
+        goal: G,
         empty_case: EC,
         cons_binders: &[&Free; 2],
         cons_case: CC,
     ) -> Self
     where
         H: Into<Term>,
-        M: Into<Term>,
+        G: Into<Term>,
         EL: Into<Term>,
         EC: Into<Term>,
         CC: Into<Term>,
     {
-        Self::list_match_scoped(
-            head,
-            elem,
-            Self::motive_scope(motive_binder, motive.into()),
-            empty_case,
-            cons_binders,
-            cons_case,
+        Self::match_at(
+            head.into(),
+            goal.into(),
+            Cases::FreeMonoid {
+                carrier: Carrier::List {
+                    elem: elem.into(),
+                    empty_case: empty_case.into(),
+                    cons_case: Scope::close(Two, cons_binders, cons_case.into()),
+                },
+            },
         )
     }
 
-    /// Build a [`Cases::Switch`] match: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], whose successor arm binds its predecessor.
-    pub fn switch<H, M, I, K, B, D>(
+    /// Build the `Bytes` case split ([`Carrier::Bytes`]) at `goal`: an empty arm plus a cons arm closed over `cons_binders`, `(head, tail)`.
+    pub fn bytes_match<H, G, EC, CC>(
         head: H,
-        motive_binder: Option<&Free>,
-        motive: M,
-        cases: I,
-        default: D,
+        goal: G,
+        empty_case: EC,
+        cons_binders: &[&Free; 2],
+        cons_case: CC,
     ) -> Self
     where
         H: Into<Term>,
-        M: Into<Term>,
+        G: Into<Term>,
+        EC: Into<Term>,
+        CC: Into<Term>,
+    {
+        Self::match_at(
+            head.into(),
+            goal.into(),
+            Cases::FreeMonoid {
+                carrier: Carrier::Bytes {
+                    empty_case: empty_case.into(),
+                    cons_case: Scope::close(Two, cons_binders, cons_case.into()),
+                },
+            },
+        )
+    }
+
+    /// Build a [`Cases::Switch`] match at `goal`: sparse dispatch on specific literal `Nat` values with a mandatory default arm. The arms bind nothing — unlike [`Term::nat_match`], whose successor arm binds its predecessor.
+    pub fn switch<H, G, I, K, B, D>(head: H, goal: G, cases: I, default: D) -> Self
+    where
+        H: Into<Term>,
+        G: Into<Term>,
         K: Into<Natural>,
         I: IntoIterator<Item = (K, B)>,
         B: Into<Term>,
         D: Into<Term>,
     {
-        Self::switch_scoped(
-            head,
-            Self::motive_scope(motive_binder, motive.into()),
-            cases,
-            default,
+        Self::match_at(
+            head.into(),
+            goal.into(),
+            Cases::Switch {
+                // Through a `BTreeMap` so the arms come out strictly ascending whatever order the caller enumerated them in — the canonical form [`Cases::Switch`] states.
+                cases: cases
+                    .into_iter()
+                    .map(|(n, b)| (n.into(), b.into()))
+                    .collect::<BTreeMap<_, _>>()
+                    .into_iter()
+                    .collect(),
+                default: default.into(),
+            },
         )
     }
 

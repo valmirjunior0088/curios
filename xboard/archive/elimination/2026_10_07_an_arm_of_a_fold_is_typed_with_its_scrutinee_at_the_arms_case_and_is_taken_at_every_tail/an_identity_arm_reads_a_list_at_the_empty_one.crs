@@ -3,7 +3,7 @@ use /std/{Nat, List};
 use /std/Bool/{True, False, Holds};
 
 let f(xs: List(Nat), h: Holds(List/len(xs) == 2)) -> False =
-    match xs: (m) => False
+    match xs
     | [] => h
     | [x, ..t]; ih => ih
     end;

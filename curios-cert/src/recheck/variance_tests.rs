@@ -327,7 +327,7 @@ fn a_level_one_arm_of_a_stuck_match_states_is_invariant() {
             r#"
 #{universe_context = {parameter_count = 2, constraints = [u + 1 <= v]}${carried}}
 induct /Arm(b: #BoolType): pub #{level = v} Type
-| c(T: match b: (x) => #{level = v} Type | false => #NatType | true => #{level = u} Type end)
+| c(T: #{goal = #{level = v} Type} match b | false => #NatType | true => #{level = u} Type end)
 end
 "#,
             carried
@@ -446,7 +446,7 @@ induct /Held(n: #NatType): pub #{level = u + 2} Type
     x: (#{node = Rec}
         (let m: (k: #NatType) -> #{level = u + 1} Type =
             (k: #NatType) =>
-                #{result = Ambient(#{level = u + 1} Type)}
+                #{goal = #{level = u + 1} Type}
                 match k
                 | 0 =>
                     #{level = u}
@@ -462,7 +462,7 @@ induct /Lied(n: #NatType): pub #{level = u + 2} Type
     x: (#{node = Rec}
         (let m: (k: #NatType) -> #{level = u + 1} Type =
             (k: #NatType) =>
-                #{result = Ambient(#{level = u + 1} Type)}
+                #{goal = #{level = u + 1} Type}
                 match k
                 | 0 =>
                     #{level = u}

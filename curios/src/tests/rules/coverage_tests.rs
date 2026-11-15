@@ -2,7 +2,7 @@
 
 use {super::test_support::*, crate::tests::test_support::*, curios_elab::Error};
 
-// Coverage. A missing arm leaves an elimination undefined at that constructor, which is a proof of the motive at an index nothing established. The control writes `none`'s arm.
+// Coverage. A missing arm leaves an elimination undefined at that constructor, which is a proof of the goal at an index nothing established. The control writes `none`'s arm.
 #[test]
 fn an_elimination_must_enumerate_its_constructors() {
     control(

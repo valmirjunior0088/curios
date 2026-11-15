@@ -34,7 +34,7 @@ fn opaque_inductive_empty_elimination_is_private() {
             end
             pub let make(n : Nat) -> T = T/wrap(n);
         end
-        let reveal(t : Secret/T) -> Nat = match t : (_) => Nat end;
+        let reveal(t : Secret/T) -> Nat = match t end;
         /std/print(Nat/to_str(reveal(Secret/make(7))))
         "#;
 

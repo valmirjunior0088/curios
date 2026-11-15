@@ -1,4 +1,4 @@
-//! The arm rule at an ambient goal: the form's reason to exist, a lying goal, and its two preconditions.
+//! The arm rule at a goal: one over a hypothesis the scrutinee types, a lying goal, and its two preconditions.
 
 use {
     super::test_support::*,
@@ -20,17 +20,17 @@ fn family(certifier: &mut Certifier) {
     scrutinee_family(certifier, "F");
 }
 
-/// `#{result = Ambient(goal)} match scrutinee | a() => body | b(m) => body end`: the two arms of an elimination of `F`, each `body`, at an ambient goal.
+/// `#{goal = goal} match scrutinee | a() => body | b(m) => body end`: the two arms of an elimination of `F`, each `body`, at an ambient goal.
 fn ambient(scrutinee: &str, goal: &str, body: &str) -> String {
     fill!(
-        "#{result = Ambient(${goal})} match ${scrutinee} | a() => ${body} | b(m) => ${body} end",
+        "#{goal = ${goal}} match ${scrutinee} | a() => ${body} | b(m) => ${body} end",
         goal,
         scrutinee,
         body
     )
 }
 
-/// The reason the form exists. `w : Q(n, x, h)` with `h : P(n, x)`: stated at the ambient goal, each arm inhabits `Q(n, x, h)` specialized — `Q(0, a(), h)` with `h` shadowed at `P(0, a())` — and `w` does so once shadowed itself. The family stating the same result, `(i, s) => Q(i, s, h)`, cannot be typed under its own binders, since `h : P(n, x)` is not a `P(i, s)`, which is what would otherwise force a convoy.
+/// `w : Q(n, x, h)` with `h : P(n, x)`: stated at the goal, each arm inhabits `Q(n, x, h)` specialized — `Q(0, a(), h)` with `h` shadowed at `P(0, a())` — and `w` does so once shadowed itself. A family over the index and scrutinee binders, `(i, s) => Q(i, s, h)`, could not be typed under its own binders, since `h : P(n, x)` is not a `P(i, s)`, which is what would force a convoy.
 ///
 /// `Q : (n : Nat, x : F(n), p : P(n, x)) -> Type` is opaque: a type former whose last parameter is typed by the scrutinee and its index, so a goal stating it about a hypothesis can be written where that hypothesis stands and nowhere else.
 #[test]
@@ -45,28 +45,21 @@ fn a_goal_over_a_hypothesis_typed_by_the_scrutinee_needs_no_family() {
             f = family_at("F", "n")
         ),
     );
-    let [ambient_form, family_form, goal] = under(
+    let [matched, goal] = under(
         &mut certifier,
         &fill!(
             "n: #NatType, x: ${f}, h: /P(n, x), w: /Q(n, x, h)",
             f = family_at("F", "n")
         ),
         &fill!(
-            "${ambient}, match x: (i, s) => /Q(i, s, h) | a() => w | b(m) => w end, /Q(n, x, h)",
+            "${ambient}, /Q(n, x, h)",
             ambient = ambient("x", "/Q(n, x, h)", "w")
         ),
     );
 
     assert_eq!(
-        infer(&mut certifier, &ambient_form).expect("the ambient goal is inhabited by each arm"),
+        infer(&mut certifier, &matched).expect("the goal is inhabited by each arm"),
         goal,
-    );
-    assert!(
-        matches!(
-            infer(&mut certifier, &family_form),
-            Err(Error::NotAMotive { .. })
-        ),
-        "the family stating the same goal typed under its own binders",
     );
 }
 
@@ -121,9 +114,8 @@ fn an_ambient_result_over_an_expression_replaces_its_occurrences() {
     );
 }
 
-/// `#{result = Ambient(${goal})} match k | 0 => 0 | pred + 1 => ${cons} end`, over a `Nat` `k`.
-const AMBIENT_ON_K: &str =
-    "#{result = Ambient(${goal})} match k | 0 => 0 | pred + 1 => ${cons} end,";
+/// `#{goal = ${goal}} match k | 0 => 0 | pred + 1 => ${cons} end`, over a `Nat` `k`.
+const AMBIENT_ON_K: &str = "#{goal = ${goal}} match k | 0 => 0 | pred + 1 => ${cons} end,";
 
 /// A case split's arms are each checked at its case value, as a `Bool` arm is. The same match, its arms each inhabiting the goal, is inferred at the goal.
 #[test]
@@ -157,39 +149,32 @@ fn an_ambient_case_split_whose_arm_misses_the_goal_is_refused() {
     ));
 }
 
-/// A budget failure is not a malformed motive, on the way from a motive's type to its sort as on the way to the type. `T : U`, where `U` is a `Bool` elimination into `Type` over a count two nested list folds take as long as their lengths' product to reach, so the type of what the result states is in hand at once and reading *it* as a sort is what the budget cannot afford. Reporting `NotAMotive` whatever that read was refused for would send a reader to a motive with nothing wrong with it; an ambient goal and a family's motive go through the one read, so both are put to it. The control is the same elimination under a budget that affords the count, which is what says the refusal was the budget's.
+/// A budget failure is not a malformed goal, on the way from a goal's type to its sort as on the way to the type. `T : U`, where `U` is a `Bool` elimination into `Type` over a count two nested list folds take as long as their lengths' product to reach, so the type of what the result states is in hand at once and reading *it* as a sort is what the budget cannot afford. Reporting `NotAGoal` whatever that read was refused for would send a reader to a goal with nothing wrong with it. The control is the same elimination under a budget that affords the count, which is what says the refusal was the budget's.
 #[test]
 fn a_result_whose_sort_the_budget_cannot_reach_is_refused_for_the_budget() {
-    let attempt = |budget: u64, ambient: bool| {
+    let attempt = |budget: u64| {
         let mut certifier = Certifier::new(budget, SYNTAX);
-        let elimination = match ambient {
-            true => "#{result = Ambient(T)} match b | false => x | true => x end,",
-            false => "match b: (s) => T | false => x | true => x end,",
-        };
         let [elimination] = under(
             &mut certifier,
             &fill!(
-                "b: #BoolType, T: match #NatEql(${count}, 0): (_) => Type | false => Type | true => Type end, x: T",
+                "b: #BoolType, T: #{goal = Type} match #NatEql(${count}, 0) | false => Type | true => Type end, x: T",
                 count = nested_count(224)
             ),
-            elimination,
+            "#{goal = T} match b | false => x | true => x end,",
         );
 
         infer(&mut certifier, &elimination)
     };
 
-    for ambient in [false, true] {
-        assert!(
-            matches!(
-                attempt(20_000, ambient),
-                Err(Error::Reduce(ReduceError::Exhausted { .. }))
-            ),
-            "ambient = {ambient}: the sort read ran out of budget and was reported as something else",
-        );
-        attempt(1_000_000_000, ambient).unwrap_or_else(|error| {
-            panic!("ambient = {ambient}: a budget that affords the count refused: {error:?}")
-        });
-    }
+    assert!(
+        matches!(
+            attempt(20_000),
+            Err(Error::Reduce(ReduceError::Exhausted { .. }))
+        ),
+        "the sort read ran out of budget and was reported as something else",
+    );
+    attempt(1_000_000_000)
+        .unwrap_or_else(|error| panic!("a budget that affords the count refused: {error:?}"));
 }
 
 /// Two list folds over `side` zeros each, the inner one summing into the outer's accumulator: a `Nat` closed term weak-head reduction takes as many steps as `side` squared to reach, zero.
@@ -228,12 +213,12 @@ fn the_arm_a_literal_scrutinee_takes_is_typed() {
 
 /// `not : (Bool) -> Bool`, as the function it is.
 const NOT: &str =
-    "((c: #BoolType) => match c: (_) => #BoolType | false => true | true => false end)";
+    "((c: #BoolType) => #{goal = #BoolType} match c | false => true | true => false end)";
 
 /// The `Nat` elimination of `scrutinee` whose `false` arm is `0` and whose `true` arm is `in_true`.
 fn nat_by(scrutinee: &str, in_true: &str) -> String {
     fill!(
-        "match ${scrutinee}: (_) => #NatType | false => 0 | true => ${in_true} end",
+        "#{goal = #NatType} match ${scrutinee} | false => 0 | true => ${in_true} end",
         scrutinee,
         in_true
     )
@@ -275,7 +260,7 @@ fn an_arm_refused_under_an_equation_its_case_closed_is_not_typed() {
     let nested = |in_false: &str, in_true: &str| {
         let mut certifier = certifier();
         let inner = fill!(
-            "match c: (_) => #NatType | false => ${in_false} | true => ${in_true} end",
+            "#{goal = #NatType} match c | false => ${in_false} | true => ${in_true} end",
             in_false,
             in_true
         );
@@ -300,7 +285,7 @@ fn an_arm_refused_under_an_equation_its_case_closed_is_not_typed() {
 fn an_arm_refused_under_a_scrutinee_that_names_a_local_and_computes_is_not_typed() {
     let mut certifier = certifier();
     let scrutinee = fill!(
-        "((a: #BoolType, b: #BoolType) => match a: (_) => #BoolType | false => false | true => b end)(${not}(true), d)",
+        "((a: #BoolType, b: #BoolType) => #{goal = #BoolType} match a | false => false | true => b end)(${not}(true), d)",
         not = NOT
     );
     let [eliminated] = under(
@@ -315,7 +300,7 @@ fn an_arm_refused_under_a_scrutinee_that_names_a_local_and_computes_is_not_typed
 /// A budget that cannot afford to compute the scrutinee withdraws no refusal: the scrutinee counts a literal down to `false`, its `true` arm holds a `Bool` where the result is `Nat`, and the elimination is refused for the budget where the count is past it and accepted where it is not.
 #[test]
 fn a_budget_that_cannot_compute_the_scrutinee_withdraws_no_refusal() {
-    let counted = "(#{node = Rec} (let down: (n: #NatType) -> #BoolType = (n: #NatType) => match n: (_) => #BoolType | 0 => false | pred + 1 => down(pred) end; down(50000)))";
+    let counted = "(#{node = Rec} (let down: (n: #NatType) -> #BoolType = (n: #NatType) => #{goal = #BoolType} match n | 0 => false | pred + 1 => down(pred) end; down(50000)))";
     let attempt = |budget: u64| {
         let mut certifier = Certifier::new(budget, SYNTAX);
 

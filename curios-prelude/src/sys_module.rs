@@ -135,7 +135,6 @@ fn holds() -> Decl {
             prop(),
             Subterm::Match(Match {
                 head: name("b"),
-                motive: None,
                 arms: vec![
                     MatrixArm::of(MatchPattern::Bool(true), name("True")),
                     MatrixArm::of(MatchPattern::Bool(false), name("False")),

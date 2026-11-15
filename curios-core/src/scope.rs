@@ -37,7 +37,7 @@ pub trait Arity: Copy {
     fn arity(&self) -> usize;
 }
 
-/// The static one-binder arity — `let` tails, telescope links, single-scrutinee motives, the `Nat` case split's successor arm.
+/// The static one-binder arity — `let` tails, telescope links, the `Nat` case split's successor arm.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct One;
@@ -73,7 +73,7 @@ impl Arity for Two {
     }
 }
 
-/// A runtime-chosen binder count, for scopes whose arity is data-dependent (inductive-match arms over constructor payloads, `Rec` blocks, motives). `close`/`open` fall back to slices and assert the length instead of getting it checked at compile time.
+/// A runtime-chosen binder count, for scopes whose arity is data-dependent (inductive-match arms over constructor payloads, `Rec` blocks). `close`/`open` fall back to slices and assert the length instead of getting it checked at compile time.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Many(pub usize);

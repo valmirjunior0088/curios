@@ -250,7 +250,7 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
         let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
-            match n : (m) => Eq()(double(m), m * 2)
+            match n
             | 0 => Eq/refl()
             | p + 1 => Eq/cong(?, double_correct(p))
             end;

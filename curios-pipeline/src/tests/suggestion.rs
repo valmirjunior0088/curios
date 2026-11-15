@@ -9,7 +9,7 @@ fn a_computed_equality_goal_suggests_refl() {
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = n + n;
         let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
-            match n : (m) => Eq()(m + m, m * 2)
+            match n
             | 0 => ?
             | p + 1 => ?
             end;
@@ -210,7 +210,7 @@ fn a_hypothesis_fills_an_imported_lemmas_proof_slot_under_an_open_function() {
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
         let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
-            match n : (m) => Eq()(double(m), m * 2)
+            match n
             | 0 => Eq/refl()
             | p + 1 =>
                 let ih = double_correct(p);

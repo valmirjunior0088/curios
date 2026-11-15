@@ -44,7 +44,7 @@ fn a_function_typed_by_a_computed_domain_is_called_at_its_stuck_form() {
     let source = r#"
         use /std/{Nat};
         let Sel(n: Nat) -> Type =
-            match n: (_) => Type | 0 => Nat | k + 1 => Type end;
+            match n | 0 => Nat | k + 1 => Type end;
         let f(x: Nat, keep: (b: Sel(x), n: Nat) -> Nat, a: Sel(x)) -> Nat = keep(a, 41);
         /std/print(Nat/to_str(f(1, (b, n) => n + 1, Nat)))
         "#;
@@ -57,7 +57,7 @@ fn a_function_written_outside_an_arm_is_called_under_its_refinement() {
     let source = r#"
         use /std/{Nat};
         let Sel(n: Nat) -> Type =
-            match n: (_) => Type | 0 => Nat | k + 1 => Type end;
+            match n | 0 => Nat | k + 1 => Type end;
         let f(x: Nat, keep: (b: Sel(x), n: Nat) -> Nat, a: Sel(x)) -> Nat =
             match x | 0 => 0 | xp + 1 => keep(a, 41) end;
         let outer(x: Nat, a: Sel(x)) -> Nat = f(x, (b, n) => n + 1, a);
@@ -118,7 +118,7 @@ fn a_structure_is_its_declarations_row_where_a_reading_erases_a_field() {
         | b()
         end
         let pick(u: U) -> Nat =
-            match u: (_) => Nat
+            match u
             | a(s) => s.y
             | b() => 7
             end;

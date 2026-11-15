@@ -40,9 +40,8 @@ use {
     curios_common::recurse,
     curios_core::{
         Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, Foreign, Free, Func,
-        FuncType, InductType, Intrinsic, Many, Match, MatchResult, Nat, One, Probe, Proj, RecGroup,
-        Scope, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Two,
-        Variant,
+        FuncType, InductType, Intrinsic, Many, Match, Nat, One, Probe, Proj, RecGroup, Scope,
+        Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     std::collections::{BTreeSet, HashMap, hash_map::Entry},
@@ -343,7 +342,7 @@ impl<E: Env> Walk<'_, E> {
             .collect()
     }
 
-    /// Open a runtime-arity scope — a motive, an inductive arm, a `let` tail, a `rec` tail — against fresh binders.
+    /// Open a runtime-arity scope — an inductive arm, a `let` tail, a `rec` tail — against fresh binders.
     ///
     /// The three openers here stay separate on purpose. `Scope<A>::open` takes `A::Params`, a *fixed-size* type per arity, which is what stops a two-binder arm from being opened at three terms; collapsing them would mean a slice-taking opener in `curios-core` that re-admits exactly that mistake, to save three lines apiece.
     fn open_many(&mut self, scope: &Scope<Many>) -> (Vec<Free>, Term) {
@@ -673,16 +672,9 @@ impl<E: Env> Walk<'_, E> {
                 self.walks(apply.params())
             }
 
-            Subterm::Match(Match {
-                head,
-                result,
-                cases,
-            }) => {
+            Subterm::Match(Match { head, goal, cases }) => {
                 self.walk_term(head)?;
-                match result {
-                    MatchResult::Family(motive) => self.open_many_walk(motive)?,
-                    MatchResult::Ambient(goal) => self.walk_term(goal)?,
-                }
+                self.walk_term(goal)?;
                 self.walk_arms(head, cases)
             }
 

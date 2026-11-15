@@ -69,19 +69,17 @@ fn slice_proof_aligns_with_byte_walk() {
             end;
 
         let to_lead_proof(s : Scan, b : Bytes, d : Utf8(s, b)) -> Valid(to_lead_bytes(s, b)) =
-            let go =
-                match s : (s) => (p : Utf8(s, b)) -> Valid(to_lead_bytes(s, b))
-                | lead() => (p) => p
-                | cont(rem, lo, hi) => (p) =>
-                    match p : (q, x, w) => Valid(to_lead_bytes(q, x))
-                    | more(c, st, t, rest) => to_lead_proof(step(Byte/to_nat(c), st), t, rest)
-                    end
-                | bad() => (p) =>
-                    match p : (q, x, w) => Valid(to_lead_bytes(q, x))
-                    | more(c, st, t, rest) => to_lead_proof(step(Byte/to_nat(c), st), t, rest)
-                    end
-                end;
-            go(d);
+            match s
+            | lead() => d
+            | cont(rem, lo, hi) =>
+                match d
+                | more(c, st, t, rest) => to_lead_proof(step(Byte/to_nat(c), st), t, rest)
+                end
+            | bad() =>
+                match d
+                | more(c, st, t, rest) => to_lead_proof(step(Byte/to_nat(c), st), t, rest)
+                end
+            end;
         let entry() -> /std/Io({}) =
             let _ = Try/run(Io/write(Proc/stdout, x[0x6F, 0x6B]))!;
             /std/Io/pure(());
@@ -159,7 +157,7 @@ fn utf8_inductive_spike() {
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Utf8(Scan/lead(), b))
             -> Utf8(s, x[..a, ..b]) =
-            match va : (q, x, w) => Utf8(q, x[..x, ..b])
+            match va
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
             end;
@@ -173,7 +171,7 @@ fn utf8_inductive_spike() {
 
 #[test]
 fn utf8_construction_spike() {
-    // The constructing side: a derivation whose index is the input `Bytes` is built by native `Bytes` recursion. That needs the eliminator's motive to be dependent — refining `b` to `x[h, ..t]` in the cons arm, so the arm can return `P(x[h, ..t])` from `ih : P(t)`. `All` accepts everything, which isolates that requirement from any decision procedure; `utf8_of_bytes_checker_decides_and_builds_derivations` is the one that decides.
+    // The constructing side: a derivation whose index is the input `Bytes` is built by native `Bytes` recursion. That needs the elimination's goal to be dependent — refining `b` to `x[h, ..t]` in the cons arm, so the arm can return `P(x[h, ..t])` from `ih : P(t)`. `All` accepts everything, which isolates that requirement from any decision procedure; `utf8_of_bytes_checker_decides_and_builds_derivations` is the one that decides.
     let source = r#"
         use /std/{Str, Nat, Bytes, Io};
 
@@ -183,7 +181,7 @@ fn utf8_construction_spike() {
         end
 
         let build(b : Bytes) -> All(b) =
-            match b : (b) => All(b)
+            match b
             | x[] => All/empty()
             | x[h, ..t] => All/snoc(/std/Byte/to_nat(h), t, build(t))
             end;
@@ -262,7 +260,7 @@ fn concat_closed_holds_for_the_real_automaton() {
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
             -> Utf8(s, x[..a, ..b]) =
-            match va : (q, x, w) => Utf8(q, x[..x, ..b])
+            match va
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
             end;
@@ -344,15 +342,15 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
         let check(b : Bytes) -> ((s : Scan) -> Option(Utf8(s, b))) =
-            match b : (b) => (s : Scan) -> Option(Utf8(s, b))
+            match b
             | x[] => (s) =>
-                match s : (s) => Option(Utf8(s, x[]))
+                match s
                 | lead() => Option/some(Utf8/stop())
                 | cont(rem, lo, hi) => Option/none()
                 | bad() => Option/none()
                 end
             | x[h, ..t] => (s) =>
-                match check(t)(step(/std/Byte/to_nat(h), s)) : (_) => Option(Utf8(s, x[h, ..t]))
+                match check(t)(step(/std/Byte/to_nat(h), s))
                 | some(rest) => Option/some(Utf8/more(/std/Byte/to_nat(h), s, t, rest))
                 | none() => Option/none()
                 end
@@ -441,7 +439,7 @@ fn decimal_is_ascii_carries_its_proof() {
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
             -> Utf8(s, x[..a, ..b]) =
-            match va : (q, x, w) => Utf8(q, x[..x, ..b])
+            match va
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
             end;
@@ -554,7 +552,7 @@ fn slice_closed_peels_codepoints() {
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
             -> Utf8(s, x[..a, ..b]) =
-            match va : (q, x, w) => Utf8(q, x[..x, ..b])
+            match va
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
             end;
@@ -565,29 +563,26 @@ fn slice_closed_peels_codepoints() {
 
         let take_to_lead(@s : Scan, @b : Bytes, d : Utf8(s, b))
             -> { mid : Bytes, tail : Bytes, midd : Utf8(s, mid), tv : Valid(tail) } =
-            let go =
-                match s : (s) => (p : Utf8(s, b))
-                    -> { mid : Bytes, tail : Bytes, midd : Utf8(s, mid), tv : Valid(tail) }
-                | lead() => (d) => (x[], b, Utf8/stop(), d)
-                | cont(rem, lo, hi) => (d) =>
-                    match d : (_, _, _) => { mid : Bytes, tail : Bytes, midd : Utf8(Scan/cont(rem, lo, hi), mid), tv : Valid(tail) }
-                    | more(c, st, t, rest) =>
-                        let w = take_to_lead(rest);
-                        (x[c, ..w.mid], w.tail,
-                         Utf8/more(c, st, w.mid, w.midd), w.tv)
-                    end
-                | bad() => (d) =>
-                    match d : (_, _, _) => { mid : Bytes, tail : Bytes, midd : Utf8(Scan/bad(), mid), tv : Valid(tail) }
-                    | more(c, st, t, rest) =>
-                        let w = take_to_lead(rest);
-                        (x[c, ..w.mid], w.tail,
-                         Utf8/more(c, st, w.mid, w.midd), w.tv)
-                    end
-                end;
-            go(d);
+            match s
+            | lead() => (x[], b, Utf8/stop(), d)
+            | cont(rem, lo, hi) =>
+                match d
+                | more(c, st, t, rest) =>
+                    let w = take_to_lead(rest);
+                    (x[c, ..w.mid], w.tail,
+                     Utf8/more(c, st, w.mid, w.midd), w.tv)
+                end
+            | bad() =>
+                match d
+                | more(c, st, t, rest) =>
+                    let w = take_to_lead(rest);
+                    (x[c, ..w.mid], w.tail,
+                     Utf8/more(c, st, w.mid, w.midd), w.tv)
+                end
+            end;
 
         let take1(@b : Bytes, d : Valid(b)) -> { cp : Bytes, v : Valid(cp) } =
-            match d : (_, _, _) => { cp : Bytes, v : Valid(cp) }
+            match d
             | stop() => (x[], Utf8/stop())
             | more(c, st, t, rest) =>
                 let w = take_to_lead(rest);
@@ -595,7 +590,7 @@ fn slice_closed_peels_codepoints() {
             end;
 
         let drop1(@b : Bytes, d : Valid(b)) -> { rest : Bytes, v : Valid(rest) } =
-            match d : (_, _, _) => { rest : Bytes, v : Valid(rest) }
+            match d
             | stop() => (x[], Utf8/stop())
             | more(c, st, t, rest) =>
                 let w = take_to_lead(rest);

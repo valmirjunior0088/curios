@@ -72,7 +72,6 @@ fn a_match_lowers_to_the_matrix_it_is_written_as() {
     let curios_core::Subterm::Transient(curios_core::Transient::Matrix(matrix)) = &*term else {
         panic!("expected a matrix at the top, got {term:?}");
     };
-    assert!(matrix.motive.is_none());
     assert_eq!(
         matrix
             .rows()
@@ -86,16 +85,6 @@ fn a_match_lowers_to_the_matrix_it_is_written_as() {
         };
         assert_eq!(body.telescope.len(), row.pattern.binders());
     }
-}
-
-#[test]
-fn a_motive_on_a_head_that_does_not_dispatch_is_rejected() {
-    // A motive attaches to the scrutinee's own dispatch, which a tuple pattern never builds: it projects.
-    let error = run_err("match p : (q) => T | (x, y) => x end");
-    assert!(
-        error.contains("misplaced motive"),
-        "unexpected error: {error}"
-    );
 }
 
 #[test]
@@ -123,16 +112,12 @@ fn a_lone_non_sequence_spread_keeps_its_concat_wrapper() {
     assert!(!format!("{:?}", run(r"x[..x[0x48]]")).contains("BytesConcat"));
 }
 
-/// The match lowering's refusals stand at what they are about: a named final arm and an irrefutable bind guard at the binder, and a motive no arm dispatches under at the motive.
+/// The match lowering's refusals stand at the binder they are about: a named final arm, and an irrefutable bind guard.
 #[test]
-fn a_match_refusal_stands_at_the_binder_or_the_motive_it_is_about() {
+fn a_match_refusal_stands_at_the_binder_it_is_about() {
     for (source, underlined) in [
         ("match m | some(x) => x | rest => 0 end", "rest"),
         ("match | some(x) = m => x | y = m => 0 | _ => 1 end", "y"),
-        (
-            "match (a, b) : (p) => Nat | (0, _) => 0 | (_, k) => k end",
-            "(p) => Nat",
-        ),
     ] {
         let report = run_err_report(source);
         // The caret line under the source's one line: blanks to where the part begins, then a caret for each of its characters.

@@ -1,4 +1,4 @@
-//! How a ladder keeps one line: within its share of the width, as part of whatever holds it, and never with a motive or a headed arm's guards where a width lays it out.
+//! How a ladder keeps one line: within its share of the width, as part of whatever holds it, and never with a headed arm's guards where a width lays it out.
 
 use {
     super::{FLAT_MATCH_SHARE, test_support::*},
@@ -39,13 +39,9 @@ fn a_call_around_a_long_ladder_breaks_with_it() {
     );
 }
 
-// A motive, and guards after a headed arm's patterns, each put a second thing between a pattern and its body, so a ladder that writes either takes a line for each arm at any width. A match with no head writes a guard where a headed one writes its patterns, and keeps its line.
+// Guards after a headed arm's patterns put a second thing between a pattern and its body, so a ladder that writes one takes a line for each arm at any width. A match with no head writes a guard where a headed one writes its patterns, and keeps its line.
 #[test]
-fn a_motive_or_a_headed_arms_guard_breaks_a_ladder_at_any_width() {
-    assert_eq!(
-        render("match n: (_) => Nat | 0 => 1 | k + 1 => 2 end", 100),
-        "match n: (_) => Nat\n| 0 => 1\n| k + 1 => 2\nend"
-    );
+fn a_headed_arms_guard_breaks_a_ladder_at_any_width() {
     assert_eq!(
         render("match o | some(n), n > 9 => 2 | _ => 0 end", 100),
         "match o\n| some(n), n > 9 => 2\n| _ => 0\nend"
@@ -59,7 +55,7 @@ fn a_motive_or_a_headed_arms_guard_breaks_a_ladder_at_any_width() {
 // With no width, as a report prints a term, every ladder keeps its one line.
 #[test]
 fn with_no_width_every_ladder_keeps_its_line() {
-    for source in [LONG, "match n: (_) => Nat | 0 => 1 | k + 1 => 2 end"] {
+    for source in [LONG, "match n | 0 => 1 | k + 1 => 2 end"] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
     }
 }

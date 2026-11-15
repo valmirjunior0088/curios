@@ -42,7 +42,7 @@ end
             h: /std/Bool/Holds(#NatLt(0, m))
     }
 ) =>
-    (match (p).1: (k, y) => (h2: /std/Bool/Holds(#NatLt(0, k))) -> /std/Bool/False
+    ((mp: #NatType, xp: #{node = InductType} /Bad()(mp), hp: /std/Bool/Holds(#NatLt(0, mp))) => (#{goal = (h2: /std/Bool/Holds(#NatLt(0, mp))) -> /std/Bool/False} match xp
     | c(payload) =>
         (
             h3: /std/Bool/Holds(
@@ -77,7 +77,7 @@ end
                 0,
                 h3
             )(p)
-    end)((p).2))(
+    end)(hp))((p).0, (p).1, (p).2))(
     (
         1,
         #{node = Variant}
@@ -102,9 +102,7 @@ end
                                 h: /std/Bool/Holds(#NatLt(0, m))
                         }
                     ) =>
-                        (match (p2).1: (k2, y2) => (
-                            h4: /std/Bool/Holds(#NatLt(0, k2))
-                        ) -> /std/Bool/False
+                        ((mp2: #NatType, xp2: #{node = InductType} /Bad()(mp2), hp2: /std/Bool/Holds(#NatLt(0, mp2))) => (#{goal = (h4: /std/Bool/Holds(#NatLt(0, mp2))) -> /std/Bool/False} match xp2
                         | c(payload2) =>
                             (
                                 h5: /std/Bool/Holds(
@@ -139,7 +137,7 @@ end
                                     0,
                                     h5
                                 )(p2)
-                        end)((p2).2)]
+                        end)(hp2))((p2).0, (p2).1, (p2).2)]
             )
         ),
         #{node = Variant}

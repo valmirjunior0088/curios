@@ -35,9 +35,9 @@
 use {
     super::{
         Apply, Argument, Atom, Bound, Carrier, Cases, Cost, Exhaustion, Field, Free, FreeMonoid,
-        Func, Global, Intrinsic, Layer, LetBinding, Many, Match, MatchResult, Mention, Nat, Proj,
-        Rec, RecGroup, ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term, Universes,
-        eta_head, instantiate_universes, project_literal, reduce_intrinsic,
+        Func, Global, Intrinsic, Layer, LetBinding, Many, Match, Mention, Nat, Proj, Rec, RecGroup,
+        ReduceError, Reducer, Scope, Sharing, Subterm, Telescope, Term, Universes, eta_head,
+        instantiate_universes, project_literal, reduce_intrinsic,
     },
     crate::Foreign,
     curios_common::Plicity,
@@ -340,7 +340,7 @@ enum Frame {
     },
     /// A match waiting for its scrutinee.
     MatchK {
-        result: MatchResult,
+        goal: Term,
         cases: Cases,
         demand: Demand,
     },
@@ -569,11 +569,8 @@ impl Machine {
             mtc @ Subterm::Match(_) => {
                 // The match is remembered whole, recorded under the key on the way out, so a second demand of the same term is a probe rather than a second run.
                 let key = Term::from(mtc);
-                let Subterm::Match(Match {
-                    head,
-                    result,
-                    cases,
-                }) = Term::unwrap_or_clone(key.clone())
+                let Subterm::Match(Match { head, goal, cases }) =
+                    Term::unwrap_or_clone(key.clone())
                 else {
                     unreachable!("rebuilt from the same value")
                 };
@@ -594,7 +591,7 @@ impl Machine {
                 self.push(
                     host,
                     Frame::MatchK {
-                        result,
+                        goal,
                         cases,
                         demand,
                     },
@@ -850,10 +847,10 @@ impl Machine {
             }
 
             Frame::MatchK {
-                result,
+                goal,
                 cases,
                 demand,
-            } => self.dispatch(host, result, cases, value, demand),
+            } => self.dispatch(host, goal, cases, value, demand),
 
             Frame::ProjK { field, demand } => match project_literal(&field, value) {
                 Ok(component) => Ok(Step::Eval(component, demand)),
@@ -1079,7 +1076,7 @@ impl Machine {
     fn dispatch<H: ClosedHost>(
         &mut self,
         host: &mut H,
-        result: MatchResult,
+        goal: Term,
         cases: Cases,
         scrutinee: Term,
         demand: Demand,
@@ -1093,7 +1090,7 @@ impl Machine {
                 Some(true) => Ok(Step::Eval(true_case, demand)),
                 None => Ok(Step::Value(Term::from(Subterm::Match(Match {
                     head: scrutinee,
-                    result,
+                    goal,
                     cases: Cases::Bool {
                         false_case,
                         true_case,
@@ -1116,7 +1113,7 @@ impl Machine {
                     )),
                     false => Ok(Step::Value(Term::from(Subterm::Match(Match {
                         head: scrutinee,
-                        result,
+                        goal,
                         cases: Cases::Switch { cases, default },
                     })))),
                 }
@@ -1158,7 +1155,7 @@ impl Machine {
 
                 Ok(Step::Value(Term::from(Subterm::Match(Match {
                     head: scrutinee,
-                    result,
+                    goal,
                     cases: Cases::Induct {
                         cases,
                         default,
@@ -1199,7 +1196,7 @@ impl Machine {
                     )),
                     Layer::Stuck(stuck) => Ok(Step::Value(Term::from(Subterm::Match(Match {
                         head: stuck.into(),
-                        result,
+                        goal,
                         cases: Cases::FreeMonoid { carrier },
                     })))),
                 }

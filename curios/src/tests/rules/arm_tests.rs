@@ -9,7 +9,7 @@ fn a_recursive_call_at_the_predecessor_is_typed_there() {
         r#"
         use /std/{Nat, Vec};
         let bogus(n : Nat) -> Vec(Nat, n) =
-            match n : (m) => Vec(Nat, m)
+            match n
             | 0 => Vec/nil()
             | k + 1 => Vec/cons(k, bogus(k))
             end;
@@ -20,7 +20,6 @@ fn a_recursive_call_at_the_predecessor_is_typed_there() {
     .refused(&[
         ("{Nat, Vec}", "{Nat, Eq}"),
         ("-> Vec(Nat, n) =", "-> Eq()(n, 0) ="),
-        ("(m) => Vec(Nat, m)", "(m) => Eq()(m, 0)"),
         ("| 0 => Vec/nil()", "| 0 => Eq/refl()"),
         ("Vec/cons(k, bogus(k))", "bogus(k)"),
         ("Nat/to_str(Vec/first(bogus(3)))", "\"FORGED\""),
@@ -37,7 +36,7 @@ fn a_dispatch_default_is_checked_at_its_scrutinee() {
         r#"
         use /std/{Nat, Eq};
         let bogus(n : Nat) -> Eq()(n, n) =
-            match n : (m) => Eq()(m, m)
+            match n
             | 0 => Eq/refl()
             | _ => Eq/refl()
             end;
@@ -45,23 +44,20 @@ fn a_dispatch_default_is_checked_at_its_scrutinee() {
         "#,
         b"ok",
     )
-    .refused(&[
-        ("-> Eq()(n, n) =", "-> Eq()(n, 0) ="),
-        ("(m) => Eq()(m, m)", "(m) => Eq()(m, 0)"),
-    ])
+    .refused(&[("-> Eq()(n, n) =", "-> Eq()(n, 0) =")])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
 }
 
-// A `Bool` arm is checked at its own case value: the `false` arm's goal is the motive at `false`, so `Eq/refl()` would have to inhabit `Eq()(false, true)`, and an arm rule that refined the scrutinee to the wrong case, or to none, would let every boolean equal `true`. The control's motive reduces at each arm's own case.
+// A `Bool` arm is checked at its own case value: the `false` arm's goal is the match's at `false`, so `Eq/refl()` would have to inhabit `Eq()(false, true)`, and an arm rule that refined the scrutinee to the wrong case, or to none, would let every boolean equal `true`. The control's goal reduces at each arm's own case.
 #[test]
 fn a_boolean_arm_is_checked_at_its_own_case() {
     control(
         r#"
         use /std/{Bool, Eq};
         let bogus(b : Bool) -> Eq()(Bool/not(Bool/not(b)), b) =
-            match b : (c) => Eq()(Bool/not(Bool/not(c)), c)
+            match b
             | true => Eq/refl()
             | false => Eq/refl()
             end;
@@ -69,26 +65,20 @@ fn a_boolean_arm_is_checked_at_its_own_case() {
         "#,
         b"ok",
     )
-    .refused(&[
-        ("-> Eq()(Bool/not(Bool/not(b)), b) =", "-> Eq()(b, true) ="),
-        (
-            "(c) => Eq()(Bool/not(Bool/not(c)), c)",
-            "(c) => Eq()(c, true)",
-        ),
-    ])
+    .refused(&[("-> Eq()(Bool/not(Bool/not(b)), b) =", "-> Eq()(b, true) =")])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
 }
 
-// A dispatch's literal arm is checked at that literal: the `1` arm's goal is the motive at `1`, which `Eq/refl()` cannot inhabit for `Eq()(1, 0)` — the default arm's companion, a literal arm refined to the wrong literal. The control states what reflexivity proves at every value.
+// A dispatch's literal arm is checked at that literal: the `1` arm's goal is the match's at `1`, which `Eq/refl()` cannot inhabit for `Eq()(1, 0)` — the default arm's companion, a literal arm refined to the wrong literal. The control states what reflexivity proves at every value.
 #[test]
 fn a_dispatch_literal_arm_is_checked_at_that_literal() {
     control(
         r#"
         use /std/{Nat, Eq};
         let bogus(n : Nat) -> Eq()(n, n) =
-            match n : (m) => Eq()(m, m)
+            match n
             | 0 => Eq/refl()
             | 1 => Eq/refl()
             | _ => Eq/refl()
@@ -97,10 +87,7 @@ fn a_dispatch_literal_arm_is_checked_at_that_literal() {
         "#,
         b"ok",
     )
-    .refused(&[
-        ("-> Eq()(n, n) =", "-> Eq()(n, 0) ="),
-        ("(m) => Eq()(m, m)", "(m) => Eq()(m, 0)"),
-    ])
+    .refused(&[("-> Eq()(n, n) =", "-> Eq()(n, 0) =")])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -361,7 +348,7 @@ fn a_guard_restated_in_an_inner_arm_is_settled_nowhere_in_it() {
 
         let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
         let f(P: ((Nat) -> Bool) -> Prop, c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0) || true)) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =
-            match (match h(p) == h(q) | true => k(0) | false => k(1) end): (b) => (Holds(b)) -> P(k)
+            match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true => (_: Holds(true)) =>
                 let split: {} = match c | false => () | true => (let inside: Holds(k(0)) = True/qed(); ()) end;
                 let after: Holds(k(0) || true) = True/qed();
@@ -392,7 +379,7 @@ fn a_guard_restated_in_a_nested_split_is_settled_nowhere_in_either_arm() {
 
         let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
         let f(P: ((Nat) -> Bool) -> Prop, c: Bool, d: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0) || true)) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =
-            match (match h(p) == h(q) | true => k(0) | false => k(1) end): (b) => (Holds(b)) -> P(k)
+            match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true => (_: Holds(true)) =>
                 let split: {} = match c | false => () | true => (match d | true => (let inside: Holds(k(0) || true) = True/qed(); ()) | false => () end) end;
                 let after: Holds(k(0) || true) = True/qed();
@@ -428,7 +415,7 @@ fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
             match b | true => True | false => Holds(y <= x) end;
 
         pub let f(x: Nat, y: Nat) -> M(x < y, x, y) =
-            match x < y: (b) => M(b, x, y) | true => True/qed() | false => True/qed() end;
+            match x < y | true => True/qed() | false => True/qed() end;
 
         let forged = f;
 

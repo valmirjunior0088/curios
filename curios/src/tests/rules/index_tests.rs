@@ -21,7 +21,7 @@ fn a_non_injective_index_target_does_not_force_its_binder() {
         end
 
         let extract(p : Loose(0)) -> Nat =
-            match p : (m, q) => Nat
+            match p
             | mk(a) => a
             end;
 
@@ -36,7 +36,7 @@ fn a_non_injective_index_target_does_not_force_its_binder() {
     .refused(&[
         ("mk(a : Nat) : (a)", "mk(a : Nat) : (blur(a))"),
         ("let same = Loose/mk(0);", "let same : Eq()(Loose/mk(0), Loose/mk(7)) = Eq/refl();"),
-        ("let boom = extract;", "let boom : False =\n            Eq/subst((n : Nat) => match n : (_) => Type | 0 => {} | _ => False end,\n                     Eq/cong(extract, same),\n                     ());"),
+        ("let boom = extract;", "let boom : False =\n            Eq/subst((n : Nat) => match n | 0 => {} | _ => False end,\n                     Eq/cong(extract, same),\n                     ());"),
     ])
     .by_elaborator_in("/extract", |error| {
         matches!(error, Error::LargeElimOfProp { .. })
@@ -66,7 +66,7 @@ fn a_proposition_valued_index_cannot_make_an_elimination_vacuous() {
         let coerce = Ind/only;
 
         let boom(w : Ind(Two/b())) -> False =
-            match w : (x, q) => False
+            match w
             end;
 
         let bad = boom;
@@ -111,7 +111,7 @@ fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
         let coerce = Ind/right;
 
         let f(w : Ind(Two/a())) -> Nat =
-            match w : (x, q) => Nat
+            match w
             | left() => 0
             end;
 
@@ -158,7 +158,7 @@ fn a_nested_proposition_valued_index_cannot_make_an_elimination_vacuous() {
         let coerce = Ind/only;
 
         let boom(w : Ind(Pair/mk(0, Two/b()))) -> False =
-            match w : (x, q) => False
+            match w
             end;
 
         let bad = boom;
@@ -206,7 +206,7 @@ fn a_nested_proposition_valued_index_cannot_excuse_an_omitted_arm() {
         let coerce = Ind/right;
 
         let f(w : Ind(Pair/mk(0, Two/a()))) -> Nat =
-            match w : (x, q) => Nat
+            match w
             | left() => 0
             end;
 
@@ -581,7 +581,7 @@ fn an_unmentioned_payload_binder_is_not_forced() {
         end
 
         let extract(p : Tight(7)) -> Nat =
-            match p : (m, q) => Nat
+            match p
             | mk(a) => a
             end;
 
@@ -615,7 +615,7 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
         end
 
         let unbox(b : Box) -> Type =
-            match b : (_) => Type
+            match b
             | mk(A) => A
             end;
 

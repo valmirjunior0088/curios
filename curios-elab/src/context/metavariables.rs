@@ -281,7 +281,7 @@ impl<'s> Context<'s> {
         self.fresh_metavar_with(result, extent, MetavarOrigin::Hole)
     }
 
-    /// Mint a metavariable identity with no birth record, for a term built ahead of its elaboration exactly as `into_core` builds one: an omitted motive, a list literal's element type, a witness goal with a provenance of its own. Birth happens where elaboration first meets the term, in checking position, as it does for every lowered hole.
+    /// Mint a metavariable identity with no birth record, for a term built ahead of its elaboration exactly as `into_core` builds one: the goal of a match nothing expects a type of, a list literal's element type, a witness goal with a provenance of its own. Birth happens where elaboration first meets the term, in checking position, as it does for every lowered hole.
     pub(crate) fn mint_metavar(&mut self) -> MetavarId {
         self.underway.attempt.solutions.mint()
     }

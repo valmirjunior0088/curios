@@ -70,8 +70,6 @@ pub enum Error {
         /// What it was written in instead.
         site: &'static str,
     },
-    /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Variant`/`Bool`/`Char`/`Nat`/`List`/`Bytes`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
-    MatrixMotiveRequiresCtorHead,
     /// A bind guard `pattern = value` whose `pattern` takes nothing apart: it always matches, so the arms after it are dead. A bind is for *refutable* matching; use a `let` for an unconditional binding.
     BindCannotFail,
     /// A headed match ended in a *named* catch-all (`| x =>`) among concrete constructor arms. Only a bare `| _ =>` is a catch-all default; a named binder there is almost certainly a mistake (a misspelled constructor, or a binder that silently swallows every remaining case).
@@ -312,10 +310,6 @@ impl Error {
                 f.text("misplaced sort");
                 f.stating(format_args!("`Sort` stands in {site}"));
                 f.stating("it is left to a caller, so it is written in the signature of a top-level `let`, `induct` or `struct`");
-            }
-            Error::MatrixMotiveRequiresCtorHead => {
-                f.text("misplaced motive");
-                f.stating("a motive is written where every arm dispatches directly on one kind of tag or literal");
             }
             Error::BindCannotFail => {
                 f.text("irrefutable pattern");

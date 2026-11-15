@@ -220,8 +220,8 @@ let /bad: #{node = InductType} /Absurd() =
     }
 }
 
-/// A member named only in its own motive: `g`'s arms answer `qed` and call nothing, while the motive `Const(g(m))` names `g` at the motive's binder, a type the elimination is typed at.
-const A_MEMBER_NAMED_IN_ITS_OWN_MOTIVE: &str = r#"
+/// A member named only in its own goal: `g`'s arms answer `qed` and call nothing, while the goal `Const(g(n))` names `g` at the scrutinee, a type the elimination is typed at.
+const A_MEMBER_NAMED_IN_ITS_OWN_GOAL: &str = r#"
 let /Const : (
     p:
         #{node = InductType}
@@ -239,7 +239,7 @@ let /g : (n: #NatType) ->
     #{node = InductType}
     /std/Bool/True() =
     (n: #NatType) =>
-        match n: (m) => /Const(/g(m))
+        #{goal = /Const(/g(n))} match n
         | 0 =>
             #{node = Variant}
             /std/Bool/True/qed()
@@ -250,15 +250,15 @@ let /g : (n: #NatType) ->
 /std/Bool/False
 "#;
 
-// A type is typed as written, so the motive's `g(m)` is an application the walk types and records, at an argument nothing is below: a group whose calls were looked for in its arms alone would read none here and descend. `curios`'s `tests::rules::totality_descent_tests` puts the program to the elaborator under this name.
+// A type is typed as written, so the goal's `g(n)` is an application the walk types and records, at an argument nothing is below: a group whose calls were looked for in its arms alone would read none here and descend. `curios`'s `tests::rules::totality_descent_tests` puts the program to the elaborator under this name.
 //
 // Mutation-checked at the `Apply` rule of `infer_within`: with no call recorded for an application whose head is a member, `g` descends and is not refused.
 #[test]
-fn a_member_named_only_in_its_own_motive_is_a_call_its_group_must_descend_on() {
+fn a_member_named_only_in_its_own_goal_is_a_call_its_group_must_descend_on() {
     let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${A_MEMBER_NAMED_IN_ITS_OWN_MOTIVE}",
+        "${PROPOSITIONS}\n${A_MEMBER_NAMED_IN_ITS_OWN_GOAL}",
         PROPOSITIONS,
-        A_MEMBER_NAMED_IN_ITS_OWN_MOTIVE
+        A_MEMBER_NAMED_IN_ITS_OWN_GOAL
     ));
 
     assert!(
@@ -279,9 +279,9 @@ let /again : (n: #NatType) ->
     (n: #NatType) =>
         ((x: #NatType) =>
             #{
-                result = Ambient(
+                goal = 
                     #{node = InductType}
-                    /std/Bool/True())}
+                    /std/Bool/True()}
             match x
             | 0 =>
                 #{node = Variant}
@@ -369,7 +369,7 @@ const A_CALL_BELOW_ITS_PARAMETER_ONLY_TO_A_JUDGMENT: &str = r#"
     #{node = Rec}
     (let loop: (n: #NatType) -> Type =
         (n: #NatType) =>
-            #{result = Ambient(Type)}
+            #{goal = Type}
             match n
             | 0 =>
                 #NatType
@@ -408,7 +408,7 @@ let /outer : /std/Bool/Holds(true) =
     #{node = Rec}
     (let Flip: (b: #BoolType) -> Prop =
         (b: #BoolType) =>
-            #{result = Ambient(Prop)}
+            #{goal = Prop}
             match b
             | false =>
                 #{node = InductType}
@@ -428,7 +428,7 @@ let /control : /std/Bool/Holds(true) =
     #{node = Rec}
     (let Flop: (b: #BoolType) -> Prop =
         (b: #BoolType) =>
-            #{result = Ambient(Prop)}
+            #{goal = Prop}
             match b
             | false =>
                 #{node = InductType}
@@ -469,7 +469,7 @@ let /outer : (n: #NatType) -> #NatType =
         #{node = Rec}
         (let T: (m: #NatType) -> Type =
             (m: #NatType) =>
-                #{result = Ambient(Type)}
+                #{goal = Type}
                 match m
                 | 0 =>
                     #NatType
@@ -536,7 +536,7 @@ let /withheld : #BoolType =
     #{node = Rec}
     (let b: (n: #NatType) -> #BoolType =
         (n: #NatType) =>
-            #{result = Ambient(#BoolType)}
+            #{goal = #BoolType}
             match n
             | 0 =>
                 true
@@ -603,8 +603,8 @@ fn a_group_listing_itself_is_refused_for_not_descending() {
     );
 }
 
-/// `g` and `h` each state `h(0)` in a match's motive, a call at an argument nothing is below, so `h`'s own keeps the group from descending.
-const A_CALL_TWO_MOTIVES_STATE: &str = r#"
+/// `g` and `h` each state `h(0)` in a match's goal, a call at an argument nothing is below, so `h`'s own keeps the group from descending.
+const A_CALL_TWO_GOALS_STATE: &str = r#"
 let /Const : (
     p:
         #{node = InductType}
@@ -622,7 +622,7 @@ let /g : (n: #NatType) ->
     #{node = InductType}
     /std/Bool/True() =
     (n: #NatType) =>
-        match n: (m) => /Const(/h(0))
+        #{goal = /Const(/h(0))} match n
         | 0 =>
             #{node = Variant}
             /std/Bool/True/qed()
@@ -634,7 +634,7 @@ and /h : (n: #NatType) ->
     #{node = InductType}
     /std/Bool/True() =
     (n: #NatType) =>
-        match n: (m) => /Const(/h(0))
+        #{goal = /Const(/h(0))} match n
         | 0 =>
             #{node = Variant}
             /std/Bool/True/qed()
@@ -647,13 +647,13 @@ and /h : (n: #NatType) ->
 
 // A group whose members are read by value in its bodies still spells every term it types with its members' locals, so a call two bodies state is typed, and recorded, in each: no remembered typing answers for a term naming a member. `h`'s own call withholds it at its turn, and the verdict its typed calls close to names the group.
 //
-// Mutation-checked at `Calls::names_member`: with a remembered typing answering for a term that names a member, `h`'s typing of its motive is answered by the one `g`'s filled, the call is never recorded, and the group stands.
+// Mutation-checked at `Calls::names_member`: with a remembered typing answering for a term that names a member, `h`'s typing of its goal is answered by the one `g`'s filled, the call is never recorded, and the group stands.
 #[test]
-fn a_call_two_motives_state_is_recorded_in_each_body() {
+fn a_call_two_goals_state_is_recorded_in_each_body() {
     let verdicts = core_text_verdicts(&fill!(
-        "${PROPOSITIONS}\n${A_CALL_TWO_MOTIVES_STATE}",
+        "${PROPOSITIONS}\n${A_CALL_TWO_GOALS_STATE}",
         PROPOSITIONS,
-        A_CALL_TWO_MOTIVES_STATE
+        A_CALL_TWO_GOALS_STATE
     ));
 
     assert!(
@@ -701,9 +701,9 @@ let /g : (
             /S()(i)
     ) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /std/Bool/False())}
+                /std/Bool/False()}
         match s
         | mk(v) =>
             /h(v)
@@ -721,9 +721,9 @@ and /h : (
             /W()
     ) =>
         #{
-            result = Ambient(
+            goal = 
                 #{node = InductType}
-                /std/Bool/False())}
+                /std/Bool/False()}
         match w
         | base() =>
             /g(w, /S/mk(w))
@@ -767,7 +767,7 @@ let /X : (
             #{node = InductType}
             /S()(n)
     ) =>
-        #{result = Ambient(Type)}
+        #{goal = Type}
         match p
         | mk(m) =>
             /X(m, /S/mk(m))
@@ -804,10 +804,10 @@ end
 (let f: (w: #{node = InductType} /W(), b: /std/Bool/Holds(false)) -> /std/Bool/False =
     (w2: #{node = InductType} /W(), b2: /std/Bool/Holds(false)) =>
         ((x: #{node = InductType} /W()) =>
-            match w2: (y) => /std/Bool/False
-            | base() => match b2: (z) => /std/Bool/False end
+            #{goal = /std/Bool/False} match w2
+            | base() => #{goal = /std/Bool/False} match b2 end
             | up(u) =>
-                match x: (y2) => /std/Bool/False
+                #{goal = /std/Bool/False} match x
                 | base() => ${dead}
                 | up(j) => ${live}
                 end
@@ -826,7 +826,7 @@ fn a_dead_case_of_an_applied_lambdas_binder_is_no_descent() {
         ))
     };
 
-    let attack = group("f(w2, b2)", "match b2: (z2) => /std/Bool/False end");
+    let attack = group("f(w2, b2)", "#{goal = /std/Bool/False} match b2 end");
     assert!(
         attack
             .iter()
@@ -834,7 +834,7 @@ fn a_dead_case_of_an_applied_lambdas_binder_is_no_descent() {
         "{attack:?}"
     );
 
-    let control = group("match b2: (z3) => /std/Bool/False end", "f(j, b2)");
+    let control = group("#{goal = /std/Bool/False} match b2 end", "f(j, b2)");
     assert!(
         !control.iter().any(|verdict| matches!(
             verdict.error,
@@ -853,7 +853,7 @@ let /through_inner : /std/Bool/False =
             #{node = Rec}
             (let g: (m: #NatType) -> /std/Bool/False =
                 (m: #NatType) =>
-                    #{result = Ambient(/std/Bool/False)} match m | 0 => q(n) | k + 1 => g(k) end;
+                    #{goal = /std/Bool/False} match m | 0 => q(n) | k + 1 => g(k) end;
             g(0));
     q(0));
 /std/Bool/False

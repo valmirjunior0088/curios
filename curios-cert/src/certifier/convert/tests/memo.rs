@@ -107,7 +107,7 @@ fn a_one_inhabitant_verdict_does_not_outlive_the_case_that_shaped_its_type() {
 
 /// `match c | false => Nat | true => W end`, over a `Bool` `c`: a type whose shape the case on `c` decides.
 const SHAPED: &str =
-    "match c: (_) => Type | false => #NatType | true => #{node = StructType} /W() end";
+    "#{goal = Type} match c | false => #NatType | true => #{node = StructType} /W() end";
 
 /// Nor its binder. `p(a)` and `p(b)` are one where `p` takes a proof — its arguments compare at a proposition — and apart where it takes data, and a name assumed again at another type, once its first binder is closed, is compared at the second.
 ///

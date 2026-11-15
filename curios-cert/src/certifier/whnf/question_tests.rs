@@ -413,7 +413,7 @@ fn a_fold_inside_a_question_is_not_taken_again() {
 }
 
 /// A `Bool` match on `${scrutinee}` at `Nat`: `2` where it is false, `1` where it is true.
-const ON_BOOL: &str = "match ${scrutinee}: (_) => #NatType | false => 2 | true => 1 end";
+const ON_BOOL: &str = "#{goal = #NatType} match ${scrutinee} | false => 2 | true => 1 end";
 
 /// A stuck elimination takes the arm the carriers' algebra reads its scrutinee as, in both reductions: a `Bool` match on `(a < b && c < b) && ¬(a < b)`, a contradiction across connectives no fold sees, is its false arm, and a structural `Nat` match on `(a + b + 1) * (b + a + 1)`, whose distribution has a floor, is its successor arm. Plain reduction takes both, the theory asking no judgment. The controls are a connective the decision diagram leaves open and a product with no floor, whose matches stand. `curios-elab`'s `reduce::question_tests` holds this proposition under this name.
 #[test]
@@ -422,7 +422,7 @@ fn a_stuck_elimination_takes_the_arm_the_algebra_reads() {
     let on_bool = |scrutinee: &str| fill!(ON_BOOL, scrutinee);
     let on_product = |floor: usize| {
         fill!(
-            "match #NatMul(#NatAdd(#NatAdd(a, b), ${floor}), #NatAdd(#NatAdd(b, a), ${floor})): (_) => #NatType | 0 => 10 | pred + 1 => 20 end",
+            "#{goal = #NatType} match #NatMul(#NatAdd(#NatAdd(a, b), ${floor}), #NatAdd(#NatAdd(b, a), ${floor})) | 0 => 10 | pred + 1 => 20 end",
             floor
         )
     };

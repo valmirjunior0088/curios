@@ -13,11 +13,11 @@ let /w : {
 } =
     (
         (x: #NatType) =>
-            match #NatLe(/G(x), 2): (b) => #BoolType
+            #{goal = #BoolType} match #NatLe(/G(x), 2)
             | false =>
                 false
             | true =>
-                match x: (y) => #BoolType
+                #{goal = #BoolType} match x
                 | 3 =>
                     ((k: /std/Bool/Holds(#NatLe(/G(3), 2))) =>
                         true)(/std/Bool/True/qed())
@@ -50,43 +50,41 @@ fn an_arms_restatement_naming_no_local_leaves_nothing_the_declaration_reads_afte
 
 /// The board's guard settled by the unit type, with the split on `g(c)`, an expression, where the ticket split on `c`: the inner arm records `g(c) = true`, solves nothing and re-types nothing, so the guard is not restated there. Inside it `F(g(c))` reduces to `{}`, `h(p)` and `h(q)` are one atom, and `u` reduces a stuck form naming the guard's locals, which asks for the guard's reduced spelling.
 const A_GUARD_SETTLED_UNDER_AN_INNER_ARMS_EQUATION: &str = r#"
-((g: (b: #BoolType) -> #BoolType, c: #BoolType, h: (x: match g(c): (x2) => Type
+((g: (b: #BoolType) -> #BoolType, c: #BoolType, h: (x: #{goal = Type} match g(c)
         | false =>
             #NatType
         | true =>
             {}
-        end) -> #NatType, k: (n: #NatType) -> #BoolType, p: match g(c): (x3) => Type
+        end) -> #NatType, k: (n: #NatType) -> #BoolType, p: #{goal = Type} match g(c)
     | false =>
         #NatType
     | true =>
         {}
-    end, q: match g(c): (x4) => Type
+    end, q: #{goal = Type} match g(c)
     | false =>
         #NatType
     | true =>
         {}
-    end, guard: /std/Bool/Holds(match #NatEql(h(p), h(q)): (x5) => #BoolType
+    end, guard: /std/Bool/Holds(#{goal = #BoolType} match #NatEql(h(p), h(q))
         | false =>
             k(1)
         | true =>
             k(0)
         end)) =>
-    match match #NatEql(h(p), h(q)): (x9) => #BoolType
+    #{goal = /std/Bool/Holds(k(0))} match #{goal = #BoolType} match #NatEql(h(p), h(q))
     | false =>
         k(1)
     | true =>
         k(0)
-    end: (x6) => /std/Bool/Holds(k(0))
+    end
     | false =>
-        match guard: (x7) => /std/Bool/Holds(k(0))
+        #{goal = /std/Bool/Holds(k(0))} match guard
         end
     | true =>
         let w:
             #{node = InductType}
             /std/Bool/True() =
-            match g(c): (x8) =>
-                #{node = InductType}
-                /std/Bool/True()
+            #{goal = #{node = InductType} /std/Bool/True()} match g(c)
             | false =>
                 #{node = Variant}
                 /std/Bool/True/qed()
@@ -144,9 +142,9 @@ end
         #{node = InductType}
         /Two()(n)) =>
     let split: #BoolType =
-        match w(()): (n2, x) => #BoolType
+        #{goal = #BoolType} match w(())
         | a() =>
-            let inside: /std/Bool/Holds(match w(()): (n3, y) => #BoolType
+            let inside: /std/Bool/Holds(#{goal = #BoolType} match w(())
                 | a() =>
                     true
                 | b() =>
@@ -158,7 +156,7 @@ end
         | b() =>
             false
         end;
-    let after: /std/Bool/Holds(match w(()): (n3, y) => #BoolType
+    let after: /std/Bool/Holds(#{goal = #BoolType} match w(())
         | a() =>
             true
         | b() =>
@@ -197,40 +195,38 @@ fn an_arms_own_equation_restated_at_its_index_solution_answers_nothing_after_the
 
 /// The guard is the match on `h(p) == h(q)`, `a < b` at `true` and `b < a` at `false`, and its `false` arm assumes it `false`. The `true` arm of the split on `c` re-types `p` and `q` at `{}`, where `h(p)` and `h(q)` are one atom, so the guard, restated there, settles to `a < b`; the readers then hold `b <= a`, that spelling's dual, `true`, and `inside` reads it. After the split `after` asks the same.
 const A_READERS_ANSWER_UNDER_A_SPLIT: &str = r#"
-((c: #BoolType, h: (x: match c: (x2) => Type
+((c: #BoolType, h: (x: #{goal = Type} match c
         | false =>
             #NatType
         | true =>
             {}
-        end) -> #NatType, a: #NatType, b: #NatType, p: match c: (x3) => Type
+        end) -> #NatType, a: #NatType, b: #NatType, p: #{goal = Type} match c
     | false =>
         #NatType
     | true =>
         {}
-    end, q: match c: (x4) => Type
+    end, q: #{goal = Type} match c
     | false =>
         #NatType
     | true =>
         {}
-    end, guard: /std/Bool/Holds(#BoolXor(match #NatEql(h(p), h(q)): (x5) => #BoolType
+    end, guard: /std/Bool/Holds(#BoolXor(#{goal = #BoolType} match #NatEql(h(p), h(q))
         | false =>
             #NatLt(b, a)
         | true =>
             #NatLt(a, b)
         end, true))) =>
-    match match #NatEql(h(p), h(q)): (x9) => #BoolType
+    #{goal = /std/Bool/Holds(#NatLe(b, a))} match #{goal = #BoolType} match #NatEql(h(p), h(q))
     | false =>
         #NatLt(b, a)
     | true =>
         #NatLt(a, b)
-    end: (x6) => /std/Bool/Holds(#NatLe(b, a))
+    end
     | false =>
         let w:
             #{node = InductType}
             /std/Bool/True() =
-            match c: (x8) =>
-                #{node = InductType}
-                /std/Bool/True()
+            #{goal = #{node = InductType} /std/Bool/True()} match c
             | false =>
                 #{node = Variant}
                 /std/Bool/True/qed()
@@ -246,7 +242,7 @@ const A_READERS_ANSWER_UNDER_A_SPLIT: &str = r#"
             /std/Bool/True/qed();
         after
     | true =>
-        match guard: (x7) => /std/Bool/Holds(#NatLe(b, a))
+        #{goal = /std/Bool/Holds(#NatLe(b, a))} match guard
         end
     end)(
     false,
@@ -285,7 +281,7 @@ fn a_readers_answer_through_a_restated_guard_answers_nothing_after_the_split() {
 
 /// The guard is the match on `h(p) == h(q)`, `k(m(r))` at `true` and `k(m2)` at `false`, and its `true` arm assumes it `true`. The `true` arm of the split on `c` re-types `p` and `q` at `{}`, so the guard, restated there, settles to `k(m(r))`; `inside` asks `k(m(s))`, which no reader takes apart and which the certifier's conversion holds one with `k(m(r))`, `r` and `s` being proofs of one proposition, so the restatement answers it. After the split `after` asks the same.
 const A_CONVERSIONS_ANSWER_UNDER_A_SPLIT: &str = r#"
-((c: #BoolType, h: (x: match c: (x2) => Type
+((c: #BoolType, h: (x: #{goal = Type} match c
         | false =>
             #NatType
         | true =>
@@ -296,38 +292,36 @@ const A_CONVERSIONS_ANSWER_UNDER_A_SPLIT: &str = r#"
         #{node = InductType}
         /std/Bool/True(), s:
         #{node = InductType}
-        /std/Bool/True(), p: match c: (x3) => Type
+        /std/Bool/True(), p: #{goal = Type} match c
     | false =>
         #NatType
     | true =>
         {}
-    end, q: match c: (x4) => Type
+    end, q: #{goal = Type} match c
     | false =>
         #NatType
     | true =>
         {}
-    end, guard: /std/Bool/Holds(match #NatEql(h(p), h(q)): (x5) => #BoolType
+    end, guard: /std/Bool/Holds(#{goal = #BoolType} match #NatEql(h(p), h(q))
         | false =>
             k(m2)
         | true =>
             k(m(r))
         end)) =>
-    match match #NatEql(h(p), h(q)): (x9) => #BoolType
+    #{goal = /std/Bool/Holds(k(m(s)))} match #{goal = #BoolType} match #NatEql(h(p), h(q))
     | false =>
         k(m2)
     | true =>
         k(m(r))
-    end: (x6) => /std/Bool/Holds(k(m(s)))
+    end
     | false =>
-        match guard: (x7) => /std/Bool/Holds(k(m(s)))
+        #{goal = /std/Bool/Holds(k(m(s)))} match guard
         end
     | true =>
         let w:
             #{node = InductType}
             /std/Bool/True() =
-            match c: (x8) =>
-                #{node = InductType}
-                /std/Bool/True()
+            #{goal = #{node = InductType} /std/Bool/True()} match c
             | false =>
                 #{node = Variant}
                 /std/Bool/True/qed()
@@ -388,11 +382,11 @@ fn a_conversions_answer_through_a_restated_guard_answers_nothing_after_the_split
 const A_REFUSED_ARM_BESIDE_ITS_SIBLINGS_EQUATION: &str = r#"
 let /w : (g: (b: #BoolType) -> #BoolType, e: #BoolType, h: /std/Bool/Holds(g(e))) -> /std/Bool/False =
     (g: (b: #BoolType) -> #BoolType, e: #BoolType, h: /std/Bool/Holds(g(e))) =>
-        match g(e): (b) => /std/Bool/False
+        #{goal = /std/Bool/False} match g(e)
         | false =>
             let k: /std/Bool/Holds(#BoolEql(g(e), false)) =
                 /std/Bool/True/qed();
-            match h: (z) => /std/Bool/False
+            #{goal = /std/Bool/False} match h
             end
         | true =>
             /std/Bool/True/qed()
@@ -425,20 +419,20 @@ let /G : (n: #NatType) -> #NatType =
         n;
 let /f : (x: #NatType, h: /std/Bool/Holds(#NatLt(/G(x), 5))) -> #BoolType =
     (x: #NatType, h: /std/Bool/Holds(#NatLt(/G(x), 5))) =>
-        match #NatLt(/G(x), 5): (b) => #BoolType
+        #{goal = #BoolType} match #NatLt(/G(x), 5)
         | false =>
             false
         | true =>
-            match x: (y) => #BoolType
+            #{goal = #BoolType} match x
             | 0 =>
                 let l: #BoolType = ((z: #BoolType) => z)(true);
                 ((k: /std/Bool/Holds(#NatEql(
-                    #{result = Ambient(#NatType)}
+                    #{goal = #NatType}
                     match h
                     | qed() =>
                         3
                     end,
-                    #{result = Ambient(#NatType)}
+                    #{goal = #NatType}
                     match h
                     | qed() =>
                         3
@@ -471,14 +465,14 @@ fn a_restatement_stands_aside_past_the_brackets_its_arm_closes() {
 const A_FLOAT_COMPARISONS_FALSE_ARM_AT_ITS_MIRROR: &str = r#"
 let /M : (b: #BoolType, x: #FltType, y: #FltType) -> Prop =
     (b: #BoolType, x: #FltType, y: #FltType) =>
-        #{result = Ambient(Prop)}
+        #{goal = Prop}
         match b
         | false => /std/Bool/Holds(#FltLe(y, x))
         | true => #{node = InductType} /std/Bool/True()
         end;
 let /f : (x: #FltType, y: #FltType) -> /M(#FltLt(x, y), x, y) =
     (x: #FltType, y: #FltType) =>
-        match #FltLt(x, y): (b) => /M(b, x, y)
+        #{goal = /M(#FltLt(x, y), x, y)} match #FltLt(x, y)
         | false => /std/Bool/True/qed()
         | true => /std/Bool/True/qed()
         end;

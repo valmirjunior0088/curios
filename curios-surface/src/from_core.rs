@@ -54,7 +54,7 @@ struct Frame<'a> {
     mint: &'a Minting,
     /// The innermost witness binder in scope, chained outward. Each node lives on the stack of the arm that opened its binder.
     witnesses: Option<&'a WitnessNode<'a>>,
-    /// Whether the term this frame is handed stands where no expected type reaches it: the head of a call or of a projection, a scrutinee. What a checked position would supply is then written, a lambda's parameter types and a match's motive. Read by the node the frame is handed to and by none below it ([`sub`], [`unchecked`]).
+    /// Whether the term this frame is handed stands where no expected type reaches it: the head of a call or of a projection, a scrutinee. What a checked position would supply is then written, a lambda's parameter types. Read by the node the frame is handed to and by none below it ([`sub`], [`unchecked`]).
     inferred: bool,
 }
 
@@ -492,17 +492,10 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
 }
 
 /// A match whose patterns are not yet compiled, as the `match` it was lowered from: each arm as its alternatives, each pattern over the names its own row's body binds, beside the guards and the body the first row's opening reads back as — the ones the arm was written with. A match over `()` whose rows write `_`, every one but the last guarded, reads back as the match with no head it was lowered from.
-///
-/// The motive's binders are opened ahead of the scrutinee's and the arms' after both, the order Core's printer ([`Spellable`](crate::Spellable)) opens them in.
 fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
-    let curios_core::Matrix { head, motive, arms } = matrix;
+    let curios_core::Matrix { head, arms } = matrix;
 
-    let unheaded = motive.is_none()
-        && matches!(&*head, curios_core::Subterm::Tuple(tuple) if tuple.fields.is_empty());
-    let motive = match motive {
-        Some(motive) => Some(sub(motive, frame)?),
-        None => None,
-    };
+    let unheaded = matches!(&*head, curios_core::Subterm::Tuple(tuple) if tuple.fields.is_empty());
     let head = unchecked(head, frame)?;
     let arms = arms
         .into_iter()
@@ -534,7 +527,7 @@ fn written_matrix(matrix: curios_core::Matrix, frame: Frame) -> Option<Term> {
         return Some(Subterm::HeadlessMatch(headless).into());
     }
 
-    Some(Subterm::Match(Match { head, motive, arms }).into())
+    Some(Subterm::Match(Match { head, arms }).into())
 }
 
 /// A row as a program writes it: its pattern over the names its body binds, each guard over the names written before it, and the body under them all. Every binder is opened once, under one label, so a guard and the body read one name alike.
@@ -1219,15 +1212,11 @@ fn binder(label: &curios_core::Free, body: &curios_core::Term, frame: Frame) -> 
     }
 }
 
-/// An elimination as the `match` that lowers to it: each case as the pattern a program writes it by.
+/// An elimination as the `match` that lowers to it: each case as the pattern a program writes it by. Its goal is what the position it stands in supplies, so it is not written.
 fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> {
-    use curios_core::{Carrier, Cases, MatchResult};
+    use curios_core::{Carrier, Cases};
 
-    let curios_core::Match {
-        head,
-        result,
-        cases,
-    } = elimination;
+    let curios_core::Match { head, cases, .. } = elimination;
     let open = |labels: &[curios_core::Free]| {
         labels
             .iter()
@@ -1235,34 +1224,6 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
             .collect::<Vec<_>>()
     };
 
-    // A motive is the lambda a program writes after the scrutinee, binding its indices and then itself. It is written where the result depends on what it binds, and where the match stands with no expected type to take its result from: elsewhere one that names none of its binders states the type the match already has where it stands, as a goal taken from there does, and a program writes neither.
-    let motive = match result {
-        MatchResult::Family(motive) => {
-            let labels = frame.mint.scope_labels(&motive);
-            let terms = open(&labels);
-            let body = motive.open(&terms.iter().collect::<Vec<_>>());
-            let params = labels
-                .iter()
-                .map(|label| FuncParam {
-                    plicity: Plicity::Explicit,
-                    pattern: Pattern::Binder(binder(label, &body, frame)),
-                    annotation: None,
-                })
-                .collect();
-
-            match frame.inferred || labels.iter().any(|label| body.mentions_free(label)) {
-                true => Some(
-                    Subterm::Func(Func {
-                        params,
-                        body: sub(body, frame)?,
-                    })
-                    .into(),
-                ),
-                false => None,
-            }
-        }
-        MatchResult::Ambient(_) => None,
-    };
     let head = unchecked(head, frame)?;
     let arms = match cases {
         Cases::Bool {
@@ -1395,5 +1356,5 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
         },
     };
 
-    Some(Subterm::Match(Match { head, motive, arms }).into())
+    Some(Subterm::Match(Match { head, arms }).into())
 }

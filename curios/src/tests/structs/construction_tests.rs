@@ -13,7 +13,7 @@ fn named_fields_run_end_to_end() {
         let p : { n : Nat, v : Vec(Nat)(n) } =
             (n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())));
         let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;
@@ -74,7 +74,7 @@ fn struct_dependent_fields_run_end_to_end() {
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat)(n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =
-            match v : (_, _) => Nat
+            match v
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
             end;

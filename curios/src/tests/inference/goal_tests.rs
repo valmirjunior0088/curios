@@ -65,18 +65,3 @@ fn a_goal_as_a_scrutinee_or_a_guard_is_reported_at_the_type_its_arms_name() {
         assert!(error.contains(expected), "{error}");
     }
 }
-
-#[test]
-fn a_goal_as_a_match_motive_is_reported() {
-    // An elided motive is synthesized from the arms, but a written `?` motive does not count as elided, which would synthesize over it and leave it unreported. It is a user-misplaced motive the author is asking about: checked against the eliminator's motive type and reported.
-    let source = r#"
-        use /std/{Nat, Bool};
-
-        let g(b : Bool) -> Nat =
-            match b : ? | true => 1 | false => 0 end;
-
-        /std/print("unreachable\n")
-        "#;
-    let error = typecheck(source).expect_err("a program with a written goal never compiles");
-    assert!(error.contains("└─ [goal]"), "{error}");
-}

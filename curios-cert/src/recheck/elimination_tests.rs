@@ -1,4 +1,4 @@
-//! Motives and result sorts, and the large-elimination guard a vacuous elimination must not skip.
+//! Goals and result sorts, and the large-elimination guard a vacuous elimination must not skip.
 
 use {
     super::test_support::*,
@@ -28,7 +28,7 @@ let /held: #{node = InductType} /Held()(#{node = Variant} /Two/b()) =
     #{node = Variant} /Held/mk();
 
 let /forged: #{node = InductType} /False() =
-    match /held: (t, h) => #{node = InductType} /False() end;
+    #{goal = #{node = InductType} /False()} match /held end;
 
 /forged
 : #{node = InductType} /False()
@@ -52,7 +52,7 @@ let /vacuous: (x: #{node = InductType} /Held()(#{node = Variant} /Two/b())) ->
     #{node = InductType}
     /False() =
     (x: #{node = InductType} /Held()(#{node = Variant} /Two/b())) =>
-        match x: (t, s) => #{node = InductType} /False() end;
+        #{goal = #{node = InductType} /False()} match x end;
 "#;
 
 /// `False`, `Held : Prop` with `qed`, and `Pin(n : Nat) : Prop` with `yes() : (0)` and `no() : (1)`.
@@ -70,7 +70,7 @@ induct /Pin: (n: #NatType) -> pub Prop
 end
 "#;
 
-/// `P(i : Nat) : Prop` with two cases at `0`, and `extract : (p : P(0)) -> Nat` eliminating it into `Nat` under a motive that states `${sort}` as its sort, `match i: (k) => ${sort} | 0 => Nat | _ => Nat end`.
+/// `P(i : Nat) : Prop` with two cases at `0`, and `extract : (p : P(0)) -> Nat` eliminating it into `Nat` at a goal that states `${sort}` as its sort, `match 0 | 0 => Nat | _ => Nat end`.
 const EXTRACTED: &str = r#"
 induct /P: (i: #NatType) -> pub Prop
 | mk(): (0)
@@ -79,13 +79,13 @@ end
 
 let /extract: (p: #{node = InductType} /P()(0)) -> #NatType =
     (p: #{node = InductType} /P()(0)) =>
-        match p: (i, s) => match i: (k) => ${sort} | 0 => #NatType | _ => #NatType end
+        #{goal = #{goal = ${sort}} match 0 | 0 => #NatType | _ => #NatType end} match p
         | mk() => 7
         | mk2() => 9
         end;
 "#;
 
-/// [`EXTRACTED`]'s honest motive over `P` declared at one universe parameter it is irrelevant in, with the cases `${cases}`, eliminated at the instance `${level}`.
+/// [`EXTRACTED`]'s honest goal over `P` declared at one universe parameter it is irrelevant in, with the cases `${cases}`, eliminated at the instance `${level}`.
 const LEVELLED: &str = r#"
 #{universe_context = {parameter_count = 1}, variances = [Irrelevant]}
 induct /P: (i: #NatType) -> pub Prop
@@ -94,7 +94,7 @@ end
 
 let /extract: (p: #{node = InductType, universes = {levels = [${level}]}} /P()(0)) -> #NatType =
     (p: #{node = InductType, universes = {levels = [${level}]}} /P()(0)) =>
-        match p: (i, s) => match i: (k) => Type | 0 => #NatType | _ => #NatType end
+        #{goal = #{goal = Type} match 0 | 0 => #NatType | _ => #NatType end} match p
         ${arms}
         end;
 "#;
@@ -113,19 +113,19 @@ end
 const PINNED_ARM: &str = r#"${PINNED}
 let /bad: (p: #{node = InductType} /Pinned()(0, 1)) -> #{node = InductType} /False() =
     (p: #{node = InductType} /Pinned()(0, 1)) =>
-        #{cases = {stated = #{node = InductType} /Pinned()(0, 1)}}
-        match p: (x2, x3, x4) => #{node = InductType} /False() | ${arm} => Prop end;
+        #{goal = #{node = InductType} /False(), cases = {stated = #{node = InductType} /Pinned()(0, 1)}}
+        match p | ${arm} => Prop end;
 "#;
 
-/// `Fixed(i : Type 7) : Type 8` whose one case targets `Type 3`, and `read : (V : ${variable}, h : Fixed(V)) -> V` whose arm is at `Type 2`: a refinement of `V` to `Type 3` fits where `V`'s type holds it.
+/// `Fixed(i : Type 7) : Type 8` whose one case targets `Type 3`, and `read : (V : ${variable}, h : Fixed(V)) -> {}` whose arm binds `Type 2` at `V`: a refinement of `V` to `Type 3` fits where `V`'s type holds it. The goal names no `V`, so the arm reads `V` as its refinement leaves it.
 const REFINED: &str = r#"
 induct /Fixed: (i: #{level = 7} Type) -> pub #{level = 8} Type
 | mk(): (#{level = 3} Type)
 end
 
-let /read: (V: ${variable}, h: #{node = InductType} /Fixed()(V)) -> V =
+let /read: (V: ${variable}, h: #{node = InductType} /Fixed()(V)) -> {} =
     (V: ${variable}, h: #{node = InductType} /Fixed()(V)) =>
-        match h: (i, s) => V | mk() => #{level = 2} Type end;
+        #{goal = {}} match h | mk() => (let y: V = #{level = 2} Type; ()) end;
 "#;
 
 /// [`REFINED`] with `Fixed` at `Type 10`, `Universe.{u} : Type (u + 2) = Type (u + 1)`, and `read` declared at `u = 8`, its variable at `${variable}`.
@@ -139,16 +139,16 @@ let /Universe: #{level = u + 2} Type =
     #{level = u + 1} Type;
 
 #{universe_context = {parameter_count = 1, constraints = [8 <= u, u <= 8]}}
-let /read: (V: ${variable}, h: #{node = InductType} /Fixed()(V)) -> V =
+let /read: (V: ${variable}, h: #{node = InductType} /Fixed()(V)) -> {} =
     (V: ${variable}, h: #{node = InductType} /Fixed()(V)) =>
-        match h: (i, s) => V | mk() => #{level = 2} Type end;
+        #{goal = {}} match h | mk() => (let y: V = #{level = 2} Type; ()) end;
 "#;
 
 /// A declared result sort that merely *reduces* to `Prop` silences the index guard that reads it syntactically.
 ///
 /// `Sort::of` decides irrelevance by reducing `result_sort`, and so do `check_signature` and `check_non_informative`. Index inversion does not: its `Prop`-valued guard — the rule that stops a proposition's constructors from being told apart, because irrelevance says they are the same value — matches `Subterm::Sort(curios_core::Sort { quality: Quality::Prop, level: _ })` on the nose. A family declared at `((s : Type 0) => s)(Prop)` is therefore a proposition to every consumer except the one whose silence is unsound.
 ///
-/// The consequence below is the vacuous-elimination route. `Two` is that family, with constructors `a` and `b`; `Held(t : Two)` has one constructor targeting `Two/a()`. Irrelevance makes `Two/a()` and `Two/b()` convertible, so `Held/mk()` inhabits `Held(Two/b())` — and then eliminating that value with *no arms at all* is accepted, because inversion clashes `Two/b()` against `Two/a()` and reports the only constructor impossible. The motive is `False`.
+/// The consequence below is the vacuous-elimination route. `Two` is that family, with constructors `a` and `b`; `Held(t : Two)` has one constructor targeting `Two/a()`. Irrelevance makes `Two/a()` and `Two/b()` convertible, so `Held/mk()` inhabits `Held(Two/b())` — and then eliminating that value with *no arms at all* is accepted, because inversion clashes `Two/b()` against `Two/a()` and reports the only constructor impossible. The goal is `False`.
 ///
 /// Without the literal-sort clause the walk would certify `let forged : False` from a value that exists. No `.crs` file can spell the sort — the surface grammar admits only the literal keywords `Type` and `Prop` after a declaration's `:` — and the elaborator builds no such entry, so only a fixture reaches it.
 ///
@@ -200,7 +200,7 @@ let /vacuous: (h: #{node = InductType} /Held()(#{node = Variant} /Two/b())) ->
     #{node = InductType}
     /False() =
     (h: #{node = InductType} /Held()(#{node = Variant} /Two/b())) =>
-        match h: (t, h2) => #{node = InductType} /False() end;
+        #{goal = #{node = InductType} /False()} match h end;
 "#,
         TWO_HELD = fill!(TWO_HELD, sort)
     ));
@@ -226,8 +226,8 @@ fn a_sole_arm_elimination_must_still_rule_out_the_constructors_it_omits() {
         r#"${PIN}
 let /forged: (p: #{node = InductType} /Pin()(1)) -> #{node = InductType} /False() =
     (p: #{node = InductType} /Pin()(1)) =>
-        #{cases = {stated = #{node = InductType} /Pin()(1)}}
-        match p: (x, x2) => #{node = InductType} /False() | yes() => Prop end;
+        #{goal = #{node = InductType} /False(), cases = {stated = #{node = InductType} /Pin()(1)}}
+        match p | yes() => Prop end;
 
 /forged(#{node = Variant} /Pin/no())
 : #{node = InductType} /False()
@@ -254,8 +254,8 @@ let /cast: (p: #{node = InductType} /Pin()(0), h: #{node = InductType} /Held()) 
     #{node = InductType}
     /Held() =
     (p: #{node = InductType} /Pin()(0), h: #{node = InductType} /Held()) =>
-        #{cases = {stated = #{node = InductType} /Pin()(0)}}
-        match p: (x, x2) => #{node = InductType} /Held() | yes() => h end;
+        #{goal = #{node = InductType} /Held(), cases = {stated = #{node = InductType} /Pin()(0)}}
+        match p | yes() => h end;
 "#,
         PIN
     ));
@@ -303,56 +303,56 @@ fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
     );
 }
 
-/// A motive that lies about its own sort must not skip the large-elimination guard.
+/// A goal that lies about its own sort must not skip the large-elimination guard.
 ///
-/// `Sort::of` classifies a stuck `match` used as a type by reading its **motive** — "its motive is the sort, which every arm shares", as the arm says. Nothing in `Sort::of` establishes that: the arms are checked against the motive only where a judgment meets the elimination, and the motive may claim whatever it likes.
+/// `Sort::of` classifies a stuck `match` used as a type by reading its **goal** — "its goal is the sort, which every arm shares", as the arm says. Nothing in `Sort::of` establishes that: the arms are checked against the goal only where a judgment meets the elimination, and the goal may claim whatever it likes.
 ///
-/// The guard is what a lie buys. `guard_large_elimination` **returns immediately when the result is not relevant** — eliminating a proposition into a proposition needs no condition. So a motive whose body is `switch i : (_) => Prop | 0 => Nat | _ => Nat` reads as `Prop` at the abstract binder, the guard would be skipped, and the very same motive *reduces to `Nat`* at the concrete index each arm is checked against, so the arms typecheck as data.
+/// The guard is what a lie buys. `guard_large_elimination` **returns immediately when the result is not relevant** — eliminating a proposition into a proposition needs no condition. So a goal `#{goal = Prop} match 0 | 0 => Nat | _ => Nat end` reads as `Prop`, the guard would be skipped, and the very same goal *reduces to `Nat`*, so the arms typecheck as data.
 ///
 /// `P` below is a two-constructor proposition, the shape the guard exists to refuse: `mk()` and `mk2()` both inhabit `P(0)`, proof irrelevance identifies them, and `extract` maps them to `7` and `9`. This is the route reached through the classifier rather than through the guard's own condition.
 ///
-/// Not reachable from a surface program: `curios-elab` builds a match's motive and checks the arms against it, so it never emits one that lies, which is why this is built here.
+/// Not reachable from a surface program: `curios-elab` builds a match's goal and checks the arms against it, so it never emits one that lies, which is why this is built here.
 ///
-/// Closed by checking the motive itself: `check_motive` types it under its real binders and requires it to land in a sort, which is Coq's `type_of_case` clause, and hands the sort it derives to the guard so nothing re-reads the claim. The lying motive does not typecheck — its arms inhabit `Type` while it states `Prop` — so the refusal names that rule rather than the guard it would bypass.
+/// Closed by checking the goal itself: `goal_sort` types it and requires it to land in a sort, which is Coq's `type_of_case` clause, and hands the sort it derives to the guard so nothing re-reads the claim. The lying goal does not typecheck — its arms inhabit `Type` while it states `Prop` — so the refusal names that rule rather than the guard it would bypass.
 ///
-/// The control is [`an_honest_motive_still_refuses_the_large_elimination`], the same module with the motive stating `Type` — where the motive is honest, the guard does fire, and the elimination is refused for the reason it should be. Together they pin that what a lie would skip is the guard, and that closing the bypass does not close the guard itself.
+/// The control is [`an_honest_goal_still_refuses_the_large_elimination`], the same module with the goal stating `Type` — where the goal is honest, the guard does fire, and the elimination is refused for the reason it should be. Together they pin that what a lie would skip is the guard, and that closing the bypass does not close the guard itself.
 #[test]
-fn a_motive_that_misreports_its_sort_does_not_skip_the_large_elimination_guard() {
+fn a_goal_that_misreports_its_sort_does_not_skip_the_large_elimination_guard() {
     let sort = "Prop";
     let verdicts = text_verdicts(&fill!(EXTRACTED, sort));
 
     assert!(
         refuses(&verdicts, Some("extract"), |error| matches!(
             error,
-            Error::NotAMotive { .. }
+            Error::NotAGoal { .. }
         )),
         "the certifier eliminated a two-constructor proposition into `Nat`: {verdicts:?}",
     );
 }
 
-/// The control: the identical module whose motive states the `Type` its arms actually have. The guard sees a relevant result and refuses, which is what proves the fixture above is about the *classifier* rather than about eliminations in general.
+/// The control: the identical module whose goal states the `Type` its arms actually have. The guard sees a relevant result and refuses, which is what proves the fixture above is about the *classifier* rather than about eliminations in general.
 #[test]
-fn an_honest_motive_still_refuses_the_large_elimination() {
+fn an_honest_goal_still_refuses_the_large_elimination() {
     let sort = "Type";
     let verdicts = text_verdicts(&fill!(EXTRACTED, sort));
 
     assert!(
         refuses(&verdicts, Some("extract"), |error| *error
             == Error::LargeElimination(global("P"))),
-        "the guard did not fire even on an honest motive: {verdicts:?}",
+        "the guard did not fire even on an honest goal: {verdicts:?}",
     );
 }
 
-/// A motive is checked even where the elimination cannot run.
+/// A goal is checked even where the elimination cannot run.
 ///
-/// `check_induct_arms` skips the large-elimination guard for a vacuous elimination — no arms, no catch-all — and the reason is good: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The question this fixture settles is whether the *motive* clause inherits that skip.
+/// `check_induct_arms` skips the large-elimination guard for a vacuous elimination — no arms, no catch-all — and the reason is good: the coverage loop must then prove *every* constructor impossible at the scrutinee's indices, so the eliminated instance is uninhabited and discharging it into a relevant result leaks nothing. The question this fixture settles is whether the *goal* clause inherits that skip.
 ///
-/// It does not, and the reason is not an exploit: no route from a vacuous elimination to a forged term is known, and the honest reading of that is the weak one — an attempt failed, which is not a proof that none exists. What makes the clause unconditional is that `infer` reads the elimination's **type** off the motive and hands it to the caller whether or not the elimination can run — so a motive nothing validated means a term whose type nothing validated, and `Sort::of` will classify it downstream. The module below is a vacuous elimination at an uninhabited `Held(Two/b())`, whose motive states `Prop` over arms inhabiting `Type`. What keeps the fixture pointed at the motive is the order `check` and `infer` run in, not the shape of the definition around it — see the note at the definition.
+/// It does not, and the reason is not an exploit: no route from a vacuous elimination to a forged term is known, and the honest reading of that is the weak one — an attempt failed, which is not a proof that none exists. What makes the clause unconditional is that `infer` reads the elimination's **type** off the goal and hands it to the caller whether or not the elimination can run — so a goal nothing validated means a term whose type nothing validated, and `Sort::of` will classify it downstream. The module below is a vacuous elimination at an uninhabited `Held(Two/b())`, whose goal states `Prop` over arms inhabiting `Type`. What keeps the fixture pointed at the goal is the order `check` and `infer` run in, not the shape of the definition around it — see the note at the definition.
 ///
-/// It also costs nothing. The clause sits in [`check_cases`](crate::infer) above the dispatch, where every `Cases` form shares one `motive` binding, so *not* running it here would mean pushing it down into `check_induct_arms`, guarding it with the vacuous condition, and duplicating it into the three intrinsic-carrier arms. Unconditional is the cheap implementation; the skip would be the deliberate exception.
+/// It also costs nothing. The clause sits in [`check_cases`](crate::infer) above the dispatch, where every `Cases` form shares one `goal` binding, so *not* running it here would mean pushing it down into `check_induct_arms`, guarding it with the vacuous condition, and duplicating it into the three intrinsic-carrier arms. Unconditional is the cheap implementation; the skip would be the deliberate exception.
 #[test]
-fn a_vacuous_elimination_still_has_its_motive_checked() {
-    // `Two : Type 0`, so `a` and `b` genuinely clash and the elimination really is vacuous; `Held : (t : Two) -> Prop | mk() : (Two/a())`, a proposition, so the guard would be in play. The codomain is honest, and the ordering is what keeps this about the motive: `check` reaches `infer` before it can subsume, and `infer` runs `check_cases` — hence the motive clause — before the result is compared.
+fn a_vacuous_elimination_still_has_its_goal_checked() {
+    // `Two : Type 0`, so `a` and `b` genuinely clash and the elimination really is vacuous; `Held : (t : Two) -> Prop | mk() : (Two/a())`, a proposition, so the guard would be in play. The codomain is honest, and the ordering is what keeps this about the goal: `check` reaches `infer` before it can subsume, and `infer` runs `check_cases` — hence the goal clause — before the result is compared.
     let verdicts = text_verdicts(
         r#"
 induct /Two: pub Type
@@ -368,16 +368,16 @@ let /vacuous: (
     n: #NatType,
     s: #{node = InductType} /Held()(#{node = Variant} /Two/b())) -> #NatType =
     (n: #NatType, s: #{node = InductType} /Held()(#{node = Variant} /Two/b())) =>
-        match s: (t, z) => match n: (k) => Prop | 0 => #NatType | _ => #NatType end end;
+        #{goal = #{goal = Prop} match n | 0 => #NatType | _ => #NatType end} match s end;
 "#,
     );
 
     assert!(
         refuses(&verdicts, Some("vacuous"), |error| matches!(
             error,
-            Error::NotAMotive { .. }
+            Error::NotAGoal { .. }
         )),
-        "a vacuous elimination carried a motive nothing validated: {verdicts:?}",
+        "a vacuous elimination carried a goal nothing validated: {verdicts:?}",
     );
 }
 
@@ -385,7 +385,7 @@ let /vacuous: (
 ///
 /// This crate has two ways to answer what sort a type has, and only one of them checks anything: `infer_sort` types a former's parts, `Sort::of` classifies them. `curios-cert/README.md` says the lookup is reached only where typing has run, and that sentence is a grep rather than a claim — a position reaching the classifier where the judgment belongs is the defect, and it can arrive at any position: a nominal occurrence's arguments, a type former's parts, a `Prop`-sorted declaration's domains.
 ///
-/// A stuck `match` is what tells the two apart, because it is the one shape in Core that *states* its own sort instead of having one derived: `Sort::of` reads the motive, and the motive is a claim the term makes about itself. Where the judgment runs, `infer` reaches `check_motive` and the arms are checked against the motive, so `match b : Prop | false => Nat | true => Nat end` is refused by the arm — `Nat` at `Type 0` against the `Prop` the motive claims. Where only the classifier runs, that same term reads as a proposition and carries a `Nat`, which is the forgery [`a_proposition_may_not_carry_a_computed_relevant_field`] derives `False` from.
+/// A stuck `match` is what tells the two apart, because it is the one shape in Core that *states* its own sort instead of having one derived: `Sort::of` reads the goal, and the goal is a claim the term makes about itself. Where the judgment runs, `infer` reaches `goal_sort` and the arms are checked against the goal, so `#{goal = Prop} match b | false => Nat | true => Nat end` is refused by the arm — `Nat` at `Type 0` against the `Prop` the goal claims. Where only the classifier runs, that same term reads as a proposition and carries a `Nat`, which is the forgery [`a_proposition_may_not_carry_a_computed_relevant_field`] derives `False` from.
 ///
 /// So the table below is one probe per position, each refused by that arm mismatch and by nothing else. The diagnostic is asserted rather than the mere presence of a verdict, because most of these types are uninhabitable while the lie stands: a body-driven refusal would name the body's own type and would pass a test that only counted verdicts.
 ///
@@ -393,9 +393,9 @@ let /vacuous: (
 ///
 /// A declaration's own domains are the seventh position and are not repeated here; [`a_proposition_may_not_carry_a_computed_relevant_field`] holds that one, and holds it with the derivation rather than with the position alone.
 #[test]
-fn no_type_position_admits_a_lying_motive() {
-    // `match b: (x) => Prop | false => Nat | true => Nat end` states a proposition and computes `Nat`, a type.
-    let lying = "match b: (x2) => Prop | false => #NatType | true => #NatType end";
+fn no_type_position_admits_a_lying_goal() {
+    // `match b | false => Nat | true => Nat end` states a proposition and computes `Nat`, a type.
+    let lying = "#{goal = Prop} match b | false => #NatType | true => #NatType end";
     for (position, text) in [
         (
             "a function type's domain",
@@ -431,7 +431,7 @@ fn no_type_position_admits_a_lying_motive() {
                     if matches!(&***inferred, Subterm::Sort(curios_core::Sort { quality: Quality::Type, level: _ }))
                         && matches!(&***expected, Subterm::Sort(curios_core::Sort { quality: Quality::Prop, level: _ }))
             )),
-            "{position} classified a lying motive instead of typing it: {verdicts:?}",
+            "{position} classified a lying goal instead of typing it: {verdicts:?}",
         );
     }
 }
@@ -484,7 +484,7 @@ let /read: (
             #{node = InductType, universes = {levels = [0]}}
             /Ixd(#NatType)(
                 #{node = Variant, universes = {levels = [1]}} /Wrap/wrap(@#NatType, 3))) =>
-        match x: (i, s) => #NatType${arms} end;
+        #{goal = #NatType} match x${arms} end;
 "#,
             arms
         ))
@@ -510,8 +510,8 @@ fn a_metavariable_the_match_gate_reads_as_closed_is_still_refused() {
     let verdicts = text_verdicts(&fill!(
         r#"${PINNED}
 let /bad: #{node = InductType} /False() =
-    #{cases = {stated = #{node = InductType} /Pinned()(0, 1)}}
-    match #{id = 0, origin = Hole} ?: (x2, x3, x4) => #{node = InductType} /False()
+    #{goal = #{node = InductType} /False(), cases = {stated = #{node = InductType} /Pinned()(0, 1)}}
+    match #{id = 0, origin = Hole} ?
     | mk(x) => Prop
     end;
 "#,

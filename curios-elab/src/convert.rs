@@ -30,9 +30,7 @@ mod test_support;
 mod tests;
 
 use {
-    super::{
-        Context, applied_head, check, infer, reduce, reduce_forced, unfold_rec, unfold_rec_apply,
-    },
+    super::{Context, applied_head, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply},
     crate::{
         Declined, Error, Occurrence, Scoped, locals_outside_spines, metavar_origins,
         metavar_spines, named_members, read_outside_spines, zonk_solved_term_metas,
@@ -42,10 +40,10 @@ use {
     curios_core::{
         Advance, Apply, Atom, Bound, Carrier, Cases, Cost, Cursor, Exhaustion, Extent, Families,
         Free, Func, FuncType, Global, InductInstance, InductType, Instance, Intrinsic, Level,
-        Lockstep, Many, Match, MatchResult, Mentions, Metavar, MetavarId, MetavarOrigin, Paired,
-        Probe, Proj, Quality, Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, Two, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, Universes, Variance, Variant, paired,
+        Lockstep, Match, Mentions, Metavar, MetavarId, MetavarOrigin, Paired, Probe, Proj, Quality,
+        Rec, ReduceError, Scope, Sort, Step, Struct, StructType, Subterm, Telescope, Term, Tuple,
+        TupleType, Two, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseError, Universes, Variance, Variant, paired,
     },
     std::{
         collections::{HashMap, HashSet, VecDeque},
@@ -624,58 +622,6 @@ impl Convert {
         })
     }
 
-    /// A motive's binders, opened as elaboration opens them where it types the motive: the family's index domains and then the scrutinee at the family over those binders, or the scrutinee's own type for a carrier that has no index. Where no lookup typed the scrutinee, or the motive binds another count than its family states, they carry no type. The certifier opens a motive's the same way.
-    fn motive_binders(
-        &mut self,
-        context: &mut Context,
-        scrutinee: Option<&Term>,
-        arity: usize,
-    ) -> Result<Vec<Term>, ReduceError> {
-        let untyped = |convert: &mut Self, context: &mut Context| {
-            (0..arity)
-                .map(|_| Term::free_var(&convert.opening(context, None, None)))
-                .collect::<Vec<_>>()
-        };
-
-        match scrutinee.map(|type_| (type_, &**type_)) {
-            Some((
-                _,
-                Subterm::InductType(InductType {
-                    name,
-                    universes,
-                    params,
-                    ..
-                }),
-            )) => {
-                let Some(indices) =
-                    declared_facet(context, name, universes, params, |at| at.indices_at(params))?
-                else {
-                    return Ok(untyped(self, context));
-                };
-                if indices.len() + 1 != arity {
-                    return Ok(untyped(self, context));
-                }
-
-                let (mut opened, ()) = self.open_telescope(context, &indices)?;
-                let over_them =
-                    Term::induct_type_at(*name, universes.clone(), params.clone(), opened.clone());
-                opened.push(Term::free_var(&self.opening(
-                    context,
-                    None,
-                    Some(over_them),
-                )));
-
-                Ok(opened)
-            }
-            Some((type_, _)) if arity == 1 => Ok(vec![Term::free_var(&self.opening(
-                context,
-                None,
-                Some(type_.clone()),
-            ))]),
-            _ => Ok(untyped(self, context)),
-        }
-    }
-
     /// A cons arm's binders, at the carrier's own domains.
     fn cons_binders(&mut self, context: &mut Context, domains: Vec<Term>) -> Vec<Term> {
         domains
@@ -822,7 +768,7 @@ impl Convert {
 
     /// The relation's own rules, for a problem at below, both sides read forced as the certifier's `subsumes` reads them: two sorts of one quality add `lower ≤ upper`, and two function types of one plicity vector pose each domain as an equation and their codomains at below. Answers whether they decided the problem. A `Prop` against a `Type` is none of them, so it goes on as the equation it is not.
     ///
-    /// **A sort left to inference takes the quality of the first sort it meets.** The sort of a type the elaborator left to inference — an unannotated binder's, a motive's result, a parked term's — has a quality nothing has stated ([`UniverseMutation::fresh_sort`](crate::UniverseMutation::fresh_sort)), and holding it to a `Prop` or to a `Type` solves it ([`Context::same_quality`]), as holding it to another such sort makes the two one. The certifier has no such rule and needs none: a quality still open where its declaration closes is a type's, so no elaborated term holds one.
+    /// **A sort left to inference takes the quality of the first sort it meets.** The sort of a type the elaborator left to inference — an unannotated binder's, the goal of a match nothing expects a type of, a parked term's — has a quality nothing has stated ([`UniverseMutation::fresh_sort`](crate::UniverseMutation::fresh_sort)), and holding it to a `Prop` or to a `Type` solves it ([`Context::same_quality`]), as holding it to another such sort makes the two one. The certifier has no such rule and needs none: a quality still open where its declaration closes is a type's, so no elaborated term holds one.
     ///
     /// Any other pair is the equation it is, taken from its written spelling through every step an equation takes: that is sufficient for a subsumption, and it is the whole of one wherever neither side can come to a sort or a function type. A problem those steps leave waiting on a metavariable keeps the relation it was asked at, so it resumes here.
     fn decide_below(
@@ -1443,7 +1389,7 @@ impl Convert {
         })
     }
 
-    /// Two stuck eliminations, part by part. The motive's and the arms' binders are opened at the types their position gives them, read off the left elimination's scrutinee, which the right one's is posed as equal to: a constructor's arm at its telescope over the scrutinee's parameters, a cons arm at its carrier's domains ([`Convert::cons_binders`]), a motive's as [`Convert::motive_binders`] opens them. So a proof an arm binds is one where the arm's body is compared, as it is in the certifier. Where no lookup types the scrutinee, or its family states no constructor of the arm's arity, the binders carry no type. An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
+    /// Two stuck eliminations, part by part. The arms' binders are opened at the types their position gives them, read off the left elimination's scrutinee, which the right one's is posed as equal to: a constructor's arm at its telescope over the scrutinee's parameters, and a cons arm at its carrier's domains ([`Convert::cons_binders`]). So a proof an arm binds is one where the arm's body is compared, as it is in the certifier. Where no lookup types the scrutinee, or its family states no constructor of the arm's arity, the binders carry no type. An arm's body is compared at `Type`: with its binders typed, a lookup reads what a type directs between two neutrals in it, a literal opens its own eta, and two literals are compared by their parts.
     fn compare_match(
         &mut self,
         context: &mut Context,
@@ -1471,33 +1417,7 @@ impl Convert {
             _ => return Ok(false),
         };
 
-        // A motive's arity is part of its shape — 1 except for an annotated inductive-match motive (pattern binders then the scrutinee); different arities are structurally distinct. One source match reaches both forms: written over a variable it is an ambient goal, and that goal substituted at an expression — a definition's `match o` unfolded at `o := f(x)` — meets the family the same match elaborates to where it was written over `f(x)`. A family at the scrutinee itself *is* the elimination's type, so the two results compare at that instance.
-        match (this.result, that.result) {
-            (MatchResult::Family(this_motive), MatchResult::Family(that_motive)) => {
-                if this_motive.arity() != that_motive.arity() {
-                    return Ok(false);
-                }
-
-                let labels =
-                    self.motive_binders(context, scrutinee.as_ref(), this_motive.arity())?;
-                let label_refs = labels.iter().collect::<Vec<_>>();
-                self.enqueue(
-                    Term::type_ground(),
-                    this_motive.open(&label_refs),
-                    that_motive.open(&label_refs),
-                );
-            }
-            (MatchResult::Ambient(this_goal), MatchResult::Ambient(that_goal)) => {
-                self.enqueue(Term::type_ground(), this_goal, that_goal);
-            }
-            (MatchResult::Family(motive), MatchResult::Ambient(goal))
-            | (MatchResult::Ambient(goal), MatchResult::Family(motive)) => {
-                let Some(at_head) = family_at_head(context, &motive, &head)? else {
-                    return Ok(false);
-                };
-                self.enqueue(Term::type_ground(), at_head, goal);
-            }
-        }
+        self.enqueue(Term::type_ground(), this.goal, that.goal);
 
         match (this.cases, that.cases) {
             (
@@ -1541,7 +1461,7 @@ impl Convert {
                 Ok(true)
             }
 
-            // The pattern is elaboration-time data, fully reflected in the motive scope once checked — convertibility ignores it. A catch-all stands for each constructor its own arms do not name, so it is compared with the arm the other writes for it ([`paired`]).
+            // The pattern is elaboration-time data, fully reflected in the arm's scope once checked — convertibility ignores it. A catch-all stands for each constructor its own arms do not name, so it is compared with the arm the other writes for it ([`paired`]).
             (
                 Cases::Induct {
                     cases: this_cases,
@@ -2894,7 +2814,7 @@ impl Convert {
                 continue;
             }
 
-            // A problem that must park does so under its *raw* spelling. The reduced forms applied the live frame's counterfactual refinements and any already-solved motive, so parking them loses exactly what a retry needs: the watch set misses the metavariables only the raw spelling mentions (an unsolved motive heading the expected type), and the refinement-suppression analysis can no longer recover the solvable unrefined spelling — a candidate instantiated through an arm refinement is well-typed only under it, which re-validation rightly rejects forever. The retry re-reduces the raw problem under its restored frame, so nothing is lost by deferring the reduction.
+            // A problem that must park does so under its *raw* spelling. The reduced forms applied the live frame's counterfactual refinements and any already-solved goal, so parking them loses exactly what a retry needs: the watch set misses the metavariables only the raw spelling mentions (an unsolved goal heading the expected type), and the refinement-suppression analysis can no longer recover the solvable unrefined spelling — a candidate instantiated through an arm refinement is well-typed only under it, which re-validation rightly rejects forever. The retry re-reduces the raw problem under its restored frame, so nothing is lost by deferring the reduction.
             let raw_problem = |type_: &Term| Problem {
                 type_: type_.clone(),
                 this: this_raw.clone(),
@@ -3140,11 +3060,11 @@ impl Convert {
                     this.name == that.name
                         && Self::compare_universes(context, &this.universes, &that.universes)?
                 }
-                // Same-kind matches compare structurally; cross-kind pairs fall through to `eta_expand_neutral` (e.g. proof irrelevance at unit). One gate: a match stuck on a *flex* scrutinee decomposes against another match only when their motives and case tables are syntactically identical — then the two are instances of one source match and the scrutinee problem is an exact congruence (what solves `?b1 := yh` when `xor3(xh, ?b1, c)` meets `xor3(xh, yh, c)`). With differing arms the pair may be layer-misaligned — reduction carried the rigid-scrutinee side past the layer the flex side is stuck at (`xor3(xh, false, c)` reduces through its `b`-match while `xor3(xh, ?b1, c)` cannot) — and the scrutinee problem would solve the metavariable with the wrong layer's scrutinee. Such a pair falls through, and the blocked-on-metavariable path below parks it until the scrutinee's metavariable resolves.
+                // Same-kind matches compare structurally; cross-kind pairs fall through to `eta_expand_neutral` (e.g. proof irrelevance at unit). One gate: a match stuck on a *flex* scrutinee decomposes against another match only when their goals and case tables are syntactically identical — then the two are instances of one source match and the scrutinee problem is an exact congruence (what solves `?b1 := yh` when `xor3(xh, ?b1, c)` meets `xor3(xh, yh, c)`). With differing arms the pair may be layer-misaligned — reduction carried the rigid-scrutinee side past the layer the flex side is stuck at (`xor3(xh, false, c)` reduces through its `b`-match while `xor3(xh, ?b1, c)` cannot) — and the scrutinee problem would solve the metavariable with the wrong layer's scrutinee. Such a pair falls through, and the blocked-on-metavariable path below parks it until the scrutinee's metavariable resolves.
                 (Subterm::Match(this), Subterm::Match(that))
                     if mem::discriminant(&this.cases) == mem::discriminant(&that.cases)
                         && ((!flex_scrutinee(&this.head) && !flex_scrutinee(&that.head))
-                            || (this.cases == that.cases && this.result == that.result)) =>
+                            || (this.cases == that.cases && this.goal == that.goal)) =>
                 {
                     self.compare_match(context, this, that)?
                 }
@@ -3678,30 +3598,4 @@ fn level_question(
         Some(_) => LevelQuestion::Blocked,
         None => LevelQuestion::Distinct,
     })
-}
-
-/// A family opened at the scrutinee's actual indices and the scrutinee — the elimination's own type. An unindexed family binds the scrutinee alone; an indexed one is opened at the indices the scrutinee's type carries, read by inference as a [`Probe`]. `None` where the scrutinee's type has no reading, which conversion answers as not convertible: incomplete, never unsound.
-fn family_at_head(
-    context: &mut Context,
-    motive: &Scope<Many>,
-    head: &Term,
-) -> Result<Option<Term>, ReduceError> {
-    let mut arguments = Vec::with_capacity(motive.arity());
-    if motive.arity() > 1 {
-        let Some(head_type) = infer(context, head).probed_refusal()? else {
-            return Ok(None);
-        };
-        let Some(head_type) = reduce_forced(context, head_type).probed()? else {
-            return Ok(None);
-        };
-        if let Subterm::InductType(InductType { indices, .. }) = &*head_type {
-            arguments.extend(indices.iter().cloned());
-        }
-    }
-    arguments.push(head.clone());
-    if arguments.len() != motive.arity() {
-        return Ok(None);
-    }
-    let refs = arguments.iter().collect::<Vec<_>>();
-    Ok(Some(motive.open(&refs)))
 }

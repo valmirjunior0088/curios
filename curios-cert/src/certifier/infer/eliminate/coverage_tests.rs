@@ -7,7 +7,7 @@ use {
     curios_core::Term,
 };
 
-/// The elimination over `Ix` at `index` whose motive is `Nat` and whose arms are `arms`, opened in `certifier` with `Ix` declared beside the hypotheses `binders`.
+/// The elimination over `Ix` at `index` whose goal is `Nat` and whose arms are `arms`, opened in `certifier` with `Ix` declared beside the hypotheses `binders`.
 fn over_ix(certifier: &mut Certifier, binders: &str, index: &str, arms: &[&str]) -> Term {
     declare(certifier, "Ix", "i: #NatType", "Type", &[ZERO, SUCCESSOR]);
     let [matched] = under(
@@ -17,10 +17,7 @@ fn over_ix(certifier: &mut Certifier, binders: &str, index: &str, arms: &[&str])
             binders,
             ix = family_at("Ix", index)
         ),
-        &fill!(
-            "${matched},",
-            matched = eliminating("i, s", "#NatType", arms)
-        ),
+        &fill!("${matched},", matched = eliminating("#NatType", arms)),
     );
 
     matched
@@ -97,11 +94,11 @@ fn over_a_scrutinee<const N: usize>(
     )
 }
 
-/// A catch-all is checked at the motive's *scrutinee* instance — the instance the elimination is then given.
+/// A catch-all is checked at the goal's *scrutinee* instance — the instance the elimination is then given.
 ///
-/// Every other arm has a case value of its own to be checked at, and a catch-all is the one arm that does not: it binds nothing and refines no index, so the only value it can stand for is the scrutinee. `infer` reads the elimination's type off `motive.open([indices, head])`, so an arm checked at any other instance proves something other than what the elimination hands its caller.
+/// Every other arm has a case value of its own to be checked at, and a catch-all is the one arm that does not: it binds nothing and refines no index, so the only value it can stand for is the scrutinee. `infer` reads the elimination's type off its goal, so an arm checked at any other instance proves something other than what the elimination hands its caller.
 ///
-/// Opening the scrutinee binder at the family *type* `Ix(b)` instead — a type substituted where a value of that type belongs — would refuse this hypothesis at `P(b, subject)` against an expectation of `P(b, Ix(b))`. That direction fails closed, because nothing well-typed inhabits the expectation it manufactures; the direction that does not is the certifier's, which would establish nothing whatever about the scrutinee for any catch-all it accepted. The source spelling is `match t : (q) => Eq()(q, q) | a() => Eq/refl() | _ => Eq/refl() end`. The fixed prelude does not ask the question — every catch-all there has a motive that ignores its scrutinee — so only a fixture does.
+/// Opening the scrutinee binder at the family *type* `Ix(b)` instead — a type substituted where a value of that type belongs — would refuse this hypothesis at `P(b, subject)` against an expectation of `P(b, Ix(b))`. That direction fails closed, because nothing well-typed inhabits the expectation it manufactures; the direction that does not is the certifier's, which would establish nothing whatever about the scrutinee for any catch-all it accepted. The source spelling is `match t : (q) => Eq()(q, q) | a() => Eq/refl() | _ => Eq/refl() end`. The fixed prelude does not ask the question — every catch-all there has a goal that ignores its scrutinee — so only a fixture does.
 ///
 /// [`a_catch_all_at_another_value_of_the_family_is_refused`] is the paired control: closing this by not checking the catch-all at all would satisfy the test above and nothing else.
 #[test]
@@ -112,7 +109,7 @@ fn a_catch_all_sees_its_own_scrutinee() {
         "w: /P(b, subject)",
         &fill!(
             "${matched}, /P(b, subject)",
-            matched = eliminating("i, s", "/P(i, s)", &["_ => w"])
+            matched = eliminating("/P(b, subject)", &["_ => w"])
         ),
     );
 
@@ -130,7 +127,7 @@ fn a_catch_all_at_another_value_of_the_family_is_refused() {
         &fill!("other: ${ix}, w: /P(b, other)", ix = family_at("Ix", "b")),
         &fill!(
             "${matched}, /P(b, subject)",
-            matched = eliminating("i, s", "/P(i, s)", &["_ => w"])
+            matched = eliminating("/P(b, subject)", &["_ => w"])
         ),
     );
 
@@ -140,7 +137,7 @@ fn a_catch_all_at_another_value_of_the_family_is_refused() {
     assert_eq!(*expected, at_the_scrutinee);
 }
 
-/// An arm is checked against the motive at *its own* constructor's index target, so a body of the wrong type is refused even where the elimination's overall type is fine.
+/// An arm is checked against the goal at *its own* constructor's index target, so a body of the wrong type is refused even where the elimination's overall type is fine.
 #[test]
 fn an_arm_body_of_the_wrong_type_is_refused() {
     let mut certifier = certifier();
@@ -156,7 +153,7 @@ fn an_arm_body_of_the_wrong_type_is_refused() {
         &fill!("subject: ${flag}", flag = family_at("Flag", "0")),
         &fill!(
             "${matched},",
-            matched = eliminating("i, s", "#NatType", &["on() => 1", "off() => true"])
+            matched = eliminating("#NatType", &["on() => 1", "off() => true"])
         ),
     );
 
@@ -182,7 +179,7 @@ fn an_arm_of_the_wrong_payload_arity_is_refused() {
         &fill!("subject: ${wrapped}", wrapped = family_at("Wrapped", "0")),
         &fill!(
             "${matched},",
-            matched = eliminating("i, s", "#NatType", &["mk() => 1"])
+            matched = eliminating("#NatType", &["mk() => 1"])
         ),
     );
 

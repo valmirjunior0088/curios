@@ -10,7 +10,7 @@ fn list_spread_concats_segments() {
         let xs : List(Nat) = [2, 3];
         let ys : List(Nat) = [1, ..xs, 4];
         let digits_of(l : List(Nat)) -> Nat =
-            match l : (_) => Nat
+            match l
             | [] => 0
             | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
             end;
@@ -32,7 +32,7 @@ fn list_spread_identity_and_multi() {
         let ys : List(Nat) = [..xs];
         let zs : List(Nat) = [..ys, ..ys];
         let digits_of(l : List(Nat)) -> Nat =
-            match l : (_) => Nat
+            match l
             | [] => 0
             | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
             end;
@@ -97,7 +97,7 @@ fn list_spread_operand_hoists_bangs() {
         let prog() -> Io({}) =
             let ys : List(Nat) = [1, ..Io/pure([2, 3])!, 4];
             let digits_of(l : List(Nat)) -> Nat =
-                match l : (_) => Nat
+                match l
                 | [] => 0
                 | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
                 end;

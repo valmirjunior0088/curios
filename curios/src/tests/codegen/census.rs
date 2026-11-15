@@ -1291,11 +1291,11 @@ use /std/{Str, Nat, Map, Toml, Option, Result, Io};
 let entry() -> /std/Io({}) =
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
-    match input: (_) => Io({})
+    match input
     | some(bytes) =>
-        match Str/of_bytes(bytes): (_) => Io({})
+        match Str/of_bytes(bytes)
         | success(s) =>
-            match Toml/decode(s): (_) => Io({})
+            match Toml/decode(s)
             | success(m) => /std/print(Nat/to_str(Map/len(m)))
             | failure(e) => /std/print(Toml/Error/to_str(e))
             end
@@ -1387,28 +1387,28 @@ fn death_birth_classifier_pins_the_canonical_pair() {
         | cons(Nat, Chain)
         end
         let step(rest: Chain, acc: Chain) -> Chain =
-            match rest: (_) => Chain
+            match rest
             | nil() => acc
             | cons(v, tail) => step(tail, Chain/cons(v + 1, acc))
             end;
         let build(n: Nat, acc: Chain) -> Chain =
-            match n: (_) => Chain
+            match n
             | 0 => acc
             | m + 1 => build(m, Chain/cons(n, acc))
             end;
         let total(c: Chain, acc: Nat) -> Nat =
-            match c: (_) => Nat
+            match c
             | nil() => acc
             | cons(v, tail) => total(tail, (acc + v) % 1000003)
             end;
         let entry() -> /std/Io({}) =
             let arguments = /std/Proc/args()!;
             let input = /std/List/try_get(arguments, 1);
-            match input: (_) => Io({})
+            match input
             | some(bytes) =>
-                match Str/of_bytes(bytes): (_) => Io({})
+                match Str/of_bytes(bytes)
                 | success(s) =>
-                    match Nat/of_str(Str/trim(s)): (_) => Io({})
+                    match Nat/of_str(Str/trim(s))
                     | some(n) => /std/print(Nat/to_str(total(step(build(n, Chain/nil()), Chain/nil()), 0)))
                     | none() => /std/print("bad input")
                     end

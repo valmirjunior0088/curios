@@ -15,9 +15,9 @@ use {
     curios_common::{Plicity, recurse},
     curios_core::{
         Apply, Argument, Arity, Atom, Bound, CalleeId, Carrier, Cases, Field, Free, Func, FuncType,
-        Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Match,
-        MatchResult, Mention, Method, Nat, Proj, Rec, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Transient, TupleType, Two, Visit, WitnessOrigin,
+        Global, InductArm, InductType, Infix, Instance, Intrinsic, Let, LetBinding, Match, Mention,
+        Method, Nat, Proj, Rec, Scope, Struct, StructType, Subterm, Telescope, Term, Transient,
+        TupleType, Two, Visit, WitnessOrigin,
     },
     curios_num::Binary,
     std::{
@@ -592,23 +592,15 @@ impl Writing {
         rebuilt(term, Subterm::Rec(Rec::new(group, tail)))
     }
 
-    /// A match: its scrutinee and result walked, and each arm walked in a frame of its own under the equations elaboration typed it under.
+    /// A match: its scrutinee and goal walked, and each arm walked in a frame of its own under the equations elaboration typed it under.
     fn match_(
         &mut self,
         context: &mut Context,
         term: &Term,
-        Match {
-            head,
-            result,
-            cases,
-        }: &Match,
+        Match { head, goal, cases }: &Match,
     ) -> Term {
         let walked_head = self.term(context, head);
-        let result = match result {
-            // A motive's binders are the scrutinee's indices and the scrutinee, crossed at no type.
-            MatchResult::Family(motive) => MatchResult::Family(self.crossed(context, motive)),
-            MatchResult::Ambient(goal) => MatchResult::Ambient(self.term(context, goal)),
-        };
+        let goal = self.term(context, goal);
         let opened = self.released(head);
 
         let cases = match cases {
@@ -660,7 +652,7 @@ impl Writing {
             term,
             Subterm::Match(Match {
                 head: walked_head,
-                result,
+                goal,
                 cases,
             }),
         )
@@ -874,19 +866,6 @@ impl Writing {
         self.entered.truncate(before);
 
         arm
-    }
-
-    /// A scope crossed with a variable of no type for each of its binders: a question about one is unanswered, and nothing it stands under is an equation.
-    fn crossed<A: Arity>(&mut self, context: &mut Context, scope: &Scope<A>) -> Scope<A> {
-        let before = self.entered.len();
-        for _ in 0..scope.arity() {
-            let binder = context.fresh(None);
-            self.entered.push(Term::free_var(&binder));
-        }
-        let scope = scope.map_body(|body| self.term(context, body));
-        self.entered.truncate(before);
-
-        scope
     }
 
     /// Any other node: each child term walked where it stands, under a variable of no type for every binder between the node and it, and the node rebuilt over what came back where a child changed.
