@@ -200,6 +200,24 @@ impl Scope {
         self.local(name).is_some_and(|local| local.value.is_some())
     }
 
+    /// Whether `term` names a `let`-bound local, read off its memoized mentions: a term [`Scope::by_value`] left names none.
+    pub fn names_bound(&self, term: &Term) -> bool {
+        self.bound != 0
+            && term.has_local_free()
+            && term.mentions().locals().any(|name| self.binds(name))
+    }
+
+    /// Whether `term` names a `let`-bound local a graded call reads by value: a term [`Scope::graded`] left names none but a local an arm's index inversion solved.
+    pub fn names_ungraded(&self, term: &Term) -> bool {
+        self.bound != 0
+            && term.has_local_free()
+            && term.mentions().locals().any(|name| {
+                self.local(name)
+                    .and_then(|local| local.value.as_ref())
+                    .is_some_and(|value| !value.solved)
+            })
+    }
+
     /// Whether `term` names a `let`-bound local whose value enclosed a group that does not descend.
     pub fn names_partial(&self, term: &Term) -> bool {
         self.bound != 0
@@ -282,6 +300,10 @@ impl Scope {
     ///
     /// Keying through `project_erased_universes` would rest on the premise that a universe argument cannot affect what a term computes to, and the premise is false: Core has no eliminator over levels, but `Type u` embeds one *in a term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two instances — and that projection rebuilds every `Type` payload at one ground level, because it is written for the Core-to-ANF hand-off where levels really are irrelevant. Read as a quotient by definitional equality it identifies `Type 0` with `Type 1`, which is the universe hierarchy's whole content. See `crate::recheck::universes_tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`.
     pub fn refine(&mut self, scrutinee: Term, resolved: Option<Term>, value: Term) -> bool {
+        debug_assert!(
+            !self.names_bound(&scrutinee),
+            "a `let`-bound local reached a case equation by name"
+        );
         let recorded = records_case_equation(&scrutinee);
         if recorded {
             self.refinements.push(Refinement {

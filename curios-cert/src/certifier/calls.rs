@@ -295,6 +295,9 @@ impl Certifier<'_> {
             .iter()
             .map(|argument| self.graded(argument))
             .collect::<Vec<_>>();
+        for argument in &arguments {
+            self.debug_assert_graded(argument);
+        }
 
         // Taken out for the grading and put back: the grader reads the context while reducing through this certifier, and nothing it reduces opens an arm.
         let context = mem::take(&mut self.calls.context);
@@ -344,6 +347,9 @@ impl Certifier<'_> {
             .iter()
             .map(|argument| self.graded(argument))
             .collect::<Vec<_>>();
+        for argument in &arguments {
+            self.debug_assert_graded(argument);
+        }
         let context = mem::take(&mut self.calls.context);
         let handed = handed(self, &context, &params, callee, &arguments);
         self.calls.context = context;

@@ -145,6 +145,9 @@ fn compare(
     this: &Term,
     that: &Term,
 ) -> Result<bool, Error> {
+    for term in [type_, this, that] {
+        certifier.debug_assert_by_value(term, "conversion");
+    }
     recurse(|| {
         certifier.spend(Cost::STEP)?;
 

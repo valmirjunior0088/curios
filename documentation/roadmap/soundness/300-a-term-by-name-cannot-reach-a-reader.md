@@ -1,6 +1,6 @@
 # A term by name cannot reach a reader
 
-The certifier's readers take their terms by a type only reading by value makes, so a term that names a `let`-bound local is refused where it would be handed to one, by the compiler, rather than met by an assertion where a reader takes it or read as written. Its next step is stage 1, a ready delivery, once the assertions [this area's findings](000-findings.md) hold at every reader have landed.
+The certifier's readers take their terms by a type only reading by value makes, so a term that names a `let`-bound local is refused where it would be handed to one, by the compiler, rather than met by an assertion where a reader takes it or read as written. Its next step is stage 1, a ready delivery.
 
 ## What this builds on
 
@@ -11,7 +11,7 @@ The certifier's readers take their terms by a type only reading by value makes, 
 
 **The rule is held by where a term is, not by what it is.** A term by value and a term by name are one `curios_core::Term`. Each reader keeps the rule at its entry by a convention: `Certifier::reading` raises a flag under which `Certifier::by_value` hands its term back as it is, `Certifier::naming` lowers it for a `let`'s tail, and an entry reached from typing unfolds its term and raises the flag — `whnf`, `Reducer::reduce_forced` (`curios-cert/src/certifier/whnf.rs`), `Sort::of` (`sort.rs`) and `convert` (`convert.rs`) — or calls `by_value` on every entry: an elimination's scrutinee, which keys its case equation (`eliminate::assume_case_value`); a recorded position and the type its erased half is filed under (`Certifier::record_checked`); a graded call's arguments (`calls.rs`); a recursive group, whose verdict is filed under it, a `let`'s and a group's tail type, an elimination's head and its goal (`infer.rs`). Inside the bracket a term is believed to be by value because it was reached there: a subterm, a reduct, a snapshot, a memo's answer or what a shared analysis built and handed back.
 
-**One reader checks what it is handed, and the others read it as written.** That only `step_var` asserts the rule, and of the one name it steps, is [an entry of this area's findings](000-findings.md), whose assertions land ahead of the stages below, so that what breaks the rule today is found before the type hides it.
+**Each reader checks what it is handed, and only in a build that keeps its checks.** Each reader asserts, on the term it is about to read, that it names no `let`-bound local (`Certifier::debug_assert_by_value`), and `step_var` asserts it of the one name it steps: a term by name is found where a test hands it to a reader, and one no test hands is read as written.
 
 ## Decisions
 

@@ -94,6 +94,7 @@ impl Reducer for Certifier<'_> {
             let term = self.by_value(&term);
             return self.reading(|certifier| certifier.reduce_forced(term));
         }
+        self.debug_assert_by_value(&term, "reduction");
         // A weak-head value is its own forced form, asked of no table ([`weak_head_value`]).
         if weak_head_value(&term) {
             return Ok(term);
@@ -136,6 +137,7 @@ pub fn whnf(certifier: &mut Certifier, term: Term) -> Result<Term, ReduceError> 
         let term = certifier.by_value(&term);
         return certifier.reading(|certifier| whnf(certifier, term));
     }
+    certifier.debug_assert_by_value(&term, "reduction");
 
     // The level itself, charged when it is deeper than any this judgment has reached — see `Spend::enter_level`. What it buys is that depth is bounded by the budget rather than by how much stack the host handed the process, which would otherwise be the one resource this walk consumes without being counted.
     certifier.enter_level()?;

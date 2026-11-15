@@ -100,6 +100,7 @@ impl Sort {
             let type_ = certifier.by_value(type_);
             return certifier.reading(|certifier| Sort::of(certifier, &type_));
         }
+        certifier.debug_assert_by_value(type_, "a type's classification");
         curios_profile::profile!("Sort::of");
         if let Some(sort) = certifier.sort_hit(type_) {
             return Ok(sort);

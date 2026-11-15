@@ -1212,6 +1212,22 @@ impl<'s> Certifier<'s> {
         self.scope.binds(name)
     }
 
+    /// Assert that `term`, which `reader` is about to read for more than its type, names no `let`-bound local: the check `step_var` makes of the one name it steps, made of the whole term where it arrives, so a caller that skipped its unfolding is caught there and not by what the reader answers.
+    pub(crate) fn debug_assert_by_value(&self, term: &Term, reader: &str) {
+        debug_assert!(
+            !self.scope.names_bound(term),
+            "a `let`-bound local reached {reader} by name"
+        );
+    }
+
+    /// [`Certifier::debug_assert_by_value`] for a graded call's argument, which keeps a local an arm's index inversion solved.
+    pub(crate) fn debug_assert_graded(&self, term: &Term) {
+        debug_assert!(
+            !self.scope.names_ungraded(term),
+            "a `let`-bound local reached a graded call by name"
+        );
+    }
+
     /// The `let`-bound locals in scope — see the scope's `bound_locals`.
     pub(crate) fn bound_locals(&self) -> Vec<LetBound> {
         self.scope.bound_locals()
@@ -1558,7 +1574,9 @@ impl<'s> Certifier<'s> {
 
         let erased = erased?;
         // A position is read for what its term reaches, and a `let`-bound local's name says nothing of what it stands for: the term is recorded by value, with whether a value it names enclosed a group that does not descend — the group was typed where the `let` binds it, not inside this term.
-        let position = self.positions.push(&self.by_value(term), erased);
+        let filed = self.by_value(term);
+        self.debug_assert_by_value(&filed, "a recorded position");
+        let position = self.positions.push(&filed, erased);
         if self.scope.names_partial(term) {
             self.positions.enclose_partial(position);
         }
