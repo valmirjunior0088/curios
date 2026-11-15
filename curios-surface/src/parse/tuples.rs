@@ -174,12 +174,7 @@ pub fn parse_tuple_field_prefix<'a, D: Grammar>(
                 .map(Some)
                 .or(pure(None)),
         )
-        .and_drop(
-            take_exact("=")
-                .and_drop(not_ahead("="))
-                .and_drop(not_ahead(">")),
-        )
-        .and_drop(parse_whitespace)
+        .and_drop(parse_field_equals)
         .flat_map(|(label, func_params): (&str, _)| {
             let label = label.to_string();
             match func_params {
@@ -189,6 +184,15 @@ pub fn parse_tuple_field_prefix<'a, D: Grammar>(
                 None => pure((label, None)).boxed(),
             }
         })
+        .parse(state)
+}
+
+// The `=` a labeled field's prefix ends in, guarded against `==` and `=>`.
+pub fn parse_field_equals<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
+    take_exact("=")
+        .and_drop(not_ahead("="))
+        .and_drop(not_ahead(">"))
+        .and_drop(parse_whitespace)
         .parse(state)
 }
 

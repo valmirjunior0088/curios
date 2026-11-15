@@ -106,6 +106,16 @@ fn a_witness_body_refuses_a_superclass_fill_by_name() {
         .expect("a concept literal keeps its fill");
 }
 
+/// A witness entry has no positional form, so past its label and `(` its list is the definition sugar's: a list it cannot read is refused where the list fails, and not at the label as what the body's list expects next.
+#[test]
+fn a_witness_entrys_list_is_refused_where_it_fails() {
+    let source = "satisfy Show(Nat) { show(x y) = f(x) } u";
+    let report = source.parse::<Entrypoint>().unwrap_err().format();
+    let column = source.find("y)").expect("the fixture writes it") + 1;
+    assert!(report.contains(&format!("1:{column}")), "{report}");
+    assert!(!report.contains("expected: `..`"), "{report}");
+}
+
 #[test]
 fn parse_witness_item() {
     // A premised witness: an `@` binder, a `use` premise, and the definition sugar (`cmp(a, b) = ...`).
