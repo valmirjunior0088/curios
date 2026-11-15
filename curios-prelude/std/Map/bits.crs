@@ -36,16 +36,14 @@ let place(x: Nat, y: Nat) -> Nat =
 
 -- Where `a` and `b` first differ, their bytes counted from `g`.
 let parts(a: Bytes, b: Bytes, g: Nat) -> Parted =
-    match a
-    | x[] => match b | x[] => Parted/same() | x[_, .._] => Parted/at(9 * g) end
-    | x[h, ..t] =>
-        match b
-        | x[] => Parted/at(9 * g)
-        | x[k, ..r] =>
-            match h == k
-            | true => parts(t, r, g + 1)
-            | false => Parted/at(9 * g + place(Byte/to_nat(h), Byte/to_nat(k)))
-            end
+    match (a, b)
+    | (x[], x[]) => Parted/same()
+    | (x[], x[_, .._]) => Parted/at(9 * g)
+    | (x[_, .._], x[]) => Parted/at(9 * g)
+    | (x[h, ..t], x[k, ..r]) =>
+        match h == k
+        | true => parts(t, r, g + 1)
+        | false => Parted/at(9 * g + place(Byte/to_nat(h), Byte/to_nat(k)))
         end
     end;
 
@@ -399,69 +397,59 @@ let outlasted(h: Byte, t: Bytes) -> Apart(x[h, ..t], x[], 0) =
 
 -- What `parts` answers is true of the two runs.
 let spec(a: Bytes, b: Bytes, g: Nat) -> Found(a, b, g, parts(a, b, g)) =
-    match a
-    | x[] =>
-        match b
-        | x[] => Eq/refl()
-        | x[k, ..r] => Shifted { over = proved(), apart = ended(k, r) }
-        end
-    | x[h, ..t] =>
-        match b
-        | x[] => Shifted { over = proved(), apart = outlasted(h, t) }
-        | x[k, ..r] =>
-            match h == k
-            | true =>
-                let inner = spec(t, r, g + 1);
-                Eq/subst(
-                    (y: Byte) => Found(x[h, ..t], x[y, ..r], g, parts(t, r, g + 1)),
-                    Byte/eq_of_eql(h, k, Bool/True/qed()),
-                    match parts(t, r, g + 1)
-                    | same() => Eq/cong((z: Bytes) => x[h, ..z], inner)
-                    | at(c) =>
-                        Shifted {
-                            over = proved(),
-                            apart =
-                                Eq/subst(
-                                    (p: Nat) => Apart(x[h, ..t], x[h, ..r], p),
-                                    Nat/le/antisym(
-                                        c - 9 * (g + 1) + 9,
-                                        c - 9 * g,
-                                        proved(),
-                                        proved()),
-                                    lifted(h, t, r, c - 9 * (g + 1), inner.apart)) }
-                    end)
-            | false =>
-                let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
-                let found: Sought(hn, kn, seek(hn, kn, 8)) =
-                    sought(
-                        hn,
-                        kn,
-                        8,
-                        proved(),
-                        proved(),
-                        Bool/True/qed(),
-                        (m, over, within) =>
+    match (a, b)
+    | (x[], x[]) => Eq/refl()
+    | (x[], x[k, ..r]) => Shifted { over = proved(), apart = ended(k, r) }
+    | (x[h, ..t], x[]) => Shifted { over = proved(), apart = outlasted(h, t) }
+    | (x[h, ..t], x[k, ..r]) =>
+        match h == k
+        | true =>
+            let inner = spec(t, r, g + 1);
+            Eq/subst(
+                (y: Byte) => Found(x[h, ..t], x[y, ..r], g, parts(t, r, g + 1)),
+                Byte/eq_of_eql(h, k, Bool/True/qed()),
+                match parts(t, r, g + 1)
+                | same() => Eq/cong((z: Bytes) => x[h, ..z], inner)
+                | at(c) =>
+                    Shifted {
+                        over = proved(),
+                        apart =
                             Eq/subst(
-                                (v: Nat) => Eq()(Nat/shr(hn, v), Nat/shr(kn, v)),
-                                Nat/le/antisym(8, m, over, within),
-                                Eq/trans(
-                                    Nat/eq_of_eql(Nat/shr(hn, 8), 0, spent(hn, proved())),
-                                    Eq/sym(Nat/eq_of_eql(Nat/shr(kn, 8), 0, spent(kn, proved()))))),
-                        Bool/True/qed());
-                Shifted {
-                    over = proved(),
-                    apart =
+                                (p: Nat) => Apart(x[h, ..t], x[h, ..r], p),
+                                Nat/le/antisym(c - 9 * (g + 1) + 9, c - 9 * g, proved(), proved()),
+                                lifted(h, t, r, c - 9 * (g + 1), inner.apart)) }
+                end)
+        | false =>
+            let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
+            let found: Sought(hn, kn, seek(hn, kn, 8)) =
+                sought(
+                    hn,
+                    kn,
+                    8,
+                    proved(),
+                    proved(),
+                    Bool/True/qed(),
+                    (m, over, within) =>
                         Eq/subst(
-                            (p: Nat) => Apart(x[h, ..t], x[k, ..r], p),
+                            (v: Nat) => Eq()(Nat/shr(hn, v), Nat/shr(kn, v)),
+                            Nat/le/antisym(8, m, over, within),
                             Eq/trans(
-                                Eq/sym(rungs(hn, kn)),
-                                Nat/le/antisym(
-                                    place(hn, kn),
-                                    9 * g + place(hn, kn) - 9 * g,
-                                    proved(),
-                                    proved())),
-                            within(h, k, t, r, seek(hn, kn, 8), found)) }
-            end
+                                Nat/eq_of_eql(Nat/shr(hn, 8), 0, spent(hn, proved())),
+                                Eq/sym(Nat/eq_of_eql(Nat/shr(kn, 8), 0, spent(kn, proved()))))),
+                    Bool/True/qed());
+            Shifted {
+                over = proved(),
+                apart =
+                    Eq/subst(
+                        (p: Nat) => Apart(x[h, ..t], x[k, ..r], p),
+                        Eq/trans(
+                            Eq/sym(rungs(hn, kn)),
+                            Nat/le/antisym(
+                                place(hn, kn),
+                                9 * g + place(hn, kn) - 9 * g,
+                                proved(),
+                                proved())),
+                        within(h, k, t, r, seek(hn, kn, 8), found)) }
         end
     end;
 
@@ -800,106 +788,100 @@ pub let before(
     apart: Apart(a, b, c),
     clear: Bool/Holds(Bool/not(bit(a, c))),
 ) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
-    match a
-    | x[] =>
-        match b
-        | x[] => match apart.differs end
-        | x[_, .._] => Eq/refl()
+    match (a, b)
+    | (x[], x[]) => match apart.differs end
+    | (x[], x[_, .._]) => Eq/refl()
+    | (x[_, .._], x[]) =>
+        match c
+        | 0 => match clear end
+        | _ + 1 => match Bool/false_neq_true(Eq/sym(apart.below(0, Bool/True/qed()))) end
         end
-    | x[h, ..t] =>
-        match b
-        | x[] =>
-            match c
-            | 0 => match clear end
-            | _ + 1 => match Bool/false_neq_true(Eq/sym(apart.below(0, Bool/True/qed()))) end
-            end
-        | x[k, ..r] =>
-            let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
-            match c < 9
-            | false =>
-                let same: Eq()(h, k) =
-                    Eq/cong(
-                        (n: Nat) => Nat/to_byte(n % 256),
-                        shifts(
-                            hn,
-                            kn,
-                            8,
-                            0,
-                            proved(),
-                            proved(),
-                            Bool/True/qed(),
-                            Bool/True/qed(),
-                            (m, _, under) =>
-                                agreed(h, k, t, r, m, under, apart.below(7 - m + 1, proved()))));
-                Eq/subst(
-                    (y: Byte) =>
-                        (apart: Apart(x[h, ..t], x[y, ..r], c)) -> Eq()(
-                            Bytes/ord(x[h, ..t], x[y, ..r]),
-                            Ordering/lt()),
-                    same,
-                    (apart) =>
-                        before(
-                            t,
-                            r,
-                            c - 9,
-                            lowered(h, t, r, c, apart, proved()),
-                            Eq/subst(
-                                (v: Bool) => Bool/Holds(Bool/not(v)),
-                                onward(h, t, c, proved()),
-                                clear)))(
-                    apart)
-            | true =>
-                match c
-                | 0 => match clear end
-                | i + 1 =>
-                    let under: Bool/Holds(i + 1 < 9) = proved();
-                    let next: Eq()(Nat/shr(hn, 7 - i + 1), Nat/shr(kn, 7 - i + 1)) =
-                        shifts(
-                            hn,
-                            kn,
-                            i,
-                            7 - i + 1,
-                            proved(),
-                            proved(),
-                            proved(),
-                            proved(),
-                            (m, over, within) =>
-                                agreed(h, k, t, r, m, within, apart.below(7 - m + 1, proved())));
-                    let off: Bool/Holds(Bool/not(low(hn, 7 - i) != 0)) =
+    | (x[h, ..t], x[k, ..r]) =>
+        let (hn, kn) = (Byte/to_nat(h), Byte/to_nat(k));
+        match c < 9
+        | false =>
+            let same: Eq()(h, k) =
+                Eq/cong(
+                    (n: Nat) => Nat/to_byte(n % 256),
+                    shifts(
+                        hn,
+                        kn,
+                        8,
+                        0,
+                        proved(),
+                        proved(),
+                        Bool/True/qed(),
+                        Bool/True/qed(),
+                        (m, _, under) =>
+                            agreed(h, k, t, r, m, under, apart.below(7 - m + 1, proved()))));
+            Eq/subst(
+                (y: Byte) =>
+                    (apart: Apart(x[h, ..t], x[y, ..r], c)) -> Eq()(
+                        Bytes/ord(x[h, ..t], x[y, ..r]),
+                        Ordering/lt()),
+                same,
+                (apart) =>
+                    before(
+                        t,
+                        r,
+                        c - 9,
+                        lowered(h, t, r, c, apart, proved()),
                         Eq/subst(
                             (v: Bool) => Bool/Holds(Bool/not(v)),
-                            inward(x[h, ..t], i + 1, under),
-                            clear);
-                    let parted: Bool/Holds(low(hn, 7 - i) != 0 != (low(kn, 7 - i) != 0)) =
+                            onward(h, t, c, proved()),
+                            clear)))(
+                apart)
+        | true =>
+            match c
+            | 0 => match clear end
+            | i + 1 =>
+                let under: Bool/Holds(i + 1 < 9) = proved();
+                let next: Eq()(Nat/shr(hn, 7 - i + 1), Nat/shr(kn, 7 - i + 1)) =
+                    shifts(
+                        hn,
+                        kn,
+                        i,
+                        7 - i + 1,
+                        proved(),
+                        proved(),
+                        proved(),
+                        proved(),
+                        (m, over, within) =>
+                            agreed(h, k, t, r, m, within, apart.below(7 - m + 1, proved())));
+                let off: Bool/Holds(Bool/not(low(hn, 7 - i) != 0)) =
+                    Eq/subst(
+                        (v: Bool) => Bool/Holds(Bool/not(v)),
+                        inward(x[h, ..t], i + 1, under),
+                        clear);
+                let parted: Bool/Holds(low(hn, 7 - i) != 0 != (low(kn, 7 - i) != 0)) =
+                    Eq/subst(
+                        (v: Bool) => Bool/Holds(v != at_place(x[k, ..r], 0, i + 1)),
+                        inward(x[h, ..t], i + 1, under),
                         Eq/subst(
-                            (v: Bool) => Bool/Holds(v != at_place(x[k, ..r], 0, i + 1)),
-                            inward(x[h, ..t], i + 1, under),
-                            Eq/subst(
-                                (v: Bool) => Bool/Holds(bit(x[h, ..t], i + 1) != v),
-                                inward(x[k, ..r], i + 1, under),
-                                apart.differs));
-                    match
-                    | low(hn, 7 - i) != 0 => match off end
-                    | low(kn, 7 - i) != 0 =>
-                        let zero: Bool/Holds(low(hn, 7 - i) == 0) = Bool/True/qed();
-                        let up = positive(low(kn, 7 - i), Bool/True/qed());
-                        let left = split(hn, 7 - i, proved(), proved());
-                        let right = split(kn, 7 - i, proved(), proved());
-                        let lower: Bool/Holds(hn < kn) =
-                            lesser(hn, kn, 7 - i, proved(), proved(), proved(), proved());
-                        Eq/subst(
-                            (o: Ordering) =>
-                                Eq()(
-                                    match o
-                                    | eq() => Bytes/ord(t, r)
-                                    | lt() => Ordering/lt()
-                                    | gt() => Ordering/gt()
-                                    end,
-                                    Ordering/lt()),
-                            Eq/sym(Nat/ord/of_lt(hn, kn, lower)),
-                            Eq/refl())
-                    | _ => match parted end
-                    end
+                            (v: Bool) => Bool/Holds(bit(x[h, ..t], i + 1) != v),
+                            inward(x[k, ..r], i + 1, under),
+                            apart.differs));
+                match
+                | low(hn, 7 - i) != 0 => match off end
+                | low(kn, 7 - i) != 0 =>
+                    let zero: Bool/Holds(low(hn, 7 - i) == 0) = Bool/True/qed();
+                    let up = positive(low(kn, 7 - i), Bool/True/qed());
+                    let left = split(hn, 7 - i, proved(), proved());
+                    let right = split(kn, 7 - i, proved(), proved());
+                    let lower: Bool/Holds(hn < kn) =
+                        lesser(hn, kn, 7 - i, proved(), proved(), proved(), proved());
+                    Eq/subst(
+                        (o: Ordering) =>
+                            Eq()(
+                                match o
+                                | eq() => Bytes/ord(t, r)
+                                | lt() => Ordering/lt()
+                                | gt() => Ordering/gt()
+                                end,
+                                Ordering/lt()),
+                        Eq/sym(Nat/ord/of_lt(hn, kn, lower)),
+                        Eq/refl())
+                | _ => match parted end
                 end
             end
         end

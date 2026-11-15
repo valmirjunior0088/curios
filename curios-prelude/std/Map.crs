@@ -233,13 +233,11 @@ let same_entries(
     xs: List({K, V}),
     ys: List({K, V}),
 ) -> Bool =
-    match xs
-    | [] => match ys | [] => true | _ => false end
-    | [x, ..xt] =>
-        match ys
-        | [] => false
-        | [y, ..yt] => Hash/hash(x.0) == Hash/hash(y.0) && x.1 == y.1 && same_entries(xt, yt)
-        end
+    match (xs, ys)
+    | ([], []) => true
+    | ([x, ..xt], [y, ..yt]) =>
+        Hash/hash(x.0) == Hash/hash(y.0) && x.1 == y.1 && same_entries(xt, yt)
+    | _ => false
     end;
 
 --- Entry by entry.
