@@ -392,24 +392,47 @@ pub fn foreign_call_to(function: Arc<ForeignFunction>) -> curios_cps::Module {
 
 /// `main` builds a closure of `target` and passes it to `apply`, which invokes it indirectly — an unknown callee that must go through the closure ABI.
 pub fn indirect_apply() -> curios_cps::Module {
-    indirect_application(false)
+    indirect_application(false, false)
 }
 
 pub fn indirect_apply_discarding_result() -> curios_cps::Module {
-    indirect_application(true)
+    indirect_application(true, false)
 }
 
-fn indirect_application(discard_result: bool) -> curios_cps::Module {
+/// [`indirect_apply`], its target answering a suspension rather than a number.
+pub fn indirect_apply_suspending() -> curios_cps::Module {
+    indirect_application(false, true)
+}
+
+fn indirect_application(discard_result: bool, suspends: bool) -> curios_cps::Module {
     let mut module = curios_cps::Module::new();
     let main = module.reserve_function();
     let target = module.reserve_function();
     let apply = module.reserve_function();
 
     let target_return = module.reserve_continuation();
-    let target_body = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
-        target: target_return,
-        args: vec![nat(0)],
-    }));
+    let target_body = match suspends {
+        false => module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
+            target: target_return,
+            args: vec![nat(0)],
+        })),
+        true => {
+            let row = module.suspension_row();
+            let suspension = module.add_value(None);
+            let answer = module.add_node(curios_cps::Node::ApplyCont(curios_cps::Edge {
+                target: target_return,
+                args: vec![curios_cps::Atom::Value(suspension)],
+            }));
+            module.add_node(curios_cps::Node::LetValue {
+                result: suspension,
+                value: curios_cps::ValueExpr::Row(
+                    row,
+                    vec![curios_cps::Atom::Filler; module.row(row).width()],
+                ),
+                next: answer,
+            })
+        }
+    };
     module.define_function(
         target,
         curios_cps::Function {

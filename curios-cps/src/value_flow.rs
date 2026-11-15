@@ -6,10 +6,18 @@
 //!
 //! **Any is what the module does not see.** That is the entry's parameters, and what a heap call answers, which only a module [`bound_frames`](crate::bound_frames) rewrote holds. A host's reply is its wire values, no closure and no construction, and the advance enters only the descriptions the entry surfaced, which take no parameter, so every other parameter takes what the module's own calls hand it. A callee that may be any reaches every function some atom names that takes as many parameters, and a read out of a value that may be any reads the summary, since every aggregate is one the module builds.
 //!
+//! **The rows a value may be are its constructions' rows**, every row where it may be any. They are what [`rows_reaching`] answers the row tests, the rebuild in place and the verifier, and what [`Module::entry_suspension`] reads off the entry's returns for its ABI ([An entry exports only the turns it can return](../../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md)): each function-return position has its own fact, even where no caller receives it, so only what reaches the entry's returns decides its capability, and a suspension consumed inside the program does not escape merely because it was built.
+//!
 //! **A flow it misses is a wrong answer** wherever a reader trusts what a value may not be, so every rule matches its node's whole alphabet: no wildcard stands over a node, a value expression or an operation.
 
 #[cfg(test)]
-mod tests;
+mod closure_tests;
+
+#[cfg(test)]
+mod entry_tests;
+
+#[cfg(test)]
+mod row_tests;
 
 use {
     super::{
@@ -26,7 +34,18 @@ pub enum MayBe<T> {
     Any,
 }
 
+/// The rows a value may be a struct of: these, or any.
+pub type Rows = MayBe<RowId>;
+
 impl<T: Ord> MayBe<T> {
+    /// Whether `item` is among what it may be.
+    pub fn may_be(&self, item: T) -> bool {
+        match self {
+            MayBe::Of(items) => items.contains(&item),
+            MayBe::Any => true,
+        }
+    }
+
     fn nothing() -> Self {
         MayBe::Of(BTreeSet::new())
     }
@@ -116,12 +135,32 @@ enum FlowKey {
 /// What each value of a module may be, solved over the module as it stands.
 pub struct ValueFlow {
     facts: BTreeMap<FlowKey, ValueFact>,
+    /// The row each construction of a row builds.
+    built: BTreeMap<NodeId, RowId>,
 }
 
 impl ValueFlow {
     pub fn of(module: &Module) -> Self {
-        Self {
-            facts: solve(module),
+        let constructions = Constructions::of(module);
+        let facts = solve(module, &constructions);
+        let built = constructions
+            .rows
+            .into_iter()
+            .flat_map(|(row, nodes)| nodes.into_iter().map(move |node| (node, row)))
+            .collect();
+        Self { facts, built }
+    }
+
+    /// The rows of the constructions `fact` may be, every row where it may be any.
+    fn rows(&self, fact: &ValueFact) -> Rows {
+        match &fact.constructions {
+            MayBe::Of(constructions) => MayBe::Of(
+                constructions
+                    .iter()
+                    .filter_map(|construction| self.built.get(construction).copied())
+                    .collect(),
+            ),
+            MayBe::Any => MayBe::Any,
         }
     }
 
@@ -134,6 +173,41 @@ impl ValueFlow {
                 .get(&FlowKey::Value(*value))
                 .map_or(MayBe::Any, |fact| fact.functions.clone()),
             Atom::Literal(_) | Atom::Filler => MayBe::nothing(),
+        }
+    }
+}
+
+/// The rows each value may be a struct of.
+pub fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
+    let flow = ValueFlow::of(module);
+    flow.facts
+        .iter()
+        .filter_map(|(key, fact)| match key {
+            FlowKey::Value(value) => Some((*value, flow.rows(fact))),
+            _ => None,
+        })
+        .collect()
+}
+
+impl Module {
+    /// The registered suspension row when an entry result may carry it; `None` when return flow excludes it, or this module has no entry or suspension row.
+    ///
+    /// This reads the current graph without caching or changing its row vocabulary. A result the module does not see retains the row; a computation that never returns contributes no returned row and need not be proved terminating.
+    pub fn entry_suspension(&self) -> Option<RowId> {
+        let entry = self.entry()?;
+        let row = self.suspension()?;
+        let flow = ValueFlow::of(self);
+        let mut returned = flow
+            .facts
+            .iter()
+            .filter_map(|(key, fact)| match key {
+                FlowKey::Returned(function, _) if *function == entry => Some(flow.rows(fact)),
+                _ => None,
+            })
+            .peekable();
+        match returned.peek().is_none() || returned.any(|rows| rows.may_be(row)) {
+            true => Some(row),
+            false => None,
         }
     }
 }
@@ -173,10 +247,9 @@ impl Constructions {
 }
 
 /// The facts of every value, return position, slot and container, solved together, so a closure call reads the same least fixpoint the calls it reaches settle.
-fn solve(module: &Module) -> BTreeMap<FlowKey, ValueFact> {
+fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, ValueFact> {
     let escaping = module.escaping_functions();
     let arities = module.return_arities();
-    let constructions = Constructions::of(module);
     let receivers: BTreeMap<ContinuationId, Vec<FlowKey>> = module
         .live_continuations()
         .map(|(id, definition)| {
@@ -288,16 +361,8 @@ fn solve(module: &Module) -> BTreeMap<FlowKey, ValueFact> {
             passed.get(index).cloned().unwrap_or_else(ValueFact::any)
         });
     };
-    let (deliver, fact, stored, read, callees, call, jump, constructions) = (
-        &deliver,
-        &fact,
-        &stored,
-        &read,
-        &callees,
-        &call,
-        &jump,
-        &constructions,
-    );
+    let (deliver, fact, stored, read, callees, call, jump) =
+        (&deliver, &fact, &stored, &read, &callees, &call, &jump);
 
     Solver::solve(seeds, |rules| {
         if let Some(entry) = module.entry().and_then(|entry| module.function(entry)) {

@@ -75,11 +75,25 @@ fn direct_entry_selection_preserves_dispatch_required_by_surviving_calls() {
     assert_contains(&text, "(table $clsr/0");
 }
 
+/// A closure call answers what its callees return, so a callback answering a suspension carries it to the entry's return and the turns stay, and one answering a number leaves the entry direct.
 #[test]
-fn an_opaque_callback_return_retains_the_turn_abi() {
-    let mut module = indirect_apply();
-    module.suspension_row();
-    let text = wat(&module);
-    assert_contains(&text, "(export \"func/advance\"");
-    assert_contains(&text, "(export \"func/main\" (func $io/main))");
+fn a_callbacks_suspension_reaches_the_entry_through_its_closure_call() {
+    for suspends in [false, true] {
+        let mut module = match suspends {
+            false => indirect_apply(),
+            true => indirect_apply_suspending(),
+        };
+        module.suspension_row();
+        let text = wat(&module);
+        match suspends {
+            true => {
+                assert_contains(&text, "(export \"func/advance\"");
+                assert_contains(&text, "(export \"func/main\" (func $io/main))");
+            }
+            false => {
+                assert_absent(&text, "(export \"func/advance\"");
+                assert_contains(&text, "(export \"func/main\" (func $func/main))");
+            }
+        }
+    }
 }

@@ -1,3 +1,5 @@
+//! The functions a value may be a closure of, through every flow: what a closure call and a list map reach.
+
 use {
     super::*,
     crate::{Continuation, Droppable, Edge, Function, Literal, Row, Slot, test_support::*},

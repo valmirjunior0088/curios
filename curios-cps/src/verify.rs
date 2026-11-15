@@ -388,7 +388,7 @@ impl Module {
         Ok(())
     }
 
-    /// A rebuild writes into a value nothing else reads: `of` names a value some flow reaching which builds the rebuild's row, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on. A value read out of a slot may be any row as far as row flow sees, and the emitted rebuild casts `of` to its row, which traps rather than writes where it is another; that nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
+    /// A rebuild writes into a value nothing else reads: `of` names a value some flow reaching which builds the rebuild's row, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on. What the value flow cannot see into may be any row, and the emitted rebuild casts `of` to its row, which traps rather than writes where it is another; that nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
     fn verify_rebuilds(&self) -> Result<(), VerifyError> {
         let mut rows = None;
         for (function, _) in self.live_functions() {

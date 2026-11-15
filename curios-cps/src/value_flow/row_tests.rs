@@ -1,3 +1,5 @@
+//! The rows a value may be a struct of, which the row tests, the rebuild in place and the verifier read.
+
 use {
     super::*,
     crate::{test_support::*, *},
@@ -141,23 +143,45 @@ fn a_number_a_callee_computes_is_no_row() {
 }
 
 #[test]
-fn a_reference_read_out_of_a_value_may_be_any_row() {
-    let (module, received) = resumed_with(false, |module, returned, next| {
-        let tuple = module.add_value(Some("tuple".into()));
-        let read = module.add_node(Node::LetIntrinsic {
-            result: returned,
-            op: Intrinsic::TupleGet(0),
-            args: vec![Atom::Value(tuple)],
-            next,
+fn a_reference_read_out_of_a_value_is_the_rows_its_construction_stores() {
+    for stores_a_row in [false, true] {
+        let mut row = None;
+        let (module, received) = resumed_with(false, |module, returned, next| {
+            let tuple = module.add_value(Some("tuple".into()));
+            let read = module.add_node(Node::LetIntrinsic {
+                result: returned,
+                op: Intrinsic::TupleGet(0),
+                args: vec![Atom::Value(tuple)],
+                next,
+            });
+            let stored = module.add_value(Some("stored".into()));
+            let tupled = module.add_node(Node::LetValue {
+                result: tuple,
+                value: ValueExpr::Tuple(vec![match stores_a_row {
+                    true => Atom::Value(stored),
+                    false => Atom::Filler,
+                }]),
+                next: read,
+            });
+            let built = one_slot_row(module);
+            row = Some(built);
+            module.add_node(Node::LetValue {
+                result: stored,
+                value: ValueExpr::Row(built, vec![Atom::Filler]),
+                next: tupled,
+            })
         });
-        module.add_node(Node::LetValue {
-            result: tuple,
-            value: ValueExpr::Tuple(vec![Atom::Filler]),
-            next: read,
-        })
-    });
+        let rows = match stores_a_row {
+            true => BTreeSet::from([row.expect("the producer built its row")]),
+            false => BTreeSet::new(),
+        };
 
-    assert_eq!(rows_reaching(&module)[&received], Rows::Any);
+        assert_eq!(
+            rows_reaching(&module)[&received],
+            Rows::Of(rows),
+            "stores a row: {stores_a_row}"
+        );
+    }
 }
 
 #[test]
