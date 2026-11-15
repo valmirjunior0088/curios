@@ -1,4 +1,4 @@
-//! The soundness board, as a cargo subcommand, and the code that reads and runs it. The board itself is its records, `xboard/tickets/`, embedded when the binary is built (`build.rs`).
+//! The soundness board, as a cargo subcommand, and the code that reads and runs it. The board itself is its records, `xboard/tickets/`, with the archive's, `xboard/archive/`, embedded when the binary is built (`build.rs`).
 //!
 //! `cargo xboard report` puts every ticket to the checkers, prints the report, and fails if a ticket regressed or was shut without a fix named, or if a record breaks the words the loader knows. `cargo xboard probe` puts one program, one module written as Core text, or one ticket by its `metadata.toml` to them, off the board: what a hunt asks before there is a ticket to commit.
 //!
@@ -46,6 +46,9 @@ use {
 /// The board's records: every file under `xboard/tickets/`, by its path below it, as they stood when the binary was built.
 const TICKETS: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/tickets.rs"));
 
+/// The archive's records: every file under `xboard/archive/`, by its path below it, as they stood when the binary was built.
+const ARCHIVE: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/archive.rs"));
+
 #[derive(Debug, Parser)]
 #[command(
     name = "cargo xboard",
@@ -85,10 +88,10 @@ enum Board {
 fn main() -> ExitCode {
     match Cli::parse().command {
         Board::Report => {
-            let parts = match load_board(TICKETS.iter().copied()) {
+            let parts = match load_board(TICKETS.iter().copied(), ARCHIVE.iter().copied()) {
                 Ok(parts) => parts,
                 Err(why) => {
-                    eprintln!("xboard/tickets/{why}");
+                    eprintln!("xboard/{why}");
 
                     return ExitCode::FAILURE;
                 }

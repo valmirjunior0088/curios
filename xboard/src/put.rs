@@ -179,6 +179,11 @@ impl Answer {
     pub fn certifier_asked(&self) -> bool {
         matches!(self, Answer::Judged(_))
     }
+
+    /// Whether the witness failed before any checker read it: its program's text, or its Core text, did not parse or lower. What an archived witness answers.
+    pub fn unread(&self) -> bool {
+        matches!(self, Answer::Unbuilt(Refusal::Text(_) | Refusal::Unread(_)))
+    }
 }
 
 /// Put a source program to both checkers as a proof of `False`, over `predecessors`: the elaborator, then the certifier over the module it built. The pipeline states the type; nothing here or in the program chooses it.

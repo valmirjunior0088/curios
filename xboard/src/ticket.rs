@@ -27,6 +27,15 @@ pub enum Status {
     Fixed,
 }
 
+/// Where a ticket is filed, by the root its directory stands under.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Filed {
+    /// On the board, `xboard/tickets/`, at the status its record states.
+    Live(Status),
+    /// In the archive, `xboard/archive/`, for the reason its record states: the construct its witnesses are written in is gone from the language, so each fails before any checker reads it.
+    Archived(String),
+}
+
 /// One flaw: a closed term the checkers admitted at `/std/Bool/False`. Nothing else is a ticket — not a misjudgment no proof of `False` was built from, not a refusal of something sound, not a program compiled to do what its source does not say.
 ///
 /// A whole one, as its directory holds it and put through a run, is `EXAMPLE` in this crate's `report/tests.rs`.
@@ -35,8 +44,8 @@ pub struct Ticket {
     pub title: String,
     /// The day it was found.
     pub found_on: Date,
-    pub status: Status,
-    /// The proofs of `False` the flaw admitted: each is refused while the ticket is fixed.
+    pub filed: Filed,
+    /// The proofs of `False` the flaw admitted: each is refused while the ticket is fixed, and fails before any checker once it is archived.
     pub witnesses: Vec<Witness>,
 }
 
@@ -48,7 +57,7 @@ pub struct Witness {
     /// The steps walked before the proof is put: none where it is put over the prelude alone.
     pub steps: Vec<Step>,
     pub proof: Proof,
-    /// What refuses it once its flaw is closed, by every checker listed and by the error each names, and, for an error every conversion raises, where it stands: the rule is named, or a witness broken in some other way would pass.
+    /// What refuses it once its flaw is closed, by every checker listed and by the error each names, and, for an error every conversion raises, where it stands: the rule is named, or a witness broken in some other way would pass. None for an archived witness, which no checker reads.
     pub expect: Vec<Expected>,
 }
 
@@ -136,10 +145,14 @@ impl Proof {
     }
 }
 
-/// How a witness reads on the board: the form of its proof, what it puts, and what refuses it.
+/// How a witness reads on the board: the form of its proof, what it puts, and what refuses it where it expects a refusal.
 impl fmt::Display for Witness {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{:<7}  {} — refused by ", self.kind(), self.what)?;
+        write!(formatter, "{:<7}  {}", self.kind(), self.what)?;
+        if self.expect.is_empty() {
+            return Ok(());
+        }
+        formatter.write_str(" — refused by ")?;
 
         for (index, expected) in self.expect.iter().enumerate() {
             if index > 0 {

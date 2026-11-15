@@ -5,7 +5,8 @@ use {super::*, curios_common::test_support::Temporary};
 /// The suite fails where `cargo xboard report` would: a record the loader refuses, or a ticket that does not stand.
 #[test]
 fn the_board_holds() {
-    let parts = load_board(TICKETS.iter().copied()).unwrap_or_else(|why| panic!("{why}"));
+    let parts = load_board(TICKETS.iter().copied(), ARCHIVE.iter().copied())
+        .unwrap_or_else(|why| panic!("{why}"));
     let report = Report::run(&parts);
 
     assert!(!report.fails(), "\n{report}");

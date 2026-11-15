@@ -4,7 +4,7 @@
 mod tests;
 
 use {
-    crate::{Answer, Part, Refusal, Status, Ticket, Witness},
+    crate::{Answer, Filed, Part, Refusal, Status, Ticket, Witness},
     std::fmt,
 };
 
@@ -21,6 +21,10 @@ pub enum Standing {
     Shut,
     /// Open, and a witness is refused by an error it does not expect: it no longer shows the flaw, or something closed the flaw another way, and the ticket says neither.
     Unshown(Vec<String>),
+    /// Archived, and every witness fails before any checker reads it.
+    Archived,
+    /// Archived, and a witness is read: what the archive says is gone from the language is back, and the ticket belongs on the board.
+    Revived(Vec<String>),
 }
 
 impl Standing {
@@ -28,7 +32,7 @@ impl Standing {
     pub fn fails(&self) -> bool {
         matches!(
             self,
-            Standing::Regressed(_) | Standing::Shut | Standing::Unshown(_)
+            Standing::Regressed(_) | Standing::Shut | Standing::Unshown(_) | Standing::Revived(_)
         )
     }
 
@@ -39,12 +43,18 @@ impl Standing {
             Standing::Open => "OPEN",
             Standing::Shut => "SHUT",
             Standing::Unshown(_) => "UNSHOWN",
+            Standing::Archived => "ARCHIVED",
+            Standing::Revived(_) => "REVIVED",
         }
     }
 }
 
-/// Where a ticket stands for what its witnesses answered.
-pub fn standing(status: Status, witnesses: &[Witness], answers: &[Answer]) -> Standing {
+/// Where a ticket filed as `filed` stands for what its witnesses answered.
+pub fn standing(filed: &Filed, witnesses: &[Witness], answers: &[Answer]) -> Standing {
+    let status = match filed {
+        Filed::Live(status) => *status,
+        Filed::Archived(_) => return archived(witnesses, answers),
+    };
     // Each witness not refused as it expects, with whether it was admitted.
     let unmet = witnesses
         .iter()
@@ -72,6 +82,21 @@ pub fn standing(status: Status, witnesses: &[Witness], answers: &[Answer]) -> St
     }
 }
 
+/// Where an archived ticket stands for what its witnesses answered: each must fail before any checker reads it.
+fn archived(witnesses: &[Witness], answers: &[Answer]) -> Standing {
+    let read = witnesses
+        .iter()
+        .zip(answers)
+        .filter(|(_, answer)| !answer.unread())
+        .map(|(witness, answer)| format!("{}: read, and {}", witness.what, refusers(answer)))
+        .collect::<Vec<_>>();
+
+    match read.is_empty() {
+        true => Standing::Archived,
+        false => Standing::Revived(read),
+    }
+}
+
 /// One line of a report: a ticket, with what its witnesses answered and where it stands.
 #[derive(Debug)]
 pub struct Row<'b> {
@@ -90,7 +115,7 @@ impl<'b> Row<'b> {
             .iter()
             .map(Witness::answer)
             .collect::<Vec<_>>();
-        let standing = standing(ticket.status, &ticket.witnesses, &answers);
+        let standing = standing(&ticket.filed, &ticket.witnesses, &answers);
 
         Row {
             part,
@@ -122,10 +147,16 @@ impl fmt::Display for Row<'_> {
             self.ticket.title
         )?;
         writeln!(formatter, "             part     {}", self.part)?;
+        if let Filed::Archived(reason) = &self.ticket.filed {
+            writeln!(formatter, "             reason   {reason}")?;
+        }
         for (witness, answer) in self.ticket.witnesses.iter().zip(&self.answers) {
             writeln!(formatter, "             {witness} [{}]", refusers(answer))?;
         }
-        if let Standing::Regressed(problems) | Standing::Unshown(problems) = &self.standing {
+        if let Standing::Regressed(problems)
+        | Standing::Unshown(problems)
+        | Standing::Revived(problems) = &self.standing
+        {
             for problem in problems {
                 writeln!(formatter, "             !        {problem}")?;
             }
@@ -157,7 +188,7 @@ impl<'b> Report<'b> {
         Report { board, rows }
     }
 
-    /// Whether any ticket regressed, was closed without saying so, or stands open on a witness refused by an error it does not expect.
+    /// Whether any ticket regressed, was closed without saying so, stands open on a witness refused by an error it does not expect, or is archived with a witness read.
     pub fn fails(&self) -> bool {
         self.rows.iter().any(|row| row.standing.fails())
     }
@@ -188,13 +219,21 @@ impl fmt::Display for Report<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             formatter,
-            "xboard: {} ticket(s) — {} holding, {} open, {} regressed, {} shut without saying so, {} open and refused otherwise",
-            self.rows.len(),
+            "xboard: {} ticket(s) — {} holding, {} open, {} regressed, {} shut without saying so, {} open and refused otherwise; {} archived, {} of them read",
+            self.rows
+                .iter()
+                .filter(|row| matches!(row.ticket.filed, Filed::Live(_)))
+                .count(),
             self.count(|standing| *standing == Standing::Holds),
             self.count(|standing| *standing == Standing::Open),
             self.count(|standing| matches!(standing, Standing::Regressed(_))),
             self.count(|standing| *standing == Standing::Shut),
             self.count(|standing| matches!(standing, Standing::Unshown(_))),
+            self.rows
+                .iter()
+                .filter(|row| matches!(row.ticket.filed, Filed::Archived(_)))
+                .count(),
+            self.count(|standing| matches!(standing, Standing::Revived(_))),
         )?;
 
         let mut rows = self.rows.iter().collect::<Vec<_>>();
@@ -207,12 +246,15 @@ impl fmt::Display for Report<'_> {
         writeln!(formatter, "\nparts: {}", self.board.len())?;
 
         for part in self.board.iter().filter(|part| !part.tickets.is_empty()) {
-            write!(
-                formatter,
-                "  {} — {} ticket(s)",
-                part.name,
-                part.tickets.len()
-            )?;
+            let live = part
+                .tickets
+                .iter()
+                .filter(|ticket| matches!(ticket.filed, Filed::Live(_)))
+                .count();
+            write!(formatter, "  {} — {live} ticket(s)", part.name)?;
+            if live < part.tickets.len() {
+                write!(formatter, " and {} archived", part.tickets.len() - live)?;
+            }
 
             match part.tickets.iter().map(|ticket| ticket.found_on).max() {
                 Some(last) => writeln!(formatter, ", the last found {last}")?,
@@ -221,10 +263,11 @@ impl fmt::Display for Report<'_> {
             writeln!(formatter, "    {}", part.description)?;
         }
 
+        // An archived ticket's witnesses are read by no checker, the certifier least of all.
         let unreached = self
             .rows
             .iter()
-            .filter(|row| !row.reaches_certifier())
+            .filter(|row| matches!(row.ticket.filed, Filed::Live(_)) && !row.reaches_certifier())
             .collect::<Vec<_>>();
         if !unreached.is_empty() {
             writeln!(formatter, "\nnot put to the certifier: {}", unreached.len())?;

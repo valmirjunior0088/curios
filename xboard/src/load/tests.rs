@@ -70,7 +70,7 @@ fn a_ticket_reads_from_its_record_and_its_witnesses_texts() {
 
     assert_eq!(ticket.title, "A forged proof");
     assert_eq!(ticket.found_on, Date::new(2026, 10, 2).expect("a day"));
-    assert_eq!(ticket.status, Status::Open);
+    assert_eq!(ticket.filed, Filed::Live(Status::Open));
 
     let [program, module] = &ticket.witnesses[..] else {
         panic!("the ticket carries its two witnesses");
@@ -113,7 +113,7 @@ fn a_board_reads_its_parts_in_the_order_of_their_directories() {
         ),
         ("admission/2026_10_02_a_forged_proof/a_module.crsc", "0"),
     ];
-    let parts = load_board(files).expect("the board reads");
+    let parts = load_board(files, []).expect("the board reads");
 
     let read = parts
         .iter()
@@ -228,7 +228,7 @@ fn a_part_holds_its_record() {
     let files = [("admission/a_forged_proof/metadata.toml", RECORD)];
 
     assert!(
-        load_board(files)
+        load_board(files, [])
             .expect_err("a part with no record is refused")
             .contains("a part's directory holds its `metadata.toml`")
     );
@@ -307,5 +307,96 @@ fn a_unit_is_mounted_at_a_path_of_one_name() {
     assert!(
         refusal(&HISTORY.replace("mount = \"/lib\"", "mount = \"/lib/deep\""))
             .contains("`/lib/deep` is no path of one name")
+    );
+}
+
+/// An archived ticket's record, its witness stating no refusal.
+const ARCHIVED: &str = r#"
+    title = "A forged proof"
+    reason = "its construct is gone"
+
+    [[witness]]
+    what = "a program"
+    source = "a_program.crs"
+"#;
+
+/// The archived ticket `record` states, read with the text of its witness.
+fn archived(record: &str) -> Result<Ticket, String> {
+    let files = BTreeMap::from([
+        (METADATA, record),
+        ("a_program.crs", "/std/Bool/True/qed()"),
+    ]);
+
+    load_archived(DIRECTORY, &files)
+}
+
+#[test]
+fn an_archived_ticket_reads_its_reason_and_witnesses_expecting_nothing() {
+    let ticket = archived(ARCHIVED).expect("the archived ticket reads");
+
+    assert_eq!(
+        ticket.filed,
+        Filed::Archived("its construct is gone".to_string())
+    );
+    assert!(matches!(&ticket.witnesses[..], [witness] if witness.expect.is_empty()));
+}
+
+/// Each root's record holds its own words: a live record states no reason, an archived one no status, and an archived witness no refusal.
+#[test]
+fn a_record_states_only_the_words_of_its_root() {
+    assert!(
+        refusal(&RECORD.replace("status = ", "reason = \"gone\"\nstatus = "))
+            .contains("unknown field `reason`")
+    );
+    assert!(
+        archived(&ARCHIVED.replace("reason = ", "status = \"fixed\"\nreason = "))
+            .expect_err("refused")
+            .contains("unknown field `status`")
+    );
+    assert!(
+        archived(&ARCHIVED.replace(
+            "source = \"a_program.crs\"",
+            "source = \"a_program.crs\"\nrefused = [{ by = \"elaborator\" }]"
+        ))
+        .expect_err("refused")
+        .contains("unknown field `refused`")
+    );
+}
+
+#[test]
+fn an_archived_record_states_its_reason() {
+    assert!(
+        archived(&ARCHIVED.replace("reason = \"its construct is gone\"\n", ""))
+            .expect_err("refused")
+            .contains("missing field `reason`")
+    );
+}
+
+/// The archive files a ticket under a part the board has, after the part's own tickets.
+#[test]
+fn an_archived_ticket_is_filed_under_a_part_the_board_has() {
+    let part = (
+        "admission/metadata.toml",
+        r#"description = "What is believed?""#,
+    );
+    let ticket = [
+        (
+            "admission/2026_10_02_a_forged_proof/metadata.toml",
+            ARCHIVED,
+        ),
+        (
+            "admission/2026_10_02_a_forged_proof/a_program.crs",
+            "/std/Bool/True/qed()",
+        ),
+    ];
+
+    let parts = load_board([part], ticket).expect("the board reads");
+    assert!(
+        matches!(&parts[..], [admission] if matches!(&admission.tickets[..], [ticket] if matches!(ticket.filed, Filed::Archived(_))))
+    );
+    assert!(
+        load_board([], ticket)
+            .expect_err("a part the board does not have is refused")
+            .contains("the board has no `admission`")
     );
 }
