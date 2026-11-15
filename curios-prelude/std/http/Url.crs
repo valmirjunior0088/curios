@@ -245,25 +245,14 @@ let hex_value(byte: Byte) -> Option({v: Nat, ok: Bool/Holds(v < 16)}) =
 let decode_at(rest: Bytes, acc: Bytes) -> Option(Bytes) =
     match rest
     | x[] => Option/some(acc)
-    | x[byte, ..after] =>
-        match Byte/to_nat(byte)
-        | '+' => decode_at(after, x[..acc, ' '])
-        | '%' =>
-            match after
-            | x[] => Option/none()
-            | x[high, ..low_on] =>
-                match low_on
-                | x[] => Option/none()
-                | x[low, ..onward] =>
-                    match (hex_value(high), hex_value(low))
-                    | (some(hi), some(lo)) =>
-                        decode_at(onward, x[..acc, Nat/to_byte(hi.v * 16 + lo.v)])
-                    | (some(_), none()) | (none(), _) => Option/none()
-                    end
-                end
-            end
-        | _ => decode_at(after, x[..acc, byte])
+    | x['+', ..after] => decode_at(after, x[..acc, ' '])
+    | x['%', high, low, ..onward] =>
+        match (hex_value(high), hex_value(low))
+        | (some(hi), some(lo)) => decode_at(onward, x[..acc, Nat/to_byte(hi.v * 16 + lo.v)])
+        | (some(_), none()) | (none(), _) => Option/none()
         end
+    | x['%', .._] => Option/none()
+    | x[byte, ..after] => decode_at(after, x[..acc, byte])
     end;
 
 --- `component` percent-decoded, `+` read as a space, or `none` when an escape is malformed or the result is not text.

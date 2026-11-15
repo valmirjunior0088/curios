@@ -145,11 +145,8 @@ let host_of(headers: List(Field)) -> Result(Refusal, Option(Str)) =
         end;
     match List/filter(headers, (f: Field) => Field/Name/is(f.name, "Host"))
     | [] => Result/success(Option/none())
-    | [one, ..others] =>
-        match others
-        | [] => stated(one)
-        | _ => Result/failure(Refusal/malformed("a request states one Host"))
-        end
+    | [one] => stated(one)
+    | _ => Result/failure(Refusal/malformed("a request states one Host"))
     end;
 
 let read_url(text: Str) -> Result(Refusal, Url) =

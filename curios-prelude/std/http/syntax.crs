@@ -14,29 +14,26 @@ pub let lines(head: Bytes) -> List(Bytes) =
         end;
     go(0, []);
 
--- The digit `b` holds at `i`, or `none`.
-let digit(b: Bytes, i: Nat) -> Option(Nat) =
-    match Bytes/try_get(b, i)
-    | some(byte), octets/is_digit(byte) => Option/some(Byte/to_nat(byte) - '0')
-    | _ => Option/none()
+-- The digit `byte` is, or `none`.
+let digit(byte: Byte) -> Option(Nat) =
+    match octets/is_digit(byte)
+    | true => Option/some(Byte/to_nat(byte) - '0')
+    | false => Option/none()
     end;
 
 --- The version `b` spells, `HTTP/` then a digit, a dot and a digit (RFC 9112 §2.3): malformed where it spells none, and not supported where its major number is not 1.
 pub let version(b: Bytes) -> Result(Refusal, Version) =
-    let unspelled: Result(Refusal, Version) =
-        Result/failure(Refusal/malformed("a version is HTTP, a slash, a digit, a dot and a digit"));
-    let shaped =
-        Bytes/len(b) == 8 && octets/at(b, 0, 'H') && octets/at(b, 1, 'T') && octets/at(b, 2, 'T')
-            && octets/at(b, 3, 'P')
-            && octets/at(b, 4, '/')
-            && octets/at(b, 6, '.');
-    match
-    | shaped, some(major) = digit(b, 5), some(minor) = digit(b, 7), minor <= 9 =>
+    match b
+    | x['H', 'T', 'T', 'P', '/', m, '.', n]
+    , some(major) = digit(m)
+    , some(minor) = digit(n)
+    , minor <= 9 =>
         match major == 1
         | true => Result/success(Version { minor = minor })
         | false => Result/failure(Refusal/version_not_supported())
         end
-    | _ => unspelled
+    | _ =>
+        Result/failure(Refusal/malformed("a version is HTTP, a slash, a digit, a dot and a digit"))
     end;
 
 --- A request line's three parts, as they stand between its two spaces: the method, the target and the version (RFC 9112 §3). A line with fewer or more spaces is malformed, since a target holds none.
@@ -96,10 +93,7 @@ let field(line: Bytes) -> Result(Refusal, Field) =
 
 -- Whether `line` begins with a space or a tab: a fold of the line before it, or nothing a head may hold.
 let indented(line: Bytes) -> Bool =
-    match Bytes/try_get(line, 0)
-    | some(byte) => octets/is_ows(byte)
-    | none() => false
-    end;
+    match line | x[byte, .._] => octets/is_ows(byte) | x[] => false end;
 
 -- `f` with the fold `line` read as a space and what follows it, as RFC 9112 §5.2 has a user agent read one.
 let folded(f: Field, line: Bytes) -> Result(Refusal, Field) =
