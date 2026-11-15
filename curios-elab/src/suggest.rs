@@ -75,16 +75,24 @@ fn suggest_in_scope(
 ) -> Suggestions {
     let mut candidates: Vec<Candidate> = Vec::new();
 
-    // Pool 0 as well — a proof from the facts in scope, where the goal is a bound: verified as the fill verifies one, and materialized before the rollback as every hit is.
+    // Pool 0 as well — a proof from the facts in scope, where the goal is a bound: verified as the fill verifies one, and materialized before the rollback as every hit is. One that reads an unnameable binder is skipped, as pool 0's binders are.
     let mut refusal = None;
     if let Ok(reduced) = reduce_with(context, goal_type) {
         let mark = context.solution_mark();
         match entail(context, goal_type, &reduced) {
-            Ok(Entailed::Proved(proof)) => candidates.push(Candidate {
-                term: zonk_solved_term_metas(context, &proof),
-                holes: 0,
-                pool: 0,
-            }),
+            Ok(Entailed::Proved(proof)) => {
+                let term = zonk_solved_term_metas(context, &proof);
+                let unwritable = telescope
+                    .iter()
+                    .any(|(name, _)| !name.nameable() && term.mentions_free(name));
+                if !unwritable {
+                    candidates.push(Candidate {
+                        term,
+                        holes: 0,
+                        pool: 0,
+                    });
+                }
+            }
             Ok(Entailed::Refused(refused)) if !refused.is_silent() => refusal = Some(refused),
             _ => {}
         }

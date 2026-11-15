@@ -287,3 +287,25 @@ fn an_unnamed_binder_a_shown_term_mentions_is_named_in_the_goals_scope() {
         "{report}"
     );
 }
+
+// A binder no source names is no candidate fit, from the facts in scope as from the scope itself: a fit is a paste, and nothing can be written for it. Where nothing else the report shows mentions it, its scope line is `_`. Mutation-checked: keeping a proof that reads one offers `? ≈ x0` and names the line after it.
+#[test]
+fn an_unnamed_binder_is_offered_as_no_fit() {
+    let report = error(
+        r#"
+        use /std/{Nat};
+        pub induct Tagged: Type
+        | tagged(@n: Nat, v: Nat)
+        end
+        pub let value(t: Tagged) -> Nat =
+            match t | tagged(v) => ? end;
+        /std/print("")
+        "#,
+    );
+
+    assert!(
+        report.contains("│  _ : Nat\n│  v : Nat\n│  ? ≈ v"),
+        "{report}"
+    );
+    assert!(!report.contains("? ≈ x"), "{report}");
+}
