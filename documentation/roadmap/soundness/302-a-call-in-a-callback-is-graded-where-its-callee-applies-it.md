@@ -1,6 +1,6 @@
 # A call in a callback is graded where its callee applies it
 
-This specification describes what remains of a capability that has landed in part. A recursion through a callback a recursive definition applies is graded where the definition applies it ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md)): a tree's `has_zero` recursing through `List/any(children, (c) => has_zero(c))` is total (`curios`'s `a_call_in_a_callback_descends_where_its_callee_applies_it_below`). What is still graded as fresh is listed below, `/std/List/map` and `/std/List/fold` first. Its next step is stage 1, a hunt run on the user's word.
+This specification describes what remains of a capability that has landed in part. A recursion through a callback a recursive definition applies is graded where the definition applies it ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md)): a tree's `has_zero` recursing through `List/any(children, (c) => has_zero(c))` is total (`curios`'s `a_call_in_a_callback_descends_where_its_callee_applies_it_below`). What is still graded as fresh is listed below, `/std/List/map` and `/std/List/fold` first. Its stages wait on the hunt [this area's findings](000-findings.md) hold, taken ahead of every stage that widens what a summary admits.
 
 ## What is missing
 
@@ -12,10 +12,9 @@ This specification describes what remains of a capability that has landed in par
 
 ## Stages
 
-1. **A hunt.** A soundness hunt with a charter on what landed — a parameter used in a way the walk misses, an application under a binder a summary misreads, a bound carried past the lambda it was handed — run on the user's word, ahead of every stage that widens what a summary admits.
-2. **A definition that is no recursive group, and a list intrinsic's callback.** The walk run over a definition's own body with no group, published beside its totality as a group's member's is, reading `ListMap`'s and `ListFold`'s function operand, where it is a parameter, as applied to an element below the list operand, and `ListFold`'s accumulator as unrelated. Check: a recursion through `/sys/List/map`, `/sys/List/fold` and `/std/Option/map` descends, each put to both checkers (`curios/src/tests/rules/`).
-3. **A projection of a bound binder.** The grader reads `b.i` below `b` where `b` is a binder a summary bounds, as a constructed tuple's fields are its children. Check: `/std/Json/encode` is total, as a fixture put to both checkers, with a refusal that projects a field of something not below.
-4. **Composition across declarations.** First a count of the definitions in `/std`, `programs/` and `../curios-papers` whose parameter is handed to another summarized definition and would be summarized through it; a count of none drops this stage, and any other is delivered with `any_kept`'s test restated.
+1. **A definition that is no recursive group, and a list intrinsic's callback.** The walk run over a definition's own body with no group, published beside its totality as a group's member's is, reading `ListMap`'s and `ListFold`'s function operand, where it is a parameter, as applied to an element below the list operand, and `ListFold`'s accumulator as unrelated. Check: a recursion through `/sys/List/map`, `/sys/List/fold` and `/std/Option/map` descends, each put to both checkers (`curios/src/tests/rules/`).
+2. **A projection of a bound binder.** The grader reads `b.i` below `b` where `b` is a binder a summary bounds, as a constructed tuple's fields are its children. Check: `/std/Json/encode` is total, as a fixture put to both checkers, with a refusal that projects a field of something not below.
+3. **Composition across declarations.** First a count of the definitions in `/std`, `programs/` and `../curios-papers` whose parameter is handed to another summarized definition and would be summarized through it; a count of none drops this stage, and any other is delivered with `any_kept`'s test restated.
 
 ## Retirement
 

@@ -273,8 +273,6 @@ fn accepting_polarities_are_closed_under_join() {
 /// The cycle guard reads a member applied past its own parameters, which stands under more than one application.
 ///
 /// A member whose result is a function is applied in two spines, `f(a)(b)`, and a family with both parameters and indices is applied in exactly two. Read one level deep — an application's immediate head — the outer application is a neutral no demand ever unfolds, so the guard would not fire and the walk would force the same member again one level deeper. The relation is [`Term::spine_rec_proj`]'s, which reads through every enclosing application, and the guard asks it rather than spelling it again.
-///
-/// The universe-instance spelling of a member is read by neither, and that half is an entry of `documentation/roadmap/soundness/000-findings.md`.
 #[test]
 fn the_cycle_guard_reads_a_member_applied_in_more_than_one_spine() {
     let member = Free::local(1, Some("f"));

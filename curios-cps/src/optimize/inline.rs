@@ -69,7 +69,7 @@ pub fn inline_known_calls(module: &mut Module, budget: &mut CopyBudget) -> bool 
         if !inlined_any {
             break;
         }
-        // Prune once per sweep, as `inline_single_use_continuations` below does: an inlined callee's original body is dead but still carries call sites, and a site in dead code would turn the next sweep's single-site callee into a duplicated one — the compounding that makes a sequencing chain's continuations exponential in its length.
+        // Prune once per sweep: an inlined callee's original body is dead but still carries call sites, and a site in dead code would turn the next sweep's single-site callee into a duplicated one — the compounding that makes a sequencing chain's continuations exponential in its length.
         prune_unreachable(module);
     }
     changed

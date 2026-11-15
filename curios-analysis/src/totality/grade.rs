@@ -27,7 +27,7 @@ fn readable(term: &Term) -> bool {
 
 /// How deep a refinement chain may be expanded.
 ///
-/// Each nested `match` on a binder introduced by an outer arm adds one level — `raw_trimmed` reaches three — so this is generous. It exists only so a pathological or cyclic refinement map cannot loop.
+/// Each nested `match` on a binder introduced by an outer arm adds one level — `/std/Str/utf8`'s `advanced` reaches three — so this is generous. It exists only so a pathological or cyclic refinement map cannot loop.
 pub const EXPAND_FUEL: usize = 16;
 
 /// The binder an arm refines for the size order, read off its scrutinee: the arm's case stands for what a binder scrutinee is within the arm, and for nothing where the scrutinee is an expression.

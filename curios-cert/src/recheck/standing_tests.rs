@@ -308,7 +308,7 @@ const TYPE_5: &str = "#{level = 5} Type";
 ///
 /// The first assertion pins the digest directly: two modules whose `G` differs only in `value_sort` digest it apart, signature read and body read alike. The three that follow are what a reader judged again must agree with — the verdict and the record of a whole compile of the same module.
 ///
-/// Mutation-checked: dropping `self.held.value_sort` from both parts of `Readable::digest` makes the two `G` digests equal, and fails this test and [`a_reader_of_a_moved_value_sorts_level_is_refused_as_a_whole_compile_refuses_it`] and no other.
+/// Mutation-checked: dropping `self.held.value_sort` from both parts of `Readable::digest` makes the two `G` digests equal, and fails this test and [`a_reader_of_a_moved_value_sort_is_stated_the_sort_a_whole_compile_states`] and no other.
 #[test]
 fn a_reader_of_a_moved_value_sort_is_judged_again() {
     // The field, read off the digest: `G`'s part digests apart where its value sort is `Type 0` and where it is `Type 5`.

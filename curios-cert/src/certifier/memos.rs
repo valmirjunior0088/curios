@@ -108,7 +108,7 @@ type Checked = Keyed<(Term, Term)>;
 /// A comparison as the table of verdicts is keyed, its type and then its two sides, told apart as a [`Checked`] is.
 type Compared = Keyed<(Term, Term, Term)>;
 
-/// A comparison's remembered verdict, with the pairs of heads its derivation unfolded: a fact wherever none of them is being unfolded, since a derivation there unfolds each as this one did ([Conversion recurrence](../../../../documentation/design/soundness/conversion-recurrence.md)).
+/// A comparison's remembered verdict, with the pairs of heads its derivation unfolded: a fact wherever none of them is being unfolded, since a derivation there unfolds each as this one did ([Conversion recurrence](../../../documentation/design/soundness/conversion-recurrence.md)).
 #[derive(Clone)]
 pub struct Converted {
     pub verdict: bool,
