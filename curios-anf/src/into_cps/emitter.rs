@@ -300,25 +300,27 @@ impl<'a> Emitter<'a> {
 
     // === Functions and recursion =========================================
 
-    /// Emit a peel: the element at `at`, and — where the arm reads it — the suffix beginning at `after`.
+    /// Emit a peel of a non-empty sequence: its head, and — where the arm reads it — the suffix after it.
     ///
-    /// **The one place the compiler says how a sequence is taken apart.** Both eliminations reach it, `FoldSequence`'s step and `UnconsSequence`'s cons arm, so the convention is encoded once rather than by each, where a change to a window's operands could leave the two disagreeing. `at` and `after` name one offset a step apart, and both callers already hold both — the fold as its loop's two indices, the peel as the literals `0` and `1`.
+    /// **The one place the compiler says how a sequence is taken apart**, `UnconsSequence`'s cons arm. A loop over a sequence peels it here too, its suffix the next turn's sequence, which the optimizer then holds as a window over the one the loop started from (`curios_cps`'s `optimize/fields.rs`).
     ///
-    /// Neither read names an extent. `sequence_rest_op` takes a start and lets the value decide how much follows, so there is no count for a caller to derive and none for two of them to derive differently.
+    /// Neither read names an extent. `sequence_rest_op` takes a start and lets the value decide how much follows, so there is no count to derive.
     pub fn emit_peel(
         &mut self,
         grain: SequenceGrain,
         sequence: &curios_cps::Atom,
         element: curios_cps::ValueId,
-        at: curios_cps::Atom,
-        suffix: Option<(curios_cps::ValueId, curios_cps::Atom)>,
+        suffix: Option<curios_cps::ValueId>,
         next: curios_cps::NodeId,
     ) -> curios_cps::NodeId {
         let next = match suffix {
-            Some((suffix, after)) => self.module.add_node(curios_cps::Node::LetIntrinsic {
+            Some(suffix) => self.module.add_node(curios_cps::Node::LetIntrinsic {
                 result: suffix,
                 op: sequence_rest_op(grain),
-                args: vec![sequence.clone(), after],
+                args: vec![
+                    sequence.clone(),
+                    curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::one())),
+                ],
                 next,
             }),
             None => next,
@@ -327,7 +329,10 @@ impl<'a> Emitter<'a> {
         self.module.add_node(curios_cps::Node::LetIntrinsic {
             result: element,
             op: sequence_get_op(grain),
-            args: vec![sequence.clone(), at],
+            args: vec![
+                sequence.clone(),
+                curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero())),
+            ],
             next,
         })
     }

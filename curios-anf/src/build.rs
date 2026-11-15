@@ -51,7 +51,7 @@ impl Builder {
         Ok(self.module)
     }
 
-    /// Mint a fresh value identity — a parameter, arm binder, or fold binder. Statement results are minted by the emission methods themselves.
+    /// Mint a fresh value identity — a parameter or an arm binder. Statement results are minted by the emission methods themselves.
     pub fn value(&mut self, debug_name: Option<String>) -> ValueId {
         self.module.add_value(debug_name)
     }

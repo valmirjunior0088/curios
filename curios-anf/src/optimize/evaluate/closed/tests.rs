@@ -411,57 +411,6 @@ fn a_list_suffix_is_a_window_whose_slices_index_from_its_own_start() {
     );
 }
 
-/// `fold s | x[] => 0 | x[_, ..t]; acc => BytesLen(t) + acc` over `x[1, 2, 3]`: the last element sees the empty suffix and each earlier one the suffix after it, so the suffix lengths sum to three.
-#[test]
-fn a_fold_step_sees_the_suffix_after_its_element() {
-    let mut builder = Builder::new();
-    let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
-    let zero = builder.constant(Constant::Nat(Natural::from(0u32)));
-
-    let candidate = sequence_candidate(&mut builder, Atom::Constant(bytes), |builder, s| {
-        builder.open_block();
-        let empty = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
-        let element = builder.value(Some("h".into()));
-        let suffix = builder.value(Some("t".into()));
-        let accumulator = builder.value(Some("acc".into()));
-        builder.open_block();
-        let length = builder.let_value(
-            None,
-            Rhs::Sequence {
-                operation: SequenceOp::BytesLen,
-                operands: vec![Atom::Value(suffix)],
-            },
-        );
-        let sum = builder.let_value(
-            None,
-            Rhs::Operation {
-                operation: Operation::NatAdd,
-                operands: vec![Atom::Value(length), Atom::Value(accumulator)],
-            },
-        );
-        let block = builder.seal_block(Terminator::Return(Atom::Value(sum)));
-        builder.let_value(
-            None,
-            Rhs::FoldSequence {
-                grain: SequenceGrain::Bytes,
-                scrutinee: Atom::Value(s),
-                empty,
-                step: FoldSequenceStep {
-                    element,
-                    suffix,
-                    accumulator,
-                    block,
-                },
-            },
-        )
-    });
-
-    assert_eq!(
-        folded(builder, candidate),
-        Constant::Nat(Natural::from(3u32))
-    );
-}
-
 /// `id(f) = f`, bound as an item, so applying it to a function yields that function as a closure over nothing.
 fn define_identity(builder: &mut Builder) -> FunctionId {
     let id = builder.reserve_function();

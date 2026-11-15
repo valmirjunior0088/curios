@@ -136,8 +136,6 @@ impl Named {
             | Rhs::Sequence { .. }
             | Rhs::SwitchBool { .. }
             | Rhs::SwitchNat { .. }
-            | Rhs::FoldNat { .. }
-            | Rhs::FoldSequence { .. }
             | Rhs::UnconsSequence { .. }
             | Rhs::Intrinsic { .. }
             | Rhs::Suspension { .. } => {}

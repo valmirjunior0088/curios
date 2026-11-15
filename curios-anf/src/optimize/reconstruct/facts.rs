@@ -242,20 +242,6 @@ impl ValueFacts {
                     }
                     copy!(Source::Key(Key::Block(*default)));
                 }
-                Rhs::FoldNat { zero, step, .. } => {
-                    copy!(Source::Key(Key::Block(*zero)));
-                    copy!(Source::Key(Key::Block(step.block)));
-                    for value in [step.predecessor, step.hypothesis] {
-                        facts.facts.insert(Key::Value(value), Origins::Opaque);
-                    }
-                }
-                Rhs::FoldSequence { empty, step, .. } => {
-                    copy!(Source::Key(Key::Block(*empty)));
-                    copy!(Source::Key(Key::Block(step.block)));
-                    for value in [step.element, step.suffix, step.accumulator] {
-                        facts.facts.insert(Key::Value(value), Origins::Opaque);
-                    }
-                }
                 Rhs::UnconsSequence { empty, cons, .. } => {
                     copy!(Source::Key(Key::Block(*empty)));
                     copy!(Source::Key(Key::Block(cons.block)));

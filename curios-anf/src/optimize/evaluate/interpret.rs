@@ -9,9 +9,9 @@
 use {
     super::{Bail, Budget, Closure, ListWindow, MAX_FOLD_BITS, MAX_FOLD_ELEMENTS, Value},
     crate::{
-        Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId, FreeValues,
-        FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,
-        Statement, SuspensionOperation, Terminator, UnconsSequenceStep, ValueId, VariantArm,
+        Atom, BlockId, Constant, FoldOutcome, ForeignId, FreeValues, FunctionId, Intrinsic, Module,
+        Operation, Rhs, Semantics, SequenceGrain, SequenceOp, Statement, SuspensionOperation,
+        Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     curios_num::Natural,
     std::{
@@ -238,16 +238,6 @@ impl<'m> Evaluator<'m> {
         result
     }
 
-    /// Evaluate a block in non-tail position, where the result must be a value: a `Stuck` cannot arise (an effect outside the tail bails), and neither can a `Jump`.
-    fn value_of_block(&mut self, block: BlockId, frame: &mut Frame) -> Result<Value, Bail> {
-        match self.eval_block(block, frame, Position::INNER) {
-            Outcome::Done(held) => Ok(held),
-            Outcome::Stuck(_) => unreachable!("non-tail evaluation never residualizes"),
-            Outcome::Jump(_) => unreachable!("non-tail evaluation makes no jump"),
-            Outcome::Bail(bail) => Err(bail),
-        }
-    }
-
     /// Evaluate a block: statements in order, then the terminator. The last statement — when it defines the returned value — stands where the block does, so a `Foreign` there residualizes in the candidate's tail and a call there is a jump in its body's.
     fn eval_block(&mut self, block: BlockId, frame: &mut Frame, at: Position) -> Outcome {
         if let Err(bail) = self.budget.charge() {
@@ -378,17 +368,6 @@ impl<'m> Evaluator<'m> {
                 Ok(_) => Outcome::Bail(Bail::Unsupported),
                 Err(bail) => Outcome::Bail(bail),
             },
-            Rhs::FoldNat {
-                scrutinee,
-                zero,
-                step,
-            } => self.eval_fold_nat(*scrutinee, *zero, step, frame),
-            Rhs::FoldSequence {
-                grain,
-                scrutinee,
-                empty,
-                step,
-            } => self.eval_fold_sequence(*grain, *scrutinee, *empty, step, frame),
             Rhs::UnconsSequence {
                 grain,
                 scrutinee,
@@ -590,83 +569,7 @@ impl<'m> Evaluator<'m> {
         }
     }
 
-    fn eval_fold_nat(
-        &mut self,
-        scrutinee: Atom,
-        zero: BlockId,
-        step: &FoldNatStep,
-        frame: &mut Frame,
-    ) -> Outcome {
-        let bound = match self.eval_atom(scrutinee, frame).and_then(|held| held.nat()) {
-            Ok(bound) => bound,
-            Err(bail) => return Outcome::Bail(bail),
-        };
-        let mut accumulator = match self.value_of_block(zero, frame) {
-            Ok(held) => held,
-            Err(bail) => return Outcome::Bail(bail),
-        };
-        for predecessor in 0..bound {
-            if let Err(bail) = self.budget.charge() {
-                return Outcome::Bail(bail);
-            }
-            let mark = frame.mark();
-            frame.push(step.predecessor, Value::Nat(Natural::from(predecessor)));
-            frame.push(step.hypothesis, accumulator);
-            let result = self.value_of_block(step.block, frame);
-            frame.restore(mark);
-            match result {
-                Ok(held) => accumulator = held,
-                Err(bail) => return Outcome::Bail(bail),
-            }
-        }
-        Outcome::Done(accumulator)
-    }
-
-    fn eval_fold_sequence(
-        &mut self,
-        grain: SequenceGrain,
-        scrutinee: Atom,
-        empty: BlockId,
-        step: &FoldSequenceStep,
-        frame: &mut Frame,
-    ) -> Outcome {
-        let sequence = match self.eval_atom(scrutinee, frame) {
-            Ok(sequence) => sequence,
-            Err(bail) => return Outcome::Bail(bail),
-        };
-        let length = match sequence_length(grain, &sequence) {
-            Ok(length) => length,
-            Err(bail) => return Outcome::Bail(bail),
-        };
-        let mut accumulator = match self.value_of_block(empty, frame) {
-            Ok(held) => held,
-            Err(bail) => return Outcome::Bail(bail),
-        };
-        // A right fold in erasure order: the last element folds first, seeing the empty suffix; each earlier element sees the suffix after it.
-        for cut in (0..length).rev() {
-            if let Err(bail) = self.budget.charge() {
-                return Outcome::Bail(bail);
-            }
-            let (element, suffix) = match peel(grain, &sequence, cut) {
-                Ok(Some(peeled)) => peeled,
-                Ok(None) => unreachable!("a cut below the length peels an element"),
-                Err(bail) => return Outcome::Bail(bail),
-            };
-            let mark = frame.mark();
-            frame.push(step.element, element);
-            frame.push(step.suffix, suffix);
-            frame.push(step.accumulator, accumulator);
-            let result = self.value_of_block(step.block, frame);
-            frame.restore(mark);
-            match result {
-                Ok(held) => accumulator = held,
-                Err(bail) => return Outcome::Bail(bail),
-            }
-        }
-        Outcome::Done(accumulator)
-    }
-
-    /// One peel, evaluated: the empty block on an empty sequence, else the cons block over the head and the suffix after it. The non-looping sibling of [`Evaluator::eval_fold_sequence`], sharing [`peel`] so the two cannot disagree about what a peel exposes.
+    /// One peel, evaluated: the empty block on an empty sequence, else the cons block over the head and the suffix after it.
     fn eval_uncons_sequence(
         &mut self,
         grain: SequenceGrain,
@@ -680,7 +583,7 @@ impl<'m> Evaluator<'m> {
             Ok(sequence) => sequence,
             Err(bail) => return Outcome::Bail(bail),
         };
-        let peeled = match peel(grain, &sequence, 0) {
+        let peeled = match peel(grain, &sequence) {
             Ok(peeled) => peeled,
             Err(bail) => return Outcome::Bail(bail),
         };
@@ -761,36 +664,27 @@ fn leaves(values: &[Value]) -> Option<Vec<Constant>> {
     values.iter().map(Value::as_constant).collect()
 }
 
-/// The element count of a sequence value at `grain`.
-fn sequence_length(grain: SequenceGrain, sequence: &Value) -> Result<usize, Bail> {
-    match (grain, sequence) {
-        (SequenceGrain::List, Value::List(elements)) => Ok(elements.len()),
-        (SequenceGrain::Bytes, Value::Bytes(packed)) => Ok(packed.len()),
-        _ => Err(Bail::Unsupported),
-    }
-}
-
-/// One peel of a sequence at `at`: the element there and the suffix after it, or `None` at the end. A `Bytes` peels a `Byte`.
+/// One peel of a sequence: its head and the suffix after it, or `None` where it is empty. A `Bytes` peels a `Byte`.
 ///
-/// Read off the original value the way the door's `Emitter::emit_peel` reads it at runtime — the element by index and the suffix as a window sharing the allocation — so a peel costs the same whether three elements or a hundred thousand follow it. Rebuilding each suffix element by element would make a recursive byte walk quadratic.
-fn peel(grain: SequenceGrain, sequence: &Value, at: usize) -> Result<Option<(Value, Value)>, Bail> {
+/// Read off the original value the way the door's `Emitter::emit_peel` reads it at runtime — the head by index and the suffix as a window sharing the allocation — so a peel costs the same whether three elements or a hundred thousand follow it. Rebuilding each suffix element by element would make a recursive byte walk quadratic.
+fn peel(grain: SequenceGrain, sequence: &Value) -> Result<Option<(Value, Value)>, Bail> {
     match (grain, sequence) {
         (SequenceGrain::List, Value::List(elements)) => {
-            let Some(element) = elements.get(at) else {
+            let Some(element) = elements.first() else {
                 return Ok(None);
             };
             let suffix = elements
-                .window(at + 1, elements.len() - at - 1)
+                .window(1, elements.len() - 1)
                 .expect("the suffix after an element is within its list");
             Ok(Some((element.clone(), Value::List(suffix))))
         }
         (SequenceGrain::Bytes, Value::Bytes(packed)) => {
             let length = packed.len();
-            if at >= length {
+            if length == 0 {
                 return Ok(None);
             }
-            let element = packed.byte(at).map(Value::Byte);
-            let suffix = packed.slice(at + 1, length);
+            let element = packed.byte(0).map(Value::Byte);
+            let suffix = packed.slice(1, length);
             match (element, suffix) {
                 (Some(element), Some(suffix)) => Ok(Some((element, Value::Bytes(Rc::new(suffix))))),
                 _ => Err(Bail::Unsupported),

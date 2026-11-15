@@ -4,11 +4,11 @@
 
 use {
     super::{
-        Analysis, Atom, Block, BlockId, ConstructorId, Emitter, FamilyEncoding, FamilyId,
-        FoldNatStep, FoldSequenceStep, Function, FunctionId, KnotMember, Module, Operation,
-        RecGroup, RecGroupId, Rhs, SequenceFacts, SequenceGrain, SequenceOp, Statement,
-        StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm, cell_op,
-        operation_intrinsic, sequence_census, sequence_intrinsic, sequence_len_op,
+        Analysis, Atom, Block, BlockId, ConstructorId, Emitter, FamilyEncoding, FamilyId, Function,
+        FunctionId, KnotMember, Module, Operation, RecGroup, RecGroupId, Rhs, SequenceFacts,
+        SequenceGrain, SequenceOp, Statement, StatementId, Terminator, UnconsSequenceStep, ValueId,
+        VariantArm, cell_op, operation_intrinsic, sequence_census, sequence_intrinsic,
+        sequence_len_op,
     },
     crate::{CellOperation, ChannelOperation, Intrinsic, SuspensionOperation, droppable_functions},
     curios_abi::ForeignFunction,
@@ -623,17 +623,6 @@ impl Lowerer<'_> {
                     .collect();
                 self.lower_switch(scrutinee, arms, Some(*default), site)
             }
-            Rhs::FoldNat {
-                scrutinee,
-                zero,
-                step,
-            } => self.lower_fold_nat(*scrutinee, *zero, step, site),
-            Rhs::FoldSequence {
-                grain,
-                scrutinee,
-                empty,
-                step,
-            } => self.lower_fold_sequence(*grain, *scrutinee, *empty, step, site),
             Rhs::UnconsSequence {
                 grain,
                 scrutinee,
@@ -1024,18 +1013,6 @@ impl Lowerer<'_> {
         {
             return (target, false);
         }
-        let join = self.open_join_fresh(site);
-        (join, true)
-    }
-
-    /// Open a join unconditionally — the fold loops route their exit through a `Switch` *edge*, and a bodyless return continuation cannot be a switch target, so they never take the tail bypass.
-    fn open_join_fresh(&mut self, site: Site<'_>) -> curios_cps::ContinuationId {
-        let Site {
-            result,
-            rest,
-            terminator,
-            target,
-        } = site;
         let join = self.emitter.reserve_continuation();
         let parameter = self.emitter.bind_value(result);
         let body = self.lower_statements(rest, terminator, target);
@@ -1047,7 +1024,7 @@ impl Lowerer<'_> {
                 body,
             },
         );
-        join
+        (join, true)
     }
 
     /// Build a parameterless continuation lowering `block` into `join`.
@@ -1475,130 +1452,7 @@ impl Lowerer<'_> {
         continuation
     }
 
-    // === Folds ===========================================================
-
-    /// Lower a `Nat` induction to an up-counting loop `i = 0 … n` threading the accumulator: the zero block seeds it, and at each step the arena predecessor/hypothesis binders are the loop index and accumulator.
-    fn lower_fold_nat(
-        &mut self,
-        scrutinee: Atom,
-        zero: BlockId,
-        step: &FoldNatStep,
-        site: Site<'_>,
-    ) -> curios_cps::NodeId {
-        let head = self.emitter.lower_atom(scrutinee);
-        let join = self.open_join_fresh(site);
-
-        let loop_index = self.emitter.add_value(None);
-        let loop_acc = self.emitter.add_value(None);
-        let step_index = self.emitter.bind_value(step.predecessor);
-        let step_acc = self.emitter.bind_value(step.hypothesis);
-        let next_index = self.emitter.add_value(None);
-        let next_acc = self.emitter.add_value(None);
-        let comparison = self.emitter.add_value(None);
-        let zero_acc = self.emitter.add_value(None);
-
-        let loop_cont = self.emitter.reserve_continuation();
-        let step_cont = self.emitter.reserve_continuation();
-        let step_resume = self.emitter.reserve_continuation();
-        let zero_resume = self.emitter.reserve_continuation();
-
-        // step_resume(next_acc): increment the index and loop.
-        let loop_back = self.emitter.jump(
-            loop_cont,
-            vec![
-                curios_cps::Atom::Value(next_index),
-                curios_cps::Atom::Value(next_acc),
-            ],
-        );
-        let increment = self.emitter.add_node(curios_cps::Node::LetIntrinsic {
-            result: next_index,
-            op: curios_cps::Intrinsic::NatAdd,
-            args: vec![
-                curios_cps::Atom::Value(step_index),
-                curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(1u32))),
-            ],
-            next: loop_back,
-        });
-        self.emitter.define_continuation(
-            step_resume,
-            curios_cps::Continuation {
-                debug_name: Some("loop/step_resume".into()),
-                params: vec![next_acc],
-                body: increment,
-            },
-        );
-
-        // step_cont(step_index, step_acc): run the step block, then resume.
-        let step_body = self.lower_block(step.block, step_resume);
-        let step_body = self.emitter.add_node(curios_cps::Node::LetCont {
-            continuations: vec![step_resume],
-            body: step_body,
-        });
-        self.emitter.define_continuation(
-            step_cont,
-            curios_cps::Continuation {
-                debug_name: Some("loop/step".into()),
-                params: vec![step_index, step_acc],
-                body: step_body,
-            },
-        );
-
-        // loop_cont(loop_index, loop_acc): step until the index reaches n.
-        let switch = self.emitter.add_node(curios_cps::Node::Switch {
-            scrutinee: curios_cps::Atom::Value(comparison),
-            cases: BTreeMap::from([(
-                0,
-                curios_cps::Edge {
-                    target: step_cont,
-                    args: vec![
-                        curios_cps::Atom::Value(loop_index),
-                        curios_cps::Atom::Value(loop_acc),
-                    ],
-                },
-            )]),
-            default: Some(curios_cps::Edge {
-                target: join,
-                args: vec![curios_cps::Atom::Value(loop_acc)],
-            }),
-        });
-        let loop_body = self.emitter.add_node(curios_cps::Node::LetIntrinsic {
-            result: comparison,
-            op: curios_cps::Intrinsic::NatEql,
-            args: vec![curios_cps::Atom::Value(loop_index), head],
-            next: switch,
-        });
-        self.emitter.define_continuation(
-            loop_cont,
-            curios_cps::Continuation {
-                debug_name: Some("loop".into()),
-                params: vec![loop_index, loop_acc],
-                body: loop_body,
-            },
-        );
-
-        // zero_resume(zero_acc): enter the loop at index 0 with the base.
-        let zero_jump = self.emitter.jump(
-            loop_cont,
-            vec![
-                curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero())),
-                curios_cps::Atom::Value(zero_acc),
-            ],
-        );
-        self.emitter.define_continuation(
-            zero_resume,
-            curios_cps::Continuation {
-                debug_name: Some("loop/base".into()),
-                params: vec![zero_acc],
-                body: zero_jump,
-            },
-        );
-
-        let entry = self.lower_block(zero, zero_resume);
-        self.emitter.add_node(curios_cps::Node::LetCont {
-            continuations: vec![join, loop_cont, step_cont, zero_resume],
-            body: entry,
-        })
-    }
+    // === Peels ===========================================================
 
     /// Lower a sequence case split to a length dispatch over one peel: zero takes the empty block, anything else peels the head and the suffix after it.
     ///
@@ -1617,7 +1471,7 @@ impl Lowerer<'_> {
 
         let length = self.emitter.add_value(None);
         let element = self.emitter.bind_value(cons.element);
-        // Declined where nothing reads it, for the reason the fold's is: a suffix allocates a rope view, and this is the only place that may decline to build one — a later pass cannot drop a read on the grounds its result is dead.
+        // Declined where nothing reads it: a suffix allocates a rope view, and this is the only place that may decline to build one — a later pass cannot drop a read on the grounds its result is dead.
         let suffix = (self.analysis.value_uses(cons.suffix) > 0)
             .then(|| self.emitter.bind_value(cons.suffix));
 
@@ -1626,19 +1480,9 @@ impl Lowerer<'_> {
 
         let cons_arm = self.emitter.reserve_continuation();
         let cons_body = self.lower_block(cons.block, join);
-        let cons_body = self.emitter.emit_peel(
-            grain,
-            &sequence,
-            element,
-            curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero())),
-            suffix.map(|suffix| {
-                (
-                    suffix,
-                    curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(1u32))),
-                )
-            }),
-            cons_body,
-        );
+        let cons_body = self
+            .emitter
+            .emit_peel(grain, &sequence, element, suffix, cons_body);
         self.emitter.define_continuation(
             cons_arm,
             curios_cps::Continuation {
@@ -1673,153 +1517,6 @@ impl Lowerer<'_> {
             op: sequence_len_op(grain),
             args: vec![sequence],
             next: dispatch,
-        })
-    }
-
-    /// Lower a sequence right fold to a backward loop `i = len … 0`: the empty block seeds the accumulator; each step reads `seq[i - 1]` and the suffix `seq[i ..]` and folds it in.
-    fn lower_fold_sequence(
-        &mut self,
-        grain: SequenceGrain,
-        scrutinee: Atom,
-        empty: BlockId,
-        step: &FoldSequenceStep,
-        site: Site<'_>,
-    ) -> curios_cps::NodeId {
-        let sequence = self.emitter.lower_atom(scrutinee);
-        let join = self.open_join_fresh(site);
-
-        let length = self.emitter.add_value(None);
-        let loop_index = self.emitter.add_value(None);
-        let loop_acc = self.emitter.add_value(None);
-        let comparison = self.emitter.add_value(None);
-        let step_index = self.emitter.add_value(None);
-        let step_acc = self.emitter.bind_value(step.accumulator);
-        let element_index = self.emitter.add_value(None);
-        let element = self.emitter.bind_value(step.element);
-        // A step almost never mentions its suffix — `Bytes/fold` and `List/fold` do not, and neither does a step whose only use of it is an argument to a `Prop` constructor, since erasure removes that. Binding it regardless costs one rope-view allocation per element, inside the loop, for a value nothing reads. **This is the only place that can decline to emit it:** a slice may trap, so no later pass may drop one on the grounds that its result is dead, and the fact that this one cannot trap is a property of the loop emitted below rather than anything recoverable downstream.
-        let suffix = (self.analysis.value_uses(step.suffix) > 0)
-            .then(|| self.emitter.bind_value(step.suffix));
-        let base_acc = self.emitter.add_value(None);
-        let next_acc = self.emitter.add_value(None);
-
-        let loop_cont = self.emitter.reserve_continuation();
-        let step_cont = self.emitter.reserve_continuation();
-        let step_resume = self.emitter.reserve_continuation();
-        let empty_resume = self.emitter.reserve_continuation();
-
-        // step_resume(next_acc): continue the loop at the element's index.
-        let loop_back = self.emitter.jump(
-            loop_cont,
-            vec![
-                curios_cps::Atom::Value(element_index),
-                curios_cps::Atom::Value(next_acc),
-            ],
-        );
-        self.emitter.define_continuation(
-            step_resume,
-            curios_cps::Continuation {
-                debug_name: Some("loop/step_resume".into()),
-                params: vec![next_acc],
-                body: loop_back,
-            },
-        );
-
-        // step_cont(step_index, step_acc): extract seq[i-1], seq[i..], fold.
-        let step_body = self.lower_block(step.block, step_resume);
-        let step_body = self.emitter.add_node(curios_cps::Node::LetCont {
-            continuations: vec![step_resume],
-            body: step_body,
-        });
-        let step_body = self.emitter.emit_peel(
-            grain,
-            &sequence,
-            element,
-            curios_cps::Atom::Value(element_index),
-            suffix.map(|suffix| (suffix, curios_cps::Atom::Value(step_index))),
-            step_body,
-        );
-        let step_body = self.emitter.add_node(curios_cps::Node::LetIntrinsic {
-            result: element_index,
-            op: curios_cps::Intrinsic::NatSub,
-            args: vec![
-                curios_cps::Atom::Value(step_index),
-                curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::from(1u32))),
-            ],
-            next: step_body,
-        });
-        self.emitter.define_continuation(
-            step_cont,
-            curios_cps::Continuation {
-                debug_name: Some("loop/step".into()),
-                params: vec![step_index, step_acc],
-                body: step_body,
-            },
-        );
-
-        // loop_cont(loop_index, loop_acc): fold until the index reaches 0.
-        let switch = self.emitter.add_node(curios_cps::Node::Switch {
-            scrutinee: curios_cps::Atom::Value(comparison),
-            cases: BTreeMap::from([(
-                0,
-                curios_cps::Edge {
-                    target: step_cont,
-                    args: vec![
-                        curios_cps::Atom::Value(loop_index),
-                        curios_cps::Atom::Value(loop_acc),
-                    ],
-                },
-            )]),
-            default: Some(curios_cps::Edge {
-                target: join,
-                args: vec![curios_cps::Atom::Value(loop_acc)],
-            }),
-        });
-        let loop_body = self.emitter.add_node(curios_cps::Node::LetIntrinsic {
-            result: comparison,
-            op: curios_cps::Intrinsic::NatEql,
-            args: vec![
-                curios_cps::Atom::Value(loop_index),
-                curios_cps::Atom::Literal(curios_cps::Literal::Nat(Natural::zero())),
-            ],
-            next: switch,
-        });
-        self.emitter.define_continuation(
-            loop_cont,
-            curios_cps::Continuation {
-                debug_name: Some("loop".into()),
-                params: vec![loop_index, loop_acc],
-                body: loop_body,
-            },
-        );
-
-        // empty_resume(base_acc): enter the loop at the end with the base.
-        let empty_jump = self.emitter.jump(
-            loop_cont,
-            vec![
-                curios_cps::Atom::Value(length),
-                curios_cps::Atom::Value(base_acc),
-            ],
-        );
-        self.emitter.define_continuation(
-            empty_resume,
-            curios_cps::Continuation {
-                debug_name: Some("loop/base".into()),
-                params: vec![base_acc],
-                body: empty_jump,
-            },
-        );
-
-        let entry = self.lower_block(empty, empty_resume);
-        let entry = self.emitter.add_node(curios_cps::Node::LetCont {
-            continuations: vec![join, loop_cont, step_cont, empty_resume],
-            body: entry,
-        });
-        // Compute the length up front so every continuation sees it.
-        self.emitter.add_node(curios_cps::Node::LetIntrinsic {
-            result: length,
-            op: sequence_len_op(grain),
-            args: vec![sequence],
-            next: entry,
         })
     }
 

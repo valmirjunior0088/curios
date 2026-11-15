@@ -69,7 +69,7 @@ impl SequenceOp {
     }
 }
 
-/// The sequence kind a fold eliminates — a homogeneous list or a packed binary — enough to recover exact element and suffix behavior.
+/// The sequence kind a peel eliminates — a homogeneous list or a packed binary — enough to recover exact element and suffix behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum SequenceGrain {

@@ -28,11 +28,10 @@ pub use schema::{
 
 mod node;
 pub use node::{
-    ArchivedBlock, ArchivedCellOperation, ArchivedChannelOperation, ArchivedFoldNatStep,
-    ArchivedFoldSequenceStep, ArchivedFunction, ArchivedIntrinsic, ArchivedNatCase,
-    ArchivedRecGroup, ArchivedRecValue, ArchivedRhs, ArchivedRole, ArchivedStatement,
-    ArchivedSuspensionOperation, ArchivedTerminator, ArchivedUnconsSequenceStep,
-    ArchivedVariantArm, Block, CellOperation, ChannelOperation, FoldNatStep, FoldSequenceStep,
+    ArchivedBlock, ArchivedCellOperation, ArchivedChannelOperation, ArchivedFunction,
+    ArchivedIntrinsic, ArchivedNatCase, ArchivedRecGroup, ArchivedRecValue, ArchivedRhs,
+    ArchivedRole, ArchivedStatement, ArchivedSuspensionOperation, ArchivedTerminator,
+    ArchivedUnconsSequenceStep, ArchivedVariantArm, Block, CellOperation, ChannelOperation,
     Function, Intrinsic, NatCase, RecGroup, RecValue, Rhs, Role, Statement, SuspensionOperation,
     Terminator, UnconsSequenceStep, VariantArm,
 };

@@ -9,9 +9,8 @@
 use {
     crate::{
         Atom, Block, BlockId, CellOperation, ChannelOperation, ConstantId, ConstructorId, FamilyId,
-        FoldNatStep, FoldSequenceStep, ForeignId, Function, FunctionId, NatCase, ProductId,
-        RecGroup, RecGroupId, RecValue, Rhs, Statement, StatementId, Terminator,
-        UnconsSequenceStep, ValueId, VariantArm,
+        ForeignId, Function, FunctionId, NatCase, ProductId, RecGroup, RecGroupId, RecValue, Rhs,
+        Statement, StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     std::collections::BTreeMap,
 };
@@ -215,35 +214,6 @@ impl Remap<'_> {
                     })
                     .collect(),
                 default: self.block(*default),
-            },
-            Rhs::FoldNat {
-                scrutinee,
-                zero,
-                step,
-            } => Rhs::FoldNat {
-                scrutinee: self.atom(*scrutinee),
-                zero: self.block(*zero),
-                step: FoldNatStep {
-                    predecessor: self.value(step.predecessor),
-                    hypothesis: self.value(step.hypothesis),
-                    block: self.block(step.block),
-                },
-            },
-            Rhs::FoldSequence {
-                grain,
-                scrutinee,
-                empty,
-                step,
-            } => Rhs::FoldSequence {
-                grain: *grain,
-                scrutinee: self.atom(*scrutinee),
-                empty: self.block(*empty),
-                step: FoldSequenceStep {
-                    element: self.value(step.element),
-                    suffix: self.value(step.suffix),
-                    accumulator: self.value(step.accumulator),
-                    block: self.block(step.block),
-                },
             },
             Rhs::UnconsSequence {
                 grain,

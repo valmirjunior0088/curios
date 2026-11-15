@@ -608,7 +608,7 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Ro
 
         // A trailing dispatch whose result the block returns: its arms are tail positions.
         //
-        // **This list is a pattern, so nothing checks it is complete.** A dispatch form missing from it is not walked into, so the recursion under it keeps its deferred context, stays non-tail, and costs a frame an element where a loop costs none. `FoldSequence` is absent because its step is not a tail position — the accumulator is consumed after it. A new dispatch form belongs here unless it is a loop.
+        // **This list is a pattern, so nothing checks it is complete.** A dispatch form missing from it is not walked into, so the recursion under it keeps its deferred context, stays non-tail, and costs a frame an element where a loop costs none. A new dispatch form belongs here.
         if let Some((
             _,
             Statement::Let {

@@ -243,10 +243,6 @@ fn head(module: &Module, rhs: &Rhs) -> String {
         } => format!("MatchVariant {family} {}", atom_(module, scrutinee)),
         Rhs::SwitchBool { scrutinee, .. } => format!("SwitchBool {}", atom_(module, scrutinee)),
         Rhs::SwitchNat { scrutinee, .. } => format!("SwitchNat {}", atom_(module, scrutinee)),
-        Rhs::FoldNat { scrutinee, .. } => format!("FoldNat {}", atom_(module, scrutinee)),
-        Rhs::FoldSequence {
-            grain, scrutinee, ..
-        } => format!("FoldSequence {grain:?} {}", atom_(module, scrutinee)),
         Rhs::UnconsSequence {
             grain, scrutinee, ..
         } => format!("UnconsSequence {grain:?} {}", atom_(module, scrutinee)),
@@ -306,35 +302,6 @@ fn bodies(module: &Module, out: &mut String, depth: usize, rhs: &Rhs) {
             }
             line(out, depth, "default");
             block(module, out, depth + 1, *default);
-        }
-        Rhs::FoldNat { zero, step, .. } => {
-            line(out, depth, "zero");
-            block(module, out, depth + 1, *zero);
-            line(
-                out,
-                depth,
-                &format!(
-                    "step({}, {})",
-                    spell_value(module, step.predecessor),
-                    spell_value(module, step.hypothesis)
-                ),
-            );
-            block(module, out, depth + 1, step.block);
-        }
-        Rhs::FoldSequence { empty, step, .. } => {
-            line(out, depth, "empty");
-            block(module, out, depth + 1, *empty);
-            line(
-                out,
-                depth,
-                &format!(
-                    "step({}, {}, {})",
-                    spell_value(module, step.element),
-                    spell_value(module, step.suffix),
-                    spell_value(module, step.accumulator)
-                ),
-            );
-            block(module, out, depth + 1, step.block);
         }
         Rhs::UnconsSequence { empty, cons, .. } => {
             line(out, depth, "empty");

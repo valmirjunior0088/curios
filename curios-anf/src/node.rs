@@ -1,6 +1,6 @@
 //! Blocks, statements, terminators, right-hand sides, functions, and recursive groups — the direct-style ANF structure of the representation.
 //!
-//! Every non-atomic computation is bound by a `Let` statement, so evaluation order is exactly statement order — the operand law's home, and the reason effect ordering is a structural property rather than per-pass discipline. Branch and fold bodies are blocks referenced by [`BlockId`]; every block has exactly one structural owner and block references are acyclic. Recursion happens only through function and recursive-group identities, never by making the block graph cyclic.
+//! Every non-atomic computation is bound by a `Let` statement, so evaluation order is exactly statement order — the operand law's home, and the reason effect ordering is a structural property rather than per-pass discipline. Branch and arm bodies are blocks referenced by [`BlockId`]; every block has exactly one structural owner and block references are acyclic. Recursion happens only through function and recursive-group identities, never by making the block graph cyclic.
 
 use {
     super::{
@@ -63,22 +63,9 @@ pub enum Rhs {
         cases: Vec<NatCase>,
         default: BlockId,
     },
-    /// `Nat` induction as a bounded fold: `zero` computes the base result, and `step` computes each successor result from the predecessor index and the induction hypothesis. A first-class loop form — O(1) native stack by construction.
-    FoldNat {
-        scrutinee: Atom,
-        zero: BlockId,
-        step: FoldNatStep,
-    },
-    /// Sequence elimination as a right fold: `empty` computes the base result, and `step` sees the current element, the suffix view after it, and the accumulated result of folding that suffix. A first-class loop form — O(1) native stack by construction.
-    FoldSequence {
-        grain: SequenceGrain,
-        scrutinee: Atom,
-        empty: BlockId,
-        step: FoldSequenceStep,
-    },
     /// Sequence elimination as a *case split*: `empty` computes the result for the empty sequence, and `cons` sees the head element and the suffix after it.
     ///
-    /// The non-looping sibling of [`Rhs::FoldSequence`], and the form Core's sequence case split erases to. It exists so that the erasure states what the Core eliminator states — one peel — instead of open-coding one out of an index dispatch and two bounded reads, which is a window convention two crates would then each have to hold.
+    /// The form Core's sequence case split erases to, and the one sequence elimination this alphabet names: a loop over a sequence is a tail recursion through it. It exists so that the erasure states what the Core eliminator states — one peel — instead of open-coding one out of an index dispatch and two bounded reads, which is a window convention two crates would then each have to hold.
     UnconsSequence {
         grain: SequenceGrain,
         scrutinee: Atom,
@@ -131,8 +118,6 @@ impl Rhs {
             | Self::MatchVariant { .. }
             | Self::SwitchBool { .. }
             | Self::SwitchNat { .. }
-            | Self::FoldNat { .. }
-            | Self::FoldSequence { .. }
             | Self::UnconsSequence { .. } => false,
         }
     }
@@ -157,31 +142,12 @@ pub struct NatCase {
     pub block: BlockId,
 }
 
-/// The successor arm of a [`Rhs::FoldNat`]: binds the predecessor index and the induction hypothesis (the fold's result on the predecessor) in `block`.
-#[derive(Debug, Clone)]
-#[curios_archive::archived]
-pub struct FoldNatStep {
-    pub predecessor: ValueId,
-    pub hypothesis: ValueId,
-    pub block: BlockId,
-}
-
 /// The cons arm of a [`Rhs::UnconsSequence`]: binds the head element and the suffix after it in `block`.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct UnconsSequenceStep {
     pub element: ValueId,
     pub suffix: ValueId,
-    pub block: BlockId,
-}
-
-/// The step arm of a [`Rhs::FoldSequence`]: binds the current element, the suffix view after it, and the accumulated result in `block`.
-#[derive(Debug, Clone)]
-#[curios_archive::archived]
-pub struct FoldSequenceStep {
-    pub element: ValueId,
-    pub suffix: ValueId,
-    pub accumulator: ValueId,
     pub block: BlockId,
 }
 

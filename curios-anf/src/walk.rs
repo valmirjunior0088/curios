@@ -30,8 +30,6 @@ impl Rhs {
             Self::MatchVariant { scrutinee, .. }
             | Self::SwitchBool { scrutinee, .. }
             | Self::SwitchNat { scrutinee, .. }
-            | Self::FoldNat { scrutinee, .. }
-            | Self::FoldSequence { scrutinee, .. }
             | Self::UnconsSequence { scrutinee, .. } => vec![*scrutinee],
         }
     }
@@ -62,21 +60,15 @@ impl Rhs {
                 .map(|case| case.block)
                 .chain([*default])
                 .collect(),
-            Self::FoldNat { zero, step, .. } => vec![*zero, step.block],
-            Self::FoldSequence { empty, step, .. } => vec![*empty, step.block],
             Self::UnconsSequence { empty, cons, .. } => vec![*empty, cons.block],
         }
     }
 
-    /// Every value the sub-blocks of this right-hand side bind — arm payload binders and fold step binders.
+    /// Every value the sub-blocks of this right-hand side bind — arm payload binders and a peel's element and suffix.
     pub fn binders(&self) -> Vec<ValueId> {
         match self {
             Self::MatchVariant { arms, .. } => {
                 arms.iter().flat_map(|arm| arm.bindings.clone()).collect()
-            }
-            Self::FoldNat { step, .. } => vec![step.predecessor, step.hypothesis],
-            Self::FoldSequence { step, .. } => {
-                vec![step.element, step.suffix, step.accumulator]
             }
             Self::UnconsSequence { cons, .. } => vec![cons.element, cons.suffix],
             _ => Vec::new(),

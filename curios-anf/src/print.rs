@@ -169,8 +169,6 @@ impl Reach {
             | Rhs::Sequence { .. }
             | Rhs::SwitchBool { .. }
             | Rhs::SwitchNat { .. }
-            | Rhs::FoldNat { .. }
-            | Rhs::FoldSequence { .. }
             | Rhs::UnconsSequence { .. }
             | Rhs::Intrinsic { .. }
             | Rhs::Suspension { .. } => {}
@@ -588,39 +586,6 @@ impl Printer<'_, '_, '_, '_> {
                         self.arm(inner, "_".into(), *default)?;
                         return self.line(inner, "end;");
                     }
-                    Rhs::FoldNat {
-                        scrutinee,
-                        zero,
-                        step,
-                    } => {
-                        self.scrutinized(indent, &bound, *scrutinee)?;
-                        self.arm(inner, "0".into(), *zero)?;
-                        let pattern = format!(
-                            "{} + 1; {}",
-                            self.binder(step.predecessor),
-                            self.binder(step.hypothesis)
-                        );
-                        self.arm(inner, pattern, step.block)?;
-                        return self.line(inner, "end;");
-                    }
-                    Rhs::FoldSequence {
-                        grain,
-                        scrutinee,
-                        empty,
-                        step,
-                    } => {
-                        let g = grain_prefix(grain);
-                        self.scrutinized(indent, &bound, *scrutinee)?;
-                        self.arm(inner, format!("{g}[]"), *empty)?;
-                        let pattern = format!(
-                            "{g}[{}, ..{}]; {}",
-                            self.binder(step.element),
-                            self.binder(step.suffix),
-                            self.binder(step.accumulator)
-                        );
-                        self.arm(inner, pattern, step.block)?;
-                        return self.line(inner, "end;");
-                    }
                     Rhs::UnconsSequence {
                         grain,
                         scrutinee,
@@ -810,7 +775,7 @@ fn fields(row: &[Field]) -> String {
         .join(", ")
 }
 
-/// The pattern prefix that selects a sequence carrier, exactly as the surface writes a packed fold: bare for `List`, `x` for `Bytes`.
+/// The pattern prefix that selects a sequence carrier, exactly as the surface writes a packed pattern: bare for `List`, `x` for `Bytes`.
 fn grain_prefix(grain: &SequenceGrain) -> &'static str {
     match grain {
         SequenceGrain::List => "",

@@ -133,14 +133,6 @@ impl Value {
         }
     }
 
-    /// The value as a machine natural, declining one no `u32` holds — every consumer is an index or a count, which a wider value cannot be.
-    pub fn nat(&self) -> Result<u32, Bail> {
-        match self {
-            Value::Nat(value) => u32::try_from(value).ok().ok_or(Bail::Unsupported),
-            _ => Err(Bail::Unsupported),
-        }
-    }
-
     pub fn bool_(&self) -> Result<bool, Bail> {
         match self {
             Value::Bool(value) => Ok(*value),

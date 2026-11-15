@@ -207,14 +207,13 @@ impl Semantics {
     /// The node-local behavior of a right-hand side — its own operation only, excluding callees, callbacks, and sub-blocks.
     pub fn local_behavior(rhs: &Rhs) -> LocalBehavior {
         match rhs {
-            // Pure structure: a call's effects are its callee's summary; a match, switch, or Nat fold contributes only its sub-blocks'; aliasing and projection are total and allocation-free.
+            // Pure structure: a call's effects are its callee's summary; a match or a switch contributes only its sub-blocks'; aliasing and projection are total and allocation-free.
             Rhs::Alias(_)
             | Rhs::Apply { .. }
             | Rhs::Project { .. }
             | Rhs::MatchVariant { .. }
             | Rhs::SwitchBool { .. }
-            | Rhs::SwitchNat { .. }
-            | Rhs::FoldNat { .. } => LocalBehavior::pure(),
+            | Rhs::SwitchNat { .. } => LocalBehavior::pure(),
             Rhs::Operation { operation, .. } => Self::operation(*operation),
             Rhs::Sequence { operation, .. } => Self::sequence(*operation),
             Rhs::Cell { operation, .. } => Self::cell(*operation),
@@ -234,11 +233,10 @@ impl Semantics {
                 | SuspensionOperation::Next
                 | SuspensionOperation::Frames => LocalBehavior::pure(),
             },
-            // Building an aggregate allocates an immutable value; a sequence fold materializes suffix views.
-            Rhs::Product { .. }
-            | Rhs::Construct { .. }
-            | Rhs::FoldSequence { .. }
-            | Rhs::UnconsSequence { .. } => LocalBehavior::alloc(Allocation::Immutable),
+            // Building an aggregate allocates an immutable value; a peel materializes its suffix's view.
+            Rhs::Product { .. } | Rhs::Construct { .. } | Rhs::UnconsSequence { .. } => {
+                LocalBehavior::alloc(Allocation::Immutable)
+            }
         }
     }
 

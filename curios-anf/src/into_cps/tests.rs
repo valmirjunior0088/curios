@@ -697,94 +697,49 @@ fn a_shared_tuple_field_is_never_settled() {
     );
 }
 
-#[test]
-fn folds_lower_to_accumulator_loops() {
-    let mut builder = Builder::new();
-    builder.open_block();
-    let five = nat(&mut builder, 5);
-    builder.open_block();
-    let zero = nat(&mut builder, 0);
-    let zero_block = builder.seal_block(Terminator::Return(zero));
-    let predecessor = builder.value(Some("pred".into()));
-    let hypothesis = builder.value(Some("ih".into()));
-    builder.open_block();
-    let two = nat(&mut builder, 2);
-    let stepped = builder.let_value(
-        None,
-        Rhs::Operation {
-            operation: Operation::NatAdd,
-            operands: vec![Atom::Value(hypothesis), two],
-        },
-    );
-    let step_block = builder.seal_block(Terminator::Return(Atom::Value(stepped)));
-    let folded = builder.let_value(
-        None,
-        Rhs::FoldNat {
-            scrutinee: five,
-            zero: zero_block,
-            step: FoldNatStep {
-                predecessor,
-                hypothesis,
-                block: step_block,
-            },
-        },
-    );
-    let entry = builder.seal_block(Terminator::Return(Atom::Value(folded)));
-    builder.set_entry(entry);
-    let module = builder.finalize().expect("verifies");
-    // Completing at all means the synthesized loop verified.
-    let cps = lowered(&module);
-    assert!(
-        intrinsics(&cps).contains(&curios_cps::Intrinsic::NatEql),
-        "{cps}"
-    );
-}
-
-#[test]
-fn a_sequence_fold_reads_through_its_grain() {
+/// `match x[1, 2, 3] | x[] => 0 | x[h, ..t] => ...` over `Bytes`, its cons arm's answer built by `cons` from the element and the suffix.
+fn bytes_case_split(cons: impl FnOnce(&mut Builder, ValueId, ValueId) -> Atom) -> Module {
     let mut builder = Builder::new();
     builder.open_block();
     let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
     builder.open_block();
     let zero = nat(&mut builder, 0);
-    let empty_block = builder.seal_block(Terminator::Return(zero));
+    let empty = builder.seal_block(Terminator::Return(zero));
     let element = builder.value(Some("h".into()));
     let suffix = builder.value(Some("t".into()));
-    let accumulator = builder.value(Some("ih".into()));
     builder.open_block();
-    // The step reads its suffix, which is what makes the suffix read part of this claim: an unused one is not emitted at all, per `an_unused_fold_suffix_is_not_sliced`.
-    let remaining = builder.let_value(
+    let answer = cons(&mut builder, element, suffix);
+    let block = builder.seal_block(Terminator::Return(answer));
+    let peeled = builder.let_value(
         None,
-        Rhs::Sequence {
-            operation: SequenceOp::BytesLen,
-            operands: vec![Atom::Value(suffix)],
-        },
-    );
-    let stepped = builder.let_value(
-        None,
-        Rhs::Operation {
-            operation: Operation::NatAdd,
-            operands: vec![Atom::Value(accumulator), Atom::Value(remaining)],
-        },
-    );
-    let step_block = builder.seal_block(Terminator::Return(Atom::Value(stepped)));
-    let folded = builder.let_value(
-        None,
-        Rhs::FoldSequence {
+        Rhs::UnconsSequence {
             grain: SequenceGrain::Bytes,
             scrutinee: Atom::Constant(bytes),
-            empty: empty_block,
-            step: FoldSequenceStep {
+            empty,
+            cons: UnconsSequenceStep {
                 element,
                 suffix,
-                accumulator,
-                block: step_block,
+                block,
             },
         },
     );
-    let entry = builder.seal_block(Terminator::Return(Atom::Value(folded)));
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(peeled)));
     builder.set_entry(entry);
-    let module = builder.finalize().expect("verifies");
+    builder.finalize().expect("verifies")
+}
+
+#[test]
+fn a_sequence_case_split_reads_through_its_grain() {
+    // The arm reads its suffix, which is what makes the suffix read part of this claim: an unused one is not emitted at all, per `an_unused_peel_suffix_is_not_built`.
+    let module = bytes_case_split(|builder, _, suffix| {
+        Atom::Value(builder.let_value(
+            None,
+            Rhs::Sequence {
+                operation: SequenceOp::BytesLen,
+                operands: vec![Atom::Value(suffix)],
+            },
+        ))
+    });
     let cps = lowered(&module);
     assert!(
         has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesLen)),
@@ -805,49 +760,14 @@ fn a_sequence_fold_reads_through_its_grain() {
     );
 }
 
-/// A fold whose step ignores its suffix pays nothing for it.
+/// A case split whose cons arm ignores its suffix pays nothing for it.
 ///
-/// The suffix is a slice, and a slice allocates a view — once per element, inside the loop. Nearly every fold discards it (`Bytes/fold` and `List/fold`), so emitting it unconditionally would put one allocation and one runtime allocation call per element into the hottest loops in the corpus, for a value nothing reads.
+/// The suffix is a view, allocated each time the arm runs — once per element in a loop peeling its sequence. Many such arms discard it, so emitting it unconditionally would put an allocation per element into a loop for a value nothing reads.
 ///
-/// **No later pass can undo that**, which is why the check belongs at the point of emission: `BytesSlice` is `MayTrap`, so dead-result elimination must keep one, and the reason this one cannot trap — the loop below indexes `[i, len)` with `1 <= i <= len` — is a property of the loop this same function emits rather than a range fact recoverable downstream.
+/// **No later pass can undo that**, which is why the check belongs at the point of emission: `BytesRest` is `MayTrap`, so dead-result elimination must keep one, and the reason this one cannot trap — it reads past the head of a sequence the dispatch found non-empty — is a property of the dispatch this same function emits rather than a range fact recoverable downstream.
 #[test]
-fn an_unused_fold_suffix_is_not_sliced() {
-    let mut builder = Builder::new();
-    builder.open_block();
-    let bytes = builder.constant(Constant::Bytes(Binary::from_bytes(vec![1, 2, 3])));
-    builder.open_block();
-    let zero = nat(&mut builder, 0);
-    let empty_block = builder.seal_block(Terminator::Return(zero));
-    let element = builder.value(Some("h".into()));
-    let suffix = builder.value(Some("t".into()));
-    let accumulator = builder.value(Some("ih".into()));
-    builder.open_block();
-    // Reads the element and the hypothesis, never the suffix.
-    let stepped = builder.let_value(
-        None,
-        Rhs::Operation {
-            operation: Operation::NatAdd,
-            operands: vec![Atom::Value(accumulator), Atom::Value(element)],
-        },
-    );
-    let step_block = builder.seal_block(Terminator::Return(Atom::Value(stepped)));
-    let folded = builder.let_value(
-        None,
-        Rhs::FoldSequence {
-            grain: SequenceGrain::Bytes,
-            scrutinee: Atom::Constant(bytes),
-            empty: empty_block,
-            step: FoldSequenceStep {
-                element,
-                suffix,
-                accumulator,
-                block: step_block,
-            },
-        },
-    );
-    let entry = builder.seal_block(Terminator::Return(Atom::Value(folded)));
-    builder.set_entry(entry);
-    let module = builder.finalize().expect("verifies");
+fn an_unused_peel_suffix_is_not_built() {
+    let module = bytes_case_split(|_, element, _| Atom::Value(element));
     let cps = lowered(&module);
     // The element is still read through its grain; only the discarded suffix is gone.
     assert!(
@@ -855,7 +775,7 @@ fn an_unused_fold_suffix_is_not_sliced() {
         "{cps}"
     );
     assert!(
-        !has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesSlice)),
+        !has_intrinsic(&cps, |op| matches!(op, curios_cps::Intrinsic::BytesRest)),
         "{cps}"
     );
 }

@@ -341,7 +341,7 @@ impl<'m> Verifier<'m> {
         })
     }
 
-    /// Bind `values`, walk `block` under them, and take them back out of scope — the bracket every arm binder, fold binder and function parameter enters its body through.
+    /// Bind `values`, walk `block` under them, and take them back out of scope — the bracket every arm binder and function parameter enters its body through.
     fn scoped_block(&mut self, values: &[ValueId], block: BlockId) -> Result<(), StructuralFault> {
         for &value in values {
             self.bind_value(value)?;
@@ -648,25 +648,6 @@ impl<'m> Verifier<'m> {
                     self.enter_block(case.block)?;
                 }
                 self.enter_block(default)?;
-            }
-            Rhs::FoldNat {
-                scrutinee,
-                zero,
-                step,
-            } => {
-                self.check_atom(id, scrutinee)?;
-                self.enter_block(zero)?;
-                self.scoped_block(&[step.predecessor, step.hypothesis], step.block)?;
-            }
-            Rhs::FoldSequence {
-                grain: _,
-                scrutinee,
-                empty,
-                step,
-            } => {
-                self.check_atom(id, scrutinee)?;
-                self.enter_block(empty)?;
-                self.scoped_block(&[step.element, step.suffix, step.accumulator], step.block)?;
             }
             Rhs::UnconsSequence {
                 grain: _,
