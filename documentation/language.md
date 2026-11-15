@@ -106,8 +106,6 @@ An integer literal is decimal, hexadecimal after `0x`, or binary after `0b`. A s
 
 A numeral takes its type from where it stands: `Nat`, `Int`, `Byte`, `Bool` or `Flt`. A `-` rules out `Nat`, `Byte` and `Bool`. `Byte` is taken only where a `Byte` is expected, from `0` through `255`, and `Bool` only where a `Bool` is expected, `0` or `1`. Where nothing gives it a type, a numeral is `Nat`, or `Int` when it is written with either sign.
 
-A numeral has no type given once the term around it has read every part and none gave it one: a call reads its arguments and its expected type, a list or a structure literal its entries, a `match` its arms, and an operator both operands. So `g(5, b)` and `g(b, 5)` read alike, `b` typing the numeral in either order. Numerals that share one type default together: to `Int` where one of them is signed, and to `Nat` otherwise.
-
 `-42` is one literal. `- 42` is none: between two operands it is a subtraction, and with no operand before it it is refused. The space is load-bearing.
 
 A floating-point literal has a decimal point with at least one digit on each side, and may have a sign and an `e` or `E` exponent. Its type is `Flt`.
@@ -166,8 +164,6 @@ The leading whitespace that the closing line and every non-blank line share is r
 
 A one-line string literal holds no raw newline; one that does is refused, naming the block form.
 
-`Str` holds certified UTF-8 and is addressed by position. A `/std/Str/At(s)` is a byte offset into `s` where a character begins, so a piece cut between two positions is whole characters, and a step from one position to the next reads one Unicode scalar value, a `Char`. Length, folding and search count and visit scalar values, not bytes or grapheme clusters.
-
 ### Boolean literals
 
 `true` and `false` have type `Bool`.
@@ -220,13 +216,9 @@ Only the `x` and the `[` are glued, so `x` is still an ordinary name: in `x [1]`
 
 ### Sorts
 
-`Type` is the sort of computational types, and `Prop` the sort of proof-irrelevant propositions.
+`Type` is the sort of computational types, and `Prop` the sort of proof-irrelevant propositions. Each written `Type`, `Prop` or `Sort` stands at a level the compiler infers, and no syntax writes a level.
 
-Each written `Type`, `Prop` or `Sort` stands at a level of a cumulative hierarchy. The compiler infers the levels and generalizes a declaration over them; no syntax writes a level. A type accepted at one level is accepted where a higher one is required, and a proposition likewise. A proposition sits at the level of the types it quantifies over or holds a value of, so no proposition quantifies over the propositions of its own level.
-
-A proposition is never accepted where a type is required, nor a type where a proposition is: a predicate is no family of types, and a function over `(A: Type)` takes no proposition for `A`. A value of an `induct` or a `struct` whose level only sizes its parameters is accepted at every such level: a function answering `Result(E, Nat)` is sequenced with `!` in a region that answers `Result(E, Type)`.
-
-`Sort` is a sort the declaration leaves to each caller: `Prop` at a use that hands it a proposition, and `Type` at one that hands it a type. It is written in the signature of a top-level `let`, `induct` or `struct`, and a use states it by inference, as it states a level.
+`Sort` is a sort the declaration leaves to each caller: `Prop` at a use that hands it a proposition, and `Type` at one that hands it a type. It is written in the signature of a top-level `let`, `induct` or `struct`, and a use states it by inference, as it states a level. It is refused in a body, a local definition, a `concept` or a `satisfy`, and as the sort of an `induct` or a `struct` after its `:`, which is `Type` or `Prop`.
 
 ```crs
 use /std/{Eq};
@@ -242,25 +234,7 @@ pub let carry(@A: Type, @x: A, @y: A, P: (A) -> Sort, p: Eq()(x, y), v: P(x)) ->
     match p | refl() => v end;
 ```
 
-Each written `Sort` is a sort of its own, and two the declaration requires to be equal are one. The declaration is checked with each of them unknown, so a value at one is neither known to be a proof nor known to be data:
-
-- two such values are not equal for being proofs;
-- a proposition is matched into one only where it could be matched into data;
-- what computes one terminates, as a proof must.
-
-These are refused:
-
-- a tuple type over two `Sort`s, which is a proposition where both are `Prop` and a type otherwise;
-- a `Sort` the declaration's own terms decide, which is written as the `Type` or `Prop` it is;
-- a `Sort` two of its terms decide apart, refused at the second, naming the first;
-- a `Sort` in a body, a local definition, a `concept` or a `satisfy`, and as the sort of an `induct` or a `struct` after its `:`, which is `Type` or `Prop`;
-- more than eight `Sort`s in one declaration.
-
-Every two proofs of one proposition are equal by definition, so a proof does its work at compile time and weighs nothing at run time.
-
-A proposition is taken apart into data only where it is empty, or has one constructor whose every payload its indices determine; that is what lets an `Eq` proof be matched to produce data. A payload no index pins, a proof among them, is taken apart only into another proposition, and a proof may always be taken apart to prove one.
-
-Why: [`Prop` is strict, proof-irrelevant, and definitionally K](design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md) and [A universe level is implicit, cumulative, and settles by where it stands](design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md).
+Why: [`Prop` is strict, proof-irrelevant, and definitionally K](design/theory/prop-is-strict-proof-irrelevant-and-definitionally-k.md), [A universe level is implicit, cumulative, and settles by where it stands](design/theory/a-universe-level-is-implicit-cumulative-and-settles-by-where-it-stands.md) and [A declaration leaves a sort to its caller](design/theory/a-declaration-leaves-a-sort-to-its-caller.md).
 
 ### Function types
 
@@ -353,13 +327,9 @@ join(@_, use custom_show, values)
 
 Against `join(@A: Type, use Show(A), values: List(A))`, `join(values)`, `join(@Nat, values)` and `join(@_, use custom_show, values)` are each accepted. `join(use custom_show, values)` is refused, since the hidden parameters before `values` open with `@A`, and so is `join(values, use custom_show)`, which writes the witness after the argument it comes before. The same rule fills every telescope: a call's arguments, a [lambda](#lambdas)'s binders, and a [concept literal](#superclass-fields-in-literals)'s entries.
 
-An omitted implicit argument is inferred, never picked. Where two implicits stand under an operation that commutes — `x * y` against `a * b`, which both `x := a` and `x := b` satisfy — the call is refused, naming the implicits it could not solve, until one is written or the expected type settles it. One implicit standing as a factor has one solution, however the sums are written: `w * (y + z)` against `x * z + x * y` gives `w := x`.
+An omitted implicit argument is inferred, from every part of its call and within the statement it stands in, and never picked between two solutions. Why: [A term is one where conversion says so](design/arithmetic/a-term-is-one-where-conversion-says-so.md) and [`curios-elab`](../curios-elab/README.md#postponement-is-a-parked-obligation-never-a-raw-substitution).
 
-An omitted implicit whose type is a proposition, a bound, is filled where the proposition reduces to `True`, and otherwise proved from the facts in scope ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). An omitted witness is resolved ([Witness resolution](#witness-resolution)).
-
-An implicit is inferred from every part of its call, whichever is written first. An argument whose type states it gives it. Where only a guess is left — two calls of one function held to equal arguments, or `M(A)` against `Two(Nat, Bool)`, read as `M := (x) => Two(Nat, x)` — the guess is taken once the call has read its arguments and its expected type, so a later argument that states `M` outright gives it. Two arguments that would guess one implicit differently refuse the call, naming the implicit and both values.
-
-Inference is local to a statement. A `let` with no annotation has its type before the next line is read, and nothing a later line says reaches back into it. A projection, a `match` or a call over a value whose type is still unknown is refused where it is written.
+An omitted implicit whose type is a proposition, a bound, is filled where the proposition reduces to `True`, and otherwise proved from the facts in scope ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)). An omitted witness is resolved ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
 
 A call fills one parameter list: the one its head's type opens with. A function whose result is a function is called once per list: `let f(T: Type) -> (Nat) -> Type` is called `f(T)(n)`, and an indexed family `Sized(T)(n)`. A list of hidden parameters alone is no exception: its call carries its `@` and `use` arguments, or none, before the next list's call, as in `Eq()(x, y)` and `Eq(@Nat)(x, y)`. Why: [A call fills one parameter group](design/theory/a-call-fills-one-parameter-group.md).
 
@@ -515,11 +485,9 @@ An operator is a call of its concept's method, resolved as any witness is, intri
 
 `&&` and `||` are calls of `And/and` and `Or/or`, as `+` is of `Add/add`, and not conditionals: neither operand is a fact in the other. So `x != 0 && 10 / x > 1` is refused, and `match | x != 0, 10 / x > 1 => true | _ => false end` is how a guard reaches the division.
 
-`/` and `%` carry the precondition their concept declares. `Div` and `Rem` each have a field `Ok(A) -> Prop`, and the operator takes an implicit proof of `Ok(divisor)`. On `Nat`, `a / b` needs `Nat/NonZero(b)`, which is `Holds(b != 0)`: reduction proves it where `b` is a literal, and the facts in scope prove it otherwise — a hypothesis or a guard that `b != 0`, or that `0 < b`, the same proposition at `Nat` ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
+`/` and `%` take an implicit proof of the precondition their concept declares, `Ok(divisor)`: on `Nat`, `Nat/NonZero(b)`, which is `Holds(b != 0)`, filled as any omitted bound is ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
-A carrier whose division is total states `True`, and pays nothing. Why: [A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md).
-
-`+` has no witness at `Str`: two texts are joined by `Str/concat` and a list of them by `Str/flatten`, and a text built from values of other types is written with `Fmt/render`.
+Why: [A bound is stated in a decided proposition and discharged by reduction](design/arithmetic/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md).
 
 ## Sequencing and effects
 
@@ -537,34 +505,15 @@ pub let parser() -> Parse(Bytes, Nat) =
 
 A `!` may stand at any depth where its region's type sequences: in a top-level value, a program's final term, a test's body or a witness's field. A function needs no permission to hold one. A function of no parameters is written `parser()` and called `parser()`.
 
-A local `let`'s value, annotated or not, shares the region around it, so an unused first binding moves no action to another region. An independent computation is a function, called where its description is needed. A `match` arm and a guard each keep a region of their own, whose monad comes from its own expected type. No `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
-
-A region's monad is read from its type, never from an action in it. A region whose type is not known yet waits for it, and one whose type can never name a monad — a lambda's body in inference position, say — is refused, asking for the result type around it to be annotated.
+A `match` arm and a guard each keep a region of their own, and a local `let`'s value shares the region around it; no `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
 
 An action of another monad than its region's is lifted through the `Monad/Lift` witness declared for that pair, and refused where none is ([Lifting between monads](#lifting-between-monads)).
 
-A type may be computed under the same rules: a pure monad may compute one, whose result its ordinary eliminator takes out. An annotation keeps its expectation, so an `Io(Type)` description is no `Type`, and a computation of a type is checked to terminate. `!=` is an operator, never a `!` followed by `=`.
+`!=` is an operator, never a `!` followed by `=`.
 
 ### Host effects and `Io`
 
-Every operation that touches the host — writing to a handle, reading a clock, calling a `foreign` function, exiting — answers an `Io(T)`: a description of a computation that yields a `T`, not the `T`. An operation on a cell or a channel answers an `Io(T)` too, since it makes or observes state of the program. Calling one performs nothing: `let greeting: Io({}) = print("hello");` has printed nothing.
-
-**No operation takes an `Io(T)` to a `T`** ([Effects are descriptions, and the carrier has no eliminator](design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md)). A description is performed only as a program's final term, which `/std/Program` performs once ([Declarations and modules](#declarations-and-modules)). So a function whose result is no `Io` performs no effect, and a `!` stands only in a region whose type is a monad: a `(Str, Bool) -> Bool` has nowhere to sequence one.
-
-`Io/pure` wraps a value as a description that does nothing, and `Io/bind` sequences two, but `!` reaches `Io` through its `Monad` witness, as it reaches any monad. Binding a description does not perform it, and one performed twice runs twice:
-
-```crs
-use /std/{Io, print};
-let once: Io({}) = print("x");
-let main() -> Io({}) =
-    let _ = once!;
-    once;
-main()                          -- prints "x" twice in total
-```
-
-`Io` cannot be matched: it has no constructors, so a `match` over one is refused, with constructor arms or with none. A lone `| _ =>` arm binds rather than takes apart, and is accepted as the binding it is.
-
-A host operation that can fail answers a `Try(M, E, A)` over its base monad: `Try(Io, Io/Error, File)` for `File/open`, and `Try(Io, Io/Error, Socket)` for `tcp/Socket/connect`. Through the edges `/std/Try` declares, a `Try` region sequences a `Try` over its own base or over one that embeds in it, a bare `Result` as an early return, and an `Io` action wherever its base admits one, which is how an `Io` base's own actions are sequenced. An action of any other base is refused. `Try/raise` stops the region, `Try/rescue` handles the stop, and `Try/run` hands the outcome back as an `M(Result(E, A))`.
+Every operation that touches the host — writing to a handle, reading a clock, calling a `foreign` function, exiting — answers an `Io(T)`: a description of a computation that yields a `T`, not the `T`, which only a program's final term performs ([Declarations and modules](#declarations-and-modules)). A host operation that can fail answers a `Try(M, E, A)` over its base monad, `Try(Io, Io/Error, File)` for `File/open`, and `!` sequences it in a `Try` region. Why: [Effects are descriptions, and the carrier has no eliminator](design/theory/effects-are-descriptions-and-the-carrier-has-no-eliminator.md).
 
 ```crs
 use /std/{File, Path, Bytes, Try, Io};
@@ -601,50 +550,17 @@ pub let job() -> Job({}) =
     Monad/pure(());
 ```
 
-`Monad/lift(action)` names the same embedding, its target monad read from the region. A region's tail — the last term of a value's body, of a lambda's body or of an arm — is lifted the same way, where its declared monad and the region's are both monads and differ; a tail that is no monadic action keeps its type mismatch.
+`Monad/lift(action)` names the same embedding, its target monad read from the region, and a region's tail is lifted as an action in it is.
 
-The lift reads the declaration of the action's head. An action whose head is no declared name — a projection, a call of a lambda — is not lifted: it is reported as an action of one monad where another is expected, and `Monad/lift(action)` lifts it. A declared result computed from an argument is read at that argument where it is settled before elaboration — a string literal, `true`, a closed call written whole — so `Fmt/print("%\n")(n)` lifts as the `Io({})` its format string makes it. One computed from a local, or from a numeral no type has realized yet, is not read, and `Monad/lift` lifts it.
-
-Embeddings never chain. With `Monad/Lift(Io, Job)` and `Monad/Lift(Job, Sched)` declared, an `Io` action does not sequence in a `Sched` region: the missing `Monad/Lift(Io, Sched)` is reported, with any chain of declared embeddings that would have reached it. The composite is declared as any witness is, by whoever writes `Sched`. Why: [A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md).
+Embeddings never chain: an action of `Io` sequences in a `Sched` region only where `Monad/Lift(Io, Sched)` is declared. Why: [A fallible operation returns `Try`, and `!` lifts along declared edges](design/standard-library/a-fallible-operation-returns-try-and-bang-lifts-along-declared-edges.md).
 
 ## Pattern matching
 
-### Match shell and goals
+### Match shell
 
-A `match` has a scrutinee, an arm `| pattern => body` for each case — or for several, written as [alternatives](#alternatives) — and a closing `end`.
+A `match` has a scrutinee, an arm `| pattern => body` for each case — or for several, written as [alternatives](#alternatives) — and a closing `end`. Its result is the type expected where it stands, and a match writes no result type of its own. Why: [An arm is checked in a context specialized by index inversion](design/theory/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md).
 
-An arm may be left out where its constructor's indices provably cannot meet the scrutinee's: a match over a `Sized(T)(n + 1)` needs no `empty()` arm. Where that is not provable, the match is refused, naming the value no arm matches as a pattern. A scrutinee whose type reduces to an inductive with no constructors takes no arms: `match contradiction end` discharges a proof of an empty type wherever a type is expected. Where the facts in scope contradict each other and no written term says so, `proved(@False)` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
-
-A match's result is its goal, the type expected where it stands, as written. Each arm is checked against the goal with the scrutinee standing for the arm's case: a variable scrutinee and its variable indices are substituted, an expression scrutinee's written occurrences are replaced, and inside the arm the scrutinee reduces to the case wherever else it is met, so a hypothesis about the scrutinee needs no help to follow it. A `| _ =>` arm binds nothing and refines no index, so it is checked at the goal as written.
-
-An arm's body is typed under the cases its own pattern states and nothing else, once for each of its [alternatives](#alternatives). What a body may rest on — the case of its scrutinee, a bound a case decides, the indices a constructor fixes — is what its own arm writes, whatever other arms the match holds: an arm that writes a binder where another names a constructor learns nothing of that constructor.
-
-Where nothing is expected, the arms decide the result, and it depends on no case: each arm answers the one type. A result that depends on the scrutinee is stated where the match stands — a declared result, a `let`'s annotation, or a helper whose signature states the family over the scrutinee's indices:
-
-```crs
-use /std/{Eq, List};
-use /std/Bool/{True};
-
-pub induct In(@T: Type): (T, List(T)) -> pub Prop
-| here(@x: T, @l: List(T)): (x, [x, ..l])
-| there(@x: T, @y: T, @l: List(T), rest: In()(x, l)): (x, [y, ..l])
-end
-
--- What a member of `m` gives a proof of `P` to take apart: nothing of no elements, and of a cons its head or its tail.
-pub let Unconsed(@T: Type, P: Prop, x: T, m: List(T)) -> Prop =
-    match m
-    | [] => True
-    | [k, ..r] => (head: (Eq()(x, k)) -> P, tail: (In()(x, r)) -> P) -> P
-    end;
-
-pub let unconsed(@T: Type, @P: Prop, @x: T, @m: List(T), i: In()(x, m)) -> Unconsed(P, x, m) =
-    match i
-    | here() => (head, _) => head(Eq/refl())
-    | there(rest) => (_, tail) => tail(rest)
-    end;
-```
-
-A match at the type level, in a signature or in another match's goal, lands in the sort its arms decide. Why a match writes no result of its own: [An arm is checked in a context specialized by index inversion](design/theory/an-arm-is-checked-in-a-context-specialized-by-index-inversion.md).
+An arm may be left out where its constructor's indices cannot meet the scrutinee's: a match over a `Sized(T)(n + 1)` needs no `empty()` arm, and one over a type with no constructors, `match contradiction end`, writes no arm at all. Where the facts in scope contradict each other, `proved(@False)` is the contradiction to match on ([Bounds from the facts in scope](#bounds-from-the-facts-in-scope)).
 
 ### Inductive patterns
 
@@ -660,7 +576,7 @@ pub let or_zero(option: Option(Nat)) -> Nat =
     end;
 ```
 
-A constructor is named bare, since the scrutinee's type gives its namespace: `Option/some(n)` is refused as a pattern. A pattern is written as the call that builds the value: each plain payload takes a pattern, in order, and an implicit (`@`) payload is left out, or written under `@` before the plain payload it precedes, where the arm names it. A payload left out is bound all the same, so a bound it states is a fact in the arm. Two arms of one constructor may write different hidden payloads. A pattern takes no witness payload, so `use` is refused in one.
+A constructor is named bare, since the scrutinee's type gives its namespace: `Option/some(n)` is refused as a pattern. A pattern is written as the call that builds the value: each plain payload takes a pattern, in order, and an implicit (`@`) payload is left out, or written under `@` before the plain payload it precedes, where the arm names it. Two arms of one constructor may write different hidden payloads. A pattern takes no witness payload, so `use` is refused in one.
 
 ```crs
 use /std/{Nat};
@@ -696,123 +612,11 @@ pub let first_or_zero(value: Option(List(Nat))) -> Nat =
     end;
 ```
 
-### Binders beside patterns
+### Tuple and structure patterns
 
-A binder — a name or `_` — may stand wherever a pattern may, beside the patterns other arms write in its place. Its arm is then taken under every case of that place: each case another arm names, and every case none does.
+A tuple pattern `(p, q)` and a structure pattern `Point { x, y = q }` take a value apart field by field, each field a pattern of its own, written as the [irrefutable binder patterns](#irrefutable-binder-patterns) of a `let` are. A structure pattern names the structure its scrutinee is.
 
-```crs
-use /std/{Nat, Option};
-
-pub let inner_or(value: Option(Option(Nat))) -> Nat =
-    match value
-    | some(some(inner)) => inner
-    | some(_) => 0
-    | none() => 1
-    end;
-```
-
-Arms have no priority: the order they are written in never changes what a match means. Two arms may match one value only where the first written is a case of the other — the other matching every value it does — so a general arm stands after its exceptions, as `some(_)` stands after `some(some(inner))`. Three refusals hold the rule:
-
-- Two arms that match one value, neither a case of the other, are refused, naming the value they share as a pattern, which is the arm that parts them: `(true, _)` and `(_, true)` meet at `(true, true)`.
-- An arm no value reaches is refused: one written after an arm it is a case of, and a final `_` after arms that cover every case already.
-- A value no arm matches is refused, named as the pattern that matches it — `(some(_), none())` — with `_` wherever no case was read.
-
-### Alternatives
-
-An arm may write several patterns before its `=>`, each after a bar of its own, and is taken by a value any of them matches.
-
-```crs
-use /std/{Bool, Char};
-
-pub let is_space(c: Char) -> Bool =
-    match Char/to_nat(c)
-    | ' ' | '\t' | '\n' | '\r' => true
-    | _ => false
-    end;
-```
-
-Every alternative binds the same names, and the body reads each as the alternative that matched binds it. A name may stand at a different place in each alternative, and its type may differ. A name one alternative binds and another does not is refused.
-
-```crs
-use /std/{Bool, Html, Str};
-
-pub let named(h: Html, name: Str) -> Bool =
-    match h
-    | element(tag, _, _) | void(tag, _) => Str/eql_ignoring_ascii_case(tag, name)
-    | _ => false
-    end;
-```
-
-The body is typed once for each alternative, under that alternative's cases and nothing else, as an arm of its own would be: an arm with alternatives means the arms it abbreviates. A proof that holds case by case is written once for all of them.
-
-```crs
-use /std/{Bool, Int};
-
-pub let at_least(a: Int) -> Bool/Holds(-1 <= Int/sign(a)) =
-    match Int/view(a)
-    | nonneg(0) | nonneg(_ + 1) | neg(_) => Bool/True/qed()
-    end;
-```
-
-The alternatives of one arm match no value in common, so no order among them decides which a value takes. An alternative that is a case of another is refused, and two that meet are refused, naming the value they share: `(true, _) | (_, true)` meet at `(true, true)`, and are written `(true, _) | (false, true)`. Against the other arms, each alternative is held to the rules of [Binders beside patterns](#binders-beside-patterns).
-
-Alternatives stand at the top of an arm, and no pattern holds them: `some('a' | 'b')` is written `some('a') | some('b')`.
-
-### Guards
-
-An arm may write guards after its patterns, each after a comma: a `Bool` term, which passes where it is `true`, or `pattern = term`, which passes where the term's value matches the pattern. An arm is taken by a value its pattern matches where every guard passes. Its guards run from the left, each only where the ones before it passed, and the names a bind guard binds are in scope in the guards after it and in the body.
-
-```crs
-use /std/{Nat, Option};
-
-pub let size(value: Option(Nat)) -> Nat =
-    match value
-    | some(n), n > 9 => 2
-    | some(n), n != 0, 100 / n > 20 => 1
-    | _ => 0
-    end;
-```
-
-A guarded arm takes none of its values for itself: where a guard fails, the value goes on to the arms after it that its pattern's case reaches, in the order they are written, and a value only guarded arms reach is a value no arm matches. Guards never order patterns: two arms whose patterns meet are held to the rules of [Binders beside patterns](#binders-beside-patterns) as they would be with no guard.
-
-What an arm knows is what it writes, guards included: in its body each condition holds and each pattern has matched. Where an arm's one guard is a condition and fails, the arms after it that are typed at the same case know it is false:
-
-```crs
-use /std/{Nat, Option};
-
-pub let share(value: Option(Nat)) -> Nat =
-    match value
-    | some(n), n == 0 => 0
-    | some(n) => 100 / n
-    | none() => 0
-    end;
-```
-
-A chain of guards that fails, or a bind guard that fails, teaches the arms after it nothing, since either failed in more ways than one. A bind guard whose pattern cannot fail is refused: a binding with no case to test is a `let`. A guard takes no [alternatives](#alternatives); the value they would test is written as the head.
-
-A guard is a region of its own, as an arm's body is ([Postfix `!`](#postfix-)). A guard's term is an operand, so a `let`, a lambda or a function type stands in one in parentheses.
-
-`&&` is no chain of guards: `a && b` evaluates both, and `b` knows nothing of `a`; `| a, b =>` evaluates `b` only where `a` holds, and `b` may rely on it.
-
-### The arm that cannot fail
-
-A final arm whose pattern takes nothing apart that could fail — most often a bare `_` — takes every value the arms before it leave.
-
-```crs
-use /std/{Nat, Option};
-
-pub let or_zero(option: Option(Nat)) -> Nat =
-    match option
-    | some(value) => value
-    | _ => 0
-    end;
-```
-
-It states no case, so its body is typed where the match stands, at the match's own type, however deep the patterns before it go. After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `x[` — it is written `_`: a final arm binding a name there is refused, since the scrutinee is in scope under the name it already has. A lone `_` with no other arm binds rather than matches.
-
-### Multiple scrutinees
-
-A tuple of scrutinees is matched column by column, from the left, grouping the arms by the shape each writes in a column. Each value of the tuple is a scrutinee of its own: an arm that states a case of one refines that value as a match on it alone would.
+A tuple written as the scrutinee, `match (left, right)`, is matched column by column, from the left, each of its values a scrutinee of its own.
 
 ```crs
 use /std/{Nat, Option};
@@ -824,21 +628,6 @@ pub let sum(left: Option(Nat), right: Option(Nat)) -> Nat =
     | (none(), _) => 0
     end;
 ```
-
-A binder may stand in any column, under the rules of [Binders beside patterns](#binders-beside-patterns):
-
-```crs
-use /std/{Nat, Option};
-
-pub let sum(left: Option(Nat), right: Option(Nat)) -> Nat =
-    match (left, right)
-    | (some(x), some(y)) => x + y
-    | (_, none()) => 0
-    | (none(), some(y)) => y
-    end;
-```
-
-A structure pattern names the structure its scrutinee is.
 
 ### Boolean match
 
@@ -856,7 +645,7 @@ pub let answer(condition: Bool) -> Str =
 
 ### Natural-number case split
 
-A case split on a `Nat` has a zero arm and a successor arm, which binds the predecessor before `+ 1`. The `+` takes whitespace on both sides, as an operator does: `pred+1` is no successor pattern. Induction is a recursion on the predecessor, each arm typed at the result with the scrutinee standing for its case:
+A case split on a `Nat` has a zero arm and a successor arm, which binds the predecessor before `+ 1`. The `+` takes whitespace on both sides, as an operator does: `pred+1` is no successor pattern.
 
 ```crs
 use /std/{Nat};
@@ -870,7 +659,7 @@ pub let induction(P: (Nat) -> Type, base: P(0), step: (k: Nat, P(k)) -> P(k + 1)
 
 ### Natural-number dispatch
 
-A dispatch on a `Nat` has literal arms and an arm that writes a binder, which takes every other value, since no set of literals covers every natural.
+A dispatch on a `Nat` has literal arms and an arm that writes a binder, which takes every other value.
 
 A match whose only literal is `0` is a case split ([Natural-number case split](#natural-number-case-split)): its arm that writes a binder is the successor's, so `| 0 => … | _ => …` is `| 0 => … | _ + 1 => …`.
 
@@ -905,8 +694,6 @@ pub let class(b: Byte) -> Nat =
 ### List case split
 
 A list pattern is a run, written as the [list literal](#list-literals) that builds the value: `[]`, `[a, b]` for a list of exactly those elements, and `[a, b, ..rest]` for a list they begin. Each element is a pattern at the element's type. The rest stands last, after one element at least, and is a name or `_`.
-
-A final `| _ =>` stands for what the arms before it leave.
 
 ```crs
 use /std/{List, Nat, Option};
@@ -967,6 +754,96 @@ pub let escapes(bytes: Bytes) -> Nat =
     end;
 ```
 
+### Binders beside patterns
+
+A binder — a name or `_` — may stand wherever a pattern may, beside the patterns other arms write in its place.
+
+```crs
+use /std/{Nat, Option};
+
+pub let inner_or(value: Option(Option(Nat))) -> Nat =
+    match value
+    | some(some(inner)) => inner
+    | some(_) => 0
+    | none() => 1
+    end;
+```
+
+Arms have no priority: the order they are written in never changes what a match means. Two arms may match one value only where the first written is a case of the other, so a general arm stands after its exceptions, as `some(_)` stands after `some(some(inner))`. Three refusals hold the rule, each naming a value as the pattern that matches it, with `_` wherever no case was read:
+
+- two arms that match one value, neither a case of the other: `(true, _)` and `(_, true)` meet at `(true, true)`;
+- an arm no value reaches: one written after an arm it is a case of, and a final `_` after arms that cover every case already;
+- a value no arm matches: `(some(_), none())`.
+
+Why: [Patterns are compiled where their types are known](design/surface/patterns-are-compiled-where-their-types-are-known.md).
+
+### Alternatives
+
+An arm may write several patterns before its `=>`, each after a bar of its own, and is taken by a value any of them matches.
+
+```crs
+use /std/{Bool, Char};
+
+pub let is_space(c: Char) -> Bool =
+    match Char/to_nat(c)
+    | ' ' | '\t' | '\n' | '\r' => true
+    | _ => false
+    end;
+```
+
+Every alternative binds the same names, and the body reads each as the alternative that matched binds it. A name may stand at a different place in each alternative, and its type may differ. A name one alternative binds and another does not is refused.
+
+```crs
+use /std/{Bool, Html, Str};
+
+pub let named(h: Html, name: Str) -> Bool =
+    match h
+    | element(tag, _, _) | void(tag, _) => Str/eql_ignoring_ascii_case(tag, name)
+    | _ => false
+    end;
+```
+
+The alternatives of one arm match no value in common: an alternative that is a case of another is refused, and two that meet are refused, naming the value they share, so `(true, _) | (_, true)` is written `(true, _) | (false, true)`. Against the other arms, each alternative is held to the rules of [Binders beside patterns](#binders-beside-patterns).
+
+Alternatives stand at the top of an arm, and no pattern holds them: `some('a' | 'b')` is written `some('a') | some('b')`.
+
+### Guards
+
+An arm may write guards after its patterns, each after a comma: a `Bool` term, which passes where it is `true`, or `pattern = term`, which passes where the term's value matches the pattern. An arm is taken by a value its pattern matches where every guard passes. Its guards run from the left, each only where the ones before it passed, and the names a bind guard binds are in scope in the guards after it and in the body.
+
+```crs
+use /std/{Nat, Option};
+
+pub let size(value: Option(Nat)) -> Nat =
+    match value
+    | some(n), n > 9 => 2
+    | some(n), n != 0, 100 / n > 20 => 1
+    | _ => 0
+    end;
+```
+
+Where a guard fails, the value goes on to the arms after it, in the order they are written, and a value only guarded arms reach is a value no arm matches. Guards never order patterns: two arms whose patterns meet are held to the rules of [Binders beside patterns](#binders-beside-patterns) as they would be with no guard.
+
+A bind guard whose pattern cannot fail is refused: a binding with no case to test is a `let`. A guard takes no [alternatives](#alternatives); the value they would test is written as the head. A guard's term is an operand, so a `let`, a lambda or a function type stands in one in parentheses.
+
+`&&` is no chain of guards: `a && b` evaluates both, and `| a, b =>` evaluates `b` only where `a` holds. Why: [An arm is taken by its patterns, then its guards](design/surface/an-arm-is-taken-by-its-patterns-then-its-guards.md).
+
+### The arm that cannot fail
+
+A final arm whose pattern takes nothing apart that could fail — most often a bare `_` — takes every value the arms before it leave.
+
+```crs
+use /std/{Nat, Option};
+
+pub let or_zero(option: Option(Nat)) -> Nat =
+    match option
+    | some(value) => value
+    | _ => 0
+    end;
+```
+
+After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `x[` — it is written `_`: a final arm binding a name there is refused, since the scrutinee is in scope under the name it already has. A lone `_` with no other arm binds rather than matches.
+
 ### A match with no head
 
 A `match` that writes no scrutinee is guards alone: each arm is a list of guards, the arms are tried from the top, and the final arm is `| _ =>`, which is required.
@@ -981,8 +858,6 @@ pub let found(condition: Bool, map: Map(Str, Nat), key: Str) -> Nat =
     | _ => 1
     end;
 ```
-
-It is a match of no columns: every arm reaches its one case, so a condition that fails as an arm's one guard is known false in every arm after it, the final `_` included.
 
 ## Declarations and modules
 
@@ -1096,16 +971,7 @@ A path is reachable where the rule holds at each of its hops, and the root's sub
 
 A glob, `use M/*` or `pub use M/*`, imports what `M` exports and never a private declaration of its subtree, which is reached only by naming it.
 
-A public interface never mentions what its consumers cannot reach. The interface is:
-
-- the parameters, indices and sorts of a public type;
-- the fields of a structure or a concept whose representation is public;
-- the constructors of an inductive whose representation is public;
-- the declared types of definitions.
-
-The check compares audiences, not paths: a name re-exported out of a private child is visible wherever the re-export puts it, and an item seen only within a subtree may mention that subtree's declarations.
-
-The check follows re-exports, aliases that are a name alone, and aliases of a type family that apply one head directly and whose declared result ends, as written, in `Type` or `Prop`. A definition's body is no interface, and neither is what a nested namespace binds — a type's constructors, a concept's methods — so a module of constructors may hand out values of a type its consumer cannot name. A name under `/sys`, which only the standard library may name, is seen within the standard library and wherever one of its exports shows it.
+A public interface mentions only what its consumers reach. Why: [Privacy is scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md).
 
 ## Recursive groups
 
@@ -1221,7 +1087,7 @@ The outer `pub` exports the type's name. The inner one exports building it and p
 
 Parameters are written as an inductive's are: plain, `@`, or a premise `use Concept(args)` ([A type declared under a premise](#a-type-declared-under-a-premise)).
 
-A field is plain or hidden. A hidden field is written under `@`, as `@label: type` or its type alone, and takes no position among the fields an author writes: a literal leaves it out, a projection `.N` and a pattern's positional fields count only the plain ones, and it is read by its label. A bound declared this way is stated once, on the data it constrains: it is proved where the value is built, and is a fact wherever the value is in scope.
+A field is plain or hidden. A hidden field is written under `@`, as `@label: type` or its type alone, and takes no position among the fields an author writes: a literal leaves it out, a projection `.N` and a pattern's positional fields count only the plain ones, and it is read by its label. Why: [A hidden member takes no position](design/theory/a-hidden-member-takes-no-position.md).
 
 ```crs
 use /std/{Nat, Vec};
@@ -1255,7 +1121,7 @@ Api { base = 3, bump(x) = x + 1 }
 
 Fields are checked in their declared order. A field written as a function definition is a lambda assigned to it.
 
-A hidden field is left out and filled as a call's omitted `@` argument is: a value by the fields whose types mention it, a bound by reduction or from the facts in scope. One nothing fills is reported at the literal, by the proposition it states. It may be written under its mark before the plain field it precedes, as a call's hidden arguments are, from the first of their run: `@label = value`, the value alone, or `@_` to hold its place.
+A hidden field is left out, filled as a call's omitted `@` argument is, or written under its mark before the plain field it precedes, as a call's hidden arguments are, from the first of their run: `@label = value`, the value alone, or `@_` to hold its place.
 
 ```text
 Positive { n = 4 }
@@ -1272,7 +1138,7 @@ Pair { ..pair, snd = false }
 Pair(Str, Nat) { ..pair, fst = "new" }
 ```
 
-A spread copies the plain fields. A hidden field is never copied, since it states something of the fields the new value has: it is filled anew as in any literal, so a bound an override breaks is refused, and the base's own is written where it is meant, `Positive { ..p, @ok = p.ok }`.
+A spread copies the plain fields, and a hidden field is filled anew, as in any literal: the base's own is written where it is meant, `Positive { ..p, @ok = p.ok }`.
 
 The spread stands first and once. Every override is labeled, and the overrides follow the declared order. The head may choose other parameters, and every copied and replaced field is checked at them, so dependent fields stay consistent.
 
@@ -1350,8 +1216,6 @@ pub concept Ord(A: Type): pub Type {
 
 So a local `Ord(A)` witness answers an `Eql(A)` goal through its superclass.
 
-A sealed concept's fields are not part of its public interface: a `pub` sealed concept may name private declarations in its fields' types, so a private superclass is an obligation resolution discharges without the consumer naming it ([Privacy is scoped to a subtree](design/surface/privacy-is-scoped-to-a-subtree.md)). A transparent `pub` concept's fields' types are interface, and are `pub` themselves.
-
 A concept at `Prop` has proof-irrelevant witnesses, which leave nothing at run time.
 
 ### Witness declarations
@@ -1380,23 +1244,7 @@ satisfy (@A: Type, use Show(A)) => Show(Bag(A)) {
 }
 ```
 
-A witness is keyed by its concept and by the head of each of the concept's arguments, and its signature spells the key, each argument written as the type it is. A head is an inductive, a structure, an intrinsic type or a tuple type, applied or not; a name bound to one, read through; or a family applied in part, written as a lambda, `(A: Type) => State(S, A)`, which keys on the head it applies. A head only computation reaches, `Show(Chosen(true))` over a `Chosen` that picks its result, is refused where the witness is declared, naming the key it computes: a witness is known by its key before anything is checked. The arguments below the heads are matched after the lookup.
-
-A tuple type is keyed by its shape — the label at each position, which gives its length — and not by its fields' types. Since labels are part of a tuple type, `Show({Nat, Bool})`, `Show({a: Nat, b: Bool})` and `Show({x: Nat, y: Bool})` are three keys. `{}` keys as the empty shape, and a family whose body is a tuple type, `let Pair(A: Type) -> Type = {Nat, A};`, keys on that body's shape. `/std/Tuple` writes the standard library's tuple witnesses, `Show`, `Spell`, `Eql` and `Ord` at the unlabeled shapes of nought through eight fields; a labeled product that wants them is a `struct`. A program writes tuple witnesses for its own concepts ([Orphan rule](#orphan-rule)):
-
-```crs
-use /std/{Show, Str};
-
-pub concept Describe(A: Type): pub Type {
-    describe(A) -> Str,
-}
-
-satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Describe({A, B}) {
-    describe(t) = Str/flatten(["(", Show/show(t.0), ", ", Show/show(t.1), ")"]),
-}
-```
-
-A function type has no key: a `satisfy` whose concept argument reduces to one is refused, as a variable head is. A function becomes a monad by being wrapped in a nominal type, as `/std/State` is. Why: [Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md).
+A witness is keyed by its concept and by the head of each of the concept's arguments, which its signature spells: an inductive, a structure, an intrinsic type or a tuple type's shape, applied or not, or a family applied in part, written as a lambda, `(A: Type) => State(S, A)`. A function type has no key. One witness at most stands at a key in a whole program, declared where its concept or a head of its key is, and its `use` premises are smaller than its own application. Why: [Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md).
 
 Witnesses that resolve through one another are one group, joined by `and` ([Recursive groups](#recursive-groups)). A lone witness may resolve through its own key with nothing said. A method written by another method of its witness — `neq(a, b) = Bool/not(a == b)` — reads that method alone, so only a method that reaches itself makes its witness recursive.
 
@@ -1420,9 +1268,7 @@ and Show(Forest) {
 }
 ```
 
-A registered witness needs a concept with at least one parameter; a concept with none is still used through a value supplied to a `use` parameter. Each argument keys on its own — `Into(Nat, Str)` and `Into(Nat, Bool)` are two keys — so a call settles every argument, from its explicit arguments, its expected result or a written witness, before the lookup.
-
-One witness at most stands at a key in a whole program. Module visibility does not scope a witness, but a sealed concept's representation does: its witnesses are declared only within its module's subtree.
+A concept with no parameter has no registered witness: a value of it is supplied to a `use` parameter.
 
 A second dictionary for a transparent concept at the same key is an ordinary concept value, supplied explicitly; a sealed concept refuses the literal outside its module.
 
@@ -1464,30 +1310,7 @@ satisfy (@A: Type, use Eql(A), use Ord(A)) => Ord(Tree(A)) {
 }
 ```
 
-The key is a declared `induct` or `struct`, fully applied, whose representation is open where the witness is declared; an intrinsic type, a tuple or function type and a concept's record are refused.
-
-A hidden payload or field takes part as a plain one does, `Spell` writing it under its mark — `Tagged/tag(@9, 1)`, `Sized { @len = 9, items = 1 }` — unless it is a type or a proof, which the text infers when it is read back. A plain payload that is itself a type is refused.
-
-Every other payload goes through its own witness, resolved in the witness's scope: a premise of the telescope, the witness's own key, or a member of its `and` group. A missing one is reported at the constructor and payload, naming the `use` premise to add when the payload's type is a variable of the telescope.
-
-| Concept | The body the compiler writes | A proof payload |
-| --- | --- | --- |
-| `Spell` | the constructor, qualified by its type's own name, applied to the explicit payloads — `Tree/node(Tree/leaf(1), Tree/leaf(2))`, `Option/some(3)` — and a structure as its literal, `Point { x = 1, y = 2 }`, positional where a field has no label | spells as the written goal `?` |
-| `Eql` | structural: the same constructor with equal payloads, pair by pair, and `!=` its negation | compares as nothing |
-| `Ord` | constructors ranked by their declared position, and payloads compared only where the constructors agree, the first that differs deciding | contributes nothing |
-| `Hash` | the constructor's ordinal, then the explicit payloads' encodings, each part behind its own four-byte length so no two values share a byte string; a structure takes ordinal zero | takes no part |
-
-A derived `Spell`'s text reads back wherever its type's name is visible unqualified, which is wherever a value of it is written, so a report shows a value as its author would write it. `Ord` has `Eql` as a superclass, so a derived `Ord` asks for its key's equality witness, and is refused where there is none. A proof payload never contributes, since two values that differ only in a proof are one value.
-
-### Witness premises
-
-A witness's premise is a concept application smaller than the witness's own: each of its variables is bound by the witness's telescope, none occurs in it more often than in the witness's application, and it has fewer nodes in all. So a premise may name a constant beside a binder — `use Monad/Lift(Io, M)` under `Monad/Lift(Io, (A: Type) => Try(M, E, A))` — while `use Show(A)` under `Show(A)` is refused. Resolution ends because the premises shrink ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
-
-### Orphan rule
-
-A witness is declared only by the compilation root that owns its concept or at least one head in its key, so no two independent parties can declare the same witness ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
-
-No root owns a tuple shape, as none owns an intrinsic type, so a tuple-keyed witness is declared where its concept is: a program writes tuple witnesses for its own concepts, and adds none for a `/std` concept at a shape `/std` did not write. No root is exempt, the standard library included, which declares every concept it witnesses.
+The key is a declared `induct` or `struct` whose representation is open where the witness is declared, and every payload goes through its own witness, resolved in the witness's scope. What each concept's body is, is [A witness body may be written by the compiler](design/surface/a-witness-body-may-be-written-by-the-compiler.md)'s.
 
 ### Superclass fields in literals
 
@@ -1497,7 +1320,7 @@ A concept's superclasses are hidden members of a concept value. They take no pos
 Ord { use custom_eql, ord(a, b) = reversed(a, b) }
 ```
 
-A witness's body writes none: a `use` entry in a `satisfy` is refused by name, so resolution fills every superclass of a registered witness, and the `Eql(A)` reached through a local `Ord(A)` is the registered one ([Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md)).
+A witness's body writes none: a `use` entry in a `satisfy` is refused by name, and resolution fills every superclass of a registered witness.
 
 In an update, a spread copies the superclasses from the base. A `use value` after the spread replaces the next superclass slot after the entries before it, and `use _` leaves one as the spread copied it.
 
@@ -1539,29 +1362,7 @@ pub let holds(@K: Type, use Key(K), @V: Type, slot: Slot(K, V), key: K) -> Bool 
     Key/same(slot.key, key);
 ```
 
-The parameter has no name, and joins the witnesses the declaration resolves from, so a field's type, an index's type and a constructor's payload resolve through it. Where the type is written, the slot is a call's: `Slot(Nat, Str)` leaves it to resolution, and `Slot(Nat, use reversed, Str)` fills it. Under a `use Key(K)` premise, as in `holds`, the nearest witness is the premise, so the signature's `Slot(K, V)` names the dictionary the function was given. Two types that differ in their dictionary are two types, and a value holds no dictionary: the parameter belongs to the type, as `K` does.
-
-A structure literal with a bare head takes the dictionary from its expected type, or from resolution where there is none. At an inductive's constructors the parameter stays a witness slot — resolved, or supplied with `use value` — where a plain or `@` parameter is implicit.
-
-A value is read under the dictionary its type names. `holds(slot, key)` over a `slot: Slot(Nat, use reversed, Str)` runs under `reversed`: the call's own slot is still open when the argument is checked, the argument's type fills it, and resolution leaves a filled slot alone ([Witness resolution](#witness-resolution)). Two values under two dictionaries are not both arguments of an operation whose signature names the dictionary once: the call is a type mismatch.
-
-A concept takes no `use` parameter: its premise is a superclass, and a witness is keyed by the heads of its concept's arguments, which a dictionary does not have.
-
-### Witness resolution
-
-An omitted witness is resolved in this order:
-
-1. The local `use` parameters, from the innermost out; the first that matches directly wins.
-2. The superclasses of the local witnesses, breadth first; two matches at the least depth are ambiguous.
-3. The global table, by the concept and the head of each of its arguments.
-
-A slot is resolved only while it is open: one that an expected type or an argument's type has already filled is left as it stands. A call's slot is resolved once the call has read its arguments and met its expected type, so a dictionary one of them names is the call's, wherever the premise is declared and whenever its arguments became known; a call none of them names one for takes the registered witness, and `use value` at the slot says which is meant. A superclass of a witness is the registered witness, and nothing names another for it.
-
-Where an argument of the concept is still an unknown, resolution waits until it is known. A global witness is instantiated with fresh implicit arguments, its premises are resolved in turn, and its whole type is unified with the goal.
-
-A unit's witnesses are known by key before any of them is checked, so a witness may be declared after the code that resolves through it, and which side of it the witness stands on changes nothing: a goal finds the witness declared at its key, and a key with no witness is reported where the goal stands. A declaration and a witness that each need the other have no order to be checked in, and are refused together, by name.
-
-A higher-kinded argument is keyable. Where `M(A)` meets `Option(Nat)`, `M` is inferred as `Option`, so `Monad(Option)` is looked up. Where `M(A)` meets an application of more arguments, `State(S, Nat)`, `M` takes all but the last, `(A) => State(S, A)`, so a family meant as a monad orders its parameters context first and result last.
+The parameter has no name. Where the type is written, the slot is a call's: `Slot(Nat, Str)` leaves it to resolution, and `Slot(Nat, use reversed, Str)` fills it. A structure literal with a bare head takes the dictionary from its expected type, and an inductive's constructors take the parameter as a witness slot. A concept takes no `use` parameter. Why: [Concepts resolve with global coherence](design/surface/concepts-resolve-with-global-coherence.md).
 
 ## Foreign declarations
 
@@ -1579,9 +1380,7 @@ pub foreign abort(Byte) -> Never;
 
 The wire types are `Nat`, `Int`, `Bool`, `Byte`, `Flt`, `Bytes`, `Handle`, `List(T)` and `Option(T)`, written bare: the wire grammar is a closed vocabulary that resolves no names, so `/std/Nat` is refused where `Nat` is meant.
 
-- A `Byte` crosses as the integer it is, both ways, and a host that answers one outside `0..=255` stops the program rather than handing it another byte.
-- A `Nat` or an `Int` crosses as a 64-bit integer, although the program's are unbounded: a `Nat` argument crosses below `2⁶⁴` and an `Int` between `-2⁶³` and `2⁶³ - 1`, and a larger one stops the program rather than crossing changed. A result comes back as a 64-bit integer too, a `Nat` read unsigned and an `Int` signed, so every result arrives whole.
-- A `Flt` crosses as a binary64.
+How each wire type crosses is [`curios-abi`](../curios-abi/README.md)'s.
 
 The operands follow the name, as a function's parameters do, each its wire type alone, with no name. No colon stands between the name and the operands, since a declaration's signature is not its type: a call yields an `Io` of the result, so `frobnicate` above is a `(Nat, Bytes) -> Io(Nat)`. Every `foreign` is a function, of no operand where its list is empty: `random` above is a `() -> Io(Nat)`, called `random()`.
 
@@ -1592,8 +1391,6 @@ A tuple type's labels are part of it, so nothing is invented, dropped or moved: 
 `Never` in place of a result says the call does not return, which differs from returning nothing. It is no type and stands nowhere else. A declaration that states it takes the type its call yields as an implicit argument before its own, so `abort` above is `(@A: Type, Byte) -> Io(A)`, a description that ends the program and so fits a region of any type; `/std/Proc/exit` is one. That argument joins the operands, so `foreign gone() -> Never;`, of no operand, is `(@A: Type) -> Io(A)` and is called `gone()`.
 
 `List` and `Option` do not nest, and their elements are `Nat`, `Int`, `Bool`, `Bytes` or `Handle`: `List(List(T))`, `List(Flt)`, `List(Byte)` and an `Option` inside a `List` are refused, and a list of bytes is the `Bytes` a row already spells.
-
-A list of `Nat`, `Int` or `Bool` crosses flat, one element per value, each narrowed going out and boxed coming back as a lone one is, so an element too large for the wire stops the program as an argument would. A list of `Bytes` or `Handle` crosses as its elements' payloads. An `Option(T)` crosses as `none`, which costs nothing, or as the one value `some` holds, so an embedder reads and answers an option of its element: a Rust binding an `Option`, a browser hook the value or `null`. How a declaration reaches its embedder is the host's interface, [`curios-abi`](../curios-abi/README.md)'s.
 
 ## Equality and proofs
 
@@ -1608,21 +1405,13 @@ pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
     end;
 ```
 
-The standard equality operations include reflexivity, symmetry, transitivity and congruence, and `Eq/subst`, which carries a `P(x)` to a `P(y)` along an equation: a proof where `P` is a family of propositions, and a value where it is one of types, `P` being declared into a `Sort`. `Eq` is propositional equality; `Eql` is the concept `==` and `!=` call.
+`Eq` is propositional equality; `Eql` is the concept `==` and `!=` call.
 
 ### Bounds from the facts in scope
 
 A bound is stated and proved in `/std/Bool`'s vocabulary, which a program imports by name: `use /std/Bool/{True, False, Holds};`. `Holds(b)` is the proposition that the decision `b` holds: it reduces to `True`, proved by `True/qed()`, where `b` is `true`, and to the empty `False` where it is not.
 
-A bound that reduction does not decide is proved by the compiler where it follows by linear arithmetic from the facts in scope: the hypotheses, their proof fields one level down, and the guards of the arms around it, each read through the local definitions and refinements in scope. The fragment is:
-
-- comparisons of `Nat` and `Int` terms with literal coefficients, the bound being any of `<`, `<=`, `==` and `!=`;
-- a disequality among the facts — an `==` that came back `false`, a `!=` that came back `true`, or a hypothesis stating either — through the two cases the order of its sides makes;
-- `min` and `max`, through the two cases the order of their operands makes, and an `Int`'s `abs` and `sign`, through the cases its operand's sign makes;
-- at `Nat`, a truncated subtraction, through what both of its cases state and, inside a sum, through its two cases; a quotient or a remainder by any nonzero divisor, through the quotient's bounds; and a power of a base reduction shows to be at least one, as the power of two a shift by an unknown count multiplies by is;
-- where linear arithmetic alone finds no proof, the products of pairs of facts and of the negated goal.
-
-A bound one of those facts states outright is proved by the fact, whatever the proposition is: an opaque `Bool` function's result, an equation, a family of its own. Why: [A bound that follows from the facts in scope is proved by the elaborator](design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md).
+A bound that reduction does not decide is proved by the compiler where it follows from the facts in scope — the hypotheses, their proof fields and the guards of the arms around it — by linear arithmetic. Why: [A bound that follows from the facts in scope is proved by the elaborator](design/arithmetic/a-bound-that-follows-from-the-facts-in-scope-is-proved-by-the-elaborator.md).
 
 ```crs
 use /std/{List, Nat};
@@ -1642,7 +1431,7 @@ pub let clamp(n: Nat, q: Holds(n <= 10)) -> Nat =
     match n > 20 | true => match proved(@False) end | false => n end;
 ```
 
-A bound the facts do not imply is refused. The report names the facts it considered and the ones it could not read, and gives values for the atoms under which the facts hold and the bound fails. A goal `?` written for a bound reports the same.
+A bound the facts do not imply is refused, the report naming the facts it read and values under which they hold and the bound fails.
 
 ## Quick reference
 
