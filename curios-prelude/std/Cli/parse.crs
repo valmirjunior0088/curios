@@ -114,24 +114,17 @@ let read_field(f: Field, seen: List(Seen), env: Map(Str, Str)) -> Result(Failure
             | some(a) => Result/success(present(presence, a.value))
             | none() => absent(presence, Str/join(" | ", spelled))
             end
-        | [k, ..more] =>
-            match more
-            | [] =>
-                match List/try_get(alternatives, k)
-                | some(a) => Result/success(present(presence, a.value))
-                | none() => absent(presence, Str/join(" | ", spelled))
-                end
-            | [_, .._] =>
-                Result/failure(
-                    Failure/conflict(
-                        List/concat_map(
-                            picks(seen),
-                            (i) =>
-                                match List/try_get(spelled, i)
-                                | some(s) => [s]
-                                | none() => []
-                                end)))
+        | [k] =>
+            match List/try_get(alternatives, k)
+            | some(a) => Result/success(present(presence, a.value))
+            | none() => absent(presence, Str/join(" | ", spelled))
             end
+        | [_, _, .._] =>
+            Result/failure(
+                Failure/conflict(
+                    List/concat_map(
+                        picks(seen),
+                        (i) => match List/try_get(spelled, i) | some(s) => [s] | none() => [] end)))
         end
     end;
 

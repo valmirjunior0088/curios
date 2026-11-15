@@ -159,141 +159,125 @@ let walk(
 ) -> Result(Rule, {Map(Str, Toml), Map(Bytes, Origin), List(Seg)}) =
     match segs
     | [] => Result/failure(Rule/empty_key_path())
+    | [seg] => walk_final(m, side, pre, seg_name(seg), act)
     | [seg, ..rest] =>
-        match rest
-        | [] => walk_final(m, side, pre, seg_name(seg), act)
-        | [_, .._] =>
-            match unchecked > 0
-            | true =>
-                match seg
-                | plain(name) =>
-                    match Map/try_get(m, name)
-                    | some(existing) =>
-                        match existing
-                        | table(inner) =>
-                            match walk(inner, side, seg_key(pre, seg), rest, unchecked - 1, act)
-                            | success((inner2, side2, res)) =>
-                                Result/success((
-                                    Map/insert(m, name, Toml/table(inner2)),
-                                    side2,
-                                    [seg, ..res]))
-                            | failure(msg) => Result/failure(msg)
-                            end
-                        | _ => Result/failure(Rule/invariant("scope is not a table"))
+        match unchecked > 0
+        | true =>
+            match seg
+            | plain(name) =>
+                match Map/try_get(m, name)
+                | some(existing) =>
+                    match existing
+                    | table(inner) =>
+                        match walk(inner, side, seg_key(pre, seg), rest, unchecked - 1, act)
+                        | success((inner2, side2, res)) =>
+                            Result/success((
+                                Map/insert(m, name, Toml/table(inner2)),
+                                side2,
+                                [seg, ..res]))
+                        | failure(msg) => Result/failure(msg)
                         end
-                    | none() => Result/failure(Rule/invariant("scope is missing"))
+                    | _ => Result/failure(Rule/invariant("scope is not a table"))
                     end
-                | at(name, index) =>
-                    match Map/try_get(m, name)
-                    | some(existing) =>
-                        match existing
-                        | arr(items) =>
+                | none() => Result/failure(Rule/invariant("scope is missing"))
+                end
+            | at(name, index) =>
+                match Map/try_get(m, name)
+                | some(existing) =>
+                    match existing
+                    | arr(items) =>
+                        match Bool/holds(index < List/len(items))
+                        | some(in_range) =>
+                            match List/get(@Toml, items, index, @in_range)
+                            | table(inner) =>
+                                match walk(inner, side, seg_key(pre, seg), rest, unchecked - 1, act)
+                                | success((inner2, side2, res)) =>
+                                    let items2 =
+                                        replace_at(items, index, in_range, Toml/table(inner2));
+                                    Result/success((
+                                        Map/insert(m, name, Toml/arr(items2)),
+                                        side2,
+                                        [seg, ..res]))
+                                | failure(msg) => Result/failure(msg)
+                                end
+                            | _ => Result/failure(Rule/invariant("scope element is not a table"))
+                            end
+                        | none() => Result/failure(Rule/invariant("scope element is missing"))
+                        end
+                    | _ => Result/failure(Rule/invariant("scope is not an array of tables"))
+                    end
+                | none() => Result/failure(Rule/invariant("scope is missing"))
+                end
+            end
+        | false =>
+            let name = seg_name(seg);
+            let kp = seg_key(pre, Seg/plain(name));
+            match Map/try_get(m, name)
+            | none() =>
+                let created: Origin =
+                    match act
+                    | act_value(_) => Origin/dotted()
+                    | _ => Origin/implicit()
+                    end;
+                match walk(Map/empty(), Map/insert(side, kp, created), kp, rest, 0, act)
+                | success((inner2, side2, res)) =>
+                    Result/success((
+                        Map/insert(m, name, Toml/table(inner2)),
+                        side2,
+                        [Seg/plain(name), ..res]))
+                | failure(msg) => Result/failure(msg)
+                end
+            | some(existing) =>
+                match existing
+                | table(inner) =>
+                    match may_extend(side, kp, act)
+                    | failure(msg) => Result/failure(msg)
+                    | success(_) =>
+                        match walk(inner, side, kp, rest, 0, act)
+                        | success((inner2, side2, res)) =>
+                            Result/success((
+                                Map/insert(m, name, Toml/table(inner2)),
+                                side2,
+                                [Seg/plain(name), ..res]))
+                        | failure(msg) => Result/failure(msg)
+                        end
+                    end
+                | arr(items) =>
+                    let is_many: Bool =
+                        match Map/try_get(side, kp)
+                        | some(st) => match st | many() => true | _ => false end
+                        | none() => false
+                        end;
+                    match is_many
+                    | true =>
+                        match act
+                        | act_value(_) => Result/failure(Rule/extends_array_with_dotted_keys())
+                        | _ =>
+                            let index = List/len(items) - 1;
+                            let seg2 = Seg/at(name, index);
                             match Bool/holds(index < List/len(items))
                             | some(in_range) =>
                                 match List/get(@Toml, items, index, @in_range)
                                 | table(inner) =>
-                                    match walk(
-                                        inner,
-                                        side,
-                                        seg_key(pre, seg),
-                                        rest,
-                                        unchecked - 1,
-                                        act)
+                                    match walk(inner, side, seg_key(pre, seg2), rest, 0, act)
                                     | success((inner2, side2, res)) =>
                                         let items2 =
                                             replace_at(items, index, in_range, Toml/table(inner2));
                                         Result/success((
                                             Map/insert(m, name, Toml/arr(items2)),
                                             side2,
-                                            [seg, ..res]))
+                                            [seg2, ..res]))
                                     | failure(msg) => Result/failure(msg)
                                     end
                                 | _ =>
-                                    Result/failure(Rule/invariant("scope element is not a table"))
+                                    Result/failure(Rule/invariant("array element is not a table"))
                                 end
-                            | none() => Result/failure(Rule/invariant("scope element is missing"))
-                            end
-                        | _ => Result/failure(Rule/invariant("scope is not an array of tables"))
-                        end
-                    | none() => Result/failure(Rule/invariant("scope is missing"))
-                    end
-                end
-            | false =>
-                let name = seg_name(seg);
-                let kp = seg_key(pre, Seg/plain(name));
-                match Map/try_get(m, name)
-                | none() =>
-                    let created: Origin =
-                        match act
-                        | act_value(_) => Origin/dotted()
-                        | _ => Origin/implicit()
-                        end;
-                    match walk(Map/empty(), Map/insert(side, kp, created), kp, rest, 0, act)
-                    | success((inner2, side2, res)) =>
-                        Result/success((
-                            Map/insert(m, name, Toml/table(inner2)),
-                            side2,
-                            [Seg/plain(name), ..res]))
-                    | failure(msg) => Result/failure(msg)
-                    end
-                | some(existing) =>
-                    match existing
-                    | table(inner) =>
-                        match may_extend(side, kp, act)
-                        | failure(msg) => Result/failure(msg)
-                        | success(_) =>
-                            match walk(inner, side, kp, rest, 0, act)
-                            | success((inner2, side2, res)) =>
-                                Result/success((
-                                    Map/insert(m, name, Toml/table(inner2)),
-                                    side2,
-                                    [Seg/plain(name), ..res]))
-                            | failure(msg) => Result/failure(msg)
+                            | none() => Result/failure(Rule/invariant("array of tables is empty"))
                             end
                         end
-                    | arr(items) =>
-                        let is_many: Bool =
-                            match Map/try_get(side, kp)
-                            | some(st) => match st | many() => true | _ => false end
-                            | none() => false
-                            end;
-                        match is_many
-                        | true =>
-                            match act
-                            | act_value(_) => Result/failure(Rule/extends_array_with_dotted_keys())
-                            | _ =>
-                                let index = List/len(items) - 1;
-                                let seg2 = Seg/at(name, index);
-                                match Bool/holds(index < List/len(items))
-                                | some(in_range) =>
-                                    match List/get(@Toml, items, index, @in_range)
-                                    | table(inner) =>
-                                        match walk(inner, side, seg_key(pre, seg2), rest, 0, act)
-                                        | success((inner2, side2, res)) =>
-                                            let items2 =
-                                                replace_at(
-                                                    items,
-                                                    index,
-                                                    in_range,
-                                                    Toml/table(inner2));
-                                            Result/success((
-                                                Map/insert(m, name, Toml/arr(items2)),
-                                                side2,
-                                                [seg2, ..res]))
-                                        | failure(msg) => Result/failure(msg)
-                                        end
-                                    | _ =>
-                                        Result/failure(
-                                            Rule/invariant("array element is not a table"))
-                                    end
-                                | none() =>
-                                    Result/failure(Rule/invariant("array of tables is empty"))
-                                end
-                            end
-                        | false => Result/failure(Rule/extends_static_array())
-                        end
-                    | _ => Result/failure(Rule/conflicts_with_value())
+                    | false => Result/failure(Rule/extends_static_array())
                     end
+                | _ => Result/failure(Rule/conflicts_with_value())
                 end
             end
         end

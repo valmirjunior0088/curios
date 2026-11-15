@@ -134,16 +134,14 @@ pub let digits_of(n: Nat) -> List(Nat) =
 pub let normalize(ds: List(Nat)) -> {List(Nat), Bool} =
     match ds
     | [] => ([], false)
+    | [10] => ([0], true)
+    | [h] => ([h], false)
     | [h, ..t] =>
-        match List/len(t) == 0
-        | true => match h == 10 | true => ([0], true) | false => ([h], false) end
-        | false =>
-            let (rest, carry) = normalize(t);
-            match
-            | Bool/not(carry) => ([h, ..rest], false)
-            | h == 9 => ([0, ..rest], true)
-            | _ => ([h + 1, ..rest], false)
-            end
+        let (rest, carry) = normalize(t);
+        match
+        | Bool/not(carry) => ([h, ..rest], false)
+        | h == 9 => ([0, ..rest], true)
+        | _ => ([h + 1, ..rest], false)
         end
     end;
 

@@ -169,10 +169,10 @@ and tree() -> Parse(Str, Html) =
             match second
             | none() => lone_bracket
             | some(after) =>
-                match
-                | after == '/' => Parse/fail("a closing tag")
-                | after == '!' => Parse/or(comment(), declaration())
-                | is_name_char(after) => element()
+                match Char/to_nat(after)
+                | '/' => Parse/fail("a closing tag")
+                | '!' => Parse/or(comment(), declaration())
+                | _, is_name_char(after) => element()
                 | _ => lone_bracket
                 end
             end
@@ -194,11 +194,7 @@ let content() -> Parse(Str, Html) =
     let all = Parse/many0(Parse/or(tree(), stray_close))!;
     let _ = Parse/eof()!;
     let read = List/filter(all, (n) => Bool/not(is_empty_fragment(n)));
-    Parse/pure(
-        match read
-        | [] => Html/fragment([])
-        | [one, ..rest] => match rest | [] => one | _ => Html/fragment(read) end
-        end);
+    Parse/pure(match read | [one] => one | _ => Html/fragment(read) end);
 
 --- The tree `s` spells, read as the markup `encode` writes rather than as a browser reads a page: what `encode` writes reads back equal. No element name is consulted, so an element is void only where it is written `<name/>`, and any other holds the trees up to the next closing tag, whichever name it bears, or to its parent's end — `<br>` written without the slash holds what follows it, and a second `<li>` or `<p>` nests in the first. A name keeps the case it was written in, a stray closing tag is skipped, a declaration is dropped, and a reference decodes as `decode` reads it, one that names nothing known kept as written. A single tree is returned as itself, several as a fragment. The grammar declines nothing today; the refusal is the parser's to report should it ever.
 pub let decode(s: Str) -> Result(Parse/Error, Html) =

@@ -463,9 +463,9 @@ pub let to_str(f: Flt) -> Str =
             place(place(place(place(place(b6 % 0x10, at(5)), at(4)), at(3)), at(2)), at(1)),
             at(0));
     let sign = match b7 >= 0x80 | true => "-" | false => "+" end;
-    match
-    | exp_field == 0x7FF && mant_field == 0 => Str/concat(sign, "inf")
-    | exp_field == 0x7FF =>
+    match exp_field
+    | 0x7FF, mant_field == 0 => Str/concat(sign, "inf")
+    | 0x7FF =>
         let quiet = mant_field >= pow2(51);
         let payload = mant_field % pow2(51);
         -- The least payload each kind carries, which goes unwritten: none for a quiet NaN, one for a signaling one, whose payload cannot be zero.
@@ -477,7 +477,7 @@ pub let to_str(f: Flt) -> Str =
             | false => Fmt/render("(0x%)")(hex_str(payload))
             end;
         Str/flatten([sign, kind, suffix])
-    | exp_field == 0 && mant_field == 0 => Str/concat(sign, "0")
+    | 0, mant_field == 0 => Str/concat(sign, "0")
     | _ =>
         let f_mant =
             match exp_field == 0
@@ -513,9 +513,9 @@ pub let to_hex_str(f: Flt) -> Str =
     let sign = match is_sign_minus(f) | true => "-" | false => "+" end;
     let field = Nat/shr(b, 52) % 2048;
     let fraction = b % pow2(52);
-    match
-    | field == 2047 => to_str(f)
-    | field == 0 && fraction == 0 => Str/concat(sign, "0x0p+0")
+    match field
+    | 2047 => to_str(f)
+    | 0, fraction == 0 => Str/concat(sign, "0x0p+0")
     | _ =>
         let lead = match field == 0 | true => "0x0" | false => "0x1" end;
         let exponent =
