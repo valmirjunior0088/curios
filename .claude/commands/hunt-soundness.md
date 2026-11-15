@@ -42,10 +42,7 @@ use /std/{Nat};
 use /std/Bool/{True, False, Holds};
 
 let f(n: Nat, h: Holds(n == 2)) -> False =
-    match n: (m) => False
-    | 0 => h
-    | k + 1; ih => ih
-    end;
+    match n | 0 => h | k + 1 => f(k + 1, h) end;
 
 f(2, True/qed())
 ```
