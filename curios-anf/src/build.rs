@@ -197,17 +197,14 @@ impl Builder {
 
     /// Bind `rhs` to a fresh value in the innermost open block, or as the next top-level item when no block is open.
     pub fn let_value(&mut self, debug_name: Option<String>, rhs: Rhs) -> ValueId {
-        let result = self.module.add_value(debug_name);
-        let statement = self.module.add_statement(Statement::Let { result, rhs });
+        let (result, statement) = self.module.let_value(debug_name, rhs);
         self.emit(statement);
         result
     }
 
     /// Introduce a function group in the innermost open block.
     pub fn let_functions(&mut self, functions: Vec<FunctionId>) {
-        let statement = self
-            .module
-            .add_statement(Statement::Functions { functions });
+        let statement = self.module.add_functions(functions);
         self.emit(statement);
     }
 
@@ -220,8 +217,7 @@ impl Builder {
     /// Bind `rhs` to a fresh value as the next top-level item.
     pub fn item_value(&mut self, debug_name: Option<String>, rhs: Rhs) -> ValueId {
         self.require_top_level("item_value");
-        let result = self.module.add_value(debug_name);
-        let statement = self.module.add_statement(Statement::Let { result, rhs });
+        let (result, statement) = self.module.let_value(debug_name, rhs);
         self.module.push_item(statement);
         result
     }
@@ -229,17 +225,13 @@ impl Builder {
     /// Introduce a function group as the next top-level item.
     pub fn item_functions(&mut self, functions: Vec<FunctionId>) {
         self.require_top_level("item_functions");
-        let statement = self
-            .module
-            .add_statement(Statement::Functions { functions });
+        let statement = self.module.add_functions(functions);
         self.module.push_item(statement);
     }
 
     /// Introduce a function group as a top-level item now, ahead of whatever item is still being built: for functions closed over nothing but other items, which that item's body names and which need not live inside it. A function left local to a body is out of reach of everything outside it, the closed evaluator's copies of a description among them.
     pub fn hoist_functions(&mut self, functions: Vec<FunctionId>) {
-        let statement = self
-            .module
-            .add_statement(Statement::Functions { functions });
+        let statement = self.module.add_functions(functions);
         self.module.push_item(statement);
     }
 

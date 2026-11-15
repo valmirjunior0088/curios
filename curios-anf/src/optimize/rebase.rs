@@ -250,14 +250,14 @@ impl Row {
                     .next()
                     .expect("a combine has an accumulator to fold into");
                 operands.fold(first, |left, right| {
-                    let folded = module.add_value(None);
-                    statements.push(module.add_statement(Statement::Let {
-                        result: folded,
-                        rhs: Rhs::Operation {
+                    let (folded, statement) = module.let_value(
+                        None,
+                        Rhs::Operation {
                             operation: *operation,
                             operands: vec![left, right],
                         },
-                    }));
+                    );
+                    statements.push(statement);
                     Atom::Value(folded)
                 })
             }
@@ -278,14 +278,14 @@ fn sequence(
     operation: SequenceOp,
     operands: Vec<Atom>,
 ) -> Atom {
-    let result = module.add_value(None);
-    statements.push(module.add_statement(Statement::Let {
-        result,
-        rhs: Rhs::Sequence {
+    let (result, statement) = module.let_value(
+        None,
+        Rhs::Sequence {
             operation,
             operands,
         },
-    }));
+    );
+    statements.push(statement);
     Atom::Value(result)
 }
 
@@ -427,20 +427,18 @@ fn rebase_one(
         .collect();
     let mut wrapper_statements = Vec::new();
     let seed = row.identity(module, &mut wrapper_statements);
-    let call_result = module.add_value(None);
-    wrapper_statements.push(
-        module.add_statement(Statement::Let {
-            result: call_result,
-            rhs: Rhs::Apply {
-                callee: Atom::Function(worker),
-                arguments: wrapper_params
-                    .iter()
-                    .map(|&param| Atom::Value(param))
-                    .chain(accumulators.iter().map(|_| seed))
-                    .collect(),
-            },
-        }),
+    let (call_result, calling) = module.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(worker),
+            arguments: wrapper_params
+                .iter()
+                .map(|&param| Atom::Value(param))
+                .chain(accumulators.iter().map(|_| seed))
+                .collect(),
+        },
     );
+    wrapper_statements.push(calling);
     let wrapper_body = module.add_block(Block {
         statements: wrapper_statements,
         terminator: Terminator::Return(Atom::Value(call_result)),

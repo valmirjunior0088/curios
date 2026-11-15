@@ -497,9 +497,7 @@ fn apply(
         if let Some(target) = binds_target(module, item, installed)
             && let Some(functions) = installed.get(&target)
         {
-            rebuilt.push(module.add_statement(Statement::Functions {
-                functions: functions.clone(),
-            }));
+            rebuilt.push(module.add_functions(functions.clone()));
         }
     }
     module.set_items(rebuilt);

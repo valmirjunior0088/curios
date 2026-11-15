@@ -481,8 +481,26 @@ impl Module {
         self.blocks.mint(block)
     }
 
+    /// Mint a statement, under the rule every statement a module holds is kept to ([`Module::bound`]): a binding whose producer names its own carrier states none.
     pub(crate) fn add_statement(&mut self, statement: Statement) -> StatementId {
+        self.bound(&statement);
         self.statements.mint(statement)
+    }
+
+    /// Bind a fresh value named `debug_name` to `rhs`: the value, and the statement binding it for the caller to place.
+    pub(crate) fn let_value(
+        &mut self,
+        debug_name: Option<String>,
+        rhs: Rhs,
+    ) -> (ValueId, StatementId) {
+        let result = self.add_value(debug_name);
+        let statement = self.add_statement(Statement::Let { result, rhs });
+        (result, statement)
+    }
+
+    /// The statement introducing a group of `functions`, for the caller to place.
+    pub(crate) fn add_functions(&mut self, functions: Vec<FunctionId>) -> StatementId {
+        self.add_statement(Statement::Functions { functions })
     }
 
     pub(crate) fn add_rec_group(&mut self, group: RecGroup) -> RecGroupId {
@@ -525,17 +543,20 @@ impl Module {
         self.items = items;
     }
 
-    /// Rewrite one live statement in place — partial evaluation's install intrinsic (a folded call becomes an alias or a residual).
-    ///
-    /// A binding handed a producer that names its own carrier, as a folded call residualized to a host call, stops stating one: the binder's type still names it, but the producer now says it, and a carrier is stated only where no producer does.
+    /// Rewrite one live statement in place — partial evaluation's install intrinsic (a folded call becomes an alias or a residual) — under the rule every statement is kept to ([`Module::bound`]).
     pub(crate) fn set_statement(&mut self, id: StatementId, statement: Statement) {
-        if let Statement::Let { result, rhs } = &statement
+        self.bound(&statement);
+        self.statements.set(id, statement);
+    }
+
+    /// What every statement a module mints or rewrites is kept to: a binding handed a producer that names its own carrier stops stating one. A pass hands a value a producer of its own — a folded call residualized to a host call, a binder a peel bound read by its index instead — and the binder's type still names the carrier, but the producer now says it, and a carrier is stated only where no producer does. Erasure states a carrier after it binds the value, so a carrier it states against its producer still meets the verifier ([`StructuralRule::StatedCarrier`](crate::StructuralRule)).
+    fn bound(&mut self, statement: &Statement) {
+        if let Statement::Let { result, rhs } = statement
             && rhs.names_its_carrier()
             && let Some(definition) = self.values.get_mut(*result)
         {
             definition.register = None;
         }
-        self.statements.set(id, statement);
     }
 
     /// Replace one live block's statement list — the splice intrinsic for materialized reifications and taken match arms.

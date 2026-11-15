@@ -203,9 +203,7 @@ fn reify_closure(
     )?;
     let function = deep_copy_function(module, closure.function, &substitution, None)
         .ok_or(Bail::Unsupported)?;
-    out.push(module.add_statement(Statement::Functions {
-        functions: vec![function],
-    }));
+    out.push(module.add_functions(vec![function]));
     let materialized = Atom::Function(function);
     scope.record(specialization, materialized);
     Ok(materialized)
@@ -649,7 +647,7 @@ pub fn item_bound_functions(module: &Module) -> BTreeSet<FunctionId> {
 }
 
 fn emit(module: &mut Module, out: &mut Vec<StatementId>, rhs: Rhs) -> Atom {
-    let result = module.add_value(None);
-    out.push(module.add_statement(Statement::Let { result, rhs }));
+    let (result, statement) = module.let_value(None, rhs);
+    out.push(statement);
     Atom::Value(result)
 }
