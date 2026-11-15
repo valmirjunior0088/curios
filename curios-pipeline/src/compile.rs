@@ -81,7 +81,14 @@ impl Findings {
 #[derive(Debug)]
 pub struct Checked {
     pub entry: Findings,
-    pub verdict: Result<curios_core::Program, CompileError>,
+    pub verdict: Result<CheckedProgram, CompileError>,
+}
+
+/// A program the checks accepted: its declarations and the term that closes it, beside what the certifier concluded about its declarations, which a question about one of them reads its totality off.
+#[derive(Debug)]
+pub struct CheckedProgram {
+    pub program: curios_core::Program,
+    pub certification: curios_core::Certification,
 }
 
 /// A compile failure, split for process-level reporting: a written-goal batch is *incomplete* development state, everything else a hard *failure*, and hard failures beside written goals are *mixed*. The CLI maps them to exit codes — 2 for incomplete, 1 for the other two, since a refusal is one whatever stands beside it — so tooling can distinguish "here is your goal batch" from "something is wrong" without parsing stderr.
@@ -858,7 +865,10 @@ where
         if let Some(erased) = entered.erased.take() {
             erased?;
         }
-        Ok(entered.program())
+        Ok(CheckedProgram {
+            program: entered.program(),
+            certification: entered.unit.certification().clone(),
+        })
     });
 
     Ok(Checked { entry, verdict })

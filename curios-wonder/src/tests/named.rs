@@ -3,7 +3,7 @@
 use {
     crate::*,
     curios_common::{Qualifier, Span},
-    curios_core::Declared,
+    curios_core::{Declared, Totality},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
     std::path::Path,
@@ -354,6 +354,23 @@ fn a_programs_own_private_declaration_is_answered_by_its_own_path() {
             ["x".to_string()].as_slice(),
             ["/std/Show"].as_slice()
         ),
+    );
+}
+
+/// A definition is answered with the totality the certifier recorded of it, off the unit that declares it: the program's own, a recursion that descends and one that does not, and the library's. A structure is answered with none, its former being no definition a reader wrote.
+#[test]
+fn a_definition_is_answered_with_its_totality() {
+    let program = "use /std/{Nat, print};\nlet halve(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => match k | 0 => 0 | j + 1 => halve(j) + 1 end end;\nlet spin(n: Nat) -> Nat = spin(n + 1);\nprint(\"\")";
+    let totality = |path| described(program, path).expect("in scope").totality;
+
+    assert_eq!(totality("/halve"), Some(Totality::Total));
+    assert_eq!(totality("/spin"), Some(Totality::Partial));
+    assert_eq!(totality("/std/Bool/not"), Some(Totality::Total));
+    assert_eq!(
+        described(POINT, "/Point")
+            .expect("the program declares it")
+            .totality,
+        None
     );
 }
 

@@ -11,7 +11,7 @@ use {
         described, diagnostics, placed, stage, unit_stage, written,
     },
     curios_common::{About, Kind, LINE_WIDTH, Qualifier, Report, Said, Source, Style},
-    curios_core::Declared,
+    curios_core::{Declared, Totality},
     curios_cps::{Fate, Outcome},
     curios_module::{LoadError, Overlay},
     curios_package::{Entry, Library, Program, Refused, Selection, Spelling},
@@ -629,7 +629,7 @@ impl FromStr for Place {
     }
 }
 
-/// `wonder --at LINE:COLUMN [SUBJECT]`: the declaration the name written at a place of the file `staged` is asked through names, to stdout — the block `--name` answers with but for the type, which no checker is asked, then its prose and head as its author wrote them, where its text is held — and nothing where no name stands there. The block names the command that lists its witnesses where it has any, `subject` as the command line wrote it. `telling` is told as [`wonder_diagnostics`]' is.
+/// `wonder --at LINE:COLUMN [SUBJECT]`: the declaration the name written at a place of the file `staged` is asked through names, to stdout — the block `--name` answers with but for the type and the totality, which no checker is asked, then its prose and head as its author wrote them, where its text is held — and nothing where no name stands there. The block names the command that lists its witnesses where it has any, `subject` as the command line wrote it. `telling` is told as [`wonder_diagnostics`]' is.
 pub fn wonder_at(
     budget: u64,
     staged: Staged,
@@ -779,7 +779,7 @@ fn declaration(
     }
 }
 
-/// What `wonder --name` and `wonder --witnesses` say of `described` first, a block: the path asked, then a fact each for what it is declared as and where, its type, its members and how many witnesses in scope it takes part in, then `listing`, the command that lists them, where there are any to list, closed on where its name is written, or on the path it is declared at where no file holds it.
+/// What `wonder --name` and `wonder --witnesses` say of `described` first, a block: the path asked, then a fact each for what it is declared as and where, its type, its totality, its members and how many witnesses in scope it takes part in, then `listing`, the command that lists them, where there are any to list, closed on where its name is written, or on the path it is declared at where no file holds it.
 fn block(described: &Described, listing: Option<String>) -> Report {
     let declared = declared_as(described.declared);
     let mut kind = match described.public {
@@ -798,6 +798,13 @@ fn block(described: &Described, listing: Option<String>) -> Report {
 
     if let Some(type_) = &described.type_ {
         report = report.stating(format!("type: {type_}"));
+    }
+    match described.totality {
+        Some(Totality::Total) => report = report.stating("totality: total"),
+        Some(Totality::Partial) => {
+            report = report.stating("totality: partial, not known to terminate");
+        }
+        None => {}
     }
     let members = match described.declared {
         Declared::Inductive => Some("constructors"),

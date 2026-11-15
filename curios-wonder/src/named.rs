@@ -14,8 +14,8 @@ use {
     crate::{Diagnosis, Overlaid, Subject, of_error, open, overlaid, tested_last},
     curios_common::{Plicity, Qualifier, Source, Span},
     curios_core::{
-        Anchors, Declared, Definitions, Global, HeadKey, Imports, Lexicon, Places, Spellings,
-        Subterm, UnitPaths, WitnessKey,
+        Anchors, Certification, Declared, Definitions, Global, HeadKey, Imports, Lexicon, Places,
+        Spellings, Subterm, Totality, UnitPaths, WitnessKey,
     },
     curios_module::{Heading, Overlay, PreparedText, SYNTAX, heading, identity},
     curios_pipeline::{Cache, EntryTail, Fold, Progress, spelling_at},
@@ -132,7 +132,7 @@ pub fn written(
     )
 }
 
-/// The declaration the name written at `line` and `column` of `file` names, as [`described`] answers one but for its type: what the lowering says of it, the subject lowered and elaborated nowhere, so a file that does not check answers as one that does. `None` where no name stands there, and where the subject is not written in `file`. `overlay` and `cache` behave as they do for `diagnostics`.
+/// The declaration the name written at `line` and `column` of `file` names, as [`described`] answers one but for its type and its totality: what the lowering says of it, the subject lowered and elaborated nowhere, so a file that does not check answers as one that does. `None` where no name stands there, and where the subject is not written in `file`. `overlay` and `cache` behave as they do for `diagnostics`.
 ///
 /// The refusal is a subject that has nothing to read, as `written`'s is.
 pub fn placed(
@@ -165,6 +165,7 @@ pub fn placed(
                 public: said.public,
                 declaration: said.declaration,
                 type_: None,
+                totality: None,
                 members: said.members,
                 witnesses: said.witnesses,
             })
@@ -393,6 +394,8 @@ pub struct Described {
     pub declaration: Option<Declaration>,
     /// The type it was elaborated at, spelled for a reader standing at it; none where the unit that declares it holds no definition under the name.
     pub type_: Option<String>,
+    /// Whether a definition terminates on every input, as the certifier recorded it of the unit that declares it: `Partial` where it is not known to, and none for anything but a definition, or where the record files none under the name.
+    pub totality: Option<Totality>,
     /// Its members by name, in the order they are declared: a family's constructors, a structure's fields, a concept's methods.
     pub members: Vec<String>,
     /// The witnesses in scope it takes part in, each unit's together in scope order and by place within it: a concept's, and a type's — none where it is neither.
@@ -454,6 +457,7 @@ pub fn described(
                     unit.core(),
                     Some((unit.lexicon(), unit.places())),
                     &others,
+                    Some(unit.certification()),
                 ))
             }
             None => Err((
@@ -493,6 +497,7 @@ pub fn described(
                             last.core(),
                             Some((last.lexicon(), last.places())),
                             &scope,
+                            Some(last.certification()),
                         )
                     }))
                 })
@@ -517,7 +522,7 @@ pub fn described(
                 Some(Ok(described)) => return Ok(Some(described)),
                 Some(Err(own)) => own,
             };
-            let program = Fold::new(budget, &units, through)
+            let checked = Fold::new(budget, &units, through)
                 .check(&entrypoint, &loader, EntryTail::Program, |step| {
                     progress(step)
                 })
@@ -528,9 +533,10 @@ pub fn described(
             Ok(Some(spelled(
                 asked,
                 said,
-                &program.definitions,
+                &checked.program.definitions,
                 None,
                 &scope,
+                Some(&checked.certification),
             )))
         }
     }
@@ -703,13 +709,14 @@ fn absolute(spellings: &Spellings, global: &Global) -> String {
     })
 }
 
-/// `said` of the declaration `asked` names, with its type spelled for a reader standing at it ([`spelling_at`]), over `definitions`, the module of the unit that declares it, kept under `kept` where it keeps one, and `scope`. The type is a definition's, or a constructor's as its family's entry makes it, and none where the module holds no definition under the name.
+/// `said` of the declaration `asked` names, with its type spelled for a reader standing at it ([`spelling_at`]), over `definitions`, the module of the unit that declares it, kept under `kept` where it keeps one, and `scope`, and its totality as `certification`, that unit's record, files it. The type is a definition's, or a constructor's as its family's entry makes it, and none where the module holds no definition under the name.
 fn spelled(
     asked: &Qualifier,
     said: Lowered,
     definitions: &Definitions,
     kept: Option<(&Lexicon, &Places)>,
     scope: &[&Lexicon],
+    certification: Option<&Certification>,
 ) -> Described {
     let name = said.name;
     let spelling = Rc::new(spelling_at(definitions, kept, scope, &SYNTAX, name));
@@ -728,6 +735,9 @@ fn spelled(
         public: said.public,
         declaration: said.declaration,
         type_: type_.map(|type_| type_.spelled(&spelling).to_string()),
+        totality: certification
+            .filter(|_| said.declared == Declared::Authored)
+            .and_then(|certification| certification.totality(&name)),
         members: said.members,
         witnesses: said.witnesses,
     }
