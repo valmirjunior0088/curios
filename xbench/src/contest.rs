@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Pin, Reading, Size, Timed, capture, held, table},
+    crate::{Pin, Size, Timed, Timing, capture, held, table},
     std::{
         env, fs, io,
         path::{Path, PathBuf},
@@ -120,7 +120,7 @@ pub const CONTESTANTS: &[Contestant] = &[
     },
 ];
 
-/// Where the built contestants go: under the workspace's own build directory, so a reading leaves nothing in the corpus.
+/// Where the built contestants go: under the workspace's own build directory, so a timing leaves nothing in the corpus.
 const ARTIFACTS: &str = "target/xbench";
 
 /// The WebAssembly target the Rust contestant is built for. The workspace's own toolchain already carries it, so the bench installs nothing.
@@ -190,7 +190,7 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
 
 /// Run one contestant once: what it printed, and how long the whole process took, in whole microseconds.
 ///
-/// `PATH` is the one variable that survives the clearing, because the engine is found on it; everything else is dropped so that the environment a contestant starts under is the same small thing in every execution of every reading.
+/// `PATH` is the one variable that survives the clearing, because the engine is found on it; everything else is dropped so that the environment a contestant starts under is the same small thing in every execution of every timing.
 fn once(invocation: &Invocation) -> Result<(String, u64), String> {
     let path = env::var("PATH").unwrap_or_default();
     let named = invocation.program.display().to_string();
@@ -353,9 +353,9 @@ fn time(workload: &Workload, size: u64, root: &Path) -> Result<Vec<Vec<Vec<u64>>
     Ok(samples)
 }
 
-/// Build the contestants, hold them to the answers their workloads are known to have, time them, and print the reading as the TOML file that records it.
+/// Build the contestants, hold them to the answers their workloads are known to have, time them, and print the timing as the TOML file that records it.
 ///
-/// The reading is numbered after `filed`, the readings already filed, which the binary keeps. Standard output carries the reading alone, so a redirect files the capture and nothing else; everything a person watches goes to standard error, the name to file it under among it.
+/// The timing is numbered after `filed`, the timings already filed, which the binary keeps. Standard output carries the timing alone, so a redirect files the capture and nothing else; everything a person watches goes to standard error, the name to file it under among it.
 pub fn collect(filed: usize) -> Result<(), String> {
     let root = root();
 
@@ -405,7 +405,7 @@ pub fn collect(filed: usize) -> Result<(), String> {
         timed.extend(measured);
     }
 
-    let reading = Reading {
+    let timing = Timing {
         taken: today(&asked("date", &["-I"], &root)?)?,
         subject,
         platform,
@@ -426,13 +426,13 @@ pub fn collect(filed: usize) -> Result<(), String> {
         timed,
     };
 
-    print!("{}", reading.filed()?);
-    eprintln!(">> file it as xbench/readings/{filed:02}.toml");
+    print!("{}", timing.filed()?);
+    eprintln!(">> file it as xbench/timings/{filed:02}.toml");
 
     Ok(())
 }
 
-/// The day `date -I` answers, as a reading records it.
+/// The day `date -I` answers, as a timing records it.
 fn today(said: &str) -> Result<toml::value::Date, String> {
     match said.parse::<Datetime>() {
         Ok(Datetime {

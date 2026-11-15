@@ -3,7 +3,7 @@ name = "xbench"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The benchmark bench: Curios and Rust on the measurement corpus, held to one answer and timed, as readings that record what they were taken under"
+description = "The benchmark bench: Curios and Rust on the measurement corpus, held to one answer and timed, as timings that record what they were taken under"
 
 [lints]
 workspace = true
@@ -12,6 +12,6 @@ workspace = true
 [dependencies]
 # The command line, in `xtask`'s own convention.
 clap = { workspace = true }
-# A reading is a TOML file beside the code, read where the bench runs and printed where a sitting files one.
+# A timing is a TOML file beside the code, read where the bench runs and printed where a sitting files one.
 serde = { workspace = true }
 toml = { workspace = true, features = ["display"] }

@@ -1,8 +1,8 @@
 //! The report: every figure computed from the samples when it is asked, so none can disagree with what it is a figure of.
 //!
-//! **A difference is proven only where two spans are disjoint.** A figure's span is the least and greatest of what its groups give, and two readings whose spans overlap could have produced each other, so the report says `no difference proven` rather than a percentage. The rule assumes nothing about how the samples are distributed, and it errs toward missing a real movement rather than announcing one: a single bad batch widens a span and hides a change, which is the direction worth being wrong in.
+//! **A difference is proven only where two spans are disjoint.** A figure's span is the least and greatest of what its groups give, and two timings whose spans overlap could have produced each other, so the report says `no difference proven` rather than a percentage. The rule assumes nothing about how the samples are distributed, and it errs toward missing a real movement rather than announcing one: a single bad batch widens a span and hides a change, which is the direction worth being wrong in.
 //!
-//! **A movement is read against Rust (Native).** Across two readings the report compares Curios's time over native Rust's, group by group. The two ran interleaved in each group, so what moved the machine during a group or between the two sittings reaches both and cancels in the ratio, and what is left is Curios's own.
+//! **A movement is read against Rust (Native).** Across two timings the report compares Curios's time over native Rust's, group by group. The two ran interleaved in each group, so what moved the machine during a group or between the two sittings reaches both and cancels in the ratio, and what is left is Curios's own.
 //!
 //! **No figure states a precision its span does not support.** Every number is rounded to the place of the first significant digit of its half-span, so a median of 438.2 with a span of six milliseconds prints as 438.
 
@@ -10,11 +10,11 @@
 mod tests;
 
 use {
-    crate::{CONTESTANTS, Pin, Reading, WORKLOADS},
+    crate::{CONTESTANTS, Pin, Timing, WORKLOADS},
     std::fmt::Write,
 };
 
-/// The anchor every other contestant is read against, within a reading and across two.
+/// The anchor every other contestant is read against, within a timing and across two.
 const CONTROL: &str = "rust";
 
 /// The subject, whose movement the bench exists to report.
@@ -199,9 +199,9 @@ pub fn table(title: &str, letter: &str, size: u64, rows: &[(&str, Vec<Vec<f64>>)
     )
 }
 
-/// What a reading says of itself, ahead of its tables.
-fn header(number: usize, reading: &Reading) -> String {
-    let pinned = reading
+/// What a timing says of itself, ahead of its tables.
+fn header(number: usize, timing: &Timing) -> String {
+    let pinned = timing
         .pinned
         .iter()
         .map(|pin| format!("{} {}", pin.tool, pin.version))
@@ -209,27 +209,27 @@ fn header(number: usize, reading: &Reading) -> String {
         .join(", ");
 
     format!(
-        "# Reading {number:02} — taken {}\n\n- **subject** {}\n- **machine** {}\n- **state** {}\n- **software** {}\n- **pinned** {pinned}\n",
-        reading.taken,
-        reading.subject,
-        reading.platform.machine,
-        reading.platform.state,
-        reading.platform.software,
+        "# Timing {number:02} — taken {}\n\n- **subject** {}\n- **machine** {}\n- **state** {}\n- **software** {}\n- **pinned** {pinned}\n",
+        timing.taken,
+        timing.subject,
+        timing.platform.machine,
+        timing.platform.state,
+        timing.platform.software,
     )
 }
 
-/// The reading numbered `number`, in full: what it says of itself, then a table per workload it measured.
-pub fn one(number: usize, reading: &Reading) -> String {
-    let mut out = header(number, reading);
+/// The timing numbered `number`, in full: what it says of itself, then a table per workload it measured.
+pub fn one(number: usize, timing: &Timing) -> String {
+    let mut out = header(number, timing);
 
     for workload in WORKLOADS {
-        let Some(size) = reading.size(workload.name) else {
+        let Some(size) = timing.size(workload.name) else {
             continue;
         };
         let rows = CONTESTANTS
             .iter()
             .filter_map(|contestant| {
-                let timed = reading.took(workload.name, contestant.name)?;
+                let timed = timing.took(workload.name, contestant.name)?;
                 Some((contestant.title, timed.milliseconds()))
             })
             .collect::<Vec<_>>();
@@ -250,7 +250,7 @@ pub fn one(number: usize, reading: &Reading) -> String {
 /// Why `before` and `after` cannot be compared, where they cannot.
 ///
 /// The software line is not among these. A kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it, so gating on it would strand the record at every patch for nothing.
-fn incomparable(before: &Reading, after: &Reading) -> Option<String> {
+fn incomparable(before: &Timing, after: &Timing) -> Option<String> {
     let differs = |what: &str, before: &str, after: &str| {
         (before != after).then(|| format!("  {what}  {before:?}\n       -> {after:?}"))
     };
@@ -276,9 +276,9 @@ fn incomparable(before: &Reading, after: &Reading) -> Option<String> {
         })
 }
 
-/// What changed between two readings, where anything can be said of it at all.
-pub fn compare(number: usize, before: &Reading, after: &Reading) -> String {
-    let heading = format!("## Reading {:02} → {number:02}\n\n", number - 1);
+/// What changed between two timings, where anything can be said of it at all.
+pub fn compare(number: usize, before: &Timing, after: &Timing) -> String {
+    let heading = format!("## Timing {:02} → {number:02}\n\n", number - 1);
 
     if let Some(why) = incomparable(before, after) {
         return format!("{heading}Not comparable.\n\n```\n{why}\n```\n");
@@ -287,8 +287,8 @@ pub fn compare(number: usize, before: &Reading, after: &Reading) -> String {
     let mut out = heading;
     let mut rows = Vec::new();
     for workload in WORKLOADS {
-        let read = |reading: &Reading| {
-            let groups = |contestant| Some(reading.took(workload.name, contestant)?.milliseconds());
+        let read = |timing: &Timing| {
+            let groups = |contestant| Some(timing.took(workload.name, contestant)?.milliseconds());
             relative(&groups(SUBJECT)?, &groups(CONTROL)?)
         };
         let (Some(was), Some(is)) = (read(before), read(after)) else {
@@ -296,7 +296,7 @@ pub fn compare(number: usize, before: &Reading, after: &Reading) -> String {
         };
 
         let half = was.half().max(is.half());
-        // The size is held per workload rather than over the reading: one resized, or one entering the record later, says so on its own row and leaves every other row comparable.
+        // The size is held per workload rather than over the timing: one resized, or one entering the record later, says so on its own row and leaves every other row comparable.
         let said = match (before.size(workload.name), after.size(workload.name)) {
             (Some(then), Some(now)) if then != now => {
                 format!("sized {then}, then {now}; not compared")
@@ -334,19 +334,19 @@ pub fn compare(number: usize, before: &Reading, after: &Reading) -> String {
     out
 }
 
-/// Every reading so far: each in full, with what changed between consecutive ones.
-pub fn report(readings: &[Reading]) -> String {
-    let Some((first, rest)) = readings.split_first() else {
-        return "No reading recorded. `cargo xbench collect` takes the first.\n".to_string();
+/// Every timing so far: each in full, with what changed between consecutive ones.
+pub fn report(timings: &[Timing]) -> String {
+    let Some((first, rest)) = timings.split_first() else {
+        return "No timing recorded. `cargo xbench collect` takes the first.\n".to_string();
     };
 
     let mut out = one(0, first);
-    for (number, reading) in rest.iter().enumerate() {
+    for (number, timing) in rest.iter().enumerate() {
         let _ = write!(
             out,
             "\n{}\n{}",
-            one(number + 1, reading),
-            compare(number + 1, &readings[number], reading)
+            one(number + 1, timing),
+            compare(number + 1, &timings[number], timing)
         );
     }
 

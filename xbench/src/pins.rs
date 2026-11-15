@@ -1,4 +1,4 @@
-//! The tools a reading is taken with, pinned, and the check that refuses to measure under anything else.
+//! The tools a timing is taken with, pinned, and the check that refuses to measure under anything else.
 //!
 //! Neither version is written here. `rust-toolchain.toml` pins the compiler the workspace builds under and `Cargo.lock` resolves the engine the compiler embeds, so this module reads the file that owns each rather than keeping a second copy for the bench to fall behind.
 //!
@@ -56,7 +56,7 @@ fn reported(program: &str) -> Result<String, String> {
 
 /// Ask `program` what it is, refuse where it is not `pinned`, and hand back what it said.
 ///
-/// What a reading records is this answer rather than the pin it was held to: the pin is what a file says the tool should be, and the answer is what the tool on the path reported of itself when the figures were taken.
+/// What a timing records is this answer rather than the pin it was held to: the pin is what a file says the tool should be, and the answer is what the tool on the path reported of itself when the figures were taken.
 fn hold(program: &str, pinned: &str) -> Result<String, String> {
     let found = version(&reported(program)?);
 
@@ -72,7 +72,7 @@ fn hold(program: &str, pinned: &str) -> Result<String, String> {
     }
 }
 
-/// Hold every tool a reading is taken with to its pin, and hand back the pins for the reading to record.
+/// Hold every tool a timing is taken with to its pin, and hand back the pins for the timing to record.
 ///
 /// This runs before anything is built, since building with the wrong compiler and timing it afterwards spends the run to produce the wrong artefact.
 pub fn held(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
@@ -84,7 +84,7 @@ pub fn held(root: &Path) -> Result<Vec<(&'static str, String)>, String> {
         .map_err(|error| format!("Cargo.lock cannot be read: {error}"))?;
     let wasmtime = locked(&lock, "wasmtime").ok_or("Cargo.lock resolves no wasmtime")?;
 
-    // The engine is recorded twice over: `wasmtime` is the CLI that runs `rust-wasm`, and `wasmtime in Curios` the one the compiler embeds and runs its own module on. The check holds them equal, and the reading says so rather than leaving a reader to assume it.
+    // The engine is recorded twice over: `wasmtime` is the CLI that runs `rust-wasm`, and `wasmtime in Curios` the one the compiler embeds and runs its own module on. The check holds them equal, and the timing says so rather than leaving a reader to assume it.
     let rustc = hold("rustc", &rustc)?;
     let engine = hold("wasmtime", &wasmtime)?;
 

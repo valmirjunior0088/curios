@@ -1,6 +1,6 @@
-//! Where a reading was taken, in three lines the host answers for itself.
+//! Where a timing was taken, in three lines the host answers for itself.
 //!
-//! The division is what the report does with each. [`Platform::machine`] and [`Platform::state`] gate a comparison, because a different machine or a different arrangement of the same one makes two readings incomparable and nothing else would notice. [`Platform::software`] is recorded and not gated: a kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it. Gating on it would strand the record at every patch.
+//! The division is what the report does with each. [`Platform::machine`] and [`Platform::state`] gate a comparison, because a different machine or a different arrangement of the same one makes two timings incomparable and nothing else would notice. [`Platform::software`] is recorded and not gated: a kernel or microcode update that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it. Gating on it would strand the record at every patch.
 //!
 //! Each line is read from `/proc` and `/sys` rather than asked of a program, so a capture spawns nothing and cannot be told a different story by a tool on the path. Reading a file and reading what it says are separate here, so what the parsing decides is held by tests over text rather than over this machine.
 
@@ -12,15 +12,15 @@ use {
     std::{env, fs, thread},
 };
 
-/// What stands where the host exposes nothing. A missing value is spelled rather than dropped, so two readings taken where different things are knowable still compare as the different arrangements they are.
+/// What stands where the host exposes nothing. A missing value is spelled rather than dropped, so two timings taken where different things are knowable still compare as the different arrangements they are.
 const UNKNOWN: &str = "unknown";
 
-/// Where a reading was taken, as the host answers it and the reading records it.
+/// Where a timing was taken, as the host answers it and the timing records it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Platform {
-    /// The machine itself. Differs between two readings, and they are of different machines.
+    /// The machine itself. Differs between two timings, and they are of different machines.
     pub machine: String,
-    /// How it was arranged when the reading was taken. Differs, and the same machine was running under different rules.
+    /// How it was arranged when the timing was taken. Differs, and the same machine was running under different rules.
     pub state: String,
     /// What was running on it. Recorded, never gated.
     pub software: String,
@@ -36,7 +36,7 @@ fn field(told: &str, name: &str) -> String {
         .unwrap_or_else(|| UNKNOWN.to_string())
 }
 
-/// `MemTotal` as gibibytes, which is what the figure is for: an identity stable across every reading on one machine, not a measurement.
+/// `MemTotal` as gibibytes, which is what the figure is for: an identity stable across every timing on one machine, not a measurement.
 fn gibibytes(told: &str) -> String {
     told.lines()
         .find_map(|line| {
@@ -49,7 +49,7 @@ fn gibibytes(told: &str) -> String {
 
 /// Whether the processor may clock above its base, from whichever driver the host has.
 ///
-/// The two spell it oppositely — `cpufreq/boost` is on when it is `1`, `intel_pstate/no_turbo` when it is `0` — so a reading that recorded the raw file would compare two machines by a number that means the reverse on each.
+/// The two spell it oppositely — `cpufreq/boost` is on when it is `1`, `intel_pstate/no_turbo` when it is `0` — so a timing that recorded the raw file would compare two machines by a number that means the reverse on each.
 fn boosting(cpufreq: Option<&str>, pstate: Option<&str>) -> String {
     let said = match (cpufreq, pstate) {
         (Some(boost), _) => match boost.trim() {
@@ -73,7 +73,7 @@ fn told(path: &str) -> String {
     fs::read_to_string(path).map_or_else(|_| UNKNOWN.to_string(), |told| told.trim().to_string())
 }
 
-/// What the host answers about itself, as a reading records it.
+/// What the host answers about itself, as a timing records it.
 pub fn capture() -> Platform {
     let cpuinfo = fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
     let meminfo = fs::read_to_string("/proc/meminfo").unwrap_or_default();

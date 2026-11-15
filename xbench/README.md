@@ -1,30 +1,30 @@
 # xbench — where Curios's cost is, and whether it moved
 
-The benchmark bench: `cargo xbench collect` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them, and prints the sitting as the TOML file that records it; `cargo xbench report` computes what the readings say. It is a run-once-every-never bench for orientation — "Curios is ~Nx off Rust on integer loops" — and **not** a rigorous benchmark suite. What makes it worth keeping is not its precision but its bookkeeping: a reading records everything it was taken under, nothing derived from a reading is stored, and a comparison the record cannot justify is refused rather than drawn.
+The benchmark bench: `cargo xbench collect` builds Curios and Rust on every workload of the corpus, holds all three contestants to the answers those workloads are known to have, times them, and prints the sitting as the TOML file that records it; `cargo xbench report` computes what the timings say. It is a run-once-every-never bench for orientation — "Curios is ~Nx off Rust on integer loops" — and **not** a rigorous benchmark suite. What makes it worth keeping is not its precision but its bookkeeping: a timing records everything it was taken under, nothing derived from a timing is stored, and a comparison the record cannot justify is refused rather than drawn.
 
-A reading is a historical fact and cannot be re-run. That is what separates this crate from [`xboard`](../xboard/README.md), whose witnesses go to the checkers on every run and fail where they disagree with their ticket. Nothing here regresses; the bench fails only where a filed record is malformed.
+A timing is a historical fact and cannot be re-run. That is what separates this crate from [`xboard`](../xboard/README.md), whose witnesses go to the checkers on every run and fail where they disagree with their ticket. Nothing here regresses; the bench fails only where a filed record is malformed.
 
 ## Run it
 
 ```
 xbench/
-  src/main.rs        the command line, and the readings the build embeds
-  src/               what a reading is, what it is taken under, the contest, the report
-  readings/NN.toml   one reading each, the file `collect` printed
+  src/main.rs        the command line, and the timings the build embeds
+  src/               what a timing is, what it is taken under, the contest, the report
+  timings/NN.toml    one timing each, the file `collect` printed
 
 ../programs/
   lcg/ trees/ chain/ churn/ walk/ spines/   the timed programs, one directory per workload
 ```
 
 ```sh
-cargo xbench collect > xbench/readings/00.toml   # filed under the next number, which collect names
-cargo xbench report                              # every reading, and what changed between them
-cargo xbench report 00                           # one reading in full
+cargo xbench collect > xbench/timings/00.toml    # filed under the next number, which collect names
+cargo xbench report                              # every timing, and what changed between them
+cargo xbench report 00                           # one timing in full
 ```
 
-Standard output carries the reading alone, so a redirect files the capture and nothing else; the build log, the agreement check and the live tables go to standard error.
+Standard output carries the timing alone, so a redirect files the capture and nothing else; the build log, the agreement check and the live tables go to standard error.
 
-Taking a reading needs a checkout, `cargo`, and the `wasmtime` CLI at the version `Cargo.lock` resolves — `rust-wasm` runs on the CLI while `curios` runs on the engine the compiler embeds, so unless the two agree the WebAssembly comparison is between two engines rather than two compilers. A reading records both, and `collect` refuses before it builds anything where they differ. Everything else is already here: `rustc` and the `wasm32-wasip2` target come from the workspace's own `rust-toolchain.toml`. There is no image and nothing to install beyond the engine.
+Taking a timing needs a checkout, `cargo`, and the `wasmtime` CLI at the version `Cargo.lock` resolves — `rust-wasm` runs on the CLI while `curios` runs on the engine the compiler embeds, so unless the two agree the WebAssembly comparison is between two engines rather than two compilers. A timing records both, and `collect` refuses before it builds anything where they differ. Everything else is already here: `rustc` and the `wasm32-wasip2` target come from the workspace's own `rust-toolchain.toml`. There is no image and nothing to install beyond the engine.
 
 ## Contestants
 
@@ -50,7 +50,7 @@ A contestant is measured in **five groups of five executions**, one untimed roun
 
 - Within a group is iteration noise. Between the group medians is the **span**.
 - A contestant's figure is the median of its group medians; its span is the least and greatest of them.
-- Across two readings, what is compared is **Curios over Rust (Native), group by group**: each group's Curios median over its native Rust median, read as a figure is.
+- Across two timings, what is compared is **Curios over Rust (Native), group by group**: each group's Curios median over its native Rust median, read as a figure is.
 - A difference is **proven only where two spans are disjoint**. Overlapping spans could have produced each other, so the report says `no difference proven`.
 - Every figure is stated to the place of the first significant digit of its half-span, so no number claims a precision its span does not support.
 
@@ -58,7 +58,7 @@ Interleaving is what makes the ratio survive a disturbance: a compile elsewhere 
 
 ## When a comparison is refused
 
-| Differs between two readings | What the report does |
+| Differs between two timings | What the report does |
 | --- | --- |
 | `machine` | refuses, naming it |
 | `state` — governor, boost, SMT | refuses, naming it |
@@ -70,21 +70,21 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 
 ## Design
 
-### A reading records what it was taken under, and nothing derived from it
+### A timing records what it was taken under, and nothing derived from it
 
-**Decision.** A reading carries the compiler it is about, the machine, that machine's arrangement, the tool pins, the size of every workload, and every sample in the order it ran. It carries no median, span, ratio or percentage: the report computes each when it is asked.
+**Decision.** A timing carries the compiler it is about, the machine, that machine's arrangement, the tool pins, the size of every workload, and every sample in the order it ran. It carries no median, span, ratio or percentage: the report computes each when it is asked.
 
 **Rationale.** A figure whose conditions are not recorded cannot be repeated, and a ratio across two such figures cannot be wrong, because nothing says what it is a ratio of. Keeping the samples rather than a summary of them is what lets the span — and so the whole question of whether anything moved — be computed at all.
 
-**Rejected.** The machine as a sentence written after the fact: nothing holds it to the sitting and nothing can compare two of them. A mean and a standard deviation over one batch: five samples summarised that way cannot tell a one percent move from nothing, and stating a ratio from them claims a precision the measurement does not have. Sizes read from the contest at print time rather than from the reading: changing a workload's size would silently relabel what every earlier reading measured.
+**Rejected.** The machine as a sentence written after the fact: nothing holds it to the sitting and nothing can compare two of them. A mean and a standard deviation over one batch: five samples summarised that way cannot tell a one percent move from nothing, and stating a ratio from them claims a precision the measurement does not have. Sizes read from the contest at print time rather than from the timing: changing a workload's size would silently relabel what every earlier timing measured.
 
-### A reading is a file the build embeds
+### A timing is a file the build embeds
 
-**Decision.** A reading is `readings/<NN>.toml`, the file `collect` printed: the day as a TOML local date, every sample in whole microseconds, and the pins, the sizes and the timings as arrays in the order they were taken. The build embeds every file there in the order of its number and refuses a name that is not the next number, and a test holds each file to what `collect` prints of the reading it holds.
+**Decision.** A timing is `timings/<NN>.toml`, the file `collect` printed: the day as a TOML local date, every sample in whole microseconds, and the pins, the sizes and the `timed` entries as arrays in the order they were taken. The build embeds every file there in the order of its number and refuses a name that is not the next number, and a test holds each file to what `collect` prints of the timing it holds.
 
-**Rationale.** A reading is data, and a record kept as code is read by Rust alone: a field added rewrote every reading, and each was listed by hand. A microsecond is an integer, so the record is exact where a decimal millisecond is a float a reader parses again, and TOML refuses a day its month does not have, which a date type of the bench's own held before. Embedding keeps a binary built at one commit reporting that commit's readings.
+**Rationale.** A timing is data, and a record kept as code is read by Rust alone: a field added rewrote every timing, and each was listed by hand. A microsecond is an integer, so the record is exact where a decimal millisecond is a float a reader parses again, and TOML refuses a day its month does not have, which a date type of the bench's own held before. Embedding keeps a binary built at one commit reporting that commit's timings.
 
-**Rejected.** A reading as a Rust module, for the reasons above. Reading the directory where the bench runs, under which a binary built at one commit reports another's readings. The TOML printer's pretty form, which lays a nested array out unevenly where the plain form puts a group's samples on one line.
+**Rejected.** A timing as a Rust module, for the reasons above. Reading the directory where the bench runs, under which a binary built at one commit reports another's timings. The TOML printer's pretty form, which lays a nested array out unevenly where the plain form puts a group's samples on one line.
 
 ### A difference is proven only where two spans are disjoint
 
@@ -96,7 +96,7 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 
 ### A movement is read against Rust (Native)
 
-**Decision.** Across two readings the report compares Curios's time over native Rust's, taken group by group — each group's Curios median over that group's native Rust median — and a movement is proven where the two readings' spans of that ratio are disjoint.
+**Decision.** Across two timings the report compares Curios's time over native Rust's, taken group by group — each group's Curios median over that group's native Rust median — and a movement is proven where the two timings' spans of that ratio are disjoint.
 
 **Rationale.** The contestants run interleaved inside a group, so what moves the machine during a group or between two sittings — a kernel update, a thermal state, something else running — reaches both and cancels in the ratio, where Curios's time alone would carry it as a movement of the compiler. The bench this one replaces asked of every sitting, by hand in prose, whether the controls held still; the ratio answers that in the figure itself, on every workload, with nothing left for a person to remember to apply.
 
@@ -106,7 +106,7 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 
 **Decision.** Three outputs, from two sources.
 
-**Rationale.** Those two carry every cross-language argument a reading makes: a Curios figure is read against what WebAssembly costs Rust, and needs no third language. Every other contestant is a toolchain to install and keep steady, for a row no argument reads.
+**Rationale.** Those two carry every cross-language argument a timing makes: a Curios figure is read against what WebAssembly costs Rust, and needs no third language. Every other contestant is a toolchain to install and keep steady, for a row no argument reads.
 
 **Rejected.** Seven contestants: five never entered an argument, two were the noisiest rows in the harness, and one of them alone required an emulated build stage. A peer kept for the occasional finding that the paradigm is not the excuse — that is an investigation, run once and filed, not a toolchain installed forever.
 
@@ -114,6 +114,6 @@ Software is not gated because a patch that moves a figure moves Rust with Curios
 
 **Decision.** `cargo xbench collect` runs on the host. The platform is recorded rather than standardised.
 
-**Rationale.** With three contestants the image would install the engine and nothing else, and it never made the platform uniform in any case — a container shares the host's kernel, CPU and governor. What makes two readings comparable is the protocol each carries, which a container is not.
+**Rationale.** With three contestants the image would install the engine and nothing else, and it never made the platform uniform in any case — a container shares the host's kernel, CPU and governor. What makes two timings comparable is the protocol each carries, which a container is not.
 
 **Rejected.** The kitchen-sink image: it existed for the five contestants that are gone. Pinning the timed processes to one core: core 0 is the one interrupts favour, and holding one core while the rest of the machine runs free invites interference rather than excluding it.

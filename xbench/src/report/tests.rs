@@ -6,10 +6,10 @@ const SOFTWARE: &str = "kernel 7.2.7, microcode 0xa201213";
 const PINNED: &[(&str, &str)] = &[("rustc", "1.95.0"), ("wasmtime", "47.0.3")];
 const SIZES: &[(&str, u64)] = &[("lcg", 100_000_000)];
 
-/// What Rust does when nothing disturbs it: the same two batches in every reading below.
+/// What Rust does when nothing disturbs it: the same two batches in every timing below.
 const STEADY: &[&[f64]] = &[&[218.0, 218.4], &[219.0, 219.2]];
 
-/// The machine every reading below was taken on, in `state`, running `software`.
+/// The machine every timing below was taken on, in `state`, running `software`.
 fn platform(state: &str, software: &str) -> Platform {
     Platform {
         machine: MACHINE.to_string(),
@@ -27,7 +27,7 @@ fn grouped(groups: &[&[f64]]) -> Vec<Vec<f64>> {
     groups.iter().map(|group| group.to_vec()).collect()
 }
 
-/// A contestant's samples, given in milliseconds as a report states them and held in microseconds as a reading records them.
+/// A contestant's samples, given in milliseconds as a report states them and held in microseconds as a timing records them.
 fn took(workload: &str, contestant: &str, groups: &[&[f64]]) -> Timed {
     Timed {
         workload: workload.to_string(),
@@ -73,13 +73,13 @@ fn shifted() -> Vec<Timed> {
     ]
 }
 
-fn reading(day: u8, platform: Platform, timed: Vec<Timed>) -> Reading {
+fn timing(day: u8, platform: Platform, timed: Vec<Timed>) -> Timing {
     sized(day, platform, SIZES, timed)
 }
 
-/// A reading sizing what `sizes` says, more than the one workload the rest of these use where it says so.
-fn sized(day: u8, platform: Platform, sizes: &[(&str, u64)], timed: Vec<Timed>) -> Reading {
-    Reading {
+/// A timing sizing what `sizes` says, more than the one workload the rest of these use where it says so.
+fn sized(day: u8, platform: Platform, sizes: &[(&str, u64)], timed: Vec<Timed>) -> Timing {
+    Timing {
         taken: Date {
             year: 2026,
             month: 10,
@@ -105,8 +105,8 @@ fn sized(day: u8, platform: Platform, sizes: &[(&str, u64)], timed: Vec<Timed>) 
     }
 }
 
-fn before() -> Reading {
-    reading(1, here(), was())
+fn before() -> Timing {
+    timing(1, here(), was())
 }
 
 #[test]
@@ -196,18 +196,18 @@ fn a_table_puts_the_fastest_first_and_reads_the_rest_against_rust() {
 }
 
 #[test]
-fn with_no_reading_the_report_says_so_and_names_what_takes_one() {
+fn with_no_timing_the_report_says_so_and_names_what_takes_one() {
     let rendered = report(&[]);
 
-    assert!(rendered.contains("No reading recorded"));
+    assert!(rendered.contains("No timing recorded"));
     assert!(rendered.contains("cargo xbench collect"));
 }
 
 #[test]
-fn a_reading_is_printed_with_what_it_was_taken_under() {
+fn a_timing_is_printed_with_what_it_was_taken_under() {
     let rendered = one(0, &before());
 
-    assert!(rendered.contains("# Reading 00"));
+    assert!(rendered.contains("# Timing 00"));
     assert!(rendered.contains(MACHINE));
     assert!(rendered.contains(STATE));
     assert!(rendered.contains("rustc 1.95.0, wasmtime 47.0.3"));
@@ -215,14 +215,14 @@ fn a_reading_is_printed_with_what_it_was_taken_under() {
 
 #[test]
 fn overlapping_spans_are_reported_as_no_difference_proven() {
-    let rendered = compare(1, &before(), &reading(2, here(), within()));
+    let rendered = compare(1, &before(), &timing(2, here(), within()));
 
     assert!(rendered.contains("no difference proven"), "{rendered}");
 }
 
 #[test]
 fn disjoint_spans_are_reported_as_a_movement() {
-    let rendered = compare(1, &before(), &reading(3, here(), under()));
+    let rendered = compare(1, &before(), &timing(3, here(), under()));
 
     assert!(rendered.contains("moved, -8.4%"), "{rendered}");
 }
@@ -230,7 +230,7 @@ fn disjoint_spans_are_reported_as_a_movement() {
 /// Curios's own time moved past its span, and so did Rust's, alike: the ratio a comparison reads cancels what moved the machine.
 #[test]
 fn a_shift_that_reaches_both_contestants_alike_proves_no_difference() {
-    let rendered = compare(1, &before(), &reading(4, here(), shifted()));
+    let rendered = compare(1, &before(), &timing(4, here(), shifted()));
 
     assert!(rendered.contains("no difference proven"), "{rendered}");
     assert!(!rendered.contains("moved,"), "{rendered}");
@@ -239,17 +239,17 @@ fn a_shift_that_reaches_both_contestants_alike_proves_no_difference() {
 #[test]
 fn a_different_arrangement_of_the_machine_refuses_the_comparison() {
     let elsewhere = platform("governor schedutil, boost on, smt on", SOFTWARE);
-    let rendered = compare(1, &before(), &reading(5, elsewhere, under()));
+    let rendered = compare(1, &before(), &timing(5, elsewhere, under()));
 
     assert!(rendered.contains("Not comparable"), "{rendered}");
     assert!(rendered.contains("schedutil"), "{rendered}");
     assert!(!rendered.contains("moved,"), "{rendered}");
 }
 
-/// A workload resized, or one entering the record later, must not refuse the readings' other rows — the old harness based a late workload at its own first capture, and the gate has to allow that.
+/// A workload resized, or one entering the record later, must not refuse the timings' other rows — the old harness based a late workload at its own first capture, and the gate has to allow that.
 #[test]
 fn a_workload_resized_says_so_on_its_own_row_and_leaves_the_rest_comparable() {
-    /// `trees` holds still across both readings, so only its size can speak on its row.
+    /// `trees` holds still across both timings, so only its size can speak on its row.
     const TREES: &[&[f64]] = &[&[250.0, 250.4], &[251.0, 251.2]];
     let trees = || {
         [
@@ -275,7 +275,7 @@ fn a_workload_resized_says_so_on_its_own_row_and_leaves_the_rest_comparable() {
 #[test]
 fn a_software_difference_is_compared_anyway() {
     let patched = platform(STATE, "kernel 7.2.8, microcode 0xa201213");
-    let rendered = compare(1, &before(), &reading(6, patched, under()));
+    let rendered = compare(1, &before(), &timing(6, patched, under()));
 
     assert!(!rendered.contains("Not comparable"), "{rendered}");
     assert!(rendered.contains("moved,"), "{rendered}");
