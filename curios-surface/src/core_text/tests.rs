@@ -7,11 +7,12 @@ use {
     },
     curios_common::{Qualifier, Source},
     curios_core::{
-        Arm, Atom, CalleeId, Cases, Constructors, Definition, DefinitionKind, Definitions, Field,
-        Free, Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam, Intrinsic, Item,
-        Let, Level, Match, Matrix, MetavarId, MetavarOrigin, Nat, Nominal, Pattern, Proj, Quality,
-        QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm, Telescope, Term,
-        UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey, WitnessOrigin,
+        Arm, Atom, CalleeId, Cases, Constructors, Definition, DefinitionKind, Definitions,
+        Elements, Field, Free, Func, FuncType, Global, Guard, HeadKey, InductDecl, InductParam,
+        Intrinsic, Item, Let, Level, Match, Matrix, MetavarId, MetavarOrigin, Nat, Nominal,
+        Pattern, Proj, Quality, QualityParam, RecItem, Row, Slot, Sort, StructDecl, Subterm,
+        Telescope, Term, UniverseContext, UniverseParam, Universes, Var, WitnessId, WitnessKey,
+        WitnessOrigin,
     },
     curios_num::Floating,
     std::rc::Rc,
@@ -517,10 +518,11 @@ fn every_node_written_reads_back_as_itself() {
                 },
                 Arm {
                     alternatives: vec![Row {
-                        pattern: Pattern::Cons {
-                            head: Slot::Wildcard,
-                            tail: Slot::Binder,
-                        },
+                        pattern: Pattern::List(Elements::Open {
+                            first: Box::new(Pattern::Wildcard),
+                            then: Vec::new(),
+                            rest: Slot::Binder,
+                        }),
                         guards: Vec::new(),
                         body: over(Free::local(1, Some("rest")), one()),
                     }],
@@ -530,6 +532,60 @@ fn every_node_written_reads_back_as_itself() {
                         pattern: Pattern::Wildcard,
                         guards: Vec::new(),
                         body: Term::func(Vec::<(Free, Term)>::new(), one()),
+                    }],
+                },
+            ],
+        }),
+        // A run's elements are patterns of their own: a closed run ends where they do, an open one's rest follows them, and a packed run is a run under `x[`.
+        Term::matrix(Matrix {
+            head: one(),
+            arms: vec![
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::List(Elements::Closed(Vec::new())),
+                        guards: Vec::new(),
+                        body: Term::func(Vec::<(Free, Term)>::new(), one()),
+                    }],
+                },
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::List(Elements::Closed(vec![
+                            Pattern::Binder,
+                            Pattern::Variant {
+                                tag: Atom::from("none"),
+                                args: Vec::new(),
+                            },
+                        ])),
+                        guards: Vec::new(),
+                        body: over(Free::local(1, Some("first")), one()),
+                    }],
+                },
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::List(Elements::Open {
+                            first: Box::new(Pattern::Wildcard),
+                            then: vec![Pattern::Binder],
+                            rest: Slot::Binder,
+                        }),
+                        guards: Vec::new(),
+                        body: Term::func(
+                            [
+                                (Free::local(1, Some("second")), nat_type()),
+                                (Free::local(2, Some("rest")), nat_type()),
+                            ],
+                            one(),
+                        ),
+                    }],
+                },
+                Arm {
+                    alternatives: vec![Row {
+                        pattern: Pattern::Bytes(Elements::Open {
+                            first: Box::new(Pattern::Binder),
+                            then: vec![Pattern::Wildcard],
+                            rest: Slot::Wildcard,
+                        }),
+                        guards: Vec::new(),
+                        body: over(Free::local(1, Some("byte")), one()),
                     }],
                 },
             ],

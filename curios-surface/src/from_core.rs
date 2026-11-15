@@ -14,12 +14,12 @@ use {
         intrinsic_global,
     },
     crate::{
-        Alternative, Apply, Argument, Binder, BytesPattern, BytesSegment, Dialect, Field, Func,
+        Alternative, Apply, Argument, Binder, BytesSegment, Dialect, Elements, Field, Func,
         FuncParam, FuncType, FuncTypeParam, Guard, HeadlessMatch, Infix, Label, Let, LetBinding,
-        LetGroup, LetSignature, ListEntry, ListPattern, Literal, Match, MatchPattern,
-        MatchPatternField, MatrixArm, Name, NatLiteral, NatPattern, NumLit, Pattern, Program, Proj,
-        ProofLiteral, Radix, StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField,
-        TupleType, TupleTypeParam,
+        LetGroup, LetSignature, ListEntry, Literal, Match, MatchPattern, MatchPatternField,
+        MatrixArm, Name, NatLiteral, NatPattern, NumLit, Pattern, Program, Proj, ProofLiteral,
+        Radix, StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple, TupleField, TupleType,
+        TupleTypeParam,
     },
     curios_common::{InfixOp, Plicity, Qualifier, Sign, recurse},
     curios_core::Bound,
@@ -629,30 +629,42 @@ pub fn written_pattern<D: Dialect>(
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value.clone(), Radix::Dec(0))))
         }
         curios_core::Pattern::Character(character) => MatchPattern::Char(*character),
-        curios_core::Pattern::Nil => MatchPattern::List(ListPattern::Nil),
-        curios_core::Pattern::Cons { head, tail } => {
-            let head_label = written_slot(*head, names, own);
-            let tail_label = written_slot(*tail, names, own);
-
-            MatchPattern::List(ListPattern::Cons {
-                head_label,
-                tail_label,
-            })
+        curios_core::Pattern::List(elements) => {
+            MatchPattern::List(written_elements(elements, names, own))
         }
-        curios_core::Pattern::End => MatchPattern::Bytes(BytesPattern::End),
-        curios_core::Pattern::Atom { head, tail } => {
-            let head_label = written_slot(*head, names, own);
-            let tail_label = written_slot(*tail, names, own);
-
-            MatchPattern::Bytes(BytesPattern::Atom {
-                head_label,
-                tail_label,
-            })
+        curios_core::Pattern::Bytes(elements) => {
+            MatchPattern::Bytes(written_elements(elements, names, own))
         }
     }
 }
 
-/// A successor's or a sequence's slot, as `own` writes the next of `names` where it is a binder, and `_` where it is a wildcard.
+/// A run's elements as [`written_pattern`] writes each, then its rest where it is open, in the order its binders are counted.
+fn written_elements<D: Dialect>(
+    elements: &curios_core::Elements,
+    names: &mut dyn Iterator<Item = Binder<D>>,
+    own: fn(Binder<D>) -> Binder<D>,
+) -> Elements<D> {
+    match elements {
+        curios_core::Elements::Closed(elements) => Elements::Closed(
+            elements
+                .iter()
+                .map(|element| written_pattern(element, names, own))
+                .collect(),
+        ),
+        curios_core::Elements::Open { first, then, rest } => {
+            let first = Box::new(written_pattern(first, names, own));
+            let then = then
+                .iter()
+                .map(|element| written_pattern(element, names, own))
+                .collect();
+            let rest = written_slot(*rest, names, own);
+
+            Elements::Open { first, then, rest }
+        }
+    }
+}
+
+/// A successor's predecessor or an open run's rest, as `own` writes the next of `names` where it is a binder, and `_` where it is a wildcard.
 fn written_slot<D: Dialect>(
     slot: curios_core::Slot,
     names: &mut dyn Iterator<Item = Binder<D>>,
@@ -1316,14 +1328,11 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                     return None;
                 };
                 let body = cons_case.open(&[peeled, remaining]);
-                let atom = BytesPattern::Atom {
-                    head_label: binder(first, &body, frame),
-                    tail_label: binder(rest, &body, frame),
-                };
+                let atom = Elements::cons(binder(first, &body, frame), binder(rest, &body, frame));
 
                 vec![
                     MatrixArm::of(
-                        MatchPattern::Bytes(BytesPattern::End),
+                        MatchPattern::Bytes(Elements::Closed(Vec::new())),
                         sub(empty_case, frame)?,
                     ),
                     MatrixArm::of(MatchPattern::Bytes(atom), sub(body, frame)?),
@@ -1340,14 +1349,11 @@ fn written_match(elimination: curios_core::Match, frame: Frame) -> Option<Term> 
                     return None;
                 };
                 let body = cons_case.open(&[peeled, remaining]);
-                let cons = ListPattern::Cons {
-                    head_label: binder(first, &body, frame),
-                    tail_label: binder(rest, &body, frame),
-                };
+                let cons = Elements::cons(binder(first, &body, frame), binder(rest, &body, frame));
 
                 vec![
                     MatrixArm::of(
-                        MatchPattern::List(ListPattern::Nil),
+                        MatchPattern::List(Elements::Closed(Vec::new())),
                         sub(empty_case, frame)?,
                     ),
                     MatrixArm::of(MatchPattern::List(cons), sub(body, frame)?),

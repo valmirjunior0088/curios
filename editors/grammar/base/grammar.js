@@ -682,30 +682,17 @@ module.exports = grammar({
     successor_pattern: ($) =>
       seq(field("predecessor", $._binder), "+", $.number),
 
-    list_pattern: ($) =>
-      choice(
-        seq("[", "]"),
-        seq(
-          "[",
-          field("head", $._binder),
-          ",",
-          "..",
-          field("tail", $._binder),
-          "]",
-        ),
-      ),
+    // A run, written as the literal that builds the value: its elements, each a pattern, then an open run's rest.
+    list_pattern: ($) => seq("[", optional($._run), "]"),
 
-    packed_pattern: ($) =>
-      choice(
-        seq("x[", "]"),
-        seq(
-          "x[",
-          field("head", $._binder),
-          ",",
-          "..",
-          field("tail", $._binder),
-          "]",
-        ),
+    packed_pattern: ($) => seq("x[", optional($._run), "]"),
+
+    _run: ($) =>
+      seq(
+        $._match_pattern,
+        repeat(seq(",", $._match_pattern)),
+        optional(seq(",", "..", field("rest", $._binder))),
+        optional(","),
       ),
 
     tuple_match_pattern: ($) =>

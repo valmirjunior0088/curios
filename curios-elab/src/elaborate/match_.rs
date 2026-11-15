@@ -240,7 +240,7 @@ fn elaborate_nat_match(
 }
 
 /// The sequences a case split takes apart into the empty one and an atom ahead of a tail.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sequence {
     List,
     Bytes,

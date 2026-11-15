@@ -3905,21 +3905,7 @@
     "type": "list_pattern",
     "named": true,
     "fields": {
-      "head": {
-        "multiple": true,
-        "required": false,
-        "types": [
-          {
-            "type": "decorator",
-            "named": true
-          },
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      },
-      "tail": {
+      "rest": {
         "multiple": true,
         "required": false,
         "types": [
@@ -3933,6 +3919,60 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "boolean",
+          "named": true
+        },
+        {
+          "type": "character",
+          "named": true
+        },
+        {
+          "type": "constructor_pattern",
+          "named": true
+        },
+        {
+          "type": "decorator",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "list_pattern",
+          "named": true
+        },
+        {
+          "type": "number",
+          "named": true
+        },
+        {
+          "type": "packed_pattern",
+          "named": true
+        },
+        {
+          "type": "parenthesized_match_pattern",
+          "named": true
+        },
+        {
+          "type": "struct_match_pattern",
+          "named": true
+        },
+        {
+          "type": "successor_pattern",
+          "named": true
+        },
+        {
+          "type": "tuple_match_pattern",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -4496,21 +4536,7 @@
     "type": "packed_pattern",
     "named": true,
     "fields": {
-      "head": {
-        "multiple": true,
-        "required": false,
-        "types": [
-          {
-            "type": "decorator",
-            "named": true
-          },
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      },
-      "tail": {
+      "rest": {
         "multiple": true,
         "required": false,
         "types": [
@@ -4524,6 +4550,60 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "boolean",
+          "named": true
+        },
+        {
+          "type": "character",
+          "named": true
+        },
+        {
+          "type": "constructor_pattern",
+          "named": true
+        },
+        {
+          "type": "decorator",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "list_pattern",
+          "named": true
+        },
+        {
+          "type": "number",
+          "named": true
+        },
+        {
+          "type": "packed_pattern",
+          "named": true
+        },
+        {
+          "type": "parenthesized_match_pattern",
+          "named": true
+        },
+        {
+          "type": "struct_match_pattern",
+          "named": true
+        },
+        {
+          "type": "successor_pattern",
+          "named": true
+        },
+        {
+          "type": "tuple_match_pattern",
+          "named": true
+        }
+      ]
     }
   },
   {

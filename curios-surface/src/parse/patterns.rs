@@ -7,15 +7,15 @@ use {
         parse_word_raw, refused, require_space,
     },
     crate::{
-        Binder, BytesPattern, FieldSugarParam, FuncParam, FuncType, FuncTypeParam, Label,
-        ListPattern, MatchPattern, MatchPatternField, NatLiteral, NatPattern, Pattern,
-        PatternField, Subterm, Term, parse_term, parse_whitespace,
+        Binder, Elements, FieldSugarParam, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
+        MatchPatternField, NatLiteral, NatPattern, Pattern, PatternField, Subterm, Term,
+        parse_term, parse_whitespace,
     },
     curios_common::{Plicity, recurse},
     curios_parse::{
-        Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, mark, memoize,
-        not_ahead, preceded_by_space, pure, refusal, sep_by0_trailing, take_exact, take_while,
-        uncommit,
+        Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, many0, mark,
+        memoize, not_ahead, preceded_by_space, pure, refusal, sep_by0_trailing, take_exact,
+        take_while, uncommit,
     },
     std::iter,
 };
@@ -469,93 +469,60 @@ pub fn parse_char_match_pattern<'a, D: Grammar>(
         .parse(state)
 }
 
-// The `[]` leaf of a nested `List` pattern.
-pub fn parse_list_nil_match_pattern<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, MatchPattern<D>> {
-    parse_literal("[]")
-        .map(|()| MatchPattern::List(ListPattern::Nil))
-        .parse(state)
-}
-
-/// What refuses an operand of a `List` leaf that is no binder.
-const LIST_LEAF_TAKES_BINDERS: &[&str] = &[
-    "the head and the tail of a `[head, ..tail]` pattern are binders, never patterns",
-    "bind the head and take it apart in the arm, `| [head, ..tail] => match head | … end`",
-];
-
-/// What refuses an operand of a `Bytes` leaf that is no binder.
-const BYTES_LEAF_TAKES_BINDERS: &[&str] = &[
-    "the head and the tail of an `x[head, ..tail]` pattern are binders, never patterns",
-    "bind the head and take it apart in the arm, `| x[head, ..tail] => match head | … end`",
-];
-
-// One operand of a `List` or a `Bytes` leaf: a binder, before the `closer` that ends it. Past the leaf's bracket nothing else can be meant, so what stands in a binder's place is refused by `rule` where it stands, the pattern there read whole so the report spans it: left to backtrack, `[some(x), ..tail]` would read `some` as the head and report the `(` after it as a stray token.
-fn parse_leaf_operand<'a, D: Grammar>(
-    closer: &'static str,
-    rule: &'static [&'static str],
-) -> impl Parser<'a, Binder<D>> {
+// A run, the literal that builds a sequence: `[]`, `[a, b]` or `[a, b, ..rest]` after `open`, `[` for a list and `x[` for a packed sequence, each element a pattern and an open run's rest, after one element at least, a binder. Nothing but a run follows its bracket, so it commits there, and once `..` is read only a binder can follow: what fails inside is reported where it stands.
+fn parse_run<'a, D: Grammar>(open: &'static str) -> impl Parser<'a, Elements<D>> {
     move |state: ParserState<'a>| {
-        parse_decorated_binder::<D>
-            .and_drop(look_ahead(take_exact(closer)))
-            .or(mark().flat_map(move |start| {
-                uncommit(parse_match_pattern::<D>)
-                    .map(|_| ())
-                    .or(pure(()))
-                    .and_keep(commit(fail_from(&start, rule)))
-            }))
+        parse_literal(open)
+            .and_keep(commit(
+                // Entries first: where neither reads, the one reported is the element a run begins with.
+                parse_run_entries::<D>
+                    .and_drop(parse_literal("]"))
+                    .or(parse_literal("]").map(|()| Elements::Closed(Vec::new()))),
+            ))
             .parse(state)
     }
 }
 
-// The `[head, ..tail]` leaf of a nested `List` pattern.
-pub fn parse_list_cons_match_pattern<'a, D: Grammar>(
-    state: ParserState<'a>,
-) -> Parsed<'a, MatchPattern<D>> {
-    parse_literal("[")
-        .and_keep(parse_leaf_operand::<D>(",", LIST_LEAF_TAKES_BINDERS))
-        .and_drop(parse_literal(","))
-        .and_drop(parse_literal(".."))
-        .and(parse_leaf_operand::<D>("]", LIST_LEAF_TAKES_BINDERS))
-        .and_drop(parse_literal("]"))
-        .map(|(head_label, tail_label)| {
-            MatchPattern::List(ListPattern::Cons {
-                head_label,
-                tail_label,
-            })
+// A nonempty run's entries: its elements, then its rest where it is open, and one trailing comma.
+fn parse_run_entries<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Elements<D>> {
+    parse_inner_match_pattern::<D>
+        .and(many0(|| {
+            parse_literal(",").and_keep(parse_inner_match_pattern::<D>)
+        }))
+        .and(
+            parse_literal(",")
+                .and_drop(parse_literal(".."))
+                .and_keep(commit(parse_decorated_binder::<D>))
+                .map(Some)
+                .or(pure(None)),
+        )
+        .and_drop(parse_literal(",").or(pure(())))
+        .map(|((first, then), rest)| match rest {
+            Some(rest) => Elements::Open {
+                first: Box::new(first),
+                then,
+                rest,
+            },
+            None => Elements::Closed(iter::once(first).chain(then).collect()),
         })
         .parse(state)
 }
 
-// The `x[]` leaf of a nested `Bytes` pattern (the empty literal) — the packed counterpart of `parse_list_nil_match_pattern`, and glued exactly as `[]` is.
-pub fn parse_bytes_end_match_pattern<'a, D: Grammar>(
+// A run over a list.
+pub fn parse_list_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
-    parse_literal("x[]")
-        .map(|()| MatchPattern::Bytes(BytesPattern::End))
-        .parse(state)
+    parse_run::<D>("[").map(MatchPattern::List).parse(state)
 }
 
-// The `x[head, ..tail]` leaf of a nested `Bytes` pattern — the packed counterpart of `parse_list_cons_match_pattern`, differing only in the letter glued to the bracket.
-pub fn parse_bytes_byte_match_pattern<'a, D: Grammar>(
+// A run over a packed sequence, its bracket `x[` glued as a packed literal's is.
+pub fn parse_bytes_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
-    parse_literal("x[")
-        .and_keep(parse_leaf_operand::<D>(",", BYTES_LEAF_TAKES_BINDERS))
-        .and_drop(parse_literal(","))
-        .and_drop(parse_literal(".."))
-        .and(parse_leaf_operand::<D>("]", BYTES_LEAF_TAKES_BINDERS))
-        .and_drop(parse_literal("]"))
-        .map(|(head_label, tail_label)| {
-            MatchPattern::Bytes(BytesPattern::Atom {
-                head_label,
-                tail_label,
-            })
-        })
-        .parse(state)
+    parse_run::<D>("x[").map(MatchPattern::Bytes).parse(state)
 }
 
-// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat`/`List`/`Bytes` literal leaves — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for the successor leaf (`parse_nat_succ_match_pattern`) specifically, before `Binder` (see its own doc comment). Each empty leaf is tried before its cons leaf, which owns what follows its bracket and refuses an operand that is no binder. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
+// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat` literal leaves or a `List`/`Bytes` run — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for the successor leaf (`parse_nat_succ_match_pattern`) specifically, before `Binder` (see its own doc comment). A run owns what follows its bracket. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
 pub fn parse_match_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, MatchPattern<D>> {
     recurse(|| memoize(MEMO_MATCH_PATTERN, parse_match_pattern_inner::<D>).parse(state))
 }
@@ -564,8 +531,7 @@ fn parse_match_pattern_inner<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
     parse_qualified_match_pattern::<D>
-        .or(parse_bytes_end_match_pattern::<D>)
-        .or(parse_bytes_byte_match_pattern::<D>)
+        .or(parse_bytes_match_pattern::<D>)
         .or(parse_struct_match_pattern::<D>)
         .or(parse_ctor_match_pattern::<D>)
         .or(parse_bool_match_pattern::<D>)
@@ -573,8 +539,7 @@ fn parse_match_pattern_inner<'a, D: Grammar>(
         .or(parse_nat_zero_match_pattern::<D>)
         .or(parse_nat_succ_match_pattern::<D>)
         .or(parse_nat_lit_match_pattern::<D>)
-        .or(parse_list_nil_match_pattern::<D>)
-        .or(parse_list_cons_match_pattern::<D>)
+        .or(parse_list_match_pattern::<D>)
         .or(parse_tuple_match_pattern::<D>)
         .or(parse_literal("(")
             .and_keep(parse_inner_match_pattern::<D>)

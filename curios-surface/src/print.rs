@@ -12,17 +12,16 @@ mod list_layout_tests;
 
 use {
     super::{
-        Alternative, Apply, Argument, Binder, BytesPattern, BytesSegment, CasePayloadParam,
-        ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
-        CoreValue, Decorated, DecoratorField, Dialect, Doc, Field, FieldSugarParam, Func,
-        FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm,
-        HeadlessMatch, InductIndex, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature,
-        ListEntry, ListPattern, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral,
-        NatPattern, NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, Shown,
-        ShownForm, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept,
-        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
-        Tuple, TupleField, TupleType, TupleTypeParam, UseGroup, WitnessField, intrinsic_form,
-        intrinsic_path,
+        Alternative, Apply, Argument, Binder, BytesSegment, CasePayloadParam, ConceptField,
+        CoreEntry, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText, CoreValue,
+        Decorated, DecoratorField, Dialect, Doc, Elements, Field, FieldSugarParam, Func, FuncParam,
+        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm, HeadlessMatch,
+        InductIndex, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, Literal,
+        Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
+        PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm, StructField, StructLit,
+        StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet,
+        TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        TupleTypeParam, UseGroup, WitnessField, intrinsic_form, intrinsic_path,
     },
     crate::{ELIDED, Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
@@ -33,6 +32,7 @@ use {
         FillItem, Printer, ends, fill, flat, flow, group, group_within, hard_line, if_break,
         indent, line, named, named_at, own_line_if_broken, pure, reached, sep_flat, soft_line,
     },
+    std::iter,
 };
 
 fn print_plicity(plicity: Plicity) -> Printer {
@@ -457,29 +457,26 @@ impl<D: Layout> TreePrinter<D> {
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(n, radix))) => {
                 pure(format_radix(&n, radix))
             }
-            MatchPattern::List(ListPattern::Nil) => pure("[]"),
-            MatchPattern::List(ListPattern::Cons {
-                head_label,
-                tail_label,
-            }) => flat([
-                pure("["),
-                self.binder(head_label),
-                pure(", .."),
-                self.binder(tail_label),
-                pure("]"),
-            ]),
-            MatchPattern::Bytes(BytesPattern::End) => pure("x[]"),
-            MatchPattern::Bytes(BytesPattern::Atom {
-                head_label,
-                tail_label,
-            }) => flat([
-                pure("x["),
-                self.binder(head_label),
-                pure(", .."),
-                self.binder(tail_label),
-                pure("]"),
-            ]),
+            MatchPattern::List(elements) => self.run("[", elements),
+            MatchPattern::Bytes(elements) => self.run("x[", elements),
         }
+    }
+
+    /// A run under its bracket `open`, laid out as the literal that builds the value is: its elements, then its rest where it is open.
+    fn run(self, open: &'static str, elements: Elements<D>) -> Printer {
+        let entries = match elements {
+            Elements::Closed(elements) => elements
+                .into_iter()
+                .map(|element| self.match_pattern(element))
+                .collect(),
+            Elements::Open { first, then, rest } => iter::once(*first)
+                .chain(then)
+                .map(|element| self.match_pattern(element))
+                .chain(iter::once(flat([pure(".."), self.binder(rest)])))
+                .collect(),
+        };
+
+        listed(open, entries, "]")
     }
 }
 
@@ -489,15 +486,14 @@ fn packs<D: Dialect>(pattern: &MatchPattern<D>) -> bool {
         MatchPattern::Binder(_)
         | MatchPattern::Bool(_)
         | MatchPattern::Char(_)
-        | MatchPattern::Nat(NatPattern::Zero | NatPattern::Lit(_))
-        | MatchPattern::List(ListPattern::Nil)
-        | MatchPattern::Bytes(BytesPattern::End) => true,
+        | MatchPattern::Nat(NatPattern::Zero | NatPattern::Lit(_)) => true,
         MatchPattern::Variant { args, .. } => args.is_empty(),
+        MatchPattern::List(elements) | MatchPattern::Bytes(elements) => {
+            matches!(elements, Elements::Closed(elements) if elements.is_empty())
+        }
         MatchPattern::Tuple(_)
         | MatchPattern::Struct { .. }
-        | MatchPattern::Nat(NatPattern::Succ { .. })
-        | MatchPattern::List(ListPattern::Cons { .. })
-        | MatchPattern::Bytes(BytesPattern::Atom { .. }) => false,
+        | MatchPattern::Nat(NatPattern::Succ { .. }) => false,
     }
 }
 

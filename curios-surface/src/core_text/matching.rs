@@ -8,8 +8,8 @@ use {
         stated_proofs, tree, value, value_fields, value_term,
     },
     crate::{
-        Binder, BytesPattern, CoreText, DecoratorField, Frame, Label, ListPattern, MatchPattern,
-        MatrixArm, NatLiteral, NatPattern, Radix, Rendered, label_terms, sub,
+        Binder, CoreText, DecoratorField, Elements, Frame, Label, MatchPattern, MatrixArm,
+        NatLiteral, NatPattern, Radix, Rendered, label_terms, sub,
     },
     curios_common::Plicity,
     curios_core::{
@@ -92,12 +92,16 @@ pub fn match_written<D: Rendered>(
                 let [head_core, tail_core] = cores(cons_case.label_iter(), frame);
                 let ((head, tail), step) = frame.open_two(cons_case);
                 vec![
-                    arm(MatchPattern::Bytes(BytesPattern::End), empty_case, frame),
                     arm(
-                        MatchPattern::Bytes(BytesPattern::Atom {
-                            head_label: decorated(head_core, &head, frame),
-                            tail_label: decorated(tail_core, &tail, frame),
-                        }),
+                        MatchPattern::Bytes(Elements::Closed(Vec::new())),
+                        empty_case,
+                        frame,
+                    ),
+                    arm(
+                        MatchPattern::Bytes(Elements::cons(
+                            decorated(head_core, &head, frame),
+                            decorated(tail_core, &tail, frame),
+                        )),
                         step,
                         frame,
                     ),
@@ -112,12 +116,16 @@ pub fn match_written<D: Rendered>(
                 let [head_core, tail_core] = cores(cons_case.label_iter(), frame);
                 let ((head, tail), step) = frame.open_two(cons_case);
                 vec![
-                    arm(MatchPattern::List(ListPattern::Nil), empty_case, frame),
                     arm(
-                        MatchPattern::List(ListPattern::Cons {
-                            head_label: decorated(head_core, &head, frame),
-                            tail_label: decorated(tail_core, &tail, frame),
-                        }),
+                        MatchPattern::List(Elements::Closed(Vec::new())),
+                        empty_case,
+                        frame,
+                    ),
+                    arm(
+                        MatchPattern::List(Elements::cons(
+                            decorated(head_core, &head, frame),
+                            decorated(tail_core, &tail, frame),
+                        )),
                         step,
                         frame,
                     ),
@@ -271,12 +279,10 @@ pub fn match_read(
             }
         }
         [
-            MatchPattern::List(ListPattern::Nil),
-            MatchPattern::List(ListPattern::Cons {
-                head_label,
-                tail_label,
-            }),
-        ] => {
+            MatchPattern::List(Elements::Closed(empty)),
+            MatchPattern::List(cons),
+        ] if empty.is_empty() && cons.as_cons().is_some() => {
+            let (head_label, tail_label) = cons.as_cons().expect("the arm is a cons, as read");
             let labels = [
                 LabelRead::binder(head_label)?,
                 LabelRead::binder(tail_label)?,
@@ -293,12 +299,10 @@ pub fn match_read(
             }
         }
         [
-            MatchPattern::Bytes(BytesPattern::End),
-            MatchPattern::Bytes(BytesPattern::Atom {
-                head_label,
-                tail_label,
-            }),
-        ] => {
+            MatchPattern::Bytes(Elements::Closed(empty)),
+            MatchPattern::Bytes(cons),
+        ] if empty.is_empty() && cons.as_cons().is_some() => {
+            let (head_label, tail_label) = cons.as_cons().expect("the arm is a cons, as read");
             let labels = [
                 LabelRead::binder(head_label)?,
                 LabelRead::binder(tail_label)?,

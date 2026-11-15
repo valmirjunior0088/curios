@@ -150,6 +150,9 @@ fn matrix_match_round_trips() {
         "match d | 0 => a | 5 => b | _ => c end",
         "match a | [] => b | [h, ..t] => c end",
         "match a | x[] => b | x[h, ..t] => c end",
+        // Runs: closed and open, their elements patterns of their own, under both brackets.
+        "match a | [x] => x | [none(), y, ..rest] => y | [_, _] => z | _ => w end",
+        "match a | x[h, _, ..t] => h | x[p, q] => p | _ => c end",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
@@ -233,59 +236,38 @@ fn a_struct_match_pattern_keeps_its_qualified_head() {
     );
 }
 
-/// The operands of a `List` or a `Bytes` leaf are binders, so a pattern or a number written in one's place is refused by that rule, where it stands, rather than as the token the fall-through reached.
+/// A run's rest is a binder and stands last, after an element, so a pattern in its place and a rest before an element each fail where they are written: the run commits at its bracket, and its rest at its `..`.
 #[test]
-fn a_leaf_operand_that_is_no_binder_is_refused_by_name() {
-    for (source, leaf, carets, place) in [
-        (
-            "match v | some([some(x), ..tail]) => 0 | _ => 1 end",
-            "a `[head, ..tail]`",
-            "^^^^^^^",
-            "1:17",
-        ),
-        (
-            "match v | [5, ..tail] => 0 | _ => 1 end",
-            "a `[head, ..tail]`",
-            "^",
-            "1:12",
-        ),
-        (
-            "match v | [head, ..some(t)] => 0 | _ => 1 end",
-            "a `[head, ..tail]`",
-            "^^^^^^^",
-            "1:20",
-        ),
-        (
-            "match v | x[0x01, ..tail] => 0 | _ => 1 end",
-            "an `x[head, ..tail]`",
-            "^^^^",
-            "1:13",
-        ),
+fn a_rest_that_is_no_binder_or_leads_its_run_fails_where_it_is_written() {
+    for (source, place) in [
+        ("match v | [head, ..some(t)] => 0 | _ => 1 end", "1:24"),
+        ("match v | [a, ..[]] => 0 | _ => 1 end", "1:17"),
+        ("match v | x[h, ..x[]] => 0 | _ => 1 end", "1:19"),
+        ("match v | [..t] => 0 | _ => 1 end", "1:12"),
+        ("match v | [..t, a] => 0 | _ => 1 end", "1:12"),
     ] {
         let report = source.parse::<Term>().unwrap_err().format();
         assert!(
-            report.contains(&format!(
-                "the head and the tail of {leaf} pattern are binders, never patterns"
-            )),
-            "{source:?} reported {report}"
-        );
-        assert!(
-            report.contains(&format!(" {carets}\n"))
-                && report.contains(&format!("[error] {place}")),
+            report.contains(&format!("[error] {place}")),
             "{source:?} reported {report}"
         );
     }
 }
 
-/// Every leaf a `List` or a `Bytes` match writes still parses: the empty ones, and the cons ones over binders and `_`.
+/// Every run parses: the empty ones, closed and open runs of binders, of `_` and of patterns, under both brackets, with one trailing comma.
 #[test]
-fn the_list_and_bytes_leaves_still_parse() {
+fn every_run_parses() {
     for source in [
         "match v | [] => 0 | [head, ..tail] => 1 end",
         "match v | x[] => 0 | x[head, ..tail] => 1 end",
         "match v | [] => 0 | [_, .._] => 1 end",
         "match v | x[] => 0 | x[ head , ..tail ] => 1 end",
         "match v | some([head, ..tail]) => 1 | _ => 0 end",
+        "match v | [a] => 0 | [a, b, ..t] => 1 | _ => 2 end",
+        "match v | some([some(x), ..tail]) => 0 | _ => 1 end",
+        "match v | [5, ..tail] => 0 | _ => 1 end",
+        "match v | x[0x01, ..tail] => 0 | _ => 1 end",
+        "match v | [a, b,] => 0 | [a, ..t,] => 1 | _ => 2 end",
     ] {
         if let Err(error) = source.parse::<Term>() {
             panic!("{source}\n{}", error.format());

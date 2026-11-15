@@ -13,5 +13,6 @@ mod pattern_tests;
 mod payload_refinement_tests;
 mod recording_tests;
 mod refinement_tests;
+mod run_tests;
 mod spelling_tests;
 mod target_tests;

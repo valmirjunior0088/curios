@@ -190,6 +190,8 @@ use /std/{List, Nat};
 pub let empty: List(Nat) = [];
 ```
 
+Written as a pattern, a list literal is a [run](#list-case-split).
+
 ### Packed literals
 
 A packed literal builds `Bytes`. It is a [list literal](#list-literals) with the letter `x` glued to its bracket, `x[…]`; a bare `[…]` is a `List`.
@@ -212,7 +214,7 @@ x[pick(flag, a, b)]
 
 `x[h, ..t]` puts `h` before `t`, and `x[..acc, b]` appends `b` to `acc`; neither has another spelling.
 
-Only the `x` and the `[` are glued, so `x` is still an ordinary name: in `x [1]` the term ends at `x`, and a name that merely ends in `x` never opens a packed literal. Inside the brackets a packed literal reads as a list literal does: whitespace is free, one trailing comma is taken, and an entry is any term.
+Only the `x` and the `[` are glued, so `x` is still an ordinary name: in `x [1]` the term ends at `x`, and a name that merely ends in `x` never opens a packed literal. Inside the brackets a packed literal reads as a list literal does: whitespace is free, one trailing comma is taken, and an entry is any term. Written as a pattern, it is a run under `x[` ([Packed case split](#packed-case-split)).
 
 ## Sorts and types
 
@@ -681,7 +683,7 @@ pub let length(@T: Type, @n: Nat, vector: Vector(T)(n)) -> Nat =
     end;
 ```
 
-A pattern nests inside a constructor's, a tuple's or a structure's field, and parentheses group one. The operands of the `Nat`, `List` and `Bytes` patterns are binders rather than patterns, so `[some(x), ..tail]` is refused.
+A pattern nests inside a constructor's, a tuple's or a structure's field and in a run's element ([List case split](#list-case-split)), and parentheses group one. A successor's predecessor and an open run's rest are binders, so `[a, ..[b, ..t]]` is written `[a, b, ..t]`. Why: [Patterns are compiled where their types are known](design/surface/patterns-are-compiled-where-their-types-are-known.md).
 
 ```crs
 use /std/{List, Nat, Option};
@@ -806,7 +808,7 @@ pub let or_zero(option: Option(Nat)) -> Nat =
     end;
 ```
 
-It states no case, so its body is typed where the match stands, at the match's own type, however deep the patterns before it go. After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, `[]` and `[head, ..tail]`, `x[]` — it is written `_`: a final arm binding a name there is refused, since the scrutinee is in scope under the name it already has. A lone `_` with no other arm binds rather than matches.
+It states no case, so its body is typed where the match stands, at the match's own type, however deep the patterns before it go. After arms that each take the scrutinee itself apart — constructors, `true` and `false`, `Nat` shapes, runs under `[` and `x[` — it is written `_`: a final arm binding a name there is refused, since the scrutinee is in scope under the name it already has. A lone `_` with no other arm binds rather than matches.
 
 ### Multiple scrutinees
 
@@ -889,23 +891,39 @@ A dispatch literal is any natural, written whole, as a numeral or as a character
 
 ### List case split
 
-A list match writes `[]` for the empty case and `[head, ..tail]` for the rest.
+A list pattern is a run, written as the [list literal](#list-literals) that builds the value: `[]`, `[a, b]` for a list of exactly those elements, and `[a, b, ..rest]` for a list they begin. Each element is a pattern at the element's type. The rest stands last, after one element at least, and is a name or `_`.
 
-Both cases are required, since a list has no index to rule one out, and a final `| _ =>` may stand for the one left out.
+A final `| _ =>` stands for what the arms before it leave.
 
 ```crs
-use /std/{List, Nat};
+use /std/{List, Nat, Option};
 
 pub let sum(values: List(Nat)) -> Nat =
     match values
     | [] => 0
     | [head, ..tail] => head + sum(tail)
     end;
+
+pub let last(values: List(Nat)) -> Option(Nat) =
+    match values
+    | [] => Option/none()
+    | [only] => Option/some(only)
+    | [_, ..rest] => last(rest)
+    end;
+
+pub let present(values: List(Option(Nat))) -> List(Nat) =
+    match values
+    | [] => []
+    | [none(), ..rest] => present(rest)
+    | [some(value), ..rest] => [value, ..present(rest)]
+    end;
 ```
+
+A run takes its elements from the front, so a rest written before an element is refused.
 
 ### Packed case split
 
-A `Bytes` match is a [list case split](#list-case-split) under the bracket `x[`, with every rule of one: both cases required, and a final `| _ =>` standing for a case left out. Its head is a `Byte`.
+A `Bytes` pattern is a [run](#list-case-split) under the bracket `x[`, as the [packed literal](#packed-literals) is, with every rule of a list's, each element a pattern at `Byte`.
 
 ```crs
 use /std/{Byte, Bytes, Nat};
@@ -920,6 +938,12 @@ pub let first_or_zero(bytes: Bytes) -> Byte =
     match bytes
     | x[] => 0
     | x[head, .._] => head
+    end;
+
+pub let second_or_zero(bytes: Bytes) -> Nat =
+    match bytes
+    | x[_, second, .._] => Byte/to_nat(second)
+    | _ => 0
     end;
 ```
 
@@ -1617,6 +1641,7 @@ A bound the facts do not imply is refused. The report names the facts it conside
 | `Name { ..base, ... }` | Structure update |
 | `struct Slot(K: Type, use Key(K)): …` | A type declared under a premise — the dictionary is an argument of the type |
 | `match term ... end` | Typed elimination or dispatch |
+| `[a, b, ..rest]` / `x[a, ..rest]` | A run — a list or `Bytes` literal written as a pattern, its rest a binder |
 | `\| pattern, guard, … =>` | An arm taken where its pattern matches and each guard passes: a `Bool`, or `pattern = term` |
 | `match \| guard, … => … \| _ => … end` | A match with no head: guards alone, closed by a default |
 | `test name = body;` | Test — a `/std/Test` description, run by `curios test` |

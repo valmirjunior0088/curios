@@ -123,7 +123,7 @@ impl Guard {
     }
 }
 
-/// A match arm's pattern as it is written. A constructor is the tag it is spelled by, since the scrutinee's type supplies its namespace, and a binder is a place among its row's binders: a pattern's binders are counted left to right, a successor's predecessor and a cons's head and then its tail. A `_` is a wildcard and no binder, so a row binds nothing for it.
+/// A match arm's pattern as it is written. A constructor is the tag it is spelled by, since the scrutinee's type supplies its namespace, and a binder is a place among its row's binders: a pattern's binders are counted left to right, a successor's predecessor, a run's elements and then its rest. A `_` is a wildcard and no binder, so a row binds nothing for it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived(recursive)]
 pub enum Pattern {
@@ -157,23 +157,71 @@ pub enum Pattern {
     Literal(Natural),
     /// A dispatch literal spelled as the character whose scalar value it is.
     Character(char),
-    /// `[]`.
-    Nil,
-    /// `[head, ..tail]`.
-    Cons {
-        head: Slot,
-        tail: Slot,
-    },
-    /// `x[]`.
-    End,
-    /// `x[head, ..tail]`.
-    Atom {
-        head: Slot,
-        tail: Slot,
+    /// A run over a list: `[]`, `[a, b]` or `[a, b, ..rest]`.
+    List(#[archived_omit_bounds] Elements),
+    /// A run over a packed sequence: `x[]`, `x[a, b]` or `x[a, b, ..rest]`.
+    Bytes(#[archived_omit_bounds] Elements),
+}
+
+/// A sequence pattern's elements as the literal that builds the value writes them, each a pattern at the element's type, taken from the front. An open run writes one element at least: one of none would be the binder its rest is, so it has no node.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived(recursive)]
+pub enum Elements {
+    /// `[]` or `[a, b]`: a sequence of exactly these elements.
+    Closed(#[archived_omit_bounds] Vec<Pattern>),
+    /// `[a, b, ..rest]`: a sequence these elements begin, and what follows them, which its rest binds.
+    Open {
+        #[archived_omit_bounds]
+        first: Box<Pattern>,
+        #[archived_omit_bounds]
+        then: Vec<Pattern>,
+        rest: Slot,
     },
 }
 
-/// A part a successor or a sequence's case always holds, its predecessor, its head or its tail, as a pattern writes it: a name, a place among its row's binders, or `_`, which binds nothing.
+/// How a run ends once its elements are read: with nothing after them, or with its rest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Ending {
+    Closed,
+    Open(Slot),
+}
+
+impl Elements {
+    /// The first element and what follows it, the elements after it and how the run ends; nothing for `[]`.
+    pub fn split(&self) -> Option<(&Pattern, &[Pattern], Ending)> {
+        match self {
+            Elements::Closed(elements) => elements
+                .split_first()
+                .map(|(first, then)| (first, then, Ending::Closed)),
+            Elements::Open { first, then, rest } => Some((first, then, Ending::Open(*rest))),
+        }
+    }
+
+    /// Every element, in the order the run writes them.
+    pub fn elements(&self) -> impl Iterator<Item = &Pattern> {
+        let (first, then) = match self {
+            Elements::Closed(elements) => (None, elements.as_slice()),
+            Elements::Open { first, then, .. } => (Some(&**first), then.as_slice()),
+        };
+
+        first.into_iter().chain(then)
+    }
+
+    /// The rest, where the run is open.
+    pub fn rest(&self) -> Option<Slot> {
+        match self {
+            Elements::Closed(_) => None,
+            Elements::Open { rest, .. } => Some(*rest),
+        }
+    }
+
+    /// How many binders the run writes: its elements', then its rest's.
+    pub fn binders(&self) -> usize {
+        self.elements().map(Pattern::binders).sum::<usize>() + self.rest().map_or(0, Slot::binders)
+    }
+}
+
+/// A part a successor's case or an open run always holds, its predecessor or its rest, as a pattern writes it: a name, a place among its row's binders, or `_`, which binds nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Slot {
@@ -201,16 +249,9 @@ impl Pattern {
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 fields.iter().map(|(_, field)| field.binders()).sum()
             }
-            Pattern::Bool(_)
-            | Pattern::Zero
-            | Pattern::Literal(_)
-            | Pattern::Character(_)
-            | Pattern::Nil
-            | Pattern::End => 0,
+            Pattern::Bool(_) | Pattern::Zero | Pattern::Literal(_) | Pattern::Character(_) => 0,
             Pattern::Succ { predecessor } => predecessor.binders(),
-            Pattern::Cons { head, tail } | Pattern::Atom { head, tail } => {
-                head.binders() + tail.binders()
-            }
+            Pattern::List(elements) | Pattern::Bytes(elements) => elements.binders(),
         }
     }
 }

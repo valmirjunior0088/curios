@@ -3,8 +3,8 @@ use {
     crate::Error,
     curios_common::Span,
     curios_surface::{
-        Alternative, BytesPattern, Guard, HeadlessArm, HeadlessMatch, Label, ListPattern, Match,
-        MatchPattern, MatchPatternField, MatrixArm, NatLiteral, NatPattern, Term,
+        Alternative, Elements, Guard, HeadlessArm, HeadlessMatch, Label, Match, MatchPattern,
+        MatchPatternField, MatrixArm, NatLiteral, NatPattern, Term,
     },
     std::collections::BTreeSet,
 };
@@ -251,26 +251,42 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value, _))) => {
                 curios_core::Pattern::Literal(value.clone())
             }
-            MatchPattern::List(ListPattern::Nil) => curios_core::Pattern::Nil,
-            MatchPattern::List(ListPattern::Cons {
-                head_label,
-                tail_label,
-            }) => curios_core::Pattern::Cons {
-                head: self.slot(head_label, binders),
-                tail: self.slot(tail_label, binders),
-            },
-            MatchPattern::Bytes(BytesPattern::End) => curios_core::Pattern::End,
-            MatchPattern::Bytes(BytesPattern::Atom {
-                head_label,
-                tail_label,
-            }) => curios_core::Pattern::Atom {
-                head: self.slot(head_label, binders),
-                tail: self.slot(tail_label, binders),
-            },
+            MatchPattern::List(elements) => {
+                curios_core::Pattern::List(self.elements(elements, binders)?)
+            }
+            MatchPattern::Bytes(elements) => {
+                curios_core::Pattern::Bytes(self.elements(elements, binders)?)
+            }
         })
     }
 
-    /// A successor's predecessor or a sequence's head or tail, its name minted onto `binders` where it writes one: a `_` binds nothing.
+    /// A run's elements as Core holds them, each a pattern, then its rest where it is open, every name minted in the order the run writes it.
+    fn elements(
+        &self,
+        elements: &Elements,
+        binders: &mut Vec<Binder>,
+    ) -> Result<curios_core::Elements, Error> {
+        Ok(match elements {
+            Elements::Closed(elements) => curios_core::Elements::Closed(
+                elements
+                    .iter()
+                    .map(|element| self.pattern(element, binders))
+                    .collect::<Result<_, Error>>()?,
+            ),
+            Elements::Open { first, then, rest } => {
+                let first = Box::new(self.pattern(first, binders)?);
+                let then = then
+                    .iter()
+                    .map(|element| self.pattern(element, binders))
+                    .collect::<Result<_, Error>>()?;
+                let rest = self.slot(rest, binders);
+
+                curios_core::Elements::Open { first, then, rest }
+            }
+        })
+    }
+
+    /// A successor's predecessor or an open run's rest, its name minted onto `binders` where it writes one: a `_` binds nothing.
     fn slot(&self, name: &Label, binders: &mut Vec<Binder>) -> curios_core::Slot {
         match bindable(name.as_str()) {
             true => {

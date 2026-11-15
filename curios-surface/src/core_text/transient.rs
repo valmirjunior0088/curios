@@ -9,13 +9,13 @@ use {
         value_word, word, word_value,
     },
     crate::{
-        Alternative, BytesPattern, CoreText, Frame, ListPattern, MatchPattern, MatrixArm,
-        NatPattern, ProofLiteral, Rendered, sub, written_pattern,
+        Alternative, CoreText, Frame, MatchPattern, MatrixArm, NatPattern, ProofLiteral, Rendered,
+        sub, written_pattern,
     },
     curios_common::{Plicity, Sign},
     curios_core::{
-        Arm, Ascribed, Atom, Bang, Func, Global, Infix, Matrix, Method, NumLit, Pattern, Row, Slot,
-        Subterm, Term, Transient,
+        Arm, Ascribed, Atom, Bang, Elements, Func, Global, Infix, Matrix, Method, NumLit, Pattern,
+        Row, Slot, Subterm, Term, Transient,
     },
 };
 
@@ -505,26 +505,38 @@ fn pattern_read(
             predecessor: slot_read(pred_label, at, places)?,
         },
         MatchPattern::Nat(NatPattern::Lit(literal)) => Pattern::Literal(literal.0.clone()),
-        MatchPattern::List(ListPattern::Nil) => Pattern::Nil,
-        MatchPattern::List(ListPattern::Cons {
-            head_label,
-            tail_label,
-        }) => Pattern::Cons {
-            head: slot_read(head_label, at, places)?,
-            tail: slot_read(tail_label, at, places)?,
-        },
-        MatchPattern::Bytes(BytesPattern::End) => Pattern::End,
-        MatchPattern::Bytes(BytesPattern::Atom {
-            head_label,
-            tail_label,
-        }) => Pattern::Atom {
-            head: slot_read(head_label, at, places)?,
-            tail: slot_read(tail_label, at, places)?,
-        },
+        MatchPattern::List(elements) => Pattern::List(elements_read(elements, at, places)?),
+        MatchPattern::Bytes(elements) => Pattern::Bytes(elements_read(elements, at, places)?),
     })
 }
 
-/// A pattern's own binder, or a successor's or a sequence's slot, where a bare `_` is a wildcard and no place: a word is a place, and `#{node = Binder} _` a nameless one. A decorator states nothing else of a place, whose label is the row's function's.
+/// A run's elements, each read as [`pattern_read`] reads a pattern, then its rest where it is open, in the order the run writes them.
+fn elements_read(
+    elements: &crate::Elements<CoreText>,
+    at: &crate::Term<CoreText>,
+    places: &mut Vec<String>,
+) -> Result<Elements, ReadError> {
+    Ok(match elements {
+        crate::Elements::Closed(elements) => Elements::Closed(
+            elements
+                .iter()
+                .map(|element| pattern_read(element, at, places))
+                .collect::<Result<_, ReadError>>()?,
+        ),
+        crate::Elements::Open { first, then, rest } => {
+            let first = Box::new(pattern_read(first, at, places)?);
+            let then = then
+                .iter()
+                .map(|element| pattern_read(element, at, places))
+                .collect::<Result<_, ReadError>>()?;
+            let rest = slot_read(rest, at, places)?;
+
+            Elements::Open { first, then, rest }
+        }
+    })
+}
+
+/// A pattern's own binder, or a successor's predecessor or an open run's rest, where a bare `_` is a wildcard and no place: a word is a place, and `#{node = Binder} _` a nameless one. A decorator states nothing else of a place, whose label is the row's function's.
 fn own_place_read(
     binder: &crate::Binder<CoreText>,
     at: &crate::Term<CoreText>,
@@ -542,7 +554,7 @@ fn own_place_read(
     }
 }
 
-/// A successor's predecessor or a sequence's head or tail, read as a pattern's own binder is: a place whose word `places` gathers, or a wildcard.
+/// A successor's predecessor or an open run's rest, read as a pattern's own binder is: a place whose word `places` gathers, or a wildcard.
 fn slot_read(
     binder: &crate::Binder<CoreText>,
     at: &crate::Term<CoreText>,

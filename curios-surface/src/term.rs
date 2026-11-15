@@ -472,10 +472,10 @@ pub enum MatchPattern<D: Dialect = Program> {
     Char(char),
     /// A nested `Nat` literal leaf — the `0`/`n + 1` (case split) or bare literal (dispatch) shapes a headed `Nat` match takes.
     Nat(NatPattern<D>),
-    /// A nested `List` literal leaf — the `[]`/`[head, ..tail]` shapes a headed `List` match takes.
-    List(ListPattern<D>),
-    /// A nested `Bytes` literal leaf — the `x[]` and `x[head, ..tail]` shapes a headed packed-sequence match takes.
-    Bytes(BytesPattern<D>),
+    /// A run over a list: `[]`, `[a, b]` or `[a, b, ..rest]`.
+    List(Elements<D>),
+    /// A run over a packed sequence: `x[]`, `x[a, b]` or `x[a, b, ..rest]`.
+    Bytes(Elements<D>),
 }
 
 impl<D: Dialect> MatchPattern<D> {
@@ -493,9 +493,9 @@ impl<D: Dialect> MatchPattern<D> {
 pub enum NatPattern<D: Dialect = Program> {
     /// The `0` leaf.
     Zero,
-    /// The `pred + 1` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches.
+    /// The `pred + 1` leaf. `pred_label` is a binder, never a pattern: one there would spell again what a literal spells, `0 + 1` the `1`.
     Succ { pred_label: Binder<D> },
-    /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, lowered to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (see `into_core::match_compile`'s `compile_nat`).
+    /// A literal-dispatch leaf `k` — matched by value, peeling no successor. Always `k >= 1`: the numeral `0` is [`NatPattern::Zero`], never `Lit(0)`, so a `Nat` has one canonical leaf per value. A column of `Lit` (and possibly `Zero`) leaves with no `Succ` is value dispatch, compiled to a `Cases::Switch` with a mandatory default rather than the `Nat` eliminator (`curios-elab`'s matrix compiler).
     ///
     /// Carries the numeral whole, as every stage down to the lowering that builds a branch table does: a key is as unbounded as the value it is compared with, and one no table indexes is decided by equality there (`curios-anf`'s `lower_switch`). Narrowed here, a numeral past a machine word would backtrack past every leaf, so the arm would be reported as holding no pattern where its key is one.
     ///
@@ -503,28 +503,49 @@ pub enum NatPattern<D: Dialect = Program> {
     Lit(NatLiteral),
 }
 
-/// The two shapes a nested `List` leaf can take — see [`MatchPattern::List`].
+/// A sequence pattern's elements as the literal that builds the value writes them, each a pattern taken from the front — see [`MatchPattern::List`] and [`MatchPattern::Bytes`]. An open run writes one element at least: one of none would be the binder its rest is, so the tree holds no `[..rest]`.
 #[derive(Debug, Clone, PartialEq)]
-pub enum ListPattern<D: Dialect = Program> {
-    /// The `[]` leaf.
-    Nil,
-    /// The `[head, ..tail]` leaf.
-    Cons {
-        head_label: Binder<D>,
-        tail_label: Binder<D>,
+pub enum Elements<D: Dialect = Program> {
+    /// `[]` or `[a, b]`: a sequence of exactly these elements.
+    Closed(Vec<MatchPattern<D>>),
+    /// `[a, b, ..rest]`: a sequence these elements begin, and what follows them, which its rest binds.
+    Open {
+        first: Box<MatchPattern<D>>,
+        then: Vec<MatchPattern<D>>,
+        rest: Binder<D>,
     },
 }
 
-/// The two shapes a nested `Bytes` leaf can take — see [`MatchPattern::Bytes`].
-#[derive(Debug, Clone, PartialEq)]
-pub enum BytesPattern<D: Dialect = Program> {
-    /// The `x[]` leaf.
-    End,
-    /// The `x[head, ..tail]` leaf.
-    Atom {
-        head_label: Binder<D>,
-        tail_label: Binder<D>,
-    },
+impl<D: Dialect> Elements<D> {
+    /// Every element, in the order the run writes them.
+    pub fn elements(&self) -> impl Iterator<Item = &MatchPattern<D>> {
+        let (first, then) = match self {
+            Elements::Closed(elements) => (None, elements.as_slice()),
+            Elements::Open { first, then, .. } => (Some(&**first), then.as_slice()),
+        };
+
+        first.into_iter().chain(then)
+    }
+
+    /// `[head, ..tail]`, a binder for each: the run a case split's cons arm is written as.
+    pub fn cons(head: Binder<D>, tail: Binder<D>) -> Self {
+        Elements::Open {
+            first: Box::new(MatchPattern::Binder(head)),
+            then: Vec::new(),
+            rest: tail,
+        }
+    }
+
+    /// The binders of a run written as [`Elements::cons`] writes one, and nothing for any other.
+    pub fn as_cons(&self) -> Option<(&Binder<D>, &Binder<D>)> {
+        match self {
+            Elements::Open { first, then, rest } if then.is_empty() => match &**first {
+                MatchPattern::Binder(head) => Some((head, rest)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 /// One tuple-pattern / struct-pattern field in a [`MatchPattern`]: a labeled sub-pattern (`label = pattern`) or a bare positional one. The literal mirror of [`PatternField`] with `Pattern` replaced by `MatchPattern`.

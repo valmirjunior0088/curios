@@ -60,10 +60,8 @@
 (lambda_parameter pattern: (identifier) @variable)
 (sugar_parameter name: (identifier) @variable)
 (successor_pattern predecessor: (identifier) @variable)
-(list_pattern head: (identifier) @variable)
-(list_pattern tail: (identifier) @variable)
-(packed_pattern head: (identifier) @variable)
-(packed_pattern tail: (identifier) @variable)
+(list_pattern (identifier) @variable)
+(packed_pattern (identifier) @variable)
 
 ; Paths: the last segment of a call head is a function, and a capitalized name is a type by the library's convention — the language itself has no lexical rule for it — in every position, so the `Eq` of `Eq/subst` reads as the `Eq` of `Eq(a, b)`. Lowercase leading segments stay `@variable`, as Zed's own Rust query leaves them: Zed has no module capture.
 (path (identifier) @variable)

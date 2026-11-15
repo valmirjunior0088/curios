@@ -24,8 +24,8 @@ use {
     },
     curios_common::{Plicity, recurse},
     curios_core::{
-        Arm, Atom, Free, Guard, InductArm, Matrix, Mention, Pattern, Row, Slot, StructType,
-        Subterm, Telescope, Term, Tuple,
+        Arm, Atom, Elements, Ending, Free, Guard, InductArm, Matrix, Mention, Pattern, Row, Slot,
+        StructType, Subterm, Telescope, Term, Tuple,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
@@ -69,17 +69,69 @@ pub fn elaborate_matrix(
 /// One of a row's binders as its body's telescope labels it: the name it is written with, and where the lowering wrote it among its declaration's binders.
 type Label = (Option<String>, Option<u32>);
 
-/// What a row writes at one column: a pattern beside the place of the first binder it writes among its row's, or nothing where the compiler put the column under a pattern another row wrote, which the row reads as a binder that binds nothing.
-type Cell<'m> = Option<(&'m Pattern, usize)>;
+/// What a row writes at one column beside the place of the first binder it writes there among its row's, or nothing where the compiler put the column under a pattern another row wrote, which the row reads as a binder that binds nothing.
+type Cell<'m> = Option<(Shape<'m>, usize)>;
 
-/// A row under a successor or a cons: what it writes of the case, where it writes it, and the row.
-type Peeled<'m> = (Option<Written>, Line<'m>);
+/// What a row writes at a column: a pattern, or what is left of a run once a split has read elements off its front, which is a run of its own.
+#[derive(Clone, Copy)]
+enum Shape<'m> {
+    Pattern(&'m Pattern),
+    /// The elements of a run after the ones read, and how it ends, over the sequence it is a run of.
+    Remains(Sequence, &'m [Pattern], Ending),
+}
 
-/// What a row writes of a successor's or a sequence's case: the place of its first binder, and its slots.
-#[derive(Clone)]
-struct Written {
-    place: usize,
-    slots: Vec<Slot>,
+impl<'m> Shape<'m> {
+    /// What a run leaves past an element: its elements after it and its end, or its rest itself where no element is left of an open one.
+    fn after(sequence: Sequence, then: &'m [Pattern], ending: Ending) -> Shape<'m> {
+        match (then, ending) {
+            ([], Ending::Open(rest)) => Shape::Pattern(slot_pattern(rest)),
+            _ => Shape::Remains(sequence, then, ending),
+        }
+    }
+
+    /// The run this is, where it is one: its sequence, and its first element beside what follows it, or nothing where it is empty.
+    fn run(self) -> Option<(Sequence, Option<(&'m Pattern, Shape<'m>)>)> {
+        let split = |sequence, elements: &'m Elements| {
+            elements
+                .split()
+                .map(|(first, then, ending)| (first, Shape::after(sequence, then, ending)))
+        };
+
+        match self {
+            Shape::Pattern(Pattern::List(elements)) => {
+                Some((Sequence::List, split(Sequence::List, elements)))
+            }
+            Shape::Pattern(Pattern::Bytes(elements)) => {
+                Some((Sequence::Bytes, split(Sequence::Bytes, elements)))
+            }
+            Shape::Pattern(_) => None,
+            Shape::Remains(sequence, elements, ending) => Some((
+                sequence,
+                elements
+                    .split_first()
+                    .map(|(first, then)| (first, Shape::after(sequence, then, ending))),
+            )),
+        }
+    }
+
+    /// The pattern this is, where it is no run's remainder.
+    fn pattern(self) -> Option<&'m Pattern> {
+        match self {
+            Shape::Pattern(pattern) => Some(pattern),
+            Shape::Remains(..) => None,
+        }
+    }
+}
+
+/// The pattern a part a case always holds is read as at a column of its own, a predecessor or an open run's rest: a binder, or `_`.
+fn slot_pattern(slot: Slot) -> &'static Pattern {
+    const BINDER: &Pattern = &Pattern::Binder;
+    const WILDCARD: &Pattern = &Pattern::Wildcard;
+
+    match slot {
+        Slot::Binder => BINDER,
+        Slot::Wildcard => WILDCARD,
+    }
 }
 
 /// One column: the term it is, and the place of the value it holds in the pattern the match's scrutinee is being read as ([`Compiler::seen`]).
@@ -117,6 +169,10 @@ enum Seen {
     Variant(String, Vec<usize>),
     /// A tuple, or a struct under its head, over its fields.
     Fields(Option<String>, Vec<(Option<String>, usize)>),
+    /// An empty sequence.
+    Empty(Sequence),
+    /// A nonempty sequence over its first element and what follows it.
+    Cons(Sequence, usize, usize),
 }
 
 /// The outermost dispatch, resolved once: what a row's own walk enters its first case by, so the row and the tree are typed against one result.
@@ -236,7 +292,7 @@ impl<'m> Compiler<'m> {
     fn line(&self, row: usize) -> Line<'m> {
         Line {
             row,
-            cells: vec![Some((&self.row(row).pattern, 0))],
+            cells: vec![Some((Shape::Pattern(&self.row(row).pattern), 0))],
             taken: vec![None; self.row(row).pattern.binders()],
             guarded: !self.row(row).guards.is_empty(),
             lets: Vec::new(),
@@ -259,19 +315,39 @@ impl<'m> Compiler<'m> {
 
         let written = lines
             .iter()
-            .filter_map(|line| line.cells[0].map(|(pattern, _)| pattern))
-            .filter(|pattern| !matches!(pattern, Pattern::Binder | Pattern::Wildcard))
+            .filter_map(|line| line.cells[0].map(|(shape, _)| shape))
+            .filter(|shape| !matches!(shape, Shape::Pattern(Pattern::Binder | Pattern::Wildcard)))
             .collect::<Vec<_>>();
         let Some(first) = written.first().copied() else {
             let column = columns.remove(0);
             for line in &mut lines {
-                if let Some((Pattern::Binder, place)) = line.cells.remove(0) {
+                if let Some((Shape::Pattern(Pattern::Binder), place)) = line.cells.remove(0) {
                     self.named(context, line, place, column.term.clone());
                 }
             }
 
             return recurse(|| self.columns(context, columns, lines, top, mode));
         };
+
+        if let Some((sequence, _)) = first.run() {
+            if !written
+                .iter()
+                .all(|other| other.run().is_some_and(|(other, _)| other == sequence))
+            {
+                return Err(Error::MatrixInconsistentShape);
+            }
+
+            return self.sequence(context, sequence, columns, lines, top, mode);
+        }
+        // What is left of a run is a run, so every other shape is a pattern as written.
+        let Some(written) = written
+            .iter()
+            .map(|shape| shape.pattern())
+            .collect::<Option<Vec<_>>>()
+        else {
+            return Err(Error::MatrixInconsistentShape);
+        };
+        let first = written[0];
 
         let every =
             |alike: fn(&Pattern, &Pattern) -> bool| written.iter().all(|other| alike(first, other));
@@ -330,20 +406,7 @@ impl<'m> Compiler<'m> {
 
                 self.naturals(context, columns, lines, top, mode)
             }
-            Pattern::Nil | Pattern::Cons { .. } => {
-                if !every(|_, other| matches!(other, Pattern::Nil | Pattern::Cons { .. })) {
-                    return Err(Error::MatrixInconsistentShape);
-                }
-
-                self.lists(context, columns, lines, top, mode)
-            }
-            Pattern::End | Pattern::Atom { .. } => {
-                if !every(|_, other| matches!(other, Pattern::End | Pattern::Atom { .. })) {
-                    return Err(Error::MatrixInconsistentShape);
-                }
-
-                self.packed(context, columns, lines, top, mode)
-            }
+            Pattern::List(_) | Pattern::Bytes(_) => unreachable!("a run is read above"),
             Pattern::Binder | Pattern::Wildcard => {
                 unreachable!("a binder or a wildcard is no pattern a column is split by")
             }
@@ -366,11 +429,11 @@ impl<'m> Compiler<'m> {
     fn joined(&mut self, context: &mut Context, lines: &mut [Line<'m>], column: &Column) {
         for line in lines {
             match line.cells[0] {
-                Some((Pattern::Binder, place)) => {
+                Some((Shape::Pattern(Pattern::Binder), place)) => {
                     self.named(context, line, place, column.term.clone());
                     line.cells[0] = None;
                 }
-                Some((Pattern::Wildcard, _)) => line.cells[0] = None,
+                Some((Shape::Pattern(Pattern::Wildcard), _)) => line.cells[0] = None,
                 _ => {}
             }
             if line.cells[0].is_none() {
@@ -416,6 +479,27 @@ impl<'m> Compiler<'m> {
             }
             Seen::Fields(None, written) => format!("({})", fields(written)),
             Seen::Fields(Some(head), written) => format!("{head} {{ {} }}", fields(written)),
+            Seen::Empty(sequence) => format!("{}]", opening(*sequence)),
+            Seen::Cons(sequence, head, tail) => {
+                // A run is written flat, as the literal that builds the value is: its tail's elements follow its head, and an open end is `.._`.
+                let mut elements = vec![self.value(*head)];
+                let mut tail = *tail;
+                let end = loop {
+                    match &self.seen[tail] {
+                        Seen::Cons(_, head, next) => {
+                            elements.push(self.value(*head));
+                            tail = *next;
+                        }
+                        Seen::Empty(_) => break None,
+                        _ => break Some(self.value(tail)),
+                    }
+                };
+                if let Some(rest) = end {
+                    elements.push(format!("..{rest}"));
+                }
+
+                format!("{}{}]", opening(*sequence), elements.join(", "))
+            }
         }
     }
 
@@ -720,7 +804,7 @@ impl<'m> Compiler<'m> {
 
         let mut tags: BTreeMap<String, Atom> = BTreeMap::new();
         for line in &lines {
-            if let Some((Pattern::Variant { tag, .. }, _)) = line.cells[0] {
+            if let Some((Shape::Pattern(Pattern::Variant { tag, .. }), _)) = line.cells[0] {
                 tags.entry(tag.as_string()).or_insert_with(|| tag.clone());
             }
         }
@@ -730,7 +814,7 @@ impl<'m> Compiler<'m> {
         let mut binders = Vec::new();
         for mut line in lines {
             match line.cells[0] {
-                Some((Pattern::Variant { tag, .. }, _)) => groups
+                Some((Shape::Pattern(Pattern::Variant { tag, .. }), _)) => groups
                     .get_mut(&tag.as_string())
                     .expect("a group stands for each constructor a row names")
                     .push(line),
@@ -813,7 +897,7 @@ impl<'m> Compiler<'m> {
         context: &mut Context,
         split: &NominalSplit,
         tag: &Atom,
-        mut group: Vec<Line<'m>>,
+        group: Vec<Line<'m>>,
         column: &Column,
         rest: &[Column],
     ) -> Result<(Atom, InductArm), Error> {
@@ -821,85 +905,17 @@ impl<'m> Compiler<'m> {
         let marks = payload.marks();
         let places = self.parts(marks.len());
 
-        let naming = group
-            .iter()
-            .enumerate()
-            .filter(|(_, line)| line.cells[0].is_some())
-            .map(|(at, _)| at)
-            .collect::<Vec<_>>();
-        let (binders, mut columns, lines) = match naming.as_slice() {
-            &[at] => {
-                let Some((Pattern::Variant { args, .. }, first)) = group[at].cells.remove(0) else {
-                    unreachable!("the row that names a constructor's case writes it");
-                };
-                let cells = payload_cells(tag, &payload, args, first)?;
-                let (binders, slots) = self.alone(context, &mut group[at], cells);
-                // A row that wrote a binder at the column reads no payload.
-                for (index, line) in group.iter_mut().enumerate() {
-                    if index != at {
-                        line.cells.remove(0);
-                        line.cells
-                            .splice(0..0, std::iter::repeat_n(None, slots.len()));
-                    }
+        let mut written = Vec::with_capacity(group.len());
+        for mut line in group {
+            let cells = match line.cells.remove(0) {
+                Some((Shape::Pattern(Pattern::Variant { args, .. }), first)) => {
+                    Some(payload_cells(tag, &payload, args, first)?)
                 }
-                let columns = slots
-                    .into_iter()
-                    .map(|slot| Column {
-                        term: Term::free_var(&binders[slot]),
-                        seen: places[slot],
-                    })
-                    .collect::<Vec<_>>();
-
-                (binders, columns, group)
-            }
-            _ => {
-                let binders = marks
-                    .iter()
-                    .map(|_| context.fresh(None))
-                    .collect::<Vec<_>>();
-                let mut read = vec![false; marks.len()];
-                let mut rows = Vec::with_capacity(group.len());
-                for mut line in group {
-                    let cells = match line.cells.remove(0) {
-                        Some((Pattern::Variant { args, .. }, first)) => {
-                            let cells = payload_cells(tag, &payload, args, first)?;
-                            line.cases.extend(binders.iter().copied());
-
-                            cells
-                        }
-                        _ => vec![None; marks.len()],
-                    };
-                    for (slot, cell) in cells.iter().enumerate() {
-                        read[slot] |= cell.is_some();
-                    }
-                    rows.push((cells, line));
-                }
-
-                // A column for each payload some row writes: what no row writes, no row reads.
-                let slots = (0..marks.len())
-                    .filter(|slot| read[*slot])
-                    .collect::<Vec<_>>();
-                let lines = rows
-                    .into_iter()
-                    .map(|(cells, mut line)| {
-                        let mut front = slots.iter().map(|slot| cells[*slot]).collect::<Vec<_>>();
-                        front.append(&mut line.cells);
-                        line.cells = front;
-
-                        line
-                    })
-                    .collect::<Vec<_>>();
-                let columns = slots
-                    .into_iter()
-                    .map(|slot| Column {
-                        term: Term::free_var(&binders[slot]),
-                        seen: places[slot],
-                    })
-                    .collect::<Vec<_>>();
-
-                (binders, columns, lines)
-            }
-        };
+                _ => None,
+            };
+            written.push((cells, line));
+        }
+        let (binders, mut columns, lines) = self.case_parts(context, written, &places);
         columns.extend(rest.iter().cloned());
 
         self.seen[column.seen] = Seen::Variant(
@@ -919,7 +935,96 @@ impl<'m> Compiler<'m> {
         arm
     }
 
-    /// A constructor's case as `line`, the one row that names it, reads it, over the `cells` it writes for the case's payloads: the binder of each payload — the row's own where it writes a name, and one of the compiler's where it writes a pattern or nothing — and the payloads whose pattern is left to read, which are the columns the row's cells are put ahead for.
+    /// The rows that reach a case over its parts, each beside the cells it writes for them — none where it wrote a binder at the column the case is of — as the binders the case is entered under, the columns of the parts left to read, each at its place among `places`, and the rows over those columns and then the ones they had left.
+    ///
+    /// The one row that writes the case names a part it binds by its own binder, as a match written one level deep does ([`Compiler::alone`]); a part a pattern takes apart, a part no row writes, and every part of a case several rows write, is a binder of the compiler's.
+    fn case_parts(
+        &mut self,
+        context: &mut Context,
+        mut group: Vec<(Option<Vec<Cell<'m>>>, Line<'m>)>,
+        places: &[usize],
+    ) -> (Vec<Free>, Vec<Column>, Vec<Line<'m>>) {
+        let column = |binders: &[Free], slot: usize| Column {
+            term: Term::free_var(&binders[slot]),
+            seen: places[slot],
+        };
+        let writing = group
+            .iter()
+            .enumerate()
+            .filter(|(_, (cells, _))| cells.is_some())
+            .map(|(at, _)| at)
+            .collect::<Vec<_>>();
+        if let &[at] = writing.as_slice() {
+            let (cells, line) = &mut group[at];
+            let cells = cells
+                .take()
+                .expect("the row that writes the case writes its parts");
+            let (binders, slots) = self.alone(context, line, cells);
+            // A row that wrote a binder at the column reads no part.
+            let lines = group
+                .into_iter()
+                .enumerate()
+                .map(|(index, (_, mut line))| {
+                    if index != at {
+                        line.cells
+                            .splice(0..0, std::iter::repeat_n(None, slots.len()));
+                    }
+
+                    line
+                })
+                .collect();
+            let columns = slots
+                .into_iter()
+                .map(|slot| column(&binders, slot))
+                .collect();
+
+            return (binders, columns, lines);
+        }
+
+        let binders = places
+            .iter()
+            .map(|_| context.fresh(None))
+            .collect::<Vec<_>>();
+        let mut read = vec![false; places.len()];
+        let mut rows = Vec::with_capacity(group.len());
+        for (cells, mut line) in group {
+            let cells = match cells {
+                Some(cells) => {
+                    line.cases.extend(binders.iter().copied());
+
+                    cells
+                }
+                None => vec![None; places.len()],
+            };
+            for (slot, cell) in cells.iter().enumerate() {
+                read[slot] |= cell.is_some();
+            }
+            rows.push((cells, line));
+        }
+
+        // A column for each part some row writes: what no row writes, no row reads.
+        let slots = (0..places.len())
+            .filter(|slot| read[*slot])
+            .collect::<Vec<_>>();
+        let lines = rows
+            .into_iter()
+            .map(|(cells, mut line)| {
+                let mut front = slots.iter().map(|slot| cells[*slot]).collect::<Vec<_>>();
+                front.append(&mut line.cells);
+                line.cells = front;
+
+                line
+            })
+            .collect();
+        let columns = slots
+            .into_iter()
+            .map(|slot| column(&binders, slot))
+            .collect();
+
+        (binders, columns, lines)
+    }
+
+    /// A case as `line`, the one row that writes it, reads it, over the `cells` it writes for the case's parts: the binder of each part — the row's own where it writes a name, and one of the compiler's where it writes a pattern or nothing — and the parts whose pattern is left to read, which are the columns the row's cells are put ahead for.
     fn alone(
         &mut self,
         context: &mut Context,
@@ -931,13 +1036,13 @@ impl<'m> Compiler<'m> {
         let mut front = Vec::new();
         for (slot, cell) in cells.into_iter().enumerate() {
             let binder = match cell {
-                Some((Pattern::Binder, place)) => {
+                Some((Shape::Pattern(Pattern::Binder), place)) => {
                     let name = self.name(context, line, place);
                     line.taken[place] = Some(Term::free_var(&name));
 
                     name
                 }
-                Some((Pattern::Wildcard, _)) | None => context.fresh(None),
+                Some((Shape::Pattern(Pattern::Wildcard), _)) | None => context.fresh(None),
                 Some(cell) => {
                     slots.push(slot);
                     front.push(Some(cell));
@@ -971,8 +1076,8 @@ impl<'m> Compiler<'m> {
         let mut trues = Vec::new();
         for mut line in lines {
             match line.cells.remove(0) {
-                Some((Pattern::Bool(false), _)) => falses.push(line),
-                Some((Pattern::Bool(true), _)) => trues.push(line),
+                Some((Shape::Pattern(Pattern::Bool(false)), _)) => falses.push(line),
+                Some((Shape::Pattern(Pattern::Bool(true)), _)) => trues.push(line),
                 _ => {
                     falses.push(line.clone());
                     trues.push(line);
@@ -1027,9 +1132,9 @@ impl<'m> Compiler<'m> {
         self.joined(context, &mut lines, &column);
 
         let writes = |alike: fn(&Pattern) -> bool| {
-            lines
-                .iter()
-                .any(|line| line.cells[0].is_some_and(|(pattern, _)| alike(pattern)))
+            lines.iter().any(|line| {
+                line.cells[0].is_some_and(|(shape, _)| shape.pattern().is_some_and(alike))
+            })
         };
         let peels = writes(|pattern| matches!(pattern, Pattern::Succ { .. }));
         let dispatches =
@@ -1038,7 +1143,9 @@ impl<'m> Compiler<'m> {
             let first = |alike: fn(&Pattern) -> bool| {
                 lines
                     .iter()
-                    .find(|line| line.cells[0].is_some_and(|(pattern, _)| alike(pattern)))
+                    .find(|line| {
+                        line.cells[0].is_some_and(|(shape, _)| shape.pattern().is_some_and(alike))
+                    })
                     .map(|line| line.row)
                     .expect("a row writes the kind the column was found to hold")
             };
@@ -1057,21 +1164,21 @@ impl<'m> Compiler<'m> {
 
         // `0` and a binder are induction's two cases, so `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its successor arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal.
         if dispatches {
-            let literal = |pattern: &Pattern| match pattern {
-                Pattern::Zero => Natural::zero(),
-                Pattern::Literal(value) => value.clone(),
-                Pattern::Character(character) => Natural::from(*character as u32),
+            let literal = |shape: Shape<'m>| match shape {
+                Shape::Pattern(Pattern::Zero) => Natural::zero(),
+                Shape::Pattern(Pattern::Literal(value)) => value.clone(),
+                Shape::Pattern(Pattern::Character(character)) => Natural::from(*character as u32),
                 _ => unreachable!("every row of the column writes a `Nat`"),
             };
             let mut groups: BTreeMap<Natural, Vec<Line<'m>>> = lines
                 .iter()
-                .filter_map(|line| line.cells[0].map(|(pattern, _)| (literal(pattern), Vec::new())))
+                .filter_map(|line| line.cells[0].map(|(shape, _)| (literal(shape), Vec::new())))
                 .collect();
             let mut others = Vec::new();
             for mut line in lines {
                 match line.cells.remove(0) {
-                    Some((pattern, _)) => groups
-                        .get_mut(&literal(pattern))
+                    Some((shape, _)) => groups
+                        .get_mut(&literal(shape))
                         .expect("a group stands for each literal a row writes")
                         .push(line),
                     None => {
@@ -1124,17 +1231,14 @@ impl<'m> Compiler<'m> {
         }
 
         let mut zeros = Vec::new();
-        let mut successors: Vec<Peeled<'m>> = Vec::new();
+        let mut successors = Vec::new();
         for mut line in lines {
             match line.cells.remove(0) {
-                Some((Pattern::Zero, _)) => zeros.push(line),
-                Some((Pattern::Succ { predecessor }, place)) => successors.push((
-                    Some(Written {
-                        place,
-                        slots: vec![*predecessor],
-                    }),
-                    line,
-                )),
+                Some((Shape::Pattern(Pattern::Zero), _)) => zeros.push(line),
+                Some((Shape::Pattern(Pattern::Succ { predecessor }), place)) => {
+                    let predecessor = Some((Shape::Pattern(slot_pattern(*predecessor)), place));
+                    successors.push((Some(vec![predecessor]), line));
+                }
                 _ => {
                     zeros.push(line.clone());
                     successors.push((None, line));
@@ -1163,10 +1267,13 @@ impl<'m> Compiler<'m> {
                 self.case(context, rest.clone(), zeros, expected)
             })?;
 
-            let ([predecessor], group) = self.peel(context, successors);
+            let places = self.parts(1);
+            let (binders, mut columns, group) = self.case_parts(context, successors, &places);
+            columns.extend(rest);
+            let predecessor = binders[0];
             self.seen[column.seen] = Seen::Leaf("_ + 1".to_string());
             let successor = split.successor(context, &predecessor, |context, expected| {
-                self.case(context, rest, group, expected)
+                self.case(context, columns, group, expected)
             })?;
             self.seen[column.seen] = Seen::Any;
             let (rebuilt, type_) = split.rebuild(zero, &predecessor, successor);
@@ -1175,107 +1282,53 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// Rows split into `[]` and `[head, ..tail]`, a row that writes a binder under both.
-    fn lists(
+    /// The case split of a run's column, a list's or a packed sequence's: the rows of its empty case, and of its nonempty one over its first element and what follows it, each a column of its own as a constructor's payload is; a row that writes a binder is under both.
+    fn sequence(
         &mut self,
         context: &mut Context,
+        sequence: Sequence,
         mut columns: Vec<Column>,
         mut lines: Vec<Line<'m>>,
         top: bool,
         mode: Mode,
     ) -> Result<(Term, Term), Error> {
         let column = columns.remove(0);
+        let rest = columns;
         self.joined(context, &mut lines, &column);
 
         let mut empties = Vec::new();
-        let mut conses: Vec<Peeled<'m>> = Vec::new();
+        let mut conses = Vec::new();
         for mut line in lines {
             match line.cells.remove(0) {
-                Some((Pattern::Nil, _)) => empties.push(line),
-                Some((Pattern::Cons { head, tail }, place)) => conses.push((
-                    Some(Written {
-                        place,
-                        slots: vec![*head, *tail],
-                    }),
-                    line,
-                )),
-                _ => {
+                Some((shape, place)) => {
+                    let (_, split) = shape
+                        .run()
+                        .expect("every row that takes the column apart writes a run");
+                    match split {
+                        None => empties.push(line),
+                        Some((first, after)) => {
+                            let cells = vec![
+                                Some((Shape::Pattern(first), place)),
+                                Some((after, place + first.binders())),
+                            ];
+                            conses.push((Some(cells), line));
+                        }
+                    }
+                }
+                None => {
                     empties.push(line.clone());
                     conses.push((None, line));
                 }
             }
         }
-
-        let cases = ["[]", "[_, .._]"];
-        self.sequence(
-            context,
-            Sequence::List,
-            (column, columns),
-            (empties, conses),
-            cases,
-            (top, mode),
-        )
-    }
-
-    /// Rows split into the empty packed sequence and one atom ahead of a tail, a row that writes a binder under both.
-    fn packed(
-        &mut self,
-        context: &mut Context,
-        mut columns: Vec<Column>,
-        mut lines: Vec<Line<'m>>,
-        top: bool,
-        mode: Mode,
-    ) -> Result<(Term, Term), Error> {
-        let column = columns.remove(0);
-        self.joined(context, &mut lines, &column);
-
-        let mut empties = Vec::new();
-        let mut atoms: Vec<Peeled<'m>> = Vec::new();
-        for mut line in lines {
-            match line.cells.remove(0) {
-                Some((Pattern::End, _)) => empties.push(line),
-                Some((Pattern::Atom { head, tail }, place)) => atoms.push((
-                    Some(Written {
-                        place,
-                        slots: vec![*head, *tail],
-                    }),
-                    line,
-                )),
-                _ => {
-                    empties.push(line.clone());
-                    atoms.push((None, line));
-                }
-            }
+        if empties.is_empty() {
+            return Err(self.uncovered(&column, Seen::Empty(sequence), false));
         }
+        if conses.is_empty() {
+            let parts = self.parts(2);
+            let missing = Seen::Cons(sequence, parts[0], parts[1]);
 
-        let cases = ["x[]", "x[_, .._]"];
-        self.sequence(
-            context,
-            Sequence::Bytes,
-            (column, columns),
-            (empties, atoms),
-            cases,
-            (top, mode),
-        )
-    }
-
-    /// The case split of a list's or a packed sequence's column: the rows of its empty case and of its nonempty one, each the arm of its case over the columns left. `cases` is how a pattern writes the two.
-    fn sequence(
-        &mut self,
-        context: &mut Context,
-        sequence: Sequence,
-        (column, rest): (Column, Vec<Column>),
-        (empties, conses): (Vec<Line<'m>>, Vec<Peeled<'m>>),
-        cases: [&'static str; 2],
-        (top, mode): (bool, Mode),
-    ) -> Result<(Term, Term), Error> {
-        for (case, missing) in cases
-            .into_iter()
-            .zip([empties.is_empty(), conses.is_empty()])
-        {
-            if missing {
-                return Err(self.uncovered(&column, Seen::Leaf(case.to_string()), false));
-            }
+            return Err(self.uncovered(&column, missing, false));
         }
 
         let scrutinee = Scrutinee::read(context, &column.term)?;
@@ -1293,88 +1346,24 @@ impl<'m> Compiler<'m> {
                 )
             });
 
-            self.seen[column.seen] = Seen::Leaf(cases[0].to_string());
+            self.seen[column.seen] = Seen::Empty(sequence);
             let empty = split.empty(context, |context, expected| {
                 self.case(context, rest.clone(), empties, expected)
             })?;
 
-            let (binders, group) = self.peel(context, conses);
-            self.seen[column.seen] = Seen::Leaf(cases[1].to_string());
+            let places = self.parts(2);
+            let (binders, mut columns, group) = self.case_parts(context, conses, &places);
+            columns.extend(rest);
+            let binders = [binders[0], binders[1]];
+            self.seen[column.seen] = Seen::Cons(sequence, places[0], places[1]);
             let cons = split.cons(context, &binders, |context, expected| {
-                self.case(context, rest, group, expected)
+                self.case(context, columns, group, expected)
             })?;
             self.seen[column.seen] = Seen::Any;
             let (rebuilt, type_) = split.rebuild(empty, &binders, cons);
 
             self.settled(context, top, rebuilt, type_)
         })
-    }
-
-    /// The binders a nonempty case is entered under — the atom ahead where the carrier has one, and what is left — and the rows that reach the case with those binders read. The one row that writes the case names them by its own binders; where several write it they are the compiler's, each of those rows binding its names to them. A row that wrote a binder at the column reads none.
-    fn peel<const N: usize>(
-        &mut self,
-        context: &mut Context,
-        mut rows: Vec<Peeled<'m>>,
-    ) -> ([Free; N], Vec<Line<'m>>) {
-        let writing = rows
-            .iter()
-            .enumerate()
-            .filter(|(_, (written, _))| written.is_some())
-            .map(|(at, _)| at)
-            .collect::<Vec<_>>();
-        if let &[at] = writing.as_slice() {
-            let (written, line) = &mut rows[at];
-            let written = written.clone().expect("the row that writes the case");
-            let mut place = written.place;
-            let mut slots = written.slots.iter().copied();
-            let binders = std::array::from_fn(|_| {
-                let slot = slots.next().expect("a slot for each binder");
-                let (name, next) = self.slot(context, line, slot, place);
-                place = next;
-
-                name
-            });
-            line.cases.extend(binders.iter().copied());
-
-            return (binders, rows.into_iter().map(|(_, line)| line).collect());
-        }
-
-        let binders: [Free; N] = std::array::from_fn(|_| context.fresh(None));
-        let mut group = Vec::with_capacity(rows.len());
-        for (written, mut line) in rows {
-            if let Some(written) = written {
-                let mut place = written.place;
-                for (slot, binder) in written.slots.iter().zip(&binders) {
-                    if let Slot::Binder = slot {
-                        self.bind(context, &mut line, place, Term::free_var(binder));
-                        place += 1;
-                    }
-                }
-                line.cases.extend(binders.iter().copied());
-            }
-            group.push(line);
-        }
-
-        (binders, group)
-    }
-
-    /// The local the slot at `place` of the row `line` is entered under, beside the place after it: the row's own binder where the slot is one, read there, and a local nothing reads where it is a wildcard.
-    fn slot(
-        &self,
-        context: &mut Context,
-        line: &mut Line<'m>,
-        slot: Slot,
-        place: usize,
-    ) -> (Free, usize) {
-        match slot {
-            Slot::Binder => {
-                let name = self.name(context, line, place);
-                line.taken[place] = Some(Term::free_var(&name));
-
-                (name, place + 1)
-            }
-            Slot::Wildcard => (context.fresh(None), place),
-        }
     }
 
     /// A tuple or struct column flattened into one column for each field, a projection of the scrutinee: a value of either has one shape, so matching one is reading its fields, and no row is put under a case by it. The rows that write the shape agree, field by field, on the label each is written with; a row that writes a binder binds its name to the column and reads no field. A struct pattern's head is the structure the column's type is.
@@ -1389,8 +1378,8 @@ impl<'m> Compiler<'m> {
         let column = columns.remove(0);
         let rest = columns;
 
-        let written = |pattern: &'m Pattern| match pattern {
-            Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => fields,
+        let written = |shape: Shape<'m>| match shape {
+            Shape::Pattern(Pattern::Tuple(fields) | Pattern::Struct { fields, .. }) => fields,
             _ => unreachable!("every row that takes the column apart writes a tuple or a struct"),
         };
         let labelled = |fields: &'m [(Option<String>, Pattern)]| {
@@ -1402,16 +1391,17 @@ impl<'m> Compiler<'m> {
         let shape = lines
             .iter()
             .find_map(|line| {
-                line.cells[0]
-                    .filter(|(pattern, _)| !matches!(pattern, Pattern::Binder | Pattern::Wildcard))
+                line.cells[0].filter(|(shape, _)| {
+                    !matches!(shape, Shape::Pattern(Pattern::Binder | Pattern::Wildcard))
+                })
             })
-            .map(|(pattern, _)| pattern)
+            .map(|(shape, _)| shape)
             .expect("a column is flattened for a row that writes its shape");
         let canonical = labelled(written(shape));
         let head = match shape {
-            Pattern::Struct {
+            Shape::Pattern(Pattern::Struct {
                 head, structure, ..
-            } => {
+            }) => {
                 held_to_structure(context, &column.term, head, structure)?;
 
                 Some(head.clone())
@@ -1422,14 +1412,14 @@ impl<'m> Compiler<'m> {
         let mut flattened = Vec::with_capacity(lines.len());
         for mut line in lines {
             let cells = match line.cells.remove(0) {
-                Some((Pattern::Binder, place)) => {
+                Some((Shape::Pattern(Pattern::Binder), place)) => {
                     self.named(context, &mut line, place, column.term.clone());
 
                     vec![None; canonical.len()]
                 }
-                Some((Pattern::Wildcard, _)) => vec![None; canonical.len()],
-                Some((pattern, mut place)) => {
-                    let fields = written(pattern);
+                Some((Shape::Pattern(Pattern::Wildcard), _)) => vec![None; canonical.len()],
+                Some((shape, mut place)) => {
+                    let fields = written(shape);
                     if labelled(fields) != canonical {
                         return Err(Error::MatrixInconsistentShape);
                     }
@@ -1437,7 +1427,7 @@ impl<'m> Compiler<'m> {
                     fields
                         .iter()
                         .map(|(_, field)| {
-                            let cell = Some((field, place));
+                            let cell = Some((Shape::Pattern(field), place));
                             place += field.binders();
 
                             cell
@@ -1666,26 +1656,26 @@ impl<'m> Compiler<'m> {
         }
 
         let column = columns.remove(0);
-        let (pattern, place) = line
+        let (shape, place) = line
             .cells
             .remove(0)
             .expect("a row alone writes every column it reads");
 
-        match pattern {
-            Pattern::Binder => {
+        match shape {
+            Shape::Pattern(Pattern::Binder) => {
                 self.bind(context, &mut line, place, column);
 
                 return recurse(|| self.alone_over(context, columns, line, top, mode));
             }
-            Pattern::Wildcard => {
+            Shape::Pattern(Pattern::Wildcard) => {
                 return recurse(|| self.alone_over(context, columns, line, top, mode));
             }
-            Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
+            Shape::Pattern(Pattern::Tuple(fields) | Pattern::Struct { fields, .. }) => {
                 let mut cells = Vec::with_capacity(fields.len() + line.cells.len());
                 let mut projections = Vec::with_capacity(fields.len() + columns.len());
                 let mut place = place;
                 for (index, (label, field)) in fields.iter().enumerate() {
-                    cells.push(Some((field, place)));
+                    cells.push(Some((Shape::Pattern(field), place)));
                     place += field.binders();
                     projections.push(projection(&column, label.as_deref(), index));
                 }
@@ -1716,10 +1706,60 @@ impl<'m> Compiler<'m> {
             Ok(body)
         };
 
+        if let Some((sequence, run)) = shape.run() {
+            let split = match shared {
+                Some(Outermost::Sequence(split)) => split,
+                Some(_) => unreachable!("a column is split by one shape"),
+                None => {
+                    let scrutinee = Scrutinee::read(context, &column)?;
+                    let goal = Term::hole(context.mint_metavar());
+
+                    Rc::new(SequenceSplit::resolve(
+                        context, sequence, scrutinee, &goal, &mode,
+                    )?)
+                }
+            };
+
+            match run {
+                Some((first, after)) => {
+                    let cells = vec![
+                        Some((Shape::Pattern(first), place)),
+                        Some((after, place + first.binders())),
+                    ];
+                    let (binders, slots) = self.alone(context, &mut line, cells);
+                    let mut parts = slots
+                        .into_iter()
+                        .map(|slot| Term::free_var(&binders[slot]))
+                        .collect::<Vec<_>>();
+                    parts.extend(columns);
+                    let binders = [binders[0], binders[1]];
+
+                    walk_awaited(context, awaits, |context| {
+                        split.cons(context, &binders, |context, expected| {
+                            arm(self, context, parts, line, expected)
+                        })
+                    })?;
+                }
+                None => {
+                    walk_awaited(context, awaits, |context| {
+                        split.empty(context, |context, expected| {
+                            arm(self, context, columns, line, expected)
+                        })
+                    })?;
+                }
+            }
+
+            return Ok(walked.expect("the arm of a row's case is its walk"));
+        }
+        let Shape::Pattern(pattern) = shape else {
+            unreachable!("what is left of a run is a run");
+        };
+
         match pattern {
             Pattern::Binder | Pattern::Wildcard | Pattern::Tuple(_) | Pattern::Struct { .. } => {
                 unreachable!("a pattern that states no case is read above")
             }
+            Pattern::List(_) | Pattern::Bytes(_) => unreachable!("a run is read above"),
             Pattern::Variant { tag, args } => {
                 let split = match shared {
                     Some(Outermost::Nominal(split)) => split,
@@ -1813,8 +1853,9 @@ impl<'m> Compiler<'m> {
 
                 match pattern {
                     Pattern::Succ { predecessor } => {
-                        let (predecessor, _) = self.slot(context, &mut line, *predecessor, place);
-                        line.cases.push(predecessor);
+                        let cells = vec![Some((Shape::Pattern(slot_pattern(*predecessor)), place))];
+                        let (binders, _) = self.alone(context, &mut line, cells);
+                        let predecessor = binders[0];
 
                         walk_awaited(context, awaits, |context| {
                             split.successor(context, &predecessor, |context, expected| {
@@ -1825,46 +1866,6 @@ impl<'m> Compiler<'m> {
                     _ => {
                         walk_awaited(context, awaits, |context| {
                             split.zero(context, |context, expected| {
-                                arm(self, context, columns, line, expected)
-                            })
-                        })?;
-                    }
-                }
-            }
-            Pattern::Nil | Pattern::Cons { .. } | Pattern::End | Pattern::Atom { .. } => {
-                let sequence = match pattern {
-                    Pattern::End | Pattern::Atom { .. } => Sequence::Bytes,
-                    _ => Sequence::List,
-                };
-                let split = match shared {
-                    Some(Outermost::Sequence(split)) => split,
-                    Some(_) => unreachable!("a column is split by one shape"),
-                    None => {
-                        let scrutinee = Scrutinee::read(context, &column)?;
-                        let goal = Term::hole(context.mint_metavar());
-
-                        Rc::new(SequenceSplit::resolve(
-                            context, sequence, scrutinee, &goal, &mode,
-                        )?)
-                    }
-                };
-
-                match pattern {
-                    Pattern::Cons { head, tail } | Pattern::Atom { head, tail } => {
-                        let (head, place) = self.slot(context, &mut line, *head, place);
-                        let (tail, _) = self.slot(context, &mut line, *tail, place);
-                        let binders = [head, tail];
-                        line.cases.extend(binders);
-
-                        walk_awaited(context, awaits, |context| {
-                            split.cons(context, &binders, |context, expected| {
-                                arm(self, context, columns, line, expected)
-                            })
-                        })?;
-                    }
-                    _ => {
-                        walk_awaited(context, awaits, |context| {
-                            split.empty(context, |context, expected| {
                                 arm(self, context, columns, line, expected)
                             })
                         })?;
@@ -2025,7 +2026,7 @@ fn payload_cells<'m>(
 
     Ok(fills
         .into_iter()
-        .map(|fill| fill.map(|member| (&args[member].1, places[member])))
+        .map(|fill| fill.map(|member| (Shape::Pattern(&args[member].1), places[member])))
         .collect())
 }
 
@@ -2043,11 +2044,19 @@ fn refutations(pattern: &Pattern) -> usize {
         | Pattern::Zero
         | Pattern::Succ { .. }
         | Pattern::Literal(_)
-        | Pattern::Character(_)
-        | Pattern::Nil
-        | Pattern::Cons { .. }
-        | Pattern::End
-        | Pattern::Atom { .. } => 1,
+        | Pattern::Character(_) => 1,
+        // A split for each element, and one for a closed run's end.
+        Pattern::List(elements) | Pattern::Bytes(elements) => {
+            let ends = match elements {
+                Elements::Closed(_) => 1,
+                Elements::Open { .. } => 0,
+            };
+
+            ends + elements
+                .elements()
+                .map(|element| 1 + refutations(element))
+                .sum::<usize>()
+        }
     }
 }
 
@@ -2104,6 +2113,33 @@ fn instance(this: &Pattern, that: &Pattern) -> bool {
             .zip(others)
             .all(|((_, field), (_, other))| instance(field, other)),
         (Pattern::Tuple(_) | Pattern::Struct { .. }, _) => false,
+        (
+            Pattern::List(elements) | Pattern::Bytes(elements),
+            Pattern::List(others) | Pattern::Bytes(others),
+        ) => {
+            // Element by element where both write one; past the end of either, `that` takes what is left only through an open rest of its own.
+            let (mut these, mut those) = (elements.elements(), others.elements());
+            loop {
+                match (these.next(), those.next()) {
+                    (Some(element), Some(other)) => {
+                        if !instance(element, other) {
+                            return false;
+                        }
+                    }
+                    (Some(_), None) => return others.rest().is_some(),
+                    (None, Some(_)) => return false,
+                    (None, None) => return elements.rest().is_none() || others.rest().is_some(),
+                }
+            }
+        }
         _ => true,
+    }
+}
+
+/// How a run under `sequence` opens.
+fn opening(sequence: Sequence) -> &'static str {
+    match sequence {
+        Sequence::List => "[",
+        Sequence::Bytes => "x[",
     }
 }

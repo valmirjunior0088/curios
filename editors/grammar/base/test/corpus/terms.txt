@@ -668,3 +668,44 @@ keep
         (identifier))))
   (path
     (identifier)))
+
+================================================================================
+Runs with element patterns
+================================================================================
+
+match l
+| [a] => a
+| [none(), b, ..rest] => b
+| x[h, _, ..t] => h
+| _ => 0
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (match_term
+    (path
+      (identifier))
+    (match_arm
+      (list_pattern
+        (identifier))
+      (path
+        (identifier)))
+    (match_arm
+      (list_pattern
+        (constructor_pattern
+          (identifier))
+        (identifier)
+        (identifier))
+      (path
+        (identifier)))
+    (match_arm
+      (packed_pattern
+        (identifier)
+        (identifier)
+        (identifier))
+      (path
+        (identifier)))
+    (match_arm
+      (identifier)
+      (number))))
