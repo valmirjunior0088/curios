@@ -142,13 +142,13 @@ let replay(start: Screen, written: Bytes) -> Screen =
                 end
             | 1 => go(s, more, x[], x[], 2)
             | _ =>
-                match
-                | n == 'H' =>
+                match n
+                | 'H' =>
                     let p = numbers(params);
                     let at = (k: Nat) => Option/unwrap_or(List/try_get(p, k), 1) - 1;
                     go(Screen { ..s, x = at(1), y = at(0) }, more, x[], x[], 0)
-                | n == 'J' => go(Screen { ..s, cells = blanked(s.cells) }, more, x[], x[], 0)
-                | Nat/in_range(n, 0x40, 0x7E) => go(s, more, x[], x[], 0)
+                | 'J' => go(Screen { ..s, cells = blanked(s.cells) }, more, x[], x[], 0)
+                | _, Nat/in_range(n, 0x40, 0x7E) => go(s, more, x[], x[], 0)
                 | _ => go(s, more, x[], x[..params, b], 2)
                 end
             end

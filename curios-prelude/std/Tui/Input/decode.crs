@@ -20,14 +20,13 @@ let low(code: Nat, @below: Bool/Holds(code < 0xD800)) -> Char =
 
 -- The key a control byte is. It is a byte's, which is what puts the letter or the sign it stands beside below the surrogates.
 let control(n: Nat, @byte: Bool/Holds(n <= 255)) -> Key =
-    match
-    | n == 0x0D => Key/plain(Key/Code/enter())
-    | n == 0x09 => Key/plain(Key/Code/tab())
-    | n == 0x7F => Key/plain(Key/Code/backspace())
-    | n == 0x08 => Key/plain(Key/Code/backspace())
-    | n == 0x1B => Key/plain(Key/Code/escape())
-    | n == 0x00 => Key/with_ctrl(Key/Code/char(' '))
-    | n <= 0x1A => Key/with_ctrl(Key/Code/char(low(n + 0x60)))
+    match n
+    | 0x0D => Key/plain(Key/Code/enter())
+    | 0x09 => Key/plain(Key/Code/tab())
+    | 0x7F | 0x08 => Key/plain(Key/Code/backspace())
+    | 0x1B => Key/plain(Key/Code/escape())
+    | 0 => Key/with_ctrl(Key/Code/char(' '))
+    | _, n <= 0x1A => Key/with_ctrl(Key/Code/char(low(n + 0x60)))
     | _ => Key/with_ctrl(Key/Code/char(low(n + 0x40)))
     end;
 
@@ -256,8 +255,8 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
     -- A sequence with no private marker and no intermediate: a key, a paste's opener, a resize or a change of focus. An omitted modifier is 1, no modifiers; the key a `~` or a `u` names has no default, both being private finals.
     let sent(p: Sequence) -> Step =
         let m = Option/unwrap_or(parameter(p, 1), 1);
-        match
-        | p.final == '~' =>
+        match p.final
+        | '~' =>
             match parameter(p, 0)
             | none() => Step/skip(p.next)
             | some(n) =>
@@ -267,13 +266,13 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
                 | _ => Step/skip(p.next)
                 end
             end
-        | p.final == 'u' =>
+        | 'u' =>
             match Option/bind(parameter(p, 0), kitty)
             | some(code) => key(modified(code, m), p.next)
             | none() => Step/skip(p.next)
             end
-        | p.final == 'Z' => key(Key { ..modified(Key/Code/tab(), m), shift = true }, p.next)
-        | p.final == 't' =>
+        | 'Z' => key(Key { ..modified(Key/Code/tab(), m), shift = true }, p.next)
+        | 't' =>
             match parameter(p, 0) == Option/some(48)
             | false => Step/skip(p.next)
             | true =>
@@ -287,18 +286,18 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
                     end
                 end
             end
-        | p.final == 'I' => Step/input(Input/focus(true), p.next)
-        | p.final == 'O' => Step/input(Input/focus(false), p.next)
-        | some(code) = final_code(p.final) => key(modified(code, m), p.next)
+        | 'I' => Step/input(Input/focus(true), p.next)
+        | 'O' => Step/input(Input/focus(false), p.next)
+        | _, some(code) = final_code(p.final) => key(modified(code, m), p.next)
         | _ => Step/skip(p.next)
         end;
     let csi(j: Nat) -> Step =
         match sequence(bytes, j)
         | none() => Step/cut()
         | some(p) =>
-            match
-            | p.private == '?' => replied(p)
-            | p.private == 0 && p.intermediate == 0 => sent(p)
+            match p.private
+            | '?' => replied(p)
+            | 0, p.intermediate == 0 => sent(p)
             | _ => Step/skip(p.next)
             end
         end;
@@ -316,13 +315,14 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
         | none() => Step/cut()
         | some(byte) =>
             let second = Byte/to_nat(byte);
-            match
-            | second == '[' => csi(i + 2)
-            | second == 'O' => ss3(i + 2)
-            | second == 0x1B => key(Key/plain(Key/Code/escape()), i + 1)
-            | Nat/in_range(second, 0x20, 0x7E) =>
+            match second
+            | '[' => csi(i + 2)
+            | 'O' => ss3(i + 2)
+            | 0x1B => key(Key/plain(Key/Code/escape()), i + 1)
+            | _, Nat/in_range(second, 0x20, 0x7E) =>
                 key(Key/with_alt(Key/Code/char(low(second))), i + 2)
-            | second < 0x20 || second == 0x7F => key(Key { ..control(second), alt = true }, i + 2)
+            | _, second < 0x20 || second == 0x7F =>
+                key(Key { ..control(second), alt = true }, i + 2)
             | _ => key(Key/plain(Key/Code/escape()), i + 1)
             end
         end;
@@ -364,9 +364,9 @@ pub let flush(rest: Bytes) -> {inputs: List(Input), replies: List(Reply)} =
     | x[] => (inputs = [], replies = [])
     | x[head, ..tail] =>
         let first: List(Input) =
-            match Byte/to_nat(head) == 0x1B
-            | true => [Input/key(Key/plain(Key/Code/escape()))]
-            | false => []
+            match head
+            | 0x1B => [Input/key(Key/plain(Key/Code/escape()))]
+            | _ => []
             end;
         let read = decode(tail);
         let after = flush(read.rest);
