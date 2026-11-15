@@ -60,7 +60,7 @@ fn what_rightly_follows_a_term_is_not_a_second_term() {
     assert!(later.contains("expected: `;`"), "{later}");
 }
 
-/// A head or a form missing a part its grammar requires is refused in a sentence that names the part: a structure's and a concept's sort, a definition's result, the `=` a definition is written with, a lambda's parentheses, a constructor's payload list, and the bars of a `match`.
+/// A head or a form missing a part its grammar requires is refused in a sentence that names the part: a structure's and a concept's sort, a definition's result, the `=` a definition is written with, a lambda's parentheses and the pattern its parameter is, a constructor's payload list, and the bars of a `match`.
 #[test]
 fn a_form_missing_its_part_is_refused_by_naming_the_part() {
     for (source, said) in [
@@ -86,6 +86,20 @@ fn a_form_missing_its_part_is_refused_by_naming_the_part() {
             "let f = x => x + 1; f(1)",
             "a lambda's parameters are written in parentheses",
         ),
+        // Written in parentheses, a parameter that is no pattern is refused as what it is, where it stands.
+        (
+            "let f = ((1)) => 1; f(1)",
+            "a parameter is a name or a pattern",
+        ),
+        (
+            "let f = (a + b) => 1; f(1)",
+            "a parameter is a name or a pattern",
+        ),
+        (
+            "let f = (x, 1 + 2) => x; f(1, 2)",
+            "a parameter is a name or a pattern",
+        ),
+        ("(g(x + 1) = 2)", "a parameter is a name or a pattern"),
         (
             "induct Color : Type | red | green end\n0",
             "a constructor is declared with its payload list",

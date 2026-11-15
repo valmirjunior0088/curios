@@ -1,10 +1,10 @@
 use {
     super::{
-        BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PATTERN_TAKES_NO_USE,
-        Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led, member_ends, members,
-        parse_char_value, parse_identifier, parse_keyword, parse_label, parse_literal, parse_mark,
-        parse_name, parse_named_premise, parse_nat_digits, parse_place, parse_qualified_name,
-        parse_word_raw, refused, require_space, trimmed,
+        BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PARAMETER_IS_A_PATTERN,
+        PATTERN_TAKES_NO_USE, Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led,
+        member_ends, members, parse_char_value, parse_identifier, parse_keyword, parse_label,
+        parse_literal, parse_mark, parse_name, parse_named_premise, parse_nat_digits, parse_place,
+        parse_qualified_name, parse_word_raw, refused, require_space, trimmed,
     },
     crate::{
         Binder, Elements, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
@@ -573,7 +573,7 @@ fn parse_annotation<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Option
         .parse(state)
 }
 
-// What a member is where the site binds, under each mark: `use _`, the member's place; after `@`, a binder with an optional annotation, a type in its place being read and reported; and with no mark the binder as `bound` reads it. Shared by a lambda's parameters and the definition sugar's, which differ only in what a binder is.
+// What a member is where the site binds, under each mark: `use _`, the member's place; after `@`, a binder with an optional annotation, a type in its place being read and reported; and with no mark the binder as `bound` reads it, a term no binder reads, a word that begins with a digit among them, being read and reported. A report is held, and raised only where the list is seen to be parameters, so the list is still read as a call's or a parenthesized term's where it is one. Shared by a lambda's parameters and the definition sugar's, which differ only in what a binder is.
 fn parse_bound_member<'a, B: 'a, D: Grammar>(
     bound: impl Parser<'a, B> + Copy + 'a,
     wildcard: fn() -> B,
@@ -597,10 +597,19 @@ fn parse_bound_member<'a, B: 'a, D: Grammar>(
                     .map(|(binder, annotation)| Ok((Plicity::Implicit, binder, annotation)))
                     .or(parse_term::<D>.flat_map(move |_| refused(&start, BINDER_FOLLOWS_IMPLICIT)))
                     .boxed(),
+                // A binder its list's separator follows; a word that begins with a digit, likewise; any other term the separator follows, read only to be reported; and last the binder alone, so a list that cannot go on past it says so where it stops.
                 Plicity::Explicit => bound
                     .and(parse_annotation)
+                    .and_drop(member_ends)
                     .map(|(binder, annotation)| Ok((Plicity::Explicit, binder, annotation)))
-                    .or(parse_numbered_binder::<_, D>)
+                    .or(parse_numbered_binder::<_, D>.and_drop(member_ends))
+                    // Uncommitted: a refusal the term's own forms commit to — a call's list that does not close — is no refusal of the list it stands in, which a tuple's or a call's reading may still take.
+                    .or(uncommit(parse_term::<D>)
+                        .and_drop(member_ends)
+                        .flat_map(move |_| refused(&start, PARAMETER_IS_A_PATTERN)))
+                    .or(bound
+                        .and(parse_annotation)
+                        .map(|(binder, annotation)| Ok((Plicity::Explicit, binder, annotation))))
                     .boxed(),
             })
             .parse(state)

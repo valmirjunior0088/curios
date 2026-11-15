@@ -48,6 +48,12 @@ pub const BINDER_STATES_NO_USE_TYPE: &[&str] = &[
     "a function that must state one is a `let` with a telescope",
 ];
 
+/// What refuses a term where a lambda's or a field sugar's parameter binds.
+pub const PARAMETER_IS_A_PATTERN: &[&str] = &[
+    "a parameter is a name or a pattern",
+    "write a name, `_`, or a pattern such as `(a, b)`",
+];
+
 /// What refuses a type after `@` where the site binds.
 pub const BINDER_FOLLOWS_IMPLICIT: &[&str] = &[
     "after `@` a binder is read here, not a type",
