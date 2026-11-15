@@ -30,7 +30,7 @@ fn tested_entry(suspends: bool) -> Module {
     }
     let body = builder.seal_block(Terminator::Return(Atom::Constant(seven)));
     builder.define_function(description, Some("description".into()), vec![], body);
-    builder.mark_description(description);
+    builder.assign_role(description, Role::Performance);
     builder.item_functions(vec![description]);
 
     builder.open_block();

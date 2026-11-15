@@ -112,7 +112,7 @@ fn functions_reserve_before_they_define() {
             debug_name: Some("self".into()),
             params: vec![n],
             body,
-            description: false,
+            role: Role::Evaluation,
             total: false,
         },
     );

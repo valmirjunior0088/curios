@@ -11,7 +11,7 @@ use {
     super::{
         Atom, Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, Field,
         ForeignId, Function, FunctionId, ProductFields, ProductId, ProductSchema, RecGroup,
-        RecGroupId, RegisterShape, Remap, Rhs, Semantics, Statement, StatementId, Terminator,
+        RecGroupId, RegisterShape, Remap, Rhs, Role, Semantics, Statement, StatementId, Terminator,
         ValueId, VariantFamily, lookup,
     },
     curios_abi::ForeignFunction,
@@ -422,7 +422,7 @@ impl Module {
             debug_name,
             params,
             body,
-            description: false,
+            role: Role::Evaluation,
             total: false,
         });
         self.imports.functions.push(ImportedFunction {

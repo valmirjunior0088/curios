@@ -3,7 +3,7 @@
 //! A [`Value`] is the compile-time result of running a closed computation — internal to the evaluator, never stored in the module — so it carries the shapes the constant alphabet deliberately omits: `Rc`-shared product and constructor aggregates, a list as a [`ListWindow`] over shared elements, and a closure over a module function with its resolved local captures. Reification ([`super::reify`](mod@super::reify)) turns a value back into arena statements.
 
 use {
-    crate::{Constant, ConstructorId, FunctionId, Module, ProductId, ValueId},
+    crate::{Constant, ConstructorId, FunctionId, Module, ProductId, Role, ValueId},
     curios_num::{Binary, Floating, Integer, Natural},
     std::{cell::RefCell, ops::Deref, rc::Rc},
 };
@@ -92,7 +92,7 @@ impl Value {
             Value::Closure(closure) => {
                 module
                     .function(closure.function)
-                    .is_some_and(|function| function.description)
+                    .is_some_and(|function| function.role == Role::Performance)
                     || closure
                         .env
                         .borrow()

@@ -566,7 +566,7 @@ fn define_describer(builder: &mut Builder, loops: bool) -> FunctionId {
         vec![],
         performance_body,
     );
-    builder.mark_description(performance);
+    builder.assign_role(performance, Role::Performance);
 
     builder.open_block();
     builder.let_functions(vec![performance]);

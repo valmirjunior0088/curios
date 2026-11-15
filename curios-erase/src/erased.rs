@@ -46,8 +46,6 @@ pub struct ErasedItem {
     ///
     /// **No position.** Where such a value is written is its declaration's, which a report finds by the name; a form holding it would be one thing erased from an item in hand and another from the same item restored from a store, which holds no position.
     unforced: BTreeSet<curios_anf::ValueId>,
-    /// The names bound to what an evaluation of the item computed, where that is another atom than the one the item bound them to. A function one of them is bound to is a closure the item computed and no definition's own, so what a record says of the definition is not said of it.
-    computed: BTreeSet<curios_core::Global>,
 }
 
 /// How a name is bound, as an item that uses it reads it.
@@ -97,19 +95,7 @@ impl ErasedItem {
             functions,
             interfaces,
             unforced,
-            computed: BTreeSet::new(),
         }
-    }
-
-    /// This erased form with `names` as the names bound to what an evaluation of the item computed.
-    pub(super) fn computing(mut self, names: BTreeSet<curios_core::Global>) -> Self {
-        self.computed = names;
-        self
-    }
-
-    /// Whether `name` is bound to what an evaluation of the item computed.
-    pub(super) fn computed(&self, name: &curios_core::Global) -> bool {
-        self.computed.contains(name)
     }
 
     /// The fragment.

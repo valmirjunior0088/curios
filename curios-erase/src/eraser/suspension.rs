@@ -273,7 +273,8 @@ impl Eraser<'_> {
         let block = self.block(body);
         self.builder
             .define_function(function, Some(name.to_string()), Vec::new(), block);
-        self.builder.mark_description(function);
+        self.builder
+            .assign_role(function, curios_anf::Role::Performance);
         self.builder.let_functions(vec![function]);
         curios_anf::Atom::Function(function)
     }
@@ -356,6 +357,11 @@ impl Eraser<'_> {
             vec![answer, pending],
             body,
         );
+        // What runs a performance, and so no part of any definition's evaluation: a suspension resumed through its frames may never stop resuming.
+        for function in [resume, frames] {
+            self.builder
+                .assign_role(function, curios_anf::Role::Machinery);
+        }
 
         self.builder.let_functions(vec![resume, frames]);
         resume
@@ -409,6 +415,8 @@ impl Eraser<'_> {
             vec![suspension],
             body,
         );
+        self.builder
+            .assign_role(surface, curios_anf::Role::Machinery);
         self.builder.let_functions(vec![surface]);
         surface
     }

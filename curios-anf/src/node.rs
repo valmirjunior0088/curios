@@ -338,16 +338,30 @@ pub struct Function {
     pub debug_name: Option<String>,
     pub params: Vec<ValueId>,
     pub body: BlockId,
-    /// Whether this function is an erased effect description's performance — stamped where descriptions are born, the erasure's `thunk`, and read where copying one would buy nothing: the host runs a description once per force, so the reifier declines to specialize it.
-    pub description: bool,
+    /// What the function is part of — stamped where it is born, and kept by every copy, since it is a fact of where the function came from that no later shape recovers.
+    pub role: Role,
     /// Whether the definition this function was erased from terminates on every input, together with everything it reaches — as the certifier's own record classifies it (`curios_core::Certification`), carried rather than re-derived.
     ///
     /// **Carried, because below Core there is nothing to derive it from.** Termination is decided by the certifier's walk and filed as its record, and it is already load-bearing above: the obligations that let erasure delete a proof or a type rest on it. A second derivation down here would be a second opinion about a question the trusted base has already answered, and two answers is how the stages come to disagree.
+    ///
+    /// **Every function of the definition's evaluation, nested ones included.** A record classifies a definition `Total` only where every recursive group its term encloses descends, and closed over everything it mentions, so what the verdict says of the definition it says of each function its evaluation runs: its lambdas and local groups at any depth, the loops erasure builds to compute its intrinsics, and the closures computing it produced. It says nothing of a [`Role::Performance`] or of [`Role::Machinery`]: a description of an effect that runs forever is a total value.
     ///
     /// **Marked on the sealed program, never by erasure.** Erasure leaves every flag false, so an erased form a unit files or the prelude archives carries none; the marks are made once, where the program the back half lowers meets the record of every unit it was erased from and of its entry, by [`Module::mark_total`](crate::Module::mark_total). Nothing reads the flag before then.
     ///
     /// False is the safe reading and the default: a definition the certifier did not find total is `Partial`, and so is anything no record classifies.
     pub total: bool,
+}
+
+/// What a function is part of, which decides what the certifier's verdict on the definition it was erased from says of it ([`Function::total`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Role {
+    /// Part of computing the value of the definition it was erased from: its lambdas and local groups, the loops erasure builds for its intrinsics, and the closures computing it produced.
+    Evaluation,
+    /// An erased effect description's performance — stamped where descriptions are born, the erasure's `thunk`, and read where copying one would buy nothing: the host runs a description once per force, so the reifier declines to specialize it.
+    Performance,
+    /// What erasure builds to run performances: the loop that resumes a suspension through its frames, the surfacing of one to the host, a crossing's step and its retry. It belongs to no definition's evaluation.
+    Machinery,
 }
 
 /// A mutually recursive group mixing functions and computed values. Every member is in scope in every member body and initializer and in the rest of the enclosing scope. A computed member is forced by need: its initializer runs the first time something reads the member, so members may reference one another in any order, and what the verifier refuses is an initializer that evaluates itself — directly, or through the functions it applies — and one that performs an effect, which forcing could not keep in its place. Member order is source order and decides nothing but spelling.

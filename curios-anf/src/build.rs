@@ -11,8 +11,8 @@ use {
     super::{
         Block, BlockId, Constant, ConstantId, ConstructorId, FamilyId, Field, ForeignId, Function,
         FunctionId, Interface, Module, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue,
-        RegisterShape, Rhs, Statement, StatementId, StructuralFault, StructuralRule, Terminator,
-        ValueId, VerifyError,
+        RegisterShape, Rhs, Role, Statement, StatementId, StructuralFault, StructuralRule,
+        Terminator, ValueId, VerifyError,
     },
     curios_abi::ForeignFunction,
     std::{collections::BTreeSet, sync::Arc},
@@ -150,22 +150,16 @@ impl Builder {
                 debug_name,
                 params,
                 body,
-                description: false,
+                role: Role::Evaluation,
                 total: false,
             },
         );
     }
 
-    /// Stamp a defined function as an erased effect description's performance — see [`Function::description`]. Called by the one birthplace of descriptions, the erasure's `thunk`.
-    pub fn mark_description(&mut self, id: FunctionId) {
+    /// Stamp a defined function with what it is part of — see [`Role`]. Called where a function is born that is no part of its definition's evaluation: the erasure's `thunk` and `description` for a performance, and the builders of what runs them for machinery.
+    pub fn assign_role(&mut self, id: FunctionId, role: Role) {
         if let Some(function) = self.module.function(id).cloned() {
-            self.module.set_function(
-                id,
-                Function {
-                    description: true,
-                    ..function
-                },
-            );
+            self.module.set_function(id, Function { role, ..function });
         }
     }
 

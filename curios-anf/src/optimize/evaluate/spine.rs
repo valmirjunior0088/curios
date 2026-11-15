@@ -341,7 +341,7 @@ impl Minter {
                 debug_name: definition.debug_name,
                 params,
                 body: definition.body,
-                description: definition.description,
+                role: definition.role,
                 total: definition.total,
             },
         );

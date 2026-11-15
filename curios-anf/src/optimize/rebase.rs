@@ -22,7 +22,7 @@ mod tests;
 use {
     crate::{
         Atom, Block, BlockId, Constant, FreeMonoidPart, Function, FunctionId, Module, Operation,
-        Rhs, Semantics, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
+        Rhs, Role, Semantics, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
         droppable_functions, self_references,
     },
     curios_num::Binary,
@@ -449,17 +449,19 @@ fn rebase_one(
     let mut worker_params = params;
     worker_params.extend(left.into_iter().chain(right));
     let worker_name = debug_name.as_ref().map(|name| format!("{name}@w"));
-    // A description is a zero-parameter thunk and never reaches the accumulator split, so both halves are ordinary computations. The termination verdict is the split definition's and is carried to both halves: re-basing a recursion moves where the accumulators live, never whether the recursion descends.
-    let total = module
+    // Both halves are what the split function was, and the termination verdict is the split definition's: re-basing a recursion moves where the accumulators live, never what the recursion is part of or whether it descends.
+    let (role, total) = module
         .function(function)
-        .is_some_and(|function| function.total);
+        .map_or((Role::Evaluation, false), |function| {
+            (function.role, function.total)
+        });
     module.define_function(
         worker,
         Function {
             debug_name: worker_name,
             params: worker_params,
             body,
-            description: false,
+            role,
             total,
         },
     );
@@ -469,7 +471,7 @@ fn rebase_one(
             debug_name,
             params: wrapper_params,
             body: wrapper_body,
-            description: false,
+            role,
             total,
         },
     );

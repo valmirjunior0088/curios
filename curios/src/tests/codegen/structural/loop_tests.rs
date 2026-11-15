@@ -636,3 +636,33 @@ fn a_map_inserts_leaf_key_is_encoded_through_a_direct_call() {
         insert.body
     );
 }
+
+/// A loop a total definition defines in its body is part of that definition's evaluation, so a call of the definition nothing reads is dropped with its loop; the same loop in a definition the certifier found partial keeps its call, since it may never return. What licenses the drop is the definition's record reaching the function nested in it ([`curios_anf::Function::total`]). Mutation-checked: marking only the functions a name is bound to keeps the total definition's loop.
+#[test]
+fn an_unread_call_through_a_total_definitions_local_loop_is_dropped() {
+    const LOCAL_LOOPS: &str = r#"
+        use /std/{Nat, List, Proc};
+        let tally(n: Nat) -> Nat =
+            let count(k: Nat, acc: Nat) -> Nat = match k | 0 => acc | j + 1 => count(j, acc + 30011) end;
+            count(n, 0);
+        let whirl(n: Nat) -> Nat =
+            let spin(k: Nat) -> Nat = spin(k + 30013);
+            spin(n);
+        let entry() -> /std/Io({}) =
+            let taint = List/len(Proc/args()!);
+            let unread_total = tally(taint);
+            let unread_partial = whirl(taint);
+            /std/print("done");
+        entry()
+        "#;
+
+    let module = cps_optm_module(LOCAL_LOOPS);
+    assert!(
+        !reads_nat(&module, 30011),
+        "the unread call of the total definition, loop and all, is dropped:\n{module}"
+    );
+    assert!(
+        reads_nat(&module, 30013),
+        "and the partial definition's is kept:\n{module}"
+    );
+}

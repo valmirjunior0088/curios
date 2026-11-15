@@ -26,8 +26,8 @@ pub struct Linking {
     /// The name and sorts each value and each function a linked form bound is declared under: the first to bind it, which is the form that defines it, since a form that hands another's name on is linked after it.
     values: BTreeMap<curios_anf::ValueId, AtSorts>,
     functions: BTreeMap<curios_anf::FunctionId, AtSorts>,
-    /// The functions a linked form bound a name to as what its evaluation computed: closures, each bound under a name and defined by no declaration.
-    computed: BTreeSet<curios_anf::FunctionId>,
+    /// Each function of a linked form's evaluation, by the names its item declares: what the certifier's verdict on those names speaks of ([`curios_anf::Function::total`]).
+    evaluating: BTreeMap<curios_anf::FunctionId, Vec<curios_core::Global>>,
     structs: BTreeMap<AtSorts, curios_anf::ProductId>,
     families: BTreeMap<AtSorts, curios_anf::FamilyId>,
     tuples: BTreeMap<usize, curios_anf::ProductId>,
@@ -89,6 +89,29 @@ impl Linking {
 
         let linked = self.module.link(erased.module(), &resolution);
 
+        // Every function the fragment defines itself is its item's, and one of the item's evaluation is what a verdict on the names the item declares speaks of: a function of its term, of an intrinsic's loop, or of a closure computing it produced.
+        let fragment = erased.module();
+        let imported = fragment
+            .imports()
+            .functions()
+            .iter()
+            .map(|import| import.function)
+            .collect::<BTreeSet<_>>();
+        let declared = erased
+            .environment()
+            .bindings()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>();
+        for function in fragment.function_ids() {
+            let evaluates = fragment
+                .function(function)
+                .is_some_and(|definition| definition.role == curios_anf::Role::Evaluation);
+            if evaluates && !imported.contains(&function) {
+                self.evaluating
+                    .insert(linked.function(function), declared.clone());
+            }
+        }
+
         self.hold(erased, sorts, &linked);
         for (name, binding) in erased.environment().bindings() {
             if let Binding::Atom(atom) = binding {
@@ -103,9 +126,6 @@ impl Linking {
                     }
                     curios_anf::Atom::Function(function) => {
                         self.functions.entry(function).or_insert(first);
-                        if erased.computed(name) {
-                            self.computed.insert(function);
-                        }
                     }
                     curios_anf::Atom::Constant(_) => {}
                 }
@@ -286,16 +306,12 @@ impl Linking {
             .iter()
             .map(|function| self.functions.get(function).copied())
             .collect::<Option<Vec<_>>>()?;
-        let computed = erased
-            .environment()
-            .bindings()
-            .filter_map(|(name, binding)| match binding {
-                Binding::Atom(atom) if bound(atom) != landed.atom(atom) => Some(*name),
-                _ => None,
-            })
-            .collect();
-
-        Some(ErasedItem::new(taken.module, environment, values, functions).computing(computed))
+        Some(ErasedItem::new(
+            taken.module,
+            environment,
+            values,
+            functions,
+        ))
     }
 }
 
@@ -427,21 +443,12 @@ pub fn link(
     linking.add(entry, &[Sorts::NONE]);
 
     let Linking {
-        module,
-        functions,
-        computed,
-        ..
+        module, evaluating, ..
     } = linking;
-    // A function is its definition's where a declaration defines it: the first name bound to it, and none where an item computed it.
-    let defined = functions
-        .into_iter()
-        .filter(|(function, _)| !computed.contains(function))
-        .map(|(function, name)| (name, function))
-        .collect();
     // Every fragment was held to the recursion rules where it was erased: its own groups by its verification, what it applies of another through that function's interface, and a read of a value whose initializer reads itself where the read was erased. So nothing here is expected to be refused, and a refusal would name nothing an extent was kept for.
     module.verify().map_err(|error| {
         Error::refused_by_verifier(error, &BTreeMap::new(), &ErasedNames::default())
     })?;
 
-    Ok(ErasedProgram::new(module, defined))
+    Ok(ErasedProgram::new(module, evaluating))
 }

@@ -196,6 +196,11 @@ impl Eraser<'_> {
             vec![token, dropped],
             body,
         );
+        // What runs a crossing, and so no part of any definition's evaluation.
+        for function in [step, again] {
+            self.builder
+                .assign_role(function, curios_anf::Role::Machinery);
+        }
         // Closed over nothing, so they are items of their own: a description of a call names `again`, and one copied out of the declaration that made it still reaches it.
         self.builder.hoist_functions(vec![step, again]);
 

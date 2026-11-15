@@ -30,10 +30,10 @@ mod node;
 pub use node::{
     ArchivedBlock, ArchivedCellOperation, ArchivedChannelOperation, ArchivedFoldNatStep,
     ArchivedFoldSequenceStep, ArchivedFunction, ArchivedIntrinsic, ArchivedNatCase,
-    ArchivedRecGroup, ArchivedRecValue, ArchivedRhs, ArchivedStatement,
+    ArchivedRecGroup, ArchivedRecValue, ArchivedRhs, ArchivedRole, ArchivedStatement,
     ArchivedSuspensionOperation, ArchivedTerminator, ArchivedUnconsSequenceStep,
     ArchivedVariantArm, Block, CellOperation, ChannelOperation, FoldNatStep, FoldSequenceStep,
-    Function, Intrinsic, NatCase, RecGroup, RecValue, Rhs, Statement, SuspensionOperation,
+    Function, Intrinsic, NatCase, RecGroup, RecValue, Rhs, Role, Statement, SuspensionOperation,
     Terminator, UnconsSequenceStep, VariantArm,
 };
 

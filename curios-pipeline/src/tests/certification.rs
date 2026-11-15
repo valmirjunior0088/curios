@@ -238,17 +238,26 @@ fn the_restored_prelude_carries_a_record_covering_every_definition() {
 
 /// A sealed program's functions are marked total from the certifier's records of everything it was erased from — the prelude's and the entry's own — and from nothing else: erasure marks nothing, so every mark here is one a record justified.
 ///
-/// Matched by debug name, which erasure derives from the definition's qualified symbol: the symbol itself, or the symbol and a path below it where the definition's value is a function inside it — a single-method witness collapses to its method, named for the field. A function minted inside a body shares that derivation and is never marked, so the check runs from the marks outward: each marked function's definition a record classifies `Total`, none a record classifies `Partial` marked, the prelude contributing marks at all, and the entry's own two definitions marked exactly as its walk classified them. Mutation-checked: marking the sealed arena from no unit's record in scope fails the prelude's half.
+/// A record speaks of an item's evaluation, the functions nested in it included, and of no performance and no machinery ([`curios_anf::Role`]), so the check runs by role and by name: no function that performs a description or runs one is marked, though the crossing `Proc/args` reaches puts machinery in an item the prelude classifies total; the entry's total definition is marked with the loop it defines, and its partial one with its loop is not; and the prelude contributes marks at all. Mutation-checked: marking from no unit's record in scope fails the prelude's half, marking only the functions a name is bound to fails the nested loop's, and marking whatever the role fails the machinery's.
 #[test]
 fn a_sealed_program_marks_its_functions_from_the_certifiers_records() {
-    let source = "use /std/{Nat};
+    let source = "use /std/{Nat, List, Proc};
 
-let double(n: Nat) -> Nat = n + n;
+let double(n: Nat) -> Nat =
+    let halve(k: Nat, acc: Nat) -> Nat = match k | 0 => acc | j + 1 => halve(j, acc + 2) end;
+    halve(n, 0);
 
-let spin(n: Nat) -> Nat = spin(n);
+let spin(n: Nat) -> Nat =
+    let whirl(k: Nat) -> Nat = whirl(k);
+    whirl(n);
 
 let subject : /std/Nat = double(2) + spin(0);
-/std/Io/pure(())
+
+let entry() -> /std/Io({}) =
+    let _ = List/len(Proc/args()!);
+    /std/Io/pure(());
+
+entry()
 ";
     let mut functions = Vec::new();
     compile_with_prelude(
@@ -261,66 +270,60 @@ let subject : /std/Nat = double(2) + spin(0);
                     .functions()
                     .iter()
                     .flatten()
-                    .map(|function| (function.debug_name.clone(), function.total))
+                    .map(|function| {
+                        (
+                            function.debug_name.clone().unwrap_or_default(),
+                            function.role,
+                            function.total,
+                        )
+                    })
                     .collect();
             }
         },
     )
     .expect("the program compiles");
-    let prelude = with_prelude(|prelude| {
-        prelude
-            .iter()
-            .flat_map(|unit| unit.certification().iter())
-            .map(|(name, totality)| (name.faithful().to_string(), totality))
-            .collect::<BTreeMap<_, _>>()
-    });
 
-    let mut marked_from_the_prelude = 0;
-    for (name, total) in &functions {
-        let Some(name) = name else {
-            assert!(!total, "a function with no definition behind it is marked");
-            continue;
-        };
-        // The definition a function's name derives from: the longest recorded symbol that is the name or a `/`-separated prefix of it.
-        let mut definition = Some(name.as_str());
-        let from_the_prelude = loop {
-            match definition {
-                Some(symbol) if prelude.contains_key(symbol) => break Some(prelude[symbol]),
-                Some(symbol) => definition = symbol.rsplit_once('/').map(|(above, _)| above),
-                None => break None,
-            }
-        };
-        let recorded = match from_the_prelude {
-            Some(totality) => Some(totality),
-            None if name.ends_with("/double") => Some(Totality::Total),
-            None if name.ends_with("/spin") => Some(Totality::Partial),
-            None => None,
-        };
-        if *total {
-            assert_eq!(
-                recorded,
-                Some(Totality::Total),
-                "{name} is marked without a record classifying it total"
-            );
-            marked_from_the_prelude += usize::from(from_the_prelude.is_some());
-        }
+    for (name, role, total) in &functions {
+        assert!(
+            !total || *role == curios_anf::Role::Evaluation,
+            "{name}, a {role:?}, is marked total"
+        );
     }
     assert!(
-        marked_from_the_prelude > 0,
+        functions
+            .iter()
+            .any(|(_, role, _)| *role == curios_anf::Role::Machinery),
+        "the program runs no machinery to hold unmarked"
+    );
+    assert!(
+        functions
+            .iter()
+            .any(|(name, _, total)| *total
+                && (name.starts_with("/std/") || name.starts_with("/sys/"))),
         "no prelude function was marked"
     );
 
-    let entry = |suffix: &str| {
-        functions
+    let marked = |suffix: &str| {
+        let named = functions
             .iter()
-            .filter(|(name, _)| name.as_deref().is_some_and(|name| name.ends_with(suffix)))
-            .any(|(_, total)| *total)
+            .filter(|(name, _, _)| name.ends_with(suffix))
+            .collect::<Vec<_>>();
+        assert!(!named.is_empty(), "the program holds no {suffix}");
+        named.iter().all(|(_, _, total)| *total)
     };
     assert!(
-        entry("/double"),
+        marked("/double"),
         "the entry's total definition is not marked"
     );
-    assert!(!entry("/spin"), "the entry's partial definition is marked");
+    assert!(
+        marked("halve"),
+        "the loop the total definition defines is not marked"
+    );
+    assert!(!marked("/spin"), "the entry's partial definition is marked");
+    assert!(
+        !marked("whirl"),
+        "the loop the partial definition defines is marked"
+    );
 }
 
 /// What the declarations below open with: `Code`'s one constructor fixes its index at `Bool`, so an arm matching on `Code(X)` reads `x` as a `Bool`, which `x + 0` adds to nothing.

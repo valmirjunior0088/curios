@@ -3,7 +3,7 @@
 use {
     super::{Eraser, Outcome},
     crate::{
-        Asked, AskedBy, AskedItems, AskedRecord, AtSorts, ErasedBaseline, ErasedForms, ErasedItem,
+        Asked, AskedBy, AskedItems, AskedRecord, ErasedBaseline, ErasedForms, ErasedItem,
         ErasedOver, ErasedUnit, Erasures, Error, Part, Sorts, constructor, emitted, evaluate, link,
         reduced,
     },
@@ -67,37 +67,40 @@ fn force_entry(
     Ok(Outcome::Emitted(lowering.yield_to_host(answer, polled)))
 }
 
-/// A program erased and linked: one module holding what its entry reaches, and where the function each linked declaration defines landed.
+/// A program erased and linked: one module holding what its entry reaches, and the functions of each linked item's evaluation.
 #[derive(Debug)]
 pub struct ErasedProgram {
     module: curios_anf::Module,
-    /// The function each name that defines one is bound to, at the sorts of the form it was linked as. A function an item computed is bound under a name and defined by none, so it is not among them.
-    defined: BTreeMap<AtSorts, curios_anf::FunctionId>,
+    /// Each function of a linked item's evaluation ([`curios_anf::Role::Evaluation`]), by the names that item declares. The entry declares none, and a performance or machinery is in none.
+    evaluating: BTreeMap<curios_anf::FunctionId, Vec<curios_core::Global>>,
 }
 
 impl ErasedProgram {
     pub(crate) fn new(
         module: curios_anf::Module,
-        defined: BTreeMap<AtSorts, curios_anf::FunctionId>,
+        evaluating: BTreeMap<curios_anf::FunctionId, Vec<curios_core::Global>>,
     ) -> Self {
-        Self { module, defined }
+        Self { module, evaluating }
     }
 
-    /// Mark every function a definition `certification` classifies `Total` erased to as total, at every form — see [`curios_anf::Function::total`]. The certifier judged the definition at each assignment of its sorts, so its totality holds of each form. Each is found through where its name was linked, so a definition that erased to anything but a function, or that the program does not reach, has nothing to mark, and a function no record names keeps the conservative `false`: a closure a top-level value was computed to among them, which its name is bound to and no declaration defines.
+    /// Mark as total every function of the evaluation of an item whose every declared definition `certification` classifies `Total`, at every form — see [`curios_anf::Function::total`]. The certifier judged each definition at each assignment of its sorts, so its totality holds of each form; a group's members are judged as one, so a function of the group's item is marked only where all of them are total. A function of no item's evaluation keeps the conservative `false`: a performance, the machinery that runs one, and anything the entry erased to, which declares nothing a record classifies.
     ///
-    /// Run on the linked program, once per record of what it was erased from: every unit's in scope and the entry's own. Nothing reads the flag before the back half lowers what this leaves.
+    /// Run on the linked program, once per record of what it was erased from: every unit's in scope and the entry's own. An item's definitions are its unit's, so one record classifies them all. Nothing reads the flag before the back half lowers what this leaves.
     ///
-    /// **Asked by the names the program linked, never walked.** A record classifies every definition of its unit and a program links a few of them, so each linked name is asked of the record, and the record is read for what the program took of its unit.
+    /// **Asked by the names the program linked, never walked.** A record classifies every definition of its unit and a program links a few of them, so each linked item's names are asked of the record, and the record is read for what the program took of its unit.
     pub fn mark_total(&mut self, certification: &curios_core::Certification) {
         let total = self
-            .defined
+            .evaluating
             .iter()
-            .filter(|((name, _), _)| {
-                certification
-                    .totality(name)
-                    .is_some_and(|totality| totality.is_total())
+            .filter(|(_, names)| {
+                !names.is_empty()
+                    && names.iter().all(|name| {
+                        certification
+                            .totality(name)
+                            .is_some_and(|totality| totality.is_total())
+                    })
             })
-            .map(|(_, function)| *function)
+            .map(|(function, _)| *function)
             .collect::<Vec<_>>();
         for id in total {
             self.module.mark_total(id);

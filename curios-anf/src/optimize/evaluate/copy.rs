@@ -108,7 +108,7 @@ pub fn deep_copy_function(
                 .map(|&p| lookup(&values, p))
                 .collect(),
             body: lookup(&block_ids, function.body),
-            description: function.description,
+            role: function.role,
             total: function.total,
         };
         module.define_function(lookup(&function_ids, *old), remapped);

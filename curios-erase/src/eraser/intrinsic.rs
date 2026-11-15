@@ -146,8 +146,9 @@ impl Eraser<'_> {
         let block = self.seal(outcome);
         self.builder
             .define_function(function, name, Vec::new(), block);
-        // Every thunk is a description's performance — the fact the reifier's decline reads.
-        self.builder.mark_description(function);
+        // Every thunk is a description's performance — the fact the reifier's decline reads, and the one no verdict on a value speaks of.
+        self.builder
+            .assign_role(function, curios_anf::Role::Performance);
         self.builder.let_functions(vec![function]);
 
         Ok(Outcome::Emitted(curios_anf::Atom::Function(function)))
