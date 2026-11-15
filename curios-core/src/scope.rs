@@ -723,7 +723,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         (0..self.arity()).map(move |index| self.label(index))
     }
 
-    /// Whether the binder at position `index` (0 = first/outermost label) is referenced anywhere in the body. A bound var refers to this binder iff its de Bruijn index equals `index` plus the number of binders entered since — which `Visit` tracks as `depth`. Used by erasure to spot an eliminator whose induction hypothesis is dead: that arm is a case-split, not a fold.
+    /// Whether the binder at position `index` (0 = first/outermost label) is referenced anywhere in the body. A bound var refers to this binder iff its de Bruijn index equals `index` plus the number of binders entered since — which `Visit` tracks as `depth`.
     ///
     /// A read riding on a pruning visit: a subterm whose `reach` is within the depth it stands at holds no index that could be this binder's, the closed type a `let` states among them, and a node more than one owner holds is read once per depth. Rebuilding every occurrence to read it cost a shared body its tree.
     pub fn uses(&self, index: usize) -> bool {

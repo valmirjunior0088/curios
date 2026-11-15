@@ -926,7 +926,7 @@ fn structural(
 
         // A `Bool` connective against a term that is no intrinsic at all — absorption's shape, `b || (b && c)` against the bare `b` — which the intrinsic congruence never sees: `curios-analysis`'s `connectives_agree` decides it equal or says nothing, and saying nothing leaves the pair where it was.
         //
-        // Then two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
+        // Then two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while the same call reached by unfolding is the member's body at the argument, a match stuck where the argument is a variable. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
         _ => match connectives_convert(certifier, pairs, this, that)? {
             true => Ok(true),
             false => unfolded_retry(certifier, pairs, this, that),

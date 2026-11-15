@@ -171,7 +171,7 @@ fn utf8_inductive_spike() {
 
 #[test]
 fn utf8_construction_spike() {
-    // The constructing side: a derivation whose index is the input `Bytes` is built by native `Bytes` recursion. That needs the elimination's goal to be dependent — refining `b` to `x[h, ..t]` in the cons arm, so the arm can return `P(x[h, ..t])` from `ih : P(t)`. `All` accepts everything, which isolates that requirement from any decision procedure; `utf8_of_bytes_checker_decides_and_builds_derivations` is the one that decides.
+    // The constructing side: a derivation whose index is the input `Bytes` is built by native `Bytes` recursion. That needs the elimination's goal to be dependent — refining `b` to `x[h, ..t]` in the cons arm, so the arm can return `All(x[h, ..t])` from the recursive call's `All(t)`. `All` accepts everything, which isolates that requirement from any decision procedure; `utf8_of_bytes_checker_decides_and_builds_derivations` is the one that decides.
     let source = r#"
         use /std/{Str, Nat, Bytes, Io};
 
@@ -278,7 +278,7 @@ fn concat_closed_holds_for_the_real_automaton() {
 
 #[test]
 fn utf8_of_bytes_checker_decides_and_builds_derivations() {
-    // A decision procedure that both decides validity at run time and builds a `Utf8` derivation in the `some` case. The native `Bytes` eliminator is a fold (its `ih` is the fold of the tail at fixed parameters), but the checker threads a changing `Scan` state — so `b` is folded into a function `(s) -> Option(Utf8(s, b))`, a foldl-as-foldr convoy in which each step receives its state from the caller, and `of_bytes_valid(b)` is `check(b)(lead)`. `decide` shows the automaton runs: "hi" (ASCII) is accepted and a lone `x[0x80]` continuation byte is rejected, printing "yesno".
+    // A decision procedure that both decides validity at run time and builds a `Utf8` derivation in the `some` case. The checker threads a changing `Scan` state through a recursion on `b`, so `check(b)` is a function `(s) -> Option(Utf8(s, b))` that hands the state each step computes to the check of the tail, and `of_bytes_valid(b)` is `check(b)(lead)`. `decide` shows the automaton runs: "hi" (ASCII) is accepted and a lone `x[0x80]` continuation byte is rejected, printing "yesno".
     let source = r#"
         use /std/{Str, Nat, Bytes, Bool, Option, Io, Try, Proc};
 

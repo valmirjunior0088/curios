@@ -154,7 +154,7 @@ fn non_tail(data: Vec<u8>, empty: Term, cons: impl Fn(Term) -> Term) -> Term {
     )
 }
 
-/// The tail-accumulator fold `go(acc, x[h, ..t]) = go(acc + to_nat(h), t)`, built by `tail_fold`. Eager argument evaluation is what keeps the accumulator a literal at every step instead of a chain of unevaluated additions, and the per-element budget is the same claim as the induction-hypothesis test's.
+/// The tail-accumulator fold `go(acc, x[h, ..t]) = go(acc + to_nat(h), t)`, built by `tail_fold`. Eager argument evaluation is what keeps the accumulator a literal at every step instead of a chain of unevaluated additions, and the per-element budget is the same claim as the non-tail recursion's above.
 #[test]
 fn a_tail_accumulator_fold_carries_values_not_chains() {
     let n = 2_000usize;

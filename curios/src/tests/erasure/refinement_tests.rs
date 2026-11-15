@@ -1,10 +1,10 @@
-//! An arm is erased under what it was elaborated under, however it is lowered: a case split under its scrutinee's refinement, an expression scrutinee as well as a variable, and a fold's step under none, since reduction takes it at every tail. Erasure reads the type of each head it eliminates off the finished term and judges nothing, so a proof an arm passes is erased by its sort whatever is in scope, and what the refinement decides is a type's head: a case split's arm calls what has a function type only at the scrutinee's case, and is read with the scrutinee standing for that case.
+//! An arm is erased under what it was elaborated under: a case split under its scrutinee's refinement, an expression scrutinee as well as a variable. Erasure reads the type of each head it eliminates off the finished term and judges nothing, so a proof an arm passes is erased by its sort whatever is in scope, and what the refinement decides is a type's head: a case split's arm calls what has a function type only at the scrutinee's case, and is read with the scrutinee standing for that case.
 //!
-//! Mutation-checked: with the refinement taken out of the successor arm and the cons arm of erasure's case splits (`curios-erase/src/lower/eliminate.rs`), each case split below panics at `erase: applied a non-function`, and the two folds, whose steps refine nothing, are unmoved.
+//! Mutation-checked: with the refinement taken out of the successor arm and the cons arm of erasure's case splits (`curios-erase/src/eraser/eliminate.rs`), each case split below panics at `erase: applied a non-function`.
 
 use crate::tests::test_support::*;
 
-// The successor arm ignores its hypothesis, so it erases as a case split rather than a fold. `g` is typed at `Step(x)`, a function type at a successor and at nothing else, so the call is read with `x` standing for `xp + 1`: with nothing refined, erasure meets a stuck `match` where it needs the callee's telescope.
+// `g` is typed at `Step(x)`, a function type at a successor and at nothing else, so the call is read with `x` standing for `xp + 1`: with nothing refined, erasure meets a stuck `match` where it needs the callee's telescope.
 #[test]
 fn a_nat_case_split_is_erased_under_its_successor() {
     let source = r#"

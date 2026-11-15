@@ -311,7 +311,7 @@ fn a_tuple_written_at_the_head_is_matched_value_by_value() {
     }
 }
 
-// A struct pattern's head means one thing wherever a pattern is written. Under a `let`, a parameter and a fold's hypothesis it is held to the structure its binder is, as an arm's is to its scrutinee's, though both structures declare the field it reads; and a head that names nothing is refused as the name it is.
+// A struct pattern's head means one thing wherever a pattern is written. Under a `let` and a parameter it is held to the structure its binder is, as an arm's is to its scrutinee's, though both structures declare the field it reads; and a head that names nothing is refused as the name it is.
 #[test]
 fn a_struct_pattern_names_its_structure_at_every_binder() {
     let program = |function: &str| {

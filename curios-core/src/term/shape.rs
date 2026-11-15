@@ -488,7 +488,7 @@ pub enum Cases {
         /// The instance of the family the scrutinee stands at, where the match states it: what a match with one arm over a proposition fires on ([`Cases::sole_arm`]), its payload read off this instance's indices and never off what a binder is assumed at. It is part of the term, so a substitution that moves the scrutinee's type moves the match with it, and what is remembered of the one is not read of the other. The elaborator states it where that rule can speak, a proposition whose one constructor's payload its index targets pin, and nowhere else; a match that states none is reduced by its scrutinee's value alone.
         stated: Option<Term>,
     },
-    /// Structural induction on a native free-monoid intrinsic (`Nat`/`List`/ `Bytes`): the `carrier` selects the intrinsic and carries both its parameters (`List`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload), the tail, and the induction hypothesis at the tail.
+    /// A case split on a native free-monoid intrinsic (`Nat`/`List`/`Bytes`): the `carrier` selects the intrinsic and carries both its parameters (`List`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload) and the tail.
     FreeMonoid { carrier: Carrier },
 }
 

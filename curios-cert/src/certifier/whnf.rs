@@ -868,7 +868,7 @@ fn forced_group(certifier: &mut Certifier, folded: &Term) -> Result<Option<RecGr
 
 /// The one definitional unfolding [`force`] withholds: a folded recursive spelling — a `rec` value, a member selection, or a member application — stepped to the weak-head form of its body. `None` for every other shape.
 ///
-/// `force` keeps the folded spelling as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument; conversion consults this to see the two spellings as one.
+/// `force` keeps the folded spelling as a recursive call's normal form, while the same call reached by unfolding is the member's body at the argument, a match stuck where the argument is a variable; conversion consults this to see the two spellings as one.
 pub fn unfold_spelling(
     certifier: &mut Certifier,
     term: &Term,
