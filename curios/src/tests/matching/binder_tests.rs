@@ -346,6 +346,58 @@ fn a_struct_pattern_names_its_structure_at_every_binder() {
     }
 }
 
+// A tuple pattern writes every field of its tuple, wherever a pattern is written: under a `let`, a parameter, a lambda's parameter, an arm and the row that cannot fail, one narrower than its tuple is refused, and one wider is refused by the same rule rather than by the projection past the tuple's end.
+#[test]
+fn a_tuple_pattern_takes_apart_every_field_of_its_tuple() {
+    let program = |function: &str| {
+        fill!(
+            r#"
+            use /std/{Nat};
+            ${function}
+            /std/print(Nat/to_str(f((1, 2, 3))))
+            "#,
+            function
+        )
+    };
+    let binders = [
+        "let f(t: {Nat, Nat, Nat}) -> Nat = let PATTERN = t; a;",
+        "let f(PATTERN: {Nat, Nat, Nat}) -> Nat = a;",
+        "let f(t: {Nat, Nat, Nat}) -> Nat = let g = (PATTERN: {Nat, Nat, Nat}) => a; g(t);",
+        "let f(t: {Nat, Nat, Nat}) -> Nat = match t | PATTERN => a end;",
+        "let f(t: {Nat, Nat, Nat}) -> Nat = match (t.0, t) | (0, _) => 0 | (_, PATTERN) => a end;",
+    ];
+
+    for written in binders {
+        let under = |pattern: &str| program(&written.replace("PATTERN", pattern));
+        assert_eq!(run(&under("(a, _, _)")), b"1", "{written}");
+
+        for (pattern, fields) in [("(a, _)", "2 fields"), ("(a, _, _, _)", "4 fields")] {
+            let error = error(&under(pattern));
+            assert!(
+                error.contains(&format!(
+                    "a tuple pattern of {fields} matches a tuple of {fields}\n│  scrutinee: {{Nat, Nat, Nat}}"
+                )),
+                "{written}: {error}"
+            );
+        }
+    }
+
+    // Over a value that is no tuple, the refusal says what the value is and asks for no field it does not have.
+    let error = error(&program(
+        "let f(t: {Nat, Nat, Nat}) -> Nat = let (a, _) = t.0; a;",
+    ));
+    assert!(
+        error.contains(
+            "a tuple pattern of 2 fields matches a tuple of 2 fields\n│  scrutinee: Nat\n"
+        ),
+        "{error}"
+    );
+    assert!(
+        !error.contains("write a pattern for every field"),
+        "{error}"
+    );
+}
+
 // A binder beside `0` and no other literal is under the successor's case, `0` and a binder being induction's two cases: `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal.
 #[test]
 fn a_binder_beside_zero_alone_is_the_successors_arm() {

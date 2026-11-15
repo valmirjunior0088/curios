@@ -25,7 +25,7 @@ use {
     curios_common::{Plicity, recurse},
     curios_core::{
         Arm, Atom, Elements, Ending, Free, Guard, InductArm, Matrix, Mention, Pattern, Row, Slot,
-        StructType, Subterm, Telescope, Term, Tuple,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
@@ -1409,7 +1409,7 @@ impl<'m> Compiler<'m> {
         })
     }
 
-    /// A tuple or struct column flattened into one column for each field, a projection of the scrutinee: a value of either has one shape, so matching one is reading its fields, and no row is put under a case by it. The rows that write the shape agree, field by field, on the label each is written with; a row that writes a binder binds its name to the column and reads no field. A struct pattern's head is the structure the column's type is.
+    /// A tuple or struct column flattened into one column for each field, a projection of the scrutinee: a value of either has one shape, so matching one is reading its fields, and no row is put under a case by it. The rows that write the shape agree, field by field, on the label each is written with; a row that writes a binder binds its name to the column and reads no field. A struct pattern's head is the structure the column's type is, and a tuple pattern's fields are every field of the tuple it is.
     fn fields(
         &mut self,
         context: &mut Context,
@@ -1448,6 +1448,11 @@ impl<'m> Compiler<'m> {
                 held_to_structure(context, &column.term, head, structure)?;
 
                 Some(head.clone())
+            }
+            Shape::Pattern(Pattern::Tuple(fields)) => {
+                held_to_arity(context, &column.term, fields.len())?;
+
+                None
             }
             _ => None,
         };
@@ -2044,6 +2049,21 @@ fn held_to_structure(
                 }
             }))
         }
+    }
+}
+
+/// Hold a tuple pattern of `written` fields to the tuple the type of `column` is, which has as many: a tuple's arity is part of its type, so a pattern narrower than its tuple would drop a field no reader sees dropped, and `()` matches the value of `{}` alone.
+fn held_to_arity(context: &mut Context, column: &Term, written: usize) -> Result<(), Error> {
+    let (_, type_) = elaborate(context, column, Mode::Infer)?;
+    let type_ = reduce_with(context, &type_)?;
+    match &*type_ {
+        Subterm::TupleType(TupleType { telescope }) if telescope.len() == written => Ok(()),
+        _ => Err(pending(context, [&type_], move |reporting, [type_]| {
+            Error::MatrixTupleArity {
+                written,
+                scrutinee: Box::new(resolved_for_display(reporting, &type_)),
+            }
+        })),
     }
 }
 

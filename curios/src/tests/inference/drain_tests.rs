@@ -93,9 +93,9 @@ fn a_postponed_conversion_between_two_holes_names_only_what_never_solved() {
     );
 }
 
-// A projection whose head's type nothing decided is refused where it is read, at the field: a destructuring lowers each field to a projection located at the field's pattern rather than at the `let` of the value it destructures. Mutation-checked: lowering the projections unlocated reports the line of `let p`.
+// A destructuring whose head's type nothing decided is refused where it is written, at its pattern: it holds its value to a tuple of as many fields, located at the pattern's fields rather than at the `let` of the value it destructures. Mutation-checked: lowering the hold unlocated reports the line of `let p`.
 #[test]
-fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
+fn a_destructuring_nothing_types_is_refused_at_its_pattern() {
     let report = error(
         r#"
         use /std/{Nat};
@@ -107,7 +107,8 @@ fn a_projection_nothing_types_is_refused_at_the_field_it_reads() {
         "#,
     );
     assert!(
-        report.contains("not a tuple") && report.contains("let (a, b) = p;"),
+        report.contains("a tuple pattern of 2 fields matches a tuple of 2 fields\n│  scrutinee: ?")
+            && report.contains("let (a, b) = p;"),
         "the report should point at the destructuring:\n{report}"
     );
 }

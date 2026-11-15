@@ -1039,7 +1039,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         // The binders already minted for the leaves, consumed in the same pre-order `pattern_names` produced them, plus the field-`let` chains that put the compound patterns in scope — both advance with the walk.
         let mut seen = 0;
         let mut chains: Vec<(&[PatternField], curios_core::Free, &[Binder])> = Vec::new();
-        let mut heads: Vec<(&Name, curios_core::Free)> = Vec::new();
+        let mut shapes: Vec<(&Pattern, curios_core::Free)> = Vec::new();
 
         let mut prefixes = self.prefixes(binders);
         for param in params {
@@ -1061,9 +1061,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 Pattern::Binder(_) => lowered.push((*plicity, leaves[0].1, domain)),
                 Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                     let synthetic = self.context.fresh_binder(None);
-                    if let Pattern::Struct { head, .. } = pattern {
-                        heads.push((head, synthetic));
-                    }
+                    shapes.push((pattern, synthetic));
                     chains.push((fields, synthetic, leaves));
                     lowered.push((*plicity, synthetic, domain));
                 }
@@ -1079,12 +1077,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .try_fold(body, |tail, (fields, synthetic, leaves)| {
                 self.lower_pattern_fields(fields, synthetic, leaves, tail)
             })?;
-        // Each struct pattern's head is held once, around the body its parameter stands over: an annotation that reads its fields is under the same parameter.
-        let body = heads
+        // Each compound pattern's shape is held once, around the body its parameter stands over: an annotation that reads its fields is under the same parameter.
+        let body = shapes
             .iter()
             .rev()
-            .try_fold(body, |tail, (head, synthetic)| {
-                self.held_to_head(head, synthetic, tail)
+            .try_fold(body, |tail, (pattern, synthetic)| {
+                self.held_to_shape(pattern, synthetic, tail)
             })?;
 
         Ok((lowered, body))
@@ -1205,9 +1203,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         type_,
                         value,
                     });
-                    if let Pattern::Struct { head, .. } = pattern {
-                        frames.push(self.held_frame(head, binder)?);
-                    }
+                    frames.push(self.held_frame(pattern, binder)?);
                     self.pattern_field_frames(fields, binder, binders, frames)?;
                 }
             }
@@ -1215,30 +1211,51 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         })
     }
 
-    fn held_frame(&self, head: &Name, binder: curios_core::Free) -> Result<RegionFrame, Error> {
-        let structure = match self.resolve_nominal(head)? {
-            Ok(structure) => curios_core::Mention::Declaration(structure),
-            Err(unbound) => curios_core::Mention::Local(unbound),
+    /// What holds `binder` to the shape the compound `pattern` writes, ahead of the fields it projects: a struct pattern to the structure its head names, and a tuple pattern to a tuple of as many fields, each field a `_` the projections after it read.
+    fn held_frame(
+        &self,
+        pattern: &Pattern,
+        binder: curios_core::Free,
+    ) -> Result<RegionFrame, Error> {
+        let (pattern, span) = match pattern {
+            Pattern::Binder(_) => unreachable!("a binder holds its value to no shape"),
+            Pattern::Struct { head, .. } => {
+                let structure = match self.resolve_nominal(head)? {
+                    Ok(structure) => curios_core::Mention::Declaration(structure),
+                    Err(unbound) => curios_core::Mention::Local(unbound),
+                };
+                let held = curios_core::Pattern::Struct {
+                    head: head.join(),
+                    structure,
+                    fields: Vec::new(),
+                };
+                (held, head.span().cloned())
+            }
+            Pattern::Tuple(fields) => {
+                let held = curios_core::Pattern::Tuple(
+                    fields
+                        .iter()
+                        .map(|field| (field.label.clone(), curios_core::Pattern::Wildcard))
+                        .collect(),
+                );
+                (held, pattern_span(pattern))
+            }
         };
         Ok(RegionFrame::Held {
             binder,
-            pattern: curios_core::Pattern::Struct {
-                head: head.join(),
-                structure,
-                fields: Vec::new(),
-            },
-            span: head.span().cloned(),
+            pattern,
+            span,
         })
     }
 
-    /// Holds the scrutinee to the struct named by its pattern, using the same resolved check as the region's lexical frames.
-    pub fn held_to_head(
+    /// Holds the scrutinee to the shape its compound pattern writes, using the same resolved check as the region's lexical frames.
+    pub fn held_to_shape(
         &self,
-        head: &Name,
+        pattern: &Pattern,
         binder: &curios_core::Free,
         tail: curios_core::Term,
     ) -> Result<curios_core::Term, Error> {
-        self.wrap(vec![self.held_frame(head, *binder)?], tail)
+        self.wrap(vec![self.held_frame(pattern, *binder)?], tail)
     }
 
     /// Projects the leaves of a compound parameter pattern under its already-minted identities.

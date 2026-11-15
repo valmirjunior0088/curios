@@ -1245,6 +1245,20 @@ impl Displayed<'_> {
                 ));
                 f.stating(format_args!("scrutinee: {}", scrutinee.spelled(spelling)));
             }
+            Error::MatrixTupleArity { written, scrutinee } => {
+                f.text("pattern mismatch");
+                match written {
+                    0 => f.stating("`()` matches the value of `{}`"),
+                    1 => f.stating("a tuple pattern of 1 field matches a tuple of 1 field"),
+                    _ => f.stating(format_args!(
+                        "a tuple pattern of {written} fields matches a tuple of {written} fields"
+                    )),
+                }
+                f.stating(format_args!("scrutinee: {}", scrutinee.spelled(spelling)));
+                if *written > 0 && matches!(&***scrutinee, Subterm::TupleType(_)) {
+                    f.stating("write a pattern for every field, `_` for one it does not read");
+                }
+            }
             Error::MatrixLiteralColumn { pattern, scrutinee } => {
                 f.text("no literal pattern");
                 f.stating(format_args!(

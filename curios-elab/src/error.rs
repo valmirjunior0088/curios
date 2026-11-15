@@ -436,6 +436,7 @@ macro_rules! shown_terms {
             | Self::UseParameterNotAConcept { found, .. }
             | Self::ImplicitConceptMemberUnfillable { found } => $visit(found),
             Self::MatrixStructHead { scrutinee, .. }
+            | Self::MatrixTupleArity { scrutinee, .. }
             | Self::MatrixLiteralColumn { scrutinee, .. } => $visit(scrutinee),
             Self::InformativePropStruct { field_type, .. } => $visit(field_type),
             Self::NotStrictlyPositive { site_type, .. } => $visit(site_type),
@@ -748,6 +749,11 @@ pub enum Error {
     /// A struct pattern written under `head` over a scrutinee whose type is not that structure.
     MatrixStructHead {
         head: String,
+        scrutinee: Box<Term>,
+    },
+    /// A tuple pattern of `written` fields over a scrutinee whose type is no tuple of as many: a tuple pattern takes every field of its tuple apart, and `()` is the pattern of `{}`.
+    MatrixTupleArity {
+        written: usize,
         scrutinee: Box<Term>,
     },
     /// A literal or a successor pattern over a column whose type takes none: a `Nat` and a `Byte` are taken apart by their values, and no other type is. `pattern` is the arm as written, and `scrutinee` the column's type.
