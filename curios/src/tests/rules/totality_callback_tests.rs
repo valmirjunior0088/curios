@@ -244,3 +244,235 @@ fn a_closure_handed_in_its_callbacks_own_place_is_counted_where_it_is_written() 
         matches!(error, curios_cert::Error::NotDescending { .. })
     });
 }
+
+// A member's parameters are the ones its leading lambdas bind, every list they bind and no more: `wrap`'s body opens both of its type's lists, so `wrap(n)(f)` hands `f` at its own place to `wrap`'s `g`, and what `wrap` does with `g` is in `hide`'s summary. The control's `wrap` hands `g` back to `hide` alone, so `hide` applies `f` below `n` and `spin` descends; counted at its first lambda alone, `wrap` would take no parameter at `f`'s place and the control would be refused. The refusal's `wrap` applies `g` to `0` where `m` is `0`, which the summary holds through the call at `n` and nothing below it, so `spin(c)` is graded at `n` and refused, as `spin(0)` is `spin(0)` again.
+#[test]
+fn a_callback_handed_to_a_member_at_a_place_its_leading_lambdas_bind_is_graded_where_it_applies_it()
+{
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        let hide(n: Nat, f: (Nat) -> True) -> True =
+            match n
+            | 0 => wrap(n)(f)
+            | k + 1 => f(k)
+            end
+        and wrap(m: Nat) -> ((Nat) -> True) -> True =
+            (g) =>
+                match m
+                | 0 => True/qed()
+                | k + 1 => hide(k, g)
+                end;
+
+        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| 0 => True/qed()", "| 0 => g(0)")])
+    .by_elaborator_in("/spin", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/spin", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A member's hidden parameters are its parameters as its plain ones are, in the places Core gives them: `wrap` binds `@B`, `m` and an erased bound by its leading lambda and answers a function, so `wrap(@A, n)(f)` hands `f` at the fourth place, past the three it takes, to the function `wrap` answers, which applies it to `0`. Counted by its type's lists, `wrap` would take a fourth parameter at `f`'s place, which no body applies, and `hide`'s summary would hold `f(k)` alone, below `n`, admitting `spin`, which at `0` is `spin(0)` again. The control hands `wrap` a callback of its own, so `hide` applies `f` below `n` alone. Mutation-checked: with `*position < arity` removed from `handed_on` in `curios-analysis/src/totality.rs`, the refusal is admitted.
+#[test]
+fn a_callback_handed_past_a_members_hidden_and_plain_parameters_is_graded_as_unrelated() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True, Holds};
+
+        let hide(@A: Type, n: Nat, @_: Holds(0 == 0), f: (Nat) -> True) -> True =
+            match n
+            | 0 => wrap(@A, n)((_) => True/qed())
+            | k + 1 => f(k)
+            end
+        and wrap(@B: Type, m: Nat, @_: Holds(0 == 0)) -> ((Nat) -> True) -> True =
+            match m
+            | 0 => (g) => g(0)
+            | k + 1 => (g) => hide(@B, k, g)
+            end;
+
+        let spin(n: Nat) -> True = hide(@Nat, n, (c) => spin(c));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("wrap(@A, n)((_) => True/qed())", "wrap(@A, n)(f)")])
+    .by_elaborator_in("/spin", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/spin", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A call split across a `let` is the call it spells: the tail is read with `w` standing for `wrap(n)`, so `w(f)` is `wrap(n)(f)`, which hands `f` past `wrap`'s one parameter to the function `wrap` answers, and `hide` publishes nothing for `f`. Read as an application of the binder `w`, or as `wrap`'s call with `f` at a place it takes, `hide`'s summary would hold `f(k)` alone and admit `spin`, which at `0` is `spin(0)` again. The control hands `w` a callback of its own. Mutation-checked: with `*position < arity` removed from `handed_on` in `curios-analysis/src/totality.rs`, the refusal is admitted.
+#[test]
+fn a_callback_handed_past_a_members_parameters_through_a_let_is_graded_as_unrelated() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        let hide(n: Nat, f: (Nat) -> True) -> True =
+            match n
+            | 0 =>
+                let w = wrap(n);
+                w((_) => True/qed())
+            | k + 1 => f(k)
+            end
+        and wrap(m: Nat) -> ((Nat) -> True) -> True =
+            match m
+            | 0 => (g) => g(0)
+            | k + 1 => (g) => hide(k, g)
+            end;
+
+        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("w((_) => True/qed())", "w(f)")])
+    .by_elaborator_in("/spin", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/spin", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A member applied in part relates the places its call leaves unfilled to nothing, whoever fills them later: `wrap` binds three lists and applies `g` to `z`, its third, where `m` is `0`. The control fills all three at the call, `wrap(k)(f)(k)`, so `hide`'s summary holds `g(z)` at `k`, below `n`, and `spin` descends. The refusal leaves the third to `at`, outside the group, which fills it with `n` itself: `at(wrap(k)(f), n)` is `f(n)` at `k` `0`, and `spin(1)` is `spin(1)` again. The call `hide` makes hands `wrap` two places, so `g(z)` reaches the summary at nothing and `spin` is refused; read as filled where the call stands, the third place would be graded at `k`, below `n`.
+#[test]
+fn a_member_applied_in_part_relates_its_unfilled_places_to_nothing() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        let at(h: (Nat) -> True, x: Nat) -> True = h(x);
+
+        let hide(n: Nat, f: (Nat) -> True) -> True =
+            match n
+            | 0 => True/qed()
+            | k + 1 => wrap(k)(f)(k)
+            end
+        and wrap(m: Nat) -> ((Nat) -> True) -> (Nat) -> True =
+            (g) => (z) =>
+                match m
+                | 0 => g(z)
+                | j + 1 => hide(j, g)
+                end;
+
+        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("wrap(k)(f)(k)", "at(wrap(k)(f), n)")])
+    .by_elaborator_in("/spin", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/spin", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A method's call is a projection of its witness applied, not a call of a definition whose record says how it applies a parameter: `wrap` hands `g` to `Relay/relay`, whose witness applies it to the `m` it is handed, so `g` is used in a way the walk does not follow, `hide`'s `f`, handed to `wrap` at that place, is summarized as nothing, and `spin`, which at `0` is `relay(0, …)`, `spin(0)` again, is refused. The control hands the method a callback of its own, so `wrap` hands `g` back to `hide` alone and `spin` descends.
+#[test]
+fn a_callback_handed_to_a_witness_method_is_graded_as_unrelated() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        concept Relay(A: Type): Type {
+            relay(A, (Nat) -> True) -> True,
+        }
+
+        satisfy Relay(Nat) {
+            relay(m, g) = g(m),
+        }
+
+        let hide(n: Nat, f: (Nat) -> True) -> True =
+            match n
+            | 0 => wrap(n, f)
+            | k + 1 => f(k)
+            end
+        and wrap(m: Nat, g: (Nat) -> True) -> True =
+            match m
+            | 0 => Relay/relay(m, (_) => True/qed())
+            | k + 1 => hide(k, g)
+            end;
+
+        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("Relay/relay(m, (_) => True/qed())", "Relay/relay(m, g)")])
+    .by_elaborator_in("/spin", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/spin", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A parameter's own place is the one Core counts, hidden binders included. In the control both members open with a hidden `@_`, so `wrap(@Nat, n, f, 0)` hands `f` at the third place, its own, to `wrap`'s `g`, which `wrap` hands back to `hide` alone, and `spin` descends. The first refusal has `wrap` apply `g` to `z` where `m` is `0`, which the summary holds through the call at `n`, so `spin` is refused. The second also takes `wrap`'s hidden binder away: `f` is still `hide`'s first plain parameter and the call's, but the call hands it at the second place Core counts, `wrap`'s `g`, where `hide`'s second is `n`, so it is no hand-on at its own place and `hide` publishes nothing for it. Read by plain places it would be handed on, and read in `wrap` at its own Core place, the third, it would be `z`, which no body applies: `hide`'s summary would hold `f(k)` alone and admit `spin`, which at `0` is `wrap(0, …, 0)`, `spin(0)` again.
+#[test]
+fn a_callback_is_handed_on_at_the_place_core_counts_hidden_binders_included() {
+    let aligned = control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        let hide(@_: Type, n: Nat, f: (Nat) -> True) -> True =
+            match n
+            | 0 => wrap(@Nat, n, f, 0)
+            | k + 1 => f(k)
+            end
+        and wrap(@_: Type, m: Nat, g: (Nat) -> True, z: Nat) -> True =
+            match m
+            | 0 => True/qed()
+            | k + 1 => hide(@Nat, k, g)
+            end;
+
+        let spin(n: Nat) -> True = hide(@Nat, n, (c) => spin(c));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    aligned
+        .refused(&[("| 0 => True/qed()", "| 0 => g(z)")])
+        .by_elaborator_in("/spin", |error| {
+            matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+        })
+        .by_certifier_in("/spin", |error| {
+            matches!(error, curios_cert::Error::NotTotal { .. })
+        });
+    aligned
+        .refused(&[
+            ("and wrap(@_: Type, m: Nat,", "and wrap(m: Nat,"),
+            ("wrap(@Nat, n, f, 0)", "wrap(n, f, 0)"),
+            ("| 0 => True/qed()", "| 0 => g(z)"),
+        ])
+        .by_elaborator_in("/spin", |error| {
+            matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+        })
+        .by_certifier_in("/spin", |error| {
+            matches!(error, curios_cert::Error::NotTotal { .. })
+        });
+}
