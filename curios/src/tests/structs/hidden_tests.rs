@@ -75,7 +75,7 @@ fn a_hidden_field_nothing_fills_is_refused_at_the_literal() {
         "{report}"
     );
     assert!(
-        report.contains("nothing discharged Holds(0 < 0)"),
+        report.contains("nothing discharged `Holds(0 < 0)`"),
         "{report}"
     );
     assert!(report.contains("{ @... }"), "{report}");

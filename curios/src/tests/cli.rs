@@ -37,7 +37,7 @@ fn a_misspelled_name_is_refused_rather_than_answered() {
     );
 
     assert!(
-        refused.contains("Cli/Has(") && refused.contains("which reduces to Bool/False"),
+        refused.contains("Cli/Has(") && refused.contains("which reduces to `Bool/False`"),
         "the refusal names the bound nothing discharged and what it came to:\n{refused}"
     );
 }
@@ -51,7 +51,7 @@ fn a_misspelled_command_is_refused_rather_than_answered() {
     );
 
     assert!(
-        refused.contains("Cli/HasCommand(") && refused.contains("which reduces to Bool/False"),
+        refused.contains("Cli/HasCommand(") && refused.contains("which reduces to `Bool/False`"),
         "{refused}"
     );
 }
@@ -77,7 +77,7 @@ fn a_duplicate_name_is_refused_where_it_is_written_by_its_problem() {
     );
 
     assert!(
-        refused.contains(r#"which reduces to Cli/Refused([Cli/Problem/duplicate_name(Cli/Spelled/long("port"))])"#),
+        refused.contains(r#"which reduces to `Cli/Refused([Cli/Problem/duplicate_name(Cli/Spelled/long("port"))])`"#),
         "{refused}"
     );
 }

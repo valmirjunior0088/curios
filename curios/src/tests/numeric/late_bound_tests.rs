@@ -62,7 +62,7 @@ fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
     .expect_err("30 is not below 10");
 
     assert!(
-        error.contains("nothing discharged Holds(30 < 10), which reduces to /std/Bool/False"),
+        error.contains("nothing discharged `Holds(30 < 10)`, which reduces to `/std/Bool/False`"),
         "unexpected report: {error}"
     );
 }
@@ -80,7 +80,7 @@ fn a_refused_bound_reduction_does_not_move_is_said_once() {
     )
     .expect_err("nothing proves an arbitrary number even");
 
-    assert!(error.contains("nothing discharged Even(n)"), "{error}");
+    assert!(error.contains("nothing discharged `Even(n)`"), "{error}");
     assert!(!error.contains("which reduces to"), "{error}");
 }
 
@@ -112,7 +112,7 @@ fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
     .expect_err("a slot born outside the arm does not rest on its guard");
 
     assert!(
-        error.contains("nothing discharged Holds(m < 10)"),
+        error.contains("nothing discharged `Holds(m < 10)`"),
         "unexpected report: {error}"
     );
 }
@@ -143,7 +143,7 @@ fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
     .expect_err("a proposition that reduces to False is not filled");
 
     assert!(
-        error.contains("nothing discharged Holds(n + 1 <= n), which reduces to Bool/False"),
+        error.contains("nothing discharged `Holds(n + 1 <= n)`, which reduces to `Bool/False`"),
         "expected the undischarged bound, got: {error}"
     );
 }

@@ -334,7 +334,7 @@ fn a_test_program_is_judged_and_a_build_holds_none_of_its_tests() {
     assert!(
         report.contains("List/get([1, 2, 3], r(0))")
             && report
-                .contains("nothing discharged /std/Bool/Holds(r(0) < List/len(@Nat, [1, 2, 3]))"),
+                .contains("nothing discharged `/std/Bool/Holds(r(0) < List/len(@Nat, [1, 2, 3]))`"),
         "{report}"
     );
     assert_eq!(run(source), b"built\n");

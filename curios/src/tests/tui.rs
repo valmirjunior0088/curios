@@ -20,7 +20,7 @@ fn a_palette_index_past_the_sixteen_is_refused() {
 
     let report = typecheck(source).expect_err("16 is not one of the sixteen");
     assert!(
-        report.contains("nothing discharged /std/Bool/Holds(16 < 16)"),
+        report.contains("nothing discharged `/std/Bool/Holds(16 < 16)`"),
         "the refusal should name the bound it could not discharge, got: {report}"
     );
 }

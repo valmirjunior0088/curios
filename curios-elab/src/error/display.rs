@@ -1395,13 +1395,13 @@ impl Displayed<'_> {
                             Some(reduct) => {
                                 let reduct = reduct.spelled(spelling).to_string();
                                 match reduct == bound.to_string() {
-                                    true => format!("nothing discharged {bound}"),
+                                    true => format!("nothing discharged `{bound}`"),
                                     false => format!(
-                                        "nothing discharged {bound}, which reduces to {reduct}"
+                                        "nothing discharged `{bound}`, which reduces to `{reduct}`"
                                     ),
                                 }
                             }
-                            None => format!("nothing discharged {bound}"),
+                            None => format!("nothing discharged `{bound}`"),
                         };
                         let mut why = Said::line(nothing);
                         if let Some(refusal) = refusal {

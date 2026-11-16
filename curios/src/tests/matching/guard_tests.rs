@@ -414,7 +414,7 @@ fn a_failed_guard_at_a_step_is_a_fact_a_proof_by_induction_reads() {
     assert_eq!(run(&proof("n < j")), b"ok");
     let report = error(&proof("n < j, true"));
     assert!(
-        report.contains("nothing discharged Holds(j <= n)"),
+        report.contains("nothing discharged `Holds(j <= n)`"),
         "{report}"
     );
 }
