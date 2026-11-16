@@ -11,7 +11,7 @@
 use {
     super::{
         Atom, Callee, ContinuationId, FunctionId, Intrinsic, Lattice, Literal, Module, Node,
-        NodeId, RowId, Rules, Slot, Solver, ValueExpr, ValueId, analyze_calls, return_edges,
+        NodeId, RowId, Rules, Slot, Solver, ValueExpr, ValueId, escaping_in_bodies, return_edges,
     },
     std::{
         cell::RefCell,
@@ -1023,7 +1023,7 @@ impl Shape {
             resumes: BTreeMap::new(),
             entries: BTreeMap::new(),
             returns: BTreeMap::new(),
-            open: analyze_calls(module).escaping,
+            open: escaping_in_bodies(module),
             constant: module.constant_data(),
             payload: BTreeSet::new(),
             reach: RefCell::new(BTreeMap::new()),

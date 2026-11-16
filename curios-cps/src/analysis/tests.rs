@@ -854,3 +854,81 @@ fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
         "the body-only graph keeps a nested closure's calls its own"
     );
 }
+
+/// The escape-only query answers what the call analysis does: a function a nested function's body names escapes, and one only a node no live body reaches names does not, though the arena-wide reading counts it.
+#[test]
+fn the_functions_live_bodies_name_are_the_call_analysis_escapes() {
+    let mut module = Module::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let outer = module.reserve_function();
+    let outer_return = module.reserve_continuation();
+    let inner = module.reserve_function();
+    let inner_return = module.reserve_continuation();
+
+    // `inner() = outer`, named within the function `outer` defines.
+    let inner_body = module.add_node(Node::ApplyCont(Edge {
+        target: inner_return,
+        args: vec![Atom::Fun(outer)],
+    }));
+    module.define_function(
+        inner,
+        Function {
+            debug_name: Some("inner".into()),
+            params: vec![],
+            return_cont: inner_return,
+            body: inner_body,
+            droppable: Droppable::Never,
+        },
+    );
+    // `outer() = inner`, defining it.
+    let hand_inner = module.add_node(Node::ApplyCont(Edge {
+        target: outer_return,
+        args: vec![Atom::Fun(inner)],
+    }));
+    let outer_body = module.add_node(Node::LetFun {
+        functions: vec![inner],
+        body: hand_inner,
+    });
+    module.define_function(
+        outer,
+        Function {
+            debug_name: Some("outer".into()),
+            params: vec![],
+            return_cont: outer_return,
+            body: outer_body,
+            droppable: Droppable::Never,
+        },
+    );
+    let call_outer = module.add_node(Node::ApplyFun {
+        callee: Callee::Known(outer),
+        args: vec![],
+        return_to: entry_return,
+    });
+    let body = module.add_node(Node::LetFun {
+        functions: vec![outer],
+        body: call_outer,
+    });
+    module.define_function(
+        entry,
+        Function {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body,
+            droppable: Droppable::Never,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    // A node a rewrite left behind, which no live body reaches.
+    module.add_node(Node::ApplyCont(Edge {
+        target: entry_return,
+        args: vec![Atom::Fun(entry)],
+    }));
+
+    let escaping = escaping_in_bodies(&module);
+    assert_eq!(escaping, analyze_calls(&module).escaping);
+    assert_eq!(escaping, BTreeSet::from([outer, inner]));
+    assert!(module.escaping_functions().contains(&entry));
+}

@@ -117,6 +117,23 @@ enum Within {
     Definitions(FunctionId),
 }
 
+/// The functions the body of some live function names as a value: [`CallAnalysis::escaping`] alone, read off the same owning bodies, for a reader that asks the analysis nothing else. A node no live function's body reaches, one a round left orphaned, names nothing here as it names nothing there, where [`Module::escaping_functions`] reads every node of the arena.
+pub fn escaping_in_bodies(module: &Module) -> BTreeSet<FunctionId> {
+    module
+        .function_ids()
+        .flat_map(|owner| function_nodes(module, owner))
+        .flat_map(|node| named_functions(module.node(node).unwrap()))
+        .collect()
+}
+
+/// The functions `node` names as a value.
+fn named_functions(node: &Node) -> impl Iterator<Item = FunctionId> + '_ {
+    atoms(node).into_iter().filter_map(|atom| match atom {
+        Atom::Fun(function) => Some(*function),
+        _ => None,
+    })
+}
+
 pub fn analyze_calls(module: &Module) -> CallAnalysis {
     let mut analysis = CallAnalysis::default();
     for (function, _) in module.live_functions() {
@@ -155,11 +172,9 @@ pub fn analyze_calls(module: &Module) -> CallAnalysis {
                 }
                 _ => {}
             }
-            for atom in atoms(node) {
-                if let Atom::Fun(function) = atom {
-                    analysis.escaping.insert(*function);
-                    named_in.entry(owner).or_default().insert(*function);
-                }
+            for function in named_functions(node) {
+                analysis.escaping.insert(function);
+                named_in.entry(owner).or_default().insert(function);
             }
         }
     }

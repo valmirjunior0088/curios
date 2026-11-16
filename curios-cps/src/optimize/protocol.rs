@@ -21,8 +21,8 @@
 use {
     crate::{
         Atom, Callee, ContinuationId, Demand, Edge, FunctionId, Lattice, Module, Node, RowId,
-        TailClasses, ValueExpr, ValueId, analyze_calls, continuation_entries, demand_of, demands,
-        function_nodes, return_edges,
+        TailClasses, ValueExpr, ValueId, continuation_entries, demand_of, demands,
+        escaping_in_bodies, function_nodes, return_edges,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -45,8 +45,8 @@ pub enum ReturnShape {
 
 /// What every live function's return protocol may be, total over the module's functions.
 pub fn return_protocols(module: &Module) -> BTreeMap<FunctionId, ReturnProtocol> {
-    let calls = analyze_calls(module);
-    let classes = TailClasses::of(module, &calls.escaping);
+    let escaping = escaping_in_bodies(module);
+    let classes = TailClasses::of(module, &escaping);
     let demands = demands(module);
     let constructions = constructions(module);
     let mut pinned = BTreeSet::<FunctionId>::new();

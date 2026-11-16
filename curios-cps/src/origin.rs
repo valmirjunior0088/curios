@@ -14,7 +14,8 @@
 
 use {
     super::{
-        Atom, Callee, Edge, Lattice, Module, Node, RowId, Solver, ValueExpr, ValueId, analyze_calls,
+        Atom, Callee, Edge, Lattice, Module, Node, RowId, Solver, ValueExpr, ValueId,
+        escaping_in_bodies,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -118,7 +119,7 @@ fn flow_edge(module: &Module, solver: &mut Solver<Origin>, edge: &Edge) {
 
 /// What flows into every value, to its least fixpoint.
 pub fn origins(module: &Module) -> BTreeMap<ValueId, Origin> {
-    let escaping = analyze_calls(module).escaping;
+    let escaping = escaping_in_bodies(module);
     let seeds = module.value_ids().collect::<Vec<_>>();
 
     Solver::solve(seeds, |rules| {
