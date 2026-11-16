@@ -142,3 +142,134 @@ fn rejoining_a_settled_fact_terminates() {
 
     assert_eq!(facts[&value(0)], Height(5));
 }
+
+/// A set of members joined by union, which answers the members a join gained, as a client over sets answers.
+#[derive(Clone, PartialEq, Debug, Default)]
+struct Members(BTreeSet<u32>);
+
+thread_local! {
+    /// How many members the gains of a solve were handed, together.
+    static HANDED: Cell<usize> = const { Cell::new(0) };
+}
+
+impl Lattice for Members {
+    fn bottom() -> Self {
+        Members::default()
+    }
+
+    fn join(&mut self, incoming: Self) {
+        self.0.extend(incoming.0);
+    }
+
+    fn gain(&mut self, incoming: &Self) -> Option<Self> {
+        HANDED.with(|handed| handed.set(handed.get() + incoming.0.len()));
+        let gained = incoming
+            .0
+            .difference(&self.0)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        self.0.extend(&gained);
+        (!gained.is_empty()).then_some(Members(gained))
+    }
+}
+
+fn members(items: impl IntoIterator<Item = u32>) -> Members {
+    Members(items.into_iter().collect())
+}
+
+/// Members sent into the head of a chain of copies one at a time each cross every copy once, however many the chain holds already.
+///
+/// Mutation-checked: with a copy handing on the whole fact its source holds, the chain is handed the square of the members' count.
+#[test]
+fn a_copy_hands_on_only_what_its_source_gained() {
+    let (length, count) = (20, 50);
+    HANDED.with(|handed| handed.set(0));
+    let facts = Solver::<Members>::solve([], |rules| {
+        rules.add(move |solver| {
+            for link in 0..length {
+                solver.copy(value(link), value(link + 1));
+            }
+            solver.join(value(0), members([0]));
+        });
+        // Each member reaching the tail sends the next one in at the head.
+        rules.watch(value(length), move |solver, gained| {
+            let next = gained.0.last().expect("a gain holds a member") + 1;
+            if next < count {
+                solver.join(value(0), members([next]));
+            }
+        });
+    });
+
+    assert_eq!(facts[&value(length)], members(0..count));
+    let handed = HANDED.with(Cell::get);
+    assert!(
+        handed <= 2 * (length + 1) as usize * count as usize,
+        "the chain was handed {handed} members"
+    );
+}
+
+/// A watch is handed all its key comes to hold, each member once, though members reach the key by two routes.
+#[test]
+fn a_watch_is_handed_each_member_once() {
+    let handed = RefCell::new(Vec::new());
+    let facts = Solver::<Members>::solve([value(0)], |rules| {
+        rules.add(|solver| {
+            solver.copy(value(1), value(0));
+            solver.copy(value(2), value(0));
+            solver.join(value(1), members([1, 2]));
+            solver.join(value(2), members([2, 3]));
+        });
+        rules.watch(value(0), |_, gained| {
+            handed.borrow_mut().extend(gained.0.iter().copied());
+        });
+    });
+
+    let mut handed = handed.into_inner();
+    handed.sort_unstable();
+    assert_eq!(handed, [1, 2, 3]);
+    assert_eq!(facts[&value(0)], members([1, 2, 3]));
+}
+
+/// A copy stated once its source holds members hands them all on, and every gain of the source after them.
+#[test]
+fn a_copy_stated_late_hands_on_what_its_source_holds() {
+    let facts = Solver::<Members>::solve([], |rules| {
+        rules.add(|solver| solver.join(value(0), members([1, 2])));
+        rules.watch(value(0), |solver, _| solver.copy(value(0), value(1)));
+        rules.watch(value(1), |solver, gained| {
+            if !gained.0.contains(&3) {
+                solver.join(value(0), members([3]));
+            }
+        });
+    });
+
+    assert_eq!(facts[&value(1)], members([1, 2, 3]));
+}
+
+/// A copy inserts its target as a join does, and a source nothing wrote stays absent.
+#[test]
+fn a_copy_from_an_absent_key_inserts_its_target_at_bottom() {
+    let facts = Solver::<Members>::solve([], |rules| {
+        rules.add(|solver| solver.copy(value(9), value(1)));
+    });
+
+    assert_eq!(facts[&value(1)], Members::bottom());
+    assert!(!facts.contains_key(&value(9)));
+}
+
+/// What a copy hands on moves its target as a join would, so a rule that read the target runs again.
+#[test]
+fn a_rule_reading_a_copied_key_runs_again_where_the_copy_moves_it() {
+    let facts = Solver::<Members>::solve([value(1)], |rules| {
+        rules.add(|solver| {
+            let held = solver.fact(&value(1)).cloned().expect("seeded");
+            solver.join(value(2), held);
+        });
+        rules.add(|solver| {
+            solver.copy(value(0), value(1));
+            solver.join(value(0), members([5]));
+        });
+    });
+
+    assert_eq!(facts[&value(2)], members([5]));
+}

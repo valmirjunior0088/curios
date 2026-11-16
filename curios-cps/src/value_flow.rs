@@ -8,7 +8,9 @@
 //!
 //! **The rows a value may be are its constructions' rows**, every row where it may be any. They are what [`ValueFlow::rows`] answers the row tests, the rebuild in place and the verifier, and what [`Module::entry_suspension`] reads off the entry's returns for its ABI ([An entry exports only the turns it can return](../../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md)): each function-return position has its own fact, even where no caller receives it, so only what reaches the entry's returns decides its capability, and a suspension consumed inside the program does not escape merely because it was built.
 //!
-//! **A solve serves every reader of the module as it stands.** Where several read one module, as the verifier of the rebuilds, the entry's capability and the frame bound do of the module the rebuild in place leaves, they read one solve ([`Module::verify_reading`], [`Module::entry_suspension_reading`], [`bound_frames`](crate::bound_frames)), and a join that moved nothing is told by what the fact gained rather than by a copy of it.
+//! **A solve serves every reader of the module as it stands.** Where several read one module, as the verifier of the rebuilds, the entry's capability and the frame bound do of the module the rebuild in place leaves, they read one solve ([`Module::verify_reading`], [`Module::entry_suspension_reading`], [`bound_frames`](crate::bound_frames)).
+//!
+//! **A flow is a copy, and what turns on a value watches it.** A store, a jump, a known call and its return, and a container's contents are copies from one key to another ([`Solver::copy`]); a closure call, a list map, a read and a rebuild are watches of the value they turn on ([`Rules::watch`]), handed each function or construction it gains, each stating the copies that one asks. A solve so carries each function and construction across each flow once, where a rule reading whole facts would copy every set it read each time it ran again.
 //!
 //! **A flow it misses is a wrong answer** wherever a reader trusts what a value may not be, so every rule matches its node's whole alphabet: no wildcard stands over a node, a value expression or an operation.
 
@@ -24,7 +26,7 @@ mod row_tests;
 use {
     super::{
         Atom, Callee, CellOp, ChannelOp, ContinuationId, FunctionId, Intrinsic, IntrinsicCall,
-        Lattice, Module, Node, NodeId, RowId, Solver, ValueExpr, ValueId,
+        Lattice, Module, Node, NodeId, RowId, Rules, Solver, ValueExpr, ValueId,
     },
     std::{
         cell::OnceCell,
@@ -39,7 +41,7 @@ pub enum MayBe<T> {
     Any,
 }
 
-/// A set of identities, ascending in a vector: what a fact holds of the functions or the constructions a value may be. A join merges two runs in one pass and a copy is one allocation, where a tree's are a node per handful of identities, and every solve copies and joins them by the hundred thousand ([`Solver::join`](crate::Solver::join)).
+/// A set of identities, ascending in a vector: what a fact holds of the functions or the constructions a value may be. A solve hands gains on by the hundred thousand, each a few identities merged into a set that keeps its allocation, where a tree pays a node per handful of identities for every one it holds.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Ids<T>(Vec<T>);
 
@@ -64,44 +66,56 @@ impl<T: Ord + Copy> Ids<T> {
         self.0.iter()
     }
 
-    /// Gain every identity of `other` this lacks, answering whether any was.
-    pub fn absorb(&mut self, other: &Self) -> bool {
-        if other.0.iter().all(|item| self.contains(item)) {
-            return false;
-        }
-        let mut merged = Vec::with_capacity(self.0.len() + other.0.len());
-        let (mut left, mut right) = (self.0.iter().peekable(), other.0.iter().peekable());
-        loop {
-            match (left.peek(), right.peek()) {
-                (Some(&&l), Some(&&r)) => match l.cmp(&r) {
-                    std::cmp::Ordering::Less => {
-                        merged.push(l);
-                        left.next();
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Gain every identity of `other` this lacks, answering those, ascending.
+    fn gain(&mut self, other: &Self) -> Self {
+        // A gain handed on is a few identities against a set of many, each sought where it would stand; a whole set handed on is walked beside this one.
+        let gained = match other.0.len() * 16 < self.0.len() {
+            true => other
+                .0
+                .iter()
+                .copied()
+                .filter(|item| !self.contains(item))
+                .collect::<Vec<_>>(),
+            false => {
+                let mut gained = Vec::new();
+                let mut held = self.0.iter().peekable();
+                for &item in &other.0 {
+                    while held.next_if(|&&below| below < item).is_some() {}
+                    if held.peek() != Some(&&item) {
+                        gained.push(item);
                     }
-                    std::cmp::Ordering::Greater => {
-                        merged.push(r);
-                        right.next();
-                    }
-                    std::cmp::Ordering::Equal => {
-                        merged.push(l);
-                        left.next();
-                        right.next();
-                    }
-                },
-                (Some(&&l), None) => {
-                    merged.push(l);
-                    left.next();
                 }
-                (None, Some(&&r)) => {
-                    merged.push(r);
-                    right.next();
-                }
-                (None, None) => break,
+                gained
+            }
+        };
+        self.merge(&gained);
+
+        Self(gained)
+    }
+
+    /// Merge `gained`, ascending and disjoint from these, in place from the back, so only what stands above its least moves.
+    fn merge(&mut self, gained: &[T]) {
+        let Some(&least) = gained.first() else {
+            return;
+        };
+        let (mut held, mut taken) = (self.0.len(), gained.len());
+        self.0.resize(held + taken, least);
+        for at in (0..self.0.len()).rev() {
+            if taken == 0 {
+                break;
+            }
+            if held > 0 && self.0[held - 1] > gained[taken - 1] {
+                held -= 1;
+                self.0[at] = self.0[held];
+            } else {
+                taken -= 1;
+                self.0[at] = gained[taken];
             }
         }
-        self.0 = merged;
-
-        true
     }
 }
 
@@ -151,19 +165,22 @@ impl<T: Ord + Copy> Lattice for MayBe<T> {
     }
 
     fn join(&mut self, incoming: Self) {
-        self.joined(incoming);
+        self.gain(&incoming);
     }
 
-    // A set moved where it grew, or became any.
-    fn joined(&mut self, incoming: Self) -> bool {
+    // What a set gained is its new members, or any.
+    fn gain(&mut self, incoming: &Self) -> Option<Self> {
         match (&mut *self, incoming) {
-            (MayBe::Any, _) => false,
+            (MayBe::Any, _) => None,
             (_, MayBe::Any) => {
                 *self = MayBe::Any;
 
-                true
+                Some(MayBe::Any)
             }
-            (MayBe::Of(left), MayBe::Of(right)) => left.absorb(&right),
+            (MayBe::Of(held), MayBe::Of(incoming)) => {
+                let gained = held.gain(incoming);
+                (!gained.is_empty()).then_some(MayBe::Of(gained))
+            }
         }
     }
 }
@@ -211,14 +228,21 @@ impl Lattice for ValueFact {
     }
 
     fn join(&mut self, incoming: Self) {
-        self.joined(incoming);
+        self.functions.join(incoming.functions);
+        self.constructions.join(incoming.constructions);
     }
 
-    fn joined(&mut self, incoming: Self) -> bool {
-        let functions = self.functions.joined(incoming.functions);
-        let constructions = self.constructions.joined(incoming.constructions);
+    fn gain(&mut self, incoming: &Self) -> Option<Self> {
+        let functions = self.functions.gain(&incoming.functions);
+        let constructions = self.constructions.gain(&incoming.constructions);
+        if functions.is_none() && constructions.is_none() {
+            return None;
+        }
 
-        functions || constructions
+        Some(ValueFact {
+            functions: functions.unwrap_or_else(MayBe::nothing),
+            constructions: constructions.unwrap_or_else(MayBe::nothing),
+        })
     }
 }
 
@@ -360,7 +384,27 @@ impl Constructions {
     }
 }
 
+/// Where a flow starts: what a key holds, or a fact no key holds.
+enum Source {
+    Key(FlowKey),
+    Fact(ValueFact),
+}
+
+/// A watch of what `source`'s key holds or, where no key holds it, a rule handed its fact once.
+fn watch<'r>(
+    rules: &mut Rules<'r, ValueFact, FlowKey>,
+    source: Source,
+    rule: impl Fn(&mut Solver<ValueFact, FlowKey>, &ValueFact) + 'r,
+) {
+    match source {
+        Source::Key(key) => rules.watch(key, rule),
+        Source::Fact(fact) => rules.add(move |solver| rule(solver, &fact)),
+    }
+}
+
 /// The facts of every value, return position, slot and container, solved together, so a closure call reads the same least fixpoint the calls it reaches settle.
+///
+/// A flow is a copy, stated by a rule that reads nothing and so runs once. What a closure call, a list map, a read and a rebuild do turns on what a value may be, so each is a watch of that value, handed each function or construction it gains, which states the copies that one asks.
 fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, ValueFact> {
     let escaping = module.escaping_functions();
     let arities = module.return_arities();
@@ -392,59 +436,62 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
         .copied()
         .chain(module.value_ids().map(FlowKey::Value))
         .collect::<Vec<_>>();
+    let seen = seeds
+        .iter()
+        .filter_map(|key| match key {
+            FlowKey::Value(value) => Some(*value),
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
 
+    let source = |atom: &Atom| match atom {
+        Atom::Value(value) if seen.contains(value) => Source::Key(FlowKey::Value(*value)),
+        // A value nothing seeded is one the module does not see.
+        Atom::Value(_) => Source::Fact(ValueFact::any()),
+        Atom::Fun(function) => Source::Fact(ValueFact::function(*function)),
+        Atom::Literal(_) | Atom::Filler => Source::Fact(ValueFact::nothing()),
+    };
+    let flow = |solver: &mut Solver<ValueFact, FlowKey>, source: Source, to: FlowKey| match source {
+        Source::Key(from) => solver.copy(from, to),
+        Source::Fact(fact) => solver.join(to, fact),
+    };
+    // What `target` binds, each position from its source.
     let deliver = |solver: &mut Solver<ValueFact, FlowKey>,
                    target: ContinuationId,
-                   facts: &dyn Fn(usize) -> ValueFact| {
+                   sources: &dyn Fn(usize) -> Source| {
         if let Some(keys) = receivers.get(&target) {
             for (index, key) in keys.iter().enumerate() {
-                solver.join(*key, facts(index));
+                flow(solver, sources(index), *key);
             }
         }
     };
-    let fact = |solver: &Solver<ValueFact, FlowKey>, atom: &Atom| match atom {
-        Atom::Value(value) => solver
-            .fact(&FlowKey::Value(*value))
-            .cloned()
-            .unwrap_or_else(ValueFact::any),
-        Atom::Fun(function) => ValueFact::function(*function),
-        Atom::Literal(_) | Atom::Filler => ValueFact::nothing(),
-    };
-    // A key nothing was stored at holds nothing.
-    let stored = |solver: &Solver<ValueFact, FlowKey>, key: FlowKey| {
-        solver
-            .fact(&key)
-            .cloned()
-            .unwrap_or_else(ValueFact::nothing)
-    };
-    // Slot `index` of `of`: under each construction among `kind` it may be, or the summary where it may be any.
-    let read = |solver: &Solver<ValueFact, FlowKey>,
-                of: &Atom,
+    // Slot `index` of an object of `gained`: under each construction among `kind` it may be, or the summary where it may be any.
+    let read = |solver: &mut Solver<ValueFact, FlowKey>,
+                gained: &ValueFact,
                 kind: &BTreeSet<NodeId>,
                 summary: FlowKey,
-                index: usize| match fact(solver, of).constructions {
+                index: usize,
+                result: FlowKey| match &gained.constructions {
         MayBe::Of(objects) => {
-            let mut read = ValueFact::nothing();
             for object in objects.iter().filter(|object| kind.contains(object)) {
-                read.join(stored(solver, FlowKey::At(*object, index)));
+                solver.copy(FlowKey::At(*object, index), result);
             }
-            read
         }
-        MayBe::Any => stored(solver, summary),
+        MayBe::Any => solver.copy(summary, result),
     };
     // The functions a callee may be that take `arity` parameters, every escaping one of them where it may be any.
-    let callees = |functions: MayBe<FunctionId>, arity: usize| -> Vec<FunctionId> {
+    let callees = |functions: &MayBe<FunctionId>, arity: usize| -> Vec<FunctionId> {
         let takes = |function: &FunctionId| {
             module
                 .function(*function)
                 .is_some_and(|definition| definition.params.len() == arity)
         };
         match functions {
-            MayBe::Of(functions) => functions.into_iter().filter(takes).collect(),
+            MayBe::Of(functions) => functions.iter().copied().filter(takes).collect(),
             MayBe::Any => escaping.iter().copied().filter(takes).collect(),
         }
     };
-    // A call of `callee` with `args`, resuming `return_to`: the arguments to its parameters, its returns to the resume.
+    // A call of `callee` with `args`, resuming `return_to`: the arguments to its parameters, its returns to the resume, any past them.
     let call = |solver: &mut Solver<ValueFact, FlowKey>,
                 callee: FunctionId,
                 args: &[Atom],
@@ -452,31 +499,23 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
         let Some(function) = module.function(callee) else {
             return;
         };
-        let passed = args
-            .iter()
-            .map(|atom| fact(solver, atom))
-            .collect::<Vec<_>>();
-        for (incoming, param) in passed.into_iter().zip(&function.params) {
-            solver.join(FlowKey::Value(*param), incoming);
+        for (atom, param) in args.iter().zip(&function.params) {
+            flow(solver, source(atom), FlowKey::Value(*param));
         }
-        let returned = (0..arities[&callee])
-            .map(|index| stored(solver, FlowKey::Returned(callee, index)))
-            .collect::<Vec<_>>();
-        deliver(solver, return_to, &|index| {
-            returned.get(index).cloned().unwrap_or_else(ValueFact::any)
+        let arity = arities[&callee];
+        deliver(solver, return_to, &|index| match index < arity {
+            true => Source::Key(FlowKey::Returned(callee, index)),
+            false => Source::Fact(ValueFact::any()),
         });
     };
     let jump = |solver: &mut Solver<ValueFact, FlowKey>, target: ContinuationId, args: &[Atom]| {
-        let passed = args
-            .iter()
-            .map(|atom| fact(solver, atom))
-            .collect::<Vec<_>>();
         deliver(solver, target, &|index| {
-            passed.get(index).cloned().unwrap_or_else(ValueFact::any)
+            args.get(index)
+                .map_or(Source::Fact(ValueFact::any()), source)
         });
     };
-    let (deliver, fact, stored, read, callees, call, jump) =
-        (&deliver, &fact, &stored, &read, &callees, &call, &jump);
+    let (source, flow, deliver, read, callees, call, jump) =
+        (&source, &flow, &deliver, &read, &callees, &call, &jump);
 
     Solver::solve(seeds, |rules| {
         if let Some(entry) = module.entry().and_then(|entry| module.function(entry)) {
@@ -487,82 +526,95 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
             });
         }
         for (id, node) in module.live_nodes() {
-            rules.add(move |solver| match node {
+            match node {
                 Node::LetValue { result, value, .. } => match value {
-                    ValueExpr::Row(row, atoms) => {
+                    ValueExpr::Row(row, atoms) => rules.add(move |solver| {
                         for (index, atom) in atoms.iter().enumerate() {
-                            let incoming = fact(solver, atom);
-                            solver.join(FlowKey::Slot(*row, index), incoming.clone());
-                            solver.join(FlowKey::At(id, index), incoming);
+                            flow(solver, source(atom), FlowKey::Slot(*row, index));
+                            flow(solver, source(atom), FlowKey::At(id, index));
                         }
                         solver.join(FlowKey::Value(*result), ValueFact::construction(id));
-                    }
-                    ValueExpr::Tuple(atoms) => {
+                    }),
+                    ValueExpr::Tuple(atoms) => rules.add(move |solver| {
                         for (index, atom) in atoms.iter().enumerate() {
-                            let incoming = fact(solver, atom);
-                            solver.join(FlowKey::Field(index), incoming.clone());
-                            solver.join(FlowKey::At(id, index), incoming);
+                            flow(solver, source(atom), FlowKey::Field(index));
+                            flow(solver, source(atom), FlowKey::At(id, index));
                         }
                         solver.join(FlowKey::Value(*result), ValueFact::construction(id));
-                    }
+                    }),
                     // A rebuild writes into the object `of` names and is that object: a construction of its row `of` may be, every one of them where `of` may be any.
                     ValueExpr::Rebuilt { of, row, slots } => {
-                        let of_row = constructions.of_row(*row);
-                        let objects = match fact(solver, of).constructions {
-                            MayBe::Of(objects) => objects
-                                .iter()
-                                .copied()
-                                .filter(|object| of_row.contains(object))
-                                .collect::<Ids<_>>(),
-                            MayBe::Any => of_row.iter().copied().collect(),
-                        };
-                        for (index, atom) in slots {
-                            let incoming = fact(solver, atom);
-                            solver.join(FlowKey::Slot(*row, *index), incoming.clone());
-                            for &object in objects.iter() {
-                                solver.join(FlowKey::At(object, *index), incoming.clone());
+                        rules.add(move |solver| {
+                            for (index, atom) in slots {
+                                flow(solver, source(atom), FlowKey::Slot(*row, *index));
                             }
-                        }
-                        solver.join(
-                            FlowKey::Value(*result),
-                            ValueFact {
-                                functions: MayBe::nothing(),
-                                constructions: MayBe::Of(objects),
-                            },
-                        );
+                            solver.join(FlowKey::Value(*result), ValueFact::nothing());
+                        });
+                        watch(rules, source(of), move |solver, gained| {
+                            let of_row = constructions.of_row(*row);
+                            let objects = match &gained.constructions {
+                                MayBe::Of(objects) => objects
+                                    .iter()
+                                    .copied()
+                                    .filter(|object| of_row.contains(object))
+                                    .collect::<Ids<_>>(),
+                                MayBe::Any => of_row.iter().copied().collect(),
+                            };
+                            for &object in objects.iter() {
+                                for (index, atom) in slots {
+                                    flow(solver, source(atom), FlowKey::At(object, *index));
+                                }
+                            }
+                            solver.join(
+                                FlowKey::Value(*result),
+                                ValueFact {
+                                    functions: MayBe::nothing(),
+                                    constructions: MayBe::Of(objects),
+                                },
+                            );
+                        });
                     }
-                    ValueExpr::List(atoms) => {
+                    ValueExpr::List(atoms) => rules.add(move |solver| {
                         for atom in atoms {
-                            let incoming = fact(solver, atom);
-                            solver.join(FlowKey::Element, incoming);
+                            flow(solver, source(atom), FlowKey::Element);
                         }
-                    }
+                    }),
                     ValueExpr::Literal(_) => {}
                 },
                 Node::LetIntrinsic {
                     result, op, args, ..
                 } => {
-                    let incoming = match op {
-                        Intrinsic::RowGet(row, index) => read(
-                            solver,
-                            &args[0],
-                            constructions.of_row(*row),
-                            FlowKey::Slot(*row, *index),
-                            *index,
-                        ),
-                        Intrinsic::TupleGet(index) => read(
-                            solver,
-                            &args[0],
-                            &constructions.tuples,
-                            FlowKey::Field(*index),
-                            *index,
-                        ),
-                        Intrinsic::ListGet => stored(solver, FlowKey::Element),
-                        Intrinsic::ImmediateGet => fact(solver, &args[0]),
+                    let result = FlowKey::Value(*result);
+                    match op {
+                        Intrinsic::RowGet(row, index) => {
+                            watch(rules, source(&args[0]), move |solver, gained| {
+                                let kind = constructions.of_row(*row);
+                                read(
+                                    solver,
+                                    gained,
+                                    kind,
+                                    FlowKey::Slot(*row, *index),
+                                    *index,
+                                    result,
+                                );
+                            });
+                        }
+                        Intrinsic::TupleGet(index) => {
+                            watch(rules, source(&args[0]), move |solver, gained| {
+                                let kind = &constructions.tuples;
+                                read(solver, gained, kind, FlowKey::Field(*index), *index, result);
+                            });
+                        }
+                        Intrinsic::ListGet => {
+                            rules.add(move |solver| solver.copy(FlowKey::Element, result));
+                        }
+                        Intrinsic::ImmediateGet => {
+                            rules.add(move |solver| flow(solver, source(&args[0]), result));
+                        }
                         Intrinsic::ListAppend => {
-                            let element = fact(solver, &args[1]);
-                            solver.join(FlowKey::Element, element);
-                            ValueFact::nothing()
+                            rules.add(move |solver| {
+                                flow(solver, source(&args[1]), FlowKey::Element)
+                            });
                         }
                         // A number, a word, a float, a sequence or a list of what the list key holds already: nothing a closure call or a read follows.
                         Intrinsic::BoolAnd
@@ -651,47 +703,51 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
                         | Intrinsic::ListFlat(_)
                         | Intrinsic::WindowExtent
                         | Intrinsic::IsImmediate
-                        | Intrinsic::IsRow(_) => ValueFact::nothing(),
-                    };
-                    solver.join(FlowKey::Value(*result), incoming);
+                        | Intrinsic::IsRow(_) => {}
+                    }
                 }
                 Node::ApplyFun {
                     callee,
                     args,
                     return_to,
-                } => {
-                    let reached = match callee {
-                        Callee::Known(callee) => vec![*callee],
-                        Callee::Closure(closure) => {
-                            callees(fact(solver, &Atom::Value(*closure)).functions, args.len())
-                        }
-                    };
-                    for callee in reached {
-                        call(solver, callee, args, *return_to);
+                } => match callee {
+                    Callee::Known(callee) => {
+                        rules.add(move |solver| call(solver, *callee, args, *return_to));
                     }
+                    Callee::Closure(closure) => {
+                        watch(
+                            rules,
+                            source(&Atom::Value(*closure)),
+                            move |solver, gained| {
+                                for callee in callees(&gained.functions, args.len()) {
+                                    call(solver, callee, args, *return_to);
+                                }
+                            },
+                        );
+                    }
+                },
+                Node::ApplyCont(edge) => {
+                    rules.add(move |solver| jump(solver, edge.target, &edge.args))
                 }
-                Node::ApplyCont(edge) => jump(solver, edge.target, &edge.args),
-                Node::Switch { cases, default, .. } => {
+                Node::Switch { cases, default, .. } => rules.add(move |solver| {
                     for edge in cases.values().chain(default.as_ref()) {
                         jump(solver, edge.target, &edge.args);
                     }
-                }
+                }),
                 Node::Cell {
                     op,
                     args,
                     return_to,
                 } => match op {
                     CellOp::Fill => {
-                        let incoming = fact(solver, &args[1]);
-                        solver.join(FlowKey::Cell, incoming);
+                        rules.add(move |solver| flow(solver, source(&args[1]), FlowKey::Cell))
                     }
-                    CellOp::Poll => {
-                        let held = stored(solver, FlowKey::Cell);
+                    CellOp::Poll => rules.add(move |solver| {
                         deliver(solver, *return_to, &|index| match index {
-                            1 => held.clone(),
-                            _ => ValueFact::nothing(),
+                            1 => Source::Key(FlowKey::Cell),
+                            _ => Source::Fact(ValueFact::nothing()),
                         });
-                    }
+                    }),
                     CellOp::Reserve => {}
                 },
                 Node::Channel {
@@ -700,16 +756,14 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
                     return_to,
                 } => match op {
                     ChannelOp::Push => {
-                        let incoming = fact(solver, &args[1]);
-                        solver.join(FlowKey::Channel, incoming);
+                        rules.add(move |solver| flow(solver, source(&args[1]), FlowKey::Channel))
                     }
-                    ChannelOp::Take => {
-                        let held = stored(solver, FlowKey::Channel);
+                    ChannelOp::Take => rules.add(move |solver| {
                         deliver(solver, *return_to, &|index| match index {
-                            1 => held.clone(),
-                            _ => ValueFact::nothing(),
+                            1 => Source::Key(FlowKey::Channel),
+                            _ => Source::Fact(ValueFact::nothing()),
                         });
-                    }
+                    }),
                     ChannelOp::New
                     | ChannelOp::Close
                     | ChannelOp::Closed
@@ -723,18 +777,19 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
                 } => match op {
                     // Each element to every function the mapper may be, and what each answers to the mapped list's elements.
                     IntrinsicCall::ListMap => {
-                        let mappers = callees(fact(solver, &args[1]).functions, 1);
-                        for mapper in mappers {
-                            let Some(function) = module.function(mapper) else {
-                                continue;
-                            };
-                            let element = stored(solver, FlowKey::Element);
-                            solver.join(FlowKey::Value(function.params[0]), element);
-                            let image = stored(solver, FlowKey::Returned(mapper, 0));
-                            solver.join(FlowKey::Element, image);
-                        }
+                        watch(rules, source(&args[1]), move |solver, gained| {
+                            for mapper in callees(&gained.functions, 1) {
+                                let Some(function) = module.function(mapper) else {
+                                    continue;
+                                };
+                                solver.copy(FlowKey::Element, FlowKey::Value(function.params[0]));
+                                solver.copy(FlowKey::Returned(mapper, 0), FlowKey::Element);
+                            }
+                        });
                     }
-                    IntrinsicCall::HeapApply => deliver(solver, *return_to, &|_| ValueFact::any()),
+                    IntrinsicCall::HeapApply => rules.add(move |solver| {
+                        deliver(solver, *return_to, &|_| Source::Fact(ValueFact::any()));
+                    }),
                     IntrinsicCall::FrameEnter { .. } | IntrinsicCall::FrameLeave { .. } => {}
                 },
                 // A host's reply is its wire values.
@@ -744,7 +799,7 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
                 | Node::Halt { .. }
                 | Node::Panic(_)
                 | Node::Unreachable => {}
-            });
+            }
         }
     })
 }
