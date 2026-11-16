@@ -92,6 +92,47 @@ fn a_let_bound_expression_scrutinee_is_refined_through_its_definition() {
     assert_eq!(run(source), b"2");
 }
 
+// A scrutinee projected from a `let`-bound base — a tuple's field, the code a character dispatch reads, the bytes a string dispatch reads — is refined through the projection of the base's definition too, which is what the certifier, reading the base by value, matches on: the arm's fact spelled over the definition holds where the one over the name does.
+#[test]
+fn a_projection_of_a_let_bound_scrutinee_is_refined_through_its_definition() {
+    let source = r#"
+        use /std/{Nat, Char, Str, List};
+        use /std/Bool/{True, Holds};
+
+        let pair(n: Nat, g: (Nat) -> {Nat, Nat}) -> Nat =
+            let p = g(n);
+            match p
+            | (3, _) =>
+                let _: Holds(p.0 == 3) = True/qed();
+                let _: Holds(g(n).0 == 3) = True/qed();
+                0
+            | _ => 1
+            end;
+
+        let character(n: Nat, g: (Nat) -> Char) -> Nat =
+            let c = g(n);
+            match c
+            | 'a' =>
+                let _: Holds(Char/to_nat(g(n)) == 97) = True/qed();
+                let _: Holds(g(n) == 'a') = True/qed();
+                0
+            | _ => 1
+            end;
+
+        let string(n: Nat, g: (Nat) -> Str) -> Nat =
+            let s = g(n);
+            match s
+            | "a" =>
+                let _: Holds(g(n) == "a") = True/qed();
+                0
+            | _ => 1
+            end;
+
+        /std/print(Str/join(" ", List/map([pair(0, (m) => (3, m)), character(0, (m) => 'a'), string(0, (m) => "b")], Nat/to_str)))
+        "#;
+    assert_eq!(run(source), b"0 0 1");
+}
+
 // A guard meets itself inside a definition that spells it over a `let`. `outside` binds `n` to `Byte/to_nat(c)` and guards on `Bool/not(Nat/in_range(n, lo, hi))`; the arm refines the same guard spelled over `Byte/to_nat(c)`. The reducer substitutes a `let` as the certifier does, so the unfolded guard is the arm's own spelling rather than one over a fresh name the arm's key never mentions.
 #[test]
 fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {

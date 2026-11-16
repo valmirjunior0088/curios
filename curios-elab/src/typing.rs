@@ -1288,7 +1288,7 @@ fn retry_checking(
 /// Register a counterfactual match-arm refinement of a scrutinee, so a context hypothesis whose type mentions it reduces at the arm's value. The frame holding the refinement is scoped to the arm, so the (counterfactual) assumption does not leak. Three keyings, by head shape:
 ///
 /// - a `Var` reduces to the value (`refine`), and a local `let`'s definition is refined to the same value in turn: the certifier reads a scrutinee by value, so the one it matches on is the definition, and a name refined alone disagrees with the definition it unfolds to — the solver reifies a local definition into the solution it stores, and that spelling saw nothing;
-/// - a projection — a `Bool`/`Nat` match on a tuple field — refines that projection (`refine_projection`);
+/// - a projection — a `Bool`/`Nat` match on a tuple field, a character's code, a string's bytes — refines that projection (`refine_projection`), and where its base is a local `let`, the projection of the definition in turn, for the reason a `let`-bound variable's definition is;
 /// - any other head — a stuck application like `classify(c)` / `Nat/in_range(...)` — is recorded as written in the term-keyed scrutinee store (`refine_scrutinee`), where an occurrence spelled otherwise is met at the entry's reduced spelling.
 ///
 /// A scrutinee's *indices* are not refined here: an arm solves their equations with `curios_analysis::solve_indices`, the certifier's own function, and records the variables it solves. Keying a non-variable index — a constructor, a stuck application — as an equation on the index itself would record the reverse of what the inverter pins, or a fact the certifier does not have.
@@ -1315,9 +1315,19 @@ pub fn refine_head(context: &mut Context, head: &Term, value: &Term) -> Result<(
         }
         Subterm::Proj(Proj {
             head,
-            field: Field::Tuple(index) | Field::Struct(_, index),
+            field: field @ (Field::Tuple(index) | Field::Struct(_, index)),
         }) => {
             context.refine_projection(head.clone(), *index, value.clone());
+            if let Subterm::Var(var) = &**head
+                && let Some(name) = var.as_free()
+                && let Some(definition) = context.definition_body(name).cloned()
+            {
+                let projected = Term::from(Subterm::Proj(Proj {
+                    head: definition,
+                    field: field.clone(),
+                }));
+                refine_head(context, &projected, value)?;
+            }
         }
         _ => {
             let mut spellings = scrutinee_spellings(context, head, head)?
