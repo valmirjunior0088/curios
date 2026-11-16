@@ -32,7 +32,7 @@ while true; do
 done
 ```
 
-Do other work between events. A step that fails is read as its event arrives, while the steps that read nothing of it run on, and the whole log once the exit code is written.
+Do other work between events. A step that fails is read as its event arrives and fixed then, as the next section says, while the steps that read nothing of it run on: the fix and its reruns wait only for the failed step to end, since a rebuild under a step still running overwrites what it launches, and the gate is never stopped for one. The whole log is read once the exit code is written.
 
 ## When a step fails
 
