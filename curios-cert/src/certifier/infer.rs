@@ -26,7 +26,8 @@ mod tests;
 
 use {
     super::{
-        Certifier, Counted, Error, Sort, as_sort, check_group, convert, infer_sort, synth_neutral,
+        Certifier, Counted, Error, Handed, Sort, as_sort, check_group, convert, infer_sort,
+        synth_neutral,
     },
     curios_analysis::spine,
     curios_common::recurse,
@@ -868,7 +869,7 @@ fn check_rules(
     term: &Term,
     expected: &Term,
     parameters: bool,
-    assumed: Option<Vec<CallMatrix>>,
+    assumed: Option<Handed>,
 ) -> Result<(), Error> {
     // A `let` carries no type of its own — the tail's type is the whole term's — so the expectation descends through it: the same binding validation as inference, with only the tail's mode changed. Without this, a dependent tuple or lambda under a `let` reaches the checked rules below as an inference and manufactures the non-dependent type they exist to avoid.
     if let Subterm::Let(block) = &**term {
@@ -923,7 +924,7 @@ fn check_lambda(
     lambda: Telescope<Term>,
     against: Telescope<Term>,
     parameters: bool,
-    assumed: Option<&[CallMatrix]>,
+    assumed: Option<&[(usize, Vec<CallMatrix>)]>,
 ) -> Result<(), Error> {
     let mut walk = Lockstep::new(&lambda, &against);
     let mut binders = Vec::new();

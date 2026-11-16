@@ -611,3 +611,71 @@ fn a_callback_handed_through_two_callees_is_bounded_by_each_call() {
             });
     }
 }
+
+// A callback handed inside an inner group's body runs within the enclosing member's invocation, so its binders stand to that member's parameters too, as a call of the enclosing member from the inner body is graded against them: `scan`, local to `has_zero`, hands `List/any` the lambda over `children`, below `t`, so the lambda's `c` is below `t` wherever `any` applies it, and so is what the member `bare`, handed itself, is applied to. The refusals hand the callback the tree rebuilt around the same children, which is `t` again.
+#[test]
+fn a_callback_handed_inside_an_inner_group_stands_to_the_enclosing_members_parameters() {
+    let program = control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose : Type
+        | node(label : Nat, children : List(Rose))
+        end
+
+        let has_zero(t : Rose) -> Bool =
+            match t
+            | node(label, children) =>
+                let scan(k : Nat) -> Bool =
+                    match k
+                    | 0 => List/any(children, (c) => has_zero(c))
+                    | j + 1 => scan(j)
+                    end;
+                label == 0 || scan(1)
+            end;
+
+        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+
+        let bare(t : Rose) -> Bool =
+            match t
+            | node(label, children) =>
+                let scan(k : Nat) -> Bool =
+                    match k
+                    | 0 => List/any(children, bare)
+                    | j + 1 => scan(j)
+                    end;
+                label == 0 || scan(1)
+            end;
+
+        let Bare(t : Rose) -> Prop = Bool/Holds(bare(t));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    for (edit, at) in [
+        (
+            (
+                "(c) => has_zero(c)",
+                "(c) => has_zero(Rose/node(label, children))",
+            ),
+            "/Zeroed",
+        ),
+        (
+            (
+                "List/any(children, bare)",
+                "List/any([Rose/node(label, children)], bare)",
+            ),
+            "/Bare",
+        ),
+    ] {
+        program
+            .refused(&[edit])
+            .by_elaborator_in(at, |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in(at, |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}

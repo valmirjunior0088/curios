@@ -30,7 +30,7 @@ use shape::*;
 
 mod grade;
 use grade::*;
-pub use grade::{SizeContext, binder_bounds, grade, handed, nonzero_by, refined_by_arm};
+pub use grade::{SizeContext, Standing, binder_bounds, grade, handed, nonzero_by, refined_by_arm};
 
 #[cfg(test)]
 mod tests;
