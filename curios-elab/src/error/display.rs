@@ -8,7 +8,7 @@ mod tests;
 use {
     super::{
         BinderSite, Callee, CycleMember, DeadArm, Declined, ErasedSite, Error, GoalReport, Need,
-        RegionOwner, ShapeDiagnosis, Underivable, Watched,
+        RegionOwner, ShapeDiagnosis, Underivable, Watched, WrittenLiteral,
     },
     crate::{Conclusion, Origin, Refusal, ordinal},
     curios_analysis::{DeclaredPart, Erased, MemberLabel},
@@ -1260,11 +1260,25 @@ impl Displayed<'_> {
                     f.stating("write a pattern for every field, `_` for one it does not read");
                 }
             }
-            Error::MatrixLiteralColumn { pattern, scrutinee } => {
+            Error::MatrixLiteralColumn {
+                pattern,
+                literal,
+                scrutinee,
+            } => {
                 f.text("no literal pattern");
-                f.stating(format_args!(
-                    "`{pattern}` takes a `Nat` or a `Byte` apart by its value"
-                ));
+                f.stating(match literal {
+                    WrittenLiteral::Numeral => {
+                        format!("`{pattern}` takes a `Nat` or a `Byte` apart by its value")
+                    }
+                    WrittenLiteral::Character => {
+                        format!(
+                            "`{pattern}` takes a `Nat`, a `Byte` or a `Char` apart by its value"
+                        )
+                    }
+                    WrittenLiteral::String => {
+                        format!("`{pattern}` takes a `Str` apart by its bytes")
+                    }
+                });
                 f.stating(format_args!("scrutinee: {}", scrutinee.spelled(spelling)));
                 f.stating("match a natural the value gives, or test it in a guard");
             }

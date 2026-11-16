@@ -384,6 +384,32 @@ end
       (boolean))))
 
 ================================================================================
+String patterns
+================================================================================
+
+match command
+| "build" | some("--help") => true
+| _ => false
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (match_term
+    (path
+      (identifier))
+    (match_arm
+      (string)
+      (constructor_pattern
+        (identifier)
+        (constructor_argument
+          (string)))
+      (boolean))
+    (match_arm
+      (identifier)
+      (boolean))))
+
+================================================================================
 Local let with destructuring binders and a recursive binding
 ================================================================================
 

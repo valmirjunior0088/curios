@@ -2,20 +2,21 @@ use {
     super::{
         BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PARAMETER_IS_A_PATTERN,
         PATTERN_TAKES_NO_USE, Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led,
-        member_ends, members, parse_char_value, parse_identifier, parse_keyword, parse_label,
-        parse_literal, parse_mark, parse_name, parse_named_premise, parse_nat_digits, parse_place,
-        parse_qualified_name, parse_word_raw, refused, require_space, trimmed,
+        member_ends, members, parse_block_str, parse_char_value, parse_identifier, parse_keyword,
+        parse_label, parse_line_str, parse_literal, parse_mark, parse_name, parse_named_premise,
+        parse_nat_digits, parse_number, parse_place, parse_qualified_name, parse_word_raw, refused,
+        require_space, trimmed,
     },
     crate::{
         Binder, Elements, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
-        MatchPatternField, NatLiteral, NatPattern, Pattern, PatternField, Subterm, Term,
+        MatchPatternField, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Subterm, Term,
         TuplePattern, parse_term, parse_whitespace,
     },
-    curios_common::{Plicity, recurse},
+    curios_common::{Plicity, Sign, recurse},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, many0, mark,
         memoize, not_ahead, preceded_by_space, pure, refusal, sep_by0_trailing, spanned,
-        take_exact, take_while, uncommit,
+        take_exact, take_n, take_while, uncommit,
     },
     std::iter,
 };
@@ -484,6 +485,61 @@ pub fn parse_char_match_pattern<'a, D: Grammar>(
         .parse(state)
 }
 
+// A string literal leaf, one line or a block, kept in the spelling it was written in: a `Str` taken apart by its bytes.
+pub fn parse_str_match_pattern<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, MatchPattern<D>> {
+    parse_block_str
+        .or(parse_line_str)
+        .map(MatchPattern::Str)
+        .parse(state)
+}
+
+// A numeral no pattern takes, refused by what it is with the guard that tests it: a signed one, since no column taken apart by its literals is an `Int`, and a floating-point one, since a pattern tests a value's identity, which tells `+0.0` from `-0.0` and one NaN from another, where `==` does neither. Read only where a sign or a digit leads, and classified before anything is consumed, so text no numeral begins, a run's `..` among it, fails here at its start and keeps its own refusal; then read whole and refused where it starts, so a payload written as one is no constructor's list gone wrong. Tried before the natural's leaves, which would read `1.5` as the pattern `1`, and failing uncommitted at an unsigned whole numeral, which is theirs.
+fn refuse_numeral_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, MatchPattern<D>> {
+    let refusal = |literal: &Term<D>| match &**literal {
+        Subterm::NumLit(NumLit {
+            sign: Sign::Unmarked,
+            ..
+        }) => None,
+        Subterm::NumLit(_) => Some(
+            "a signed numeral is no pattern: no column taken apart by its literals is an `Int`",
+        ),
+        _ => Some(
+            "a floating-point literal is no pattern: a pattern tests identity, which tells `+0.0` from `-0.0` where `==` does not",
+        ),
+    };
+
+    look_ahead(take_n(1))
+        .flat_map(|lead: &str| {
+            match lead.starts_with(|char: char| char.is_ascii_digit() || char == '-' || char == '+')
+            {
+                true => pure(()).boxed(),
+                false => fail("a numeral begins with a sign or a digit").boxed(),
+            }
+        })
+        .and_keep(look_ahead(parse_number::<D>.map(Some).or(pure(None))))
+        .flat_map(move |literal| match literal.as_ref().and_then(refusal) {
+            None => fail("an unsigned numeral is a natural's pattern").boxed(),
+            Some(refusal) => mark()
+                .and(spanned(parse_number::<D>))
+                .flat_map(move |(start, (span, _))| {
+                    let written = span.source.text()[span.start..span.end].trim_end();
+                    commit(fail_from(
+                        &start,
+                        vec![
+                            refusal.to_string(),
+                            format!(
+                                "bind the value and test it in a guard: `| x, x == {written} =>`"
+                            ),
+                        ],
+                    ))
+                })
+                .boxed(),
+        })
+        .parse(state)
+}
+
 // A run, the literal that builds a sequence: `[]`, `[a, b]` or `[a, b, ..rest]` after `open`, `[` for a list and `x[` for a packed sequence, each element a pattern and an open run's rest, after one element at least, a binder. Nothing but a run follows its bracket, so it commits there, and once `..` is read only a binder can follow: what fails inside is reported where it stands.
 fn parse_run<'a, D: Grammar>(open: &'static str) -> impl Parser<'a, Elements<D>> {
     move |state: ParserState<'a>| {
@@ -537,7 +593,7 @@ pub fn parse_bytes_match_pattern<'a, D: Grammar>(
     parse_run::<D>("x[").map(MatchPattern::Bytes).parse(state)
 }
 
-// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat` literal leaves or a `List`/`Bytes` run — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for the successor leaf (`parse_nat_succ_match_pattern`) specifically, before `Binder` (see its own doc comment). A run owns what follows its bracket. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states.
+// A match-arm pattern: a plain binder, an inductive constructor applied to (possibly nested) sub-patterns, a tuple pattern, a struct pattern, or one of the `Bool`/`Nat` literal leaves or a `List`/`Bytes` run — see `MatchPattern`. Struct and constructor forms are tried before the bare-name case for the same reason `parse_pattern` tries `Struct`/`Tuple` first: a plain identifier prefix (`Point` in `Point { z, w = ww }`, `some` in `some(x)`) would otherwise be consumed by the binder case before the disambiguating `{`/`(` is ever seen. The literal leaves are tried before `Tuple` (none of their prefixes — `[`, `x[`, a digit, `true`/`false` — overlap `Tuple`'s `(`) and, for the successor leaf (`parse_nat_succ_match_pattern`) specifically, before `Binder` (see its own doc comment). A run owns what follows its bracket. A qualified head is refused ahead of all of them, for the reason `parse_qualified_match_pattern` states, and a numeral no pattern takes ahead of the natural's leaves, for the reason `refuse_numeral_pattern` states.
 pub fn parse_match_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, MatchPattern<D>> {
     recurse(|| memoize(MEMO_MATCH_PATTERN, parse_match_pattern_inner::<D>).parse(state))
 }
@@ -551,6 +607,8 @@ fn parse_match_pattern_inner<'a, D: Grammar>(
         .or(parse_ctor_match_pattern::<D>)
         .or(parse_bool_match_pattern::<D>)
         .or(parse_char_match_pattern::<D>)
+        .or(parse_str_match_pattern::<D>)
+        .or(refuse_numeral_pattern::<D>)
         .or(parse_nat_zero_match_pattern::<D>)
         .or(parse_nat_succ_match_pattern::<D>)
         .or(parse_nat_lit_match_pattern::<D>)

@@ -20,7 +20,8 @@ use {
         elaborate, payload_fills,
     },
     crate::{
-        Context, Error, HeldFrames, check, expect, pending, reduce_with, resolved_for_display,
+        Context, Error, HeldFrames, WrittenLiteral, check, expect, pending, reduce_with,
+        resolved_for_display, stuck_on_metavar,
     },
     curios_common::{Plicity, recurse},
     curios_core::{
@@ -29,7 +30,11 @@ use {
     },
     curios_num::Natural,
     curios_surface::written_pattern,
-    std::{collections::BTreeMap, rc::Rc},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+        sync::OnceLock,
+    },
 };
 
 /// Compile `matrix`, which `term` holds, into the tree of matches it comes to, each elaborated as it is built.
@@ -61,6 +66,7 @@ pub fn elaborate_matrix(
         taken: vec![false; rows],
         covers: vec![None; rows],
         seen: vec![Seen::Any],
+        texts: BTreeSet::new(),
     };
 
     compiler.whole(context, mode)
@@ -78,6 +84,8 @@ enum Shape<'m> {
     Pattern(&'m Pattern),
     /// The elements of a run after the ones read, and how it ends, over the sequence it is a run of.
     Remains(Sequence, &'m [Pattern], Ending),
+    /// What a string pattern spells past the bytes read: a closed run of those bytes.
+    Text(&'m [u8]),
 }
 
 impl<'m> Shape<'m> {
@@ -97,6 +105,13 @@ impl<'m> Shape<'m> {
                 .map(|(first, then, ending)| (first, Shape::after(sequence, then, ending)))
         };
 
+        // A string is the closed run of its bytes, each a byte's literal.
+        let text = |bytes: &'m [u8]| {
+            bytes
+                .split_first()
+                .map(|(first, then)| (byte_pattern(*first), Shape::Text(then)))
+        };
+
         match self {
             Shape::Pattern(Pattern::List(elements)) => {
                 Some((Sequence::List, split(Sequence::List, elements)))
@@ -104,6 +119,8 @@ impl<'m> Shape<'m> {
             Shape::Pattern(Pattern::Bytes(elements)) => {
                 Some((Sequence::Bytes, split(Sequence::Bytes, elements)))
             }
+            Shape::Pattern(Pattern::Str(value)) => Some((Sequence::Bytes, text(value.as_bytes()))),
+            Shape::Text(bytes) => Some((Sequence::Bytes, text(bytes))),
             Shape::Pattern(_) => None,
             Shape::Remains(sequence, elements, ending) => Some((
                 sequence,
@@ -118,9 +135,20 @@ impl<'m> Shape<'m> {
     fn pattern(self) -> Option<&'m Pattern> {
         match self {
             Shape::Pattern(pattern) => Some(pattern),
-            Shape::Remains(..) => None,
+            Shape::Remains(..) | Shape::Text(_) => None,
         }
     }
+}
+
+/// The pattern of a byte's literal `byte`, as a string pattern's run reads each of its bytes.
+fn byte_pattern(byte: u8) -> &'static Pattern {
+    static BYTES: OnceLock<Vec<Pattern>> = OnceLock::new();
+
+    &BYTES.get_or_init(|| {
+        (0..=u8::MAX)
+            .map(|byte| Pattern::Literal(Natural::from(u32::from(byte))))
+            .collect()
+    })[usize::from(byte)]
 }
 
 /// The pattern a part a case always holds is read as at a column of its own, a predecessor or an open run's rest: a binder, or `_`.
@@ -219,6 +247,8 @@ struct Compiler<'m> {
     covers: Vec<Option<usize>>,
     /// The value the scrutinee holds at the place the compiler stands, as a pattern: the first is the scrutinee's, and a part read apart names the places of its parts.
     seen: Vec<Seen>,
+    /// The places that hold a `Str` its bytes were read apart at, which a value prints as the string they spell, or `_` where they spell none yet.
+    texts: BTreeSet<usize>,
 }
 
 /// The row that cannot fail, while the rows before it are read.
@@ -406,7 +436,9 @@ impl<'m> Compiler<'m> {
 
                 self.naturals(context, columns, lines, top, mode)
             }
-            Pattern::List(_) | Pattern::Bytes(_) => unreachable!("a run is read above"),
+            Pattern::List(_) | Pattern::Bytes(_) | Pattern::Str(_) => {
+                unreachable!("a run is read above")
+            }
             Pattern::Binder | Pattern::Wildcard => {
                 unreachable!("a binder or a wildcard is no pattern a column is split by")
             }
@@ -452,6 +484,45 @@ impl<'m> Compiler<'m> {
         }
     }
 
+    /// The bytes the run at `place` holds, where every one of them and its end were read.
+    fn spelled_bytes(&self, place: usize) -> Option<Vec<u8>> {
+        let mut bytes = Vec::new();
+        let mut at = place;
+        loop {
+            match &self.seen[at] {
+                Seen::Empty(_) => return Some(bytes),
+                Seen::Cons(_, head, tail) => {
+                    let Seen::Leaf(byte) = &self.seen[*head] else {
+                        return None;
+                    };
+                    bytes.push(byte.parse().ok()?);
+                    at = *tail;
+                }
+                _ => return None,
+            }
+        }
+    }
+
+    /// The refusal of the row at `row`, which writes `literal` at a column whose type, the scrutinee's, takes no literal of its kind.
+    fn literal_refused(
+        &self,
+        context: &mut Context,
+        scrutinee: &Scrutinee,
+        row: usize,
+        literal: WrittenLiteral,
+    ) -> Error {
+        let pattern = self.written(row);
+
+        pending(context, [scrutinee.type_()], move |reporting, [type_]| {
+            Error::MatrixLiteralColumn {
+                pattern,
+                literal,
+                scrutinee: Box::new(resolved_for_display(reporting, &type_)),
+            }
+        })
+        .at_opt(self.row(row).body.extent())
+    }
+
     /// The value at `place` as a pattern.
     fn value(&self, place: usize) -> String {
         let fields = |fields: &[(Option<String>, usize)]| {
@@ -464,6 +535,13 @@ impl<'m> Compiler<'m> {
                 .collect::<Vec<_>>()
                 .join(", ")
         };
+
+        if self.texts.contains(&place) {
+            return self
+                .spelled_bytes(place)
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .map_or_else(|| "_".to_string(), |text| format!("{text:?}"));
+        }
 
         match &self.seen[place] {
             Seen::Any => "_".to_string(),
@@ -1144,26 +1222,25 @@ impl<'m> Compiler<'m> {
             first(|pattern| matches!(pattern, Pattern::Literal(_) | Pattern::Character(_)));
         let place = |row: usize| self.row(row).body.extent();
 
-        // What a column's literals are is its type's: a byte's are dispatched as the natural it is, and a type that is neither takes none.
+        // What a column's literals are is its type's: a byte's are dispatched as the natural it is, a character's as its code point, which only a character's literal names, and a type that is none of these takes none.
         let scrutinee = Scrutinee::read(context, &column.term)?;
         let byte = scrutinee.is_byte();
-        if !byte && !scrutinee.takes_naturals(context) {
-            let row = lines
-                .iter()
-                .find(|line| line.cells[0].is_some())
-                .map(|line| line.row)
-                .expect("a row writes the literal the column was split for");
-            let pattern = self.written(row);
+        let character = scrutinee.is_char(context);
+        let refused = lines.iter().find_map(|line| {
+            let (shape, _) = line.cells[0]?;
+            let written = match shape {
+                Shape::Pattern(Pattern::Character(_)) => WrittenLiteral::Character,
+                _ => WrittenLiteral::Numeral,
+            };
+            let taken = match written {
+                WrittenLiteral::Character => character || byte || scrutinee.takes_naturals(context),
+                _ => !character && (byte || scrutinee.takes_naturals(context)),
+            };
 
-            return Err(
-                pending(context, [scrutinee.type_()], move |reporting, [type_]| {
-                    Error::MatrixLiteralColumn {
-                        pattern,
-                        scrutinee: Box::new(resolved_for_display(reporting, &type_)),
-                    }
-                })
-                .at_opt(place(row)),
-            );
+            (!taken).then_some((line.row, written))
+        });
+        if let Some((row, literal)) = refused {
+            return Err(self.literal_refused(context, &scrutinee, row, literal));
         }
         if byte && let Some(successor) = peels {
             return Err(Error::MatrixByteSuccessor {
@@ -1181,7 +1258,7 @@ impl<'m> Compiler<'m> {
         }
 
         // `0` and a binder are induction's two cases, so `| 0 => … | _ => …` is the term `| 0 => … | _ + 1 => …` is, and takes its successor arm at a successor whose predecessor is unknown, where a dispatch takes an arm only at a literal. A byte has no successor, so its `0` is a literal.
-        if byte || dispatches.is_some() {
+        if byte || character || dispatches.is_some() {
             let literal = |shape: Shape<'m>| match shape {
                 Shape::Pattern(Pattern::Zero) => Natural::zero(),
                 Shape::Pattern(Pattern::Literal(value)) => value.clone(),
@@ -1208,6 +1285,20 @@ impl<'m> Compiler<'m> {
                 .iter()
                 .filter_map(|line| line.cells[0].map(|(shape, _)| (literal(shape), Vec::new())))
                 .collect();
+            // Each case as its first row writes it, a character as a character.
+            let mut spelled = BTreeMap::new();
+            for line in &lines {
+                if let Some((shape, _)) = line.cells[0] {
+                    spelled
+                        .entry(literal(shape))
+                        .or_insert_with(|| match shape {
+                            Shape::Pattern(Pattern::Character(character)) => {
+                                format!("{character:?}")
+                            }
+                            _ => literal(shape).to_string(),
+                        });
+                }
+            }
             let mut others = Vec::new();
             for mut line in lines {
                 match line.cells.remove(0) {
@@ -1225,12 +1316,14 @@ impl<'m> Compiler<'m> {
             }
             // No set of literals covers every natural: the least one no row writes is a value no arm matches. A byte's dispatch is a natural's, so it too takes its other values at a binder, written `_` where every byte has an arm.
             if others.is_empty() {
-                let missing = match byte {
-                    true => (0..=u32::from(u8::MAX))
+                let missing = match (byte, character) {
+                    (true, _) => (0..=u32::from(u8::MAX))
                         .map(Natural::from)
                         .find(|literal| !groups.contains_key(literal))
                         .map_or(Seen::Any, |least| Seen::Leaf(least.to_string())),
-                    false => {
+                    // A character no row writes is any of them.
+                    (false, true) => Seen::Any,
+                    (false, false) => {
                         let least = (0u32..)
                             .map(Natural::from)
                             .find(|literal| !groups.contains_key(literal))
@@ -1243,7 +1336,7 @@ impl<'m> Compiler<'m> {
                 return Err(self.uncovered(&column, missing, false));
             }
 
-            let scrutinee = dispatched(scrutinee);
+            let scrutinee = dispatched(context, scrutinee);
             let goal = Term::hole(context.mint_metavar());
 
             return context.awaiting(|context| {
@@ -1258,7 +1351,7 @@ impl<'m> Compiler<'m> {
 
                 let mut cases = Vec::with_capacity(groups.len());
                 for (value, group) in groups {
-                    self.seen[column.seen] = Seen::Leaf(value.to_string());
+                    self.seen[column.seen] = Seen::Leaf(spelled[&value].clone());
                     let arm = split.arm(context, &value, |context, expected| {
                         self.case(context, rest.clone(), group, expected)
                     })?;
@@ -1339,6 +1432,36 @@ impl<'m> Compiler<'m> {
         let rest = columns;
         self.joined(context, &mut lines, &column);
 
+        // A string pattern takes a `Str` apart by its bytes, and a column a row writes one at holds strings alone: the row that writes the first, where one does.
+        let whole =
+            |line: &Line<'m>| matches!(line.cells[0], Some((Shape::Pattern(Pattern::Str(_)), _)));
+        let texts = lines.iter().find(|line| whole(line)).map(|line| line.row);
+        if texts.is_some()
+            && lines
+                .iter()
+                .any(|line| line.cells[0].is_some() && !whole(line))
+        {
+            return Err(Error::MatrixInconsistentShape);
+        }
+        // Read before a case is missed, so a column no string fits is refused as one and a missing case is spelled as the string it is.
+        let read = match texts {
+            Some(text) => {
+                let scrutinee = Scrutinee::read(context, &column.term)?;
+                if !scrutinee.is_text(context) && !stuck_on_metavar(context, scrutinee.type_()) {
+                    return Err(self.literal_refused(
+                        context,
+                        &scrutinee,
+                        text,
+                        WrittenLiteral::String,
+                    ));
+                }
+                self.texts.insert(column.seen);
+
+                Some(scrutinee.of_text(context)?)
+            }
+            None => None,
+        };
+
         let mut empties = Vec::new();
         let mut conses = Vec::new();
         for mut line in lines {
@@ -1374,7 +1497,10 @@ impl<'m> Compiler<'m> {
             return Err(self.uncovered(&column, missing, false));
         }
 
-        let scrutinee = Scrutinee::read(context, &column.term)?;
+        let scrutinee = match read {
+            Some(scrutinee) => scrutinee,
+            None => Scrutinee::read(context, &column.term)?,
+        };
         let goal = Term::hole(context.mint_metavar());
 
         context.awaiting(|context| {
@@ -1760,6 +1886,11 @@ impl<'m> Compiler<'m> {
                 Some(_) => unreachable!("a column is split by one shape"),
                 None => {
                     let scrutinee = Scrutinee::read(context, &column)?;
+                    // A string pattern reads its `Str` through its bytes, as the tree's split does.
+                    let scrutinee = match shape {
+                        Shape::Pattern(Pattern::Str(_)) => scrutinee.of_text(context)?,
+                        _ => scrutinee,
+                    };
                     let goal = Term::hole(context.mint_metavar());
 
                     Rc::new(SequenceSplit::resolve(
@@ -1807,7 +1938,9 @@ impl<'m> Compiler<'m> {
             Pattern::Binder | Pattern::Wildcard | Pattern::Tuple(_) | Pattern::Struct { .. } => {
                 unreachable!("a pattern that states no case is read above")
             }
-            Pattern::List(_) | Pattern::Bytes(_) => unreachable!("a run is read above"),
+            Pattern::List(_) | Pattern::Bytes(_) | Pattern::Str(_) => {
+                unreachable!("a run is read above")
+            }
             Pattern::Variant { tag, args } => {
                 let split = match shared {
                     Some(Outermost::Nominal(split)) => split,
@@ -1867,12 +2000,9 @@ impl<'m> Compiler<'m> {
                         let scrutinee = Scrutinee::read(context, &column)?;
                         let goal = Term::hole(context.mint_metavar());
 
-                        Rc::new(SwitchSplit::resolve(
-                            context,
-                            dispatched(scrutinee),
-                            &goal,
-                            &mode,
-                        )?)
+                        let scrutinee = dispatched(context, scrutinee);
+
+                        Rc::new(SwitchSplit::resolve(context, scrutinee, &goal, &mode)?)
                     }
                 };
 
@@ -2125,6 +2255,8 @@ fn refutations(pattern: &Pattern) -> usize {
         | Pattern::Succ { .. }
         | Pattern::Literal(_)
         | Pattern::Character(_) => 1,
+        // A split for each byte, and one for the end.
+        Pattern::Str(value) => value.len() + 1,
         // A split for each element, and one for a closed run's end.
         Pattern::List(elements) | Pattern::Bytes(elements) => {
             let ends = match elements {
@@ -2224,10 +2356,11 @@ fn opening(sequence: Sequence) -> &'static str {
     }
 }
 
-/// The scrutinee a dispatch on literals reads: a byte as the natural it is, and any other as it stands.
-fn dispatched(scrutinee: Scrutinee) -> Scrutinee {
-    match scrutinee.is_byte() {
-        true => scrutinee.of_byte(),
-        false => scrutinee,
+/// The scrutinee a dispatch on literals reads: a byte as the natural it is, a character as its code point, and any other as it stands.
+fn dispatched(context: &Context, scrutinee: Scrutinee) -> Scrutinee {
+    match (scrutinee.is_byte(), scrutinee.is_char(context)) {
+        (true, _) => scrutinee.of_byte(),
+        (false, true) => scrutinee.of_char(context),
+        (false, false) => scrutinee,
     }
 }

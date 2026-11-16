@@ -157,6 +157,8 @@ pub enum Pattern {
     Literal(Natural),
     /// A dispatch literal spelled as the character whose scalar value it is.
     Character(char),
+    /// A string literal, which takes a `Str` apart by its bytes.
+    Str(String),
     /// A run over a list: `[]`, `[a, b]` or `[a, b, ..rest]`.
     List(#[archived_omit_bounds] Elements),
     /// A run over a packed sequence: `x[]`, `x[a, b]` or `x[a, b, ..rest]`.
@@ -249,7 +251,11 @@ impl Pattern {
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 fields.iter().map(|(_, field)| field.binders()).sum()
             }
-            Pattern::Bool(_) | Pattern::Zero | Pattern::Literal(_) | Pattern::Character(_) => 0,
+            Pattern::Bool(_)
+            | Pattern::Zero
+            | Pattern::Literal(_)
+            | Pattern::Character(_)
+            | Pattern::Str(_) => 0,
             Pattern::Succ { predecessor } => predecessor.binders(),
             Pattern::List(elements) | Pattern::Bytes(elements) => elements.binders(),
         }

@@ -14,8 +14,8 @@ use {
     curios_common::Plicity,
     curios_core::{
         Advance, Atom, Carrier, Cases, Free, Global, InductArm, InductDecl, InductType, Intrinsic,
-        IntrinsicHead, Many, Match, Nat, One, Quality, Scope, Subterm, Telescope, Term, Two,
-        Universes, goal_at,
+        IntrinsicHead, Many, Match, Nat, One, Quality, Scope, StructType, Subterm, Telescope, Term,
+        Two, Universes, goal_at,
     },
     curios_num::{Binary, Natural},
     std::collections::{HashMap, HashSet},
@@ -56,6 +56,51 @@ impl Scrutinee {
             term: Term::intrinsic(Intrinsic::ByteToNat(self.term)),
             type_: Term::intrinsic(Intrinsic::NatType),
         }
+    }
+
+    /// Whether the scrutinee is a `/std/Char`, which a dispatch on its literals reads as its code point ([`Scrutinee::of_char`]).
+    pub fn is_char(&self, context: &Context) -> bool {
+        self.is_structure(&Global::Authored(
+            context.syntax().character.character.qualifier(),
+        ))
+    }
+
+    /// Whether the scrutinee is a `/std/Str`, which a string pattern takes apart by its bytes ([`Scrutinee::of_text`]).
+    pub fn is_text(&self, context: &Context) -> bool {
+        self.is_structure(&Global::Authored(
+            context.syntax().string.string.qualifier(),
+        ))
+    }
+
+    /// Whether the scrutinee is the structure `name`, which takes no parameter.
+    fn is_structure(&self, name: &Global) -> bool {
+        matches!(&*self.type_, Subterm::StructType(StructType { name: of, params, .. }) if of == name && params.is_empty())
+    }
+
+    /// The character as its code point, the field its literal is built with: a dispatch on a `Char`'s literals is a natural's, as a byte's is, so Core and the certifier hold nothing new for it.
+    pub fn of_char(self, context: &Context) -> Self {
+        Self {
+            term: Term::proj_struct(
+                self.term,
+                Global::Authored(context.syntax().character.character.qualifier()),
+                0,
+            ),
+            type_: Term::intrinsic(Intrinsic::NatType),
+        }
+    }
+
+    /// The string as its bytes, the field its literal is built with: a string pattern is the closed run of its bytes, so Core and the certifier hold nothing new for it. A scrutinee of a type nothing has decided yet is held to `Str`, which the pattern names.
+    pub fn of_text(self, context: &mut Context) -> Result<Self, Error> {
+        let string = Global::Authored(context.syntax().string.string.qualifier());
+        if stuck_on_metavar(context, &self.type_) {
+            let text = Term::struct_type(string, Vec::<Term>::new());
+            expect(context, &self.term, &self.type_, &text)?;
+        }
+
+        Ok(Self {
+            term: Term::proj_struct(self.term, string, 0),
+            type_: Term::intrinsic(Intrinsic::BytesType),
+        })
     }
 
     /// The type the scrutinee is read at.

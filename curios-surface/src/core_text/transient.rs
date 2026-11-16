@@ -500,6 +500,7 @@ fn pattern_read(
         MatchPattern::Struct { .. } => return Err(unresolved(at)),
         MatchPattern::Bool(value) => Pattern::Bool(*value),
         MatchPattern::Char(character) => Pattern::Character(*character),
+        MatchPattern::Str(literal) => Pattern::Str(literal.value.clone()),
         MatchPattern::Nat(NatPattern::Zero) => Pattern::Zero,
         MatchPattern::Nat(NatPattern::Succ { pred_label }) => Pattern::Succ {
             predecessor: slot_read(pred_label, at, places)?,

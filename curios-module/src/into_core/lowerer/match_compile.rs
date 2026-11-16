@@ -244,6 +244,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             },
             MatchPattern::Bool(value) => curios_core::Pattern::Bool(*value),
             MatchPattern::Char(character) => curios_core::Pattern::Character(*character),
+            MatchPattern::Str(literal) => curios_core::Pattern::Str(literal.value.clone()),
             MatchPattern::Nat(NatPattern::Zero) => curios_core::Pattern::Zero,
             MatchPattern::Nat(NatPattern::Succ { pred_label }) => curios_core::Pattern::Succ {
                 predecessor: self.slot(pred_label, binders),
@@ -366,6 +367,7 @@ fn takes_apart(pattern: &MatchPattern) -> bool {
         MatchPattern::Variant { .. }
         | MatchPattern::Bool(_)
         | MatchPattern::Char(_)
+        | MatchPattern::Str(_)
         | MatchPattern::Nat(_)
         | MatchPattern::List(_)
         | MatchPattern::Bytes(_) => true,

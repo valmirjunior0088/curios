@@ -353,12 +353,19 @@ pub fn parse_char_value<'a>(state: ParserState<'a>) -> Parsed<'a, char> {
 }
 
 pub fn parse_string_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+    parse_line_str
+        .map(|literal| Subterm::ProofLiteral(ProofLiteral::Str(literal)))
+        .map(Into::into)
+        .parse(state)
+}
+
+/// A one-line string literal, as the term and the pattern it spells both hold it.
+pub fn parse_line_str<'a>(state: ParserState<'a>) -> Parsed<'a, StrLit> {
     take_exact("\"")
         .and_keep(many0(parse_string_chunk))
         .and_drop(take_exact("\"").or(refuse_line_break_in_string))
         .and_drop(parse_whitespace)
-        .map(|chunks| Subterm::ProofLiteral(ProofLiteral::Str(StrLit::line(chunks.concat()))))
-        .map(Into::into)
+        .map(|chunks| StrLit::line(chunks.concat()))
         .parse(state)
 }
 
@@ -397,6 +404,14 @@ fn parse_block_piece<'a>(state: ParserState<'a>) -> Parsed<'a, BlockPiece<'a>> {
 ///
 /// Refusals are the delimiters': an opener followed by anything but a newline, and a closer that is not alone on its line, each named from where it stands.
 pub fn parse_block_string_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+    parse_block_str
+        .map(|literal| Subterm::ProofLiteral(ProofLiteral::Str(literal)))
+        .map(Into::into)
+        .parse(state)
+}
+
+/// A block string literal, as the term and the pattern it spells both hold it: see [`parse_block_string_literal`].
+pub fn parse_block_str<'a>(state: ParserState<'a>) -> Parsed<'a, StrLit> {
     mark()
         .flat_map(|open| {
             take_exact("\"\"\"")
@@ -418,15 +433,11 @@ pub fn parse_block_string_literal<'a, D: Grammar>(state: ParserState<'a>) -> Par
                     ),
                 )))
                 .flat_map(|(pieces, close)| match assemble_block(pieces) {
-                    Ok(value) => pure(Subterm::ProofLiteral(ProofLiteral::Str(StrLit::block(
-                        value,
-                    ))))
-                    .boxed(),
+                    Ok(value) => pure(StrLit::block(value)).boxed(),
                     Err(message) => commit(fail_from(&close, message)).boxed(),
                 })
         })
         .and_drop(parse_whitespace)
-        .map(Into::into)
         .parse(state)
 }
 

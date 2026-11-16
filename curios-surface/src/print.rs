@@ -18,10 +18,11 @@ use {
         FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm, HeadlessMatch, InductIndex, Infix,
         Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, Literal, Match,
         MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
-        PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm, StructField, StructLit,
-        StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem, TopLet,
-        TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField, TuplePattern, TupleType,
-        TupleTypeParam, UseGroup, WitnessField, intrinsic_form, intrinsic_path,
+        PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm, StrLit, StructField,
+        StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct,
+        TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField,
+        TuplePattern, TupleType, TupleTypeParam, UseGroup, WitnessField, intrinsic_form,
+        intrinsic_path,
     },
     crate::{ELIDED, Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
@@ -187,6 +188,29 @@ fn argument_lines(items: Vec<Printer>) -> Printer {
         ])),
         pure(")"),
     ])
+}
+
+/// A string literal in the spelling it was written in: a block, or one line with its escapes.
+fn print_string_literal(literal: &StrLit) -> Printer {
+    match literal.block {
+        true => print_block_string(&literal.value),
+        false => pure(format!(
+            "\"{}\"",
+            literal
+                .value
+                .chars()
+                .map(|character| match character {
+                    '"' => "\\\"".to_string(),
+                    '\\' => "\\\\".to_string(),
+                    '\n' => "\\n".to_string(),
+                    '\t' => "\\t".to_string(),
+                    '\r' => "\\r".to_string(),
+                    hidden if unseen(hidden) => braced_escape(hidden),
+                    _ => character.to_string(),
+                })
+                .collect::<String>()
+        )),
+    }
 }
 
 /// A block string literal, printed as the lines of its value one level in from the opener's line, with the closer at that level. Each line prints as itself: the leading whitespace lines share puts them right of the closer, which is exactly what a reader strips, so nothing is removed here — while trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form, but for any other control character, which prints as its braced escape.
@@ -450,6 +474,7 @@ impl<D: Layout> TreePrinter<D> {
             MatchPattern::Bool(false) => pure("false"),
             MatchPattern::Bool(true) => pure("true"),
             MatchPattern::Char(character) => print_char_literal(character),
+            MatchPattern::Str(literal) => print_string_literal(&literal),
             MatchPattern::Nat(NatPattern::Zero) => pure("0"),
             MatchPattern::Nat(NatPattern::Succ { pred_label }) => {
                 flat([self.binder(pred_label), pure(" + 1")])
@@ -487,6 +512,7 @@ fn packs<D: Dialect>(pattern: &MatchPattern<D>) -> bool {
         | MatchPattern::Bool(_)
         | MatchPattern::Char(_)
         | MatchPattern::Nat(NatPattern::Zero | NatPattern::Lit(_)) => true,
+        MatchPattern::Str(literal) => !literal.block,
         MatchPattern::Variant { args, .. } => args.is_empty(),
         MatchPattern::List(elements) | MatchPattern::Bytes(elements) => {
             matches!(elements, Elements::Closed(elements) if elements.is_empty())
@@ -1044,25 +1070,7 @@ impl<D: Layout> TreePrinter<D> {
             // Never parsed: the witness lowering mints it, and a `satisfy` prints its `;` from the declaration, not from here.
             Subterm::Derive => pure("derive"),
             Subterm::ProofLiteral(ProofLiteral::Char(character)) => print_char_literal(character),
-            Subterm::ProofLiteral(ProofLiteral::Str(literal)) if literal.block => {
-                print_block_string(&literal.value)
-            }
-            Subterm::ProofLiteral(ProofLiteral::Str(literal)) => pure(format!(
-                "\"{}\"",
-                literal
-                    .value
-                    .chars()
-                    .map(|character| match character {
-                        '"' => "\\\"".to_string(),
-                        '\\' => "\\\\".to_string(),
-                        '\n' => "\\n".to_string(),
-                        '\t' => "\\t".to_string(),
-                        '\r' => "\\r".to_string(),
-                        hidden if unseen(hidden) => braced_escape(hidden),
-                        _ => character.to_string(),
-                    })
-                    .collect::<String>()
-            )),
+            Subterm::ProofLiteral(ProofLiteral::Str(literal)) => print_string_literal(&literal),
             Subterm::FuncType(FuncType { params, output }) => flat([
                 listed(
                     "(",

@@ -4343,6 +4343,14 @@
         },
         {
           "type": "SYMBOL",
+          "name": "string"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "block_string"
+        },
+        {
+          "type": "SYMBOL",
           "name": "successor_pattern"
         },
         {

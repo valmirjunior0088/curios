@@ -470,8 +470,10 @@ pub enum MatchPattern<D: Dialect = Program> {
     },
     /// A `Bool` literal leaf: `true` or `false`.
     Bool(bool),
-    /// A character literal leaf — a `Nat` dispatch case spelled by its scalar value, printed back as written.
+    /// A character literal leaf — a dispatch case spelled by its scalar value, at a `Char`, a `Nat` or a `Byte`, printed back as written.
     Char(char),
+    /// A string literal leaf — a `Str` taken apart by its bytes — printed back in the spelling it was written in.
+    Str(StrLit),
     /// A nested `Nat` literal leaf — the `0`/`n + 1` (case split) or bare literal (dispatch) shapes a headed `Nat` match takes.
     Nat(NatPattern<D>),
     /// A run over a list: `[]`, `[a, b]` or `[a, b, ..rest]`.

@@ -17,3 +17,4 @@ mod refinement_tests;
 mod run_tests;
 mod spelling_tests;
 mod target_tests;
+mod text_tests;

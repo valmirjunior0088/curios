@@ -128,7 +128,7 @@ The values no decimal spells have literals of their own, each with a required si
 
 ### Character and string literals
 
-A character literal holds one Unicode scalar value or one escape. Like a numeral, it takes its type from where it stands: a `Char`, certified by proof, where nothing pins it, and its code point where a `Nat`, a `Byte` or an `Int` is expected. A `Byte` refuses a code point past `255`, and neither `Bool` nor `Flt` takes a character. `Char` excludes the surrogates and everything past `U+10FFFF`. `Char/to_nat` converts a value whose type is already fixed. In a `match`, a character literal is a dispatch case of a `Nat` or a `Byte` ([Natural-number dispatch](#natural-number-dispatch)).
+A character literal holds one Unicode scalar value or one escape. Like a numeral, it takes its type from where it stands: a `Char`, certified by proof, where nothing pins it, and its code point where a `Nat`, a `Byte` or an `Int` is expected. A `Byte` refuses a code point past `255`, and neither `Bool` nor `Flt` takes a character. `Char` excludes the surrogates and everything past `U+10FFFF`. `Char/to_nat` converts a value whose type is already fixed. In a `match`, a character literal is a dispatch case of a `Char`, a `Nat` or a `Byte` ([Character and string dispatch](#character-and-string-dispatch), [Natural-number dispatch](#natural-number-dispatch)).
 
 ```text
 'c'
@@ -676,7 +676,7 @@ pub let name(tag: Nat) -> Str =
 
 One match does not mix a successor arm and literal arms.
 
-A dispatch literal is any natural, written whole, as a numeral or as a character literal, which matches its scalar value: `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, the conversion visible at the head.
+A dispatch literal is any natural, written whole, as a numeral or as a character literal, which matches its scalar value.
 
 A `Byte` is dispatched on literals as a `Nat` is, a numeral from `0` through `255` or a character whose code point fits a byte, as a [packed literal](#packed-literals)'s constant entries are. Its `0` is a literal like any other, and a byte takes no successor pattern.
 
@@ -690,6 +690,32 @@ pub let class(b: Byte) -> Nat =
     | _ => 2
     end;
 ```
+
+### Character and string dispatch
+
+A `Char` is dispatched on character literals and a `Str` on string literals, beside an arm that writes a binder, which takes every other value.
+
+```crs
+use /std/{Char, Nat, Str};
+
+pub let spacing(c: Char) -> Nat =
+    match c
+    | ' ' | '\t' => 0
+    | '\n' => 1
+    | _ => 2
+    end;
+
+pub let command(name: Str) -> Nat =
+    match name
+    | "build" => 0
+    | "test" => 1
+    | _ => 2
+    end;
+```
+
+A character matches by its code point and a string by its bytes, a one-line and a block string alike, so a string pattern stands wherever a pattern does: `| some("--help") =>`, `| ["run", ..rest] =>`. A `Char` takes no numeral, and a `Str` no packed run.
+
+A floating-point literal is no pattern: a pattern tests a value's identity, which tells `+0.0` from `-0.0` and one NaN from another, where `==` does neither, so a [guard](#guards) tests a float, `| x, x == 1.5 =>`.
 
 ### List case split
 

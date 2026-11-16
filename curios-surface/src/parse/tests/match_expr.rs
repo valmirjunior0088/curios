@@ -226,6 +226,71 @@ fn a_qualified_constructor_pattern_is_refused_by_name() {
     }
 }
 
+/// A signed numeral and a floating-point literal take nothing apart, and each is refused by what it is, where it starts, with the guard that tests it — rather than as the binder the fall-through fails to read at its first character, the natural `1.5` opens with, or the constructor a payload written as one is read as the binder of.
+#[test]
+fn a_numeral_no_pattern_takes_is_refused_by_name_where_it_starts() {
+    for (source, literal, what) in [
+        ("match i | -1 => 0 | _ => 1 end", "-1", "a signed numeral"),
+        ("match i | +1 => 0 | _ => 1 end", "+1", "a signed numeral"),
+        (
+            "match o | some(-1) => 0 | _ => 1 end",
+            "-1",
+            "a signed numeral",
+        ),
+        (
+            "match x | 1.5 => 0 | _ => 1 end",
+            "1.5",
+            "a floating-point literal",
+        ),
+        (
+            "match x | -inf.0 => 0 | _ => 1 end",
+            "-inf.0",
+            "a floating-point literal",
+        ),
+    ] {
+        let error = source.parse::<Term>().unwrap_err();
+        let report = error.format();
+        assert!(
+            report.contains(&format!("{what} is no pattern")),
+            "{source:?} reported {report}"
+        );
+        assert!(
+            report.contains(&format!("`| x, x == {literal} =>`")),
+            "{source:?} reported {report}"
+        );
+        let column = source.find(literal).expect("the literal is written") + 1;
+        assert_eq!(
+            error.report().span().expect("located").line_column(),
+            (1, column),
+            "{source:?} reported {report}"
+        );
+    }
+}
+
+/// A string literal is a pattern, at the top of an arm and inside a constructor's payload, in a run's element and in either spelling, and each prints back as written.
+#[test]
+fn a_string_literal_is_a_pattern_printed_as_written() {
+    for source in [
+        r#"match name | "source" => 0 | "" => 1 | _ => 2 end"#,
+        r#"match o | some("x") => 0 | _ => 1 end"#,
+        r#"match args | ["--help", ..rest] => 0 | _ => 1 end"#,
+        r#"match s | "a\tb\"c" => 0 | _ => 1 end"#,
+    ] {
+        let term = source.parse::<Term>().unwrap();
+        assert_eq!(term.to_string(), source, "{source:?} printed back");
+    }
+
+    let block = "match s\n| \"\"\"\n    two\n    lines\n    \"\"\" => 0\n| _ => 1\nend";
+    let term = block.parse::<Term>().unwrap();
+    let Subterm::Match(matched) = &*term else {
+        panic!("a match");
+    };
+    assert_eq!(
+        matched.arms[0].alternatives[0].pattern,
+        MatchPattern::Str(StrLit::block("two\nlines"))
+    );
+}
+
 /// The one match pattern that may carry a path keeps it: a struct head is kept as written, for the lowering to resolve.
 #[test]
 fn a_struct_match_pattern_keeps_its_qualified_head() {

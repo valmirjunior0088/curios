@@ -629,6 +629,7 @@ pub fn written_pattern<D: Dialect>(
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value.clone(), Radix::Dec(0))))
         }
         curios_core::Pattern::Character(character) => MatchPattern::Char(*character),
+        curios_core::Pattern::Str(value) => MatchPattern::Str(StrLit::line(value.clone())),
         curios_core::Pattern::List(elements) => {
             MatchPattern::List(written_elements(elements, names, own))
         }

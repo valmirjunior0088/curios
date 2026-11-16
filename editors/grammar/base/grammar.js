@@ -667,6 +667,8 @@ module.exports = grammar({
         $.constructor_pattern,
         $.boolean,
         $.character,
+        $.string,
+        $.block_string,
         $.successor_pattern,
         $.number,
         $.list_pattern,
