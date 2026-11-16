@@ -496,3 +496,59 @@ fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
         "{verdicts:?}"
     );
 }
+
+/// The board's guard settled by the unit type, with the split on `c.0`, the projection a character dispatch reads, where the ticket split on `c`: the inner arm records `c.0 = 97`, solves nothing and re-types nothing, so the guard is not restated there. Inside it `F(c.0)` reduces to `{}`, `h(p)` and `h(q)` are one atom, and `one` reduces a stuck form naming the guard's locals, which asks for the guard's reduced spelling. Settled under the arm's equation it would be `k(0)` and outlive the arm, and the term the module closes with, at `c := C { 98 }` and `k := (n) => n == 1`, would be a proof of `False`.
+const A_GUARD_SETTLED_UNDER_A_CHARACTER_ARM: &str = r#"
+struct /C: pub Type { code: #NatType }
+
+((
+    c: #{node = StructType} /C(),
+    h: (x: #{goal = Type} match #{field = Struct(/C, 0)} c.0 | 97 => {} | _ => #NatType end) -> #NatType,
+    k: (n: #NatType) -> #BoolType,
+    p: #{goal = Type} match #{field = Struct(/C, 0)} c.0 | 97 => {} | _ => #NatType end,
+    q: #{goal = Type} match #{field = Struct(/C, 0)} c.0 | 97 => {} | _ => #NatType end,
+    guard: /std/Bool/Holds(
+        #{goal = #BoolType} match #NatEql(h(p), h(q)) | false => k(1) | true => k(0) end)) =>
+    #{goal = /std/Bool/Holds(k(0))}
+    match #{goal = #BoolType} match #NatEql(h(p), h(q)) | false => k(1) | true => k(0) end
+    | false => #{goal = /std/Bool/Holds(k(0))} match guard end
+    | true =>
+        let w: #{node = InductType} /std/Bool/True() =
+            #{goal = #{node = InductType} /std/Bool/True()}
+            match #{field = Struct(/C, 0)} c.0
+            | 97 =>
+                let one: /std/Bool/Holds(#NatEql(#NatAdd(h(p), h(q)), #NatAdd(h(p), h(p)))) =
+                    #{node = Variant} /std/Bool/True/qed();
+                #{node = Variant} /std/Bool/True/qed()
+            | _ => #{node = Variant} /std/Bool/True/qed()
+            end;
+        #{node = Variant} /std/Bool/True/qed()
+    end)(
+    /C { 98 },
+    (n2: #NatType) => n2,
+    (n3: #NatType) => #NatEql(n3, 1),
+    0,
+    1,
+    #{node = Variant} /std/Bool/True/qed())
+"#;
+
+// The guard's spelling is settled with the arm's equation withheld, which leaves it the stuck match whatever the arm knows: `one` holds inside the arm, and the `qed` after the split is refused at `Holds(k(0))`, as the module's closing term.
+#[test]
+fn a_guard_settled_under_a_character_arm_answers_nothing_after_that_arm() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_GUARD_SETTLED_UNDER_A_CHARACTER_ARM}",
+        PROPOSITIONS,
+        A_GUARD_SETTLED_UNDER_A_CHARACTER_ARM
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict {
+                name: None,
+                error: Error::Mismatch { .. }
+            }]
+        ),
+        "{verdicts:?}"
+    );
+}

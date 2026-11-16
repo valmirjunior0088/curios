@@ -1261,3 +1261,175 @@ fn a_value_and_an_arm_one_payload_past_their_case_are_refused_by_their_counts() 
     assert!(counted("pick", Counted::ArmBinders), "{verdicts:?}");
     assert!(counted("forged", Counted::Payload), "{verdicts:?}");
 }
+
+/// `/C` holds a code, as `/std/Char` does, and `character` dispatches on it, the projection a character pattern reads, with `qed` at `Holds(c.0 == 97)` in the default. Read at the `97` arm's instance, the default would hold it, and `character(C { 98 })`, which the module closes with, would be a proof of `False`.
+const A_CHARACTER_DISPATCH_DEFAULT: &str = r#"
+struct /C: pub Type { code: #NatType }
+
+#{proof = true}
+let /character: (c: #{node = StructType} /C()) -> /std/Bool/Holds(
+    #NatEql(#{field = Struct(/C, 0)} c.0, 97)) =
+    (c: #{node = StructType} /C()) =>
+        #{goal = /std/Bool/Holds(#NatEql(#{field = Struct(/C, 0)} c.0, 97))}
+        match #{field = Struct(/C, 0)} c.0
+        | 97 => /std/Bool/True/qed()
+        | _ => /std/Bool/True/qed()
+        end;
+
+/character(/C { 98 })
+"#;
+
+// A dispatch on a projection records its equation on the projection and refines nothing in its default, which is checked at the scrutinee itself: `qed` is refused there, under `character`, and the closing term, which stands at `False`, is admitted, so `character`'s refusal is all that stands between the module and `False`.
+#[test]
+fn a_character_dispatch_default_is_checked_at_its_scrutinee() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_CHARACTER_DISPATCH_DEFAULT}",
+        PROPOSITIONS,
+        A_CHARACTER_DISPATCH_DEFAULT
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict { name: Some(character), error: Error::Mismatch { .. } }] if *character == global("character")
+        ),
+        "{verdicts:?}"
+    );
+}
+
+/// `/S` holds bytes, as `/std/Str` does, and `string` splits them, the projection a string pattern reads, with `qed` at `Holds(s.0 == x[])` in the cons arm. Read as no case of its own, the cons arm would hold it, and `string(S { x[0x61] })` would be a proof of `False`.
+const A_STRING_RUNS_CONS_ARM: &str = r#"
+struct /S: pub Type { bytes: #BytesType }
+
+#{proof = true}
+let /string: (s: #{node = StructType} /S()) -> /std/Bool/Holds(
+    #BytesEql(#{field = Struct(/S, 0)} s.0, x[])) =
+    (s: #{node = StructType} /S()) =>
+        #{goal = /std/Bool/Holds(#BytesEql(#{field = Struct(/S, 0)} s.0, x[]))}
+        match #{field = Struct(/S, 0)} s.0
+        | x[] => /std/Bool/True/qed()
+        | x[b, ..rest] => /std/Bool/True/qed()
+        end;
+
+/string(/S { x[0x61] })
+"#;
+
+// A split of a projected run checks its cons arm at a byte ahead of a tail, where the bytes are no empty run: `qed` is refused there, under `string`, and the closing term is admitted.
+#[test]
+fn a_string_runs_cons_arm_is_checked_at_the_cons() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_STRING_RUNS_CONS_ARM}",
+        PROPOSITIONS,
+        A_STRING_RUNS_CONS_ARM
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict { name: Some(string), error: Error::Mismatch { .. } }] if *string == global("string")
+        ),
+        "{verdicts:?}"
+    );
+}
+
+/// A guard on a character's code, as `| x, x == 'a' =>` compiles: the rows after the arm are the `false` arm, which states `qed` at `Holds(c.0 == 97)`. Read where the guard held, `guarded(C { 98 })` would be a proof of `False`.
+const A_GUARDS_FALL_THROUGH: &str = r#"
+struct /C: pub Type { code: #NatType }
+
+#{proof = true}
+let /guarded: (c: #{node = StructType} /C()) -> /std/Bool/Holds(
+    #NatEql(#{field = Struct(/C, 0)} c.0, 97)) =
+    (c: #{node = StructType} /C()) =>
+        #{goal = /std/Bool/Holds(#NatEql(#{field = Struct(/C, 0)} c.0, 97))}
+        match #NatEql(#{field = Struct(/C, 0)} c.0, 97)
+        | false => /std/Bool/True/qed()
+        | true => /std/Bool/True/qed()
+        end;
+
+/guarded(/C { 98 })
+"#;
+
+// The `false` arm is checked at the guard's failure, where the goal is `Holds(false)`: `qed` is refused there, under `guarded`, and the closing term is admitted.
+#[test]
+fn a_guards_fall_through_is_checked_where_the_guard_failed() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_GUARDS_FALL_THROUGH}",
+        PROPOSITIONS,
+        A_GUARDS_FALL_THROUGH
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict { name: Some(guarded), error: Error::Mismatch { .. } }] if *guarded == global("guarded")
+        ),
+        "{verdicts:?}"
+    );
+}
+
+/// `x`'s type is `/C` only under `g(n) = true`, where `reduced` dispatches on `x.0` and states `qed` in the default at `Holds(x.0 == 97)`. Read at the `97` arm's instance, `reduced` at `g := (m) => m == 0`, `n := 0` and `x := C { 98 }`, which the module closes with, would be a proof of `False`.
+const A_DISPATCH_ON_A_TYPE_AN_ARM_REDUCES: &str = r#"
+struct /C: pub Type { code: #NatType }
+
+let /T: (b: #BoolType) -> Type =
+    (b: #BoolType) =>
+        #{goal = Type}
+        match b
+        | false => #NatType
+        | true => #{node = StructType} /C()
+        end;
+
+#{proof = true}
+let /reduced: (
+    g: (#NatType) -> #BoolType,
+    n: #NatType,
+    x: /T(g(n))) -> /std/Bool/Holds(
+    #{goal = #BoolType}
+    match g(n)
+    | false => true
+    | true => #NatEql(#{field = Struct(/C, 0)} x.0, 97)
+    end) =
+    (g: (#NatType) -> #BoolType, n: #NatType, x: /T(g(n))) =>
+        #{
+            goal = /std/Bool/Holds(
+                #{goal = #BoolType}
+                match g(n)
+                | false => true
+                | true => #NatEql(#{field = Struct(/C, 0)} x.0, 97)
+                end)}
+        match g(n)
+        | false => /std/Bool/True/qed()
+        | true =>
+            #{
+                goal = /std/Bool/Holds(
+                    #{goal = #BoolType}
+                    match true
+                    | false => true
+                    | true => #NatEql(#{field = Struct(/C, 0)} x.0, 97)
+                    end)}
+            match #{field = Struct(/C, 0)} x.0
+            | 97 => /std/Bool/True/qed()
+            | _ => /std/Bool/True/qed()
+            end
+        end;
+
+/reduced((m: #NatType) => #NatEql(m, 0), 0, /C { 98 })
+"#;
+
+// The projection is typed where the outer arm's equation makes `x` a `/C`, and the inner default is checked at the scrutinee itself: `qed` is refused there, under `reduced`, and the closing term is admitted.
+#[test]
+fn a_character_dispatch_on_a_type_an_arm_reduces_is_checked_at_its_scrutinee() {
+    let verdicts = core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${A_DISPATCH_ON_A_TYPE_AN_ARM_REDUCES}",
+        PROPOSITIONS,
+        A_DISPATCH_ON_A_TYPE_AN_ARM_REDUCES
+    ));
+
+    assert!(
+        matches!(
+            &verdicts[..],
+            [Verdict { name: Some(reduced), error: Error::Mismatch { .. } }] if *reduced == global("reduced")
+        ),
+        "{verdicts:?}"
+    );
+}

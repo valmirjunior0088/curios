@@ -431,3 +431,156 @@ fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
     ])
     .by_elaborator_in("/f", |error| matches!(error, Error::TypeMismatch { .. }));
 }
+
+// A character dispatch reads the code its view projects, and its default binds nothing and refines no code, so it is checked at the scrutinee itself: its goal is `Holds(c == 'a')` for any character, which `qed` cannot inhabit. Checked at the `'a'` arm's instance — the shape a refinement read off the code and leaked to the default would produce — `bogus('b')` would be a proof of `False`. `curios-cert`'s `recheck::case_tests` puts the module to the certifier under this name. The control states what holds of every character.
+#[test]
+fn a_character_dispatch_default_is_checked_at_its_scrutinee() {
+    control(
+        r#"
+        use /std/{Char};
+        use /std/Bool/{True, Holds};
+
+        let bogus(c: Char) -> Holds(c == c) =
+            match c
+            | 'a' => True/qed()
+            | _ => True/qed()
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("-> Holds(c == c) =", "-> Holds(c == 'a') =")])
+    .by_elaborator_in("/bogus", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
+}
+
+// A string's arm is checked at every byte it read and at its end: `"a"`'s arm is the string `x[0x61]`, where `s == "ab"` is `False`, and no prefix of `"ab"` that a longer string reaches too. Read as the run it begins, its `qed` would prove `"a" == "ab"`. `curios-cert`'s `recheck::case_tests` puts a run's cons arm to the certifier at the empty string. The control states what holds of every string.
+#[test]
+fn a_string_arm_is_checked_at_the_bytes_it_read() {
+    control(
+        r#"
+        use /std/{Str};
+        use /std/Bool/{True, Holds};
+
+        let bogus(s: Str, h: Holds(s == s)) -> Holds(s == s) =
+            match s
+            | "ab" => True/qed()
+            | "a" => True/qed()
+            | _ => h
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("h: Holds(s == s)", "h: Holds(s == \"ab\")"),
+        ("-> Holds(s == s) =", "-> Holds(s == \"ab\") ="),
+    ])
+    .by_elaborator_in("/bogus", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
+}
+
+// The rows after a guarded arm fall through to its guard's `false` arm and are checked there: where `x == 'a'` failed, `Holds(c == 'a')` is `False`, which `qed` cannot inhabit. Checked where the guard held — the shape a fall-through read under its guard's success would produce — `bogus('b')` would be a proof of `False`. `curios-cert`'s `recheck::case_tests` puts the module to the certifier under this name. The control states what holds of every character.
+#[test]
+fn a_guards_fall_through_is_checked_where_the_guard_failed() {
+    control(
+        r#"
+        use /std/{Char};
+        use /std/Bool/{True, Holds};
+
+        let bogus(c: Char) -> Holds(c == c) =
+            match c
+            | x, x == 'a' => True/qed()
+            | _ => True/qed()
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("-> Holds(c == c) =", "-> Holds(c == 'a') =")])
+    .by_elaborator_in("/bogus", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
+}
+
+// A bind guard's string is taken apart by its bytes and fails in more ways than one, so the rows after it are read once, where the guard has not run: there `g(s) == "ok"` is unknown, which `qed` cannot inhabit. Read where the bind guard matched, `bogus("a", (t: Str) => t)` would be a proof of `False`. The control states what holds of every string.
+#[test]
+fn a_bind_guards_fall_through_is_checked_where_its_string_was_missed() {
+    control(
+        r#"
+        use /std/{Str};
+        use /std/Bool/{True, Holds};
+
+        let bogus(s: Str, g: (Str) -> Str) -> Holds(g(s) == g(s)) =
+            match s
+            | x, "ok" = g(x) => True/qed()
+            | _ => True/qed()
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("-> Holds(g(s) == g(s)) =", "-> Holds(g(s) == \"ok\") =")])
+    .by_elaborator_in("/bogus", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
+}
+
+// A value whose type is `Char` only under an arm's equation is dispatched on the code the certifier reads there, and the default refines nothing: under `g(n) = true` the inner default's goal is `Holds(x == 'a')` for any `x`, which `qed` cannot inhabit. `curios-cert`'s `recheck::case_tests` puts the module to the certifier under this name. The control states what holds of every value.
+#[test]
+fn a_character_dispatch_on_a_type_an_arm_reduces_is_checked_at_its_scrutinee() {
+    control(
+        r#"
+        use /std/{Bool, Char, Nat};
+        use /std/Bool/{True, Holds};
+
+        let T(b: Bool) -> Type = match b | true => Char | false => Nat end;
+
+        let bogus(g: (Nat) -> Bool, n: Nat, x: T(g(n))) -> Holds(match g(n) | true => x == x | false => true end) =
+            match g(n)
+            | true =>
+                match x
+                | 'a' => True/qed()
+                | _ => True/qed()
+                end
+            | false => True/qed()
+            end;
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| true => x == x |", "| true => x == 'a' |")])
+    .by_elaborator_in("/bogus", |error| {
+        matches!(error, Error::TypeMismatch { .. })
+    });
+}
+
+// A guard's spelling settled inside an arm of a character dispatch reads that arm's equation nowhere: the dispatch reads the code `c.0`, an expression, so under the `'a'` arm the operands are units and `one` asks for the guard's spelling there, which is the stuck match whatever the arm knows, and after the dispatch nothing says `k(0)`. Nothing before the dispatch names `k`, so the guard is first settled inside it. `curios-cert`'s `recheck::equation_tests` hold the certifier to the same term. The control claims nothing past the dispatch.
+#[test]
+fn a_guard_settled_under_a_character_arm_answers_nothing_after_that_arm() {
+    control(r#"
+        use /std/{Nat, Bool, Char};
+        use /std/Bool/{True, Holds};
+
+        let F(n: Nat) -> Type = match n | 'a' => {} | _ => Nat end;
+        let leak(c: Char, h: (F(Char/to_nat(c))) -> Nat, k: (Nat) -> Bool, p: F(Char/to_nat(c)), q: F(Char/to_nat(c))) -> True =
+            match (match h(p) == h(q) | true => k(0) | false => k(1) end)
+            | true =>
+                let split: {} = match c | 'a' => (let one: Holds(h(p) + h(q) == h(p) + h(p)) = True/qed(); ()) | _ => () end;
+                let after: True = True/qed();
+                True/qed()
+            | false => True/qed()
+            end;
+
+        /std/print(Nat/to_str(0))
+        "#, b"0")
+        .refused(&[("let after: True =", "let after: Holds(k(0)) =")])
+        .by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
+}

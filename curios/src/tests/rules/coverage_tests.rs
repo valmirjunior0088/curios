@@ -320,3 +320,50 @@ fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
         });
     }
 }
+
+// A string has no last case: past the bytes every string arm writes there is a string none of them matches, so a match over strings is covered only by a final arm. Without one, `f("a")` reaches no arm, and a split of the bytes would need an arm at the cons no row wrote. The control writes the final arm.
+#[test]
+fn a_string_dispatch_is_covered_only_by_a_final_arm() {
+    control(
+        r#"
+        use /std/{Nat, Str};
+
+        let f(s: Str) -> Nat =
+            match s
+            | "" => 0
+            | _ => 1
+            end;
+
+        /std/print(Nat/to_str(f("a")))
+        "#,
+        b"1",
+    )
+    .refused(&[("            | _ => 1\n", "")])
+    .by_elaborator_in("/f", |error| {
+        matches!(error, Error::MatrixUncovered { indexed: false, .. })
+    });
+}
+
+// A character's literal dispatches as its code point, so over a `Nat` `'a'` and `97` are one case, and the arm written second is one no value reaches: the dispatch takes the first arm at `97`, and a duplicate check that told the two spellings apart would leave a reader an arm the compiled match never takes. The control writes `98`, another case.
+#[test]
+fn a_character_and_its_code_point_are_one_case() {
+    control(
+        r#"
+        use /std/{List, Nat, Str};
+
+        let f(n: Nat) -> Nat =
+            match n
+            | 'a' => 1
+            | 98 => 2
+            | _ => 0
+            end;
+
+        /std/print(Str/join(" ", List/map([f(97), f(98), f(0)], Nat/to_str)))
+        "#,
+        b"1 2 0",
+    )
+    .refused(&[("| 98 => 2", "| 97 => 2")])
+    .by_elaborator_in("/f", |error| {
+        matches!(error, Error::MatrixDuplicateRow { .. })
+    });
+}
