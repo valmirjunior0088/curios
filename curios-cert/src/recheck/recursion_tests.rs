@@ -482,7 +482,7 @@ let /outer : (n: #NatType) -> #NatType =
 /std/Bool/False
 "#;
 
-// A body is checked at its signature as the group's bodies read it, so a binder it restates at a sibling is the type its signature reads. `curios`'s `tests::recursion::a_member_typed_at_a_sibling_reads_it_by_value` runs the program both ways it is written.
+// A body is checked at its signature as the group's bodies read it, so a binder it restates at a sibling is the type its signature reads. `curios`'s `tests::recursion::group::a_member_typed_at_a_sibling_reads_it_by_value` runs the program both ways it is written.
 //
 // Mutation-checked at `check_group`: with each member assumed, and its body checked, at its signature read through the folded group, and no member read by value, `/outer` is refused `Mismatch`, `T(0)` at the local against `T(0)` at the group.
 #[test]
