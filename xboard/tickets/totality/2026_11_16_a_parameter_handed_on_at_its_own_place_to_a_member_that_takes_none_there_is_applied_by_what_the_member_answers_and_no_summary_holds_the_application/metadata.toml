@@ -1,0 +1,12 @@
+title = "A parameter handed on at its own place to a member that takes none there is applied by what the member answers, and no summary holds the application"
+status = "open"
+
+[[witness]]
+what = "a recursion through a callback `hide` hands past `wrap`'s one parameter to the function `wrap` answers, graded below its argument by `hide`'s summary"
+source = "a_callback_handed_past_a_members_parameters.crs"
+refused = [{ by = "elaborator", error = "PartialInErasedPosition" }]
+
+[[witness]]
+what = "the same recursion, as a term"
+source = "a_callback_handed_past_a_members_parameters.crsc"
+refused = [{ by = "certifier", error = "NotTotal" }]

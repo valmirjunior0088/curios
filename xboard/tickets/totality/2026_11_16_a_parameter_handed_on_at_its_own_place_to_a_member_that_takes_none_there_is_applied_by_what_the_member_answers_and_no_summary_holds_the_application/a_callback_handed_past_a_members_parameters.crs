@@ -1,0 +1,13 @@
+-- `wrap` takes one parameter and answers a function, so `wrap(n)(f)` hands `f` at the second place to what `wrap` answers, which applies it to `0`. The summary of how `hide` applies its parameters reads `f` as handed on at its own place to `wrap`, which has none, so it holds `f(k)` alone, below `n`: `spin(c)` is graded below `n`, and `spin(0)` is `wrap(0)(…)`, which is `spin(0)` again.
+use /std/{Nat};
+use /std/Bool/{False};
+
+let hide(n: Nat, f: (Nat) -> False) -> False =
+    match n | 0 => wrap(n)(f) | k + 1 => f(k) end
+and wrap(m: Nat) -> ((Nat) -> False) -> False =
+    match m | 0 => (g) => g(0) | k + 1 => (g) => hide(k, g) end;
+
+let spin(n: Nat) -> False =
+    hide(n, (c) => spin(c));
+
+spin(0)

@@ -1,0 +1,27 @@
+-- `/wrap` takes one parameter and answers a function, so `/wrap(n)(f)` hands `f` at the second place to what `/wrap` answers, which applies it to `0`. The summary of how `/hide` applies its parameters reads `f` as handed on at its own place to `/wrap`, which has none there, so it holds `f(k)` alone, below `n`: `/spin(c)` is graded below `n`, and `/spin(0)` is `/wrap(0)(…)` applied, which is `/spin(0)` again.
+#{proof = true}
+let /hide: (n: #NatType, f: (#NatType) -> #{node = InductType} /sys/Bool/False()) ->
+    #{node = InductType}
+    /sys/Bool/False() =
+    (n: #NatType, f: (#NatType) -> #{node = InductType} /sys/Bool/False()) =>
+        #{goal = #{node = InductType} /sys/Bool/False()}
+        match n | 0 => /wrap(n)(f) | k + 1 => f(k) end
+#{proof = true}
+and /wrap: (m: #NatType) -> ((#NatType) -> #{node = InductType} /sys/Bool/False()) ->
+    #{node = InductType}
+    /sys/Bool/False() =
+    (m: #NatType) =>
+        #{
+            goal = ((#NatType) -> #{node = InductType} /sys/Bool/False()) ->
+                #{node = InductType}
+                /sys/Bool/False()}
+        match m
+        | 0 => (g: (#NatType) -> #{node = InductType} /sys/Bool/False()) => g(0)
+        | k + 1 => (g2: (#NatType) -> #{node = InductType} /sys/Bool/False()) => /hide(k, g2)
+        end;
+
+#{node = Rec, proof = true}
+let /spin: (n: #NatType) -> #{node = InductType} /sys/Bool/False() =
+    (n: #NatType) => /hide(n, (c: #NatType) => /spin(c));
+
+/spin(0)
