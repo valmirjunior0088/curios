@@ -4,7 +4,7 @@
 
 mod combinator;
 pub use combinator::{
-    ends, fill, flat, flow, group, group_within, hard_line, if_break, indent, line, named,
+    ends, fill, flat, flow, group, group_within, hang, hard_line, if_break, indent, line, named,
     named_at, own_line_if_broken, pure, reached, sep_flat, soft_line,
 };
 

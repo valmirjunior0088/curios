@@ -205,3 +205,44 @@ fn guards_that_do_not_fit_stand_each_on_a_line_led_by_its_comma() {
         "let size =\n    match o\n    | some(n), n > 9 => 2\n    | _ => 0\n    end;\n()\n",
     );
 }
+
+/// A block string stands where the code around it puts it: its lines and its closer at the opener's column where the opener begins its line, as the reference writes one under a `let`, and one level in from the line where the opener rides it, as a call's last argument does, the parenthesis hugging the closer. Lines indented past the closer keep the difference, so a closer written left of them keeps indentation in the value, and what follows the closer rides it.
+#[test]
+fn a_block_string_stands_where_the_code_around_it_puts_it() {
+    let source = concat!(
+        "let page: Str =\n",
+        "    \"\"\"\n",
+        "    <ul>\n",
+        "        <li>one</li>\n",
+        "    </ul>\n",
+        "    \"\"\";\n",
+        "\n",
+        "let indented: Str =\n",
+        "    \"\"\"\n",
+        "      kept two in\n",
+        "    \"\"\";\n",
+        "\n",
+        "let local(x: Nat) -> Str =\n",
+        "    let s =\n",
+        "        \"\"\"\n",
+        "        a\n",
+        "        \"\"\";\n",
+        "    s;\n",
+        "\n",
+        "print(\"\"\"\n",
+        "    hello\n",
+        "    \"\"\")\n",
+    );
+    assert_eq!(formatted(source), source);
+
+    let moved = source
+        .replace(
+            "    <ul>\n        <li>one</li>\n    </ul>\n    \"\"\";",
+            "        <ul>\n            <li>one</li>\n        </ul>\n        \"\"\";",
+        )
+        .replace(
+            "print(\"\"\"\n    hello\n    \"\"\")",
+            "print(\n    \"\"\"\n        hello\n        \"\"\")",
+        );
+    assert_eq!(formatted(&moved), source);
+}

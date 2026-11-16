@@ -257,25 +257,22 @@ fn a_string_that_spans_lines_is_a_block_or_is_refused() {
     }
 }
 
-/// A block prints as a block: its lines one level in from the opener, the closer at that level, and what a reader would strip, mistake or close on escaped — so the printed text reads back as the value it prints.
+/// A block prints as a block: its lines and its closer at the opener's column, which begins the line a term printed alone starts on, and what a reader would strip, mistake or close on escaped — so the printed text reads back as the value it prints.
 #[test]
 fn a_block_string_prints_as_a_block_that_reads_back() {
     for (value, printed) in [
-        ("a\nb", "\"\"\"\n    a\n    b\n    \"\"\""),
+        ("a\nb", "\"\"\"\na\nb\n\"\"\""),
         // Shared leading whitespace sits right of the closer, which is exactly what the reader keeps.
-        ("  a\n  b", "\"\"\"\n      a\n      b\n    \"\"\""),
+        ("  a\n  b", "\"\"\"\n  a\n  b\n\"\"\""),
         // A trailing space, a tab and a third consecutive quote are escaped; a lone quote is not.
         (
             "a \n\t\"b\"\n\"\"\"\"",
-            "\"\"\"\n    a\\u{20}\n    \\t\"b\"\n    \"\"\\\"\"\n    \"\"\"",
+            "\"\"\"\na\\u{20}\n\\t\"b\"\n\"\"\\\"\"\n\"\"\"",
         ),
         // An empty line prints empty, and a whitespace-only one as escapes.
-        (
-            "a\n\n \nb",
-            "\"\"\"\n    a\n\n    \\u{20}\n    b\n    \"\"\"",
-        ),
+        ("a\n\n \nb", "\"\"\"\na\n\n\\u{20}\nb\n\"\"\""),
         // A control character prints as its braced escape, as in the one-line form.
-        ("a\u{8}b", "\"\"\"\n    a\\u{8}b\n    \"\"\""),
+        ("a\u{8}b", "\"\"\"\na\\u{8}b\n\"\"\""),
     ] {
         assert_eq!(block(value).to_string(), printed, "{value:?}");
         assert_eq!(printed.parse::<Term>().unwrap(), block(value), "{printed}");

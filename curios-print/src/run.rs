@@ -562,6 +562,7 @@ fn ahead(rest: &[Step]) -> Option<char> {
                 stack.extend(items.iter().rev().map(|item| (&item.printer, flat)));
             }
             Printer::Indent(inner)
+            | Printer::Hang(inner)
             | Printer::OwnLineIfBroken(inner)
             | Printer::Group { inner, .. } => stack.push((inner, flat)),
             Printer::Line { .. } | Printer::Mark(_) | Printer::Ends => {}
@@ -754,7 +755,7 @@ fn fits(
                     })
                 }));
             }
-            Printer::Indent(inner) => stack.push(Scanned::Node(Measured {
+            Printer::Indent(inner) | Printer::Hang(inner) => stack.push(Scanned::Node(Measured {
                 node: inner,
                 flat,
                 inside,
@@ -864,6 +865,15 @@ fn run<'b, 'c>(
                     stack.push(Step::Dedent);
                     stack.push(Step::Print(inner.take(), flat));
                 }
+                // At the start of a line the block stands at that line's indentation, as written; past something written on it, its later lines hang a level deeper.
+                Printer::Hang(inner) => match state.should_indent {
+                    true => stack.push(Step::Print(inner.take(), flat)),
+                    false => {
+                        state.indent_by += state.indent_step;
+                        stack.push(Step::Dedent);
+                        stack.push(Step::Print(inner.take(), flat));
+                    }
+                },
                 // A hard line breaks even under a fitting group — the fits scan only guarantees the first line, and a mandatory break is mandatory.
                 Printer::Line { hard: true, .. } => state.line_ends(&stack)?,
                 Printer::Line { flat: spelling, .. } => match flat {
@@ -1117,6 +1127,7 @@ pub fn each_named(
                 stack.extend(items.iter_mut().rev().map(|item| &mut item.printer))
             }
             Printer::Indent(inner)
+            | Printer::Hang(inner)
             | Printer::OwnLineIfBroken(inner)
             | Printer::Group { inner, .. } => stack.push(inner),
             Printer::Text(_)

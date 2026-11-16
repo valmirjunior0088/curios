@@ -30,7 +30,7 @@ use {
     curios_num::Natural,
     curios_parse::unseen,
     curios_print::{
-        FillItem, Printer, ends, fill, flat, flow, group, group_within, hard_line, if_break,
+        FillItem, Printer, ends, fill, flat, flow, group, group_within, hang, hard_line, if_break,
         indent, line, named, named_at, own_line_if_broken, pure, reached, sep_flat, soft_line,
     },
     std::iter,
@@ -141,13 +141,14 @@ fn is_atom<D: Layout>(term: &Term<D>) -> bool {
     }
 }
 
-/// Whether a term carries a break of its own that a call can hand its layout to — a list, a packed literal or a tuple of two or more fields, which break inside the brackets, or a lambda, whose body rides its arrow and breaks below it: see [`TreePrinter::riding_call`].
+/// Whether a term carries a break of its own that a call can hand its layout to — a list, a packed literal or a tuple of two or more fields, which break inside the brackets, a lambda, whose body rides its arrow and breaks below it, or a block string, whose opener rides the line and whose lines hang below it: see [`TreePrinter::riding_call`].
 fn carries_its_own_break<D: Layout>(term: &Term<D>) -> bool {
     match term.as_subterm() {
         Subterm::Literal(Literal::List(entries)) => !entries.is_empty(),
         Subterm::Literal(Literal::Bytes(segments)) => !segments.is_empty(),
         Subterm::Tuple(Tuple { fields }) => fields.len() >= 2,
         Subterm::Func(_) => true,
+        Subterm::ProofLiteral(ProofLiteral::Str(literal)) => literal.block,
         _ => false,
     }
 }
@@ -214,7 +215,7 @@ fn print_string_literal(literal: &StrLit) -> Printer {
     }
 }
 
-/// A block string literal, printed as its lines one level in from the opener's line, with the closer at that level: the lines as they were written where it was read from them, see [`visible`], and otherwise the lines of its value, each spelled to read back as itself. A line prints at the closer's column, so the leading whitespace past it is what a reader keeps, and nothing is removed here — while a value's trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form, but for any other control character, which prints as its braced escape.
+/// A block string literal, printed as its lines and then its closer, each on a line of its own, at the opener's column where the opener begins its line and one level in from that line where the opener rides it (see [`hang`]), so the indentation the closer and the lines share is where the code around them puts it and a line indented past the closer keeps the difference: the lines as they were written where it was read from them, see [`visible`], and otherwise the lines of its value, each spelled to read back as itself. A line prints at the closer's column, so the leading whitespace past it is what a reader keeps, and nothing is removed here — while a value's trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form, but for any other control character, which prints as its braced escape.
 fn print_block_string(value: &str, written: Option<&str>) -> Printer {
     let mut body = Vec::new();
     let lines = match written {
@@ -227,7 +228,7 @@ fn print_block_string(value: &str, written: Option<&str>) -> Printer {
     }
     body.push(hard_line());
     body.push(pure("\"\"\""));
-    flat([pure("\"\"\""), indent(flat(body))])
+    hang(flat([pure("\"\"\""), flat(body)]))
 }
 
 /// One line of a block string literal's value, spelled so that it reads back as itself.

@@ -49,6 +49,11 @@ pub fn indent(printer: Printer) -> Printer {
     Printer::Indent(Box::new(printer))
 }
 
+/// `printer` hanging: its lines after its first one indentation level deeper where something is already written on the line it starts on, and at that line's indentation where it starts the line, so a block keeps the column its first line gives it.
+pub fn hang(printer: Printer) -> Printer {
+    Printer::Hang(Box::new(printer))
+}
+
 /// `printer` flat on the current line where it fits there, and otherwise broken on a line of its own, as a printer on a line of its own is placed: a newline and one indentation level deeper where something is already written on the line, and as it stands at the start of one.
 pub fn own_line_if_broken(printer: Printer) -> Printer {
     Printer::OwnLineIfBroken(Box::new(printer))

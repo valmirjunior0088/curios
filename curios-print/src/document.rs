@@ -39,6 +39,8 @@ pub enum Printer {
     Concat(Vec<Printer>),
     /// Emitted one indentation level deeper.
     Indent(Box<Printer>),
+    /// A hanging block: its lines after its first one indentation level deeper where something is already written on the line it is reached on, and at that line's indentation where it begins the line.
+    Hang(Box<Printer>),
     /// Emitted flat on the line it is reached on where the whole of its flat form fits the room left there, and otherwise broken on a line of its own: where something is already written on the line, a newline and the document one indentation level deeper; at the start of a line, the document as it stands. Whole is what sets it apart from a [`Printer::Group`], which asks of its first line alone: a newline it writes or a mandatory break breaks it at any width. The fits scan measures it as a nested group, so a group holding one renders flat only where it fits flat too, and one holding a mandatory break never does.
     OwnLineIfBroken(Box<Printer>),
     /// A layout choice point: `flat` when the enclosing [`Printer::Group`] renders on one line, a newline (plus pending indentation) when it breaks — or unconditionally when no group encloses it, since the top of a document is broken context. `hard` marks a mandatory break: it always emits a newline, and the fits scan fails on it, so no group containing one ever renders flat.
@@ -84,6 +86,7 @@ impl Printer {
             Printer::Concat(parts) => parts.is_empty(),
             Printer::Fill { items, .. } => items.is_empty(),
             Printer::Indent(inner)
+            | Printer::Hang(inner)
             | Printer::OwnLineIfBroken(inner)
             | Printer::Group { inner, .. } => matches!(**inner, Printer::Text(_)),
             Printer::Line { .. } => true,
@@ -114,6 +117,7 @@ impl Drop for Printer {
                     pending.extend(mem::take(items).into_iter().map(|item| item.printer));
                 }
                 Printer::Indent(inner)
+                | Printer::Hang(inner)
                 | Printer::OwnLineIfBroken(inner)
                 | Printer::Group { inner, .. } => pending.push(inner.take()),
                 Printer::Line { .. } => {}

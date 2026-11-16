@@ -208,13 +208,13 @@ fn every_source_in_the_tree_is_already_canonical() {
     assert!(reshaped.is_empty(), "{}", reshaped.join("\n"));
 }
 
-/// A block string literal is laid out by the formatter: its lines and its closer one level in from the opener's line, wherever the author left them, and the value unchanged because the closer's column is what a reader strips.
+/// A block string literal is laid out by the formatter: its lines and its closer at the opener's column where the opener begins its line, as under a `let`, wherever the author left them, and the value unchanged because the closer's column is what a reader strips.
 #[test]
 fn a_block_string_literal_takes_the_canonical_indentation() {
-    let source = "use /std/{Str};\n\nlet page: Str =\n    \"\"\"\n    <p>\n      x\n    </p>\n    \"\"\";\n\npage\n";
+    let source = "use /std/{Str};\n\nlet page: Str =\n    \"\"\"\n          <p>\n            x\n          </p>\n          \"\"\";\n\npage\n";
     assert_eq!(
         formatted(source),
-        "use /std/{Str};\n\nlet page: Str =\n    \"\"\"\n        <p>\n          x\n        </p>\n        \"\"\";\n\npage\n"
+        "use /std/{Str};\n\nlet page: Str =\n    \"\"\"\n    <p>\n      x\n    </p>\n    \"\"\";\n\npage\n"
     );
 }
 
