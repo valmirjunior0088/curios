@@ -1,6 +1,6 @@
 //! `unused-let`: a `let` whose value runs no action and none of whose binders anything reads, which does nothing, and the `let`s that are not one.
 
-use super::test_support::*;
+use crate::into_core::test_support::*;
 
 #[test]
 fn a_local_binding_nothing_reads_is_reported() {

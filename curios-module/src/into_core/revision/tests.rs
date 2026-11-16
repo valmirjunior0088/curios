@@ -393,7 +393,7 @@ fn a_witness_written_ahead_of_one_alike_takes_its_place() {
     same_keys(&over, &whole);
 }
 
-/// The lints and zeros of a unit, each as what it is about and the span it stands at, sorted: a lowering over a baseline and a whole one gather a unit's lints and zeros in orders of their own, and a unit puts its lints in reading order.
+/// The lints and the unread sites of a unit, each as what it is about and the span it stands at, sorted: a lowering over a baseline and a whole one gather them in orders of their own, and a unit puts its lints in reading order.
 fn zeros_of(unit: &PreparedText) -> Vec<String> {
     let placed = |at: Option<curios_core::Extent>| at.and_then(|at| at.resolved(&[unit.anchors()]));
     let lints = unit.lints().iter().map(|lint| {
@@ -404,15 +404,24 @@ fn zeros_of(unit: &PreparedText) -> Vec<String> {
             placed(lint.at)
         )
     });
-    let zeros = unit.zeros().iter().map(|zero| {
-        let what = match zero {
-            Zero::Binder { name, binder, .. } => format!("binder {name} {binder:?}"),
-            Zero::Wildcard { binder, .. } => format!("wildcard {binder:?}"),
-            Zero::Let { name, binders, .. } => format!("let {name:?} {binders:?}"),
-        };
-        format!("{what} at {:?}", placed(zero.at()))
-    });
-    let mut found = lints.chain(zeros).collect::<Vec<_>>();
+    let minted = unit.minted();
+    let unread = minted
+        .each()
+        .flat_map(|(_, mints)| &mints.unread)
+        .chain(&minted.entry.unread)
+        .map(|site| {
+            let what = match site {
+                curios_core::Unread::Binder { name, binder, .. } => {
+                    format!("binder {name} {binder:?}")
+                }
+                curios_core::Unread::Wildcard { binder, .. } => format!("wildcard {binder:?}"),
+                curios_core::Unread::Let { name, binders, .. } => {
+                    format!("let {name:?} {binders:?}")
+                }
+            };
+            format!("{what} at {:?}", placed(site.at()))
+        });
+    let mut found = lints.chain(unread).collect::<Vec<_>>();
     found.sort();
     found
 }

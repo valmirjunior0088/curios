@@ -7,7 +7,12 @@ use {
     curios_common::{Mount, Qualifier, SyntaxRegistry, test_support::*},
     curios_core::test_support::*,
     curios_surface::Entrypoint,
-    std::{collections::BTreeSet, fs, path::Path, rc::Rc},
+    std::{
+        collections::{BTreeSet, HashSet},
+        fs,
+        path::Path,
+        rc::Rc,
+    },
 };
 
 /// The registry the lowering's suites lower through ([`crate::test_support::SYNTAX`]).
@@ -25,7 +30,7 @@ pub fn fixture_loader() -> RootSource {
     RootSource::none().tested()
 }
 
-/// The lints the lowering of `src` decides, each as `kind: message`, in reading order: an import nothing resolved through and a declaration nothing reaches, which resolution alone decides.
+/// The lints of `src` lowered alone, each as `kind: message`, in reading order: the lowering's own — an import nothing resolved through, a declaration nothing reaches — and what the sites it found no written name reads come to where no proof read one and no site's class is known, as a declaration nothing elaborated would be filed with.
 pub fn lints(src: &str) -> Vec<String> {
     let entrypoint = src.parse::<Entrypoint>().unwrap();
     let text = into_core_unit(
@@ -34,11 +39,23 @@ pub fn lints(src: &str) -> Vec<String> {
         syntax(),
     )
     .unwrap();
+    // A declaration's names share what it minted, so each entry is read once.
+    let minted = text.minted();
+    let mut read = HashSet::new();
+    let unread = minted
+        .each()
+        .filter(|(_, mints)| read.insert(std::ptr::from_ref(*mints)))
+        .flat_map(|(_, mints)| &mints.unread)
+        .chain(&minted.entry.unread);
+    let binders = curios_elab::binder_lints(unread, |_| false, |_| None);
 
-    curios_core::Lint::ordered(text.lints().to_vec(), text.anchors())
-        .iter()
-        .map(|lint| format!("{}: {}", lint.kind.name(), lint.report(&[]).message()))
-        .collect()
+    curios_core::Lint::ordered(
+        text.lints().iter().cloned().chain(binders).collect(),
+        text.anchors(),
+    )
+    .iter()
+    .map(|lint| format!("{}: {}", lint.kind.name(), lint.report(&[]).message()))
+    .collect()
 }
 
 /// The entry's body as the lowering writes it, the module it closes over left aside.

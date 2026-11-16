@@ -78,6 +78,9 @@ pub use entailment::{Conclusion, Origin, Refusal};
 mod established;
 pub use established::Established;
 
+mod lints;
+pub use lints::binder_lints;
+
 mod traces;
 use traces::*;
 pub use traces::{

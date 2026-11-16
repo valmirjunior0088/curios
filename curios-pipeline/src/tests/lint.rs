@@ -49,6 +49,33 @@ let _other(n: Nat) -> Nat = n;
     );
 }
 
+/// A program refused for `_bad` reports what the record of each declaration it filed holds, worded as an accepted check words it: `_one`'s `_` binds `{}`, which its record's class says.
+#[test]
+fn a_refused_program_words_its_declarations_sites_by_what_they_bind() {
+    let source = "use /std/{Nat};
+
+let _one(_: {}) -> Nat = 1;
+
+let _bad: Nat = \"s\";
+
+/std/print(\"x\")
+";
+    let Checked { entry, verdict } = checked_through(source, &Keeping::default());
+
+    assert!(verdict.is_err(), "`_bad` is refused");
+    assert_eq!(
+        entry
+            .lints
+            .iter()
+            .filter(|lint| lint.kind == LintKind::UnitWildcard)
+            .map(|lint| lint.report(&[&entry.anchors]).message())
+            .collect::<Vec<_>>(),
+        [
+            "unit wildcard\n  this `_` binds `{}`\n  write `()`, which refuses a value that stops being `{}`"
+        ]
+    );
+}
+
 /// `idle` and `ok` sit at one place among their own declarations' written binders, so a credit keyed by the wrong member would spare the first and report the second.
 #[test]
 fn a_proof_in_a_group_members_type_credits_that_member() {

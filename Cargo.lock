@@ -811,9 +811,6 @@ version = "0.16.24"
 dependencies = [
  "curios-common",
  "curios-core",
- "curios-elab",
- "curios-module",
- "curios-surface",
 ]
 
 [[package]]
@@ -899,7 +896,6 @@ dependencies = [
  "curios-elab",
  "curios-emit",
  "curios-erase",
- "curios-lint",
  "curios-module",
  "curios-prelude",
  "curios-profile",
@@ -921,7 +917,6 @@ dependencies = [
  "curios-document",
  "curios-elab",
  "curios-erase",
- "curios-lint",
  "curios-module",
  "curios-native",
  "curios-num",
@@ -983,7 +978,6 @@ dependencies = [
  "curios-core",
  "curios-elab",
  "curios-erase",
- "curios-lint",
  "curios-module",
 ]
 

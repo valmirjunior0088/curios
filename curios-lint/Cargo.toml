@@ -3,7 +3,7 @@ name = "curios-lint"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios binder lints, decided from what the lowering and elaboration recorded of a unit, and a unit's lints in reading order"
+description = "The Curios lint decided over a package rather than a unit: a declared dependency nothing reached"
 
 [lints]
 workspace = true
@@ -11,12 +11,3 @@ workspace = true
 [dependencies]
 curios-common = { workspace = true }
 curios-core = { workspace = true }
-# What elaboration decided a written site binds, which a lint's wording reads.
-curios-elab = { workspace = true }
-curios-module = { workspace = true }
-
-[dev-dependencies]
-# The registry the lowering's suites lower through, which the lint suites here lower a fixture through too. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
-curios-module = { workspace = true, features = ["test-support"] }
-# The entrypoint a fixture is parsed into.
-curios-surface = { workspace = true }

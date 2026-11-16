@@ -1,6 +1,6 @@
 //! What one source declaration lowered to beside its items, and what it asked of its scope to get there: the record a later lowering of the same sources keeps the declaration's lowering by.
 //!
-//! **A lowering is a function of its declaration's text and the names it resolved.** Every counter a lowering mints from starts at zero for each declaration, and a declaration reads its scope through two doors alone: `Context::resolve_term_name` for a name written as a path, `Context::resolve_bare` for a bare one no binder of its own binds. So a declaration whose text is the one a baseline lowered, and whose every resolution answers as it did, lowers to what it lowered to, and is not lowered: its items, its registry entries, what it minted, its import scopes and its zeros are taken from the baseline ([`Baseline::kept`]).
+//! **A lowering is a function of its declaration's text and the names it resolved.** Every counter a lowering mints from starts at zero for each declaration, and a declaration reads its scope through two doors alone: `Context::resolve_term_name` for a name written as a path, `Context::resolve_bare` for a bare one no binder of its own binds. So a declaration whose text is the one a baseline lowered, and whose every resolution answers as it did, lowers to what it lowered to, and is not lowered: its items, its registry entries, what it minted — the sites no written name reads among it — and its import scopes are taken from the baseline ([`Baseline::kept`]).
 //!
 //! **Asked only where an edit could have reached** ([`Moved`]): a declaration of a file the edit did not touch, none of whose lookups read a binding that moved, is kept with nothing compared or asked, and what asking its lookups would have marked is marked from the bindings its record says they read ([`Consulted`]).
 //!
@@ -12,7 +12,7 @@ use {
     super::{
         Context, FlatItem, FlatLet, Journal, LoweredItem, Lowering, Resolution, Scan, Step, Table,
     },
-    crate::{LintedBinder, PreparedText, Zero},
+    crate::PreparedText,
     curios_common::{Digest, Filed, Object, Ordered, Persistent, Qualifier, Sorted},
     std::{
         cell::RefCell,
@@ -243,36 +243,11 @@ pub enum Consulted {
     Mount(Qualifier),
 }
 
-/// A zero of a declaration's binders as a lowered declaration holds it: placed in the declaration's text, and naming each definition it is about by its place among the declaration's, since a witness's name is given anew by every lowering.
-#[derive(Debug, Clone)]
-#[curios_archive::archived]
-enum Unused {
-    /// A binder zero: the binder by its definition's place and its own.
-    Binder {
-        name: String,
-        at: curios_core::Extent,
-        definition: u32,
-        ordinal: u32,
-    },
-    /// A `_`'s zero: the `_` by its definition's place and its own.
-    Wildcard {
-        at: curios_core::Extent,
-        definition: u32,
-        ordinal: u32,
-    },
-    /// A let zero: each binder its pattern writes by its definition's place and its own.
-    Let {
-        name: Option<String>,
-        at: curios_core::Extent,
-        binders: Vec<(u32, u32)>,
-    },
-}
-
 /// What one source declaration lowered to, beside the items themselves, which are its unit's: see the module documentation.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct LoweredDeclaration {
-    /// The text it was lowered from, by its anchor and the text's stamp. `None` for a declaration no later lowering may keep: one that was built rather than written, one a name of which resolved to nothing, and one whose findings could not be placed in its text.
+    /// The text it was lowered from, by its anchor and the text's stamp. `None` for a declaration no later lowering may keep: one that was built rather than written, one a name of which resolved to nothing, and one a name it declares could not be placed in its text.
     key: Option<Key>,
     /// The text it was lowered from, whether or not a later lowering may keep it: what the unit's anchors hold of it. `None` for one built rather than written.
     text: Option<Key>,
@@ -284,7 +259,6 @@ pub struct LoweredDeclaration {
     items: Vec<LoweredItem>,
     /// The definitions it recorded an import scope for, each by its place among the declaration's.
     scoped: Vec<u32>,
-    zeros: Vec<Unused>,
     /// Every name it resolved through its scope, with what each resolved to.
     trace: curios_core::Trace<Lookup, Qualifier>,
     /// Every binding resolving those names read, each once, in order: what an answer can move with ([`Consulted`]).
@@ -303,7 +277,6 @@ impl LoweredDeclaration {
             trace,
             consulted,
             scoped,
-            zeros,
             unbound,
         } = context.journal();
         let names = items.iter().flat_map(FlatItem::names).collect::<Vec<_>>();
@@ -313,30 +286,6 @@ impl LoweredDeclaration {
         };
 
         let scoped = scoped.iter().map(place).collect::<Option<Vec<_>>>();
-        let unused = zeros
-            .iter()
-            .map(|zero| match zero {
-                Zero::Binder { name, at, binder } => Some(Unused::Binder {
-                    name: name.clone(),
-                    at: (*at)?,
-                    definition: place(&binder.declaration?)?,
-                    ordinal: binder.ordinal,
-                }),
-                Zero::Wildcard { at, binder } => Some(Unused::Wildcard {
-                    at: (*at)?,
-                    definition: place(&binder.declaration?)?,
-                    ordinal: binder.ordinal,
-                }),
-                Zero::Let { name, at, binders } => Some(Unused::Let {
-                    name: name.clone(),
-                    at: (*at)?,
-                    binders: binders
-                        .iter()
-                        .map(|binder| Some((place(&binder.declaration?)?, binder.ordinal)))
-                        .collect::<Option<Vec<_>>>()?,
-                }),
-            })
-            .collect::<Option<Vec<_>>>();
         // A name that was written and could not be placed is one the `unused-declaration` lint would lose with a kept lowering.
         let placed = items
             .iter()
@@ -345,8 +294,8 @@ impl LoweredDeclaration {
             .all(|(let_, declared)| let_.span.is_none() || declared.label.is_some());
 
         let text = context.sited(|key, _| key);
-        let key = match (unbound, placed, &scoped, &unused) {
-            (false, true, Some(_), Some(_)) => text,
+        let key = match (unbound, placed, &scoped) {
+            (false, true, Some(_)) => text,
             _ => None,
         };
 
@@ -357,7 +306,6 @@ impl LoweredDeclaration {
             foreign,
             items: facts,
             scoped: scoped.unwrap_or_default(),
-            zeros: unused.unwrap_or_default(),
             trace,
             consulted: consulted
                 .into_iter()
@@ -432,9 +380,6 @@ pub struct BaselineHalf {
     /// Every `unused-import` lint each module body's `use` declarations were found to leave, by the body: what a body a later lowering passes unwalked contributes. A body that leaves none holds none.
     #[archived_with(curios_common::InSharedKeyOrder)]
     pub lints: Table<Vec<curios_core::Lint>>,
-    /// Every zero each module body's declarations were found to leave of a written binder, by the body, as `lints` holds a body's lints.
-    #[archived_with(curios_common::InSharedKeyOrder)]
-    pub zeros: Table<Vec<Zero>>,
     /// Every name each witness's key read, by the witness: what its name can move with.
     #[archived_with(curios_common::InSharedKeyOrder)]
     pub keyed: Sorted<curios_core::Global, Rc<Vec<curios_core::Global>>>,
@@ -751,7 +696,7 @@ impl<'a> Baseline<'a> {
             .expect("a record the baseline holds")
     }
 
-    /// Take the declaration whose first item stands at `first` into `lowered` as lowering it again would have written it, its items under the names this lowering gives them, their registry entries and rows, its import scopes and its zeros: what the walk reads of the unit's declarations. What it minted, and its items and record as the unit holds them, are the baseline's, which the unit is a version of, and are left where they stand ([`Step`]).
+    /// Take the declaration whose first item stands at `first` into `lowered` as lowering it again would have written it, its items under the names this lowering gives them, their registry entries and rows and its import scopes: what the walk reads of the unit's declarations. What it minted, the sites no written name reads among it, and its items and record as the unit holds them, are the baseline's, which the unit is a version of, and are left where they stand ([`Step`]).
     pub fn kept(&self, first: i64, context: &Context, lowered: &mut Lowering) {
         let declaration = self.record(first);
         let from = lowered.items.len();
@@ -796,40 +741,6 @@ impl<'a> Baseline<'a> {
         for &place in &declaration.scoped {
             context.record_import_scope(Some(&names[place as usize]));
         }
-        let binder = |definition: u32, ordinal: u32| LintedBinder {
-            declaration: Some(names[definition as usize]),
-            ordinal,
-        };
-        context.report(declaration.zeros.iter().map(|unused| {
-            match unused {
-                Unused::Binder {
-                    name,
-                    at,
-                    definition,
-                    ordinal,
-                } => Zero::Binder {
-                    name: name.clone(),
-                    at: Some(*at),
-                    binder: binder(*definition, *ordinal),
-                },
-                Unused::Wildcard {
-                    at,
-                    definition,
-                    ordinal,
-                } => Zero::Wildcard {
-                    at: Some(*at),
-                    binder: binder(*definition, *ordinal),
-                },
-                Unused::Let { name, at, binders } => Zero::Let {
-                    name: name.clone(),
-                    at: Some(*at),
-                    binders: binders
-                        .iter()
-                        .map(|(definition, ordinal)| binder(*definition, *ordinal))
-                        .collect(),
-                },
-            }
-        }));
         lowered.steps.push(Step {
             kept: Some(first),
             passed: None,

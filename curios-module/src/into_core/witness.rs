@@ -10,11 +10,12 @@
 
 use {
     super::{FlatItem, FlatLet},
-    crate::{PreparedText, Zero},
+    crate::PreparedText,
     curios_common::{Plicity, Qualifier},
     std::{
         cell::RefCell,
         collections::{BTreeMap, HashSet},
+        rc::Rc,
     },
 };
 
@@ -167,7 +168,6 @@ pub struct Named<'a> {
     pub items: &'a mut [FlatItem],
     pub minted: &'a mut curios_core::Minted,
     pub imports: &'a mut curios_core::Imports,
-    pub zeros: &'a mut BTreeMap<Qualifier, Vec<Zero>>,
 }
 
 /// Give each witness `names` holds the name it takes there ([`witness_names`]), in each table that holds the name it holds.
@@ -196,22 +196,14 @@ pub fn rename_witnesses(
         .collect::<Vec<_>>();
     for (name, mints, in_scope) in held {
         let taken = renamed(name);
+        // A witness declares one name, so its entry is its own, and its unread sites are re-keyed with it.
         if let Some(mints) = mints {
-            named.minted.declare(&mints, [taken]);
+            named
+                .minted
+                .declare(&Rc::new(mints.renamed(&name, taken)), [taken]);
         }
         if let Some(in_scope) = in_scope {
             named.imports.scope(taken, in_scope);
-        }
-    }
-    for zero in named.zeros.values_mut().flatten() {
-        let binders = match zero {
-            Zero::Binder { binder, .. } | Zero::Wildcard { binder, .. } => {
-                std::slice::from_mut(binder)
-            }
-            Zero::Let { binders, .. } => binders.as_mut_slice(),
-        };
-        for binder in binders {
-            binder.declaration = binder.declaration.map(renamed);
         }
     }
 }

@@ -18,7 +18,7 @@ use {
         Width, intrinsic_former, to_core,
     },
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::BTreeSet,
         fs,
         path::{Path, PathBuf},
         rc::Rc,
@@ -48,9 +48,9 @@ pub fn authored() -> Vec<PathBuf> {
     sources
 }
 
-/// **The standard library lints clean**, lowered with its tests, as `curios lint` lints a package: a declaration only a test reads is read.
+/// **The standard library lints clean**, lowered with its tests, as `curios lint` lints a package: a declaration only a test reads is read, and an import only a test reads is used.
 ///
-/// The lints are exact and always on, so the honest test of them is the largest corpus in the tree: an import nothing resolves through, a binder nothing reads or a private declaration nothing reaches in `/std` is a finding to fix there, not a rule to relax. A binder only a proof the elaborator wrote reads is used, which only elaboration says, so the lowering here is credited with what the build script's elaboration recorded; lowering and restoring are the whole cost, so this belongs in the ordinary suite. A failure renders each lint as `curios lint` would.
+/// The lints are exact and always on, so the honest test of them is the largest corpus in the tree: an import nothing resolves through, a binder nothing reads or a private declaration nothing reaches in `/std` is a finding to fix there, not a rule to relax. The lowering's lints are this lowering's; the binder lints are what the build's elaboration filed with each declaration's record, the test modules', which the build does not elaborate, being `tests/std.rs`'s to hold (`every_test_module_lints_clean`). Lowering and restoring are the whole cost, so this belongs in the ordinary suite. A failure renders each lint as `curios lint` would.
 #[test]
 fn every_authored_source_is_lint_clean() {
     // Both roots, in the order the build script folds them: `/std`'s imports resolve only against a lowered `/sys`, and an unresolved import is not a lint but a lowering failure.
@@ -58,46 +58,20 @@ fn every_authored_source_is_lint_clean() {
         .unwrap_or_else(|error| panic!("/sys failed to lower: {}", error.format()));
     let std = prepare_prelude(&std_source().tested(), &[&sys], &SYNTAX)
         .unwrap_or_else(|error| panic!("/std failed to lower: {}", error.format()));
-    // Credited and worded as a recompile credits and words a declaration it keeps: with what the build's elaboration of the same sources recorded, in each declaration's record, as read by a proof it wrote and as bound by each site. A test module's declarations, which the build does not elaborate, hold no record here, so a class of theirs is `tests/std.rs`'s to hold.
-    let (recorded, classes) = with_prelude(|units| {
-        let records = units
+    let anchors = [sys.anchors(), std.anchors()];
+    let filed = with_prelude(|units| {
+        units
             .iter()
             .flat_map(|unit| unit.traces().declarations())
-            .map(|(_, record)| record.concluded().clone())
-            .collect::<Vec<_>>();
-        let recorded = records
-            .iter()
-            .flat_map(|concluded| concluded.credited.iter().copied())
-            .collect::<BTreeSet<_>>();
-        let classes = records
-            .iter()
-            .flat_map(|concluded| concluded.classes.iter().copied())
-            .map(|(name, place, class)| ((name, place), class))
-            .collect::<BTreeMap<_, _>>();
-        (recorded, classes)
-    });
-    let lints = [&sys, &std]
-        .iter()
-        .flat_map(|prepared| {
-            curios_lint::lints(
-                prepared.lints(),
-                prepared.zeros(),
-                |binder| {
-                    binder
-                        .declaration
-                        .is_some_and(|name| recorded.contains(&(name, binder.ordinal)))
-                },
-                |binder| {
-                    binder
-                        .declaration
-                        .and_then(|name| classes.get(&(name, binder.ordinal)).copied())
-                },
-                prepared.anchors(),
-            )
-            .iter()
-            .map(|lint| lint.report(&[prepared.anchors()]).render())
+            .flat_map(|(_, record)| record.concluded().lints.iter().cloned())
             .collect::<Vec<_>>()
-        })
+    });
+    let lints = sys
+        .lints()
+        .iter()
+        .chain(std.lints())
+        .chain(&filed)
+        .map(|lint| lint.report(&anchors).render())
         .collect::<Vec<_>>();
     assert!(
         lints.is_empty(),

@@ -1,6 +1,6 @@
 //! The written binders a proof the elaborator wrote read.
 //!
-//! The lowering records each written binder no written name references, and the one reference no written name makes is a proof the elaborator writes from the facts in scope: it reads the binders it sums. A binder one reads is *credited* here, by its declaration and its place among that declaration's written binders, and the lint owner (`curios-lint`) reports none it credits. Appended to as proofs are written, and taken back where the candidate a proof was written inside is rolled back.
+//! The lowering records each written binder no written name references, and the one reference no written name makes is a proof the elaborator writes from the facts in scope: it reads the binders it sums. A binder one reads is *credited* here, by its declaration and its place among that declaration's written binders, and the binder lints a declaration's record is filed with report none it credits ([`binder_lints`](crate::binder_lints)). Appended to as proofs are written, and taken back where the candidate a proof was written inside is rolled back.
 
 use {
     curios_core::{Free, Global, Term},
@@ -35,15 +35,6 @@ impl Credits {
             .filter_map(|local| self.opened.get(local).copied())
             .collect::<Vec<_>>();
         self.credited.extend(read);
-    }
-
-    /// Credit `credited`, each by its declaration and its place: what the proofs of a declaration taken from a candidate read, which no proof written now reads again.
-    pub fn adopt(&mut self, credited: impl IntoIterator<Item = (Global, u32)>) {
-        self.credited.extend(
-            credited
-                .into_iter()
-                .map(|(declaration, place)| (Some(declaration), place)),
-        );
     }
 
     /// The written binders proofs have read in a definition `names` holds, each by its definition and its place, in order and each once: what the record of the declaration declaring them holds.

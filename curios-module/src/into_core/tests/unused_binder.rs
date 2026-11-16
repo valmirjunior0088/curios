@@ -1,6 +1,6 @@
 //! `unused-binder`: a parameter, local, pattern leaf or arm binder nothing reads, and the binders never reported.
 
-use super::test_support::*;
+use crate::into_core::test_support::*;
 
 #[test]
 fn a_parameter_the_body_never_reads_is_reported_at_its_word() {

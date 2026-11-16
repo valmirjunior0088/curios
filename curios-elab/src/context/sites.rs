@@ -1,4 +1,4 @@
-//! The written sites an elaboration opened, each with the type it was opened at: what is classified where the site's declaration files its record, for the lint owner to word a finding about the site by ([`SiteClass`]).
+//! The written sites an elaboration opened, each with the type it was opened at: what is classified where the site's declaration files its record, which the binder lints it is filed with are worded by ([`SiteClass`], [`binder_lints`]).
 //!
 //! **A class is a lint's question, which never changes a verdict.** It is decided under an allowance of its own ([`LINT_ALLOWANCE`]), separate from the declaration's budget, which it leaves as it found it; whatever it solves is rolled back and nothing is credited; and an allowance run out is no class. What it reads of other declarations — a struct's fields, whether a monad is one — joins the declaration's trace, so a record a recompile keeps is still true of what it read.
 //!
@@ -7,17 +7,20 @@
 use {
     super::Spend,
     crate::{
-        Context, LINT_ALLOWANCE, Mode, SiteClass, elaborate, reduce_with, zonk_solved_term_metas,
+        Context, LINT_ALLOWANCE, Mode, SiteClass, Traces, binder_lints, elaborate, reduce_with,
+        zonk_solved_term_metas,
     },
-    curios_core::{Global, HeadKey, Subterm, Term, WitnessKey},
-    std::collections::{BTreeMap, BTreeSet},
+    curios_core::{Global, HeadKey, Lint, Subterm, Term, WitnessKey},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
-/// What an elaboration that ran observed of the written sites no declaration's record holds: every binder a proof it wrote read, each by its declaration and its place, and the class of each site of an entry's final term, by its place. What the lint owner reads of a program's final term, which no record holds, and of a unit refused, which files none.
+/// The binder lints an elaboration that ran holds, whatever it concluded: those of every declaration its walk's traces hold — elaborated now, adopted from a store or kept from a baseline — and those of an entry's final term, which no record holds, decided once it has run. What a unit is made with, and what a refused one is reported with.
 #[derive(Debug, Clone, Default)]
 pub struct Observed {
-    pub credited: BTreeSet<(Option<Global>, u32)>,
-    pub entry_classes: BTreeMap<u32, SiteClass>,
+    pub lints: Vec<Lint>,
 }
 
 /// How many structs of one field a class reads through to the action one holds: `Try(Io, E, A)` holds `Io(Result(E, A))` one deep.
@@ -134,18 +137,66 @@ impl Context<'_> {
             .collect()
     }
 
-    /// What this elaboration observed of the sites no declaration's record holds ([`Observed`]): the class of each of an entry's final term decided now and taken out. Asked once the elaboration has run, since only elaboration writes a proof.
+    /// The binder lints of the declaration declaring `names`, decided as its record is filed: the sites its lowering found no written name reads ([`curios_core::Mints::unread`]), less every binder a proof it wrote read, worded by the class each site's openings decide now. Asked before the declaration's trace is taken, since what deciding a class reads is the declaration's too.
+    pub(crate) fn lints_in(&mut self, names: &[Global]) -> Vec<Lint> {
+        let classes = self
+            .classes_in(names)
+            .into_iter()
+            .map(|(name, place, class)| ((name, place), class))
+            .collect::<BTreeMap<_, _>>();
+        let credited = self.credited_in(names).into_iter().collect::<BTreeSet<_>>();
+        // A declaration's names share what it minted, so its first holds the sites of every one.
+        let minted = Rc::clone(&self.underway.minted);
+        let sites = names
+            .first()
+            .map_or(&[][..], |name| minted.of(name).unread.as_slice());
+
+        binder_lints(
+            sites,
+            |binder| {
+                binder
+                    .declaration
+                    .is_some_and(|name| credited.contains(&(name, binder.ordinal)))
+            },
+            |binder| classes.get(&(binder.declaration?, binder.ordinal)).copied(),
+        )
+    }
+
+    /// Hold the binder lints of every declaration `traces` holds, the walk's as it ends, for [`Context::observed`] to hand out whatever the walk concluded.
+    pub(crate) fn hold_lints(&mut self, traces: &Traces) {
+        self.underway.held = traces
+            .declarations()
+            .flat_map(|(_, record)| record.concluded().lints.iter().cloned())
+            .collect();
+    }
+
+    /// The binder lints this elaboration holds ([`Observed`]): the declarations' its walk held, and an entry's final term's, decided now from what its lowering found no written name reads and the proofs written in it, worded by the class of each of its sites, taken out. Asked once the elaboration has run, since only elaboration writes a proof.
     pub fn observed(&mut self) -> Observed {
         let opened = self.underway.sites.take(Option::is_none);
-        let entry_classes = self
+        let classes = self
             .classes_of(opened)
             .into_iter()
             .map(|((_, place), class)| (place, class))
-            .collect();
+            .collect::<BTreeMap<_, _>>();
+        let credited = self.credited();
+        let minted = Rc::clone(&self.underway.minted);
+        let entry = binder_lints(
+            &minted.entry.unread,
+            |binder| credited.contains(&(binder.declaration, binder.ordinal)),
+            |binder| {
+                binder
+                    .declaration
+                    .is_none()
+                    .then(|| classes.get(&binder.ordinal).copied())
+                    .flatten()
+            },
+        );
 
         Observed {
-            credited: self.credited(),
-            entry_classes,
+            lints: std::mem::take(&mut self.underway.held)
+                .into_iter()
+                .chain(entry)
+                .collect(),
         }
     }
 

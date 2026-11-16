@@ -19,7 +19,7 @@ use {
         Digest, Facet, InKeyOrder, Object, Persistent, Records, Sorted, candidate_name,
     },
     curios_core::{
-        Applications, Global, Order, ParameterField, Totality, Trace, Variance, WitnessKey,
+        Applications, Global, Lint, Order, ParameterField, Totality, Trace, Variance, WitnessKey,
     },
     std::{
         cell::OnceCell,
@@ -50,10 +50,8 @@ pub struct Made {
 pub struct Concluded {
     /// What elaboration concluded of each definition the declaration made, by the definition's name ([`Classified`]), its items holding none: what a declaration reads of the definition besides its terms, in this unit, over it as a baseline, or in a unit compiled after it.
     pub classified: Vec<(Global, Classified)>,
-    /// The written binders the proofs it wrote read, each by the name of its definition and its place among that definition's written binders: each used, though no written name reaches it, which the lint owner reads where it decides `unused-binder`.
-    pub credited: Vec<(Global, u32)>,
-    /// What each written site it opened binds, where that is decided ([`SiteClass`]), each by the name of its definition and its place among that definition's written binders: what the lint owner words a finding about the site by.
-    pub classes: Vec<(Global, u32, SiteClass)>,
+    /// The binder lints of its written sites, decided as it is filed ([`binder_lints`](crate::binder_lints)): each site the lowering found no written name reads, less every binder a proof it wrote read, worded by what each site binds. Placed by the extents of its text, which a record is reused only beside, since a lowered item's digest holds them and a declaration lowered again is elaborated again.
+    pub lints: Vec<Lint>,
 }
 
 /// What a written site binds, as far as a lint's wording reads it: decided off the type the site was opened at, reduced at its declaration's close, and absent where that type was left a metavariable, the reduction ran out of its allowance, or it is neither.
@@ -687,8 +685,7 @@ struct TabledTrace {
     name: u32,
     asked: Trace<Question<u32, u32>, Answered<u32>>,
     classified: Vec<(u32, Classified)>,
-    credited: Vec<(u32, u32)>,
-    classes: Vec<(u32, u32, SiteClass)>,
+    lints: Vec<Lint>,
     made: Option<TabledMade>,
 }
 
@@ -727,16 +724,7 @@ impl TabledTrace {
                 .into_iter()
                 .map(|(place, classified)| Ok((name(place)?, classified)))
                 .collect::<Result<_, String>>()?,
-            credited: self
-                .credited
-                .into_iter()
-                .map(|(place, ordinal)| Ok((name(place)?, ordinal)))
-                .collect::<Result<_, String>>()?,
-            classes: self
-                .classes
-                .into_iter()
-                .map(|(place, ordinal, class)| Ok((name(place)?, ordinal, class)))
-                .collect::<Result<_, String>>()?,
+            lints: self.lints,
         };
 
         Ok((name(self.name)?, trace, concluded, made))
@@ -875,16 +863,7 @@ impl TraceTable {
                         .iter()
                         .map(|(name, classified)| (names.place(*name), classified.clone()))
                         .collect(),
-                    credited: concluded
-                        .credited
-                        .iter()
-                        .map(|(name, place)| (names.place(*name), *place))
-                        .collect(),
-                    classes: concluded
-                        .classes
-                        .iter()
-                        .map(|(name, place, class)| (names.place(*name), *place, *class))
-                        .collect(),
+                    lints: concluded.lints.clone(),
                     made,
                 }
             })

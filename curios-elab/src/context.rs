@@ -539,11 +539,6 @@ impl<'s> Context<'s> {
         }
     }
 
-    /// Credit the written binders `credited` names, each by its definition's name and its place among that definition's written binders: what the proofs of a declaration taken from a candidate read.
-    pub(crate) fn credit_adopted(&mut self, credited: impl IntoIterator<Item = (Global, u32)>) {
-        self.underway.credits.adopt(credited);
-    }
-
     /// Zonk every term recorded since `mark`, the finished item's, so the erasure obligations read them once the state they were recorded in is gone.
     ///
     /// One pass across them all, the solutions standing still while it runs: the terms are each other's subterms, a deep expression's recorded once at each of its levels, and zonked apart they would cost the sum of their sizes.

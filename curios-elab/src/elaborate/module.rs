@@ -1892,6 +1892,8 @@ fn elaborate_and_zonk<'s>(
             elaborated.held,
             elaborated.obligations,
         );
+        // Every record the walk holds, whatever it concluded: what a refusal is reported with, and what a unit is made with.
+        context.hold_lints(&elaborated.traces);
         if !elaborated.refusals.is_empty() {
             return Err(refused(elaborated.refusals, finalized));
         }
@@ -2012,14 +2014,9 @@ fn elaborate_and_zonk_over<'s>(
             elaborated.held,
             elaborated.obligations,
         );
+        // Every record the walk holds, a kept declaration's the baseline made among them, whatever the walk concluded: what a refusal is reported with, and what a unit is made with.
+        context.hold_lints(&elaborated.traces);
         if !elaborated.refusals.is_empty() {
-            // A declaration kept as the baseline holds it is filed with the record the baseline made, whose credits no proof written now repeats: they join this elaboration's, so the lints a refusal is read with credit what a kept proof reads, as a unit made of the same traces would.
-            context.credit_adopted(
-                elaborated
-                    .traces
-                    .declarations()
-                    .flat_map(|(_, record)| record.concluded().credited.iter().copied()),
-            );
             return Err(refused(elaborated.refusals, finalized));
         }
         let Finalized {

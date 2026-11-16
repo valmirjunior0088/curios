@@ -3,7 +3,7 @@ use {
         Consulted, Lookup, PublicInterface, Reach, Scoped, Shared, carriers, named, out_of_reach,
         unresolved, visible_binding, visible_child,
     },
-    crate::{Error, OrderedMap, Zero},
+    crate::{Error, OrderedMap},
     curios_common::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
     curios_surface::{Label, Name},
     std::{
@@ -123,8 +123,6 @@ pub struct Journal {
     pub consulted: Vec<Consulted>,
     /// The names it recorded an import scope for.
     pub scoped: Vec<curios_core::Global>,
-    /// The zeros its lowerers recorded.
-    pub zeros: Vec<Zero>,
     /// Whether a name it wrote resolved to nothing. Elaboration refuses such a declaration, and no later lowering keeps what it lowered to.
     pub unbound: bool,
 }
@@ -540,6 +538,8 @@ pub struct Declaring {
     sorts: WrittenSorts,
     // Every name the declaration being lowered wrote that resolved to nothing, keyed by the binder identity it lowered to, with why: `curios-elab` reports the unbound binder, and this is what its report says. The declaration's, since a binder's identity is.
     unbound: RefCell<BTreeMap<curios_core::Free, curios_core::Unresolved>>,
+    // Every written site of the declaration being lowered no written name reads: what `curios-elab` decides the binder lints from. The declaration's, since a written binder's place is.
+    unread: RefCell<Vec<curios_core::Unread>>,
 }
 
 impl Declaring {
@@ -553,6 +553,7 @@ impl Declaring {
             universe_allocations,
             sorts,
             unbound,
+            unread,
         } = self;
 
         metavars.reset();
@@ -562,6 +563,7 @@ impl Declaring {
         universe_allocations.borrow_mut().clear();
         sorts.begin();
         unbound.borrow_mut().clear();
+        unread.borrow_mut().clear();
     }
 }
 
@@ -577,6 +579,7 @@ impl Shared {
                 universe_allocations: RefCell::default(),
                 sorts: WrittenSorts::default(),
                 unbound: RefCell::default(),
+                unread: RefCell::default(),
             },
             universe_role: Cell::new(curios_core::UniverseRole::Flexible),
             minted: RefCell::default(),
@@ -584,7 +587,6 @@ impl Shared {
             imports: RefCell::default(),
             sites: RefCell::default(),
             reached: RefCell::default(),
-            zeros: RefCell::default(),
             anchoring: Anchoring::default(),
             closed: RefCell::default(),
         }
@@ -701,21 +703,9 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Record `zeros` of the declaration being lowered, under the module body it is written in.
-    pub fn report(&self, zeros: impl IntoIterator<Item = Zero>) {
-        let zeros = zeros.into_iter().collect::<Vec<_>>();
-        self.shared
-            .anchoring
-            .journal
-            .borrow_mut()
-            .zeros
-            .extend(zeros.iter().cloned());
-        self.shared
-            .zeros
-            .borrow_mut()
-            .entry(self.prefix)
-            .or_default()
-            .extend(zeros);
+    /// Record `sites` of the declaration being lowered as ones no written name reads, beside what it minted.
+    pub fn unread(&self, sites: impl IntoIterator<Item = curios_core::Unread>) {
+        self.shared.declaring.unread.borrow_mut().extend(sites);
     }
 
     /// Open the `use` site every label imported until [`Self::close_site`] is credited to.
@@ -860,6 +850,7 @@ impl<'a> Context<'a> {
             metavariables: self.shared.declaring.metavars.count(),
             universes: self.shared.declaring.universe_seeds.borrow().clone(),
             qualities: self.shared.declaring.sorts.seeds.borrow().clone(),
+            unread: self.shared.declaring.unread.borrow().clone(),
         }
     }
 

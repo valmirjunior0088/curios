@@ -23,8 +23,8 @@ use {
     curios_emit::into_wasm,
     curios_erase::{Erasures, erase_program, erase_unit},
     curios_module::{
-        BrokenItem, LintedBinder, LoweredEntry, PreparedText, RootSource, UnitSource, Zero,
-        into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
+        BrokenItem, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_entry,
+        into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
     curios_surface::{Entrypoint, ReaderPosition, Spelling},
     curios_unit::{Predecessors, Unit},
@@ -57,39 +57,28 @@ impl Findings {
             .unwrap_or_default()
     }
 
-    /// A lowering's that made no unit, decided now with what its elaboration `observed`: what it found, less every binder a proof it wrote read.
+    /// A lowering's that made no unit, gathered now as a unit gathers its own: the lowering's lints, and the binder lints its elaboration `observed`, whatever that elaboration concluded.
     pub fn of_text(text: &PreparedText, observed: &Observed) -> Self {
-        Self::decided(
+        Self::gathered(
             text.lints(),
-            text.zeros(),
             observed,
             text.anchors().clone(),
             text.reached().clone(),
         )
     }
 
-    /// The lints the lowering `decided`, and those `zeros` come to with what an elaboration `observed`, placed by `anchors`: less every binder a proof it wrote read, worded by what each site of an entry's final term binds — a declaration's sites, whose records no unit holds here, are worded without.
-    fn decided(
+    /// The lints the lowering `decided`, and the binder lints elaboration `observed`, in reading order as `anchors` place them.
+    fn gathered(
         decided: &[Lint],
-        zeros: &[Zero],
         observed: &Observed,
         anchors: Anchors,
         reached: BTreeSet<Qualifier>,
     ) -> Self {
-        let read = |binder: &LintedBinder| {
-            observed
-                .credited
-                .contains(&(binder.declaration, binder.ordinal))
-        };
-        let class = |binder: &LintedBinder| {
-            binder
-                .declaration
-                .is_none()
-                .then(|| observed.entry_classes.get(&binder.ordinal).copied())
-                .flatten()
-        };
         Self {
-            lints: curios_lint::lints(decided, zeros, read, class, &anchors),
+            lints: Lint::ordered(
+                decided.iter().chain(&observed.lints).cloned().collect(),
+                &anchors,
+            ),
             anchors,
             reached,
         }
@@ -748,11 +737,8 @@ where
 {
     curios_profile::profile!("elaborate_and_zonk");
 
-    // Taken before the entry elaborates, which consumes its lowering, and decided once it has, when every proof it writes is written.
-    let (decided, zeros) = (
-        std::mem::take(&mut lowered.lints),
-        std::mem::take(&mut lowered.zeros),
-    );
+    // Taken before the entry elaborates, which consumes its lowering, and gathered once it has, when every proof it writes is written and every binder lint decided.
+    let decided = std::mem::take(&mut lowered.lints);
     let (anchors, reached) = (
         lowered.anchors.clone(),
         std::mem::take(&mut lowered.reached),
@@ -767,7 +753,7 @@ where
         tail,
         observe,
     );
-    let findings = Findings::decided(&decided, &zeros, &context.observed(), anchors, reached);
+    let findings = Findings::gathered(&decided, &context.observed(), anchors, reached);
     (findings, verdict)
 }
 
@@ -796,7 +782,6 @@ where
         foreigns: _,
         names,
         lints: _,
-        zeros: _,
         reached: _,
         broken,
         anchors: own,

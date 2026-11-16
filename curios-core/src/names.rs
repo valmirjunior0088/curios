@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{UniverseSeed, Unresolved, WitnessId, WitnessKey, WrittenSort},
+    crate::{UniverseSeed, Unread, Unresolved, WitnessId, WitnessKey, WrittenSort},
     curios_common::{
         Digest, Filed, InKeyOrder, InfixOp, Object, Qualifier, Records, Sorted, Symbol, name,
     },
@@ -170,6 +170,22 @@ pub struct Mints {
     pub universes: Vec<UniverseSeed>,
     /// Where each `Sort` the declaration writes stands, by the id of the quality metavariable the lowering gave it: a quality its elaboration closes as a parameter of the declaration, where nothing of the declaration decides it. Every copy of one written `Sort` shares a quality, as a written `Type` shares a level.
     pub qualities: Vec<Option<WrittenSort>>,
+    /// Every written site of the declaration no written name reads, each by the definition it is written in ([`Unread`]): what elaboration decides the binder lints from where it files the declaration's record, beside what the proofs it wrote read. Held here, as `unbound` is, because a written binder's place means something within its declaration alone.
+    pub unread: Vec<Unread>,
+}
+
+impl Mints {
+    /// These mints with every unread site of the definition `name` re-keyed to `renamed`: a witness's, whose name is given anew by every lowering.
+    pub fn renamed(&self, name: &Global, renamed: Global) -> Self {
+        Self {
+            unread: self
+                .unread
+                .iter()
+                .map(|site| site.renamed(name, renamed))
+                .collect(),
+            ..self.clone()
+        }
+    }
 }
 
 /// What one unit's lowering minted, declaration by declaration — the whole of what the lowering hands elaboration beside the module.
@@ -198,6 +214,7 @@ impl Minted {
             metavariables: 0,
             universes: Vec::new(),
             qualities: Vec::new(),
+            unread: Vec::new(),
         };
 
         self.from.get(name).map_or(&NOTHING, Rc::as_ref)
@@ -215,10 +232,11 @@ impl Minted {
         }
     }
 
-    /// Record what `name` was lowered from under `renamed` instead.
+    /// Record what `name` was lowered from under `renamed` instead, its unread sites re-keyed with it.
     pub fn rename(&mut self, name: &Global, renamed: Global) {
         if let Some(mints) = self.from.remove(name) {
-            self.from.insert(renamed, mints);
+            self.from
+                .insert(renamed, Rc::new(mints.renamed(name, renamed)));
         }
     }
 

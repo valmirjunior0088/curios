@@ -1100,7 +1100,6 @@ impl<'a> Demand<'a> {
                 self.compare(context, &item);
                 self.survivors.keep(ItemStamp(*position), item, Vec::new());
             }
-            context.credit_adopted(record.concluded().credited.iter().copied());
             self.file(&names, Rc::clone(&record));
             return true;
         }
@@ -1275,8 +1274,8 @@ impl<'a> Demand<'a> {
 
             let needs = context.take_needs();
             if needs.is_empty() {
-                // What each written site binds, decided before the trace is taken, so what deciding it read is the declaration's too.
-                let classes = context.classes_in(&names);
+                // The binder lints, decided before the trace is taken, so what deciding what each written site binds read is the declaration's too.
+                let lints = context.lints_in(&names);
                 // What the attempt that stands asked of the declarations around it is its declaration's.
                 let trace = context.take_trace();
                 curios_profile::sample!("demand::asked", trace.len());
@@ -1290,11 +1289,7 @@ impl<'a> Demand<'a> {
                     .flatten()
                     .map(|name| (name, context.classified(&name)))
                     .collect();
-                let concluded = Concluded {
-                    classified,
-                    credited: context.credited_in(&names),
-                    classes,
-                };
+                let concluded = Concluded { classified, lints };
                 self.file(&names, Rc::new(TraceRecord::new(trace, concluded)));
                 self.poison = poison;
                 let mut holding = Vec::new();

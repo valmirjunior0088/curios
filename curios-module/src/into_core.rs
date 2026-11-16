@@ -67,7 +67,7 @@ pub use reachability::Reachability;
 use reachability::*;
 
 use {
-    crate::{Compiled, Error, RootSource, Zero, tree_of},
+    crate::{Compiled, Error, RootSource, tree_of},
     curios_abi::{ForeignFunction, ForeignStore},
     curios_archive::Bytes,
     curios_common::{
@@ -637,12 +637,9 @@ pub struct PreparedText {
     imports: Recorded<curios_core::Imports>,
     /// The mounts this unit may name: the ones it declared a dependency on, or every open one in scope where it declared none, and its own. What its references were guarded by, and what drops a path it may not write from the table a report spells by.
     visible: Vec<Mount>,
-    /// Every lint resolution alone decides — an import nothing resolved through, a declaration nothing reaches — worded here: what the unit's lints are gathered from where the unit is made, beside what [`PreparedText::zeros`] comes to. Held by a unit lowered in this process alone: a unit stores the lints gathered of it, and a lowering over it reads its baseline half's.
+    /// Every lint resolution alone decides — an import nothing resolved through, a declaration nothing reaches — worded here: what the unit's lints are gathered from where the unit is made, beside the binder lints elaboration decides from the sites each declaration's mints hold ([`curios_core::Mints::unread`]). Held by a unit lowered in this process alone: a unit stores the lints gathered of it, and a lowering over it reads its baseline half's.
     #[archived_with(curios_archive::Skip)]
     lints: Vec<curios_core::Lint>,
-    /// Every zero the lowering found of a written binder — see [`Zero`]: what the binder lints are decided from where the unit is made, beside what elaboration recorded. Held by a unit lowered in this process alone, as `lints` is.
-    #[archived_with(curios_archive::Skip)]
-    zeros: Vec<Zero>,
     /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
     reached: BTreeSet<Qualifier>,
     /// Every item the parser could not read, in reading order — see [`BrokenItem`]. Empty for any unit that compiles.
@@ -687,10 +684,6 @@ pub struct BrokenItem {
 
 impl PreparedText {
     /// See the field.
-    pub fn zeros(&self) -> &[Zero] {
-        &self.zeros
-    }
-
     /// See the field.
     pub fn lints(&self) -> &[curios_core::Lint] {
         &self.lints
@@ -2509,8 +2502,6 @@ struct Shared {
     sites: RefCell<Vec<UseSite>>,
     // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
     reached: RefCell<BTreeSet<Qualifier>>,
-    // Every zero a `Lowerer` of this unit recorded, by the module body it is written in — see `Lowerer::flush`.
-    zeros: RefCell<BTreeMap<Qualifier, Vec<Zero>>>,
     // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
     anchoring: Anchoring,
     // The module bodies whose `use` declarations this lowering has recorded what they brought into scope of.
@@ -2871,7 +2862,6 @@ fn into_core_unit_within(
             items: &mut flat_items,
             minted: &mut shared.minted.borrow_mut(),
             imports: &mut shared.imports.borrow_mut(),
-            zeros: &mut shared.zeros.borrow_mut(),
         },
         &renames,
     );
@@ -3000,7 +2990,7 @@ fn into_core_unit_within(
         context.anchor(curios_core::Anchored::Entry, span);
     }
     let entry = {
-        // Scoped so the lowerer drops, and records its zeros, before the tables the context borrows are moved into the result below.
+        // Scoped so the lowerer drops, and records its unread sites, before the tables the context borrows are moved into the result below.
         let lower = Lowerer::new(&context, None);
         match source.entrypoint() {
             Some(entrypoint) => Some(curios_core::Entrypoint {
@@ -3236,16 +3226,12 @@ fn into_core_unit_within(
         _ => foreigns,
     };
 
-    // What each body's declarations and `use` declarations were found to leave unused: the baseline's, with each body the walk passed found again and each it no longer holds taken away.
-    let (mut body_zeros, mut body_lints) = baseline
+    // What each body's `use` declarations were found to leave unused: the baseline's, with each body the walk passed found again and each it no longer holds taken away.
+    let mut body_lints = baseline
         .as_ref()
-        .map(|baseline| {
-            let half = baseline.unit().half();
-            (half.zeros.clone(), half.lints.clone())
-        })
+        .map(|baseline| baseline.unit().half().lints.clone())
         .unwrap_or_default();
     {
-        let mut found = shared.zeros.take();
         let mut imports = BTreeMap::<Qualifier, Vec<UseSite>>::new();
         for site in shared.sites.take() {
             imports.entry(site.body).or_default().push(site);
@@ -3259,25 +3245,8 @@ fn into_core_unit_within(
                 }
                 false => body_lints.insert(body, Rc::new(lints)),
             }
-            let zeros = found.remove(&body).unwrap_or_default();
-            match zeros.is_empty() {
-                true => {
-                    body_zeros.remove(&body);
-                }
-                false => body_zeros.insert(body, Rc::new(zeros)),
-            }
-        }
-        // The entry's term is lowered in the compilation root's body, which a unit with no entry does not walk.
-        for (body, zeros) in found {
-            let mut held = body_zeros
-                .get(&body)
-                .map(|held| (**held).clone())
-                .unwrap_or_default();
-            held.extend(zeros);
-            body_zeros.insert(body, Rc::new(held));
         }
         for body in &removed {
-            body_zeros.remove(body);
             body_lints.remove(body);
         }
     }
@@ -3435,10 +3404,6 @@ fn into_core_unit_within(
         .flat_map(|(_, lints)| lints.iter().cloned())
         .chain(dead)
         .collect();
-    let zeros = body_zeros
-        .iter()
-        .flat_map(|(_, zeros)| zeros.iter().cloned())
-        .collect();
     let unit = PreparedText {
         mounts: own.clone(),
         compiled: source.compiled(),
@@ -3464,7 +3429,6 @@ fn into_core_unit_within(
         visible: visible_mounts,
         broken,
         lints,
-        zeros,
         reached,
         anchors: Recorded::held(shared.anchoring.into_anchors()),
         baseline: Recorded::held(BaselineHalf {
@@ -3473,7 +3437,6 @@ fn into_core_unit_within(
             uses,
             keyed: held_keys,
             lints: body_lints,
-            zeros: body_zeros,
         }),
         lookups: lookups.map(OnceCell::from).unwrap_or_default(),
         importers,
@@ -3593,7 +3556,7 @@ pub fn prepare_prelude(
     into_core_unit(&UnitSource::mounted(input), predecessors, syntax)
 }
 
-/// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, and its lints and zeros. A name that resolved to nothing is among what its declaration minted (`curios_core::Mints::unbound`).
+/// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, and its lints. A name that resolved to nothing is among what its declaration minted (`curios_core::Mints::unbound`).
 pub struct LoweredEntry {
     pub program: curios_core::Program,
     pub minted: Rc<curios_core::Minted>,
@@ -3602,8 +3565,6 @@ pub struct LoweredEntry {
     pub names: EntryNames,
     /// See [`PreparedText::lints`].
     pub lints: Vec<curios_core::Lint>,
-    /// See [`PreparedText::zeros`].
-    pub zeros: Vec<Zero>,
     /// See [`PreparedText::broken`].
     pub broken: Vec<BrokenItem>,
     /// See [`PreparedText::reached`].
@@ -3751,7 +3712,6 @@ pub fn into_core_with_prelude(
             visible: unit.visible,
         },
         lints: unit.lints,
-        zeros: unit.zeros,
         reached: unit.reached,
         broken: unit.broken,
         anchors: unit

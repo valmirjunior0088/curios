@@ -138,6 +138,9 @@ pub use names::{
 mod lint;
 pub use lint::{ArchivedLint, ArchivedLintKind, Lint, LintKind};
 
+mod unread;
+pub use unread::{ArchivedUnread, ArchivedWrittenBinder, Unread, WrittenBinder};
+
 mod unresolved;
 pub use unresolved::{
     ArchivedMissing, ArchivedSought, ArchivedUnresolved, Missing, Sought, Unresolved,

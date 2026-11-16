@@ -69,22 +69,22 @@ fn a_binder_a_reused_items_proof_reads_stays_credited_as_in_a_whole_compile() {
     );
 }
 
-/// A hypothesis a proof reads in `below`, and one in `above` under it, whose statement reaches `limit`.
+/// A hypothesis a proof reads in `below`, and one in `above` under it, whose statement reaches `limit`; and in each a binder nothing reads.
 const CREDITED_TWICE: &str = "use /std/{Nat, proved};
 use /std/Bool/{Holds};
 
 pub let limit: Nat = 7;
 
-pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = proved();
+pub let below(i: Nat, n: Nat, p: Holds(i < n), spare: Nat) -> Holds(i <= n) = proved();
 
-pub let above(i: Nat, q: Holds(limit < i)) -> Holds(limit <= i) = proved();
+pub let above(i: Nat, q: Holds(limit < i), spare: Nat) -> Holds(limit <= i) = proved();
 ";
 
-/// A unit's credited binders are held alike in its declarations' records whichever pass credited them.
+/// A unit's binder lints are held alike in its declarations' records whichever pass decided them, and a hypothesis a proof reads is in none.
 ///
-/// A recompile files what the proofs of each declaration it elaborates again read in that declaration's record, and keeps the baseline's record of each it reused, where a whole compile files every record as it elaborates in reading order: `above` is elaborated again and `below`, over it in the text, is reused, so the two passes run in the other order than the text.
+/// A recompile files the lints of each declaration it elaborates again in that declaration's record, and keeps the baseline's record of each it reused, where a whole compile files every record as it elaborates in reading order: `above` is elaborated again and `below`, over it in the text, is reused, so the two passes run in the other order than the text.
 #[test]
-fn credited_binders_are_stored_alike_whichever_pass_credited_them() {
+fn binder_lints_are_stored_alike_whichever_pass_decided_them() {
     let baseline = unit_of(CREDITED_TWICE);
     let edited = CREDITED_TWICE.replace("= 7", "= 8");
 
@@ -93,25 +93,21 @@ fn credited_binders_are_stored_alike_whichever_pass_credited_them() {
 
     assert!(reuses_body(&baseline, &incremental, "below"));
     assert!(!reuses_body(&baseline, &incremental, "above"));
-    assert!(unused_binders(&incremental).is_empty());
-    let credited = |unit: &Unit| {
+    let decided = |unit: &Unit| {
         unit.traces()
             .declarations()
-            .map(|(name, record)| (*name, record.concluded().credited.clone()))
+            .map(|(name, record)| (*name, record.concluded().lints.clone()))
             .collect::<Vec<_>>()
     };
     assert_eq!(
-        credited(&incremental),
-        credited(&whole),
-        "a record holds another credit over a baseline"
+        decided(&incremental),
+        decided(&whole),
+        "a record holds other lints over a baseline"
     );
     assert_eq!(
-        credited(&whole)
-            .iter()
-            .filter(|(_, credited)| !credited.is_empty())
-            .count(),
-        2,
-        "the records of `below` and `above` each hold what their proof read"
+        unused_binders(&incremental),
+        ["unused binder\n  `spare` is never used\n  write `_` in its name's place"; 2],
+        "the records of `below` and `above` each hold their own lint and none of what their proof read"
     );
 }
 
