@@ -4,7 +4,7 @@
 #^^^ source.curios keyword.other.curios
 #   ^ source.curios
 #    ^ source.curios punctuation.separator.path.curios
-#     ^^^ source.curios support.module.curios
+#     ^^^ source.curios entity.name.namespace.curios
 #        ^ source.curios
 #         ^ source.curios punctuation.bracket.curios
 #          ^^^ source.curios entity.name.type.curios
@@ -15,7 +15,7 @@
 #                      ^ source.curios
 #                       ^^^ source.curios keyword.other.curios
 #                          ^ source.curios
-#                           ^^^^^^ source.curios entity.name.type.curios
+#                           ^^^^^^ source.curios entity.name.namespace.curios
 #                                 ^ source.curios punctuation.separator.curios
 #                                  ^ source.curios
 #                                   ^^^ source.curios keyword.control.curios
@@ -28,16 +28,16 @@
 #   ^ source.curios
 #    ^^^ source.curios keyword.other.curios
 #       ^ source.curios
-#        ^^^^^^ source.curios support.module.curios
+#        ^^^^^^ source.curios entity.name.namespace.curios
 #              ^^ source.curios
 #                ^ source.curios punctuation.separator.curios
 >
 >--- Nothing yet.
-#^^^^^^^^^^^^^^^^ source.curios comment.line.double-dash.curios
+#^^^^^^^^^^^^^^^^ source.curios comment.line.documentation.curios
 >---
-#^^^ source.curios comment.line.double-dash.curios
+#^^^ source.curios comment.line.documentation.curios
 >--- The additive identity.
-#^^^^^^^^^^^^^^^^^^^^^^^^^^ source.curios comment.line.double-dash.curios
+#^^^^^^^^^^^^^^^^^^^^^^^^^^ source.curios comment.line.documentation.curios
 >pub let zero: Nat = 0;
 #^^^ source.curios keyword.other.curios
 #   ^ source.curios
@@ -118,7 +118,7 @@
 #                     ^ source.curios
 #                      ^^ source.curios keyword.operator.arrow.curios
 #                        ^ source.curios
-#                         ^^^^^^ source.curios support.module.curios
+#                         ^^^^^^ source.curios entity.name.namespace.curios
 #                               ^ source.curios punctuation.separator.path.curios
 #                                ^^^^ source.curios entity.name.function.curios
 #                                    ^ source.curios punctuation.bracket.curios
@@ -136,7 +136,7 @@
 #                                                   ^ source.curios
 #                                                    ^^ source.curios keyword.operator.arrow.curios
 #                                                      ^ source.curios
-#                                                       ^^^^^^ source.curios support.module.curios
+#                                                       ^^^^^^ source.curios entity.name.namespace.curios
 #                                                             ^ source.curios punctuation.separator.path.curios
 #                                                              ^^^^ source.curios entity.name.function.curios
 #                                                                  ^ source.curios punctuation.bracket.curios
@@ -254,7 +254,7 @@
 #                                                      ^ source.curios
 #                                                       ^ source.curios keyword.operator.assignment.curios
 #                                                        ^ source.curios
-#                                                         ^^^^^ source.curios support.module.curios
+#                                                         ^^^^^ source.curios entity.name.namespace.curios
 #                                                              ^ source.curios punctuation.separator.path.curios
 #                                                               ^^^ source.curios entity.name.function.curios
 #                                                                  ^ source.curios punctuation.bracket.curios
@@ -268,7 +268,7 @@
 >satisfy Show(Nat) {
 #^^^^^^^ source.curios keyword.other.curios
 #       ^ source.curios
-#        ^^^^ source.curios entity.name.type.curios
+#        ^^^^ source.curios entity.name.type.interface.curios
 #            ^ source.curios punctuation.bracket.curios
 #             ^^^ source.curios entity.name.type.curios
 #                ^ source.curios punctuation.bracket.curios
@@ -283,7 +283,7 @@
 #           ^ source.curios
 #            ^ source.curios keyword.operator.assignment.curios
 #             ^ source.curios
-#              ^^^ source.curios support.module.curios
+#              ^^^ source.curios entity.name.namespace.curios
 #                 ^ source.curios punctuation.separator.path.curios
 #                  ^^^^^^ source.curios entity.name.function.curios
 #                        ^ source.curios punctuation.bracket.curios
@@ -337,7 +337,7 @@
 >satisfy Spell(Nat) {
 #^^^^^^^ source.curios keyword.other.curios
 #       ^ source.curios
-#        ^^^^^ source.curios entity.name.type.curios
+#        ^^^^^ source.curios entity.name.type.interface.curios
 #             ^ source.curios punctuation.bracket.curios
 #              ^^^ source.curios entity.name.type.curios
 #                 ^ source.curios punctuation.bracket.curios
@@ -357,7 +357,7 @@
 #                      ^ source.curios keyword.operator.assignment.curios
 >    Test/assert(even(zero));
 #^^^^ source.curios
-#    ^^^^ source.curios support.module.curios
+#    ^^^^ source.curios entity.name.namespace.curios
 #        ^ source.curios punctuation.separator.path.curios
 #         ^^^^^^ source.curios entity.name.function.curios
 #               ^ source.curios punctuation.bracket.curios
@@ -376,13 +376,13 @@
 #                           ^ source.curios keyword.operator.assignment.curios
 >    Test/equal(map(Option/some(zero), (n: Nat) => n + 1), Option/some(1));
 #^^^^ source.curios
-#    ^^^^ source.curios support.module.curios
+#    ^^^^ source.curios entity.name.namespace.curios
 #        ^ source.curios punctuation.separator.path.curios
 #         ^^^^^ source.curios entity.name.function.curios
 #              ^ source.curios punctuation.bracket.curios
 #               ^^^ source.curios entity.name.function.curios
 #                  ^ source.curios punctuation.bracket.curios
-#                   ^^^^^^ source.curios support.module.curios
+#                   ^^^^^^ source.curios entity.name.namespace.curios
 #                         ^ source.curios punctuation.separator.path.curios
 #                          ^^^^ source.curios entity.name.function.curios
 #                              ^ source.curios punctuation.bracket.curios
@@ -407,7 +407,7 @@
 #                                                       ^ source.curios punctuation.bracket.curios
 #                                                        ^ source.curios punctuation.separator.curios
 #                                                         ^ source.curios
-#                                                          ^^^^^^ source.curios support.module.curios
+#                                                          ^^^^^^ source.curios entity.name.namespace.curios
 #                                                                ^ source.curios punctuation.separator.path.curios
 #                                                                 ^^^^ source.curios entity.name.function.curios
 #                                                                     ^ source.curios punctuation.bracket.curios

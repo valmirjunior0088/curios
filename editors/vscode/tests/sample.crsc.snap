@@ -266,7 +266,7 @@
 #                                                                              ^ source.curios.core punctuation.separator.curios
 >/Wit/w(#NatAdd(n, 1), #CellPoll(T, c, {levels = [u], qualities = [Param(0)]}))
 #^ source.curios.core punctuation.separator.path.curios
-# ^^^ source.curios.core support.module.curios
+# ^^^ source.curios.core entity.name.namespace.curios
 #    ^ source.curios.core punctuation.separator.path.curios
 #     ^ source.curios.core entity.name.function.curios
 #      ^ source.curios.core punctuation.bracket.curios

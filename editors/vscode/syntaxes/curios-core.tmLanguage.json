@@ -35,7 +35,7 @@
       "comment": "A declaration named by its absolute path, after its keyword or the `and` that joins it to a group; a witness's name, which runs on past `witness~`, is the witness pattern's.",
       "patterns": [
         {
-          "match": "\\b(induct|struct|concept|and\\s+induct|and\\s+struct|and\\s+concept)\\s+(/(?:[\\p{L}\\p{N}_]+/)*)([\\p{L}\\p{N}_]+)(?![~/\\p{L}\\p{N}_])",
+          "match": "\\b(induct|struct|and\\s+induct|and\\s+struct)\\s+(/(?:[\\p{L}\\p{N}_]+/)*)([\\p{L}\\p{N}_]+)(?![~/\\p{L}\\p{N}_])",
           "captures": {
             "1": {
               "name": "keyword.control.curios"
@@ -43,7 +43,7 @@
             "2": {
               "patterns": [
                 {
-                  "name": "support.module.curios",
+                  "name": "entity.name.namespace.curios",
                   "match": "[\\p{L}\\p{N}_]+"
                 },
                 {
@@ -58,6 +58,29 @@
           }
         },
         {
+          "match": "\\b(concept|and\\s+concept)\\s+(/(?:[\\p{L}\\p{N}_]+/)*)([\\p{L}\\p{N}_]+)(?![~/\\p{L}\\p{N}_])",
+          "captures": {
+            "1": {
+              "name": "keyword.control.curios"
+            },
+            "2": {
+              "patterns": [
+                {
+                  "name": "entity.name.namespace.curios",
+                  "match": "[\\p{L}\\p{N}_]+"
+                },
+                {
+                  "name": "punctuation.separator.path.curios",
+                  "match": "/"
+                }
+              ]
+            },
+            "3": {
+              "name": "entity.name.type.interface.curios"
+            }
+          }
+        },
+        {
           "match": "\\b(let|foreign|test|and)\\s+(/(?:[\\p{L}\\p{N}_]+/)*)([\\p{L}\\p{N}_]+)(?![~/\\p{L}\\p{N}_])",
           "captures": {
             "1": {
@@ -66,7 +89,7 @@
             "2": {
               "patterns": [
                 {
-                  "name": "support.module.curios",
+                  "name": "entity.name.namespace.curios",
                   "match": "[\\p{L}\\p{N}_]+"
                 },
                 {

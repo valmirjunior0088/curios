@@ -5,6 +5,8 @@
 #[cfg(test)]
 mod tests;
 
+use crate::Class;
+
 /// Where a word is one, and so what else it may spell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Standing {
@@ -18,9 +20,9 @@ pub enum Standing {
     Sort,
 }
 
-/// Declares [`Keyword`] from one table, so the roster, [`Keyword::ALL`], the spellings and the standings cannot drift apart: a new word is written exactly once.
+/// Declares [`Keyword`] from one table, so the roster, [`Keyword::ALL`], the spellings, the standings and the classes cannot drift apart: a new word is written exactly once.
 macro_rules! keywords {
-    ($($variant:ident => $spelling:literal, $standing:ident;)+) => {
+    ($($variant:ident => $spelling:literal, $standing:ident, $class:ident;)+) => {
         /// A word the surface grammar reads as itself rather than as a name.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Keyword {
@@ -49,29 +51,36 @@ macro_rules! keywords {
                     $(Keyword::$variant => Standing::$standing,)+
                 }
             }
+
+            /// What the word is painted as wherever it stands as one.
+            pub fn class(self) -> Class {
+                match self {
+                    $(Keyword::$variant => Class::$class,)+
+                }
+            }
         }
     };
 }
 
 keywords! {
-    Let => "let", Reserved;
-    Match => "match", Reserved;
-    Mod => "mod", Reserved;
-    Use => "use", Reserved;
-    Pub => "pub", Reserved;
-    End => "end", Reserved;
-    Induct => "induct", Reserved;
-    Struct => "struct", Reserved;
-    Foreign => "foreign", Reserved;
-    True => "true", Reserved;
-    False => "false", Reserved;
-    Concept => "concept", ItemHead;
-    Satisfy => "satisfy", ItemHead;
-    Test => "test", ItemHead;
-    And => "and", GroupJoin;
-    Type => "Type", Sort;
-    Prop => "Prop", Sort;
-    Sort => "Sort", Sort;
+    Let => "let", Reserved, Keyword;
+    Match => "match", Reserved, Keyword;
+    Mod => "mod", Reserved, Keyword;
+    Use => "use", Reserved, Keyword;
+    Pub => "pub", Reserved, Keyword;
+    End => "end", Reserved, Keyword;
+    Induct => "induct", Reserved, Keyword;
+    Struct => "struct", Reserved, Keyword;
+    Foreign => "foreign", Reserved, Keyword;
+    True => "true", Reserved, Boolean;
+    False => "false", Reserved, Boolean;
+    Concept => "concept", ItemHead, Keyword;
+    Satisfy => "satisfy", ItemHead, Keyword;
+    Test => "test", ItemHead, Keyword;
+    And => "and", GroupJoin, Keyword;
+    Type => "Type", Sort, Sort;
+    Prop => "Prop", Sort, Sort;
+    Sort => "Sort", Sort, Sort;
 }
 
 /// Whether `word` is reserved, and so cannot spell a name: a binder, a label or a path segment.

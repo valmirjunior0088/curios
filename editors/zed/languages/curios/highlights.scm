@@ -1,6 +1,9 @@
 ; Captures for the `curios` grammar in `editors/grammar/base`. Zed reads a language's queries from its own directory alone — the grammar ships no `queries/` — so this is the one statement of them, which `curios_core/highlights.scm` opens with verbatim, and `editors/grammar`'s `npm test` compiles each against its grammar so a renamed node cannot orphan a capture silently.
 
 (comment) @comment
+; A documentation comment is a comment the grammar reads like any other, opening with `---`.
+((comment) @comment.doc
+  (#match? @comment.doc "^---"))
 
 ; Keywords, including the contextual ones — the grammar only lexes `concept`, `satisfy`, `test` and `and` as keywords in their positions.
 [
@@ -19,15 +22,15 @@
   "match"
 ] @keyword
 
-(sort) @type
+(sort) @type.builtin
 (boolean) @boolean
 (number) @number
 (string) @string
 (block_string) @string
 (escape_sequence) @string.escape
 (character) @string.special.symbol
-; A goal is punctuation, not `punctuation.special`: the default themes paint the latter red, and a hole the author wrote on purpose is not an alarm.
-(goal) @punctuation
+; A goal is its own capture, falling back to `punctuation` rather than `punctuation.special`: the default themes paint the latter red, and a hole the author wrote on purpose is not an alarm.
+(goal) @punctuation.goal
 (held) @punctuation
 
 ; Definitions.
@@ -36,11 +39,11 @@
 (test_item name: (identifier) @function)
 (let_binding pattern: (identifier) @variable)
 (let_binding pattern: (identifier) @function parameters: (parameters))
-(mod_item name: (identifier) @type)
+(mod_item name: (identifier) @module)
 (induct_body name: (identifier) @type)
 (struct_member name: (identifier) @type)
-(concept_member name: (identifier) @type)
-(satisfy_member concept: (path (identifier) @type .))
+(concept_member name: (identifier) @type.interface)
+(satisfy_member concept: (path (identifier) @type.interface .))
 (constructor name: (identifier) @constructor)
 (constructor_pattern name: (identifier) @constructor)
 
@@ -50,6 +53,8 @@
 (pattern_field name: (identifier) @variable.member)
 (match_pattern_field name: (identifier) @variable.member)
 (field_identifier) @variable.member
+; A concept's field is a method, a function the concept's witnesses give.
+(concept_field (field_declaration name: (identifier) @function.method))
 
 ; Binders. Plain `@variable` rather than `@variable.parameter`: a binder and its uses are the same name, and a theme that paints the two apart makes every function head read as an alarm.
 (type_parameter name: (identifier) @variable)
@@ -77,8 +82,8 @@
 ((use_entry name: (identifier) @type)
   (#match? @type "^\\p{Lu}"))
 
-; The implicit-slot mark; the witness mark is the keyword `use` above.
-"@" @attribute
+; The implicit-slot mark, a keyword as the witness mark `use` above is.
+"@" @keyword
 
 [
   "->"

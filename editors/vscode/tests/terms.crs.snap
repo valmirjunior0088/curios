@@ -123,7 +123,7 @@
 #   ^ source.curios
 #    ^^^^^^^ source.curios keyword.other.curios
 #           ^ source.curios
-#            ^^^^^^^ source.curios entity.name.type.curios
+#            ^^^^^^^ source.curios entity.name.type.interface.curios
 #                   ^ source.curios punctuation.bracket.curios
 #                    ^ source.curios entity.name.type.curios
 #                     ^ source.curios keyword.operator.assignment.curios
@@ -166,7 +166,7 @@
 #   ^ source.curios
 #    ^^^ source.curios keyword.other.curios
 #       ^ source.curios
-#        ^^^^^^^^ source.curios entity.name.type.curios
+#        ^^^^^^^^ source.curios entity.name.namespace.curios
 >    foreign random() -> Nat;
 #^^^^ source.curios
 #    ^^^^^^^ source.curios keyword.control.curios
@@ -423,7 +423,7 @@
 #        ^ source.curios
 #         ^ source.curios keyword.operator.assignment.curios
 #          ^ source.curios
-#           ^ source.curios support.module.curios
+#           ^ source.curios entity.name.namespace.curios
 #            ^ source.curios punctuation.separator.path.curios
 #             ^ source.curios variable.other.curios
 #              ^ source.curios punctuation.separator.curios

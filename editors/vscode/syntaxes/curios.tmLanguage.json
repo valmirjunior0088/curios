@@ -48,8 +48,16 @@
   ],
   "repository": {
     "comment": {
-      "name": "comment.line.double-dash.curios",
-      "match": "(?<!-)---?(?: .*)?$"
+      "patterns": [
+        {
+          "name": "comment.line.documentation.curios",
+          "match": "(?<!-)---(?: .*)?$"
+        },
+        {
+          "name": "comment.line.double-dash.curios",
+          "match": "(?<!-)--(?: .*)?$"
+        }
+      ]
     },
     "block_string": {
       "name": "string.quoted.triple.curios",
@@ -122,7 +130,7 @@
             "2": {
               "patterns": [
                 {
-                  "name": "support.module.curios",
+                  "name": "entity.name.namespace.curios",
                   "match": "[\\p{L}\\p{N}_]+"
                 },
                 {
@@ -156,7 +164,7 @@
           }
         },
         {
-          "match": "\\b(induct|struct|concept|mod)\\s+([\\p{L}\\p{N}_]+)",
+          "match": "\\b(induct|struct)\\s+([\\p{L}\\p{N}_]+)",
           "captures": {
             "1": {
               "name": "keyword.other.curios"
@@ -167,13 +175,35 @@
           }
         },
         {
+          "match": "\\b(concept)\\s+([\\p{L}\\p{N}_]+)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.curios"
+            },
+            "2": {
+              "name": "entity.name.type.interface.curios"
+            }
+          }
+        },
+        {
+          "match": "\\b(mod)\\s+([\\p{L}\\p{N}_]+)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.curios"
+            },
+            "2": {
+              "name": "entity.name.namespace.curios"
+            }
+          }
+        },
+        {
           "match": "\\b(satisfy)\\s+(?!\\()(/?[\\p{L}\\p{N}_]+(?:/[\\p{L}\\p{N}_]+)*)",
           "captures": {
             "1": {
               "name": "keyword.other.curios"
             },
             "2": {
-              "name": "entity.name.type.curios"
+              "name": "entity.name.type.interface.curios"
             }
           }
         },
@@ -241,7 +271,7 @@
             "2": {
               "patterns": [
                 {
-                  "name": "support.module.curios",
+                  "name": "entity.name.namespace.curios",
                   "match": "[\\p{L}\\p{N}_]+"
                 },
                 {
@@ -264,7 +294,7 @@
             "2": {
               "patterns": [
                 {
-                  "name": "support.module.curios",
+                  "name": "entity.name.namespace.curios",
                   "match": "[\\p{L}\\p{N}_]+"
                 },
                 {

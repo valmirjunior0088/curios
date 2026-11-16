@@ -1,9 +1,15 @@
-//! The editors' grammars and the syntax reference state the parser's words: every statement of a word outside the parser — each tree-sitter grammar, each TextMate grammar, each Zed query and `documentation/language.md` — is held to [`Keyword`], so a word the language adds reaches each of them or fails here.
+//! The editors' grammars and the syntax reference state the parser's words, and the editors' grammars paint in the class set: every statement of a word outside the parser — each tree-sitter grammar, each TextMate grammar, each Zed query and `documentation/language.md` — is held to [`Keyword`], so a word the language adds reaches each of them or fails here; and every scope a TextMate grammar writes and every capture a Zed query writes stands for one [`Class`], so a scope or a capture added reaches a class or fails here.
+//!
+//! **`classes.json` is the TextMate grammars' table**, beside them in `editors/vscode/syntaxes/` and shipped with them: an object whose `classes` maps each class's name to the scopes the grammars write for it, and whose `unclassed` lists the scopes a grammar writes for a name it leaves to the server's semantic tokens. A page maps a token's scope to a class by it. The queries' captures are read by nothing but Zed's themes, so their classes are this test's own table ([`CAPTURES`]).
 
 use {
-    curios_common::{Keyword, Standing, is_identifier},
+    curios_common::{Class, Keyword, Standing, is_identifier},
     serde_json::Value,
-    std::{collections::BTreeSet, fs, path::Path},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        fs,
+        path::Path,
+    },
 };
 
 /// The tree-sitter grammars, each by its directory.
@@ -13,19 +19,45 @@ const TREE_SITTER: [&str; 2] = ["editors/grammar/base", "editors/grammar/core"];
 const TEXTMATE: &str = "editors/vscode/syntaxes/curios.tmLanguage.json";
 const TEXTMATE_CORE: &str = "editors/vscode/syntaxes/curios-core.tmLanguage.json";
 
+/// The TextMate grammars' table of classes.
+const TABLE: &str = "editors/vscode/syntaxes/classes.json";
+
 /// The Zed queries, Core text's opening with the program's.
 const QUERIES: [&str; 2] = [
     "editors/zed/languages/curios/highlights.scm",
     "editors/zed/languages/curios_core/highlights.scm",
 ];
 
-/// The scopes a TextMate grammar paints a word in: a keyword, a boolean, a sort.
-const WORD_SCOPES: [&str; 4] = [
-    "keyword.control.curios",
-    "keyword.other.curios",
-    "constant.language.boolean.curios",
-    "storage.type.sort.curios",
+/// What each capture the queries write stands for, by the class's name: a capture Zed's themes paint, or one falling back by its prefix to the key they paint the class's text by today.
+const CAPTURES: [(&str, &str); 24] = [
+    ("comment", "comment"),
+    ("comment.doc", "documentation-comment"),
+    ("keyword", "keyword"),
+    ("boolean", "boolean"),
+    ("type.builtin", "sort"),
+    ("number", "number"),
+    ("string", "string"),
+    ("string.special.symbol", "character"),
+    ("string.escape", "escape"),
+    ("operator", "operator"),
+    ("punctuation", "punctuation"),
+    ("punctuation.bracket", "punctuation"),
+    ("punctuation.delimiter", "punctuation"),
+    ("punctuation.goal", "goal"),
+    ("attribute", "decorator"),
+    ("module", "module"),
+    ("type", "type"),
+    ("constructor", "constructor"),
+    ("type.interface", "concept"),
+    ("function.method", "method"),
+    ("function", "function"),
+    ("function.builtin", "function"),
+    ("constant", "value"),
+    ("variable.member", "field"),
 ];
+
+/// The captures a query writes for a name it leaves to the server's semantic tokens.
+const UNCLASSED_CAPTURES: [&str; 1] = ["variable"];
 
 /// The file at `path` from the repository's root.
 fn read(path: &str) -> String {
@@ -46,6 +78,15 @@ fn words(wanted: impl Fn(Standing) -> bool) -> BTreeSet<String> {
         .collect()
 }
 
+/// The words of `class`.
+fn words_of(class: Class) -> BTreeSet<String> {
+    Keyword::ALL
+        .into_iter()
+        .filter(|keyword| keyword.class() == class)
+        .map(|keyword| keyword.spelling().to_string())
+        .collect()
+}
+
 /// Every value `root` holds, itself included, walked by a stack, as a grammar nests its patterns arbitrarily deep.
 fn every_value(root: &Value) -> Vec<&Value> {
     let mut found = Vec::new();
@@ -59,6 +100,49 @@ fn every_value(root: &Value) -> Vec<&Value> {
         }
     }
     found
+}
+
+/// Every scope a TextMate grammar writes: each pattern's and each capture's `name` and `contentName`.
+fn scopes_of(grammar: &Value) -> Vec<String> {
+    every_value(grammar)
+        .into_iter()
+        .filter_map(Value::as_object)
+        .flat_map(|fields| ["name", "contentName"].map(|key| fields.get(key)))
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|scope| scope.contains('.'))
+        .map(str::to_string)
+        .collect()
+}
+
+/// The table's scopes of each class, by the class's name.
+fn table() -> BTreeMap<String, Vec<String>> {
+    let table = json(TABLE);
+    let strings = |value: &Value| {
+        value
+            .as_array()
+            .unwrap_or_else(|| panic!("{TABLE} lists scopes"))
+            .iter()
+            .map(|scope| scope.as_str().expect("a scope is a string").to_string())
+            .collect::<Vec<_>>()
+    };
+    let mut classes = table["classes"]
+        .as_object()
+        .unwrap_or_else(|| panic!("{TABLE} maps its classes"))
+        .iter()
+        .map(|(name, scopes)| (name.clone(), strings(scopes)))
+        .collect::<BTreeMap<_, _>>();
+    classes.insert(String::new(), strings(&table["unclassed"]));
+    classes
+}
+
+/// The scopes the table gives the words' classes: what a TextMate grammar paints a word in.
+fn word_scopes() -> BTreeSet<String> {
+    let table = table();
+    [Class::Keyword, Class::Boolean, Class::Sort]
+        .into_iter()
+        .flat_map(|class| table[class.name()].clone())
+        .collect()
 }
 
 /// The words a regular expression spells in a group of nothing but alternatives of words, `(let|match|end)` and `(and\s+induct)` alike: what a TextMate pattern matches a word by.
@@ -85,18 +169,16 @@ fn alternated_words(pattern: &str) -> BTreeSet<String> {
     found
 }
 
-/// The words a TextMate grammar paints as words: those of each word group of every pattern that paints any of [`WORD_SCOPES`], whole or by a capture.
+/// The words a TextMate grammar paints as words: those of each word group of every pattern that paints any scope of the words' classes, whole or by a capture.
 fn textmate_words(grammar: &Value) -> BTreeSet<String> {
-    let paints_a_word = |pattern: &Value| {
-        let scopes = every_value(pattern)
-            .into_iter()
-            .filter_map(Value::as_object)
-            .filter_map(|fields| fields.get("name").and_then(Value::as_str));
-        scopes.into_iter().any(|scope| WORD_SCOPES.contains(&scope))
-    };
+    let word_scopes = word_scopes();
     every_value(grammar)
         .into_iter()
-        .filter(|pattern| paints_a_word(pattern))
+        .filter(|pattern| {
+            scopes_of(pattern)
+                .iter()
+                .any(|scope| word_scopes.contains(scope))
+        })
         .filter_map(|pattern| pattern.get("match").and_then(Value::as_str))
         .flat_map(alternated_words)
         .collect()
@@ -109,6 +191,15 @@ fn rule_strings(grammar: &Value, rule: &str) -> BTreeSet<String> {
         .filter(|value| value["type"] == "STRING")
         .filter_map(|value| value["value"].as_str().map(str::to_string))
         .collect()
+}
+
+/// A query's text, its comment lines left out.
+fn query_code(query: &str) -> String {
+    read(query)
+        .lines()
+        .filter(|line| !line.trim_start().starts_with(';'))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Every backticked word of `text`.
@@ -150,16 +241,11 @@ fn a_textmate_grammar_paints_only_the_words_and_the_programs_paints_every_one() 
     );
 }
 
-/// A query captures as a keyword every word its grammar reads alone, and leaves a boolean and a sort to the nodes the grammar reads them as.
+/// A query captures each word of the keyword class as a keyword, and leaves a boolean and a sort to the nodes its grammar reads them as.
 #[test]
-fn a_zed_query_captures_every_word_its_grammar_reads_alone_as_a_keyword() {
+fn a_zed_query_captures_each_word_by_its_class() {
     for (query, grammar) in QUERIES.into_iter().zip(TREE_SITTER) {
-        let text = read(query);
-        let code = text
-            .lines()
-            .filter(|line| !line.trim_start().starts_with(';'))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let code = query_code(query);
         let quoted = code
             .split('"')
             .skip(1)
@@ -178,12 +264,23 @@ fn a_zed_query_captures_every_word_its_grammar_reads_alone_as_a_keyword() {
             .next()
             .and_then(|before| before.rsplit('[').next())
             .unwrap_or_else(|| panic!("{query} captures a list as `@keyword`"));
-        let keywords = backticked(&list.replace('"', "`"));
-        let grammar = json(&format!("{grammar}/src/grammar.json"));
-        let read_as_nodes = &rule_strings(&grammar, "boolean") | &rule_strings(&grammar, "sort");
+        assert_eq!(
+            backticked(&list.replace('"', "`")),
+            words_of(Class::Keyword),
+            "{query}"
+        );
 
-        assert!(keywords.is_disjoint(&read_as_nodes), "{query}");
-        assert_eq!(&keywords | &read_as_nodes, words(|_| true), "{query}");
+        let grammar = json(&format!("{grammar}/src/grammar.json"));
+        assert_eq!(
+            rule_strings(&grammar, "boolean"),
+            words_of(Class::Boolean),
+            "{query}"
+        );
+        assert_eq!(
+            rule_strings(&grammar, "sort"),
+            words_of(Class::Sort),
+            "{query}"
+        );
     }
 }
 
@@ -223,4 +320,85 @@ fn the_syntax_reference_states_the_reserved_the_contextual_and_the_sort_words() 
         sentence("are sorts"),
         words(|standing| standing == Standing::Sort)
     );
+}
+
+#[test]
+fn the_textmate_table_names_every_class_and_no_other() {
+    let named = table()
+        .into_keys()
+        .filter(|name| !name.is_empty())
+        .collect::<BTreeSet<_>>();
+    let classes = Class::ALL
+        .map(|class| class.name().to_string())
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+
+    assert_eq!(named, classes);
+}
+
+#[test]
+fn every_scope_a_textmate_grammar_writes_stands_for_one_class() {
+    let mut listed = BTreeMap::new();
+    for (class, scopes) in table() {
+        for scope in scopes {
+            let earlier = listed.insert(scope.clone(), class.clone());
+            assert!(earlier.is_none(), "{TABLE} lists `{scope}` twice");
+        }
+    }
+
+    let written = [TEXTMATE, TEXTMATE_CORE]
+        .into_iter()
+        .flat_map(|grammar| scopes_of(&json(grammar)))
+        .collect::<BTreeSet<_>>();
+    let unlisted = written
+        .iter()
+        .filter(|scope| !listed.contains_key(*scope))
+        .collect::<Vec<_>>();
+    let unwritten = listed
+        .keys()
+        .filter(|scope| !written.contains(*scope))
+        .collect::<Vec<_>>();
+
+    assert!(
+        unlisted.is_empty(),
+        "{TABLE} lists no class for {unlisted:?}"
+    );
+    assert!(unwritten.is_empty(), "no grammar writes {unwritten:?}");
+}
+
+#[test]
+fn every_capture_a_zed_query_writes_stands_for_one_class() {
+    for (_, class) in CAPTURES {
+        assert!(
+            Class::ALL.iter().any(|known| known.name() == class),
+            "`{class}` is no class"
+        );
+    }
+    let captures = CAPTURES.map(|(capture, _)| capture);
+    for (place, capture) in captures.iter().enumerate() {
+        assert!(
+            !captures[..place].contains(capture),
+            "`@{capture}` is listed twice"
+        );
+    }
+
+    for query in QUERIES {
+        for capture in query_code(query)
+            .split('@')
+            .skip(1)
+            .map(|rest| {
+                rest.split(|char: char| {
+                    !(char.is_ascii_alphanumeric() || char == '.' || char == '_')
+                })
+                .next()
+                .unwrap_or_default()
+            })
+            .filter(|capture| !capture.is_empty())
+        {
+            assert!(
+                captures.contains(&capture) || UNCLASSED_CAPTURES.contains(&capture),
+                "{query} writes `@{capture}`, which stands for no class"
+            );
+        }
+    }
 }

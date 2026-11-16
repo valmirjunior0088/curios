@@ -1,0 +1,60 @@
+{
+  "classes": {
+    "keyword": [
+      "keyword.control.curios",
+      "keyword.other.curios",
+      "storage.modifier.implicit.curios"
+    ],
+    "boolean": ["constant.language.boolean.curios"],
+    "sort": ["storage.type.sort.curios"],
+    "number": [
+      "constant.numeric.binary.curios",
+      "constant.numeric.decimal.curios",
+      "constant.numeric.float.curios",
+      "constant.numeric.hex.curios"
+    ],
+    "string": ["string.quoted.double.curios", "string.quoted.triple.curios"],
+    "character": ["string.quoted.single.curios"],
+    "escape": ["constant.character.escape.curios"],
+    "comment": ["comment.line.double-dash.curios"],
+    "documentation-comment": ["comment.line.documentation.curios"],
+    "operator": [
+      "keyword.operator.arithmetic.curios",
+      "keyword.operator.arrow.curios",
+      "keyword.operator.assignment.curios",
+      "keyword.operator.bang.curios",
+      "keyword.operator.comparison.curios",
+      "keyword.operator.logical.curios",
+      "keyword.operator.spread.curios"
+    ],
+    "punctuation": [
+      "punctuation.accessor.curios",
+      "punctuation.bracket.curios",
+      "punctuation.definition.packed.curios",
+      "punctuation.separator.curios",
+      "punctuation.separator.path.curios"
+    ],
+    "goal": ["keyword.operator.goal.curios"],
+    "decorator": [
+      "entity.other.attribute-name.curios",
+      "meta.decorator.curios",
+      "punctuation.definition.decorator.begin.curios",
+      "punctuation.definition.decorator.end.curios"
+    ],
+    "module": ["entity.name.namespace.curios"],
+    "type": ["entity.name.type.curios"],
+    "constructor": [],
+    "concept": ["entity.name.type.interface.curios"],
+    "method": [],
+    "function": [
+      "entity.name.function.curios",
+      "support.function.builtin.curios"
+    ],
+    "value": ["variable.other.constant.witness.curios"],
+    "field": ["variable.other.property.curios"],
+    "parameter": [],
+    "type-parameter": [],
+    "local": []
+  },
+  "unclassed": ["variable.other.curios"]
+}
