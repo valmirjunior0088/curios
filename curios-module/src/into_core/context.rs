@@ -157,11 +157,11 @@ impl Anchoring {
         self.anchors.borrow_mut().site(anchor, line).extent(at)
     }
 
-    /// Forget every namespace text no zero of `zeros` stands in: one sited for a zero this lowering no longer finds, or kept from a baseline whose line is gone. A namespace text is sited for a report and kept for as long as a zero stands in it, every zero standing in one being reported whatever elaboration says.
-    pub fn keep_lines<'z>(&self, zeros: impl IntoIterator<Item = &'z Zero>) {
-        let placed = zeros
+    /// Forget every namespace text no lint stands in, `placed` being where each stands: one sited for a lint this lowering no longer finds, or kept from a baseline whose line is gone. A namespace text is sited for a report and kept for as long as a lint stands in it.
+    pub fn keep_lines(&self, placed: impl IntoIterator<Item = curios_core::Extent>) {
+        let placed = placed
             .into_iter()
-            .filter_map(|zero| zero.at().map(|at| (at.anchor, at.stamp)))
+            .map(|at| (at.anchor, at.stamp))
             .collect::<HashSet<_>>();
         let mut anchors = self.anchors.borrow_mut();
         let stale = anchors

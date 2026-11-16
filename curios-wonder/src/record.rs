@@ -9,7 +9,7 @@ pub enum Severity {
     Error,
     /// A written `?`, reported with what elaboration determined there.
     Goal,
-    /// A lint — see `curios_lint::Lint`.
+    /// A lint — see `curios_core::Lint`.
     Lint,
 }
 

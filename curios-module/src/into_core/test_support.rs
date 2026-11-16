@@ -25,6 +25,22 @@ pub fn fixture_loader() -> RootSource {
     RootSource::none().tested()
 }
 
+/// The lints the lowering of `src` decides, each as `kind: message`, in reading order: an import nothing resolved through and a declaration nothing reaches, which resolution alone decides.
+pub fn lints(src: &str) -> Vec<String> {
+    let entrypoint = src.parse::<Entrypoint>().unwrap();
+    let text = into_core_unit(
+        &UnitSource::entry(&entrypoint, &fixture_loader()),
+        &[],
+        syntax(),
+    )
+    .unwrap();
+
+    curios_core::Lint::ordered(text.lints().to_vec(), text.anchors())
+        .iter()
+        .map(|lint| format!("{}: {}", lint.kind.name(), lint.report(&[]).message()))
+        .collect()
+}
+
 /// The entry's body as the lowering writes it, the module it closes over left aside.
 pub fn run(src: &str) -> curios_core::Term {
     let (program, _, _, _) = into_core(

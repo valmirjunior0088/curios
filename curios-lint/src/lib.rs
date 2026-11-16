@@ -1,6 +1,6 @@
-//! The lint owner: every lint decided from the facts the stages recorded of a unit, worded, placed and ordered for its reader.
+//! The binder lints, decided from the facts the stages recorded of a unit, and a unit's lints gathered in reading order.
 //!
-//! **A stage records, this crate decides.** The lowering records each zero of name resolution — a `use` selector nothing resolved through, a written binder nothing referenced, a written `_`, a `let` that runs no action and none of whose binders anything referenced, a declaration nothing reaches ([`curios_module::Zero`]) — and elaboration records each written binder a proof it wrote read, which no written name reaches, and what each written site binds. Neither words a lint: which facts are reported, as what, where and in what order is decided here, from both. The decision is `documentation/design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md`.
+//! **The lowering records, this crate decides the binder lints.** The lowering words the lints resolution alone decides — an import nothing resolved through, a declaration nothing reaches ([`curios_module::PreparedText::lints`]) — and records each zero of a written binder: a binder nothing referenced, a written `_`, a `let` that runs no action and none of whose binders anything referenced ([`curios_module::Zero`]). Elaboration records each written binder a proof it wrote read, which no written name reaches, and what each written site binds. Which zeros are reported, as what, is decided here from both, and every lint of the unit is put in reading order. The decision is `documentation/design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md`.
 //!
 //! **Decided once, where a unit is made.** A unit's lints are decided where `curios-unit` makes it and stored with it, so a unit compiled now, restored from a store or compiled over a baseline reports the same lints, and asking again decides nothing. A package's `unused-dependency` is decided where its units' reached mounts are gathered ([`unused_dependencies`]).
 
@@ -9,17 +9,18 @@ mod tests;
 
 mod lint;
 use lint::*;
-pub use lint::{ArchivedLint, ArchivedLintKind, Lint, LintKind};
 
 use {
     curios_common::Qualifier,
+    curios_core::Lint,
     curios_elab::SiteClass,
     curios_module::{LintedBinder, Zero},
     std::collections::BTreeSet,
 };
 
-/// The lints `zeros` come to, in reading order as `anchors` place them: each zero reported — a `_` only where it binds `{}` — less every binder `read` holds of — one a proof the elaborator wrote reads, which is used though no written name reaches it. A `let` none of whose binders is read either way does nothing, whatever its value: it is reported whole, once, and its binders are none of `unused-binder`'s. `class` says what a binder binds where elaboration decided it, which words the way out.
+/// The lints of a unit in reading order as `anchors` place them: `decided`, the lowering's own, and what `zeros` come to — each zero reported, a `_` only where it binds `{}`, less every binder `read` holds of, one a proof the elaborator wrote reads, which is used though no written name reaches it. A `let` none of whose binders is read either way does nothing, whatever its value: it is reported whole, once, and its binders are none of `unused-binder`'s. `class` says what a binder binds where elaboration decided it, which words the way out.
 pub fn lints<'z>(
+    decided: &[Lint],
     zeros: impl IntoIterator<Item = &'z Zero>,
     read: impl Fn(&LintedBinder) -> bool,
     class: impl Fn(&LintedBinder) -> Option<SiteClass>,
@@ -36,7 +37,7 @@ pub fn lints<'z>(
         .flatten()
         .copied()
         .collect::<BTreeSet<_>>();
-    let lints = zeros
+    let binders = zeros
         .into_iter()
         .filter(|zero| match zero {
             Zero::Binder { binder, .. } => !read(binder) && !in_dead_let.contains(binder),
@@ -47,15 +48,10 @@ pub fn lints<'z>(
                     && class(binder) == Some(SiteClass::Unit)
             }
             Zero::Let { binders, .. } => dead(binders),
-            Zero::Selector { .. }
-            | Zero::Glob { .. }
-            | Zero::Declaration { .. }
-            | Zero::Module { .. } => true,
         })
-        .map(|zero| Lint::of(zero, &class))
-        .collect();
+        .map(|zero| worded(zero, &class));
 
-    ordered(lints, anchors)
+    Lint::ordered(decided.iter().cloned().chain(binders).collect(), anchors)
 }
 
 /// The `unused-dependency` lints of a package: each dependency `declared` names whose prefix nothing in the package *wrote* (`reached`). Exact, where a language with externals could only guess: a dependency mounts at its name and is reached only by a reference that names it.
@@ -68,6 +64,6 @@ pub fn unused_dependencies<'a>(
     declared
         .into_iter()
         .filter(|name| !reached.contains(&Qualifier::from([name.as_str()])))
-        .map(|name| Lint::unused_dependency(name))
+        .map(|name| unused_dependency(name))
         .collect()
 }

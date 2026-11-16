@@ -209,10 +209,6 @@ pub fn rename_witnesses(
                 std::slice::from_mut(binder)
             }
             Zero::Let { binders, .. } => binders.as_mut_slice(),
-            Zero::Selector { .. }
-            | Zero::Glob { .. }
-            | Zero::Declaration { .. }
-            | Zero::Module { .. } => &mut [],
         };
         for binder in binders {
             binder.declaration = binder.declaration.map(renamed);

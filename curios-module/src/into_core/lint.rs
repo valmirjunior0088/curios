@@ -1,4 +1,4 @@
-//! The zeros `unused-declaration` is decided from: each declaration nothing reaches from the unit's roots.
+//! `unused-declaration`, decided and worded here: each declaration nothing reaches from the unit's roots, a fact resolution alone establishes.
 //!
 //! Reachability rather than a reference count, so a private definition used only by itself, or only by another dead one, is dead. The roots are what the unit hands out, runs or keeps: every binding of a module reachable through `pub` children from a mount the unit claims — read off the public interfaces, so a re-export out of a private child counts as the facade it is — every test, every witness, every declaration its author keeps unused by a `_` prefix on its name, and the entrypoint tail. The edges are the ones the dependency order already walks: a definition's free names, plus what its registry entry mentions. A constructor is a name its family's item declares, so a use of one reaches the family, and a method is reached through its concept; neither is reported, and neither is a root of its own.
 //!
@@ -6,7 +6,6 @@
 
 use {
     super::{FlatItem, LoweredItem, ModuleInfo, PublicInterface, Scoped, named, owner_of},
-    crate::Zero,
     curios_common::{Mount, Qualifier, Span},
     std::collections::{BTreeSet, HashMap, HashSet},
 };
@@ -27,8 +26,8 @@ pub struct Declarations<'a> {
     pub place_module: &'a dyn Fn(&Qualifier) -> Option<curios_core::Extent>,
 }
 
-/// Every unreachability zero of the unit, in item order.
-pub fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Zero> {
+/// Every `unused-declaration` lint of the unit, in item order.
+pub fn unused_declarations(declarations: &Declarations<'_>) -> Vec<curios_core::Lint> {
     curios_profile::profile!("unused_declarations");
     let Declarations {
         items,
@@ -123,26 +122,46 @@ pub fn unused_declarations(declarations: &Declarations<'_>) -> Vec<Zero> {
         }
     }
 
-    let mut zeros = dead_modules
+    let mut lints = dead_modules
         .iter()
-        .map(|module| Zero::Module {
-            name: module.last().to_string(),
-            at: place_module(module),
-        })
+        .map(|module| unused_module(module, place_module(module)))
         .collect::<Vec<_>>();
-    zeros.extend(
+    lints.extend(
         dead.iter()
             .filter(|(name, _)| {
                 !name
                     .qualifier()
                     .is_some_and(|name| dead_modules.iter().any(|dead| name.is_within(dead)))
             })
-            .map(|(name, label)| Zero::Declaration {
-                name: name.qualifier().map_or("", Qualifier::last).to_string(),
-                at: **label,
-            }),
+            .map(|(name, label)| unused_declaration(name, **label)),
     );
-    zeros
+    lints
+}
+
+/// A declaration nothing reaches, underlined at the name it was written under. Deleted, made part of what the unit hands out by `pub`, or kept unused on purpose by a `_` prefix.
+pub fn unused_declaration(
+    name: &curios_core::Global,
+    at: curios_core::Extent,
+) -> curios_core::Lint {
+    let name = name.qualifier().map_or("", Qualifier::last);
+    curios_core::Lint::unused(
+        curios_core::LintKind::UnusedDeclaration,
+        Some(at),
+        "declaration",
+        name,
+        format_args!("delete it, make it `pub`, or name it `_{name}` to keep it unused"),
+    )
+}
+
+/// A private module none of whose declarations anything reaches, underlined at its `mod`: one deletion removes them all, so its declarations are not reported.
+pub fn unused_module(module: &Qualifier, at: Option<curios_core::Extent>) -> curios_core::Lint {
+    curios_core::Lint::unused(
+        curios_core::LintKind::UnusedDeclaration,
+        at,
+        "module",
+        module.last(),
+        "delete it or make it `pub`",
+    )
 }
 
 /// Whether a `_` prefix on its own name keeps the declaration at `name` unused on purpose, which makes it a root, so what it reads is used. A module's name keeps nothing.

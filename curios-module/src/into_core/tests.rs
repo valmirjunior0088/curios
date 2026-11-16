@@ -13,4 +13,6 @@ mod ordering;
 mod re_export;
 mod scan;
 mod universe;
+mod unused_declaration;
+mod unused_import;
 mod visibility;

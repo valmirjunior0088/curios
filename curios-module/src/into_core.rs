@@ -637,7 +637,10 @@ pub struct PreparedText {
     imports: Recorded<curios_core::Imports>,
     /// The mounts this unit may name: the ones it declared a dependency on, or every open one in scope where it declared none, and its own. What its references were guarded by, and what drops a path it may not write from the table a report spells by.
     visible: Vec<Mount>,
-    /// Every zero the lowering found — see [`Zero`]: what `curios-lint` decides the unit's lints from where the unit is made. Held by a unit lowered in this process alone: a unit stores the lints decided of it, and a lowering over it reads its baseline half's.
+    /// Every lint resolution alone decides — an import nothing resolved through, a declaration nothing reaches — worded here: what the unit's lints are gathered from where the unit is made, beside what [`PreparedText::zeros`] comes to. Held by a unit lowered in this process alone: a unit stores the lints gathered of it, and a lowering over it reads its baseline half's.
+    #[archived_with(curios_archive::Skip)]
+    lints: Vec<curios_core::Lint>,
+    /// Every zero the lowering found of a written binder — see [`Zero`]: what the binder lints are decided from where the unit is made, beside what elaboration recorded. Held by a unit lowered in this process alone, as `lints` is.
     #[archived_with(curios_archive::Skip)]
     zeros: Vec<Zero>,
     /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
@@ -686,6 +689,11 @@ impl PreparedText {
     /// See the field.
     pub fn zeros(&self) -> &[Zero] {
         &self.zeros
+    }
+
+    /// See the field.
+    pub fn lints(&self) -> &[curios_core::Lint] {
+        &self.lints
     }
 
     /// Where each source declaration of this unit lies. See the field.
@@ -3229,9 +3237,12 @@ fn into_core_unit_within(
     };
 
     // What each body's declarations and `use` declarations were found to leave unused: the baseline's, with each body the walk passed found again and each it no longer holds taken away.
-    let mut body_zeros = baseline
+    let (mut body_zeros, mut body_lints) = baseline
         .as_ref()
-        .map(|baseline| baseline.unit().half().zeros.clone())
+        .map(|baseline| {
+            let half = baseline.unit().half();
+            (half.zeros.clone(), half.lints.clone())
+        })
         .unwrap_or_default();
     {
         let mut found = shared.zeros.take();
@@ -3240,11 +3251,15 @@ fn into_core_unit_within(
             imports.entry(site.body).or_default().push(site);
         }
         for body in shared.closed() {
-            let zeros =
-                unused_imports(imports.remove(&body).unwrap_or_default(), &shared.anchoring)
-                    .into_iter()
-                    .chain(found.remove(&body).unwrap_or_default())
-                    .collect::<Vec<_>>();
+            let lints =
+                unused_imports(imports.remove(&body).unwrap_or_default(), &shared.anchoring);
+            match lints.is_empty() {
+                true => {
+                    body_lints.remove(&body);
+                }
+                false => body_lints.insert(body, Rc::new(lints)),
+            }
+            let zeros = found.remove(&body).unwrap_or_default();
             match zeros.is_empty() {
                 true => {
                     body_zeros.remove(&body);
@@ -3263,6 +3278,7 @@ fn into_core_unit_within(
         }
         for body in &removed {
             body_zeros.remove(body);
+            body_lints.remove(body);
         }
     }
 
@@ -3362,7 +3378,7 @@ fn into_core_unit_within(
                 ),
                 _ => Reachability::of(now, public.own(), &own, entry_roots.clone()),
             };
-            let dead = state.zeros(
+            let dead = state.lints(
                 now,
                 &|module, label| table.get(module)?.get_child(label),
                 &mod_spans,
@@ -3406,17 +3422,22 @@ fn into_core_unit_within(
         _ => OnceCell::new(),
     };
 
-    // Each line a zero stands in is kept, and every other namespace text goes: one a zero this lowering no longer finds was sited for, or one a baseline held of a line since gone.
+    // Each line a lint stands in is kept, and every other namespace text goes: one a lint this lowering no longer finds was sited for, or one a baseline held of a line since gone. A zero stands in a declaration's text, never on a line.
     shared.anchoring.keep_lines(
-        body_zeros
+        body_lints
             .iter()
-            .flat_map(|(_, zeros)| zeros.iter())
-            .chain(&dead),
+            .flat_map(|(_, lints)| lints.iter())
+            .chain(&dead)
+            .filter_map(|lint| lint.at),
     );
+    let lints = body_lints
+        .iter()
+        .flat_map(|(_, lints)| lints.iter().cloned())
+        .chain(dead)
+        .collect();
     let zeros = body_zeros
         .iter()
         .flat_map(|(_, zeros)| zeros.iter().cloned())
-        .chain(dead)
         .collect();
     let unit = PreparedText {
         mounts: own.clone(),
@@ -3442,6 +3463,7 @@ fn into_core_unit_within(
         imports: Recorded::held(shared.imports.into_inner()),
         visible: visible_mounts,
         broken,
+        lints,
         zeros,
         reached,
         anchors: Recorded::held(shared.anchoring.into_anchors()),
@@ -3450,6 +3472,7 @@ fn into_core_unit_within(
             scans,
             uses,
             keyed: held_keys,
+            lints: body_lints,
             zeros: body_zeros,
         }),
         lookups: lookups.map(OnceCell::from).unwrap_or_default(),
@@ -3570,13 +3593,15 @@ pub fn prepare_prelude(
     into_core_unit(&UnitSource::mounted(input), predecessors, syntax)
 }
 
-/// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, and its zeros. A name that resolved to nothing is among what its declaration minted (`curios_core::Mints::unbound`).
+/// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, and its lints and zeros. A name that resolved to nothing is among what its declaration minted (`curios_core::Mints::unbound`).
 pub struct LoweredEntry {
     pub program: curios_core::Program,
     pub minted: Rc<curios_core::Minted>,
     pub foreigns: ForeignStore,
     /// How the entry's names can be written, where — see [`EntryNames`].
     pub names: EntryNames,
+    /// See [`PreparedText::lints`].
+    pub lints: Vec<curios_core::Lint>,
     /// See [`PreparedText::zeros`].
     pub zeros: Vec<Zero>,
     /// See [`PreparedText::broken`].
@@ -3666,8 +3691,8 @@ fn spellings_over(
     }
 }
 
-/// The import zeros: every site no reference resolved through, a re-export excepted.
-fn unused_imports(sites: Vec<UseSite>, anchoring: &Anchoring) -> Vec<Zero> {
+/// The `unused-import` lints: every site no reference resolved through, a re-export excepted.
+fn unused_imports(sites: Vec<UseSite>, anchoring: &Anchoring) -> Vec<curios_core::Lint> {
     sites
         .into_iter()
         .filter(|site| !site.used && !site.exported)
@@ -3677,16 +3702,18 @@ fn unused_imports(sites: Vec<UseSite>, anchoring: &Anchoring) -> Vec<Zero> {
                 .as_ref()
                 .zip(site.span.as_ref())
                 .and_then(|(line, span)| anchoring.line(site.body, line, span));
-            match &site.what {
-                UseSiteKind::Selector(label) => Zero::Selector {
-                    label: label.to_string(),
-                    at,
-                },
-                UseSiteKind::Glob(path) => Zero::Glob {
-                    path: path.clone(),
-                    at,
-                },
-            }
+            // A selector is underlined at itself, a glob over its whole `use` declaration, since the glob itself is one character.
+            let name = match &site.what {
+                UseSiteKind::Selector(label) => label.to_string(),
+                UseSiteKind::Glob(path) => path.clone(),
+            };
+            curios_core::Lint::unused(
+                curios_core::LintKind::UnusedImport,
+                at,
+                "import",
+                name,
+                "delete it",
+            )
         })
         .collect()
 }
@@ -3723,6 +3750,7 @@ pub fn into_core_with_prelude(
             mounts: unit.mounts,
             visible: unit.visible,
         },
+        lints: unit.lints,
         zeros: unit.zeros,
         reached: unit.reached,
         broken: unit.broken,

@@ -335,10 +335,6 @@ impl LoweredDeclaration {
                         .map(|binder| Some((place(&binder.declaration?)?, binder.ordinal)))
                         .collect::<Option<Vec<_>>>()?,
                 }),
-                Zero::Selector { .. }
-                | Zero::Glob { .. }
-                | Zero::Declaration { .. }
-                | Zero::Module { .. } => None,
             })
             .collect::<Option<Vec<_>>>();
         // A name that was written and could not be placed is one the `unused-declaration` lint would lose with a kept lowering.
@@ -433,7 +429,10 @@ pub struct BaselineHalf {
     /// Every binding the `use` declarations of each module body read, by the module: what the scope of its body can move with. A body that reads none holds none.
     #[archived_with(curios_common::InSharedKeyOrder)]
     pub uses: Table<Vec<Consulted>>,
-    /// Every zero each module body's declarations and `use` declarations were found to leave, by the body: what a body a later lowering passes unwalked contributes. A body that leaves none holds none.
+    /// Every `unused-import` lint each module body's `use` declarations were found to leave, by the body: what a body a later lowering passes unwalked contributes. A body that leaves none holds none.
+    #[archived_with(curios_common::InSharedKeyOrder)]
+    pub lints: Table<Vec<curios_core::Lint>>,
+    /// Every zero each module body's declarations were found to leave of a written binder, by the body, as `lints` holds a body's lints.
     #[archived_with(curios_common::InSharedKeyOrder)]
     pub zeros: Table<Vec<Zero>>,
     /// Every name each witness's key read, by the witness: what its name can move with.

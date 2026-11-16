@@ -5,10 +5,9 @@ use {
     curios_common::{
         Candidates, Digest, Facet, Object, Report, RootKind, candidate_prefix, test_support::*,
     },
-    curios_core::{Definitions, Enter, Item, Sharing, Variance},
+    curios_core::{Definitions, Enter, Item, LintKind, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
-    curios_lint::LintKind,
     curios_module::{PreparedText, RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
     curios_surface::Entrypoint,

@@ -135,6 +135,9 @@ pub use names::{
     Paths, Spellings, StoredMints, UnitPaths, WritablePath,
 };
 
+mod lint;
+pub use lint::{ArchivedLint, ArchivedLintKind, Lint, LintKind};
+
 mod unresolved;
 pub use unresolved::{
     ArchivedMissing, ArchivedSought, ArchivedUnresolved, Missing, Sought, Unresolved,

@@ -3,8 +3,10 @@
 //! **Decided by a search, not a count.** An item is live where a root reaches it, so an item an edit could have moved — one lowered now, one whose readers or edges changed, one whose name an export now shows or no longer does — is decided by searching back through its readers for a root or an item already decided live. A search that runs out finds every item it passed dead too, since a root reaching one of them would reach the item. What changed of an item's liveness moves the items its edges reach, which are decided again in turn, so the lint's dead items are the ones a whole walk finds.
 
 use {
-    super::{Gone, LoweredItem, PublicInterface, Records, Table, kept, named},
-    crate::Zero,
+    super::{
+        Gone, LoweredItem, PublicInterface, Records, Table, kept, named, unused_declaration,
+        unused_module,
+    },
     curios_common::{Mount, Persistent, Qualifier, Sorted, Span},
     std::{
         collections::{BTreeSet, HashMap, HashSet},
@@ -406,14 +408,14 @@ impl Reachability {
         }
     }
 
-    /// The unreachability zeros of `items`, read off the items these say no root reaches: each dead declaration a reader wrote, and each private module every reportable declaration of which is dead, once, its subtree folded into it. `child` gives whether a module declares a child of a label public, `mod_spans` where each module was written, and `place_module` where in its parent's namespace a module's zero stands.
-    pub(super) fn zeros(
+    /// The `unused-declaration` lints of `items`, read off the items these say no root reaches: each dead declaration a reader wrote, and each private module every reportable declaration of which is dead, once, its subtree folded into it. `child` gives whether a module declares a child of a label public, `mod_spans` where each module was written, and `place_module` where in its parent's namespace a module's zero stands.
+    pub(super) fn lints(
         &self,
         items: Items<'_>,
         child: &dyn Fn(&Qualifier, &str) -> Option<bool>,
         mod_spans: &HashMap<Qualifier, Span>,
         place_module: &dyn Fn(&Qualifier) -> Option<curios_core::Extent>,
-    ) -> Vec<Zero> {
+    ) -> Vec<curios_core::Lint> {
         // Every dead reportable name, and the ones a reader wrote, with where each is written.
         let mut dead_names = Vec::new();
         let mut written = Vec::new();
@@ -470,14 +472,11 @@ impl Reachability {
             }
         }
 
-        let mut zeros = dead_modules
+        let mut lints = dead_modules
             .iter()
-            .map(|module| Zero::Module {
-                name: module.last().to_string(),
-                at: place_module(module),
-            })
+            .map(|module| unused_module(module, place_module(module)))
             .collect::<Vec<_>>();
-        zeros.extend(
+        lints.extend(
             written
                 .iter()
                 .filter(|(name, _)| {
@@ -485,12 +484,9 @@ impl Reachability {
                         .qualifier()
                         .is_some_and(|name| dead_modules.iter().any(|dead| name.is_within(dead)))
                 })
-                .map(|(name, label)| Zero::Declaration {
-                    name: name.qualifier().map_or("", Qualifier::last).to_string(),
-                    at: *label,
-                }),
+                .map(|(name, label)| unused_declaration(name, *label)),
         );
-        zeros
+        lints
     }
 
     /// How many reportable definitions `module` and every module under it declare.

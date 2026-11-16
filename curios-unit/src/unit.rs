@@ -11,10 +11,9 @@ use {
     curios_abi::ForeignStore,
     curios_archive::{Bytes, joined, parted},
     curios_common::{Digest, Mount, Object, Recorded},
-    curios_core::{Certification, Definitions, ItemRun, Lexicon, Places},
+    curios_core::{Certification, Definitions, ItemRun, Lexicon, Lint, Places},
     curios_elab::{Candidating, Observed, Readers, Traces},
     curios_erase::ErasedUnit,
-    curios_lint::Lint,
     curios_module::PreparedText,
     std::{
         borrow::Cow,
@@ -378,6 +377,7 @@ impl Unit {
             .map(|(name, place, class)| ((name, place), class))
             .collect::<BTreeMap<_, _>>();
         let lints = curios_lint::lints(
+            text.lints(),
             text.zeros(),
             |binder| {
                 observed

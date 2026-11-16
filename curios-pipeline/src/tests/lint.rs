@@ -1,6 +1,6 @@
 //! `unused-binder` and `unused-let` once elaboration has credited them: a binder only a proof the elaborator writes reads is used wherever that proof is written, `_` among them, and a credit names the declaration whose binder was read and no other.
 
-use {super::test_support::*, crate::*, curios_lint::LintKind};
+use {super::test_support::*, crate::*, curios_core::LintKind};
 
 /// The bound of `/` in the result type is discharged from `ok`, which nothing names: the proof is written while the type elaborates, under the type's own binder.
 #[test]

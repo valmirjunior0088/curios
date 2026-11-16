@@ -809,7 +809,6 @@ dependencies = [
 name = "curios-lint"
 version = "0.16.24"
 dependencies = [
- "curios-archive",
  "curios-common",
  "curios-core",
  "curios-elab",

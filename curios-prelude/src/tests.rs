@@ -80,6 +80,7 @@ fn every_authored_source_is_lint_clean() {
         .iter()
         .flat_map(|prepared| {
             curios_lint::lints(
+                prepared.lints(),
                 prepared.zeros(),
                 |binder| {
                     binder

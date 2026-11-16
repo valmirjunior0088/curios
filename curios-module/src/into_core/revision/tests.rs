@@ -393,27 +393,28 @@ fn a_witness_written_ahead_of_one_alike_takes_its_place() {
     same_keys(&over, &whole);
 }
 
-/// The zeros of a unit, each as what it is about and the span it stands at, sorted: a lowering over a baseline and a whole one gather a unit's zeros in orders of their own, and the lint owner puts them in reading order.
+/// The lints and zeros of a unit, each as what it is about and the span it stands at, sorted: a lowering over a baseline and a whole one gather a unit's lints and zeros in orders of their own, and a unit puts its lints in reading order.
 fn zeros_of(unit: &PreparedText) -> Vec<String> {
-    let mut zeros = unit
-        .zeros()
-        .iter()
-        .map(|zero| {
-            let what = match zero {
-                Zero::Selector { label, .. } => format!("selector {label}"),
-                Zero::Glob { path, .. } => format!("glob {path}"),
-                Zero::Binder { name, binder, .. } => format!("binder {name} {binder:?}"),
-                Zero::Wildcard { binder, .. } => format!("wildcard {binder:?}"),
-                Zero::Let { name, binders, .. } => format!("let {name:?} {binders:?}"),
-                Zero::Declaration { name, .. } => format!("declaration {name}"),
-                Zero::Module { name, .. } => format!("module {name}"),
-            };
-            let span = zero.at().and_then(|at| at.resolved(&[unit.anchors()]));
-            format!("{what} at {span:?}")
-        })
-        .collect::<Vec<_>>();
-    zeros.sort();
-    zeros
+    let placed = |at: Option<curios_core::Extent>| at.and_then(|at| at.resolved(&[unit.anchors()]));
+    let lints = unit.lints().iter().map(|lint| {
+        format!(
+            "{} {} at {:?}",
+            lint.kind.name(),
+            lint.report(&[]).message(),
+            placed(lint.at)
+        )
+    });
+    let zeros = unit.zeros().iter().map(|zero| {
+        let what = match zero {
+            Zero::Binder { name, binder, .. } => format!("binder {name} {binder:?}"),
+            Zero::Wildcard { binder, .. } => format!("wildcard {binder:?}"),
+            Zero::Let { name, binders, .. } => format!("let {name:?} {binders:?}"),
+        };
+        format!("{what} at {:?}", placed(zero.at()))
+    });
+    let mut found = lints.chain(zeros).collect::<Vec<_>>();
+    found.sort();
+    found
 }
 
 /// `a.crs` lowered whole, then written as each of `edits` in turn over the last lowering: at each, the zeros of the unit lowered over the last and of a whole lowering are one.
