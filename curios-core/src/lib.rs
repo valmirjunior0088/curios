@@ -196,7 +196,7 @@ pub use polarity::{ArchivedPolarity, Polarity};
 mod call_matrix;
 pub use call_matrix::{
     Applications, ArchivedApplications, ArchivedCallMatrix, ArchivedFieldApplications,
-    ArchivedSize, CallMatrix, FieldApplications, Size,
+    ArchivedPartApplications, ArchivedSize, CallMatrix, FieldApplications, PartApplications, Size,
 };
 
 mod variance;

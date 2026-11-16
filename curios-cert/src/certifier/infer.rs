@@ -190,9 +190,18 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             let mut from_head = Vec::new();
             let head_type = match &*apply.head {
                 Subterm::Func(func) if certifier.recording() => {
+                    // The argument lists before the first field the spine projects: what the lambda's binders, and its inner lambdas', stand for.
                     let arguments = apply
                         .params()
-                        .chain(later.iter().flatten())
+                        .chain(
+                            later
+                                .iter()
+                                .map_while(|step| match step {
+                                    Segment::Arguments(arguments) => Some(arguments),
+                                    Segment::Field(_) => None,
+                                })
+                                .flatten(),
+                        )
                         .cloned()
                         .collect::<Vec<_>>();
                     let before = certifier.partial_groups();
@@ -204,10 +213,10 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
 
                     head_type
                 }
-                Subterm::Apply(_) => {
-                    let mut lists = vec![apply.params().cloned().collect::<Vec<_>>()];
-                    lists.extend(later.iter().cloned());
-                    certifier.calls.set_later(lists);
+                Subterm::Apply(_) | Subterm::Proj(_) => {
+                    let mut steps = vec![Segment::Arguments(apply.params().cloned().collect())];
+                    steps.extend(later.iter().cloned());
+                    certifier.calls.set_later(steps);
                     certifier.calls.set_spine_head();
                     let head_type = infer(certifier, &apply.head);
                     // A head answered from the memo takes neither, so neither outlives it.
@@ -237,16 +246,13 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             // A definition applying a parameter as its summary states hands a lambda there bounds for its binders, and a member there the calls it makes, over its spine's every list: this list's positions taken here, and the rest left for the applications around this one.
             let (mut handed, rest) = match &*apply.head {
                 Subterm::Instance(instance) => {
-                    let arguments = apply
-                        .params()
-                        .chain(later.iter().flatten())
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    let mut handed = certifier.handed_to(&instance.name, &arguments)?;
+                    let mut steps = vec![Segment::Arguments(apply.params().cloned().collect())];
+                    steps.extend(later.iter().cloned());
+                    let mut handed = certifier.handed_to(&instance.name, &steps)?;
                     let rest = handed.split_off(apply.arguments.len().min(handed.len()));
                     (handed, rest)
                 }
-                Subterm::Apply(_) => {
+                Subterm::Apply(_) | Subterm::Proj(_) => {
                     let rest = from_head.split_off(apply.arguments.len().min(from_head.len()));
                     (from_head, rest)
                 }
@@ -324,8 +330,18 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             };
 
             // A projection is a step of the path its head starts, typed as part of it, and the path's call is recorded where the path ends: a member's field applied is a call of the part it reaches, and one named unapplied a call it cannot grade ([`Certifier::record_call`]).
+            // The steps after this projection, its own field first, go to its head, so a definition's call the path roots at reads the part it reaches; whatever the head hands the argument lists after them stays for the application around this one.
+            let later = certifier.calls.take_later();
+            if !later.is_empty() {
+                let mut steps = vec![Segment::Field(index)];
+                steps.extend(later);
+                certifier.calls.set_later(steps);
+            }
             certifier.calls.set_spine_head();
-            let head_type = infer(certifier, head)?;
+            let head_type = infer(certifier, head);
+            // A head answered from the memo takes none, so none outlives it.
+            certifier.calls.take_later();
+            let head_type = head_type?;
             if !spine_head {
                 let (root, steps) = call_path(term);
                 if let Subterm::Var(var) = &*root

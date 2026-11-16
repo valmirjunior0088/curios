@@ -478,7 +478,6 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
         walked: HashMap::new(),
         calls: Vec::new(),
         tracked: None,
-        summarizes: false,
     };
     walk.walk(slice::from_ref(&body));
 
@@ -560,7 +559,6 @@ fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
         walked: HashMap::new(),
         calls: Vec::new(),
         tracked: None,
-        summarizes: false,
     };
     walk.walk(slice::from_ref(body));
 

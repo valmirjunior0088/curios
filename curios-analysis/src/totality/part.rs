@@ -195,7 +195,7 @@ pub fn handed_member(
 }
 
 /// Each part of member `member`: what a call reaching the member without following a field into it makes a call of, the record its leading lambdas answer escaping ([`part_calls`]).
-fn member_parts(parts: &[PartShape], member: usize) -> impl Iterator<Item = usize> + '_ {
+pub(super) fn member_parts(parts: &[PartShape], member: usize) -> impl Iterator<Item = usize> + '_ {
     parts
         .iter()
         .enumerate()

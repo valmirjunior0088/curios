@@ -48,9 +48,9 @@ pub struct Calls {
     handed: Option<(Free, Handed)>,
     /// What the record literal the next judgment types is handed, which its rule hands each field by its slot. Taken by that judgment alone, as `record` is.
     literal: Option<Handed>,
-    /// The argument lists applied after the application whose head the next judgment types, nearest first: the rest of a curried spine, which its head reads whole, as the elaborator's walk does. Taken by that judgment alone, as `spine_head` is.
-    later: Vec<Vec<Term>>,
-    /// What a curried spine's head handed the argument lists after its own, nearest first, left for the application around it to take its share of once its head is typed.
+    /// The steps after the application whose head the next judgment types, nearest first — the argument lists of a curried spine, and the fields a path projects between them — which its head reads whole, as the elaborator's walk does. Taken by that judgment alone, as `spine_head` is.
+    later: Vec<Segment>,
+    /// What a spine's head handed the argument lists after its own, nearest first, left for the application around it to take its share of once its head is typed.
     rest_handed: Vec<Option<Handed>>,
     /// Whether the record literal the next judgment types is what a member's leading lambdas answer, or a record held at a field of one, so its fields are checked as the parts they are ([`Certifier::enter_field`]). Taken by that judgment alone, as `parameters` is.
     record: bool,
@@ -173,13 +173,13 @@ impl Calls {
         mem::take(&mut self.record)
     }
 
-    /// The argument lists applied after the application about to be typed, clearing them for the judgments after it: empty but where that application heads a curried spine.
-    pub fn take_later(&mut self) -> Vec<Vec<Term>> {
+    /// The steps after the application or projection about to be typed, clearing them for the judgments after it: empty but where it heads a spine.
+    pub fn take_later(&mut self) -> Vec<Segment> {
         mem::take(&mut self.later)
     }
 
-    /// Hand the head about to be typed the argument lists applied after it, `later`, nearest first.
-    pub fn set_later(&mut self, later: Vec<Vec<Term>>) {
+    /// Hand the head about to be typed the steps after it, `later`, nearest first.
+    pub fn set_later(&mut self, later: Vec<Segment>) {
         self.later = later;
     }
 
@@ -436,12 +436,13 @@ impl Certifier<'_> {
         Ok(())
     }
 
-    /// What a call of `callee` with `arguments`, typed in a body being checked, hands each argument at a parameter `callee` applies as its summary states ([`handed`]), graded against the parameters of each member whose body holds it: `None` at every position outside a body.
+    /// What a call of `callee` along `steps`, typed in a body being checked, hands each argument the steps apply, in order, at a parameter the part it reaches applies as its summary states ([`handed`]), graded against the parameters of each member whose body holds it: `None` at every position outside a body.
     pub(super) fn handed_to(
         &mut self,
         callee: &Global,
-        arguments: &[Term],
+        steps: &[Segment],
     ) -> Result<Vec<Option<Handed>>, Error> {
+        let count = steps.iter().flat_map(Segment::arguments).count();
         let callers = self
             .calls
             .frames
@@ -450,38 +451,37 @@ impl Certifier<'_> {
             .filter_map(|(frame, open)| Some((frame, open.caller.clone()?.1)))
             .collect::<Vec<_>>();
         if callers.is_empty() || self.positions.suppressed() {
-            return Ok(vec![None; arguments.len()]);
+            return Ok(vec![None; count]);
         }
         // Asked first and of the record alone, since grading what a call hands reads each argument whole, and most calls are of a definition that summarizes nothing.
         let summarized = self
             .globals
             .applications(callee)
-            .is_some_and(|applications| {
-                (0..arguments.len()).any(|position| {
-                    applications
-                        .of(position)
-                        .is_some_and(|applied| !applied.is_empty())
-                        || applications
-                            .fields_of(position)
-                            .any(|(_, applied)| !applied.is_empty())
-                })
-            });
+            .is_some_and(|applications| !applications.is_empty());
         if !summarized {
-            return Ok(vec![None; arguments.len()]);
+            return Ok(vec![None; count]);
         }
         // Graded on what each argument passes, as a call is ([`Certifier::record_call`]).
-        let arguments = arguments
+        let steps = steps
             .iter()
-            .map(|argument| self.graded(argument))
+            .map(|step| match step {
+                Segment::Arguments(arguments) => Segment::Arguments(
+                    arguments
+                        .iter()
+                        .map(|argument| self.graded(argument))
+                        .collect(),
+                ),
+                Segment::Field(slot) => Segment::Field(*slot),
+            })
             .collect::<Vec<_>>();
-        for argument in &arguments {
+        for argument in steps.iter().flat_map(Segment::arguments) {
             self.debug_assert_graded(argument);
         }
         let context = mem::take(&mut self.calls.context);
-        let mut by_position = vec![None; arguments.len()];
+        let mut by_position = vec![None; count];
         let mut graded = Ok(());
         for (frame, params) in &callers {
-            match handed(self, &context, params, callee, &arguments) {
+            match handed(self, &context, params, callee, &steps) {
                 Ok(positions) => {
                     for (position, applied) in positions.into_iter().enumerate() {
                         if let Some(applied) = applied {

@@ -3,7 +3,7 @@
 //! Shared by every walk that finds calls — the elaborator's discovery [`Walk`](super::Walk), and the certifier's own typing walk — so a call is graded by one function whichever walk met it. What a walk contributes is its [`SizeContext`], built as it enters and leaves arms, and the arguments it saw at the call.
 
 use {
-    super::{Call, Carriers, Guard, Shape, Tag, spine},
+    super::{Call, Carriers, Guard, Segment, Shape, Tag, spine},
     crate::{Env, forceable},
     curios_core::{
         CallMatrix, Free, FreeMonoid, Global, Intrinsic, Layer, Nat, Probe, Proj, Size, Struct,
@@ -290,37 +290,57 @@ impl Applied {
         field
     }
 
-    /// Every matrix grading an application of the field at `path`.
-    pub fn at(&self, path: &[usize]) -> impl Iterator<Item = &CallMatrix> {
-        self.fields
-            .iter()
-            .filter(move |(at, _)| at == path)
-            .flat_map(|(_, applied)| applied)
-    }
-
     /// Whether nothing applies the argument or any field of it.
     pub fn is_empty(&self) -> bool {
         self.itself.is_empty() && self.fields.iter().all(|(_, applied)| applied.is_empty())
     }
 }
 
-/// What a call of `callee` with `arguments`, from a member whose parameters are `params`, hands each argument at a parameter `callee` applies as its summary states ([`Applications`](curios_core::Applications)): every matrix grading an application of that parameter, or of a field of it, against `params`, through what the call hands `callee` under `context`. `None` at a position `callee` summarizes nothing at or applies nowhere, and at every position where nothing is filed of `callee` or the call does not hand it every parameter.
+/// What a call of `callee`'s part at `path` with `arguments` — its leading lambdas at the empty path, a field lambda of the record they answer otherwise, its arguments the leading lambdas' and then the field's — from a member whose parameters are `params`, hands each argument at a parameter the part applies as its summary states ([`Applications`](curios_core::Applications)): every matrix grading an application of that parameter, or of a field of it, against `params`, through what the call hands the part under `context`. `None` at a position the part summarizes nothing at or applies nowhere, and at every position where nothing is filed of the part or the call does not hand it every parameter.
 pub fn handed<E: Env>(
     env: &mut E,
     context: &SizeContext,
     params: &[Free],
     callee: &Global,
-    arguments: &[Term],
+    steps: &[Segment],
 ) -> Result<Vec<Option<Applied>>, E::Error> {
+    let arguments = steps
+        .iter()
+        .flat_map(Segment::arguments)
+        .cloned()
+        .collect::<Vec<_>>();
+    let arguments = arguments.as_slice();
     let mut handed = vec![None; arguments.len()];
     let Some(applications) = env.applications(callee) else {
         return Ok(handed);
     };
+    // The part the steps reach: the leading lambdas where they apply arguments alone, and the field lambda at the slots they project where the arguments before those fill the leading lambdas and arguments alone follow.
+    let is_arguments = |step: &&Segment| matches!(step, Segment::Arguments(_));
+    let leading = steps
+        .iter()
+        .take_while(is_arguments)
+        .flat_map(Segment::arguments)
+        .count();
+    let path = steps
+        .iter()
+        .skip_while(is_arguments)
+        .map_while(|step| match step {
+            Segment::Field(slot) => Some(*slot),
+            Segment::Arguments(_) => None,
+        })
+        .collect::<Vec<_>>();
+    let after = steps.iter().skip_while(is_arguments).skip(path.len());
+    let reaches = path.is_empty()
+        || (after.clone().all(|step| is_arguments(&step))
+            && applications
+                .part(&[])
+                .is_some_and(|part| part.arity() == leading));
+    let Some(part) = applications.part(&path).filter(|_| reaches) else {
+        return Ok(handed);
+    };
     let applies = |position: usize| {
-        applications
-            .of(position)
-            .is_some_and(|applied| !applied.is_empty())
-            || applications
+        part.of(position).is_some_and(|applied| !applied.is_empty())
+            || part
                 .fields_of(position)
                 .any(|(_, applied)| !applied.is_empty())
     };
@@ -338,10 +358,10 @@ pub fn handed<E: Env>(
         if !applies(position) {
             continue;
         }
-        let Some(itself) = applications.of(position).and_then(through) else {
+        let Some(itself) = part.of(position).and_then(through) else {
             continue;
         };
-        let fields = applications
+        let fields = part
             .fields_of(position)
             .map(|(path, applied)| Some((path.to_vec(), through(applied)?)))
             .collect::<Option<Vec<_>>>();

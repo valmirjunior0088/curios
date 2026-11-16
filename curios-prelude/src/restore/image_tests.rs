@@ -122,7 +122,7 @@ fn the_std_record_files_that_any_applies_its_predicate_below_its_list() {
         let applied = root
             .certification()
             .applications(&any)
-            .and_then(|applications| applications.of(2))
+            .and_then(|applications| applications.part(&[])?.of(2))
             .expect("/std/List/any's record files how it applies `pred`");
 
         assert!(

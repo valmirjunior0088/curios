@@ -348,3 +348,99 @@ fn a_structure_of_handlers_handed_where_nothing_is_summarized_is_graded_as_unrel
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A derived witness on a type whose children sit in a container compares them through the container's witness: `List`'s, applied to `Rose` and the witness being derived, its method projected and applied. The method is a part of `List`'s witness, whose summary states that it applies the witness it is handed as `List/eql` does, to elements below its lists, so the derived method's call on the children is a call of its own field below its arguments, and a type reaching `==` on `Rose` is formed.
+#[test]
+fn a_derived_witness_compares_children_held_in_a_container_through_the_containers_witness() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+        use /std/ops/{Eql};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        satisfy Eql(Rose) {
+            ..
+        }
+
+        let Same(a: Rose, b: Rose) -> Prop = Bool/Holds(a == b);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+}
+
+// A derived witness under a telescope hands the container's witness itself applied to its own parameters, as the written one does: the call on the children descends as the witness of no telescope does.
+#[test]
+fn a_derived_witness_under_a_telescope_compares_children_held_in_a_container() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+        use /std/ops/{Eql};
+
+        induct Rose(A: Type): Type
+        | rose(A, List(Rose(A)))
+        end
+
+        satisfy (@A: Type, use Eql(A)) => Eql(Rose(A)) {
+            ..
+        }
+
+        let Same(a: Rose(Nat), b: Rose(Nat)) -> Prop = Bool/Holds(a == b);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+}
+
+// A container's witness of the program's own is read as `List`'s is: `Wrap`'s method applies the witness it is handed to the fields of its arguments, below them, so `Tree`'s method comparing two wrapped children descends. The refusal compares the wraps built around the trees being compared, whose fields are those trees again.
+#[test]
+fn a_containers_witness_is_graded_by_the_summary_of_its_method() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/ops/{Eql};
+
+        struct Wrap(A: Type): Type {
+            item: A,
+        }
+
+        satisfy (@A: Type, use Eql(A)) => Eql(Wrap(A)) {
+            eql(a, b) = Eql/eql(a.item, b.item),
+            neq(a, b) = Bool/not(Eql/eql(a.item, b.item)),
+        }
+
+        induct Tree: Type
+        | leaf(Nat)
+        | node(Wrap(Tree))
+        end
+
+        satisfy Eql(Tree) {
+            eql(a, b) = match a
+                | leaf(n) => match b | leaf(m) => n == m | _ => false end
+                | node(x) => match b | node(y) => x == y | _ => false end
+                end,
+            neq(a, b) = Bool/not(Eql/eql(a, b)),
+        }
+
+        let Same(a: Tree, b: Tree) -> Prop = Bool/Holds(a == b);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "| node(y) => x == y",
+        "| node(y) => Wrap { item = a } == Wrap { item = b }",
+    )])
+    .by_elaborator_in("/Same", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Same", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

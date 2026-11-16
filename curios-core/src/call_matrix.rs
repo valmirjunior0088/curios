@@ -161,12 +161,20 @@ impl CallMatrix {
     }
 }
 
-/// How a definition applies each of its parameters: for each, every matrix grading what an application of it hands against the definition's parameters, and every matrix grading what an application of a field of it hands, or nothing where the parameter is used otherwise than applied, a field of it applied, or handed on unchanged.
+/// How a definition applies its parameters, one summary for each of its parts ([`PartApplications`]): its leading lambdas, at the empty path, and each field lambda of the record they answer, at its path.
 ///
-/// What a certifier's record stores of a definition beside its totality, so a call a callback makes is graded where the definition handed it applies it: `/std/List/any` applies `pred` to an element below `l`, and `/std/List/eql` applies its witness's method, `e.0(x, y)`, to elements below its lists.
+/// What a certifier's record stores of a definition beside its totality, so a call a callback makes is graded where the definition handed it applies it: `/std/List/any` applies `pred` to an element below `l`, `/std/List/eql` applies its witness's method, `e.0(x, y)`, to elements below its lists, and `List`'s witness's method, its field at `[0]`, applies its `use` parameter's as `List/eql` does.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Applications {
+    parts: Vec<PartApplications>,
+}
+
+/// How one part of a definition applies each of its parameters — the definition's, then a field lambda's: for each, every matrix grading what an application of it hands against the part's parameters, and every matrix grading what an application of a field of it hands, or nothing where the parameter is used otherwise than applied, a field of it applied, or handed on unchanged.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct PartApplications {
+    path: Vec<usize>,
     parameters: Vec<Option<Vec<CallMatrix>>>,
     fields: Vec<FieldApplications>,
 }
@@ -181,9 +189,39 @@ pub struct FieldApplications {
 }
 
 impl Applications {
-    /// The applications of each parameter in order, `None` for one used otherwise, and of each field path of one, where the parameter is not used otherwise.
-    pub fn new(parameters: Vec<Option<Vec<CallMatrix>>>, fields: Vec<FieldApplications>) -> Self {
-        Self { parameters, fields }
+    /// The summaries of a definition's parts.
+    pub fn new(parts: Vec<PartApplications>) -> Self {
+        Self { parts }
+    }
+
+    /// The summary of the part at `path`: the leading lambdas' at the empty path.
+    pub fn part(&self, path: &[usize]) -> Option<&PartApplications> {
+        self.parts.iter().find(|part| part.path == path)
+    }
+
+    /// Whether no part applies anything where every use of it is seen: what a record files nothing for.
+    pub fn is_empty(&self) -> bool {
+        self.parts.iter().all(PartApplications::is_empty)
+    }
+}
+
+impl PartApplications {
+    /// The applications by the part at `path` of each of its parameters in order, `None` for one used otherwise, and of each field path of one, where the parameter is not used otherwise.
+    pub fn new(
+        path: Vec<usize>,
+        parameters: Vec<Option<Vec<CallMatrix>>>,
+        fields: Vec<FieldApplications>,
+    ) -> Self {
+        Self {
+            path,
+            parameters,
+            fields,
+        }
+    }
+
+    /// How many parameters the part has.
+    pub fn arity(&self) -> usize {
+        self.parameters.len()
     }
 
     /// Every matrix grading an application of parameter `index`, where every use of it is one; `None` where it is used otherwise, and for a parameter the definition has not.
