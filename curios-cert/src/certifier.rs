@@ -1132,7 +1132,7 @@ impl<'s> Certifier<'s> {
     ///
     /// **A `let` is moved where its value, read by value, names the local bound.** Its value was read while the local stood for nothing, so it names the local still; bound again, it stands for what a substituted `let` would have left in its place. One the binding only re-types is bound again at the value it had — assumed, it would stand for nothing.
     ///
-    /// **Bound again from the value as written, in scope order.** A `let`'s value names the `let`s before it, so with those already bound again its own value is its written one with the binding substituted, read by value where they now stand. Substituting through each value by value instead would walk, for every `let` in scope, everything beneath it — the square of a chain of `let`s at every binding.
+    /// **Bound again from the value as written, in scope order.** A `let`'s value names the `let`s before it and the local just bound, so with those already bound again its own value is its written one read by value where they now stand, and graded where they stand for a call: a local an arm's index inversion solved stays as written there, since the size order reads nothing an inversion concluded, so a `let` over one is graded as the local itself is. Substituting through each value by value instead would walk, for every `let` in scope, everything beneath it — the square of a chain of `let`s at every binding.
     fn read_again(&mut self, bound: &[(Free, Term)]) {
         let locals = self
             .local_names()
@@ -1161,7 +1161,7 @@ impl<'s> Certifier<'s> {
                 self.bind_as(
                     &local.name,
                     specialized.unwrap_or(&local.type_),
-                    &local.written.substitute(bound),
+                    &local.written,
                     local.encloses_partial,
                     local.solved,
                 );

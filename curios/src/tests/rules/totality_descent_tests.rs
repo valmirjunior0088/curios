@@ -843,3 +843,52 @@ fn zero_ruled_out_of_an_applied_lambdas_binder_is_ruled_out_of_what_it_stands_fo
             });
     }
 }
+
+// A `let` bound before an arm over a variable the arm's index inversion solves is graded as that variable, as written, since the size order reads nothing an inversion concluded: `hop(u)` is `hop(t)`, as the inlined group's `step(t)` is, and the cycle through it descends on `j`. The refusal hands `hop` the successor, which `j` is no longer below.
+#[test]
+fn a_let_over_a_variable_an_inversion_solves_is_graded_as_the_variable() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        induct Q : (Nat) -> Type
+        | c(k : Nat) : (k)
+        end
+
+        let inlined(t : Nat, q : Q(t)) -> Bool =
+            match q
+            | c(k) => step(t)
+            end
+        and step(m : Nat) -> Bool =
+            match m
+            | 0 => false
+            | j + 1 => inlined(j, Q/c(j))
+            end;
+
+        let Inlined(t : Nat, q : Q(t)) -> Prop = Bool/Holds(inlined(t, q));
+
+        let bound(t : Nat, q : Q(t)) -> Bool =
+            let u = t;
+            match q
+            | c(k) => hop(u)
+            end
+        and hop(m : Nat) -> Bool =
+            match m
+            | 0 => false
+            | j + 1 => bound(j, Q/c(j))
+            end;
+
+        let Bound(t : Nat, q : Q(t)) -> Prop = Bool/Holds(bound(t, q));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| c(k) => hop(u)", "| c(k) => hop(u + 1)")])
+    .by_elaborator_in("/Bound", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Bound", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
