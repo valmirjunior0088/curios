@@ -215,3 +215,14 @@ fn an_arm_splitting_an_applied_lambdas_binder_splits_what_the_binder_stands_for(
 
     assert!(infer(&mut certifier(), &group(&body)).is_ok());
 }
+
+/// Zero ruled out of a lambda's binder is ruled out of what it stands for: in `((x) => match x | 0 => … | _ => f(x - 1) end)(n)` the default runs with `x` being `n` and nonzero, so `x - 1` is below `n`, as a default over `n` itself reads it, and a boolean guard's `false` arm over `x == 0` alike. Mutation-checked: ruling zero out of the binder alone, the call reads at most `n`, and both are refused.
+#[test]
+fn zero_ruled_out_of_an_applied_lambdas_binder_is_ruled_out_of_what_it_stands_for() {
+    for body in [
+        "((x: #NatType) => #{goal = Type} match x | 0 => #NatType | _ => f(#NatSub(x, 1)) end)(n)",
+        "((x: #NatType) => #{goal = Type} match #NatEql(x, 0) | false => f(#NatSub(x, 1)) | true => #NatType end)(n)",
+    ] {
+        assert!(infer(&mut certifier(), &group(body)).is_ok(), "{body}");
+    }
+}

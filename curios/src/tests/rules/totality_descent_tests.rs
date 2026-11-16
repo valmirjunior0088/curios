@@ -801,3 +801,45 @@ fn a_recursion_through_a_std_callback_is_graded_alike_by_both_checkers() {
             });
     }
 }
+
+// Zero ruled out of a lambda's binder applied on the spot to the parameter is ruled out of the parameter, so a subtraction past it descends, as it does written over the parameter itself: in a dispatch's default, which enumerating `0` rules zero out of, and in a guard's `false` arm alike. The refusals subtract where nothing rules zero out, `chained(0)` and `guarded(0)` being themselves again.
+#[test]
+fn zero_ruled_out_of_an_applied_lambdas_binder_is_ruled_out_of_what_it_stands_for() {
+    let program = control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let chained(n : Nat) -> Bool =
+            ((x : Nat) => match x | 0 => false | 5 => true | _ => chained(x - 1) end)(n);
+
+        let Chained(n : Nat) -> Prop = Bool/Holds(chained(n));
+
+        let guarded(n : Nat) -> Bool =
+            ((x : Nat) => match x == 0 | true => false | false => guarded(x - 1) end)(n);
+
+        let Guarded(n : Nat) -> Prop = Bool/Holds(guarded(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    for (edit, at) in [
+        (
+            ("| 0 => false | 5", "| 0 => chained(x - 1) | 5"),
+            "/Chained",
+        ),
+        (
+            ("| true => false |", "| true => guarded(x - 1) |"),
+            "/Guarded",
+        ),
+    ] {
+        program
+            .refused(&[edit])
+            .by_elaborator_in(at, |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in(at, |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}

@@ -69,8 +69,8 @@ pub struct SizeContext {
 pub struct Undo {
     /// The refined binders, each with what it stood for before, empty when the scope refined nothing.
     refined: Vec<(Free, Option<Shape>)>,
-    /// The binder this scope added to `nonzero`, `None` when it added none — an already-known binder included.
-    nonzero: Option<Free>,
+    /// The binders this scope added to `nonzero`, empty when it added none — an already-known binder included.
+    nonzero: Vec<Free>,
     /// The binders this scope added to `payloads`, empty when it added none.
     payloads: Vec<Free>,
     /// The binders this scope assumed bounds of, each with what it stood for before.
@@ -126,10 +126,23 @@ impl SizeContext {
                 refined.push((binder, previous));
             }
         }
-        let nonzero = match nonzero {
-            Some(atom) if self.nonzero.insert(atom) => Some(atom),
-            _ => None,
-        };
+        // Zero ruled out of a binder is ruled out of what it stands for bare, in the same bracket, for the reason a case refining the one refines the other.
+        let mut ruled = Vec::new();
+        let mut next = nonzero;
+        while let Some(atom) = next.take() {
+            if self.nonzero.insert(atom) {
+                ruled.push(atom);
+            }
+            next = match self.refined.get(&atom) {
+                Some(Shape::Atom(stood_for))
+                    if *stood_for != atom && !ruled.contains(stood_for) =>
+                {
+                    Some(*stood_for)
+                }
+                _ => None,
+            };
+        }
+        let nonzero = ruled;
         let payloads = payloads
             .into_iter()
             .filter(|binder| self.payloads.insert(*binder))
@@ -151,7 +164,7 @@ impl SizeContext {
             .collect();
         self.scopes.push(Undo {
             refined: Vec::new(),
-            nonzero: None,
+            nonzero: Vec::new(),
             payloads: Vec::new(),
             assumed,
         });
@@ -170,7 +183,7 @@ impl SizeContext {
                 None => self.refined.remove(&binder),
             };
         }
-        if let Some(atom) = undo.nonzero {
+        for atom in undo.nonzero {
             self.nonzero.remove(&atom);
         }
         for binder in undo.payloads {
