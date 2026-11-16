@@ -450,13 +450,14 @@ curios lint app.crs      # one file, placed in its unit
 curios lint -            # the program on standard input
 ```
 
-A lint is an exact finding the compilation already has and nothing stops on: `run`, `compile` and `test` never mention one, `wonder` and the language server report them beside the errors and goals, and `lint` is where they turn into an exit code. There are five, every one always on, and there is nothing to configure — what keeps a name is spelled in the program, and each message says how.
+A lint is an exact finding the compilation already has and nothing stops on: `run`, `compile` and `test` never mention one, `wonder` and the language server report them beside the errors and goals, and `lint` is where they turn into an exit code. There are six, every one always on, and there is nothing to configure — what keeps a name is spelled in the program, and each message says how.
 
 | Lint | Reports | Kept by |
 | --- | --- | --- |
 | `unused-import` | a `use` selector, or a glob, that no reference resolved through; a `pub use` is a re-export and its own use | deleting it |
 | `unused-binder` | a parameter, `let` binder or pattern binder nothing references, implicit or shadowed included, where it is no `unused-let`'s; a hypothesis a proof the elaborator wrote from the facts in scope reads is referenced, though no written name reaches it, and a declaration holding a written goal reports none, since its binders are the goal's scope | writing `_` in its name's place, `()` where it binds `{}` |
 | `unused-let` | a `let` whose value runs no action — no `!` stands in it — and none of whose binders anything references, `_` included: it does nothing, whatever its value, an action bound and never run among them; a binder a proof the elaborator wrote reads is referenced, as for `unused-binder` | deleting it, or running it with `!` where it holds an action |
+| `unit-wildcard` | a written `_` that binds `{}`, as elaboration decided what it binds: the pattern of a `let` that runs an action, a part of one, a parameter, or a match pattern's payload or component — an arm's whole `_` excepted, which takes what the arms before it left | writing `()`, which refuses a value that stops being `{}` |
 | `unused-declaration` | a non-`pub` `let`, `foreign`, `induct`, `struct` or `concept` unreachable from the unit's roots — its exported surface, its tests, its witnesses, the declarations a `_` keeps unused and its program's tail; a private `mod` none of whose declarations is reached is reported once, at the `mod` | deleting it, `pub`, or naming it `_x` |
 | `unused-dependency` | a `[dependencies]` row whose package no reference in the library or any executable resolved into; decided over the package, so reported only by the package-entire form | deleting the row |
 

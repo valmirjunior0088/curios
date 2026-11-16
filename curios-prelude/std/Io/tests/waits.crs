@@ -71,7 +71,7 @@ test a_fulfilment_wakes_a_waiter_once_across_duplicate_offers =
                 Io/pure(n);
             let task = Io/Scope/spawn(s, waiter())!;
             let () = Io/yield()!;
-            let _ = Future/fill(f, 7)!;
+            let () = Future/fill(f, 7)!;
             Io/Scope/Task/join(task))!;
     let first = Channel/try_receive(wakes.1)!;
     let second = Channel/try_receive(wakes.1)!;
@@ -119,7 +119,7 @@ test a_losing_offer_neither_takes_a_later_message_nor_acknowledges_it =
             let () = Io/yield()!;
             let polled = Cell/poll(ack)!;
             let got = Channel/receive(messages.1)!;
-            let acknowledged = match polled | none() => false | some(_) => true end;
+            let acknowledged = match polled | none() => false | some(()) => true end;
             Io/pure((acknowledged, Option/map(got, (message: {Nat, Cell({})}) => message.0))))!;
     Test/all([Test/assert(Bool/not(acknowledged)), Test/equal(n, Option/some(7))]);
 
@@ -134,10 +134,10 @@ test signals_coalesce_and_futures_preserve_their_first_answer =
     let () = Signal/notify(s)!;
     let () = Signal/wait(s)!;
     let again = tried(s)!;
-    let coalesced = match again | none() => true | some(_) => false end;
+    let coalesced = match again | none() => true | some(()) => false end;
     let f = Future/new(@Nat)!;
-    let _ = Future/fill(f, 7)!;
-    let _ = Future/fill(f, 99)!;
+    let () = Future/fill(f, 7)!;
+    let () = Future/fill(f, 99)!;
     let answer = Future/wait(f)!;
     Test/all([Test/assert(coalesced), Test/equal(answer, 7)]);
 

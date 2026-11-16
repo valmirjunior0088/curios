@@ -934,6 +934,7 @@ dependencies = [
  "curios-unicode",
  "curios-unit",
  "curios-verdict",
+ "curios-wonder",
 ]
 
 [[package]]

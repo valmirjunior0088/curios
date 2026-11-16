@@ -115,7 +115,9 @@ use {
 pub const DEFAULT_BUDGET: u64 = 30_000_000;
 
 /// What deciding the class of one written site may spend, apart from its declaration's budget ([`DEFAULT_BUDGET`]), which it leaves as it found it: a class reads a type's weak head, through a few structs of one field, and an allowance run out is no class, never a refusal. See `context/sites.rs`.
-pub const LINT_ALLOWANCE: u64 = 1_000_000;
+///
+/// The least power of ten above the most a site of `/std`, `programs/` and `language.md`'s examples spends, which `curios`' `classification_allowance_measurements` counts and holds.
+pub const LINT_ALLOWANCE: u64 = 100_000;
 
 /// The identity spine over a [`BirthTelescope`] — one `Var::free` per binder — shared with the scope as the telescope is.
 type SharedSpine = MetavarSpine;

@@ -205,7 +205,9 @@ pub fn rename_witnesses(
     }
     for zero in named.zeros.values_mut().flatten() {
         let binders = match zero {
-            Zero::Binder { binder, .. } => std::slice::from_mut(binder),
+            Zero::Binder { binder, .. } | Zero::Wildcard { binder, .. } => {
+                std::slice::from_mut(binder)
+            }
             Zero::Let { binders, .. } => binders.as_mut_slice(),
             Zero::Selector { .. }
             | Zero::Glob { .. }

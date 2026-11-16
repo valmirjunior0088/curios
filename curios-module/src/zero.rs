@@ -22,6 +22,11 @@ pub enum Zero {
         at: Option<curios_core::Extent>,
         binder: LintedBinder,
     },
+    /// A written `_`, standing at it: a slot no written name reads, which a proof the elaborator writes may still read, by `binder`, and which binds what its class says.
+    Wildcard {
+        at: Option<curios_core::Extent>,
+        binder: LintedBinder,
+    },
     /// A `let` whose value runs no action and none of whose binders a written name referenced, standing at its pattern: one that does nothing where no proof the elaborator writes reads a binder of it either, by `binders`. `name` is what its pattern names where it is one binder with a name.
     Let {
         name: Option<String>,
@@ -47,6 +52,7 @@ impl Zero {
             Zero::Selector { at, .. }
             | Zero::Glob { at, .. }
             | Zero::Binder { at, .. }
+            | Zero::Wildcard { at, .. }
             | Zero::Let { at, .. }
             | Zero::Module { at, .. } => *at,
             Zero::Declaration { at, .. } => Some(*at),

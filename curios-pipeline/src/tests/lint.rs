@@ -1,6 +1,6 @@
 //! `unused-binder` and `unused-let` once elaboration has credited them: a binder only a proof the elaborator writes reads is used wherever that proof is written, `_` among them, and a credit names the declaration whose binder was read and no other.
 
-use super::test_support::*;
+use {super::test_support::*, curios_lint::LintKind};
 
 /// The bound of `/` in the result type is discharged from `ok`, which nothing names: the proof is written while the type elaborates, under the type's own binder.
 #[test]
@@ -167,4 +167,69 @@ pub let one(done: {}) -> Nat = 1;
         lints_of(&unit),
         ["unused-binder: unused binder\n  `done` is never used\n  write `()` in its name's place"]
     );
+}
+
+/// A `_` of `{}` is told to be `()`, which refuses a value that stops being `{}`, wherever it is written: a `let` that runs an action, a part of a `let`'s pattern, a lambda's and a definition's parameter, a variant's payload and a match tuple's component.
+#[test]
+fn a_wildcard_of_unit_is_told_to_write_unit_wherever_it_stands() {
+    let unit = unit_of(
+        "use /std/{Io, Nat, Result, Str, print};
+
+pub let run() -> Io({}) =
+    let _ = print(\"one\\n\")!;
+    let (line, _) = (\"two\\n\", ());
+    Io/bind(print(line), (_) => print(\"three\\n\"));
+
+pub let one(_: {}) -> Nat = 1;
+
+pub let succeeded(r: Result(Str, {})) -> Nat =
+    match r
+    | success(_) => 1
+    | failure(_) => 0
+    end;
+
+pub let first(p: {Nat, {}}) -> Nat =
+    match p
+    | (k, _) => k
+    end;
+",
+    );
+
+    assert_eq!(
+        lints_of(&unit),
+        vec![
+            "unit-wildcard: unit wildcard\n  this `_` binds `{}`\n  write `()`, which refuses a value that stops being `{}`";
+            6
+        ]
+    );
+    assert_eq!(
+        placed_lints(&unit, LintKind::UnitWildcard),
+        [(4, 9), (5, 16), (6, 27), (8, 13), (12, 15), (18, 11)]
+    );
+}
+
+/// A `_` of anything but `{}` is the slot it should be, and an arm's whole `_` takes what the arms before it left rather than a part of a value, whatever its type: neither is reported.
+#[test]
+fn a_wildcard_of_anything_else_is_never_reported() {
+    let unit = unit_of(
+        "use /std/{Nat, Option};
+
+pub let second(p: {Nat, Nat}) -> Nat =
+    let (_, b) = p;
+    b;
+
+pub let fallback(o: Option(Nat)) -> Nat =
+    match o
+    | some(_) => 1
+    | none() => 0
+    end;
+
+pub let whole(u: {}) -> Nat =
+    match u
+    | _ => 1
+    end;
+",
+    );
+
+    assert_eq!(lints_of(&unit), Vec::<String>::new());
 }

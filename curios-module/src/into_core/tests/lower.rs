@@ -212,7 +212,7 @@ fn a_match_with_no_head_lowers_to_a_matrix_over_the_unit_value() {
     assert!(
         matrix
             .rows()
-            .all(|row| row.pattern == curios_core::Pattern::Wildcard)
+            .all(|row| matches!(row.pattern, curios_core::Pattern::Wildcard(_)))
     );
     assert_eq!(
         matrix

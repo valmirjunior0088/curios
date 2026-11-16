@@ -75,7 +75,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         leaf: fn(&Self, &Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Row, Error> {
         self.row(
-            curios_core::Pattern::Wildcard,
+            curios_core::Pattern::WILDCARD,
             Vec::new(),
             guards,
             body,
@@ -119,7 +119,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             .iter()
             .map(|alternative| {
                 let mut binders = Vec::new();
-                let pattern = self.pattern(&alternative.pattern, &mut binders)?;
+                let pattern = self.whole(&alternative.pattern, &mut binders)?;
                 let written = binders
                     .iter()
                     .map(|(name, _)| name.clone())
@@ -168,7 +168,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                         return Err(placed(Error::BindCannotFail, pattern.span.as_ref()));
                     }
                     let value = self.function(&binders, value, leaf)?;
-                    let pattern = self.pattern(&pattern.pattern, &mut binders)?;
+                    let pattern = self.whole(&pattern.pattern, &mut binders)?;
 
                     curios_core::Guard::Binds { pattern, value }
                 }
@@ -209,6 +209,20 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
+    /// [`Self::pattern`] for an arm's or a bind guard's whole pattern, where a `_` takes whatever the patterns before it left rather than a part of a value: no place is given it.
+    fn whole(
+        &self,
+        pattern: &MatchPattern,
+        binders: &mut Vec<Binder>,
+    ) -> Result<curios_core::Pattern, Error> {
+        match pattern {
+            MatchPattern::Binder(name) if !bindable(name.as_str()) => {
+                Ok(curios_core::Pattern::WILDCARD)
+            }
+            _ => self.pattern(pattern, binders),
+        }
+    }
+
     /// A pattern as Core holds it, with every name it binds minted onto `binders` in the order it writes them. A struct pattern's head is resolved as a struct literal's is ([`Lowerer::resolve_nominal`]): the scrutinee's type is held to the structure it names where the pattern is compiled.
     fn pattern(
         &self,
@@ -216,8 +230,9 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         binders: &mut Vec<Binder>,
     ) -> Result<curios_core::Pattern, Error> {
         Ok(match pattern {
+            // A `_` inside a pattern takes its place among the declaration's written binders: a payload or a component it leaves is one a lint may ask the class of.
             MatchPattern::Binder(name) if !bindable(name.as_str()) => {
-                curios_core::Pattern::Wildcard
+                curios_core::Pattern::Wildcard(curios_core::WrittenPlace(self.wildcard_place(name)))
             }
             MatchPattern::Binder(name) => {
                 binders.push(self.pattern_binder(name));

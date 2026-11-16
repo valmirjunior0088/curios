@@ -484,7 +484,7 @@ fn pattern_read(
 
                 Pattern::Binder
             }
-            None => Pattern::Wildcard,
+            None => Pattern::WILDCARD,
         },
         MatchPattern::Variant { tag, args } => Pattern::Variant {
             tag: Atom::from(tag.as_str()),

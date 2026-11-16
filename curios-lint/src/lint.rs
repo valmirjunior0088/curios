@@ -16,6 +16,7 @@ pub enum LintKind {
     UnusedImport,
     UnusedBinder,
     UnusedLet,
+    UnitWildcard,
     UnusedDeclaration,
     UnusedDependency,
 }
@@ -26,6 +27,7 @@ impl LintKind {
             LintKind::UnusedImport => "unused-import",
             LintKind::UnusedBinder => "unused-binder",
             LintKind::UnusedLet => "unused-let",
+            LintKind::UnitWildcard => "unit-wildcard",
             LintKind::UnusedDeclaration => "unused-declaration",
             LintKind::UnusedDependency => "unused-dependency",
         }
@@ -65,6 +67,13 @@ impl Lint {
                     Some(SiteClass::Action) | None => "write `_` in its name's place",
                 };
                 Self::at(LintKind::UnusedBinder, *at, unused("binder", name, way_out))
+            }
+            // A `_` that binds `{}`, underlined at it: `()` checks what `_` discards.
+            Zero::Wildcard { at, .. } => {
+                let mut said = Said::line("unit wildcard");
+                said.stating("this `_` binds `{}`");
+                said.stating("write `()`, which refuses a value that stops being `{}`");
+                Self::at(LintKind::UnitWildcard, *at, said)
             }
             // A `let` that does nothing, underlined at its pattern: its value runs no action, so it is deleted with nothing lost — or, where it holds an action, run as was likely meant.
             Zero::Let { name, at, binders } => {

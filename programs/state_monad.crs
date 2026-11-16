@@ -7,7 +7,7 @@ let loop(n: Nat) -> State(Nat, {}) =
     match n
     | 0 => State/pure(())
     | m + 1 =>
-        let _ = State/modify((s) => s + 3)!;
+        let () = State/modify((s) => s + 3)!;
         loop(m)
     end;
 
@@ -19,7 +19,7 @@ let execute() -> Try(Io, Str, {}) =
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
     let n = Option/to_result(Nat/of_str(Str/trim(s)), "bad input")!;
-    let _ = Fmt/print("%\n")(total(n))!;
+    let () = Fmt/print("%\n")(total(n))!;
     Try/pure(());
 
 execute()

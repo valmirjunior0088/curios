@@ -7,13 +7,13 @@ let loop(n: Nat, acc: Nat) -> Io(Nat) =
     match n
     | 0 => Io/pure(acc)
     | m + 1 =>
-        let _ = Io/yield()!;
+        let () = Io/yield()!;
         let a = Io/pure(acc + 3)!;
         loop(m, a)
     end;
 
 let measured(n: Nat) -> Io({}) =
-    let (total, _) = Io/both(loop(n, 0), Io/pure(()))!;
+    let (total, ()) = Io/both(loop(n, 0), Io/pure(()))!;
     Fmt/print("%\n")(total);
 
 let execute() -> Try(Io, Str, {}) =

@@ -6,7 +6,7 @@ use {
     crate::{Atom, Mention, Term},
     curios_common::Plicity,
     curios_num::Natural,
-    std::iter,
+    std::{hash, iter},
 };
 
 /// A match before its patterns are compiled: the scrutinee and the arms in the order they are written. A match with no head is a match over `()` whose rows write `_`. Consumed by `elaborate_matrix`, which compiles the patterns into the single-level [`Match`](crate::Match) forms every later stage reads; the node never survives elaboration.
@@ -129,8 +129,8 @@ impl Guard {
 pub enum Pattern {
     /// A name, a place among its row's binders.
     Binder,
-    /// `_`, which takes nothing apart and binds nothing: no place among its row's binders stands for it.
-    Wildcard,
+    /// `_`, which takes nothing apart and binds nothing: no place among its row's binders stands for it. Where the lowering wrote it, it holds its place among its declaration's written binders ([`WrittenPlace`]).
+    Wildcard(WrittenPlace),
     /// A constructor over one pattern for each payload it writes, each under the mark it is written under.
     Variant {
         tag: Atom,
@@ -241,12 +241,32 @@ impl Slot {
     }
 }
 
+/// Where a written `_` sits among its declaration's written binders, where the lowering wrote one: what elaboration records the class of a pattern's `_` under, for a lint to read, and nothing a pattern means. Ignored by identity as a binder's written place is (`Mint`), so two matches apart only in where their wildcards were written are one, and none a compiler built holds one.
+#[derive(Debug, Clone, Copy, Default)]
+#[curios_archive::archived]
+pub struct WrittenPlace(pub Option<u32>);
+
+impl PartialEq for WrittenPlace {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for WrittenPlace {}
+
+impl hash::Hash for WrittenPlace {
+    fn hash<H: hash::Hasher>(&self, _: &mut H) {}
+}
+
 impl Pattern {
+    /// A `_` no written one stands for: what a compiler builds.
+    pub const WILDCARD: Pattern = Pattern::Wildcard(WrittenPlace(None));
+
     /// How many binders the pattern writes.
     pub fn binders(&self) -> usize {
         match self {
             Pattern::Binder => 1,
-            Pattern::Wildcard => 0,
+            Pattern::Wildcard(_) => 0,
             Pattern::Variant { args, .. } => args.iter().map(|(_, arg)| arg.binders()).sum(),
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 fields.iter().map(|(_, field)| field.binders()).sum()

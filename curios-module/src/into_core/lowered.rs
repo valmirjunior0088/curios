@@ -254,6 +254,12 @@ enum Unused {
         definition: u32,
         ordinal: u32,
     },
+    /// A `_`'s zero: the `_` by its definition's place and its own.
+    Wildcard {
+        at: curios_core::Extent,
+        definition: u32,
+        ordinal: u32,
+    },
     /// A let zero: each binder its pattern writes by its definition's place and its own.
     Let {
         name: Option<String>,
@@ -312,6 +318,11 @@ impl LoweredDeclaration {
             .map(|zero| match zero {
                 Zero::Binder { name, at, binder } => Some(Unused::Binder {
                     name: name.clone(),
+                    at: (*at)?,
+                    definition: place(&binder.declaration?)?,
+                    ordinal: binder.ordinal,
+                }),
+                Zero::Wildcard { at, binder } => Some(Unused::Wildcard {
                     at: (*at)?,
                     definition: place(&binder.declaration?)?,
                     ordinal: binder.ordinal,
@@ -799,6 +810,14 @@ impl<'a> Baseline<'a> {
                     ordinal,
                 } => Zero::Binder {
                     name: name.clone(),
+                    at: Some(*at),
+                    binder: binder(*definition, *ordinal),
+                },
+                Unused::Wildcard {
+                    at,
+                    definition,
+                    ordinal,
+                } => Zero::Wildcard {
                     at: Some(*at),
                     binder: binder(*definition, *ordinal),
                 },

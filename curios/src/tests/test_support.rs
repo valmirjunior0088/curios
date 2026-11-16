@@ -14,8 +14,36 @@ use {
     curios_native::{Compiled, ForeignBindings, TestEnd, test_support::*},
     curios_pipeline::{Fold, Stage, TestProgram, compile_with_prelude},
     curios_surface::Entrypoint,
-    std::{any::Any, sync::Mutex},
+    std::{
+        any::Any,
+        fs,
+        path::{Path, PathBuf},
+        sync::Mutex,
+    },
 };
+
+/// The workspace this crate sits in.
+pub fn workspace() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("the crate sits in the workspace")
+        .to_path_buf()
+}
+
+/// Every `.crs` under `directory`, one level of subdirectory included — the layout `programs/README.md` states: a bare file is an instrument, a directory carries one program in every spelling.
+pub fn programs(directory: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for entry in fs::read_dir(directory).expect("the directory is readable") {
+        let path = entry.expect("the entry is readable").path();
+        if path.is_dir() {
+            found.extend(programs(&path));
+        } else if path.extension().is_some_and(|extension| extension == "crs") {
+            found.push(path);
+        }
+    }
+    found.sort();
+    found
+}
 
 /// Compile an already-parsed entrypoint under `loader` and run it.
 ///

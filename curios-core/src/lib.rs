@@ -168,14 +168,14 @@ pub use term::{
     ArchivedNumLit, ArchivedPattern, ArchivedProj, ArchivedRec, ArchivedRecGroup,
     ArchivedRecMemberScopes, ArchivedRow, ArchivedSlot, ArchivedSort, ArchivedStruct,
     ArchivedStructEntry, ArchivedStructType, ArchivedSubterm, ArchivedTerm, ArchivedTransient,
-    ArchivedTuple, ArchivedTupleType, ArchivedVariant, ArchivedWitnessOrigin, Argument, Arm,
-    Ascribed, Bang, Carrier, Cases, Elements, Ending, Field, Foreign, FormerEta, Func, FuncType,
-    Guard, HeadTag, ImplicitOrigin, InductArm, InductType, Infix, Instance, Let, LetBinding,
-    LevelDifferences, Match, Matrix, MentionCache, Mentions, MentionsIter, MetaRenaming, Metavar,
-    MetavarId, MetavarOrigin, MetavarSpine, Method, Names, NumLit, Paired, Pattern, Proj, Ranked,
-    Rec, RecGroup, RecMemberScopes, Row, ScalarCache, Scalars, Slot, Sort, SpineEntries, Struct,
-    StructEntry, StructType, Subterm, Term, Transient, Tuple, TupleType, Variant, WitnessOrigin,
-    former_eta, goal_at, paired,
+    ArchivedTuple, ArchivedTupleType, ArchivedVariant, ArchivedWitnessOrigin, ArchivedWrittenPlace,
+    Argument, Arm, Ascribed, Bang, Carrier, Cases, Elements, Ending, Field, Foreign, FormerEta,
+    Func, FuncType, Guard, HeadTag, ImplicitOrigin, InductArm, InductType, Infix, Instance, Let,
+    LetBinding, LevelDifferences, Match, Matrix, MentionCache, Mentions, MentionsIter,
+    MetaRenaming, Metavar, MetavarId, MetavarOrigin, MetavarSpine, Method, Names, NumLit, Paired,
+    Pattern, Proj, Ranked, Rec, RecGroup, RecMemberScopes, Row, ScalarCache, Scalars, Slot, Sort,
+    SpineEntries, Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, TupleType,
+    Variant, WitnessOrigin, WrittenPlace, former_eta, goal_at, paired,
 };
 
 mod walk;

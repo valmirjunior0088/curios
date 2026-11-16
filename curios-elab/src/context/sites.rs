@@ -1,10 +1,14 @@
 //! The written sites an elaboration opened, each with the type it was opened at: what is classified where the site's declaration files its record, for the lint owner to word a finding about the site by ([`SiteClass`]).
 //!
 //! **A class is a lint's question, which never changes a verdict.** It is decided under an allowance of its own ([`LINT_ALLOWANCE`]), separate from the declaration's budget, which it leaves as it found it; whatever it solves is rolled back and nothing is credited; and an allowance run out is no class. What it reads of other declarations — a struct's fields, whether a monad is one — joins the declaration's trace, so a record a recompile keeps is still true of what it read.
+//!
+//! **Where a site is opened.** A `let`'s binder where `elaborate_let` binds it, against the region its block is checked at; a lambda's parameter where its type is checked; a match pattern's binder where the matrix compiler binds it, by a `let` of its own, as a slot ([`Context::note_pattern_site`]); and a match pattern's `_` where the matrix compiler reads the column it stands at, whose type is inferred under the allowance as a class is decided ([`Context::open_column_site`]). An arm's whole `_` holds no place and opens nothing.
 
 use {
     super::Spend,
-    crate::{Context, LINT_ALLOWANCE, SiteClass, reduce_with, zonk_solved_term_metas},
+    crate::{
+        Context, LINT_ALLOWANCE, Mode, SiteClass, elaborate, reduce_with, zonk_solved_term_metas,
+    },
     curios_core::{Global, HeadKey, Subterm, Term, WitnessKey},
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -41,6 +45,8 @@ pub enum Binding {
 #[derive(Debug, Default)]
 pub struct Sites {
     opened: Vec<Opened>,
+    /// The places of a match pattern's binders, which the matrix compiler binds by `let`s of its own: what [`Context::site_binding`] opens as slots. A place is a pattern's or a `let`'s, never both, so nothing here is rolled back.
+    patterns: BTreeSet<(Option<Global>, u32)>,
 }
 
 impl Sites {
@@ -65,6 +71,44 @@ impl Sites {
 }
 
 impl Context<'_> {
+    /// Note that the written binder at `place` is a match pattern's, which the matrix compiler binds by a `let` of its own.
+    pub(crate) fn note_pattern_site(&mut self, place: Option<u32>) {
+        if let Some(place) = place {
+            self.underway
+                .sites
+                .patterns
+                .insert((self.underway.declaration, place));
+        }
+    }
+
+    /// What the written binder at `place`, bound by a `let` in a block checked at `region`, is opened as: a slot where it is a match pattern's ([`Context::note_pattern_site`]), a `let`'s binder otherwise.
+    pub(crate) fn site_binding(&self, place: Option<u32>, region: Option<&Term>) -> Binding {
+        match place.is_some_and(|place| {
+            self.underway
+                .sites
+                .patterns
+                .contains(&(self.underway.declaration, place))
+        }) {
+            true => Binding::Slot,
+            false => Binding::Let(region.cloned()),
+        }
+    }
+
+    /// Record the written `_` at `place` as standing at `column`, a column of a match the matrix compiler is reading, which binds nothing for it: a slot of the column's type, inferred under [`LINT_ALLOWANCE`] with the declaration's budget set aside and whatever it solved rolled back.
+    pub(crate) fn open_column_site(&mut self, place: u32, column: &Term) {
+        let budget = std::mem::replace(&mut self.typing.spend, Spend::new(LINT_ALLOWANCE));
+        let mark = self.solution_mark();
+        let typed = elaborate(self, column, Mode::Infer)
+            .map(|(_, type_)| zonk_solved_term_metas(self, &type_));
+        self.rollback_solutions(mark);
+        self.end_solutions(mark);
+        curios_profile::sample!("sites::column", self.typing.spend.consumed().units());
+        self.typing.spend = budget;
+        if let Ok(type_) = typed {
+            self.open_site(Some(place), &type_, Binding::Slot);
+        }
+    }
+
     /// Record that the written site at `place`, where the lowering wrote one, was opened at `type_` as `binding`.
     pub(crate) fn open_site(&mut self, place: Option<u32>, type_: &Term, binding: Binding) {
         let Some(place) = place else {

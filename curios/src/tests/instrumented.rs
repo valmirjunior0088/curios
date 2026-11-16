@@ -2,6 +2,7 @@
 //!
 //! Each reads something recorded only under this crate's `profile` feature: through `curios-profile`'s `enabled`, the per-pass spans of the CPS fixpoint and the stream a traced compilation and run file, and from `curios-core`, the looks its walks count. So the module is the one thing gated on the feature, and no build that ships compiles it. `cargo xtask instrumented lint` is the step that does; nothing in the gate runs what is here, since that would compile the whole suite a second time with every feature on, so each test is taken by hand, by the command recorded beside it.
 
+mod allowance;
 mod coordination;
 mod fixpoint;
 mod growth;

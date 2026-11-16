@@ -279,13 +279,20 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             declaration: self.declaration,
             ordinal: u32::try_from(*place).expect("a declaration's binders fit a u32"),
         };
-        let binders = (0..candidates.len())
-            .filter(|place| bindable(&candidates[*place].name) && unread(place))
-            .map(|place| Zero::Binder {
-                name: candidates[place].name.clone(),
-                at: self.context.extent(&candidates[place].span),
-                binder: binder(&place),
-            });
+        let binders =
+            (0..candidates.len())
+                .filter(|place| unread(place))
+                .map(|place| match bindable(&candidates[place].name) {
+                    true => Zero::Binder {
+                        name: candidates[place].name.clone(),
+                        at: self.context.extent(&candidates[place].span),
+                        binder: binder(&place),
+                    },
+                    false => Zero::Wildcard {
+                        at: self.context.extent(&candidates[place].span),
+                        binder: binder(&place),
+                    },
+                });
         let lets = self
             .lets
             .borrow()
@@ -1168,6 +1175,28 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             })
     }
 
+    /// The place a `_` written at `name` takes among the declaration's written binders, as a candidate no binder stands for: what a match pattern's `_` holds ([`curios_core::WrittenPlace`]). `None` for one written nowhere.
+    pub fn wildcard_place(&self, name: &Label) -> Option<u32> {
+        let span = name.span()?.clone();
+        let mut candidates = self.candidates.borrow_mut();
+        let place = match candidates
+            .iter()
+            .rposition(|candidate| candidate.span == span)
+        {
+            Some(place) => place,
+            None => {
+                candidates.push(Candidate {
+                    name: name.to_string(),
+                    ids: Vec::new(),
+                    span,
+                });
+                candidates.len() - 1
+            }
+        };
+
+        Some(u32::try_from(place).expect("a declaration's binders fit a u32"))
+    }
+
     /// One pattern-leaf binder: its written spelling and the identity it lowers to. `_` gets an identity nothing can name, so repeated wildcards never collide.
     pub fn pattern_binder(&self, name: &Label) -> Binder {
         self.mint_written([(name.to_string(), name.span().cloned())])
@@ -1297,7 +1326,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let held = curios_core::Pattern::Tuple(
                     fields
                         .iter()
-                        .map(|field| (field.label.clone(), curios_core::Pattern::Wildcard))
+                        .map(|field| (field.label.clone(), curios_core::Pattern::WILDCARD))
                         .collect(),
                 );
                 (held, span.clone().or_else(|| pattern_span(pattern)))

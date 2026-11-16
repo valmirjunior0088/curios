@@ -449,6 +449,10 @@ fn what_stands_past_a_programs_final_term_is_refused_as_what_it_is() {
             report.contains("a program closes with one term") && report.contains(said),
             "{source:?} reported {report}"
         );
+        assert!(
+            report.contains("`let () = …!;` for one that yields `{}`"),
+            "{source:?} reported {report}"
+        );
         assert_eq!(
             error.report().span().expect("located").line_column(),
             place,

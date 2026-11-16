@@ -18,7 +18,7 @@ use {
     std::collections::BTreeSet,
 };
 
-/// The lints `zeros` come to, in reading order as `anchors` place them: each zero reported, less every binder `read` holds of — one a proof the elaborator wrote reads, which is used though no written name reaches it. A `let` none of whose binders is read either way does nothing, whatever its value: it is reported whole, once, and its binders are none of `unused-binder`'s. `class` says what a binder binds where elaboration decided it, which words the way out.
+/// The lints `zeros` come to, in reading order as `anchors` place them: each zero reported — a `_` only where it binds `{}` — less every binder `read` holds of — one a proof the elaborator wrote reads, which is used though no written name reaches it. A `let` none of whose binders is read either way does nothing, whatever its value: it is reported whole, once, and its binders are none of `unused-binder`'s. `class` says what a binder binds where elaboration decided it, which words the way out.
 pub fn lints<'z>(
     zeros: impl IntoIterator<Item = &'z Zero>,
     read: impl Fn(&LintedBinder) -> bool,
@@ -40,6 +40,12 @@ pub fn lints<'z>(
         .into_iter()
         .filter(|zero| match zero {
             Zero::Binder { binder, .. } => !read(binder) && !in_dead_let.contains(binder),
+            // A `_` of `{}` is asked to be `()`, which refuses a value that stops being one; a `_` of anything else is the slot it should be.
+            Zero::Wildcard { binder, .. } => {
+                !read(binder)
+                    && !in_dead_let.contains(binder)
+                    && class(binder) == Some(SiteClass::Unit)
+            }
             Zero::Let { binders, .. } => dead(binders),
             Zero::Selector { .. }
             | Zero::Glob { .. }

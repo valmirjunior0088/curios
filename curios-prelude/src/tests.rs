@@ -18,7 +18,7 @@ use {
         Width, intrinsic_former, to_core,
     },
     std::{
-        collections::BTreeSet,
+        collections::{BTreeMap, BTreeSet},
         fs,
         path::{Path, PathBuf},
         rc::Rc,
@@ -58,13 +58,23 @@ fn every_authored_source_is_lint_clean() {
         .unwrap_or_else(|error| panic!("/sys failed to lower: {}", error.format()));
     let std = prepare_prelude(&std_source().tested(), &[&sys], &SYNTAX)
         .unwrap_or_else(|error| panic!("/std failed to lower: {}", error.format()));
-    // Credited as a recompile credits a declaration it keeps: with what the build's elaboration of the same sources recorded, in each declaration's record, as read by a proof it wrote.
-    let recorded = with_prelude(|units| {
-        units
+    // Credited and worded as a recompile credits and words a declaration it keeps: with what the build's elaboration of the same sources recorded, in each declaration's record, as read by a proof it wrote and as bound by each site. A test module's declarations, which the build does not elaborate, hold no record here, so a class of theirs is `tests/std.rs`'s to hold.
+    let (recorded, classes) = with_prelude(|units| {
+        let records = units
             .iter()
             .flat_map(|unit| unit.traces().declarations())
-            .flat_map(|(_, record)| record.concluded().credited.iter().copied())
-            .collect::<BTreeSet<_>>()
+            .map(|(_, record)| record.concluded().clone())
+            .collect::<Vec<_>>();
+        let recorded = records
+            .iter()
+            .flat_map(|concluded| concluded.credited.iter().copied())
+            .collect::<BTreeSet<_>>();
+        let classes = records
+            .iter()
+            .flat_map(|concluded| concluded.classes.iter().copied())
+            .map(|(name, place, class)| ((name, place), class))
+            .collect::<BTreeMap<_, _>>();
+        (recorded, classes)
     });
     let lints = [&sys, &std]
         .iter()
@@ -76,7 +86,11 @@ fn every_authored_source_is_lint_clean() {
                         .declaration
                         .is_some_and(|name| recorded.contains(&(name, binder.ordinal)))
                 },
-                |_| None,
+                |binder| {
+                    binder
+                        .declaration
+                        .and_then(|name| classes.get(&(name, binder.ordinal)).copied())
+                },
                 prepared.anchors(),
             )
             .iter()

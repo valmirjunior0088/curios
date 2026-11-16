@@ -178,16 +178,16 @@ pub const DOC_BEFORE_NOTHING: &[&str] = &[
     "that is a declaration, a constructor, a field or a concept method",
 ];
 
-/// What refuses a term standing past a program's final one. It states the rule and not the reader's intent: that the term before it is an action is nothing the grammar knows, so the sequencing form is given as what is written where it is one.
+/// What refuses a term standing past a program's final one. It states the rule and not the reader's intent: that the term before it is an action is nothing the grammar knows, so the sequencing form is given as what is written where it is one, `()` for the `{}` most actions yield, which `unit-wildcard` asks for, and `_` for a result dropped.
 const PROGRAM_CLOSES_WITH_ONE_TERM: &[&str] = &[
     "a program closes with one term, the description it performs, and this is a second",
-    "sequence an action that runs before the last, as `let _ = …!;`",
+    "sequence an action that runs before the last, as `let () = …!;` for one that yields `{}`, or `let _ = …!;` for one whose result is dropped",
 ];
 
 /// What refuses a `;` standing past a program's final term.
 const PROGRAM_TAKES_NO_SEMICOLON: &[&str] = &[
     "a program closes with one term, the description it performs, and no `;` follows it",
-    "sequence an action that runs before the last, as `let _ = …!;`",
+    "sequence an action that runs before the last, as `let () = …!;` for one that yields `{}`, or `let _ = …!;` for one whose result is dropped",
 ];
 
 /// The end of a program: its input exhausted past the final term. What stands there in its place is refused as what it is, rather than left for `take_eof` to report as a token the grammar did not expect: a documentation block, which documents nothing; a `;`, which closes a declaration and no term; and a second term, where a program has one.

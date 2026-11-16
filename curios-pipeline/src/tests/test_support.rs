@@ -342,6 +342,24 @@ pub fn lints_of(unit: &Unit) -> Vec<String> {
         .collect()
 }
 
+/// Where each of a unit's lints of `kind` stands, as a line and a column of its text.
+pub fn placed_lints(unit: &Unit, kind: LintKind) -> Vec<(usize, usize)> {
+    let anchors = unit
+        .text()
+        .expect("a program's unit holds its lowering")
+        .anchors();
+    unit.lints()
+        .iter()
+        .filter(|lint| lint.kind == kind)
+        .map(|lint| {
+            lint.report(&[anchors])
+                .span()
+                .expect("a lint is placed")
+                .line_column()
+        })
+        .collect()
+}
+
 /// The binders a unit's `unused-binder` lints name, once elaboration has credited them.
 pub fn unused_binders(unit: &Unit) -> Vec<String> {
     unit.lints()

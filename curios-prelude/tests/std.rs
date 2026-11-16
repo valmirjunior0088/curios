@@ -4,7 +4,7 @@
 
 use {
     curios::{TestSubject, test_subjects, test_support::*},
-    curios_common::{Qualifier, fill},
+    curios_common::{Qualifier, Style, fill},
     curios_elab::DEFAULT_BUDGET,
     curios_module::{Overlay, RootSource},
     curios_native::{ForeignBindings, TestEnd, test_support::*},
@@ -17,6 +17,7 @@ use {
         is_extended_pictographic, test_support::*,
     },
     curios_verdict::Verdicts,
+    curios_wonder::{Severity, Subject, diagnostics},
     std::{
         fs,
         path::{Path, PathBuf},
@@ -100,6 +101,32 @@ fn library() -> TestSubject {
 
     assert_eq!(subjects.len(), 1, "the standard library is one library");
     subjects.remove(0)
+}
+
+/// **The standard library's test modules lint clean**, decided as `curios lint` decides the package: the library's declarations kept from the archive with the records they were elaborated to, and each test module elaborated over it — or the unit restored from the store the claims file into, whose lints are the ones a compile decides. `curios-prelude`'s `every_authored_source_is_lint_clean` holds the library by its archive alone, which elaborates no test, so what a test module's site binds is held here.
+#[test]
+fn every_test_module_lints_clean() {
+    let found = diagnostics(
+        DEFAULT_BUDGET,
+        Subject::Unit {
+            units: vec![std_source().tested()],
+        },
+        &Overlay::default(),
+        Some(&store()),
+        &mut |_| {},
+    )
+    .diagnostics
+    .into_iter()
+    .filter(|diagnostic| matches!(diagnostic.severity, Severity::Lint | Severity::Error))
+    .map(|diagnostic| diagnostic.rendered(&Style::plain()))
+    .collect::<Vec<_>>();
+
+    assert!(
+        found.is_empty(),
+        "{} findings:\n\n{}",
+        found.len(),
+        found.join("\n\n")
+    );
 }
 
 /// Every test `/std` declares, by its path.

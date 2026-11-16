@@ -506,7 +506,7 @@ fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_
                 ],
                 over(x, Term::free_var(&x)),
             ),
-            row(Pattern::Wildcard, Vec::new(), nothing(numeral(1))),
+            row(Pattern::WILDCARD, Vec::new(), nothing(numeral(1))),
         ],
     });
     assert_eq!(
@@ -518,11 +518,11 @@ fn a_rows_guards_print_after_its_pattern_and_a_match_over_the_unit_value_prints_
         head: Term::tuple(Vec::<Term>::new()),
         arms: vec![
             row(
-                Pattern::Wildcard,
+                Pattern::WILDCARD,
                 vec![Guard::Holds(nothing(flag))],
                 nothing(numeral(1)),
             ),
-            row(Pattern::Wildcard, Vec::new(), nothing(numeral(0))),
+            row(Pattern::WILDCARD, Vec::new(), nothing(numeral(0))),
         ],
     });
     assert_eq!(

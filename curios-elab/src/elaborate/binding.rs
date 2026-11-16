@@ -54,11 +54,9 @@ pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(T
                 }
             };
             let label = context.fresh_for(let_.tail().hint(index), let_.tail().written(index));
-            context.open_site(
-                let_.tail().written(index),
-                &type_elaborated,
-                Binding::Let(region.clone()),
-            );
+            let place = let_.tail().written(index);
+            let binding = context.site_binding(place, region.as_ref());
+            context.open_site(place, &type_elaborated, binding);
 
             // Define the binding with the *rebuilt* body so the tail's type-level evaluation does not reduce through the lowered (under-applied) original, its committed solutions substituted: a solved metavariable left in it stands over a spine of every binding before it, which each reduction through the definition would read again, a chain of definitions paying its length at every link. The type stays as written, since what a tail's unification solves from it is spelled as it is.
             let body_elaborated = zonk_solved_term_metas(context, &body_elaborated);

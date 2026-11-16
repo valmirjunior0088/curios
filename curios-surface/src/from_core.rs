@@ -605,7 +605,7 @@ pub fn written_pattern<D: Dialect>(
 ) -> MatchPattern<D> {
     match pattern {
         curios_core::Pattern::Binder => MatchPattern::Binder(own(next_name(names))),
-        curios_core::Pattern::Wildcard => MatchPattern::Binder("_".into()),
+        curios_core::Pattern::Wildcard(_) => MatchPattern::Binder("_".into()),
         curios_core::Pattern::Variant { tag, args } => MatchPattern::Variant {
             tag: tag.as_string(),
             args: args

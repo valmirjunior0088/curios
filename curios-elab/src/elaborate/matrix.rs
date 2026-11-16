@@ -26,7 +26,7 @@ use {
     curios_common::{Plicity, recurse},
     curios_core::{
         Arm, Atom, Elements, Ending, Free, Guard, InductArm, Matrix, Mention, Pattern, Row, Slot,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, WrittenPlace,
     },
     curios_num::Natural,
     curios_surface::written_pattern,
@@ -154,7 +154,7 @@ fn byte_pattern(byte: u8) -> &'static Pattern {
 /// The pattern a part a case always holds is read as at a column of its own, a predecessor or an open run's rest: a binder, or `_`.
 fn slot_pattern(slot: Slot) -> &'static Pattern {
     const BINDER: &Pattern = &Pattern::Binder;
-    const WILDCARD: &Pattern = &Pattern::Wildcard;
+    const WILDCARD: &Pattern = &Pattern::WILDCARD;
 
     match slot {
         Slot::Binder => BINDER,
@@ -342,11 +342,24 @@ impl<'m> Compiler<'m> {
         if columns.is_empty() {
             return self.leaf(context, lines, mode);
         }
+        // A `_` the lowering placed binds the column it stands at, which binds nothing for it: what a lint asks the class of.
+        for line in &lines {
+            if let Some((Shape::Pattern(Pattern::Wildcard(WrittenPlace(Some(place)))), _)) =
+                line.cells[0]
+            {
+                context.open_column_site(*place, &columns[0].term);
+            }
+        }
 
         let written = lines
             .iter()
             .filter_map(|line| line.cells[0].map(|(shape, _)| shape))
-            .filter(|shape| !matches!(shape, Shape::Pattern(Pattern::Binder | Pattern::Wildcard)))
+            .filter(|shape| {
+                !matches!(
+                    shape,
+                    Shape::Pattern(Pattern::Binder | Pattern::Wildcard(_))
+                )
+            })
             .collect::<Vec<_>>();
         let Some(first) = written.first().copied() else {
             let column = columns.remove(0);
@@ -439,7 +452,7 @@ impl<'m> Compiler<'m> {
             Pattern::List(_) | Pattern::Bytes(_) | Pattern::Str(_) => {
                 unreachable!("a run is read above")
             }
-            Pattern::Binder | Pattern::Wildcard => {
+            Pattern::Binder | Pattern::Wildcard(_) => {
                 unreachable!("a binder or a wildcard is no pattern a column is split by")
             }
         }
@@ -465,7 +478,7 @@ impl<'m> Compiler<'m> {
                     self.named(context, line, place, column.term.clone());
                     line.cells[0] = None;
                 }
-                Some((Shape::Pattern(Pattern::Wildcard), _)) => line.cells[0] = None,
+                Some((Shape::Pattern(Pattern::Wildcard(_)), _)) => line.cells[0] = None,
                 _ => {}
             }
             if line.cells[0].is_none() {
@@ -855,7 +868,7 @@ impl<'m> Compiler<'m> {
     ) {
         match pattern {
             Pattern::Binder => self.bind(context, line, place, value),
-            Pattern::Wildcard => {}
+            Pattern::Wildcard(_) => {}
             Pattern::Tuple(fields) | Pattern::Struct { fields, .. } => {
                 for (index, (label, field)) in fields.iter().enumerate() {
                     let projected = projection(&value, label.as_deref(), index);
@@ -1120,7 +1133,10 @@ impl<'m> Compiler<'m> {
 
                     name
                 }
-                Some((Shape::Pattern(Pattern::Wildcard), _)) | None => context.fresh(None),
+                // A `_` the lowering placed is read as a column, which binds nothing for it, so its column's type is asked where columns are read ([`Compiler::columns`]).
+                Some((Shape::Pattern(Pattern::Wildcard(WrittenPlace(None))), _)) | None => {
+                    context.fresh(None)
+                }
                 Some(cell) => {
                     slots.push(slot);
                     front.push(Some(cell));
@@ -1561,7 +1577,10 @@ impl<'m> Compiler<'m> {
             .iter()
             .find_map(|line| {
                 line.cells[0].filter(|(shape, _)| {
-                    !matches!(shape, Shape::Pattern(Pattern::Binder | Pattern::Wildcard))
+                    !matches!(
+                        shape,
+                        Shape::Pattern(Pattern::Binder | Pattern::Wildcard(_))
+                    )
                 })
             })
             .map(|(shape, _)| shape)
@@ -1591,7 +1610,7 @@ impl<'m> Compiler<'m> {
 
                     vec![None; canonical.len()]
                 }
-                Some((Shape::Pattern(Pattern::Wildcard), _)) => vec![None; canonical.len()],
+                Some((Shape::Pattern(Pattern::Wildcard(_)), _)) => vec![None; canonical.len()],
                 Some((shape, mut place)) => {
                     let fields = written(shape);
                     if labelled(fields) != canonical {
@@ -1742,7 +1761,7 @@ impl<'m> Compiler<'m> {
                         },
                         Arm {
                             alternatives: vec![Row {
-                                pattern: Pattern::Wildcard,
+                                pattern: Pattern::WILDCARD,
                                 guards: Vec::new(),
                                 body: Term::func(Vec::<(Free, Term)>::new(), failed.clone()),
                             }],
@@ -1841,7 +1860,11 @@ impl<'m> Compiler<'m> {
 
                 return recurse(|| self.alone_over(context, columns, line, top, mode));
             }
-            Shape::Pattern(Pattern::Wildcard) => {
+            Shape::Pattern(Pattern::Wildcard(written)) => {
+                if let WrittenPlace(Some(place)) = written {
+                    context.open_column_site(*place, &column);
+                }
+
                 return recurse(|| self.alone_over(context, columns, line, top, mode));
             }
             Shape::Pattern(Pattern::Tuple(fields) | Pattern::Struct { fields, .. }) => {
@@ -1935,7 +1958,7 @@ impl<'m> Compiler<'m> {
         };
 
         match pattern {
-            Pattern::Binder | Pattern::Wildcard | Pattern::Tuple(_) | Pattern::Struct { .. } => {
+            Pattern::Binder | Pattern::Wildcard(_) | Pattern::Tuple(_) | Pattern::Struct { .. } => {
                 unreachable!("a pattern that states no case is read above")
             }
             Pattern::List(_) | Pattern::Bytes(_) | Pattern::Str(_) => {
@@ -2104,6 +2127,8 @@ impl<'m> Compiler<'m> {
     fn bind(&self, context: &mut Context, line: &mut Line<'m>, place: usize, value: Term) {
         let (hint, written) = &self.labels[line.row][place];
         let name = context.fresh_written(hint.as_deref(), *written);
+        // The `let` it is bound by is the matrix's, and a pattern's binder a slot, which a lint asks only whether it binds `{}`.
+        context.note_pattern_site(*written);
         line.taken[place] = Some(Term::free_var(&name));
         line.lets.push((name, value));
     }
@@ -2243,7 +2268,7 @@ fn payload_cells<'m>(
 /// How many dispatches a pattern is refuted at: one for each constructor and each carrier leaf it writes, at any depth. A pattern refuted at none takes nothing apart that could fail.
 fn refutations(pattern: &Pattern) -> usize {
     match pattern {
-        Pattern::Binder | Pattern::Wildcard => 0,
+        Pattern::Binder | Pattern::Wildcard(_) => 0,
         Pattern::Variant { args, .. } => {
             1 + args.iter().map(|(_, arg)| refutations(arg)).sum::<usize>()
         }
@@ -2301,8 +2326,8 @@ fn payload_places(
 /// Whether every value `this` matches is one `that` matches: `this` is a case of `that`. Two rows that reach one leaf agree wherever both write a case, so what is asked is whether `that` writes a case anywhere `this` writes a binder.
 fn instance(this: &Pattern, that: &Pattern) -> bool {
     match (this, that) {
-        (_, Pattern::Binder | Pattern::Wildcard) => true,
-        (Pattern::Binder | Pattern::Wildcard, that) => refutations(that) == 0,
+        (_, Pattern::Binder | Pattern::Wildcard(_)) => true,
+        (Pattern::Binder | Pattern::Wildcard(_), that) => refutations(that) == 0,
         (
             Pattern::Variant { tag, args },
             Pattern::Variant {
@@ -2316,7 +2341,7 @@ fn instance(this: &Pattern, that: &Pattern) -> bool {
             tag == other_tag
                 && payload_places(others).all(|(place, other)| match written.get(&place) {
                     Some(pattern) => instance(pattern, other),
-                    None => instance(&Pattern::Wildcard, other),
+                    None => instance(&Pattern::WILDCARD, other),
                 })
         }
         (Pattern::Tuple(fields), Pattern::Tuple(others))

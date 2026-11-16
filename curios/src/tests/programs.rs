@@ -1,38 +1,13 @@
 //! The programs this tree ships lint clean and are written as `curios format` writes them: every instrument under `programs/`, loose as `curios lint` places a file no unit declares. A lint is exact and always on, so a finding here is fixed in the program rather than excused.
 
 use {
+    super::test_support::*,
     curios_common::Style,
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_surface::{Formatted, Width},
     curios_wonder::{Origin, Severity, Subject, diagnostics},
-    std::{
-        fs,
-        path::{Path, PathBuf},
-    },
 };
-
-fn workspace() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("the crate sits in the workspace")
-        .to_path_buf()
-}
-
-/// Every `.crs` under `directory`, one level of subdirectory included — the layout `programs/README.md` states: a bare file is an instrument, a directory carries one program in every spelling.
-fn programs(directory: &Path) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    for entry in fs::read_dir(directory).expect("the directory is readable") {
-        let path = entry.expect("the entry is readable").path();
-        if path.is_dir() {
-            found.extend(programs(&path));
-        } else if path.extension().is_some_and(|extension| extension == "crs") {
-            found.push(path);
-        }
-    }
-    found.sort();
-    found
-}
 
 /// The lints `subject` reports, rendered; an error is a lint here too, since a program that does not compile cannot be said to lint clean.
 fn findings(subject: Subject) -> Vec<String> {

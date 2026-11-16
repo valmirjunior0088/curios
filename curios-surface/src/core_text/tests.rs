@@ -519,7 +519,7 @@ fn every_node_written_reads_back_as_itself() {
                 Arm {
                     alternatives: vec![Row {
                         pattern: Pattern::List(Elements::Open {
-                            first: Box::new(Pattern::Wildcard),
+                            first: Box::new(Pattern::WILDCARD),
                             then: Vec::new(),
                             rest: Slot::Binder,
                         }),
@@ -529,7 +529,7 @@ fn every_node_written_reads_back_as_itself() {
                 },
                 Arm {
                     alternatives: vec![Row {
-                        pattern: Pattern::Wildcard,
+                        pattern: Pattern::WILDCARD,
                         guards: Vec::new(),
                         body: Term::func(Vec::<(Free, Term)>::new(), one()),
                     }],
@@ -563,7 +563,7 @@ fn every_node_written_reads_back_as_itself() {
                 Arm {
                     alternatives: vec![Row {
                         pattern: Pattern::List(Elements::Open {
-                            first: Box::new(Pattern::Wildcard),
+                            first: Box::new(Pattern::WILDCARD),
                             then: vec![Pattern::Binder],
                             rest: Slot::Binder,
                         }),
@@ -581,7 +581,7 @@ fn every_node_written_reads_back_as_itself() {
                     alternatives: vec![Row {
                         pattern: Pattern::Bytes(Elements::Open {
                             first: Box::new(Pattern::Binder),
-                            then: vec![Pattern::Wildcard],
+                            then: vec![Pattern::WILDCARD],
                             rest: Slot::Wildcard,
                         }),
                         guards: Vec::new(),
@@ -864,7 +864,7 @@ fn a_rows_places_are_its_functions_words_and_a_bare_underscore_is_a_wildcard() {
             },
             Arm {
                 alternatives: vec![Row {
-                    pattern: Pattern::Wildcard,
+                    pattern: Pattern::WILDCARD,
                     guards: Vec::new(),
                     body: Term::func(Vec::<(Free, Term)>::new(), numeral(0)),
                 }],
