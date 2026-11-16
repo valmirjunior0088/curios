@@ -552,7 +552,7 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
         (concats, appends, flat)
     };
 
-    // Settle sites first. Each is re-read at its turn, so a settle-of-settle chain resolves in any order.
+    // Settle sites first. Each is read against the module as the sites before it left it, so a settle-of-settle chain resolves in any order; the module is read again only once a rewrite has moved it, since a site that rewrote nothing left it as the last read saw it.
     let settle_sites: Vec<NodeId> = module
         .live_nodes()
         .filter_map(|(id, node)| {
@@ -566,6 +566,7 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
             .then_some(id)
         })
         .collect();
+    let mut standing = None;
     for site in settle_sites {
         let Some(Node::LetIntrinsic {
             result,
@@ -576,8 +577,8 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
         else {
             continue;
         };
-        let counts = module.value_use_counts();
-        let (concats, appends, flat) = collect(module);
+        let (counts, (concats, appends, flat)) =
+            standing.get_or_insert_with(|| (module.value_use_counts(), collect(module)));
         let operand = args[0].clone();
         match &operand {
             Atom::Value(value) if flat.contains(value) => {
@@ -586,6 +587,7 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
                 module.remove_node(site);
                 module.remove_value(result);
                 changed = true;
+                standing = None;
             }
             Atom::Value(value)
                 if counts.get(value).copied().unwrap_or(0) == 1
@@ -595,14 +597,15 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
                 let mut pieces = Vec::new();
                 collect_flat_tree(
                     &operand,
-                    &counts,
-                    &concats,
-                    &appends,
+                    counts,
+                    concats,
+                    appends,
                     &mut consumed,
                     &mut pieces,
                 );
                 install_flat(module, site, result, next, pieces, consumed);
                 changed = true;
+                standing = None;
             }
             _ => {}
         }
@@ -621,6 +624,7 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
             _ => None,
         })
         .collect();
+    let mut standing = None;
     for site in roots {
         let Some(Node::LetIntrinsic {
             result,
@@ -631,22 +635,22 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
         else {
             continue;
         };
-        let counts = module.value_use_counts();
-        let (concats, appends, _) = collect(module);
+        let (counts, (concats, appends, _)) =
+            standing.get_or_insert_with(|| (module.value_use_counts(), collect(module)));
         let mut consumed = Vec::new();
         let mut pieces = Vec::new();
         match op {
             Intrinsic::ListConcat(_) => {
                 for arg in &args {
-                    collect_flat_tree(arg, &counts, &concats, &appends, &mut consumed, &mut pieces);
+                    collect_flat_tree(arg, counts, concats, appends, &mut consumed, &mut pieces);
                 }
             }
             Intrinsic::ListAppend => {
                 collect_flat_tree(
                     &args[0],
-                    &counts,
-                    &concats,
-                    &appends,
+                    counts,
+                    concats,
+                    appends,
                     &mut consumed,
                     &mut pieces,
                 );
@@ -656,6 +660,7 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
         }
         install_flat(module, site, result, next, pieces, consumed);
         changed = true;
+        standing = None;
     }
 
     changed
