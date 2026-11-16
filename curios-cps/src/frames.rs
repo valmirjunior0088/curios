@@ -23,7 +23,10 @@ use {
         copy_bodies, function_nodes, prune_unreachable,
     },
     curios_num::Natural,
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        cell::OnceCell,
+        collections::{BTreeMap, BTreeSet},
+    },
 };
 
 /// What the native frames of the calls the budget admits may weigh at once across the whole program, a frame weighing a fixed overhead and one for each value its function's body binds: a small part of a page's stack for the code with the fattest frames a module runs as, the module Binaryen has not optimized, by the protocol and the figures of [A recursion is as deep as the heap allows](../../documentation/design/compilation/a-recursion-is-as-deep-as-the-heap-allows.md).
@@ -79,7 +82,7 @@ struct Cycles {
 }
 
 impl Cycles {
-    fn of(module: &Module, calls: &CallAnalysis) -> Self {
+    fn of(module: &Module, calls: &CallAnalysis, flow: &ValueFlow) -> Self {
         let mut held: BTreeMap<usize, BTreeSet<FunctionId>> = BTreeMap::new();
         for &function in &calls.escaping {
             if let Some(definition) = module.function(function) {
@@ -88,7 +91,6 @@ impl Cycles {
                     .insert(function);
             }
         }
-        let flow = ValueFlow::of(module);
         let callees = module
             .live_nodes()
             .filter_map(|(id, node)| {
@@ -190,10 +192,10 @@ impl Cycles {
     }
 }
 
-/// Bound the native frames a recursion holds: guard each call that may close a cycle of the call graph without being a tail call, native while the frame budget admits it and to the callee's twin past it, and give every member of a guarded cycle its twin.
-pub fn bound_frames(module: &mut Module) {
+/// Bound the native frames a recursion holds: guard each call that may close a cycle of the call graph without being a tail call, native while the frame budget admits it and to the callee's twin past it, and give every member of a guarded cycle its twin. The callees a closure call may reach are read off `flow`, the value flow of the module as it is handed over, solved there where nothing has solved it yet.
+pub fn bound_frames(module: &mut Module, flow: &OnceCell<ValueFlow>) {
     let calls = analyze_calls(module);
-    let mut cycles = Cycles::of(module, &calls);
+    let mut cycles = Cycles::of(module, &calls, flow.get_or_init(|| ValueFlow::of(module)));
 
     // The components a call may close other than by a tail call, read off the module as the optimizer left it.
     let mut components: Vec<Vec<FunctionId>> = module

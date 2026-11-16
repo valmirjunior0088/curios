@@ -63,7 +63,7 @@ fn refused(module: &Module) -> Module {
 
 /// What `module` exits with and prints, given `n` as its first argument.
 fn run(module: &Module, n: &str) -> (u8, Vec<u8>) {
-    let (wasm, foreigns) = curios_emit::into_wasm(module);
+    let (wasm, foreigns) = curios_emit::into_wasm(module, module.entry_suspension());
     let code = curios_cranelift::compile(&to_bytes(&wasm)).expect("the module validates");
     let (host, io) = MockHost::builder().args(["program", n]).build();
     let status = Compiled::of(code, foreigns)

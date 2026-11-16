@@ -80,17 +80,25 @@ mod tests;
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built, its reducible control structurized into blocks and loops and its constant data hoisted, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
 ///
 /// The module comes beside the rows its `ffi` imports are declared as, by import name: exactly the rows whose call sites the emitted code holds, which is what a program asks an implementation of. A row a unit declares and nothing calls is not among them.
-pub fn into_wasm(module: &curios_cps::Module) -> (curios_wasm::Module, ForeignStore) {
+///
+/// `turns` is the suspension row the entry's results may carry, which decides the entry's exports ([`curios_cps::Module::entry_suspension`]): read by whoever hands the module over, over the module as the rebuild in place left it, before the frame bound's twins, which change no value an entry returns.
+pub fn into_wasm(
+    module: &curios_cps::Module,
+    turns: Option<curios_cps::RowId>,
+) -> (curios_wasm::Module, ForeignStore) {
     // On a segment of its own, as every other stage enters: the emitter below recurses per nested region, and its frames are large enough that a knot's few thousand lines of CPS would outgrow the default test-thread stack.
-    grown(|| into_wasm_within(module))
+    grown(|| into_wasm_within(module, turns))
 }
 
-fn into_wasm_within(module: &curios_cps::Module) -> (curios_wasm::Module, ForeignStore) {
+fn into_wasm_within(
+    module: &curios_cps::Module,
+    turns: Option<curios_cps::RowId>,
+) -> (curios_wasm::Module, ForeignStore) {
     curios_profile::profile!("into_wasm");
     let representation = curios_cps::representation(module);
     let mut raw = raw_locals(&representation);
     let closures = closure_locals(&representation);
-    let machine = lower(module, &representation.results);
+    let machine = lower(module, &representation.results, turns);
     let mut structured = structurize(&machine);
     raw.extend(structured.minted_registers());
     hoist_consts(&mut structured);

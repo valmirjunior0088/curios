@@ -6,7 +6,6 @@ use {
     curios_abi::ForeignFunction,
     curios_common::{Entropy, id},
     std::{
-        cell::OnceCell,
         collections::{BTreeMap, BTreeSet, VecDeque},
         fmt,
         sync::Arc,
@@ -213,15 +212,15 @@ impl fmt::Display for MachineVerifyError {
     }
 }
 
-/// Lower `source` to the closed machine CFG, each function handing back its results at the storage `results` decided for them.
+/// Lower `source` to the closed machine CFG, each function handing back its results at the storage `results` decided for them, its entry exporting the turns `turns` says it can return ([`into_wasm`](crate::into_wasm())).
 pub fn lower(
     source: &curios_cps::Module,
     results: &BTreeMap<curios_cps::FunctionId, Vec<curios_cps::Storage>>,
+    turns: Option<curios_cps::RowId>,
 ) -> MachineModule {
-    // One value flow for the module as it stands, read by the verifier's rebuilds and by the entry's capability alike.
-    let flow = OnceCell::new();
+    // Its rebuilds were held to the value flow before the frame bound, whose twins keep them.
     source
-        .verify_reading(&flow)
+        .verify_unflowed()
         .expect("invalid high CPS at machine boundary");
     let mut free_values = source
         .functions()
@@ -329,7 +328,7 @@ pub fn lower(
         function_hints,
         rows,
         members: source.members().to_vec(),
-        entry_suspension: source.entry_suspension_reading(&flow),
+        entry_suspension: turns,
     };
     module.verify().expect("invalid closed machine CFG");
     module

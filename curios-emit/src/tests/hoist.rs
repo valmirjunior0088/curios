@@ -56,7 +56,11 @@ fn every_hoisted_binding_is_constant_data() {
         big_tuple(),
     ] {
         let representation = curios_cps::representation(&module);
-        let mut structured = structurize(&lower(&module, &representation.results));
+        let mut structured = structurize(&lower(
+            &module,
+            &representation.results,
+            module.entry_suspension(),
+        ));
         let before = bound(&mut structured);
         hoist_consts(&mut structured);
         let hoisted = before
@@ -88,7 +92,11 @@ fn every_hoisted_binding_is_constant_data() {
 fn a_block_takes_no_parameter_for_a_hoisted_binding() {
     let module = constant_tuple_across_a_jump();
     let representation = curios_cps::representation(&module);
-    let mut structured = structurize(&lower(&module, &representation.results));
+    let mut structured = structurize(&lower(
+        &module,
+        &representation.results,
+        module.entry_suspension(),
+    ));
     let (taken, handed) = captures(&mut structured);
     assert!(
         taken > 0 && taken == handed,

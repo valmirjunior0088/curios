@@ -8,7 +8,7 @@
 //!
 //! **The rows a value may be are its constructions' rows**, every row where it may be any. They are what [`ValueFlow::rows`] answers the row tests, the rebuild in place and the verifier, and what [`Module::entry_suspension`] reads off the entry's returns for its ABI ([An entry exports only the turns it can return](../../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md)): each function-return position has its own fact, even where no caller receives it, so only what reaches the entry's returns decides its capability, and a suspension consumed inside the program does not escape merely because it was built.
 //!
-//! **A solve serves every reader of the module as it stands.** Where two read one module, as the machine boundary's verifier and the entry's capability do, they read one solve ([`Module::verify_reading`], [`Module::entry_suspension_reading`]), and a join that moved nothing is told by what the fact gained rather than by a copy of it.
+//! **A solve serves every reader of the module as it stands.** Where several read one module, as the verifier of the rebuilds, the entry's capability and the frame bound do of the module the rebuild in place leaves, they read one solve ([`Module::verify_reading`], [`Module::entry_suspension_reading`], [`bound_frames`](crate::bound_frames)), and a join that moved nothing is told by what the fact gained rather than by a copy of it.
 //!
 //! **A flow it misses is a wrong answer** wherever a reader trusts what a value may not be, so every rule matches its node's whole alphabet: no wildcard stands over a node, a value expression or an operation.
 

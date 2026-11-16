@@ -245,7 +245,7 @@ fn a_non_tail_self_call_is_guarded_and_its_function_gains_a_twin() {
     let (mut module, count) = counting(false);
     let functions = module.live_functions().count();
 
-    bound_frames(&mut module);
+    bound_frames(&mut module, &OnceCell::new());
 
     module.verify().expect("a bounded module verifies");
     let mut operations = budget_operations(&module);
@@ -267,7 +267,7 @@ fn a_tail_self_call_keeps_no_frame_and_is_left_alone() {
     let (mut module, _) = counting(true);
     let functions = module.live_functions().count();
 
-    bound_frames(&mut module);
+    bound_frames(&mut module, &OnceCell::new());
 
     module.verify().expect("the module still verifies");
     assert!(budget_operations(&module).is_empty());
@@ -279,7 +279,7 @@ fn a_call_on_no_cycle_is_left_alone() {
     let (mut module, _) = helper_called(true);
     let functions = module.live_functions().count();
 
-    bound_frames(&mut module);
+    bound_frames(&mut module, &OnceCell::new());
 
     assert!(budget_operations(&module).is_empty());
     assert_eq!(module.live_functions().count(), functions);
@@ -290,7 +290,7 @@ fn a_closure_call_reaching_no_function_on_its_cycle_is_left_alone() {
     let (mut module, _) = applying(false);
     let functions = module.live_functions().count();
 
-    bound_frames(&mut module);
+    bound_frames(&mut module, &OnceCell::new());
 
     assert!(budget_operations(&module).is_empty());
     assert_eq!(module.live_functions().count(), functions);
@@ -300,7 +300,7 @@ fn a_closure_call_reaching_no_function_on_its_cycle_is_left_alone() {
 fn a_recursion_through_a_closure_is_guarded_and_its_members_gain_twins() {
     let (mut module, apply) = applying(true);
 
-    bound_frames(&mut module);
+    bound_frames(&mut module, &OnceCell::new());
 
     module.verify().expect("a bounded module verifies");
     assert!(budget_operations(&module).contains(&true));

@@ -131,7 +131,7 @@ fn a_cycles_panic_names_the_member_it_was_seated_for() {
     );
     module.set_entry(main);
 
-    let (emitted, _) = into_wasm(&module);
+    let (emitted, _) = into_wasm(&module, module.entry_suspension());
     let wat = emitted.to_string();
     assert_contains(&wat, "call $refuse/cycle/1");
     assert_contains(&wat, "array.new_data $bytes $refusal/cycle/1");

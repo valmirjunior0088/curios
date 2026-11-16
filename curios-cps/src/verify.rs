@@ -173,6 +173,17 @@ impl ScopeVerifier {
     }
 }
 
+/// The clauses a verification checks beside the structural ones.
+#[derive(Clone, Copy)]
+enum Clauses<'a> {
+    /// None: a round's close.
+    Structure,
+    /// The row vocabulary, but no rebuild's flow.
+    Vocabulary,
+    /// The row vocabulary, and every rebuild held to the value flow `flow` holds.
+    Flowing(&'a OnceCell<ValueFlow>),
+}
+
 impl Module {
     pub fn verify(&self) -> Result<(), VerifyError> {
         self.verify_reading(&OnceCell::new())
@@ -180,18 +191,23 @@ impl Module {
 
     /// [`Module::verify`], reading the value flow a rebuild is held to from `flow`, solved there where nothing has solved it yet: one solve serves the verifier and every other reader of the module as it stands.
     pub fn verify_reading(&self, flow: &OnceCell<ValueFlow>) -> Result<(), VerifyError> {
-        self.verify_with(Some(flow))
+        self.verify_with(Clauses::Flowing(flow))
+    }
+
+    /// Every clause of [`Module::verify`] but the one a rebuild is held to by the value flow: what a module the frame bound rewrote is held to, its rebuilds verified over the module before it, which its twins keep, since a twin moves no read and adds no reader ([`bound_frames`](crate::bound_frames)).
+    pub fn verify_unflowed(&self) -> Result<(), VerifyError> {
+        self.verify_with(Clauses::Vocabulary)
     }
 
     /// The round-boundary subset of [`Module::verify`]: every structural clause, without the row-vocabulary one.
     ///
     /// A round's close leaves scoping, ownership and arities canonical, but the vocabulary clause holds only of the *converged* module: constant folding pushes a decided reply's payload into both arms of its dispatch, so until a later round threads the decided switch and prunes behind it, the dead arm legitimately reads that payload in the other vocabulary — the tag the fold decided is what keeps it honest, and no per-round rewrite is obliged to have cleaned it up yet. `/std/Parse`'s reply dispatches reach this state on every `pure`-fed combinator, so the full check at a round boundary would refuse half the cross-stage corpus that the exit gate admits. The entry and exit verifies keep the full set, so a mismatch that survives convergence is still refused where its premise actually holds.
     pub fn verify_structure(&self) -> Result<(), VerifyError> {
-        self.verify_with(None)
+        self.verify_with(Clauses::Structure)
     }
 
-    /// The structural clauses, and where `flow` is given the row-vocabulary ones, which read it.
-    fn verify_with(&self, flow: Option<&OnceCell<ValueFlow>>) -> Result<(), VerifyError> {
+    /// The structural clauses, and the row-vocabulary ones `clauses` asks for.
+    fn verify_with(&self, clauses: Clauses<'_>) -> Result<(), VerifyError> {
         let entry = self
             .entry()
             .ok_or_else(|| VerifyError("module has no entry function".into()))?;
@@ -241,8 +257,10 @@ impl Module {
             self.verify_function_body(id, function, &facts, &mut bound_continuations)?;
         }
         self.verify_lexical_scopes(entry)?;
-        if let Some(flow) = flow {
+        if let Clauses::Vocabulary | Clauses::Flowing(_) = clauses {
             self.verify_rows()?;
+        }
+        if let Clauses::Flowing(flow) = clauses {
             self.verify_rebuilds(flow)?;
         }
 
