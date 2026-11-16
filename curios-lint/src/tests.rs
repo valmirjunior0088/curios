@@ -7,3 +7,4 @@ mod unused_binder;
 mod unused_declaration;
 mod unused_dependency;
 mod unused_import;
+mod unused_let;

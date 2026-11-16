@@ -243,14 +243,23 @@ pub enum Consulted {
     Mount(Qualifier),
 }
 
-/// A binder zero as a lowered declaration holds it: placed in the declaration's text, and naming the definition it is about by its place among the declaration's, since a witness's name is given anew by every lowering.
+/// A zero of a declaration's binders as a lowered declaration holds it: placed in the declaration's text, and naming each definition it is about by its place among the declaration's, since a witness's name is given anew by every lowering.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
-struct Unused {
-    name: String,
-    at: curios_core::Extent,
-    definition: u32,
-    ordinal: u32,
+enum Unused {
+    /// A binder zero: the binder by its definition's place and its own.
+    Binder {
+        name: String,
+        at: curios_core::Extent,
+        definition: u32,
+        ordinal: u32,
+    },
+    /// A let zero: each binder its pattern writes by its definition's place and its own.
+    Let {
+        name: Option<String>,
+        at: curios_core::Extent,
+        binders: Vec<(u32, u32)>,
+    },
 }
 
 /// What one source declaration lowered to, beside the items themselves, which are its unit's: see the module documentation.
@@ -300,17 +309,25 @@ impl LoweredDeclaration {
         let scoped = scoped.iter().map(place).collect::<Option<Vec<_>>>();
         let unused = zeros
             .iter()
-            .map(|zero| {
-                let Zero::Binder { name, at, binder } = zero else {
-                    return None;
-                };
-
-                Some(Unused {
+            .map(|zero| match zero {
+                Zero::Binder { name, at, binder } => Some(Unused::Binder {
                     name: name.clone(),
                     at: (*at)?,
                     definition: place(&binder.declaration?)?,
                     ordinal: binder.ordinal,
-                })
+                }),
+                Zero::Let { name, at, binders } => Some(Unused::Let {
+                    name: name.clone(),
+                    at: (*at)?,
+                    binders: binders
+                        .iter()
+                        .map(|binder| Some((place(&binder.declaration?)?, binder.ordinal)))
+                        .collect::<Option<Vec<_>>>()?,
+                }),
+                Zero::Selector { .. }
+                | Zero::Glob { .. }
+                | Zero::Declaration { .. }
+                | Zero::Module { .. } => None,
             })
             .collect::<Option<Vec<_>>>();
         // A name that was written and could not be placed is one the `unused-declaration` lint would lose with a kept lowering.
@@ -769,13 +786,31 @@ impl<'a> Baseline<'a> {
         for &place in &declaration.scoped {
             context.record_import_scope(Some(&names[place as usize]));
         }
-        context.report(declaration.zeros.iter().map(|unused| Zero::Binder {
-            name: unused.name.clone(),
-            at: Some(unused.at),
-            binder: LintedBinder {
-                declaration: Some(names[unused.definition as usize]),
-                ordinal: unused.ordinal,
-            },
+        let binder = |definition: u32, ordinal: u32| LintedBinder {
+            declaration: Some(names[definition as usize]),
+            ordinal,
+        };
+        context.report(declaration.zeros.iter().map(|unused| {
+            match unused {
+                Unused::Binder {
+                    name,
+                    at,
+                    definition,
+                    ordinal,
+                } => Zero::Binder {
+                    name: name.clone(),
+                    at: Some(*at),
+                    binder: binder(*definition, *ordinal),
+                },
+                Unused::Let { name, at, binders } => Zero::Let {
+                    name: name.clone(),
+                    at: Some(*at),
+                    binders: binders
+                        .iter()
+                        .map(|(definition, ordinal)| binder(*definition, *ordinal))
+                        .collect(),
+                },
+            }
         }));
         lowered.steps.push(Step {
             kept: Some(first),

@@ -1,4 +1,4 @@
-//! A zero of name resolution: a `use` selector no reference resolved through, a written binder nothing referenced, a declaration nothing reaches — what the lowering, the one stage that resolves every written name, records of a unit for the lint owner (`curios-lint`) to decide its lints from. A zero is a fact and says nothing to a reader: which zeros are reported, and how, is the owner's, which reads beside them what elaboration recorded. The decision is `documentation/design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md`.
+//! A zero of name resolution: a `use` selector no reference resolved through, a written binder nothing referenced, a `let` that runs nothing and none of whose binders anything referenced, a declaration nothing reaches — what the lowering, the one stage that resolves every written name, records of a unit for the lint owner (`curios-lint`) to decide its lints from. A zero is a fact and says nothing to a reader: which zeros are reported, and how, is the owner's, which reads beside them what elaboration recorded. The decision is `documentation/design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md`.
 //!
 //! **A zero stands in a text of its unit, as a lowered term's position does** ([`curios_core::Extent`]): in the declaration it is about, or in the `use` or `mod` line it is on ([`curios_core::Anchored::Namespace`]). So a zero holds no source, and one a recompile keeps is placed in the text its file is read as now.
 
@@ -22,6 +22,12 @@ pub enum Zero {
         at: Option<curios_core::Extent>,
         binder: LintedBinder,
     },
+    /// A `let` whose value runs no action and none of whose binders a written name referenced, standing at its pattern: one that does nothing where no proof the elaborator writes reads a binder of it either, by `binders`. `name` is what its pattern names where it is one binder with a name.
+    Let {
+        name: Option<String>,
+        at: Option<curios_core::Extent>,
+        binders: Vec<LintedBinder>,
+    },
     /// A declaration nothing reaches from its unit's roots, standing at its name.
     Declaration {
         name: String,
@@ -41,6 +47,7 @@ impl Zero {
             Zero::Selector { at, .. }
             | Zero::Glob { at, .. }
             | Zero::Binder { at, .. }
+            | Zero::Let { at, .. }
             | Zero::Module { at, .. } => *at,
             Zero::Declaration { at, .. } => Some(*at),
         }

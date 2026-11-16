@@ -1,4 +1,4 @@
-//! `unused-binder` once elaboration has credited it: a binder only a proof the elaborator writes reads is used wherever that proof is written, and a credit names the declaration whose binder was read and no other.
+//! `unused-binder` and `unused-let` once elaboration has credited them: a binder only a proof the elaborator writes reads is used wherever that proof is written, `_` among them, and a credit names the declaration whose binder was read and no other.
 
 use super::test_support::*;
 
@@ -54,5 +54,61 @@ pub let holder(m: Nat, idle: Nat) -> Nat =
     assert_eq!(
         unused_binders(&unit),
         ["unused binder\n  `idle` is never used\n  write `_` in its name's place"]
+    );
+}
+
+/// `below(t)` is bound to `_` for the fact it states, which nothing names: the proof `proved` stands for reads it, so the `let` does something, and no lint stands.
+#[test]
+fn a_wildcard_a_proof_reads_is_used() {
+    let unit = unit_of(
+        "use /std/{Bytes, Nat, proved};
+use /std/Bool/{Holds};
+
+pub let bounded(t: Bytes) -> Holds(Bytes/to_nat(t) < Nat/pow(256, Bytes/len(t))) =
+    let _ = Bytes/to_nat/below(t);
+    proved();
+",
+    );
+
+    assert_eq!(lints_of(&unit), Vec::<String>::new());
+}
+
+/// An action bound to `_` and never run is a description nothing performs: the `let` does nothing.
+#[test]
+fn an_action_bound_and_never_run_is_reported() {
+    let unit = unit_of(
+        "use /std/{Io, print};
+
+pub let greet() -> Io({}) =
+    let _ = print(\"never printed\\n\");
+    print(\"ran\\n\");
+",
+    );
+
+    assert_eq!(
+        lints_of(&unit),
+        [
+            "unused-let: unused let\n  nothing reads this `let`, and its value runs no action\n  delete it"
+        ]
+    );
+}
+
+/// A `Test` bound and never run is reported as an `Io` is: no list of types decides it, and an assertion dropped this way would let its test pass.
+#[test]
+fn a_test_bound_and_never_run_is_reported() {
+    let unit = unit_of(
+        "use /std/{Test};
+
+pub let dropped() -> Test({}) =
+    let failed = Test/assert(false);
+    Test/pure(());
+",
+    );
+
+    assert_eq!(
+        lints_of(&unit),
+        [
+            "unused-let: unused let\n  `failed` is never used, and its value runs no action\n  delete it"
+        ]
     );
 }

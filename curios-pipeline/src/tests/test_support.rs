@@ -334,6 +334,14 @@ fn elaborated(
     .expect("the unit elaborates")
 }
 
+/// Every lint of a unit, decided where it was made, each as `kind: message`.
+pub fn lints_of(unit: &Unit) -> Vec<String> {
+    unit.lints()
+        .iter()
+        .map(|lint| format!("{}: {}", lint.kind.name(), lint.report(&[]).message()))
+        .collect()
+}
+
 /// The binders a unit's `unused-binder` lints name, once elaboration has credited them.
 pub fn unused_binders(unit: &Unit) -> Vec<String> {
     unit.lints()

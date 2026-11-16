@@ -14,6 +14,7 @@ use {
 pub enum LintKind {
     UnusedImport,
     UnusedBinder,
+    UnusedLet,
     UnusedDeclaration,
     UnusedDependency,
 }
@@ -23,6 +24,7 @@ impl LintKind {
         match self {
             LintKind::UnusedImport => "unused-import",
             LintKind::UnusedBinder => "unused-binder",
+            LintKind::UnusedLet => "unused-let",
             LintKind::UnusedDeclaration => "unused-declaration",
             LintKind::UnusedDependency => "unused-dependency",
         }
@@ -61,6 +63,22 @@ impl Lint {
                 *at,
                 unused("binder", name, "write `_` in its name's place"),
             ),
+            // A `let` that does nothing, underlined at its pattern: its value runs no action, so it is deleted with nothing lost.
+            Zero::Let { name, at, .. } => {
+                let mut said = Said::line("unused let");
+                match name {
+                    Some(name) => {
+                        said.stating(format_args!(
+                            "`{name}` is never used, and its value runs no action"
+                        ));
+                    }
+                    None => {
+                        said.stating("nothing reads this `let`, and its value runs no action");
+                    }
+                }
+                said.stating("delete it");
+                Self::at(LintKind::UnusedLet, *at, said)
+            }
             // A declaration nothing reaches, underlined at its name. Deleted, made part of what the unit hands out by `pub`, or kept unused on purpose by a `_` prefix.
             Zero::Declaration { name, at } => Self::at(
                 LintKind::UnusedDeclaration,

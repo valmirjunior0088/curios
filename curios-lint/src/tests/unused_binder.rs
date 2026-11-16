@@ -57,19 +57,6 @@ fn only_the_sugars_own_parameters_are_exempted_by_the_result_type() {
 }
 
 #[test]
-fn a_local_binding_nothing_reads_is_reported() {
-    assert_eq!(
-        lints(
-            r#"
-        let x = Type;
-        Type
-    "#
-        ),
-        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
-    );
-}
-
-#[test]
 fn a_pattern_leaf_nothing_reads_is_reported_alone() {
     assert_eq!(
         lints(
@@ -79,20 +66,6 @@ fn a_pattern_leaf_nothing_reads_is_reported_alone() {
     "#
         ),
         ["unused-binder: unused binder\n  `b` is never used\n  write `_` in its name's place"]
-    );
-}
-
-#[test]
-fn a_binder_shadowed_before_any_use_is_reported() {
-    assert_eq!(
-        lints(
-            r#"
-        let x = Type;
-        let x = Type;
-        x
-    "#
-        ),
-        ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
     );
 }
 
@@ -154,14 +127,15 @@ fn a_predecessor_and_a_cons_tail_nothing_reads_are_reported() {
     );
 }
 
+/// A `_` is the slot a binder nothing reads gives its name up to: a parameter's, an implicit one's and a part of a pattern whose other part is read. A whole `let _ = …;` that runs nothing is no slot, and `unused-let`'s.
 #[test]
 fn a_wildcard_binder_is_never_reported() {
     assert_eq!(
         lints(
             r#"
-        let _ = Type;
         let f(_ : Type, @_ : Type) -> Type = Type;
-        f
+        let (a, _) = f;
+        a
     "#
         ),
         Vec::<String>::new()
@@ -232,25 +206,6 @@ fn a_use_lambda_member_is_never_reported() {
     "#
         ),
         Vec::<String>::new()
-    );
-}
-
-/// An arm's body is lowered once for each alternative, and a binder written in it is one binder however often it is lowered: reported once, and only where no lowering of it is read.
-#[test]
-fn a_binder_in_the_body_an_arm_of_alternatives_shares_is_reported_once() {
-    assert_eq!(
-        lints(
-            r#"
-        let f(o : Bool) -> Bool =
-            match o
-            | true | false =>
-                let unused = o;
-                o
-            end;
-        f
-    "#
-        ),
-        ["unused-binder: unused binder\n  `unused` is never used\n  write `_` in its name's place"]
     );
 }
 

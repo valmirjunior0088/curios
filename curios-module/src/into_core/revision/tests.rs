@@ -403,6 +403,7 @@ fn zeros_of(unit: &PreparedText) -> Vec<String> {
                 Zero::Selector { label, .. } => format!("selector {label}"),
                 Zero::Glob { path, .. } => format!("glob {path}"),
                 Zero::Binder { name, binder, .. } => format!("binder {name} {binder:?}"),
+                Zero::Let { name, binders, .. } => format!("let {name:?} {binders:?}"),
                 Zero::Declaration { name, .. } => format!("declaration {name}"),
                 Zero::Module { name, .. } => format!("module {name}"),
             };

@@ -17,15 +17,33 @@ use {
     std::collections::BTreeSet,
 };
 
-/// The lints `zeros` come to, in reading order as `anchors` place them: each zero reported, less every binder zero whose binder `read` holds of — one a proof the elaborator wrote reads, which is used though no written name reaches it.
+/// The lints `zeros` come to, in reading order as `anchors` place them: each zero reported, less every binder `read` holds of — one a proof the elaborator wrote reads, which is used though no written name reaches it. A `let` none of whose binders is read either way does nothing, whatever its value: it is reported whole, once, and its binders are none of `unused-binder`'s.
 pub fn lints<'z>(
     zeros: impl IntoIterator<Item = &'z Zero>,
     read: impl Fn(&LintedBinder) -> bool,
     anchors: &curios_core::Anchors,
 ) -> Vec<Lint> {
+    let zeros = zeros.into_iter().collect::<Vec<_>>();
+    let dead = |binders: &[LintedBinder]| !binders.iter().any(&read);
+    let in_dead_let = zeros
+        .iter()
+        .filter_map(|zero| match zero {
+            Zero::Let { binders, .. } if dead(binders) => Some(binders),
+            _ => None,
+        })
+        .flatten()
+        .copied()
+        .collect::<BTreeSet<_>>();
     let lints = zeros
         .into_iter()
-        .filter(|zero| !matches!(zero, Zero::Binder { binder, .. } if read(binder)))
+        .filter(|zero| match zero {
+            Zero::Binder { binder, .. } => !read(binder) && !in_dead_let.contains(binder),
+            Zero::Let { binders, .. } => dead(binders),
+            Zero::Selector { .. }
+            | Zero::Glob { .. }
+            | Zero::Declaration { .. }
+            | Zero::Module { .. } => true,
+        })
         .map(Lint::of)
         .collect();
 

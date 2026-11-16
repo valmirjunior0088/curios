@@ -160,8 +160,10 @@ pub struct Lowerer<'a, 'b> {
     declaration: Option<curios_core::Global>,
     /// The enclosing local binders (function and `let` binders, match-arm patterns), innermost last. A bare reference whose spelling appears here resolves to the innermost such binder rather than a like-named module binding — see [`Self::resolve_name`]. Compiler-minted binders are never registered: nothing can write their name.
     scope: RefCell<LexicalScope>,
-    /// Every written binder a reference could reach, with where it was written — the candidates for a binder zero, read by [`Self::flush`] once the whole declaration is lowered, since a goal anywhere in it or a mention in its declared type is decided after the binder's scope closes.
+    /// Every written binder, with where it was written, `_` among them, which no reference reaches and a proof the elaborator writes may still read — the candidates for a zero, read by [`Self::flush`] once the whole declaration is lowered, since a goal anywhere in it or a mention in its declared type is decided after the binder's scope closes.
     candidates: RefCell<Vec<Candidate>>,
+    /// Every `let` whose value runs no action, by the places of the binders its pattern writes: a let zero where nothing reads any of them ([`Self::flush`]).
+    lets: RefCell<Vec<LetCandidate>>,
     /// The binder identities some reference resolved to.
     used: RefCell<HashSet<curios_core::Free>>,
     /// Whether a written `?` was lowered: a declaration holding one is exempt, its binders being the goal's scope.
@@ -174,6 +176,13 @@ struct Candidate {
     /// One for each time its text is lowered: an arm's body is lowered once for each of the arm's alternatives, and the binder is read where any lowering of it is.
     ids: Vec<curios_core::Free>,
     span: Span,
+}
+
+/// One `let` whose value runs no action: what its pattern names where it is one binder with a name, where the pattern was written, and the places of the binders it writes among the declaration's candidates.
+struct LetCandidate {
+    name: Option<String>,
+    span: Option<Span>,
+    places: Vec<usize>,
 }
 
 /// A `let`-like signature as the lowering holds it: what was written, and the binders of its parameters when it is the function-definition sugar `f(params) -> output = body`.
@@ -191,6 +200,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             declaration,
             scope: RefCell::default(),
             candidates: RefCell::new(Vec::new()),
+            lets: RefCell::new(Vec::new()),
             used: RefCell::new(HashSet::new()),
             saw_goal: Cell::new(false),
         }
@@ -257,28 +267,75 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// The zeros of the declaration this lowered, read now that every binder's scope has closed and every mention has been seen. A declaration holding a written goal records none: its binders are what the goal's report lists for the author to use next.
+    /// The zeros of the declaration this lowered, read now that every binder's scope has closed and every mention has been seen: each named binder nothing referenced, and each `let` that runs no action and none of whose binders anything referenced. A declaration holding a written goal records none: its binders are what the goal's report lists for the author to use next.
     fn flush(&self) {
         if self.saw_goal.get() {
             return;
         }
         let used = self.used.borrow();
-        let zeros = self
-            .candidates
+        let candidates = self.candidates.borrow();
+        let unread = |place: &usize| !candidates[*place].ids.iter().any(|id| used.contains(id));
+        let binder = |place: &usize| LintedBinder {
+            declaration: self.declaration,
+            ordinal: u32::try_from(*place).expect("a declaration's binders fit a u32"),
+        };
+        let binders = (0..candidates.len())
+            .filter(|place| bindable(&candidates[*place].name) && unread(place))
+            .map(|place| Zero::Binder {
+                name: candidates[place].name.clone(),
+                at: self.context.extent(&candidates[place].span),
+                binder: binder(&place),
+            });
+        let lets = self
+            .lets
             .borrow()
             .iter()
-            .enumerate()
-            .filter(|(_, candidate)| !candidate.ids.iter().any(|id| used.contains(id)))
-            .map(|(ordinal, candidate)| Zero::Binder {
-                name: candidate.name.clone(),
-                at: self.context.extent(&candidate.span),
-                binder: LintedBinder {
-                    declaration: self.declaration,
-                    ordinal: u32::try_from(ordinal).expect("a declaration's binders fit a u32"),
-                },
+            .filter(|let_| let_.places.iter().all(unread))
+            .map(|let_| Zero::Let {
+                name: let_.name.clone(),
+                at: let_
+                    .span
+                    .as_ref()
+                    .and_then(|span| self.context.extent(span)),
+                binders: let_.places.iter().map(binder).collect(),
             })
             .collect::<Vec<_>>();
+        let zeros = binders.chain(lets).collect::<Vec<_>>();
         self.context.report(zeros);
+    }
+
+    /// Note `group`, whose pattern wrote `binders`, as a `let` that runs no action, once however often its text is lowered: one none of whose binders anything reads is a let zero. Where a binder it writes is no candidate, a leaf placed nowhere, nothing is noted.
+    fn note_let(&self, group: &LetGroup, binders: &[Binder]) {
+        let span = group
+            .members
+            .first()
+            .and_then(|member| pattern_span(&member.binder));
+        let mut lets = self.lets.borrow_mut();
+        if span.is_some() && lets.iter().any(|let_| let_.span == span) {
+            return;
+        }
+        let candidates = self.candidates.borrow();
+        let Some(places) = binders
+            .iter()
+            .map(|(_, id)| {
+                candidates
+                    .iter()
+                    .position(|candidate| candidate.ids.contains(id))
+            })
+            .collect::<Option<Vec<_>>>()
+        else {
+            return;
+        };
+        let name = match group.members.as_slice() {
+            [
+                LetBinding {
+                    binder: Pattern::Binder(label),
+                    ..
+                },
+            ] if bindable(label.as_str()) => Some(label.to_string()),
+            _ => None,
+        };
+        lets.push(LetCandidate { name, span, places });
     }
 
     /// Mint one binder identity per written name, in order. Nothing is brought into scope: the caller decides where each binder is visible, and the identity it holds is the one every such region re-enters.
@@ -294,7 +351,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .collect()
     }
 
-    /// [`Self::mint`] for written binders: one that carries a span and can be referred to becomes a lint candidate, whatever its name begins with.
+    /// [`Self::mint`] for written binders: one that carries a span becomes a candidate, whatever its name begins with, and `_` among them, whose place a proof the elaborator writes credits as it credits a named binder's.
     fn mint_written(
         &self,
         labels: impl IntoIterator<Item = (String, Option<Span>)>,
@@ -303,7 +360,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             .into_iter()
             .map(|(name, span)| {
                 let hint = bindable(&name).then_some(name.as_str());
-                let candidate = span.filter(|_| bindable(&name));
+                let candidate = span.filter(|_| bindable(&name) || name == "_");
                 let Some(span) = candidate else {
                     let id = self.context.fresh_binder(hint);
                     return (name, id);
@@ -832,6 +889,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 .any(|term| term.mentions_free(id))
                 || contexts.iter().flatten().any(|frame| frame.mentions(id))
         });
+        // A value that hoists a `!` runs an action where the `let` stands, which a `_` keeps; one that hoists none only binds.
+        let runs = contexts
+            .iter()
+            .flatten()
+            .any(|frame| matches!(frame, RegionFrame::Bang { .. }));
+        if !runs {
+            self.note_let(group, &binders);
+        }
         if group.members.len() == 1 && !mentioned {
             let mut frames = contexts.into_iter().next().expect("one member context");
             self.pattern_frames(
