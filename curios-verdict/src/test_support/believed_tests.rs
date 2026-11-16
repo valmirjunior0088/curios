@@ -1463,11 +1463,10 @@ pub let loop(x: N) -> N =
 /// What `/lib`'s record files of `apply`'s `k` is read off `/base`: through the witness `Down/down(p)` resolves to, or through `each`'s summary. Either reads `k` applied below `x` as `/base` is first written, and at `x` itself once it is edited, where `loop(N/s(N/z()))` is `N/s` of itself. Neither `/lib` nor `/app` is edited, so `apply` is judged again for what it read of `/base`, and `loop` for the summary it read of `apply`. Mutation-check: as for the history across units above, and the proof over each edited carrier is admitted.
 #[test]
 fn a_recursion_through_a_summary_is_judged_again_where_a_unit_the_callee_read_moves() {
-    let carriers: [(fn(bool) -> String, &str); 2] = [
-        (descending, APPLYING_THROUGH_A_WITNESS),
+    for (carrier, library) in [
+        (descending as fn(bool) -> String, APPLYING_THROUGH_A_WITNESS),
         (iterating, APPLYING_THROUGH_EACH),
-    ];
-    for (carrier, library) in carriers {
+    ] {
         for edited in [false, true] {
             let mut history = History::new();
             history
