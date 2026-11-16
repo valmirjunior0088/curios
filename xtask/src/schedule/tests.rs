@@ -53,17 +53,17 @@ fn the_native_host_s_checks_build_no_launcher() {
 #[test]
 fn an_npm_script_runs_after_its_tree_s_install() {
     assert_eq!(
-        scheduled("vscode test", &[]),
-        ["vscode install", "vscode test"]
+        scheduled("textmate test", &[]),
+        ["textmate install", "textmate test"]
     );
 }
 
-/// `zed test` hashes the parser `grammar build` generates, which the grammar's own tools generate.
+/// `zed test` hashes the parser `tree-sitter build` generates, which the grammar's own tools generate.
 #[test]
 fn the_extension_s_test_runs_after_the_grammar_it_hashes() {
     assert_eq!(
         scheduled("zed test", &[]),
-        ["grammar install", "grammar build", "zed test"]
+        ["tree-sitter install", "tree-sitter build", "zed test"]
     );
 }
 
@@ -98,7 +98,8 @@ fn the_gate_runs_every_subject_s_steps_in_the_order_it_names_them() {
         "docs",
         "compiler",
         "bundle",
-        "grammar",
+        "tree-sitter",
+        "textmate",
         "vscode",
         "zed",
         "tools",

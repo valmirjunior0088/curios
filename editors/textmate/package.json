@@ -1,0 +1,14 @@
+{
+  "name": "curios-textmate",
+  "version": "0.1.0",
+  "description": "Curios grammars for TextMate: programs, and Core text, with the table of classes their scopes stand for",
+  "license": "Apache-2.0",
+  "private": true,
+  "scripts": {
+    "test": "vscode-tmgrammar-snap -g curios.tmLanguage.json -s source.curios \"tests/**/*.crs\" && vscode-tmgrammar-snap -g curios.tmLanguage.json -g curios-core.tmLanguage.json -s source.curios.core \"tests/**/*.crsc\"",
+    "test:update": "vscode-tmgrammar-snap -u -g curios.tmLanguage.json -s source.curios \"tests/**/*.crs\" && vscode-tmgrammar-snap -u -g curios.tmLanguage.json -g curios-core.tmLanguage.json -s source.curios.core \"tests/**/*.crsc\""
+  },
+  "devDependencies": {
+    "vscode-tmgrammar-test": "^0.1.3"
+  }
+}

@@ -1,0 +1,29 @@
+description = "The TextMate grammars, with the table of classes their scopes stand for"
+
+[install]
+description = "Install the TextMate grammars' tools from their lock file, exactly, as every run that reads them does"
+dir = "editors/textmate"
+produces.installed = "editors/textmate/node_modules"
+run = [
+    ["npm", "clean-install"],
+]
+
+[lint.biome-format]
+description = "Fail on formatting drift in the TextMate grammars and their table"
+run = [
+    ["biome", "format", "editors/textmate"],
+]
+
+[lint.biome-lint]
+description = "Lint the TextMate grammars and their table"
+run = [
+    ["biome", "lint", "--error-on-warnings", "editors/textmate"],
+]
+
+[test]
+description = "Hold the TextMate grammars to their snapshots"
+dir = "editors/textmate"
+consumes = ["installed"]
+run = [
+    ["npm", "test"],
+]

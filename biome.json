@@ -7,13 +7,14 @@
       "curios-browser/src/**/*.mjs",
       "curios-document/static/**/*.js",
       "curios-document/static/**/*.css",
-      "editors/grammar/**/*.js",
-      "editors/grammar/**/*.json",
+      "editors/textmate/**/*.json",
+      "editors/tree-sitter/**/*.js",
+      "editors/tree-sitter/**/*.json",
       "editors/vscode/**/*.js",
       "editors/vscode/**/*.json",
       "!**/package-lock.json",
-      "!editors/grammar/base/src",
-      "!editors/grammar/core/src"
+      "!editors/tree-sitter/base/src",
+      "!editors/tree-sitter/core/src"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2 }

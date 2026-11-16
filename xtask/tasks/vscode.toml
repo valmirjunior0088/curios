@@ -20,16 +20,8 @@ run = [
     ["biome", "lint", "--error-on-warnings", "editors/vscode"],
 ]
 
-[test]
-description = "Hold the TextMate grammars to their snapshots"
-dir = "editors/vscode"
-consumes = ["installed"]
-run = [
-    ["npm", "test"],
-]
-
 [build]
-description = "Bundle the VS Code extension and write its package as it ships, which the snapshots never load"
+description = "Bundle the VS Code extension and the TextMate grammars it ships, and write its package as it ships, which the snapshots never load"
 dir = "editors/vscode"
 consumes = ["installed"]
 run = [

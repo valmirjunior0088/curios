@@ -37,8 +37,9 @@ The language server elaborates the sources in your workspace, which means runnin
 ```sh
 npm ci
 npm run package         # writes .artifacts/curios-<version>.vsix, bundling first
-npm test                # TextMate grammar snapshots
 ```
+
+Bundling copies in the TextMate grammars from [`editors/textmate`](https://github.com/valmirjunior0088/curios/tree/main/editors/textmate), where their snapshot tests run.
 
 Install the result from the Extensions view: `⋯` → **Install from VSIX…**. Everything under `.artifacts/` is a build product and is not committed.
 

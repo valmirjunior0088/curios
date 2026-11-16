@@ -1,6 +1,6 @@
 //! The editors' grammars and the syntax reference state the parser's words, and the editors' grammars paint in the class set: every statement of a word outside the parser — each tree-sitter grammar, each TextMate grammar, each Zed query and `documentation/language.md` — is held to [`Keyword`], so a word the language adds reaches each of them or fails here; and every scope a TextMate grammar writes and every capture a Zed query writes stands for one [`Class`], so a scope or a capture added reaches a class or fails here.
 //!
-//! **`classes.json` is the TextMate grammars' table**, beside them in `editors/vscode/syntaxes/` and shipped with them: an object whose `classes` maps each class's name to the scopes the grammars write for it, and whose `unclassed` lists the scopes a grammar writes for a name it leaves to the server's semantic tokens. A page maps a token's scope to a class by it. The queries' captures are read by nothing but Zed's themes, so their classes are this test's own table ([`CAPTURES`]).
+//! **`classes.json` is the TextMate grammars' table**, beside them in `editors/textmate/` and shipped with them: an object whose `classes` maps each class's name to the scopes the grammars write for it, and whose `unclassed` lists the scopes a grammar writes for a name it leaves to the server's semantic tokens. A page maps a token's scope to a class by it. The queries' captures are read by nothing but Zed's themes, so their classes are this test's own table ([`CAPTURES`]).
 
 use {
     curios_common::{Class, Keyword, Standing, is_identifier},
@@ -13,14 +13,14 @@ use {
 };
 
 /// The tree-sitter grammars, each by its directory.
-const TREE_SITTER: [&str; 2] = ["editors/grammar/base", "editors/grammar/core"];
+const TREE_SITTER: [&str; 2] = ["editors/tree-sitter/base", "editors/tree-sitter/core"];
 
 /// The TextMate grammar of a program, which states every word, and Core text's, which includes it and states the words its own forms begin with.
-const TEXTMATE: &str = "editors/vscode/syntaxes/curios.tmLanguage.json";
-const TEXTMATE_CORE: &str = "editors/vscode/syntaxes/curios-core.tmLanguage.json";
+const TEXTMATE: &str = "editors/textmate/curios.tmLanguage.json";
+const TEXTMATE_CORE: &str = "editors/textmate/curios-core.tmLanguage.json";
 
 /// The TextMate grammars' table of classes.
-const TABLE: &str = "editors/vscode/syntaxes/classes.json";
+const TABLE: &str = "editors/textmate/classes.json";
 
 /// The Zed queries, Core text's opening with the program's.
 const QUERIES: [&str; 2] = [

@@ -145,9 +145,9 @@ jobs:
           mv .artifacts/downloads/curios-js/curios-js.tar.gz .artifacts/curios-js.tar.gz
           mv .artifacts/downloads/curios-docs/curios-docs.tar.gz .artifacts/curios-docs.tar.gz
 
-      # The TextMate grammars and the table a page maps their scopes to classes by — the `syntaxes` directory whole, as this tag holds it — so a page colours Curios with what the release it pins ships.
+      # The TextMate grammars and the table a page maps their scopes to classes by, each by name as this tag holds it, so a page colours Curios with what the release it pins ships.
       - name: Archive grammars
-        run: tar -czf .artifacts/curios-grammars.tar.gz -C editors/vscode/syntaxes .
+        run: tar -czf .artifacts/curios-grammars.tar.gz -C editors/textmate curios.tmLanguage.json curios-core.tmLanguage.json classes.json
 
       # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned. The recipe renders the template to a fresh file under xtask/.artifacts rather than editing it in place: what ships is a build product, never a mutated checkout.
       - name: Prepare installer

@@ -1,4 +1,4 @@
-; Captures for the `curios` grammar in `editors/grammar/base`. Zed reads a language's queries from its own directory alone — the grammar ships no `queries/` — so this is the one statement of them, which `curios_core/highlights.scm` opens with verbatim, and `editors/grammar`'s `npm test` compiles each against its grammar so a renamed node cannot orphan a capture silently.
+; Captures for the `curios` grammar in `editors/tree-sitter/base`. Zed reads a language's queries from its own directory alone — the grammar ships no `queries/` — so this is the one statement of them, which `curios_core/highlights.scm` opens with verbatim, and `editors/tree-sitter`'s `npm test` compiles each against its grammar so a renamed node cannot orphan a capture silently.
 
 (comment) @comment
 ; A documentation comment is a comment the grammar reads like any other, opening with `---`.
@@ -112,7 +112,7 @@
 
 "," @punctuation.delimiter
 
-; Core text's own forms, the `curios_core` grammar in `editors/grammar/core`, beneath the program's captures above, which this file opens with verbatim (`the_core_text_query_opens_with_the_programs`): a later pattern refines an earlier one.
+; Core text's own forms, the `curios_core` grammar in `editors/tree-sitter/core`, beneath the program's captures above, which this file opens with verbatim (`the_core_text_query_opens_with_the_programs`): a later pattern refines an earlier one.
 
 ; A decorator states the fields of the node it decorates, as an attribute does.
 (decorator

@@ -1,2 +1,2 @@
-editors/grammar/base/src/** linguist-generated
-editors/grammar/core/src/** linguist-generated
+editors/tree-sitter/base/src/** linguist-generated
+editors/tree-sitter/core/src/** linguist-generated

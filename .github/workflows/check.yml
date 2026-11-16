@@ -161,8 +161,8 @@ jobs:
       - name: Test
         run: cargo xtask bundle test
 
-  grammar:
-    name: Grammar parser
+  tree-sitter:
+    name: Tree-sitter grammars
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -172,7 +172,7 @@ jobs:
         with:
           node-version: ${{ env.NODE }}
           cache: npm
-          cache-dependency-path: editors/grammar/package-lock.json
+          cache-dependency-path: editors/tree-sitter/package-lock.json
       - name: Install npm
         run: npm install --global npm@${{ env.NPM }}
       - name: Install Biome
@@ -184,9 +184,36 @@ jobs:
           key: xtask
           workspaces: .
       - name: Lint
-        run: cargo xtask grammar lint
+        run: cargo xtask tree-sitter lint
       - name: Test
-        run: cargo xtask grammar test
+        run: cargo xtask tree-sitter test
+
+  textmate:
+    name: TextMate grammars
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/pins
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE }}
+          cache: npm
+          cache-dependency-path: editors/textmate/package-lock.json
+      - name: Install npm
+        run: npm install --global npm@${{ env.NPM }}
+      - name: Install Biome
+        run: npm install --global @biomejs/biome@${{ env.BIOME }}
+      - name: Install the pinned toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: xtask
+          workspaces: .
+      - name: Lint
+        run: cargo xtask textmate lint
+      - name: Test
+        run: cargo xtask textmate test
 
   vscode:
     name: VS Code extension
@@ -212,8 +239,6 @@ jobs:
           workspaces: .
       - name: Lint
         run: cargo xtask vscode lint
-      - name: Test
-        run: cargo xtask vscode test
       - name: Build
         run: cargo xtask vscode build
 
@@ -228,7 +253,7 @@ jobs:
         with:
           node-version: ${{ env.NODE }}
           cache: npm
-          cache-dependency-path: editors/grammar/package-lock.json
+          cache-dependency-path: editors/tree-sitter/package-lock.json
       - name: Install npm
         run: npm install --global npm@${{ env.NPM }}
       - name: Install the pinned toolchain
