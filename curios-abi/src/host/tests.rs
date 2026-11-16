@@ -234,3 +234,21 @@ fn a_closed_code_reads_back_its_variant_and_nothing_past_it() {
     round_trips::<SerialFlow>();
     round_trips::<SerialOp>();
 }
+
+/// A declaration's reader and its printer read one spelling: every wire type's word reads back as the type it writes, an element's included.
+#[test]
+fn every_wire_word_reads_back_as_the_type_it_writes() {
+    for word in WireType::words() {
+        let read = WireType::read(word)
+            .or_else(|| WireType::elemented(word).map(|wrap| wrap(WireLeaf::Bool)));
+        assert_eq!(read.map(|type_| type_.word()), Some(word));
+    }
+    for leaf in WireLeaf::ALL {
+        assert_eq!(WireLeaf::read(WireType::from(leaf).word()), Some(leaf));
+    }
+    assert_eq!(
+        WireType::elemented("List").map(|wrap| wrap(WireLeaf::Nat).to_string()),
+        Some("List(Nat)".to_string())
+    );
+    assert_eq!(WireType::read("List"), None);
+}

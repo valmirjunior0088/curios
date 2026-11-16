@@ -14,7 +14,7 @@ pub use host::{
     ArchivedWireLeaf, ArchivedWireReference, ArchivedWireResults, ArchivedWireReturn,
     ArchivedWireScalar, ArchivedWireSignature, ArchivedWireType, Carrier, ChildExit, ChildHandles,
     ClockReading, ClosedCode, DEADLOCK, ENTRY, Encoded, Failure, FileKind, FileStat,
-    ForeignFunction, ForeignStore, Handle, HostFront, HostOp, HostOps, LANE_IN, Later, Mode,
+    ForeignFunction, ForeignStore, Handle, HostFront, HostOp, HostOps, LANE_IN, Later, Mode, NEVER,
     Namespace, PANIC, PayloadSlots, Refusal, ReplyShape, ResultShape, RowReply, SerialFlow,
     SerialOp, SerialParity, Settled, StdioMode, Termination, TokenMint, TtySize, WireLeaf,
     WirePayload, WireReference, WireReply, WireResults, WireReturn, WireScalar, WireShape,

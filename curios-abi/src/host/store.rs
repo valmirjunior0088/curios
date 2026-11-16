@@ -144,19 +144,87 @@ impl WireType {
     }
 }
 
+/// The word a row that does not return is written with where its result stands.
+pub const NEVER: &str = "Never";
+
+impl WireType {
+    /// The wire types a word spells alone, taking no element.
+    const BARE: [WireType; 7] = [
+        WireType::Nat,
+        WireType::Int,
+        WireType::Bool,
+        WireType::Byte,
+        WireType::Flt,
+        WireType::Bytes,
+        WireType::Handle,
+    ];
+
+    /// The wire types that take an element, by the variant that wraps it.
+    const ELEMENTED: [fn(WireLeaf) -> WireType; 2] = [WireType::List, WireType::Option];
+
+    /// The word a `foreign` declaration writes this type with, its element following in parentheses where it takes one: what [`Display`] writes and the surface parser reads ([`WireType::read`], [`WireType::elemented`]).
+    pub fn word(&self) -> &'static str {
+        match self {
+            WireType::Nat => "Nat",
+            WireType::Int => "Int",
+            WireType::Bool => "Bool",
+            WireType::Byte => "Byte",
+            WireType::Flt => "Flt",
+            WireType::Bytes => "Bytes",
+            WireType::Handle => "Handle",
+            WireType::List(_) => "List",
+            WireType::Option(_) => "Option",
+        }
+    }
+
+    /// The wire type `word` spells alone, where it spells one that takes no element.
+    pub fn read(word: &str) -> Option<WireType> {
+        Self::BARE.into_iter().find(|type_| type_.word() == word)
+    }
+
+    /// The variant that wraps an element in the wire type `word` spells, where it spells one that takes an element: `List` or `Option`.
+    pub fn elemented(word: &str) -> Option<fn(WireLeaf) -> WireType> {
+        Self::ELEMENTED
+            .into_iter()
+            .find(|wrap| wrap(WireLeaf::Nat).word() == word)
+    }
+
+    /// Every word of the wire grammar a type is written with, those taking no element first.
+    pub fn words() -> impl Iterator<Item = &'static str> {
+        Self::BARE.into_iter().map(|type_| type_.word()).chain(
+            Self::ELEMENTED
+                .into_iter()
+                .map(|wrap| wrap(WireLeaf::Nat).word()),
+        )
+    }
+}
+
+impl WireLeaf {
+    /// Every element type, in declaration order.
+    pub const ALL: [WireLeaf; 5] = [
+        WireLeaf::Nat,
+        WireLeaf::Int,
+        WireLeaf::Bool,
+        WireLeaf::Bytes,
+        WireLeaf::Handle,
+    ];
+
+    /// The element type `word` spells, where it spells one.
+    pub fn read(word: &str) -> Option<WireLeaf> {
+        Self::ALL
+            .into_iter()
+            .find(|leaf| WireType::from(*leaf).word() == word)
+    }
+}
+
 /// A wire type as a `foreign` declaration spells it — `Nat`, `List(Bool)`, `Option(Handle)` — the one spelling the printer and every description of a row handed to an embedder read.
 impl Display for WireType {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            WireType::Nat => formatter.write_str("Nat"),
-            WireType::Int => formatter.write_str("Int"),
-            WireType::Bool => formatter.write_str("Bool"),
-            WireType::Byte => formatter.write_str("Byte"),
-            WireType::Flt => formatter.write_str("Flt"),
-            WireType::Bytes => formatter.write_str("Bytes"),
-            WireType::Handle => formatter.write_str("Handle"),
-            WireType::List(leaf) => write!(formatter, "List({})", WireType::from(*leaf)),
-            WireType::Option(leaf) => write!(formatter, "Option({})", WireType::from(*leaf)),
+            WireType::List(leaf) | WireType::Option(leaf) => {
+                write!(formatter, "{}({})", self.word(), WireType::from(*leaf))
+            }
+            _ => formatter.write_str(self.word()),
         }
     }
 }

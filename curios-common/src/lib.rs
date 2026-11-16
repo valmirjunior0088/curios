@@ -1,4 +1,4 @@
-//! Foundational utilities shared across every Curios pipeline stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the typed identity-addressed [`Arena`], the [`Persistent`], [`Ordered`] and [`Sorted`] maps a state extended a step at a time is kept in, the SHA-256 content [`digest()`] and the [`Fingerprint`] every store key, record and tree hash is spelled with, the resolved-module-path `Qualifier` identity, the value types the surface (`curios-module`) and core (`curios-core`) `Term` representations share verbatim (`Plicity`, `InfixOp`), and the [`SyntaxRegistry`] shape those two stages read their emitted vocabulary from. Compiler-known names themselves belong to `curios-module`, alongside the source declarations they name: this crate states the slots, never the spellings.
+//! Foundational utilities shared across every Curios pipeline stage: source spans, the fresh-name `Entropy`/`Mint` supply, the `name!` and `id!` newtype macros, the typed identity-addressed [`Arena`], the [`Persistent`], [`Ordered`] and [`Sorted`] maps a state extended a step at a time is kept in, the SHA-256 content [`digest()`] and the [`Fingerprint`] every store key, record and tree hash is spelled with, the resolved-module-path `Qualifier` identity, the language's words ([`Keyword`]), the value types the surface (`curios-module`) and core (`curios-core`) `Term` representations share verbatim (`Plicity`, `InfixOp`), and the [`SyntaxRegistry`] shape those two stages read their emitted vocabulary from. Compiler-known names themselves belong to `curios-module`, alongside the source declarations they name: this crate states the slots, never the spellings.
 //!
 //! Why names are never ordered, why every identity space has one source, why qualifiers and symbols are interned once per process, why a segment's legality is decided here, why a mount is a prefix, why the syntax registry states slots and never spellings, and why depth is bought with stack are `README.md`'s decisions.
 //!
@@ -32,9 +32,11 @@ pub use interner::{Table, intern};
 
 mod qualifier;
 pub use qualifier::{
-    ArchivedQualifier, Interning, Qualifier, is_identifier, is_identifier_char,
-    is_identifier_start, is_keyword,
+    ArchivedQualifier, Interning, Qualifier, is_identifier, is_identifier_char, is_identifier_start,
 };
+
+mod keyword;
+pub use keyword::{Keyword, Standing, is_reserved};
 
 mod symbol;
 pub use symbol::{ArchivedSymbol, InterningText, Symbol};

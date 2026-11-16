@@ -12,7 +12,7 @@ use {
         TupleField, TupleType, TupleTypeParam, parse_identifier_raw, parse_term, parse_whitespace,
         reserved_keyword,
     },
-    curios_common::{Plicity, is_keyword},
+    curios_common::{Plicity, is_reserved},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, look_ahead, mark, not_ahead, pure,
         raise, refusal, sep_by0_trailing, take_exact,
@@ -135,7 +135,7 @@ fn refuse_keyword_field_label<'a, D: Grammar>(
         .and(parse_identifier_raw)
         .and_drop(parse_whitespace)
         .and_drop(look_ahead(parse_literal(":").or(parse_literal("("))))
-        .flat_map(|(start, word)| match is_keyword(word) {
+        .flat_map(|(start, word)| match is_reserved(word) {
             true => commit(fail_from(&start, reserved_keyword(word))).boxed(),
             false => fail("not a keyword written as a field label").boxed(),
         })

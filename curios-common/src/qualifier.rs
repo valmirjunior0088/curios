@@ -2,7 +2,7 @@
 //!
 //! **A qualifier is a copyable identity.** Its segments are interned once per process — one allocation per distinct path, never freed — and a qualifier is a `&'static` reference to that allocation, so copying one is copying a pointer, two equal qualifiers share it, and one can cross a thread. The archive reads a path back through the same table, by its archived segments where they lie ([`Interned`]). Why the segments are shared at all, and why no structural hash is cached on top, is `README.md`'s; the restore half of the interning figure is retaken by `curios-prelude`'s `stored_prelude_measurements`, which is where a figure for it belongs.
 //!
-//! **What a segment may spell lives here too**, as [`is_identifier`] and [`is_keyword`], rather than inside the lexer: `curios-module` refuses a keyword when it parses a path, and `curios-package` refuses one when it parses the name a package declares for itself, and one list below both keeps those two refusals the same refusal — `README.md`'s decision.
+//! **What a segment may spell lives here too**, as [`is_identifier`] here and [`is_reserved`](crate::is_reserved) beside it, rather than inside the lexer: `curios-surface` refuses a reserved word when it parses a path, and `curios-package` refuses one when it parses the name a package declares for itself, and one statement below both keeps those two refusals the same refusal — `README.md`'s decision.
 
 #[cfg(test)]
 mod tests;
@@ -23,11 +23,6 @@ use {
 /// The characters an identifier may spell beyond the alphanumerics.
 const CHARACTERS: &[char] = &['_'];
 
-/// The words the surface grammar claims for itself, which therefore cannot spell a segment.
-const KEYWORDS: &[&str] = &[
-    "let", "match", "mod", "use", "pub", "end", "false", "true", "induct", "struct", "foreign",
-];
-
 /// Whether `character` may appear in an identifier.
 pub fn is_identifier_char(character: char) -> bool {
     CHARACTERS.contains(&character) || character.is_alphanumeric()
@@ -41,11 +36,6 @@ pub fn is_identifier_start(character: char) -> bool {
 /// Whether `word` spells an identifier: a non-empty run of [`is_identifier_char`] whose first is an [`is_identifier_start`].
 pub fn is_identifier(word: &str) -> bool {
     word.chars().next().is_some_and(is_identifier_start) && word.chars().all(is_identifier_char)
-}
-
-/// Whether `word` is a keyword, and so cannot spell a segment.
-pub fn is_keyword(word: &str) -> bool {
-    KEYWORDS.contains(&word)
 }
 
 /// A resolved module path: the segment sequence from the module root (see the module docs above for why it lives in this crate). The empty qualifier *is* the root, not a degenerate case.

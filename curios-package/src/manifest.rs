@@ -19,7 +19,7 @@ use {
         CompilerVersion, FileHash, FormatSettings, Refused, Row, STORE, Step, Store, Subject,
         TreeHash,
     },
-    curios_common::{About, Report, Said, Source, is_identifier, is_keyword},
+    curios_common::{About, Report, Said, Source, is_identifier, is_reserved},
     serde::Deserialize,
     std::{
         collections::BTreeMap,
@@ -1021,7 +1021,7 @@ pub fn canonical(written: &str) -> Result<String, Refused> {
         "" => Err(refuse("it is empty")),
         // `is_identifier` rejects a `/` along with everything else a segment could not be, so the one-word rule needs no separate check for it.
         _ if !is_identifier(written) => Err(refuse("it is no identifier")),
-        _ if is_keyword(written) => Err(refuse("it is a keyword")),
+        _ if is_reserved(written) => Err(refuse("it is a keyword")),
         _ => Ok(written.to_string()),
     }
 }

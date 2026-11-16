@@ -1,6 +1,6 @@
 # curios-common
 
-Foundational utilities shared across every pipeline stage: source spans and reports, the `Entropy`/`Mint` fresh-name supply, the `name!` and `id!` newtype macros, the typed identity-addressed `Arena`, the persistent maps a state extended a step at a time is kept in, the resolved-module-path `Qualifier`, the mount table, the SHA-256 content digest and the fingerprint that finishes into one, the shape of the compiler's emitted vocabulary, and the native-stack bracket every recursive walk over user data runs inside. The numeric vocabulary is `curios-num`'s, and the two combinator DSLs are `curios-parse` and `curios-print`; each module's contract belongs to the crate rustdoc.
+Foundational utilities shared across every pipeline stage: source spans and reports, the `Entropy`/`Mint` fresh-name supply, the `name!` and `id!` newtype macros, the typed identity-addressed `Arena`, the persistent maps a state extended a step at a time is kept in, the resolved-module-path `Qualifier`, the language's words, the mount table, the SHA-256 content digest and the fingerprint that finishes into one, the shape of the compiler's emitted vocabulary, and the native-stack bracket every recursive walk over user data runs inside. The numeric vocabulary is `curios-num`'s, and the two combinator DSLs are `curios-parse` and `curios-print`; each module's contract belongs to the crate rustdoc.
 
 ## Design
 
@@ -24,11 +24,13 @@ Foundational utilities shared across every pipeline stage: source spans and repo
 
 **Rejected.** A memoized structural hash, measured indistinguishable from the uncached one while its `OnceCell` trips `mutable_key_type` wherever a qualifier keys a map — do not add one back without a measurement. A dense id into a process-wide vector, whose content ordering would take the table's lock per comparison. Freeing an entry once nothing names it, which a `Copy` identity cannot know; the tables are bounded by the distinct names a process meets. Sources are the opposite case — a language server loads a new text per edit — so a span holds its source by reference count.
 
-### What a segment may spell is decided once, beside the identity
+### The language's words are stated once, beside the identity
 
-**Decision.** `is_identifier` and `is_keyword` — the identifier characters and the reserved words — live beside `Qualifier`, not in the parser.
+**Decision.** `is_identifier` — the identifier characters — lives beside `Qualifier`, and `Keyword` beside it states every word the surface grammar reads as itself, each with where it is one, from one table; `is_reserved` is its reserved part. The parser reads its words from it, and a test holds the editors' grammars and `documentation/language.md` to it ([Curios is coloured from one class set](../documentation/design/tools/curios-is-coloured-from-one-class-set.md)).
 
-**Rationale.** A segment's legality is a property of the identity: `curios-surface` refuses a keyword in a path and `curios-package` refuses one as a package's name, which becomes a mount prefix nothing could write. One list below both keeps the two refusals one refusal.
+**Rationale.** A segment's legality is a property of the identity: `curios-surface` refuses a reserved word in a path and `curios-package` refuses one as a package's name, which becomes a mount prefix nothing could write. One statement below both keeps the two refusals one refusal, and the parser and every grammar that restates a word read the same one.
+
+**Rejected.** The words in the parser, where `curios-package` could not read them. The wire words of a `foreign` signature here: they are `curios-abi`'s, which owns the wire and spells each already.
 
 ### A mount is a prefix, not an identity beside it
 

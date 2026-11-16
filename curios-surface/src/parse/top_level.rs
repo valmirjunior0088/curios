@@ -11,21 +11,21 @@ use {
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem,
         InductIndex, Label, Module, Name, Program, StructField, Term, TopCase, TopConcept,
         TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
-        UseGroup, WitnessField, parse_declared_label, parse_doc, parse_identifier_raw, parse_term,
-        parse_whitespace, reserved_keyword, text_after, word_after,
+        UseGroup, WitnessField, one_of, parse_declared_label, parse_doc, parse_identifier_raw,
+        parse_term, parse_whitespace, reserved_keyword, text_after, word_after,
     },
-    curios_abi::{WireLeaf, WireResults, WireReturn, WireSignature, WireType},
-    curios_common::{Plicity, is_keyword},
+    curios_abi::{NEVER, WireLeaf, WireResults, WireReturn, WireSignature, WireType},
+    curios_common::{Keyword, Plicity, is_reserved},
     curios_parse::{
-        Boxed, Mark, Parsed, Parser, ParserError, ParserState, commit, fail, fail_from, look_ahead,
-        many0, mark, not_ahead, pure, raise, refusal, sep_by0_trailing, sep_by1_trailing, spanned,
-        tagging, take_exact,
+        Boxed, Mark, Parsed, Parser, ParserError, ParserState, Stated, commit, fail, fail_from,
+        look_ahead, many0, mark, not_ahead, pure, raise, refusal, sep_by0_trailing,
+        sep_by1_trailing, spanned, tagging, take_exact,
     },
     std::iter,
 };
 
 pub fn parse_pub<'a>(state: ParserState<'a>) -> Parsed<'a, bool> {
-    parse_keyword("pub")
+    parse_keyword(Keyword::Pub)
         .map(|()| true)
         .or(pure(false))
         .parse(state)
@@ -54,19 +54,21 @@ pub fn parse_and_head<'a, D: Grammar>(
         .flat_map(|doc| {
             let head = D::parse_fields
                 .and(parse_pub)
-                .and_drop(parse_keyword("and"));
+                .and_drop(parse_keyword(Keyword::And));
             let Some(doc) = doc else {
                 return head
                     .map(|(fields, vis_pub)| (None, fields, vis_pub))
                     .boxed();
             };
 
-            match word_after(&doc) {
-                "and" => head
+            let word = word_after(&doc);
+            match Keyword::read(word) {
+                Some(Keyword::And) => head
                     .map_err(DOC_BEFORE_NOTHING)
                     .map(move |(fields, vis_pub)| (Some(doc), fields, vis_pub))
                     .boxed(),
-                "" | "end" => commit(fail(DOC_BEFORE_NOTHING)).boxed(),
+                Some(Keyword::End) => commit(fail(DOC_BEFORE_NOTHING)).boxed(),
+                None if word.is_empty() => commit(fail(DOC_BEFORE_NOTHING)).boxed(),
                 // Recoverable: another word hands the block to the next item, which reads it again.
                 _ => fail(DOC_BEFORE_NOTHING).boxed(),
             }
@@ -160,49 +162,49 @@ pub fn parse_top_let<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, Top
     }
 }
 
-/// The words a wire type is one of, which the refusal of anything else names.
-const WIRE_TYPE_EXPECTED: &[&str] = &[
-    "expected: a wire type",
-    "one of Nat, Int, Bool, Byte, Flt, Bytes, Handle, List(...) or Option(...)",
-];
-
-/// The words a `List`'s or an `Option`'s element is one of.
-const WIRE_LEAF_EXPECTED: &[&str] = &[
-    "expected: a `List` or `Option` element type",
-    "one of Nat, Int, Bool, Bytes or Handle",
-    "neither nests",
-];
-
-/// The facts of what was `expected`, with the word obtained in its place said after the first of them, which says what was expected.
-fn obtained_instead(expected: &[&str], obtained: &str) -> Vec<String> {
-    let facts = |facts: &[&str]| {
-        facts
-            .iter()
-            .map(|fact| fact.to_string())
-            .collect::<Vec<_>>()
-    };
-    let (wanted, rest) = expected.split_at(expected.len().min(1));
-
-    [
-        facts(wanted),
-        vec![format!("obtained: `{obtained}`")],
-        facts(rest),
-    ]
-    .concat()
+/// The words a wire type is one of, which the refusal of anything else names, read from where the wire states them: one that takes an element with its parentheses.
+fn wire_type_expected() -> Vec<String> {
+    let words = WireType::words().map(|word| match WireType::elemented(word) {
+        Some(_) => format!("{word}(...)"),
+        None => word.to_string(),
+    });
+    vec!["expected: a wire type".to_string(), one_of(words)]
 }
 
-/// What refuses `List` written with no element.
-const LIST_STATES_ITS_ELEMENT: &str = "`List` is written with its element type, as in `List(Nat)`";
+/// The words a `List`'s or an `Option`'s element is one of.
+fn wire_leaf_expected() -> Vec<String> {
+    let elemented = WireType::words()
+        .filter(|word| WireType::elemented(word).is_some())
+        .map(|word| format!("`{word}`"))
+        .collect::<Vec<_>>();
+    let leaves = WireLeaf::ALL.map(|leaf| WireType::from(leaf).word().to_string());
+    vec![
+        format!("expected: a {} element type", elemented.join(" or ")),
+        one_of(leaves),
+        "neither nests".to_string(),
+    ]
+}
 
-/// What refuses `Option` written with no element.
-const OPTION_STATES_ITS_ELEMENT: &str =
-    "`Option` is written with its element type, as in `Option(Nat)`";
+/// The facts of what was `expected`, with the word obtained in its place said after the first of them, which says what was expected.
+fn obtained_instead(mut expected: Vec<String>, obtained: &str) -> Vec<String> {
+    let at = expected.len().min(1);
+    expected.insert(at, format!("obtained: `{obtained}`"));
+    expected
+}
+
+/// What refuses a word that takes an element written with none.
+fn states_its_element(word: &str) -> String {
+    let example = WireType::Nat.word();
+    format!("`{word}` is written with its element type, as in `{word}({example})`")
+}
 
 /// What refuses a result that no form of one begins.
-const WIRE_RESULT_EXPECTED: &[&str] = &[
-    "expected: a wire result",
-    "a wire type, a braced list of labelled wire types, `{}` for none, or `Never`",
-];
+fn wire_result_expected() -> Vec<String> {
+    vec![
+        "expected: a wire result".to_string(),
+        format!("a wire type, a braced list of labelled wire types, `{{}}` for none, or `{NEVER}`"),
+    ]
+}
 
 /// What refuses `()` where a result stands.
 const WIRE_RESULT_IS_A_TYPE: &[&str] = &[
@@ -213,17 +215,13 @@ const WIRE_RESULT_IS_A_TYPE: &[&str] = &[
 // A `List` or `Option` element type — the wire grammar minus `List` and `Option` themselves. Splitting it out of `parse_wire_type` is what makes `List(List(T))` and `Option(List(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
 fn parse_wire_leaf<'a>(state: ParserState<'a>) -> Parsed<'a, WireLeaf> {
     refuse_qualified_wire_name
-        .and_keep(mark().and(parse_identifier.map_err(WIRE_LEAF_EXPECTED)))
-        .flat_map(|(start, name)| match name {
-            "Nat" => pure(WireLeaf::Nat).boxed(),
-            "Int" => pure(WireLeaf::Int).boxed(),
-            "Bool" => pure(WireLeaf::Bool).boxed(),
-            "Bytes" => pure(WireLeaf::Bytes).boxed(),
-            "Handle" => pure(WireLeaf::Handle).boxed(),
+        .and_keep(mark().and(parse_identifier.map_err(wire_leaf_expected())))
+        .flat_map(|(start, name)| match WireLeaf::read(name) {
+            Some(leaf) => pure(leaf).boxed(),
             // A word read here is an element type or nothing, so the refusal commits and is the diagnosis. Left to backtrack it reached no reader at all: the enclosing list took the failure for an empty one and the `)` after it complained instead, naming a paren for a mistake about a type.
-            other => commit(fail_from(
+            None => commit(fail_from(
                 &start,
-                obtained_instead(WIRE_LEAF_EXPECTED, other),
+                obtained_instead(wire_leaf_expected(), name),
             ))
             .boxed(),
         })
@@ -239,42 +237,30 @@ fn refuse_qualified_wire_name<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     .parse(state)
 }
 
-// One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Byte`/`Flt`/`Bytes`/`Handle` are literal keywords here, and `List(T)` and `Option(T)` take a leaf.
+// One of the wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: the words `curios-abi` states are the only ones read here, `List(T)` and `Option(T)` taking a leaf.
 pub fn parse_wire_type<'a>(state: ParserState<'a>) -> Parsed<'a, WireType> {
     refuse_qualified_wire_name
-        .and_keep(mark().and(parse_identifier.map_err(WIRE_TYPE_EXPECTED)))
-        .flat_map(|(start, name)| match name {
-            "Nat" => pure(WireType::Nat).boxed(),
-            "Int" => pure(WireType::Int).boxed(),
-            "Bool" => pure(WireType::Bool).boxed(),
-            "Byte" => pure(WireType::Byte).boxed(),
-            "Flt" => pure(WireType::Flt).boxed(),
-            "Bytes" => pure(WireType::Bytes).boxed(),
-            "Handle" => pure(WireType::Handle).boxed(),
-            // `List` is read, so its element follows or nothing does. Left to backtrack, an operand list came back empty and its `)` complained where the word stands.
-            "List" => commit(
-                parse_literal("(")
-                    .map_err(LIST_STATES_ITS_ELEMENT)
-                    .and_keep(parse_wire_leaf)
-                    .and_drop(parse_literal(")")),
-            )
-            .map(WireType::List)
-            .boxed(),
-            "Option" => commit(
-                parse_literal("(")
-                    .map_err(OPTION_STATES_ITS_ELEMENT)
-                    .and_keep(parse_wire_leaf)
-                    .and_drop(parse_literal(")")),
-            )
-            .map(WireType::Option)
-            .boxed(),
-            // As in [`parse_wire_leaf`]: a word here is a wire type or nothing. `parse_identifier` failing on a non-identifier is what keeps the empty parameter list `() -> T` working — the arm is never reached at the `)`.
-            other => commit(fail_from(
-                &start,
-                obtained_instead(WIRE_TYPE_EXPECTED, other),
-            ))
-            .boxed(),
-        })
+        .and_keep(mark().and(parse_identifier.map_err(wire_type_expected())))
+        .flat_map(
+            |(start, name)| match (WireType::read(name), WireType::elemented(name)) {
+                (Some(type_), _) => pure(type_).boxed(),
+                // A word that takes an element is read, so its element follows or nothing does. Left to backtrack, an operand list came back empty and its `)` complained where the word stands.
+                (None, Some(wrap)) => commit(
+                    parse_literal("(")
+                        .map_err(states_its_element(name))
+                        .and_keep(parse_wire_leaf)
+                        .and_drop(parse_literal(")")),
+                )
+                .map(wrap)
+                .boxed(),
+                // As in [`parse_wire_leaf`]: a word here is a wire type or nothing. `parse_identifier` failing on a non-identifier is what keeps the empty parameter list `() -> T` working — the arm is never reached at the `)`.
+                (None, None) => commit(fail_from(
+                    &start,
+                    obtained_instead(wire_type_expected(), name),
+                ))
+                .boxed(),
+            },
+        )
         .parse(state)
 }
 
@@ -295,7 +281,7 @@ fn parse_wire_label<'a>(state: ParserState<'a>) -> Parsed<'a, (String, ParserErr
         .and(parse_identifier_raw)
         .flat_map(|(start, word)| match word {
             "_" => commit(fail_from(&start, WIRE_FIELD_IS_LABELLED)).boxed(),
-            word if is_keyword(word) => commit(fail_from(&start, reserved_keyword(word))).boxed(),
+            word if is_reserved(word) => commit(fail_from(&start, reserved_keyword(word))).boxed(),
             word => look_ahead(parse_whitespace.and_keep(take_exact(":")))
                 .or(commit(fail_from(
                     &start,
@@ -362,7 +348,7 @@ fn parse_wire_return<'a>(state: ParserState<'a>) -> Parsed<'a, WireReturn> {
         .map(WireReturn::Answers)
         .or(refuse_wire_unit_value)
         .or(parse_wire_word)
-        .or(commit(fail(WIRE_RESULT_EXPECTED)))
+        .or(commit(fail(wire_result_expected())))
         .parse(state)
 }
 
@@ -393,9 +379,9 @@ fn refuse_wire_unit_value<'a>(state: ParserState<'a>) -> Parsed<'a, WireReturn> 
 fn parse_wire_word<'a>(state: ParserState<'a>) -> Parsed<'a, WireReturn> {
     look_ahead(parse_identifier_raw)
         .or(pure(""))
-        .flat_map(|word| match word {
-            "Never" => parse_identifier.map(|_| WireReturn::Never).boxed(),
-            _ => parse_wire_type
+        .flat_map(|word| match word == NEVER {
+            true => parse_identifier.map(|_| WireReturn::Never).boxed(),
+            false => parse_wire_type
                 .map(WireResults::single)
                 .map(WireReturn::Answers)
                 .boxed(),
@@ -444,7 +430,7 @@ pub fn parse_top_mod<'a>(doc: Option<Doc>, vis_pub: bool, start: Mark) -> impl P
                 tagging(
                     None,
                     many0(|| spanned(parse_top_item))
-                        .and_drop(parse_keyword("end"))
+                        .and_drop(parse_keyword(Keyword::End))
                         .map(|items| {
                             let (spans, items) = items.into_iter().unzip();
 
@@ -494,10 +480,10 @@ pub fn parse_use_path<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
 }
 
 pub fn parse_group_item<'a>(state: ParserState<'a>) -> Parsed<'a, GroupItem> {
-    parse_keyword("mod")
+    parse_keyword(Keyword::Mod)
         .and_keep(parse_declared_label)
         .map(GroupItem::Mod)
-        .or(parse_keyword("let")
+        .or(parse_keyword(Keyword::Let)
             .and_keep(parse_declared_label)
             .map(GroupItem::Let))
         .or(parse_declared_label.map(GroupItem::Both))
@@ -593,7 +579,9 @@ pub fn parse_top_induct_case<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'
                     parse_literal("|").map_err(DOC_BEFORE_NOTHING).boxed()
                 }
                 // Recoverable: `and` hands the block to the group's next member, which reads it again.
-                Some(doc) if word_after(doc) == "and" => fail(DOC_BEFORE_NOTHING).boxed(),
+                Some(doc) if Keyword::read(word_after(doc)) == Some(Keyword::And) => {
+                    fail(DOC_BEFORE_NOTHING).boxed()
+                }
                 Some(_) => commit(fail(DOC_BEFORE_NOTHING)).boxed(),
             };
 
@@ -798,7 +786,7 @@ pub fn parse_top_induct<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a, 
                             parse_top_induct_body::<Program>(doc, (), vis_pub)
                         })
                     })
-                    .and_drop(parse_keyword("end")),
+                    .and_drop(parse_keyword(Keyword::End)),
                 )
                 .map(move |rest| (first, rest))
             })
@@ -1061,7 +1049,7 @@ const WITNESS_NEVER_FILLS_A_SUPERCLASS: &[&str] = &[
 // A witness-body entry is an implementation field. A concept literal also admits a `use <term>` fill for one of the concept's `use`-marked fields; a witness does not, because a registered witness carrying a superclass other than the registered one answers `==` one way through the table and another way through its own projection. The word is read and refused by name rather than left to fail as a missing label, which would say nothing about why.
 fn parse_witness_entry<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessField> {
     mark()
-        .and_drop(parse_keyword("use"))
+        .and_drop(parse_keyword(Keyword::Use))
         .flat_map(|start| commit(fail_from(&start, WITNESS_NEVER_FILLS_A_SUPERCLASS)))
         .or(parse_witness_field)
         .parse(state)
@@ -1146,11 +1134,24 @@ pub fn parse_top_witness<'a>(doc: Option<Doc>, vis_pub: bool) -> impl Parser<'a,
     }
 }
 
-/// What a head that names no item reports. Lists the heads rather than the offending word alone, because the reader's next question is what they were allowed to write.
-const NOT_A_TOP_LEVEL_ITEM: &[&str] = &[
-    "expected: a top-level item",
-    "one of `mod`, `use`, `concept`, `satisfy`, `test`, `let`, `induct`, `struct` or `foreign`",
+/// The words that head a top-level item, in the order a refusal lists them, a `pub` standing before any of them.
+pub const ITEM_HEADS: [Keyword; 9] = [
+    Keyword::Mod,
+    Keyword::Use,
+    Keyword::Concept,
+    Keyword::Satisfy,
+    Keyword::Test,
+    Keyword::Let,
+    Keyword::Induct,
+    Keyword::Struct,
+    Keyword::Foreign,
 ];
+
+/// What a head that names no item reports. Lists the heads rather than the offending word alone, because the reader's next question is what they were allowed to write.
+fn not_a_top_level_item() -> Vec<String> {
+    let heads = ITEM_HEADS.map(|head| format!("`{}`", head.spelling()));
+    vec!["expected: a top-level item".to_string(), one_of(heads)]
+}
 
 /// One top-level item, dispatched on the head it begins with.
 ///
@@ -1183,33 +1184,33 @@ pub fn parse_top_item<'a>(state: ParserState<'a>) -> Parsed<'a, TopItem> {
                 };
 
                 // The head is read *raw*, so an unrecognized one is reported against the word itself rather than wherever the whitespace after it ended — which for a one-word line is the next line, or end of input. Every arm therefore consumes that whitespace itself.
-                let body = match head {
-                    "mod" => commit(parse_top_mod(doc, vis_pub, start)).boxed(),
-                    "use" => match documented {
+                let body = match Keyword::read(head) {
+                    Some(Keyword::Mod) => commit(parse_top_mod(doc, vis_pub, start)).boxed(),
+                    Some(Keyword::Use) => match documented {
                         true => commit(fail(DOC_BEFORE_USE)).boxed(),
                         false => commit(parse_top_use(vis_pub, start)).boxed(),
                     }
                     .boxed(),
-                    "induct" => commit(parse_top_induct(doc, vis_pub)).boxed(),
-                    "struct" => commit(parse_top_struct(doc, vis_pub)).boxed(),
-                    "foreign" => commit(parse_top_foreign(doc, vis_pub)).boxed(),
-                    "concept" => fallible(parse_top_concept(doc, vis_pub).boxed()),
-                    "satisfy" => fallible(parse_top_witness(doc, vis_pub).boxed()),
+                    Some(Keyword::Induct) => commit(parse_top_induct(doc, vis_pub)).boxed(),
+                    Some(Keyword::Struct) => commit(parse_top_struct(doc, vis_pub)).boxed(),
+                    Some(Keyword::Foreign) => commit(parse_top_foreign(doc, vis_pub)).boxed(),
+                    Some(Keyword::Concept) => fallible(parse_top_concept(doc, vis_pub).boxed()),
+                    Some(Keyword::Satisfy) => fallible(parse_top_witness(doc, vis_pub).boxed()),
                     // The fall-through ends at the label, so this arm hands the item over uncaught rather than through `fallible`, whose commitment reaches past it. A `pub` commits the whole arm, which `parse_top_test` refuses by name.
-                    "test" => match (documented, vis_pub) {
+                    Some(Keyword::Test) => match (documented, vis_pub) {
                         (true, _) => commit(fail(DOC_BEFORE_TEST)).boxed(),
                         (false, true) => commit(parse_top_test(vis_pub)).boxed(),
                         (false, false) => parse_top_test(vis_pub).boxed(),
                     }
                     .boxed(),
-                    "let" => fallible(parse_top_let(doc, vis_pub).boxed()),
+                    Some(Keyword::Let) => fallible(parse_top_let(doc, vis_pub).boxed()),
                     _ => {
                         return fallible(
                             fail_from(
                                 &start,
                                 match documented {
-                                    true => DOC_BEFORE_NOTHING,
-                                    false => NOT_A_TOP_LEVEL_ITEM,
+                                    true => Stated::from(DOC_BEFORE_NOTHING),
+                                    false => Stated::from(not_a_top_level_item()),
                                 },
                             )
                             .boxed(),

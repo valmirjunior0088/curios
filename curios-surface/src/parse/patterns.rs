@@ -12,7 +12,7 @@ use {
         MatchPatternField, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Subterm, Term,
         TuplePattern, parse_term, parse_whitespace,
     },
-    curios_common::{Plicity, Sign, recurse},
+    curios_common::{Keyword, Plicity, Sign, recurse},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, many0, mark,
         memoize, not_ahead, preceded_by_space, pure, refusal, sep_by0_trailing, spanned,
@@ -378,9 +378,9 @@ pub fn parse_qualified_match_pattern<'a, D: Grammar>(
 pub fn parse_bool_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
-    parse_keyword("false")
+    parse_keyword(Keyword::False)
         .map(|()| MatchPattern::Bool(false))
-        .or(parse_keyword("true").map(|()| MatchPattern::Bool(true)))
+        .or(parse_keyword(Keyword::True).map(|()| MatchPattern::Bool(true)))
         .parse(state)
 }
 

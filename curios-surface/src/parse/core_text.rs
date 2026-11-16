@@ -4,7 +4,7 @@
 
 use {
     super::{
-        Grammar, clear_comments, parse_and_head, parse_atomic_term, parse_concept_member,
+        Grammar, clear_comments, one_of, parse_and_head, parse_atomic_term, parse_concept_member,
         parse_file_head, parse_foreign_member, parse_held, parse_identifier_raw, parse_keyword,
         parse_label, parse_let_member, parse_literal, parse_name, parse_sort, parse_struct_member,
         parse_term, parse_test_member, parse_top_induct_body, take_comments, trimmed, with_span,
@@ -13,7 +13,7 @@ use {
         CoreEntry, CoreFile, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
         CoreValue, Decorated, DecoratorField, Label, Subterm, Term, parse_whitespace,
     },
-    curios_common::{Qualifier, Source, Span, is_identifier_char},
+    curios_common::{Keyword, Qualifier, Source, Span, is_identifier_char},
     curios_core::{Global, HeadKey, WitnessId},
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, commit, fail, look_ahead, many0, mark, not_ahead,
@@ -335,54 +335,69 @@ fn parse_declaring_path<'a>(state: ParserState<'a>) -> Parsed<'a, (Global, Label
         .parse(state)
 }
 
+/// The words that head an item of Core text, in the order a refusal lists them.
+const CORE_ITEM_HEADS: [Keyword; 6] = [
+    Keyword::Let,
+    Keyword::Induct,
+    Keyword::Struct,
+    Keyword::Concept,
+    Keyword::Test,
+    Keyword::Foreign,
+];
+
 /// One item of a file, past the decorator before it.
 fn parse_core_item<'a>(state: ParserState<'a>) -> Parsed<'a, CoreItem> {
     CoreText::parse_fields
         .and(mark().and(parse_identifier_raw).and_drop(parse_whitespace))
-        .flat_map(|(fields, (start, word))| match word {
-            "test" => commit(parse_test_member(fields)).map(CoreItem::Test).boxed(),
-            "foreign" => commit(parse_foreign_member(None, fields, false))
+        .flat_map(|(fields, (start, word))| match Keyword::read(word) {
+            Some(Keyword::Test) => commit(parse_test_member(fields))
+                .map(CoreItem::Test)
+                .boxed(),
+            Some(Keyword::Foreign) => commit(parse_foreign_member(None, fields, false))
                 .map(CoreItem::Foreign)
                 .boxed(),
-            _ => match first_member(word, fields) {
+            keyword => match keyword.and_then(|keyword| first_member(keyword, fields)) {
                 Some(member) => commit(parse_group(member)).map(CoreItem::Group).boxed(),
-                None => curios_parse::fail_from(
-                    &start,
-                    "Expected an item of Core text: one of 'let', 'induct', 'struct', 'concept', 'test' or 'foreign'",
-                )
-                .boxed(),
+                None => {
+                    let heads = CORE_ITEM_HEADS.map(|head| format!("'{}'", head.spelling()));
+                    curios_parse::fail_from(
+                        &start,
+                        format!("Expected an item of Core text: {}", one_of(heads)),
+                    )
+                    .boxed()
+                }
             },
         })
         .parse(state)
 }
 
-/// A group's first member, read past `word` under the decorator before it, where `word` declares one.
+/// A group's first member, read past `keyword` under the decorator before it, where `keyword` declares one.
 fn first_member<'a>(
-    word: &str,
+    keyword: Keyword,
     fields: Vec<DecoratorField>,
 ) -> Option<curios_parse::Boxed<'a, CoreMember>> {
-    Some(match word {
-        "let" => parse_let_member(None, fields, false)
+    Some(match keyword {
+        Keyword::Let => parse_let_member(None, fields, false)
             .map(CoreMember::Let)
             .boxed(),
-        _ => nominal_member(word, fields)?,
+        _ => nominal_member(keyword, fields)?,
     })
 }
 
-/// A nominal member, read past its declaring `word`: an `induct` closed by its `end`, a `struct` or a `concept` by its brace.
+/// A nominal member, read past its declaring `keyword`: an `induct` closed by its `end`, a `struct` or a `concept` by its brace.
 fn nominal_member<'a>(
-    word: &str,
+    keyword: Keyword,
     fields: Vec<DecoratorField>,
 ) -> Option<curios_parse::Boxed<'a, CoreMember>> {
-    Some(match word {
-        "induct" => parse_top_induct_body(None, fields, false)
-            .and_drop(parse_keyword("end"))
+    Some(match keyword {
+        Keyword::Induct => parse_top_induct_body(None, fields, false)
+            .and_drop(parse_keyword(Keyword::End))
             .map(CoreMember::Induct)
             .boxed(),
-        "struct" => parse_struct_member(None, fields, false)
+        Keyword::Struct => parse_struct_member(None, fields, false)
             .map(CoreMember::Struct)
             .boxed(),
-        "concept" => parse_concept_member(None, fields, false)
+        Keyword::Concept => parse_concept_member(None, fields, false)
             .map(CoreMember::Concept)
             .boxed(),
         _ => return None,
@@ -398,11 +413,13 @@ fn parse_group<'a>(first: curios_parse::Boxed<'a, CoreMember>) -> impl Parser<'a
                     .or(pure(""))
                     .flat_map(move |word| {
                         let fields = fields.clone();
-                        match word {
-                            "induct" | "struct" | "concept" => parse_identifier_raw
+                        match Keyword::read(word) {
+                            Some(
+                                keyword @ (Keyword::Induct | Keyword::Struct | Keyword::Concept),
+                            ) => parse_identifier_raw
                                 .and_drop(parse_whitespace)
-                                .flat_map(move |word| {
-                                    nominal_member(word, fields.clone())
+                                .flat_map(move |_| {
+                                    nominal_member(keyword, fields.clone())
                                         .expect("a nominal word was looked at")
                                 })
                                 .boxed(),

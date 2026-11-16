@@ -25,7 +25,7 @@ use {
         intrinsic_form, intrinsic_path,
     },
     crate::{ELIDED, Writer, op_precedence, written_intrinsic},
-    curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
+    curios_abi::{NEVER, ResultShape, WireResults, WireReturn, WireSignature, WireType},
     curios_common::{Plicity, recurse},
     curios_num::Natural,
     curios_parse::unseen,
@@ -655,7 +655,7 @@ pub fn print_wire_signature(signature: &WireSignature) -> Printer {
         pure(" -> "),
         match &signature.returns {
             WireReturn::Answers(results) => print_wire_results(results),
-            WireReturn::Never => pure("Never"),
+            WireReturn::Never => pure(NEVER),
         },
     ])
 }

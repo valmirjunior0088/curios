@@ -6,6 +6,7 @@ mod blank;
 mod concept;
 mod core_text;
 mod documentation;
+mod editors;
 mod foreign;
 mod grammar;
 mod guard;

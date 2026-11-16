@@ -947,6 +947,7 @@ dependencies = [
  "curios-parse",
  "curios-print",
  "curios-profile",
+ "serde_json",
 ]
 
 [[package]]

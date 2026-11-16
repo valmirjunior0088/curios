@@ -7,7 +7,7 @@
 use {
     super::{Grammar, parse_identifier, parse_keyword, parse_literal},
     crate::{Term, parse_term},
-    curios_common::Plicity,
+    curios_common::{Keyword, Plicity},
     curios_parse::{
         Mark, Parsed, Parser, ParserError, ParserState, commit, fail, look_ahead, pure, raise,
         refusal,
@@ -109,7 +109,7 @@ pub type Read<T> = Result<T, ParserError>;
 
 /// The mark a member or an argument is written under: `use`, `@`, or nothing.
 pub fn parse_mark<'a>(state: ParserState<'a>) -> Parsed<'a, Plicity> {
-    parse_keyword("use")
+    parse_keyword(Keyword::Use)
         .map(|()| Plicity::Witness)
         .or(parse_literal("@").map(|()| Plicity::Implicit))
         .or(pure(Plicity::Explicit))

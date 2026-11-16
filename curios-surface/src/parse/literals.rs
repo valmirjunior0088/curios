@@ -4,7 +4,7 @@ use {
         BytesSegment, CharLit, FltLit, ListEntry, Literal, NatLiteral, NumLit, ProofLiteral, Radix,
         StrLit, Subterm, Term, Written, parse_term, parse_whitespace,
     },
-    curios_common::{Sign, Span},
+    curios_common::{Keyword, Sign, Span},
     curios_num::{Floating, Natural},
     curios_parse::{
         Mark, Parsed, Parser, ParserState, commit, expecting, fail, fail_from, look_ahead, many0,
@@ -13,21 +13,21 @@ use {
 };
 
 pub fn parse_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    parse_keyword("Type")
+    parse_keyword(Keyword::Type)
         .map(|()| Subterm::Type)
         .map(Into::into)
         .parse(state)
 }
 
 pub fn parse_prop<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    parse_keyword("Prop")
+    parse_keyword(Keyword::Prop)
         .map(|()| Subterm::Prop)
         .map(Into::into)
         .parse(state)
 }
 
 pub fn parse_caller_sort<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    parse_keyword("Sort")
+    parse_keyword(Keyword::Sort)
         .map(|()| Subterm::Sort)
         .map(Into::into)
         .parse(state)
@@ -631,9 +631,9 @@ pub fn parse_list_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
 }
 
 pub fn parse_bool_intrinsic<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    parse_keyword("false")
+    parse_keyword(Keyword::False)
         .map(|()| Subterm::Literal(Literal::Bool(false)))
-        .or(parse_keyword("true").map(|()| Subterm::Literal(Literal::Bool(true))))
+        .or(parse_keyword(Keyword::True).map(|()| Subterm::Literal(Literal::Bool(true))))
         .map(Into::into)
         .parse(state)
 }

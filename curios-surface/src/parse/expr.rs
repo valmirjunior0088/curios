@@ -12,7 +12,7 @@ use {
         LetGroup, LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, declared,
         parse_identifier_raw, parse_whitespace,
     },
-    curios_common::{InfixOp, Plicity, Span, is_identifier_char, is_keyword, recurse},
+    curios_common::{InfixOp, Keyword, Plicity, Span, Standing, is_identifier_char, recurse},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, many0, many1,
         mark, memoize, not_ahead, preceded_by_space, pure, sep_by0_trailing, shown, spanned,
@@ -68,12 +68,12 @@ pub fn parse_binding<'a, D: Grammar>(
 
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
 fn parse_let_group<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, LetGroup<D>> {
-    parse_keyword("let")
+    parse_keyword(Keyword::Let)
         .and_keep(parse_let_binder::<D>)
         .and(parse_local_let_signature)
         .map(|(binder, signature)| LetBinding { binder, signature })
         .and(many0(|| {
-            parse_keyword("and")
+            parse_keyword(Keyword::And)
                 .and_keep(commit(D::parse_fields.and(parse_binding)))
                 .map(|(core, (label, signature))| LetBinding {
                     binder: Pattern::Binder(Binder { core, label }),
@@ -588,8 +588,14 @@ fn refuse_juxtaposed_term<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
                     .chars()
                     .next()
                     .is_some_and(|char| matches!(char, '[' | '"' | '\'')),
-                "and" => false,
-                word => !is_keyword(word) || matches!(word, "true" | "false" | "match"),
+                word => match Keyword::read(word) {
+                    Some(Keyword::And) => false,
+                    Some(keyword) => {
+                        keyword.standing() != Standing::Reserved
+                            || matches!(keyword, Keyword::True | Keyword::False | Keyword::Match)
+                    }
+                    None => true,
+                },
             };
             if !begins_a_term || skipped.contains('\n') {
                 return pure(()).boxed();
@@ -689,16 +695,21 @@ fn refuse_non_term<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>
 // The reserved words that begin a declaration and can never begin a term, refused ahead of the alternatives above. Left to them, the local `let` would read the word as its keyword and fail one token in, which wins [`Parser::or`]'s furthest-failure tie-break: a declaration written after the program's tail — after the unannotated top-level `let` that opened it, above all — would report `Expected keyword 'let'`, naming neither the word read nor why an item is refused there. The word is consumed before the failure so it is past the choice point and stays the diagnosis, with the caret after the word as `parse_keyword` places it. `end`, `concept`, `satisfy` and `test` stay out: the first may follow a term and the other three may begin one.
 fn refuse_declaration_head<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     look_ahead(take_while(is_identifier_char))
-        .flat_map(|head| match head {
-            "mod" | "use" | "pub" | "induct" | "struct" | "foreign" => {
-                take_while(is_identifier_char)
-                    .and_keep(fail(vec![
-                        format!("`{head}` begins a declaration, not a term"),
-                        "every declaration precedes the program's final term".to_string(),
-                        "an unannotated top-level `let` opens that term".to_string(),
-                    ]))
-                    .boxed()
-            }
+        .flat_map(|head| match Keyword::read(head) {
+            Some(
+                Keyword::Mod
+                | Keyword::Use
+                | Keyword::Pub
+                | Keyword::Induct
+                | Keyword::Struct
+                | Keyword::Foreign,
+            ) => take_while(is_identifier_char)
+                .and_keep(fail(vec![
+                    format!("`{head}` begins a declaration, not a term"),
+                    "every declaration precedes the program's final term".to_string(),
+                    "an unannotated top-level `let` opens that term".to_string(),
+                ]))
+                .boxed(),
             _ => pure(()).boxed(),
         })
         .parse(state)

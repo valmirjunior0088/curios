@@ -1,12 +1,12 @@
 use {
     super::{
-        Argument, Dialect, FuncParam, FuncSugarParam, FuncTypeParam, Intrinsic, Label,
+        Argument, Dialect, FuncParam, FuncSugarParam, FuncTypeParam, ITEM_HEADS, Intrinsic, Label,
         LetSignature, Name, Program, Subterm, Term, Tuple, TupleType, TupleTypeParam,
         clear_comments, parse_file_head, parse_optional_term, parse_program_end, parse_term,
         parse_top_item, print_module_items, print_term, signature_type, take_comments,
     },
     curios_abi::WireSignature,
-    curios_common::{Plicity, Report, Source, Span},
+    curios_common::{Keyword, Plicity, Report, Source, Span},
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, Recovered, commit, fail, is_blank, many0, raise,
         recover, run_parser, settled, spanned, take_eof,
@@ -338,19 +338,8 @@ fn begins_item(line: &str) -> bool {
         .split(|character: char| !character.is_alphanumeric() && character != '_')
         .next()
         .unwrap_or("");
-    let head = matches!(
-        word,
-        "pub"
-            | "mod"
-            | "use"
-            | "induct"
-            | "struct"
-            | "foreign"
-            | "concept"
-            | "satisfy"
-            | "test"
-            | "let"
-    );
+    let head = Keyword::read(word)
+        .is_some_and(|keyword| keyword == Keyword::Pub || ITEM_HEADS.contains(&keyword));
 
     head && line[word.len()..].starts_with(is_blank)
 }

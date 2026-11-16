@@ -7,6 +7,7 @@ use {
         Alternative, Func, Guard, HeadlessArm, HeadlessMatch, Match, MatrixArm, Subterm, Term,
         parse_term, parse_whitespace,
     },
+    curios_common::Keyword,
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail_from, look_ahead, many0, mark, not_ahead, pure,
         sep_by0_trailing, spanned, take_exact, uncommit,
@@ -181,12 +182,12 @@ const HEADLESS_MATCH_TAKES_A_DEFAULT: &[&str] = &[
 //
 // **An `end` here is a match with no head and no default.** The arms are read and the word that closes the form stands where the default does, so the rule is what is broken, and it is refused by name at that word, where a bare default would report the bar it wanted and a letter of `end`.
 fn parse_headless_default<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    look_ahead(parse_keyword("end"))
+    look_ahead(parse_keyword(Keyword::End))
         .map(|()| true)
         .or(pure(false))
         .flat_map(|ended| match ended {
             true => mark()
-                .and_drop(take_exact("end"))
+                .and_drop(take_exact(Keyword::End.spelling()))
                 .flat_map(|start| commit(fail_from(&start, HEADLESS_MATCH_TAKES_A_DEFAULT)))
                 .boxed(),
             false => parse_literal("|")
@@ -203,7 +204,7 @@ fn parse_headless_default<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
 fn parse_headless_match<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     many0(parse_headless_arm::<D>)
         .and(parse_headless_default::<D>)
-        .and_drop(parse_keyword("end"))
+        .and_drop(parse_keyword(Keyword::End))
         .map(|(arms, default)| Subterm::HeadlessMatch(HeadlessMatch { arms, default }).into())
         .parse(state)
 }
@@ -212,14 +213,14 @@ fn parse_headless_match<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Te
 fn parse_headed_match<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     parse_match_head::<D>
         .and(many0(parse_induct_match_branch::<D>))
-        .and_drop(parse_keyword("end"))
+        .and_drop(parse_keyword(Keyword::End))
         .map(|(head, arms)| Subterm::Match(Match { head, arms }).into())
         .parse(state)
 }
 
 // A `match` is the pattern matrix, headed or not. Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch), `List`, `Bytes` — is just a matrix whose arm patterns are that carrier's leaves (see `parse_match_pattern`), compiled by `curios-elab`'s matrix compiler, and a match with no head is the matrix of no columns. A bar right after the keyword is what tells the two apart, since no head begins with one. Zero arms are legal under a head: under index inversion every impossible arm is silently omittable, and a scrutinee whose indices clash with *every* constructor's target eliminates with no arms at all.
 pub fn parse_match<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    parse_keyword("match")
+    parse_keyword(Keyword::Match)
         .and_keep(look_ahead(parse_literal("|")).map(|_| true).or(pure(false)))
         .flat_map(|headless| match headless {
             true => parse_headless_match::<D>.boxed(),

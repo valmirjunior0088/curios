@@ -26,3 +26,5 @@ curios-profile = { workspace = true }
 [dev-dependencies]
 # `variants!`, by which the test support names the reader's refusals. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-common = { workspace = true, features = ["test-support"] }
+# The editors' grammars and their node types, which a test holds to the language's words.
+serde_json = { workspace = true }

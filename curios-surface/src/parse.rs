@@ -18,8 +18,8 @@ use expr::*;
 pub use expr::{op_precedence, parse_term};
 
 mod top_level;
-pub use top_level::parse_top_item;
 use top_level::*;
+pub use top_level::{ITEM_HEADS, parse_top_item};
 
 mod core_text;
 pub use core_text::{CoreFormatInput, parse_core_for_format};
@@ -31,7 +31,9 @@ mod tests;
 
 use {
     super::{Dialect, Doc, Label, Name, Program, Term},
-    curios_common::{Qualifier, Source, Span, is_identifier_char, is_identifier_start, is_keyword},
+    curios_common::{
+        Keyword, Qualifier, Source, Span, is_identifier_char, is_identifier_start, is_reserved,
+    },
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, ahead, commit, fail, fail_from, is_blank,
         look_ahead, many0, mark, not_ahead, obtained, pure, run_parser, spanned, tagging, take_eof,
@@ -277,9 +279,9 @@ pub fn text_after(doc: &Doc) -> &str {
 pub fn word_after(doc: &Doc) -> &str {
     let rest = text_after(doc);
     let (first, after) = word_at(rest);
-    match first {
-        "pub" => word_at(after.trim_start()).0,
-        other => other,
+    match Keyword::read(first) {
+        Some(Keyword::Pub) => word_at(after.trim_start()).0,
+        _ => first,
     }
 }
 
@@ -396,6 +398,16 @@ fn parse_label_owning<'a>(owns_the_fault: bool) -> impl Parser<'a, Label> {
     }
 }
 
+/// `items` as a refusal lists what it wanted, `one of a, b or c`: what a message naming the words a position takes spells them by, read from where they are stated.
+pub fn one_of(items: impl IntoIterator<Item = String>) -> String {
+    let mut items = items.into_iter().collect::<Vec<_>>();
+    let last = items.pop().unwrap_or_default();
+    match items.is_empty() {
+        true => format!("one of {last}"),
+        false => format!("one of {} or {last}", items.join(", ")),
+    }
+}
+
 pub fn reserved_keyword(word: &str) -> String {
     format!("`{word}` is a reserved keyword, so it cannot be a name")
 }
@@ -407,7 +419,7 @@ pub fn digit_led(word: &str) -> String {
 
 // Why `word` cannot be a name, where it cannot: a keyword is the grammar's own, and a word that begins with a digit is read as a number wherever a term stands.
 fn unnameable(word: &str) -> Option<String> {
-    match (is_keyword(word), begins_a_name(word)) {
+    match (is_reserved(word), begins_a_name(word)) {
         (true, _) => Some(reserved_keyword(word)),
         (false, false) => Some(digit_led(word)),
         (false, true) => None,
@@ -416,7 +428,7 @@ fn unnameable(word: &str) -> Option<String> {
 
 fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> impl Parser<'a, Name> {
     move |state: ParserState<'a>| {
-        let keyword = segments.iter().any(|segment| is_keyword(segment));
+        let keyword = segments.iter().any(|segment| is_reserved(segment));
         let numbered = segments.iter().find(|segment| !begins_a_name(segment));
         (match (keyword, numbered, segments.len()) {
             (true, _, _) => fail(format!(
@@ -471,7 +483,8 @@ fn parse_qualified_name<'a>(state: ParserState<'a>) -> Parsed<'a, Name> {
 // Commitment is unchanged: `parse_identifier_raw` rejects an empty run, so a mismatch has consumed at least one character and stays fatal past the choice point, while the empty case fails *at* the choice point either way.
 //
 // Where no word begins at all — a `;` or a `/` standing where `end` belongs — the word run is empty and the report names the keyword and the character found, in `take_exact`'s style. Left to `parse_identifier_raw`, the report would be its bare `Expected identifier`, which names neither. The empty run consumes nothing, so the failure stays recoverable at the choice point exactly as the identifier parser's is.
-fn parse_keyword<'a>(expected: &'static str) -> impl Parser<'a, ()> {
+fn parse_keyword<'a>(keyword: Keyword) -> impl Parser<'a, ()> {
+    let expected = keyword.spelling();
     move |state: ParserState<'a>| {
         mark()
             .and(take_while(is_identifier_char))
