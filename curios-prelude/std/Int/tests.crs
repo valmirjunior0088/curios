@@ -1,5 +1,5 @@
 -- `Int` through its sign view, at zero, at both signs and at equal magnitudes of opposite sign: the order's laws, cancellation, the extrema, `abs` and `sign` of a product, the signed scale and floored division.
-use /std/{Nat, Int, Bool, List, Ordering, Eq, Test};
+use /std/{Nat, Int, Bool, List, Option, Ordering, Eq, Test};
 use /std/Bool/{True, Holds};
 
 let _a_number_orders_as_equal_to_itself(a: Int) -> Eq()(Int/ord(a, a), Ordering/eq()) =
@@ -63,6 +63,12 @@ let _an_integer_is_its_sign_times_its_magnitude(
     a: Int,
 ) -> Eq()(a, Int/sign(a) * Nat/to_int(Int/abs(a))) =
     Int/sign/times_abs(a);
+
+-- An integer is read with its sign, and text that spells none is no integer.
+test of_str_reads_a_signed_integer_and_nothing_else =
+    Test/equal(
+        [Int/of_str("-5"), Int/of_str("+7"), Int/of_str("x")],
+        [Option/some(-5), Option/some(+7), Option/none()]);
 
 test parity_the_extrema_and_the_sign_compute =
     Test/all([

@@ -1,3 +1,5 @@
+mod tests;
+
 use /std/{Nat, Bytes, Io};
 
 --- So many random bytes.

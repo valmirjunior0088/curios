@@ -1,4 +1,4 @@
-//! The `Key` laws, which a witness must discharge where it is declared. `Map` and `Set` themselves — lookups, the canonical shape and the rewriting functions — are the corpus's `/data/map`.
+//! The `Key` laws, which a witness must discharge where it is declared. `Map` and `Set` themselves — lookups, the canonical shape and the rewriting functions — are `/std/Map`'s own tests'.
 
 use super::test_support::*;
 

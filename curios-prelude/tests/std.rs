@@ -41,6 +41,8 @@ claims! {
     root => [],
     str => ["Str"],
     char => ["Char"],
+    cell => ["Cell"],
+    rand => ["rand"],
     json => ["Json"],
     toml => ["Toml"],
     html => ["Html"],

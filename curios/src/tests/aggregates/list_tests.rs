@@ -1,4 +1,4 @@
-//! `List/each` under `Io`, whose claim is the order its effects reach the host. The pure `List` surface — predicates, searches, builders, `traverse` and the stable sort — is the corpus's `/aggregates/list`.
+//! `List/each` under `Io`, whose claim is the order its effects reach the host. The pure `List` surface — predicates, searches, builders, `traverse` and the stable sort — is `/std/List`'s own tests'.
 
 use {super::test_support::*, crate::tests::test_support::*, curios_native::test_support::*};
 

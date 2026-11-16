@@ -1,4 +1,4 @@
-//! What survives to codegen once a `/std/Fmt` format string is a literal: the residual after partial evaluation, and the absence of any formatter in the emitted CPS. What a `%` slot shows is the corpus's `/data/fmt`.
+//! What survives to codegen once a `/std/Fmt` format string is a literal: the residual after partial evaluation, and the absence of any formatter in the emitted CPS. What a `%` slot shows is `/std/Fmt`'s own tests'.
 //!
 //! The rendering half is the witness each slot dispatches through. The specialization half is that a literal format string parses at compile time — the ANF `evaluate` pass folds the parse to a constant spine and `specialize` unrolls the fold over it, so neither the parser nor the generic fold reaches the backend.
 

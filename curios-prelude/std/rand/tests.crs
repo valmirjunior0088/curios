@@ -1,0 +1,7 @@
+-- `/std/rand`: what the operating system's generator answers.
+use /std/{Bytes, Test, rand};
+
+-- `bytes` answers as many bytes as it is asked for.
+test bytes_answers_as_many_as_it_is_asked_for =
+    let drawn = rand/bytes(8)!;
+    Test/equal(Bytes/len(drawn), 8);

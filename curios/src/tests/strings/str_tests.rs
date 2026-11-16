@@ -1,4 +1,4 @@
-//! What a `Str` literal costs to compile and how one reads in a report. The `Str` surface itself — indexing, slicing and trimming at codepoint boundaries — is the corpus's `/strings/str`.
+//! What a `Str` literal costs to compile and how one reads in a report. The `Str` surface itself — indexing, slicing and trimming at codepoint boundaries — is `/std/Str`'s own tests'.
 
 use {crate::tests::test_support::*, curios_common::fill};
 

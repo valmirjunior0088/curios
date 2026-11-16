@@ -1,4 +1,4 @@
-//! The bound `Vec/get` carries past the end, which nothing fills. `Vec`'s surface — the index inside the length, the list round trip, `zip` and `fold` — is the corpus's `/aggregates/vec`.
+//! The bound `Vec/get` carries past the end, which nothing fills. `Vec`'s surface — the index inside the length, the list round trip, `zip` and `fold` — is `/std/Vec`'s own tests'.
 
 use crate::tests::test_support::*;
 

@@ -1,4 +1,4 @@
-//! The `Flt` codec against Rust's own encoding: the little-endian round trip byte-for-byte, and the decimal round trip over runtime-tainted values so the pair runs in emitted Wasm rather than folding; and the literals of the values no decimal spells. The narrowings that answer partiality with an `Option` are the corpus's `/numeric`.
+//! The `Flt` codec against Rust's own encoding: the little-endian round trip byte-for-byte, and the decimal round trip over runtime-tainted values so the pair runs in emitted Wasm rather than folding; and the literals of the values no decimal spells. The narrowings that answer partiality with an `Option` are `/std/Flt`'s own tests'.
 
 use crate::tests::test_support::*;
 

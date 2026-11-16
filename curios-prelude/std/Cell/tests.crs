@@ -1,0 +1,29 @@
+-- `/std/Cell`: a cell is empty until its first fill, which it keeps.
+use /std/{Bool, Cell, Nat, Option, Test};
+
+-- A cell polls empty until its first fill, and the fill is taken.
+test a_cell_polls_empty_until_its_first_fill =
+    let cell = Cell/new(@Nat)!;
+    let before = Cell/poll(cell)!;
+    let accepted = Cell/fill(cell, 42)!;
+    let after = Cell/poll(cell)!;
+    Test/all([
+        Test/equal(before, Option/none()),
+        Test/assert(accepted),
+        Test/equal(after, Option/some(42))]);
+
+-- A later fill is refused, and the cell keeps its first value.
+test a_later_fill_preserves_the_first_value =
+    let cell = Cell/new(@Nat)!;
+    let first = Cell/fill(cell, 7)!;
+    let later = Cell/fill(cell, 99)!;
+    let held = Cell/poll(cell)!;
+    Test/all([Test/assert(first), Test/assert(Bool/not(later)), Test/equal(held, Option/some(7))]);
+
+-- Filling one cell leaves another empty.
+test filling_one_cell_leaves_another_empty =
+    let a = Cell/new(@Nat)!;
+    let b = Cell/new(@Nat)!;
+    let _ = Cell/fill(a, 1)!;
+    let polled = Cell/poll(b)!;
+    Test/equal(polled, Option/none());

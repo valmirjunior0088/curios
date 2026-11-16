@@ -7,7 +7,7 @@ mod gcd;
 
 mod scale;
 
-use /std/{Nat, Bool, Test};
+use /std/{Nat, Bool, Option, Test};
 use /std/Bool/{True, Holds};
 
 test powers_divisors_logarithms_and_roots_compute =
@@ -31,6 +31,12 @@ test powers_divisors_logarithms_and_roots_compute =
             Nat/sqrt(16),
             Nat/sqrt(1000000)],
         [1024, 1, 0, 6, 5, 5, 0, 12, 0, 0, 10, 9, 0, 0, 3, 4, 1000]);
+
+-- A natural is read from its digits alone: text holding anything else, and no text at all, is no natural.
+test of_str_reads_digits_and_nothing_else =
+    Test/equal(
+        [Nat/of_str("123"), Nat/of_str("12a"), Nat/of_str("")],
+        [Option/some(123), Option/none(), Option/none()]);
 
 -- A decision of every number below a bound holds where each number meets it, and of no bound one number fails.
 test a_decision_of_every_number_below_a_bound_is_decided_at_each =

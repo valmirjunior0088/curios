@@ -1,4 +1,4 @@
-//! Which arithmetic the totality analysis grades: `sqrt` descends on a guard between two computed values and is refused in a type, `log2` halves under a guard and is accepted, and `gcd` recurses on well-founded `<` and is accepted. What those functions compute is the corpus's `/numeric`.
+//! Which arithmetic the totality analysis grades: `sqrt` descends on a guard between two computed values and is refused in a type, `log2` halves under a guard and is accepted, and `gcd` recurses on well-founded `<` and is accepted. What those functions compute is `/std/Nat`'s own tests'.
 
 use crate::tests::test_support::*;
 

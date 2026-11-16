@@ -1,4 +1,4 @@
-//! The bound `Option/get` carries, and the report naming it when nothing fills it. The `Option` and `Result` surface itself is the corpus's `/aggregates/option_result`.
+//! The bound `Option/get` carries, and the report naming it when nothing fills it. The `Option` and `Result` surface itself is `/std`'s own `tests/option_result`.
 
 use crate::tests::test_support::*;
 

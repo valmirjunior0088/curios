@@ -1,54 +1,6 @@
-//! The `/std` surfaces a program reaches at runtime: randomness, parsing, the clock, and cells.
+//! The `/std` surfaces a program reaches at runtime that need what `/std`'s own tests cannot hold: a scripted clock, a decided bound's cost over a computed subject, and a refusal.
 
 use {crate::tests::test_support::*, curios_native::test_support::*};
-
-// A struct type is nominal: it never converts with a structural tuple type of the same fields.
-#[test]
-fn random_bytes_returns_requested_length() {
-    let output = run(r#"
-let entry() -> /std/Io({}) =
-    let _ = /std/Try/run(std/Io/write(std/Proc/stdout, /std/rand/bytes(8)!))!;
-    /std/Io/pure(());
-entry()
-"#);
-    assert_eq!(output.len(), 8);
-}
-
-#[test]
-fn nat_of_str_returns_option() {
-    // `123` parses; `12a` (non-digit) and the empty string are `none`, taking the `unwrap_or` defaults — `123 + 7 + 9`.
-    assert_eq!(
-        run(r#"
-        use /std/{Nat, Str, Option, Io};
-        let entry() -> /std/Io({}) =
-            let ok = Option/unwrap_or(Nat/of_str("123"), 0);
-            let bad = Option/unwrap_or(Nat/of_str("12a"), 7);
-            let empty = Option/unwrap_or(Nat/of_str(""), 9);
-            let _ = /std/print(Nat/to_str(Nat/add(Nat/add(ok, bad), empty)))!;
-            /std/Io/pure(());
-        entry()
-        "#),
-        b"139"
-    );
-}
-
-#[test]
-fn int_of_str_returns_option() {
-    // `-5` and `+7` parse (compared by magnitude); `x` is `none` → default `+3`.
-    assert_eq!(
-        run(r#"
-        use /std/{Nat, Int, Str, Option, Io};
-        let entry() -> /std/Io({}) =
-            let neg = Int/abs(Option/unwrap_or(Int/of_str("-5"), +0));
-            let pos = Int/abs(Option/unwrap_or(Int/of_str("+7"), +0));
-            let bad = Int/abs(Option/unwrap_or(Int/of_str("x"), +3));
-            let _ = /std/print(Nat/to_str(Nat/add(Nat/add(neg, pos), bad)))!;
-            /std/Io/pure(());
-        entry()
-        "#),
-        b"15"
-    );
-}
 
 #[test]
 fn flt_of_str_returns_option() {
@@ -68,25 +20,6 @@ fn flt_of_str_returns_option() {
         entry()
         "#),
         b"1017"
-    );
-}
-
-#[test]
-fn option_result_char_helpers() {
-    assert_eq!(
-        run(r#"
-        use /std/{Option, Result, Char, Nat, Str, Io};
-        let entry() -> /std/Io({}) =
-            let opt = Option/unwrap_or(Option/map(Option/some(4), (x : Nat) => Nat/add(x, 1)), 0);
-            let res0 : Result(Nat, Nat) = Result/success(5);
-            let res = Result/unwrap_or(Result/map(res0, (x : Nat) => Nat/mul(x, 2)), 0);
-            let up = Char/to_ascii_upper('a');
-            let _ = /std/print(Nat/to_str(Nat/add(Nat/add(opt, res), Char/to_nat(up))))!;
-            /std/Io/pure(());
-        entry()
-        "#),
-        // opt = 5, res = 10, up = 'A' = 65  ->  80
-        b"80",
     );
 }
 
@@ -162,57 +95,6 @@ fn clock_mono_reads_scripted_elapsed() {
     .expect("expected result");
 
     assert_eq!(io.output(), b"+3");
-}
-
-#[test]
-fn a_cell_polls_empty_until_its_first_fill() {
-    assert_eq!(
-        run(r#"
-            use /std/{Cell, Nat, Option, Io, print};
-            let entry() -> /std/Io({}) =
-                let cell = Cell/new(@Nat)!;
-                let before = Cell/poll(cell)!;
-                let _ = print(match before | none() => "empty " | some(_) => "full " end)!;
-                let accepted = Cell/fill(cell, 42)!;
-                let _ = print(match accepted | true => "yes " | false => "no " end)!;
-                print(Nat/to_str(Option/unwrap_or(Cell/poll(cell)!, 0)));
-            entry()
-        "#),
-        b"empty yes 42",
-    );
-}
-
-#[test]
-fn a_later_fill_preserves_the_first_value() {
-    assert_eq!(
-        run(r#"
-            use /std/{Cell, Nat, Option, Io, print};
-            let entry() -> /std/Io({}) =
-                let cell = Cell/new()!;
-                let _ = Cell/fill(cell, 7)!;
-                let accepted = Cell/fill(cell, 99)!;
-                let _ = print(match accepted | true => "yes " | false => "no " end)!;
-                print(Nat/to_str(Option/unwrap_or(Cell/poll(cell)!, 0)));
-            entry()
-        "#),
-        b"no 7",
-    );
-}
-
-#[test]
-fn filling_one_cell_leaves_another_empty() {
-    assert_eq!(
-        run(r#"
-            use /std/{Cell, Nat, Option, Io, print};
-            let entry() -> /std/Io({}) =
-                let a = Cell/new(@Nat)!;
-                let b = Cell/new(@Nat)!;
-                let _ = Cell/fill(a, 1)!;
-                print(match Cell/poll(b)! | none() => "empty" | some(_) => "full" end);
-            entry()
-        "#),
-        b"empty",
-    );
 }
 
 // A handle wrapper is built beneath the module that declares it and nowhere else, so a `Socket`, a child or a stream a program holds came from a connection, a spawn or this process's own standard streams: none is made of a file's handle or a terminal's, by its literal or by a builder its module publishes. A process's `Input` and `Output` have no module of their own, and so nowhere to publish one.

@@ -23,6 +23,17 @@ test option_and_result_convert_into_each_other =
         Test/equal(Result/to_option(bad), Option/none()),
         Test/equal(Result/unwrap_or_else(bad, (e: Str) => Str/len(e)), 2)]);
 
+-- `map` reaches the value a `some` and a `success` hold and leaves the others as they are, and `unwrap_or` falls back only where no value is held.
+test map_reaches_a_held_value_and_unwrap_or_falls_back_where_none_is =
+    let held: Result(Nat, Nat) = Result/success(5);
+    let refused: Result(Nat, Nat) = Result/failure(1);
+    Test/all([
+        Test/equal(Option/map(Option/some(4), (x: Nat) => x + 1), Option/some(5)),
+        Test/equal(Option/map(Option/none(), (x: Nat) => x + 1), Option/none()),
+        Test/equal(Option/unwrap_or(Option/none(), 0), 0),
+        Test/equal(Result/unwrap_or(Result/map(held, (x: Nat) => x * 2), 0), 10),
+        Test/equal(Result/unwrap_or(Result/map(refused, (x: Nat) => x * 2), 0), 0)]);
+
 -- `IsSome` is decided by a match, so `get` on a literal `some` fills its bound by reduction with nothing written.
 test get_on_a_literal_some_discharges_its_bound =
     Test/equal(Option/get(Option/some(3)), 3);

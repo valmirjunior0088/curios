@@ -1,4 +1,4 @@
-//! Indexed vectors a program declares for itself: the type-level `Vec` over `Nat` induction, and the indexed inductive whose `append` is executed rather than only compiled. The packed splices and folds are the corpus's `/aggregates/packed`.
+//! Indexed vectors a program declares for itself: the type-level `Vec` over `Nat` induction, and the indexed inductive whose `append` is executed rather than only compiled. The packed splices and folds are `/std/Bytes`'s own tests'.
 
 use {super::test_support::*, crate::tests::test_support::*, curios_native::test_support::*};
 
