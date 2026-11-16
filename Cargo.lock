@@ -806,14 +806,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "curios-lint"
-version = "0.16.24"
-dependencies = [
- "curios-common",
- "curios-core",
-]
-
-[[package]]
 name = "curios-module"
 version = "0.16.24"
 dependencies = [
@@ -1019,7 +1011,6 @@ dependencies = [
  "curios-cps",
  "curios-document",
  "curios-elab",
- "curios-lint",
  "curios-module",
  "curios-package",
  "curios-pipeline",

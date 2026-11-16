@@ -22,7 +22,6 @@ curios-document = { workspace = true }
 # For what a name is declared as and where its declaration's name is written, which `at` and `declarations` answer in the lowering's own terms.
 curios-core = { workspace = true }
 curios-module = { workspace = true }
-curios-lint = { workspace = true }
 curios-surface = { workspace = true }
 curios-unit = { workspace = true }
 curios-wasm = { workspace = true }

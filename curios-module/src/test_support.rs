@@ -1,4 +1,4 @@
-//! The fixtures another crate's suites lower a source through: the registry of compiler-known names the lowering's suites declare as source, whose spellings are load-bearing where a suite writes the declarations they name — `curios-lint`'s `unused_declaration` among them.
+//! The fixtures another crate's suites lower a source through: the registry of compiler-known names the lowering's suites declare as source, whose spellings are load-bearing where a suite writes the declarations they name — the lowering's `unused_declaration` among them.
 
 use curios_common::{
     ChannelSyntax, CharacterSyntax, ConceptField, DerivationSyntax, EntailmentSyntax,
@@ -90,7 +90,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         str_concat: registry_name(&["std", "Str", "concat"]),
         fmt_render: registry_name(&["std", "Fmt", "render"]),
     },
-    // These spellings are load-bearing for `curios-lint`'s `unused_declaration` suite, which declares them as source and asserts the references that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
+    // These spellings are load-bearing for the lowering's `unused_declaration` suite, which declares them as source and asserts the references that follow: a row whose concept does not match what the source declares yields no vocabulary at all, and that suite is what says so.
     derivations: DerivationSyntax {
         spell: SpellDerivation {
             spell: registry_field(&["std", "Spell", "Spell"], "spell"),

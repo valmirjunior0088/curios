@@ -1,6 +1,6 @@
 //! The one lint decided over a package rather than a unit: a declared dependency nothing reached.
 
-use {crate::*, curios_common::Qualifier, std::collections::BTreeSet};
+use {super::*, curios_common::Qualifier, std::collections::BTreeSet};
 
 /// The dependencies `unused_dependencies` reports of `declared`, each as `kind: message`.
 fn unused(declared: &[String], reached: &BTreeSet<Qualifier>) -> Vec<String> {

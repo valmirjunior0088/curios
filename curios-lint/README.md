@@ -1,3 +1,0 @@
-# curios-lint
-
-A package's `unused-dependency`: the one lint no unit can decide alone, decided from the mounts its units' references were written under. Every other lint is decided by the stage that establishes its last fact and stored with its unit — `unused-import` and `unused-declaration` by the lowering ([`curios-module`](../curios-module/README.md)), the binder lints by elaboration as it files each declaration's record ([`curios-elab`](../curios-elab/README.md)) — in `curios-core`'s vocabulary (`Lint`). What a lint is, and which ones there are, is [A lint is an exact finding read off the compilation](../documentation/design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md); what the API offers belongs to the crate rustdoc.

@@ -1,10 +1,14 @@
 //! `curios lint`: the gate over what `wonder` reports.
 //!
-//! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, which the lint owner decides off the union of the prefixes every unit spelled ([`curios_lint::unused_dependencies`]) — and it asks only when the subject is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
+//! The same subjects, the same records, the same rendering: a lint is a diagnostic the compilation reports and nothing stops on, and this subcommand is where it turns into an exit code. What it adds is the one lint no unit can decide alone — a declared dependency nothing in the package wrote, decided here off the union of the prefixes every unit spelled ([`unused_dependencies`]), the one lint whose last fact is the package's — and it asks only when the subject is the package entire, because a dependency is a fact of the package and a file asked about alone reaches what it reaches.
+
+#[cfg(test)]
+mod tests;
 
 use {
     crate::{Asked, Diagnosed, Severity, Telling, answer},
-    curios_common::{Kind, Report},
+    curios_common::{Kind, Qualifier, Report},
+    curios_core::{Lint, LintKind},
     curios_module::Overlay,
     curios_package::Selection,
     std::collections::BTreeSet,
@@ -62,7 +66,7 @@ pub fn lint(
     }
 
     if let Some(dependencies) = dependencies {
-        for lint in curios_lint::unused_dependencies(&dependencies, &reached) {
+        for lint in unused_dependencies(&dependencies, &reached) {
             let rendered = lint.report(&[]).rendered(Kind::Lint, &reader);
             if seen.insert_rendered(rendered) {
                 linted.lints += 1;
@@ -94,4 +98,26 @@ impl Renderings {
 
         first
     }
+}
+
+/// The `unused-dependency` lints of a package: each dependency `declared` names whose prefix nothing in the package *wrote* (`reached`), standing in no text, since its row is the package's manifest's. Exact, where a language with externals could only guess: a dependency mounts at its name and is reached only by a reference that names it.
+///
+/// Spelling rather than resolution, which is the same basis the refusal uses — one rule enforced one way. Resolution would report almost nothing unused: a re-export means the path a reference resolves to need not be the path it was written under, so a program naming `/std/Nat` resolves into `/sys` without having spelled it.
+fn unused_dependencies<'a>(
+    declared: impl IntoIterator<Item = &'a String>,
+    reached: &BTreeSet<Qualifier>,
+) -> Vec<Lint> {
+    declared
+        .into_iter()
+        .filter(|name| !reached.contains(&Qualifier::from([name.as_str()])))
+        .map(|name| {
+            Lint::unused(
+                LintKind::UnusedDependency,
+                None,
+                "dependency",
+                name,
+                "delete its row",
+            )
+        })
+        .collect()
 }
