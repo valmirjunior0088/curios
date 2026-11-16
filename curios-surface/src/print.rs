@@ -1044,11 +1044,16 @@ impl<D: Layout> TreePrinter<D> {
             Subterm::Let(_) | Subterm::FuncType(_) | Subterm::Func(_) => true,
             _ => false,
         };
-        match parenthesized {
-            true => flat([pure("("), self.term(term), indent(ends()), pure(")")]),
-            false => self.term(term),
+        match (parenthesized, matches!(term.as_subterm(), Subterm::Let(_))) {
+            // A `let` ends its own line, so parenthesized it opens a block: one level in after the parenthesis, as a broken call's arguments stand, the closer riding its last line.
+            (true, true) => flat([
+                pure("("),
+                indent(flat([hard_line(), self.term(term), ends()])),
+                pure(")"),
+            ]),
+            (true, false) => flat([pure("("), self.term(term), indent(ends()), pure(")")]),
+            (false, _) => self.term(term),
         }
-    }
 
     /// [`TreePrinter::operand`] for the head of an application, projection, or bang — a position above every operator, so any infix parenthesizes. A numeric literal parenthesizes too: `(1).0` must not reprint as the float literal `1.0`.
     fn suffix_head(self, term: Term<D>, suffix: Printer) -> Printer {

@@ -1,4 +1,4 @@
-//! How the rest prints as written: a numeral pattern's radix and width, a sort's word, a body riding its arrow or equals, an operator chain's continuations, and a local group's `and`.
+//! How the rest prints as written: a numeral pattern's radix and width, a sort's word, a body riding its arrow or equals, an operator chain's continuations, a parenthesized `let`'s block, and a local group's `and`.
 
 use super::test_support::*;
 
@@ -97,5 +97,14 @@ fn alternatives_too_long_for_a_line_continue_at_the_arms_column() {
             32
         ),
         "match p\n| (some(x), _)\n| (none(), some(x)) => x\n| _ => 0\nend"
+    );
+}
+
+// A `let` ends its own line, so a parenthesized one opens a block: one level in after the parenthesis, the closer riding its last line, as a broken call's arguments stand, and the chain around it breaks as it does around a broken call. Left on the parenthesis's line, its body printed at the indentation of the line the parenthesis opens on, left of the `let` it belongs to.
+#[test]
+fn a_parenthesized_let_opens_a_block_after_its_parenthesis() {
+    assert_eq!(
+        render("12345 + (let n = 2; n * n)", 100),
+        "12345\n    + (\n        let n = 2;\n        n * n)"
     );
 }
