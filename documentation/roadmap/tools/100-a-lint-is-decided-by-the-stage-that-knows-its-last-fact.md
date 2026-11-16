@@ -1,12 +1,11 @@
 # A lint is decided by the stage that knows its last fact
 
-**The benefit.** Each lint is decided by the stage that establishes its last fact and kept in that stage's record: the lowering words `unused-import` and `unused-declaration`, elaboration files each declaration's binder lints with its record, and a unit gathers what the records hold. What is left is the reader that gathers nothing — a refused library reports none of its lints — and the owner that decides one lint: `curios-lint` holds `unused-dependency` alone, which the package pass deciding it can hold. GHC, OCaml and rustc's resolver and liveness pass decide a warning in the phase that knows it, and rustc keeps a query's diagnostics with its result. The project has decided to adopt it.
+**The benefit.** Each lint is decided by the stage that establishes its last fact and kept in that stage's record: the lowering words `unused-import` and `unused-declaration`, elaboration files each declaration's binder lints with its record, and a unit gathers what the records hold. What is left is the owner that decides one lint: `curios-lint` holds `unused-dependency` alone, which the package pass deciding it can hold. GHC, OCaml and rustc's resolver and liveness pass decide a warning in the phase that knows it, and rustc keeps a query's diagnostics with its result. The project has decided to adopt it.
 
 The next step is stage 1, a delivery. It waits on nothing.
 
 ## What is wrong today
 
-- **A refused library reports none of its lints.** Probed at `f7afc7555`: a library whose `lib.crs` writes `use /std/{Nat, Bool};` and reads only `Nat` reports `unused import` at `Bool` under `curios lint`, and with a declaration of it refused reports `0 lints, 1 error`. A unit's lints are decided where the unit is made (`Unit::new`), and a refused unit is made nowhere: the fold of a library answers its refusal alone (`Fold::units`, `curios-pipeline/src/standard.rs`; `Diagnosed::refused`, `curios-wonder/src/diagnostics.rs`), where a refused program hands its lints beside its verdict (`Checked`).
 - **The decision still rejects the shape the code has taken.** [A lint is an exact finding read off the compilation](../../design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md) rejects "a stage deciding a lint, which spreads lint logic across every stage that knows a fact, as GHC's warnings spread across its renamer, typechecker and desugarer",. Two stages know a lint's facts, and the later one can be handed the earlier's half, as the lowering already hands elaboration `curios_core::Minted` beside the module and an `Unresolved` under a binder for elaboration to report. GHC's failure is a phase that runs twice reporting twice ([#23569](https://gitlab.haskell.org/ghc/ghc/-/issues/23569)), where a stage here decides a declaration once and keeps the decision in the record a recompile reuses. One owner did not remove the spread: both stages recorded lint-shaped facts for it, and it added a join each reader restated.
 
 ## What this builds on
@@ -31,11 +30,10 @@ GHC, OCaml, Agda and Gleam warn as they check; rustc declares every lint once an
 
 ## Stages
 
-1. **A refused unit reports its lints, as a refused program does.** A unit's compile hands its findings beside its refusal — the lowering's lints and `Observed`'s, gathered as `Findings::of_text` gathers a program's — and the fold of a library hands them on (`Fold::units`), so `wonder`, the server and `curios lint` report them beside the errors. Check: a test in `curios-wonder` — a library with an import nothing reads and a refused declaration — reporting `unused-import` beside the refusal, which fails before the change; `every_test_module_lints_clean`.
-2. **`curios-lint` goes.** `unused_dependencies` and its suite move to `curios-wonder`, and the crate, its README and its rows in the workspace manifest and `.claude/rules/pipeline.md` are deleted. Check: `cargo xtask workspace lint`; `curios lint`'s suite in `curios-wonder`.
+1. **`curios-lint` goes.** `unused_dependencies` and its suite move to `curios-wonder`, and the crate, its README and its rows in the workspace manifest and `.claude/rules/pipeline.md` are deleted. Check: `cargo xtask workspace lint`; `curios lint`'s suite in `curios-wonder`.
 
 Each stage's contract lands in its owner as it lands: the decision restates who decides a lint — the stage that establishes its last fact, in its own record — with its **Rejected** paragraph naming an owner that joins records kept for it, and dropping "a stage deciding a lint"; `.claude/rules/pipeline.md`'s lint line names the two stages and the vocabulary.
 
 ## Retirement
 
-Once the two stages have landed, the decision, the crates' READMEs and the rules state who decides each lint, and nothing references this specification, it is deleted. A later lint is decided by the stage that establishes its last fact, and a fact one stage knows and a later one needs travels beside the module, as each declaration's unread sites do in its mints.
+Once the stage has landed, the decision, the crates' READMEs and the rules state who decides each lint, and nothing references this specification, it is deleted. A later lint is decided by the stage that establishes its last fact, and a fact one stage knows and a later one needs travels beside the module, as each declaration's unread sites do in its mints.

@@ -7,8 +7,9 @@ mod tests;
 
 use {
     crate::{
-        Cache, Checked, CompileError, EntryTail, Progress, ReadLowering, Stage, TestProgram, Told,
-        check_entrypoint, compile_entrypoint, compile_units, declared_test_paths, lower_subject,
+        Cache, Checked, CompileError, EntryTail, Listeners, Progress, ReadLowering, ReadRefusal,
+        Stage, TestProgram, Told, check_entrypoint, compile_entrypoint, compile_units,
+        declared_test_paths, lower_subject,
     },
     curios_abi::ForeignStore,
     curios_common::Qualifier,
@@ -45,6 +46,8 @@ pub struct Fold<'a> {
     cache: Option<&'a dyn Cache>,
     /// Told the subject's lowering — the last unit's, or the program's on top — as soon as it is made or restored. See [`Fold::reading`].
     read: Option<ReadLowering<'a>>,
+    /// Told the subject's findings where it is a unit and its compile is refused. See [`Fold::refusing`].
+    refused: Option<ReadRefusal<'a>>,
 }
 
 impl<'a> Fold<'a> {
@@ -55,6 +58,7 @@ impl<'a> Fold<'a> {
             units,
             cache,
             read: None,
+            refused: None,
         }
     }
 
@@ -64,6 +68,14 @@ impl<'a> Fold<'a> {
     pub fn reading(self, read: ReadLowering<'a>) -> Self {
         Self {
             read: Some(read),
+            ..self
+        }
+    }
+
+    /// This fold, telling `refused` the findings of its subject where the subject is its last unit and that unit's compile is refused (`ReadRefusal`): what a question about a library reports beside its refusal, as a program's findings are reported beside its verdict ([`Checked`]).
+    pub fn refusing(self, refused: ReadRefusal<'a>) -> Self {
+        Self {
+            refused: Some(refused),
             ..self
         }
     }
@@ -237,25 +249,30 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.scoped_before(1, None, progress, |prelude, sources, produced, _| {
-            let (source, offered) = sources.last().ok_or_else(|| {
-                CompileError::fault("there is nothing to read: the scope holds no unit")
-            })?;
-            let scope = prelude
-                .iter()
-                .copied()
-                .chain(produced.iter())
-                .collect::<Vec<_>>();
+        self.scoped_before(
+            1,
+            Listeners::default(),
+            progress,
+            |prelude, sources, produced, _| {
+                let (source, offered) = sources.last().ok_or_else(|| {
+                    CompileError::fault("there is nothing to read: the scope holds no unit")
+                })?;
+                let scope = prelude
+                    .iter()
+                    .copied()
+                    .chain(produced.iter())
+                    .collect::<Vec<_>>();
 
-            lower_subject(
-                Predecessors::over(&scope),
-                &SYNTAX,
-                source,
-                *offered,
-                self.cache,
-                |text, _| then(&scope, text),
-            )
-        })
+                lower_subject(
+                    Predecessors::over(&scope),
+                    &SYNTAX,
+                    source,
+                    *offered,
+                    self.cache,
+                    |text, _| then(&scope, text),
+                )
+            },
+        )
     }
 
     /// The interface of the last unit — a package's library, compiled against everything before it — for its consumers. The same fold [`Fold::check_units`] runs, the certifier included, so a library that does not check is not documented and reports what stopped it as `run` would. The record is then made from the unit's stored tables and its sources ([`document_unit`]), whether the unit was compiled now or reused from the store: no unit carries one.
@@ -311,19 +328,24 @@ impl<'a> Fold<'a> {
         E: FnOnce(Predecessors<'_>, &mut dyn FnMut(Progress<'_>)) -> Result<T, CompileError>,
     {
         // The subject is the program on top, whose step tells the reader itself: no unit beneath it is read.
-        self.scoped_before(0, None, progress, |prelude, _, produced, progress| {
-            let predecessors = prelude
-                .iter()
-                .copied()
-                .chain(produced.iter())
-                .collect::<Vec<_>>();
+        self.scoped_before(
+            0,
+            Listeners::default(),
+            progress,
+            |prelude, _, produced, progress| {
+                let predecessors = prelude
+                    .iter()
+                    .copied()
+                    .chain(produced.iter())
+                    .collect::<Vec<_>>();
 
-            // The entry step announces itself, since what its announcement says, whether its declarations are held, is known first there; that it finished is said here, where the fold's last step ends.
-            let compiled = entry(Predecessors::over(&predecessors), progress)?;
-            progress(Progress::Compiled);
+                // The entry step announces itself, since what its announcement says, whether its declarations are held, is known first there; that it finished is said here, where the fold's last step ends.
+                let compiled = entry(Predecessors::over(&predecessors), progress)?;
+                progress(Progress::Compiled);
 
-            Ok(compiled)
-        })
+                Ok(compiled)
+            },
+        )
     }
 
     /// The standard predecessors, every unit compiled — see [`Fold::scoped_before`].
@@ -340,14 +362,22 @@ impl<'a> Fold<'a> {
     where
         P: FnMut(Progress<'_>),
     {
-        self.scoped_before(0, self.read, progress, then)
+        self.scoped_before(
+            0,
+            Listeners {
+                read: self.read,
+                refused: self.refused,
+            },
+            progress,
+            then,
+        )
     }
 
-    /// The standard predecessors, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, each unit's source as it is compiled, the units produced, and the progress reporter for whatever follows. The one spelling of them this type exists to write once; the methods differ only in what they do with it. The last `left` units are given their sources and not compiled, for a method that does something else with its subject, and `read` is told the lowering of the last unit compiled.
+    /// The standard predecessors, assembled once: the fixed prelude's roots, then the units compiled in order against them — what every method here compiles against — handed to `then` as the prelude, each unit's source as it is compiled, the units produced, and the progress reporter for whatever follows. The one spelling of them this type exists to write once; the methods differ only in what they do with it. The last `left` units are given their sources and not compiled, for a method that does something else with its subject, and `listeners` are told of the last unit compiled: its lowering, and its findings where it is refused.
     fn scoped_before<P, T>(
         self,
         left: usize,
-        read: Option<ReadLowering<'a>>,
+        listeners: Listeners<'a>,
         mut progress: P,
         then: impl FnOnce(
             &[&Unit],
@@ -364,6 +394,7 @@ impl<'a> Fold<'a> {
             units,
             cache,
             read: _,
+            refused: _,
         } = self;
 
         with_prelude(|prelude| {
@@ -395,7 +426,7 @@ impl<'a> Fold<'a> {
                 &sources[..sources.len().saturating_sub(left)],
                 cache,
                 &mut progress,
-                read,
+                listeners,
             )?;
 
             then(&roots, &sources, produced, &mut progress)

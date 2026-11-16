@@ -243,7 +243,7 @@ pub fn compile_with_units(
             &sources,
             None,
             |_| {},
-            None,
+            Listeners::default(),
         )?;
         let predecessors = prelude
             .iter()
@@ -439,6 +439,7 @@ pub fn unit_after(prefix: &str, source: &str, units: &[&Unit]) -> Unit {
             &SYNTAX,
             &UnitSource::mounted(&modules),
             &|_| {},
+            None,
         )
     })
     .map_err(String::from)
@@ -474,6 +475,7 @@ pub fn recompile_after(
                 candidates: None,
             },
             &|_| {},
+            None,
         )
     })
     .map_err(String::from)
@@ -490,7 +492,7 @@ pub fn compile_modules(modules: &RootSource) -> Result<Unit, String> {
             &[(UnitSource::mounted(modules), None)],
             None,
             |_| {},
-            None,
+            Listeners::default(),
         )
     })
     .map_err(String::from)
@@ -515,7 +517,7 @@ pub fn compile_each(sources: &[&RootSource]) -> Result<Vec<Unit>, String> {
                 .collect::<Vec<_>>(),
             None,
             |_| {},
-            None,
+            Listeners::default(),
         )
     })
     .map_err(String::from)
@@ -535,6 +537,7 @@ pub fn recompile_modules(modules: &RootSource, baseline: &Unit) -> Result<Unit, 
                 candidates: None,
             },
             &|_| {},
+            None,
         )
     })
     .map_err(String::from)

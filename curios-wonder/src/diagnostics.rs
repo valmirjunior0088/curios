@@ -196,12 +196,18 @@ fn diagnosed_reading(
     let mut diagnosed = match subject.formed(overlay) {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
-            let found = fold(&units).units(&mut *progress, |_, produced| {
-                Ok(produced.last().map(Findings::of_unit).unwrap_or_default())
-            });
-            match found {
-                Ok(findings) => Diagnosed::found(None, findings),
-                Err(error) => Diagnosed::refused(error),
+            // A refused library's findings, reported beside its refusal as a refused program's are.
+            let refusal = RefCell::new(None);
+            let refused = |findings: Findings| *refusal.borrow_mut() = Some(findings);
+            let found = fold(&units)
+                .refusing(&refused)
+                .units(&mut *progress, |_, produced| {
+                    Ok(produced.last().map(Findings::of_unit).unwrap_or_default())
+                });
+            match (found, refusal.take()) {
+                (Ok(findings), _) => Diagnosed::found(None, findings),
+                (Err(error), Some(findings)) => Diagnosed::found(Some(error), findings),
+                (Err(error), None) => Diagnosed::refused(error),
             }
         }
         Subject::Entry {

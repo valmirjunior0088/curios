@@ -90,7 +90,7 @@ fn folded_offered(
                     Progress::Entry { .. } => "entry".to_string(),
                 });
             },
-            None,
+            Listeners::default(),
         )
     })
     .expect("the units compile");

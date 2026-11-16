@@ -18,8 +18,8 @@ mod compile;
 use compile::*;
 pub use compile::{
     After, Cache, Checked, CheckedProgram, CompileError, Earlier, EntryTail, Examined, Findings,
-    Obligation, Progress, Refused, TestModule, TestProgram, compile_units, declared_test_paths,
-    examine_entrypoint, globals, recheck, spelling_at,
+    Listeners, Obligation, Progress, Refused, TestModule, TestProgram, compile_units,
+    declared_test_paths, examine_entrypoint, globals, recheck, spelling_at,
 };
 
 mod recompile;

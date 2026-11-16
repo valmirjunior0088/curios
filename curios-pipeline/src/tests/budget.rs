@@ -180,7 +180,7 @@ fn a_program_is_taken_under_the_same_budget_whatever_its_scope_holds() {
             &[(UnitSource::mounted(&modules), None)],
             None,
             |_| {},
-            None,
+            Listeners::default(),
         )
         .map_err(String::from)
         .expect("the library compiles")

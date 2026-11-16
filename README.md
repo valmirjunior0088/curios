@@ -35,10 +35,10 @@ That length is not a comment, and nobody has to remember to check it. Try tellin
 ```crs
 use /std/{Nat, Vec};
 
-let empty: Vec(Nat, 0) =
+pub let empty: Vec(Nat, 0) =
     Vec/nil();
 
-let single: Vec(Nat, 1) =
+pub let single: Vec(Nat, 1) =
     empty;
 ```
 

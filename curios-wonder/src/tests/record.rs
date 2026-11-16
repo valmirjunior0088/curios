@@ -189,6 +189,40 @@ fn a_library_reports_its_own_lints() {
     );
 }
 
+/// A refused library reports its lints beside its refusal, as a refused program does: the lowering's own, here an import nothing resolved through, stand whatever elaboration says.
+#[test]
+fn a_refused_library_reports_its_lints_beside_the_refusal() {
+    let root = mounted_project("refused-library-lints");
+    write(
+        &root,
+        "b/lib.crs",
+        "use /std/{Nat, Bool};\n\npub let one : Nat = \"a\";\n",
+    );
+    let diagnostics = diagnostics(
+        DEFAULT_BUDGET,
+        Subject::Unit {
+            units: mounted(&root),
+        },
+        &Overlay::default(),
+        None,
+        &mut |_| {},
+    )
+    .diagnostics;
+
+    let severities = diagnostics
+        .iter()
+        .map(|diagnosis| diagnosis.severity)
+        .collect::<Vec<_>>();
+    assert_eq!(severities, [Severity::Error, Severity::Lint]);
+    assert!(
+        diagnostics[1]
+            .rendered(&Style::plain())
+            .contains("lib.crs:1:16"),
+        "{}",
+        diagnostics[1].rendered(&Style::plain())
+    );
+}
+
 /// A library's ill-typed test is its own record, though no tail is compiled over the library's tests.
 ///
 /// **The premise a question about a library rests on.** `curios test` compiles a library under a synthesized `Test/main([...])`, and a question compiles no entry at all — which is sound only because that tail raises nothing of its own: a test's body is an item checked at `/std/Test` like any other, so a fault in one is the unit's refusal.

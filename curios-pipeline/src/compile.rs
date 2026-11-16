@@ -907,9 +907,10 @@ pub struct Closing<'a> {
     pub tail: Tail<'a>,
     /// Told the unit's module and the entry as they elaborated, before anything judges them.
     pub elaborated: &'a mut dyn FnMut(&curios_core::Definitions, &curios_core::Entrypoint),
-    /// Told the unit's lowering, with what its elaboration observed, where the unit is refused: what a question reads the program's findings off whatever the verdict.
-    pub refused: &'a mut dyn FnMut(&PreparedText, &Observed),
 }
+
+/// Told a unit's lowering, with the binder lints its elaboration held, where the unit is refused: what a question reads the unit's findings off whatever the verdict, a program's or a library's ([`Findings::of_text`]).
+pub type OnRefusal<'a> = &'a mut dyn FnMut(&PreparedText, &Observed);
 
 /// What erasing an entered program came to: the module it links to, or what erasing it refused it for.
 type Erasure = Result<curios_anf::Module, CompileError>;
@@ -1034,7 +1035,6 @@ where
             let closing = Some(Closing {
                 tail: closing,
                 elaborated: &mut elaborated,
-                refused: &mut refused,
             });
             let compiled = match &earlier {
                 Some(Earlier {
@@ -1056,8 +1056,16 @@ where
                         candidates: candidates.as_deref(),
                     },
                     closing,
+                    Some(&mut refused),
                 ),
-                None => compile_lowered(budget, predecessors, syntax, lowered, closing),
+                None => compile_lowered(
+                    budget,
+                    predecessors,
+                    syntax,
+                    lowered,
+                    closing,
+                    Some(&mut refused),
+                ),
             };
 
             compiled.map(|(unit, entry)| {
@@ -1325,7 +1333,7 @@ where
     (wasm_module, imported)
 }
 
-/// Compile one unit against `predecessors`: lower, elaborate, judge, erase, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude.
+/// Compile one unit against `predecessors`: lower, elaborate, judge, erase, `told` the unit's lowering as soon as it is made, whatever its compile goes on to conclude, and `refused` its lowering with what its elaboration held where it is refused ([`OnRefusal`]).
 ///
 /// **The judgment sits between elaboration and erasure and that ordering is the point.** A module the certifier refuses never reaches erasure's budget, and a refusal reads as a refusal rather than as whatever erasure made of an ill-typed term. It is also why this is a fold step rather than one operation: the producer of a stored unit runs the same sequence *without* the judge, because the crate that writes an image deliberately cannot reach the certifier.
 pub fn compile_unit(
@@ -1334,13 +1342,14 @@ pub fn compile_unit(
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
     told: &dyn Fn(&PreparedText),
+    refused: Option<OnRefusal<'_>>,
 ) -> Result<Unit, CompileError> {
     curios_profile::profile!("compile_unit");
     let lowered = into_core_unit(source, &predecessors.text(), syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
     told(&lowered);
 
-    compile_lowered(budget, predecessors, syntax, lowered, None).map(|(unit, _)| unit)
+    compile_lowered(budget, predecessors, syntax, lowered, None, refused).map(|(unit, _)| unit)
 }
 
 /// [`compile_unit`] from the unit's lowering on: elaborate, judge, erase. With `closing`, the unit is a program's declarations and the term that closes the program is elaborated in their walk and handed back beside the unit ([`Closing`]).
@@ -1350,15 +1359,12 @@ pub fn compile_lowered(
     syntax: &SyntaxRegistry,
     lowered: PreparedText,
     closing: Option<Closing<'_>>,
+    mut refused: Option<OnRefusal<'_>>,
 ) -> Result<(Unit, Option<curios_core::Entrypoint>), CompileError> {
     let cores = predecessors.cores();
-    let (tail, mut elaborated, mut refused) = match closing {
-        Some(Closing {
-            tail,
-            elaborated,
-            refused,
-        }) => (Some(tail), Some(elaborated), Some(refused)),
-        None => (None, None, None),
+    let (tail, mut elaborated) = match closing {
+        Some(Closing { tail, elaborated }) => (Some(tail), Some(elaborated)),
+        None => (None, None),
     };
 
     let fixed = predecessors.fixed();
@@ -1521,7 +1527,7 @@ impl After {
 ///
 /// Each source arrives beside the baseline its assembler offers for it — `None` for every unit but one taking a prelude root's place, which is decided where the sources are built rather than recognized here. The offer goes to `cache` on a miss, which decides what becomes of it, and with no cache nothing is taken.
 ///
-/// `read`, where there is one, is told the last unit's lowering as soon as it is made or restored (`ReadLowering`).
+/// `listeners` are told of the last unit: its lowering as soon as it is made or restored, and its findings where it is refused ([`Listeners`]).
 pub fn compile_units<'a, P>(
     budget: u64,
     base: Predecessors<'a>,
@@ -1529,7 +1535,7 @@ pub fn compile_units<'a, P>(
     sources: &[(UnitSource<'_>, Option<&Unit>)],
     cache: Option<&dyn Cache>,
     mut progress: P,
-    read: Option<ReadLowering<'_>>,
+    listeners: Listeners<'_>,
 ) -> Result<Vec<Unit>, CompileError>
 where
     P: FnMut(Progress<'_>),
@@ -1537,8 +1543,9 @@ where
     let mut produced: Vec<Unit> = Vec::new();
 
     for (index, (source, offered)) in sources.iter().enumerate() {
-        // The last unit is the fold's subject, and the one whose lowering a reader is told.
-        let read = read.filter(|_| index + 1 == sources.len());
+        // The last unit is the fold's subject, and the one whose lowering and findings are told.
+        let subject = index + 1 == sources.len();
+        let read = listeners.read.filter(|_| subject);
         let predecessors = base
             .units()
             .iter()
@@ -1570,7 +1577,12 @@ where
             None => Progress::Compiling(&prefix),
         });
 
-        let unit = match &baseline {
+        // A refused subject's findings, its lowering's lints and what its elaboration held, for whoever is told of them.
+        let mut findings = None;
+        let mut refused = |text: &PreparedText, observed: &Observed| {
+            findings = Some(Findings::of_text(text, observed));
+        };
+        let compiled = match &baseline {
             Some(Earlier {
                 unit: baseline,
                 after,
@@ -1589,14 +1601,25 @@ where
                     candidates: candidates.as_deref(),
                 },
                 &told,
-            )?,
+                Some(&mut refused),
+            ),
             None => compile_unit(
                 budget,
                 Predecessors::over(&predecessors),
                 syntax,
                 source,
                 &told,
-            )?,
+                Some(&mut refused),
+            ),
+        };
+        let unit = match compiled {
+            Ok(unit) => unit,
+            Err(error) => {
+                if let (Some(tell), Some(findings), true) = (listeners.refused, findings, subject) {
+                    tell(findings);
+                }
+                return Err(error);
+            }
         };
         progress(Progress::Compiled);
 
@@ -1744,6 +1767,16 @@ fn answered(source: &UnitSource<'_>, unit: &Unit) -> Result<(), CompileError> {
 ///
 /// **What was produced, told once, for the subject alone.** Beside [`Progress`] and the [`Stage`] observer rather than inside either: the first reports what is happening and the second the rungs `wonder --stage` prints, while this hands a reader the lowering a refused subject still has, so a question about what a file writes is answered from the check that compiled it.
 pub type ReadLowering<'a> = &'a dyn Fn(&[&Unit], &PreparedText, Option<&curios_core::Entrypoint>);
+
+/// Told the findings of a fold's subject where its compile is refused: its lowering's lints, and the binder lints its elaboration held whatever it concluded — what a question about a refused library reports beside the refusal, as a refused program's are reported beside its verdict ([`Checked`]).
+pub type ReadRefusal<'a> = &'a dyn Fn(Findings);
+
+/// What a fold's units are compiled telling of its subject, the last of them: its lowering as soon as it is made or restored, and its findings where it is refused.
+#[derive(Clone, Copy, Default)]
+pub struct Listeners<'a> {
+    pub read: Option<ReadLowering<'a>>,
+    pub refused: Option<ReadRefusal<'a>>,
+}
 
 /// What the fold is doing, for a caller that reports it.
 ///
