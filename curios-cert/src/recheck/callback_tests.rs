@@ -1,4 +1,4 @@
-//! A call in a callback, graded where its callee applies it: modules built by hand and put to the certifier alone, each claim beside the program `curios`'s `tests::rules::totality_callback_tests` puts to both checkers.
+//! A call in a callback, graded where its callee applies it: modules built by hand and put to the certifier alone, each claim beside the program `curios`'s `tests::rules::totality_callback_tests` or `totality_callback_binder_tests` puts to both checkers.
 
 use {super::test_support::*, crate::*, curios_common::fill};
 
@@ -142,5 +142,113 @@ fn a_member_whose_second_list_is_a_definitions_value_is_graded_over_both_its_lam
         verdicts("/loop(k)(f)"),
         Vec::new(),
         "the control stopped certifying, a call on the predecessor",
+    );
+}
+
+/// `each` applies `p` to the `Never` a `more` holds and the function that answers to `r` unchanged, and `split` applies `p` to that `Never` and `q` to `r` unchanged. `Never` has no closed value, so a `spin` whose calls descend is a total function out of it; `${spin}` is what `spin` hands its callee.
+const CALLBACKS_OUT_OF_AN_EMPTY_TYPE: &str = r#"
+induct /Never: pub Type
+| more(x: #{node = InductType} /Never())
+end
+
+#{node = Rec}
+let /each: (
+    n: #NatType,
+    t: #{node = InductType} /Never(),
+    r: #{node = InductType} /Never(),
+    p: (#{node = InductType} /Never()) -> (#{node = InductType} /Never()) -> /std/Bool/False
+) -> /std/Bool/False =
+    (
+        n: #NatType,
+        t: #{node = InductType} /Never(),
+        r: #{node = InductType} /Never(),
+        p: (#{node = InductType} /Never()) -> (#{node = InductType} /Never()) -> /std/Bool/False
+    ) =>
+        #{goal = /std/Bool/False}
+        match n
+        | 0 => #{goal = /std/Bool/False} match t | more(x) => p(x)(r) end
+        | k + 1 => /each(k, t, r, p)
+        end;
+
+#{node = Rec}
+let /split: (
+    n: #NatType,
+    t: #{node = InductType} /Never(),
+    r: #{node = InductType} /Never(),
+    p: (#{node = InductType} /Never()) -> /std/Bool/False,
+    q: (#{node = InductType} /Never()) -> /std/Bool/False
+) -> /std/Bool/False =
+    (
+        n: #NatType,
+        t: #{node = InductType} /Never(),
+        r: #{node = InductType} /Never(),
+        p: (#{node = InductType} /Never()) -> /std/Bool/False,
+        q: (#{node = InductType} /Never()) -> /std/Bool/False
+    ) =>
+        #{goal = /std/Bool/False}
+        match n
+        | 0 => #{goal = /std/Bool/False} match t | more(x) => p(x) end
+        | k + 1 => q(r)
+        end;
+
+#{node = Rec}
+let /spin: (t: #{node = InductType} /Never()) -> /std/Bool/False =
+    (t: #{node = InductType} /Never()) => ${spin};
+/std/Bool/True/qed()
+"#;
+
+/// The verdicts on [`CALLBACKS_OUT_OF_AN_EMPTY_TYPE`] with `spin` handing its callee `spin`.
+fn spin_verdicts(spin: &str) -> Vec<Verdict> {
+    core_text_verdicts(&fill!(
+        "${PROPOSITIONS}\n${CALLBACKS}",
+        PROPOSITIONS,
+        CALLBACKS = fill!(CALLBACKS_OUT_OF_AN_EMPTY_TYPE, spin)
+    ))
+}
+
+/// Whether `verdicts` refuse `spin` for a group that does not descend.
+fn spin_does_not_descend(verdicts: &[Verdict]) -> bool {
+    refuses(verdicts, Some("spin"), |error| {
+        matches!(error, Error::NotDescending { .. })
+    })
+}
+
+// A bound a callback is handed stays with its binders: `each` stands `c` below `t`, and the lambda the callback answers binds `e` to `r`, which `spin` hands `t` itself, so `spin(e)` is `spin(t)` again. `curios`'s `tests::rules::totality_callback_binder_tests` puts the program to both checkers under this name. The control recurses on `c`.
+#[test]
+fn a_lambda_a_callback_answers_takes_none_of_the_callbacks_bounds() {
+    let attack = spin_verdicts(
+        "/each(0, t, t, (c: #{node = InductType} /Never()) => (e: #{node = InductType} /Never()) => /spin(e))",
+    );
+    assert!(spin_does_not_descend(&attack), "{attack:?}");
+
+    let control = spin_verdicts(
+        "/each(0, t, t, (c: #{node = InductType} /Never()) => (e: #{node = InductType} /Never()) => /spin(c))",
+    );
+    assert!(
+        !refuses(&control, Some("spin"), |error| matches!(
+            error,
+            Error::NotDescending { .. } | Error::NotTotal { .. }
+        )),
+        "{control:?}"
+    );
+}
+
+// Each argument of a call is bounded by the applications of its own parameter: `split` stands `p`'s binder below `t` and `q`'s at `r`, which `spin` hands `t` itself, so `spin(e)` is `spin(t)` again. `curios`'s `tests::rules::totality_callback_binder_tests` puts the program to both checkers under this name. The control's `q` callback recurses on what a `more` of `t` holds.
+#[test]
+fn a_callbacks_sibling_is_bounded_by_its_own_applications() {
+    let attack = spin_verdicts(
+        "/split(1, t, t, (c: #{node = InductType} /Never()) => /spin(c), (e: #{node = InductType} /Never()) => /spin(e))",
+    );
+    assert!(spin_does_not_descend(&attack), "{attack:?}");
+
+    let control = spin_verdicts(
+        "/split(1, t, t, (c: #{node = InductType} /Never()) => /spin(c), (e: #{node = InductType} /Never()) => #{goal = /std/Bool/False} match t | more(y) => /spin(y) end)",
+    );
+    assert!(
+        !refuses(&control, Some("spin"), |error| matches!(
+            error,
+            Error::NotDescending { .. } | Error::NotTotal { .. }
+        )),
+        "{control:?}"
     );
 }

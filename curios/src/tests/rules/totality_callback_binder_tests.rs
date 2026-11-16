@@ -362,3 +362,252 @@ fn a_binder_that_takes_a_parameters_name_stands_for_what_it_binds() {
             matches!(error, curios_cert::Error::NotTotal { .. })
         });
 }
+
+// A bound a callback is handed stays with its binders: `apply_inner` applies `p` to a child below `t` and the function that answers to `r`, so `c` stands below `t` and the lambda the callback answers binds `e` to `r`, which `size` hands `t` itself. `curios_cert`'s `recheck::callback_tests` puts the same claim to the certifier alone under this name. The refusal recurses on `e`, which is `size(t)` again wherever `t` has a child.
+#[test]
+fn a_lambda_a_callback_answers_takes_none_of_the_callbacks_bounds() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        induct Tr : Type
+        | leaf(n : Nat)
+        | node(a : Tr, b : Tr)
+        end
+        let apply_inner(t : Tr, r : Tr, p : (Tr) -> (Tr) -> Nat) -> Nat =
+            match t
+            | leaf(n) => n
+            | node(a, b) => p(a)(r) + apply_inner(b, r, p)
+            end;
+        let size(t : Tr) -> Nat = apply_inner(t, t, (c) => (e) => 1 + size(c));
+        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(e) => 1 + size(c)", "(e) => 1 + size(e)")])
+    .by_elaborator_in("/Sized", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Sized", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// Each argument of a call is bounded by the applications of its own parameter: `split` applies `p` to a child below `t` and `q` to `r` unchanged, so the callback at `q` stands at `t` itself, beside one below it. `curios_cert`'s `recheck::callback_tests` puts the same claim to the certifier alone under this name. The refusal recurses on `q`'s binder, which is `size(t)` again wherever `t` has a child.
+#[test]
+fn a_callbacks_sibling_is_bounded_by_its_own_applications() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        induct Tr : Type
+        | leaf(n : Nat)
+        | node(a : Tr, b : Tr)
+        end
+        let split(t : Tr, r : Tr, p : (Tr) -> Nat, q : (Tr) -> Nat) -> Nat =
+            match t
+            | leaf(n) => n
+            | node(a, b) => p(a) + q(r) + split(b, r, p, q)
+            end;
+        let size(t : Tr) -> Nat = split(t, t, (c) => 1 + size(c), (e) => 0);
+        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(e) => 0", "(e) => size(e)")])
+    .by_elaborator_in("/Sized", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Sized", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A lambda a callback hands on is bounded through the call that hands it, and by nothing the callback was handed: inside `each`'s callback, `at(0, c, f)` applies `f` to `c`, which is below `t`, so `d` is too. The refusal hands `at` the whole of `t`, which `f` is applied to unchanged, beside a `c` still below it.
+#[test]
+fn a_lambda_a_callback_hands_on_is_bounded_through_the_call_that_hands_it() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        induct Tr : Type
+        | leaf(n : Nat)
+        | node(a : Tr, b : Tr)
+        end
+        let each(t : Tr, p : (Tr) -> Nat) -> Nat =
+            match t
+            | leaf(n) => n
+            | node(a, b) => p(a) + each(b, p)
+            end;
+        let at(n : Nat, x : Tr, f : (Tr) -> Nat) -> Nat =
+            match n
+            | 0 => f(x)
+            | k + 1 => at(k, x, f)
+            end;
+        let size(t : Tr) -> Nat = each(t, (c) => 1 + at(0, c, (d) => size(d)));
+        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("at(0, c, ", "at(0, t, ")])
+    .by_elaborator_in("/Sized", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Sized", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// Only a lambda written where the callee applies it is bounded by the callee's applications: one bound by a `let`, stored in a tuple, chosen by a match or answered by another call reaches the callee as a value, and is applied besides wherever the program applies it, here to `t` itself. Each refusal hands `each` the lambda the control writes in place through one indirection and applies it to `t` beside the call.
+#[test]
+fn a_callback_reached_through_an_indirection_takes_no_bounds() {
+    let program = control(
+        r#"
+        use /std/{Nat, Bool};
+        induct Tr : Type
+        | leaf(n : Nat)
+        | node(a : Tr, b : Tr)
+        end
+        let each(t : Tr, p : (Tr) -> Nat) -> Nat =
+            match t
+            | leaf(n) => n
+            | node(a, b) => p(a) + each(b, p)
+            end;
+        let twice(f : (Tr) -> Nat, x : Tr) -> (Tr) -> Nat = (y : Tr) => f(y) + f(x);
+        let size(t : Tr) -> Nat = each(t, (c) => 1 + size(c));
+        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    for indirection in [
+        "let g = (c : Tr) => 1 + size(c); each(t, g) + g(t)",
+        "let held = ((c : Tr) => 1 + size(c), t); each(t, held.0) + held.0(held.1)",
+        "let g = match t | leaf(n) => (c : Tr) => 1 + size(c) | node(a, b) => (c : Tr) => 1 + size(c) end; each(t, g) + g(t)",
+        "each(t, twice((c) => 1 + size(c), t))",
+    ] {
+        program
+            .refused(&[("each(t, (c) => 1 + size(c))", indirection)])
+            .by_elaborator_in("/Sized", |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in("/Sized", |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}
+
+// A callback is bounded by what every application its callee reaches establishes, the ones a path of the callee's group reaches included: `kids` applies `p` below `t` and hands it on to `whole`, which applies it below `r`, and `size` hands both `t`. The refusal has `whole` apply `p` to `r` itself, which only the path through `whole` reaches, and which is `size(t)` again.
+#[test]
+fn a_callback_is_bounded_by_every_application_its_callee_reaches() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        induct Tr : Type
+        | leaf(n : Nat)
+        | node(a : Tr, b : Tr)
+        end
+        let kids(p : (Tr) -> Nat, r : Tr, t : Tr) -> Nat =
+            match t
+            | leaf(n) => whole(p, r)
+            | node(a, b) => p(a) + kids(p, r, b)
+            end
+        and whole(p : (Tr) -> Nat, r : Tr) -> Nat =
+            match r
+            | leaf(n) => n
+            | node(a, b) => p(a) + kids(p, a, a)
+            end;
+        let size(t : Tr) -> Nat = kids((c) => 1 + size(c), t, t);
+        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "| node(a, b) => p(a) + kids(p, a, a)",
+        "| node(a, b) => p(r) + kids(p, a, a)",
+    )])
+    .by_elaborator_in("/Sized", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Sized", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A summary reads a lambda a definition hands on as a call reads one: `relay` hands `apply_inner` a lambda whose `x` stands below `t` and whose answer binds `y` to `t` itself, so `relay` applies `p` below `t` only where it applies it to `x`. The refusal applies `p` to `y`, so `relay` hands `size`'s callback `t` itself.
+#[test]
+fn a_lambda_a_summarized_callback_answers_takes_none_of_its_bounds() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        induct Tr : Type
+        | leaf(n : Nat)
+        | node(a : Tr, b : Tr)
+        end
+        let apply_inner(t : Tr, r : Tr, q : (Tr) -> (Tr) -> Nat) -> Nat =
+            match t
+            | leaf(n) => n
+            | node(a, b) => q(a)(r) + apply_inner(b, r, q)
+            end;
+        let relay(t : Tr, p : (Tr) -> Nat) -> Nat =
+            match t
+            | leaf(n) => n
+            | node(a, b) => apply_inner(t, t, (x) => (y) => p(x)) + relay(b, p)
+            end;
+        let size(t : Tr) -> Nat = relay(t, (c) => 1 + size(c));
+        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == 2);
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(y) => p(x)", "(y) => p(y)")])
+    .by_elaborator_in("/Sized", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Sized", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A callback handed through two callees is bounded by each call on the way: `relay` hands `each` a lambda applying `p`, which `each` applies below `t`, so `relay` applies `p` below `t`, whether `size` hands it a callback or `count` hands it `count` itself. The refusals hand `each` a tree holding `t` as a child, so `p` is applied to `t` itself, and have `relay`'s lambda apply `p` to `t` beside its element.
+#[test]
+fn a_callback_handed_through_two_callees_is_bounded_by_each_call() {
+    let program = control(
+        r#"
+        use /std/{Nat, Bool};
+        induct Tr : Type
+        | leaf(n : Nat)
+        | node(a : Tr, b : Tr)
+        end
+        let each(t : Tr, p : (Tr) -> Nat) -> Nat =
+            match t
+            | leaf(n) => n
+            | node(a, b) => p(a) + each(b, p)
+            end;
+        let relay(t : Tr, p : (Tr) -> Nat) -> Nat =
+            match t
+            | leaf(n) => n
+            | node(a, b) => each(t, (x) => p(x) + p(a)) + relay(b, p)
+            end;
+        let size(t : Tr) -> Nat = relay(t, (c) => 1 + size(c));
+        let count(t : Tr) -> Nat = 1 + relay(t, count);
+        let Sized(t : Tr) -> Prop = Bool/Holds(size(t) == count(t));
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    for edit in [
+        ("each(t, (x)", "each(Tr/node(t, t), (x)"),
+        ("p(x) + p(a)", "p(x) + p(t)"),
+    ] {
+        program
+            .refused(&[edit])
+            .by_elaborator_in("/Sized", |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in("/Sized", |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}
