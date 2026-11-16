@@ -170,10 +170,18 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
         // Application: the head must be a function of matching arity, each argument checks against its domain, and the result is the codomain with the arguments substituted — which is where dependency lives.
         //
         // A lambda applied on the spot, inside a group's body, is typed with each binder standing for its argument, for the call recorder alone: a call inside reads its arguments as what they are rather than as fresh binders nothing is below, which is what keeps an arm generalized over a hypothesis and applied back to it from hiding the descent it carries. Outside every group there is no call to read, and the lambda takes the ordinary route, memo included. Every other head is typed as the head of this spine, whose call is recorded here whole once the arguments are typed.
+        //
+        // A curried spine is read whole, as the elaborator's walk reads it: the head of `h(a)(b)` is typed with `[b]` applied after it, so a lambda applied on the spot binds its inner lambda's binders to the later lists too, and a callee's summary grades every list's arguments, the head's own taken there and each later list's taken by the application around it once its head is typed. Nothing else reads the later lists, so a spine inside an argument starts from none.
         Subterm::Apply(apply) => {
+            let later = certifier.calls.take_later();
+            let mut from_head = Vec::new();
             let head_type = match &*apply.head {
                 Subterm::Func(func) if certifier.recording() => {
-                    let arguments = apply.params().cloned().collect::<Vec<_>>();
+                    let arguments = apply
+                        .params()
+                        .chain(later.iter().flatten())
+                        .cloned()
+                        .collect::<Vec<_>>();
                     let before = certifier.partial_groups();
                     let head_type = infer_lambda(certifier, func, &arguments)?;
                     let position = certifier.record_checked(&apply.head, &head_type);
@@ -182,6 +190,17 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                     }
 
                     head_type
+                }
+                Subterm::Apply(_) => {
+                    let mut lists = vec![apply.params().cloned().collect::<Vec<_>>()];
+                    lists.extend(later.iter().cloned());
+                    certifier.calls.set_later(lists);
+                    certifier.calls.set_spine_head();
+                    let head_type = infer(certifier, &apply.head);
+                    // A head answered from the memo takes neither, so neither outlives it.
+                    certifier.calls.take_later();
+                    from_head = certifier.calls.take_rest_handed();
+                    head_type?
                 }
                 _ => {
                     certifier.calls.set_spine_head();
@@ -202,13 +221,23 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 });
             }
 
-            // A definition applying a parameter as its summary states hands a lambda there bounds for its binders, and a member there the calls it makes.
-            let mut handed = match &*apply.head {
+            // A definition applying a parameter as its summary states hands a lambda there bounds for its binders, and a member there the calls it makes, over its spine's every list: this list's positions taken here, and the rest left for the applications around this one.
+            let (mut handed, rest) = match &*apply.head {
                 Subterm::Instance(instance) => {
-                    let arguments = apply.params().cloned().collect::<Vec<_>>();
-                    certifier.handed_to(&instance.name, &arguments)?
+                    let arguments = apply
+                        .params()
+                        .chain(later.iter().flatten())
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    let mut handed = certifier.handed_to(&instance.name, &arguments)?;
+                    let rest = handed.split_off(apply.arguments.len().min(handed.len()));
+                    (handed, rest)
                 }
-                _ => Vec::new(),
+                Subterm::Apply(_) => {
+                    let rest = from_head.split_off(apply.arguments.len().min(from_head.len()));
+                    (from_head, rest)
+                }
+                _ => (Vec::new(), Vec::new()),
             };
 
             let mut cursor = telescope.cursor();
@@ -232,6 +261,10 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 certifier.calls.clear_handed();
                 checked?;
                 cursor.advance(argument.term.clone());
+            }
+
+            if !rest.is_empty() {
+                certifier.calls.leave_rest_handed(rest);
             }
 
             if !spine_head {
@@ -1116,7 +1149,20 @@ fn infer_telescope(
         }
 
         let body = cursor.body().expect("a cursor past every entry");
-        let type_ = infer(certifier, &body)?;
+        // Arguments past the telescope are what the lambda the body is gets applied to on the spot, its binders standing for them as these do: a curried spine's later lists. Typed as the application's head lambda is, its position recorded here, since the memo the ordinary route would consult cannot hold a size fact.
+        let rest = arguments.get(entries.len()..).unwrap_or_default();
+        let type_ = match &*body {
+            Subterm::Func(func) if !rest.is_empty() => {
+                let before = certifier.partial_groups();
+                let type_ = infer_lambda(certifier, func, rest)?;
+                let position = certifier.record_checked(&body, &type_);
+                if certifier.partial_groups() > before {
+                    certifier.enclose_partial(position);
+                }
+                type_
+            }
+            _ => infer(certifier, &body)?,
+        };
 
         // The Π keeps each binder's mark, which is part of its identity.
         Ok(Telescope::build_marked(entries, type_))

@@ -45,6 +45,10 @@ pub struct Calls {
     assumed: Option<Handed>,
     /// The member the next typing of a bare member local names, with what its callee hands it ([`handed`]): calls graded through each in place of one claiming nothing. Keyed by the member, so no other local's typing takes it.
     handed: Option<(Free, Handed)>,
+    /// The argument lists applied after the application whose head the next judgment types, nearest first: the rest of a curried spine, which its head reads whole, as the elaborator's walk does. Taken by that judgment alone, as `spine_head` is.
+    later: Vec<Vec<Term>>,
+    /// What a curried spine's head handed the argument lists after its own, nearest first, left for the application around it to take its share of once its head is typed.
+    rest_handed: Vec<Option<Handed>>,
 }
 
 /// What a call hands one argument where its callee applies it ([`handed`]), once for each frame whose body is being checked: the frame, and the callee's applications graded against that frame's caller. A lambda handed inside an inner group's body runs within the enclosing member's invocation too, so its binders stand to every caller whose body holds it, as a call of an enclosing member is graded against that member's parameters ([`Certifier::record_call`]).
@@ -135,6 +139,26 @@ impl Calls {
     /// Mark the next judgment as typing the head of an application spine.
     pub fn set_spine_head(&mut self) {
         self.spine_head = true;
+    }
+
+    /// The argument lists applied after the application about to be typed, clearing them for the judgments after it: empty but where that application heads a curried spine.
+    pub fn take_later(&mut self) -> Vec<Vec<Term>> {
+        mem::take(&mut self.later)
+    }
+
+    /// Hand the head about to be typed the argument lists applied after it, `later`, nearest first.
+    pub fn set_later(&mut self, later: Vec<Vec<Term>>) {
+        self.later = later;
+    }
+
+    /// What the head just typed handed the argument lists after its own, clearing it: empty where it handed nothing, a memo's answer among them.
+    pub fn take_rest_handed(&mut self) -> Vec<Option<Handed>> {
+        mem::take(&mut self.rest_handed)
+    }
+
+    /// Leave the application around the one just typed what its spine's head handed the lists after this one.
+    pub fn leave_rest_handed(&mut self, rest: Vec<Option<Handed>>) {
+        self.rest_handed = rest;
     }
 
     /// Whether the check about to run opens a member's leading lambdas, clearing the flag for the ones after it.

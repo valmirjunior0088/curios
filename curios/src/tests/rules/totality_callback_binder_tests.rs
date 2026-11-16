@@ -679,3 +679,57 @@ fn a_callback_handed_inside_an_inner_group_stands_to_the_enclosing_members_param
             });
     }
 }
+
+// A curried spine is read whole, as an uncurried call is: `any_c(pred)(l)` hands `pred` at the place `any_c`'s summary counts it, across its leading lambdas, so `c` is below `children` and `has_zero` descends; and `((x) => (y) => …)(0)(n)` binds `y` to `n` as the uncurried `((x, y) => …)(0, n)` does, so the split of `y` descends on `n`. The refusals hand the callback the tree rebuilt around the same children, and recur on `y` itself, each of which is the call again.
+#[test]
+fn a_curried_spine_is_read_whole_as_an_uncurried_call_is() {
+    let program = control(
+        r#"
+        use /std/{Nat, List, Bool};
+
+        induct Rose : Type
+        | node(label : Nat, children : List(Rose))
+        end
+
+        let any_c(pred: (Rose) -> Bool) -> (List(Rose)) -> Bool =
+            (l) => match l | [] => false | [h, ..t] => pred(h) || any_c(pred)(t) end;
+
+        let has_zero(t : Rose) -> Bool =
+            match t
+            | node(label, children) => label == 0 || any_c((c) => has_zero(c))(children)
+            end;
+
+        let Zeroed(t : Rose) -> Prop = Bool/Holds(has_zero(t));
+
+        let curried(n : Nat) -> Bool =
+            ((x : Nat) => (y : Nat) => match y | 0 => false | k + 1 => curried(k) end)(0)(n);
+
+        let Curried(n : Nat) -> Prop = Bool/Holds(curried(n));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+    for (edit, at) in [
+        (
+            (
+                "(c) => has_zero(c)",
+                "(c) => has_zero(Rose/node(label, children))",
+            ),
+            "/Zeroed",
+        ),
+        (
+            ("| k + 1 => curried(k)", "| k + 1 => curried(y)"),
+            "/Curried",
+        ),
+    ] {
+        program
+            .refused(&[edit])
+            .by_elaborator_in(at, |error| {
+                matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+            })
+            .by_certifier_in(at, |error| {
+                matches!(error, curios_cert::Error::NotTotal { .. })
+            });
+    }
+}
