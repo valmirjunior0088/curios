@@ -2223,10 +2223,15 @@ fn witness_signature(params: Vec<Printer>, app: Printer) -> Printer {
 
 /// The concept application a witness concludes: the concept's name, then its argument list where one was written.
 fn witnessed(concept: &Name, args: Option<Vec<Argument>>) -> Printer {
+    // A name as a term's is, so a page links the concept a witness satisfies by what the lowering resolved it to.
+    let concept = match concept.span() {
+        Some(span) => named_at(concept.join(), span.start..span.end),
+        None => named(concept.join()),
+    };
     match args {
-        None => pure(concept.join()),
+        None => concept,
         Some(args) => flat([
-            pure(concept.join()),
+            concept,
             listed(
                 "(",
                 args.into_iter()

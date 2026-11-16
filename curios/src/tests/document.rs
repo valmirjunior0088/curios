@@ -702,7 +702,7 @@ fn painted(signature: &Signature) -> Vec<(&str, Option<Class>)> {
         .collect()
 }
 
-/// **A signature paints each word and each name by what it is.** The printer marks the words it writes, so a parameter spelled as a contextual word, or one whose first letters spell a keyword, is no word; and a name is classed by what the declaration it resolved to states — a type, a constructor, a concept and a function of `/std`, a value of the package's own — wherever it is declared, a binder staying plain; a `foreign` signature's wire words are words, each naming a type.
+/// **A signature paints each word and each name by what it is.** The printer marks the words it writes, so a parameter spelled as a contextual word, or one whose first letters spell a keyword, is no word; and a name is classed by what the declaration it resolved to states — a type, a constructor, a concept and a function of `/std`, a value of the package's own, the concept a witness satisfies — wherever it is declared, a binder staying plain; a `foreign` signature's wire words are words, each naming a type.
 #[test]
 fn a_signature_paints_each_word_and_name_by_what_it_is() {
     let root = tree(
@@ -723,6 +723,8 @@ fn a_signature_paints_each_word_and_name_by_what_it_is() {
                     "pub let seven: Nat =\n    7;\n\n",
                     "pub let pick(concept: Nat, letà: Nat) -> Nat =\n    concept + letà;\n\n",
                     "pub let need(@A: Type, use Show(A), p: Eq()(Option/some(Nat/add(seven, 1)), Option/some(8))) -> Nat =\n    0;\n\n",
+                    "pub concept Sized(A: Type): pub Type {\n    size(A) -> Nat,\n}\n\n",
+                    "satisfy Sized(Nat) {\n    size(n) = n,\n}\n\n",
                     "pub foreign halt(Nat, List(Bytes)) -> Never;\n",
                 ),
             ),
@@ -774,6 +776,22 @@ fn a_signature_paints_each_word_and_name_by_what_it_is() {
         signature("need").text
     );
 
+    let witness = &documentation.modules[0]
+        .declarations
+        .iter()
+        .find(|declaration| declaration.kind == Kind::Witness)
+        .expect("the package declares a witness")
+        .signature;
+    assert_eq!(
+        painted(witness),
+        [
+            ("satisfy", keyword),
+            ("Sized", Some(Class::Concept)),
+            ("Nat", type_)
+        ],
+        "{}",
+        witness.text
+    );
     assert_eq!(
         painted(signature("halt")),
         [
