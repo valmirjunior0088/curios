@@ -1,6 +1,6 @@
 # A call in a callback is graded where its callee applies it
 
-This specification describes what remains of a capability that has landed in part. A recursion through a callback a recursive definition applies is graded where the definition applies it ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md)): a tree's `has_zero` recursing through `List/any(children, (c) => has_zero(c))` is total (`curios`'s `a_call_in_a_callback_descends_where_its_callee_applies_it_below`). What is still graded as fresh is listed below, `/std/List/map` and `/std/List/fold` first. Its stages wait on the hunt [this area's findings](000-findings.md) hold, taken ahead of every stage that widens what a summary admits.
+This specification describes what remains of a capability that has landed in part. A recursion through a callback a recursive definition applies is graded where the definition applies it ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md)): a tree's `has_zero` recursing through `List/any(children, (c) => has_zero(c))` is total (`curios`'s `a_call_in_a_callback_descends_where_its_callee_applies_it_below`). What is still graded as fresh is listed below, `/std/List/map` and `/std/List/fold` first.
 
 ## What is missing
 
