@@ -1,6 +1,6 @@
 # A text position holds the rest it was cut to
 
-**Not refined yet.** This specification reserves a step over text that cuts once from what the step before left, where each step cuts the rest from the whole text again today, in the type and in the erased program alike. It is not an implementation plan, and the shape of `/std/Str/At` it rests on is the user's to choose.
+This specification makes a step over text cut once from what the step before left, where each step cuts the rest from the whole text again today, in the type and in the erased program alike. Its next step is stage 1, a delivery.
 
 ## What is missing
 
@@ -10,7 +10,25 @@
 
 **The erased step keeps the cut.** What the erased program is spared is the proofs and not the cut. `Str/At/next` prints at `cps-optm`, on top of `ddf5bbf85`, as `Bytes/slice(s, at, Bytes/len(s) - at)`, the rest cut from the whole text again, a `Bytes/get` of its first byte, `Bytes/rest` of it past that byte, the decoding of what follows, and the position past as a sum of offsets: a position is its offset and holds no bound, and each step makes two cuts it hands to no step after it.
 
-## Refinement
+## Decisions
 
-- **The shape.** A position holds the rest it was cut to, so a step cuts once from what the step before left; what `At` then holds beside its offset, and what that moves of `/std/Str`'s public names and proofs, is the user's decision.
-- **Check**: `parse_primitive_measurements`, read again, and the emitted step's cuts.
+- **A position holds its rest as text.** `At(s)` is its offset, the rest of `s` it was cut to as a `Str`, and the bound and the cut, both erased:
+
+  ```crs
+  pub struct At(s: Str): pub Type {
+      offset: Nat,
+      rest: Str,
+      @within: Bool/Holds(offset <= Bytes/len(s.bytes)),
+      @cut: Eq()(rest.bytes, Bytes/drop(s.bytes, offset, @within)),
+  }
+  ```
+
+  The boundary a position holds as a proof of its own today follows from the rest being valid text, which no continuation byte begins, so it goes, and `Str/after(s, at)` reads the rest. Decided on 2026-11-16.
+
+## Stages
+
+1. **`At` holds its rest.** The structure above; the walks that build a position past — `skip`, `next`, `forward`, `Str/span`, `Str/follows` — cutting once from the rest they hold; and `/std/Str`'s proofs over a position restated over the cut. Check: `parse_primitive_measurements` read again, `Parse/str/take_while` and `Parse/str/literal` against their bytes twins, and `Str/At/next` at `cps-optm` cutting once.
+
+## Retirement
+
+Once stage 1 lands, `/std/Str/At`'s documentation states what a position holds, the measurement's figures move with it, and this file is deleted.
