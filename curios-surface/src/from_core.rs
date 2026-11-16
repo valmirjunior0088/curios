@@ -470,7 +470,7 @@ fn tree(term: curios_core::Term, frame: Frame) -> Option<Term> {
         )) => numeral(magnitude, sign),
         curios_core::Subterm::Transient(curios_core::Transient::NumLit(
             curios_core::NumLit::Character(character),
-        )) => Subterm::ProofLiteral(ProofLiteral::Char(character)).into(),
+        )) => Subterm::ProofLiteral(ProofLiteral::Char(character.into())).into(),
         curios_core::Subterm::Transient(curios_core::Transient::Infix(curios_core::Infix {
             op,
             left,
@@ -628,7 +628,7 @@ pub fn written_pattern<D: Dialect>(
         curios_core::Pattern::Literal(value) => {
             MatchPattern::Nat(NatPattern::Lit(NatLiteral(value.clone(), Radix::Dec(0))))
         }
-        curios_core::Pattern::Character(character) => MatchPattern::Char(*character),
+        curios_core::Pattern::Character(character) => MatchPattern::Char((*character).into()),
         curios_core::Pattern::Str(value) => MatchPattern::Str(StrLit::line(value.clone())),
         curios_core::Pattern::List(elements) => {
             MatchPattern::List(written_elements(elements, names, own))
@@ -1042,7 +1042,7 @@ fn written_flt<T, D: Dialect>(value: Floating, writer: &impl Writer<T, D>) -> Op
     let spelled =
         value.is_finite() || !value.is_nan() || value.abs().to_bits() == Floating::nan().to_bits();
     if spelled {
-        return Some(Subterm::Literal(Literal::Flt(value)).into());
+        return Some(Subterm::Literal(Literal::Flt(value.into())).into());
     }
 
     let bytes = value

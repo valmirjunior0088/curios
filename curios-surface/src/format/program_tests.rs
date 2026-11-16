@@ -217,3 +217,15 @@ fn a_block_string_literal_takes_the_canonical_indentation() {
         "use /std/{Str};\n\nlet page: Str =\n    \"\"\"\n        <p>\n          x\n        </p>\n        \"\"\";\n\npage\n"
     );
 }
+
+/// A literal keeps the spelling it was written in, where any other spelling of its value reads back alike: a decimal its sign and exponent, a character's and a string's escapes — an escape is often written because its character is hard to see or to type — and a block's lines theirs. A character no reader sees, typed raw, is the one spelling the formatter changes, to its escape.
+#[test]
+fn a_literal_keeps_the_spelling_it_was_written_in() {
+    let source = "use /std/{Flt, Char, Str};\n\nlet half: Flt =\n    0.5;\n\nlet big: Flt =\n    1.0e9;\n\nlet small: Flt =\n    -2.5e-3;\n\nlet signed: Flt =\n    +4.0;\n\nlet accent: Char =\n    '\\u{301}';\n\nlet letters: Str =\n    \"\\u{41}\\t\\u{200B}\";\n\nlet kind(c: Char) -> Str =\n    match c | '\\u{41}' => \"a\" | _ => \"b\" end;\n\nhalf\n";
+    assert_eq!(formatted(source), source);
+
+    assert_eq!(
+        formatted("let hidden: Str =\n    \"a\u{200B}b\tc\";\n\nhidden\n"),
+        "let hidden: Str =\n    \"a\\u{200B}b\\tc\";\n\nhidden\n"
+    );
+}

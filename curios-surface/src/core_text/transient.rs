@@ -67,7 +67,9 @@ fn transient_written_as_core<D: Rendered>(
         }
         Transient::NumLit(NumLit::Character(character)) => frame.decorated(
             node("NumLit"),
-            tree(crate::Subterm::ProofLiteral(ProofLiteral::Char(character))),
+            tree(crate::Subterm::ProofLiteral(ProofLiteral::Char(
+                character.into(),
+            ))),
         ),
         // The rest of the region called over the action's result, as the `!` it is: `k(action!)`.
         Transient::Bang(Bang {
@@ -336,7 +338,7 @@ pub fn node_transient_read(
             sign: *sign,
         }),
         ("NumLit", crate::Subterm::ProofLiteral(ProofLiteral::Char(character))) => {
-            Transient::NumLit(NumLit::Character(*character))
+            Transient::NumLit(NumLit::Character(character.value))
         }
         ("NumLit", _) => return Err(refused("a numeral or a character")),
         ("Bang", crate::Subterm::Apply(crate::Apply { head, arguments })) => {
@@ -499,7 +501,7 @@ fn pattern_read(
         ),
         MatchPattern::Struct { .. } => return Err(unresolved(at)),
         MatchPattern::Bool(value) => Pattern::Bool(*value),
-        MatchPattern::Char(character) => Pattern::Character(*character),
+        MatchPattern::Char(character) => Pattern::Character(character.value),
         MatchPattern::Str(literal) => Pattern::Str(literal.value.clone()),
         MatchPattern::Nat(NatPattern::Zero) => Pattern::Zero,
         MatchPattern::Nat(NatPattern::Succ { pred_label }) => Pattern::Succ {

@@ -1,14 +1,14 @@
 use {
     super::{Grammar, parse_keyword, parse_literal},
     crate::{
-        BytesSegment, ListEntry, Literal, NatLiteral, NumLit, ProofLiteral, Radix, StrLit, Subterm,
-        Term, parse_term, parse_whitespace,
+        BytesSegment, CharLit, FltLit, ListEntry, Literal, NatLiteral, NumLit, ProofLiteral, Radix,
+        StrLit, Subterm, Term, Written, parse_term, parse_whitespace,
     },
-    curios_common::Sign,
+    curios_common::{Sign, Span},
     curios_num::{Floating, Natural},
     curios_parse::{
         Mark, Parsed, Parser, ParserState, commit, expecting, fail, fail_from, look_ahead, many0,
-        mark, not_ahead, pure, sep_by0_trailing, take_exact, take_n, take_while,
+        mark, not_ahead, pure, sep_by0_trailing, spanned, take_exact, take_n, take_while,
     },
 };
 
@@ -46,7 +46,7 @@ const NO_WHOLE_PART: &[&str] = &[
 //
 // The sign is read once, here, so what stands behind one is this production's to say. Read by each magnitude for itself, a sign that touched none failed three alternatives at one offset, and the report was the first one's word: `Expected 'inf.0'`.
 pub fn parse_number<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    let flt = |value| Term::from(Subterm::Literal(Literal::Flt(value)));
+    let flt = |literal: FltLit| Term::from(Subterm::Literal(Literal::Flt(literal)));
 
     mark()
         .and(
@@ -65,6 +65,7 @@ pub fn parse_number<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D
                 Sign::Negative | Sign::Positive => expecting(
                     SIGN_LEADS_A_LITERAL,
                     parse_non_finite_flt(sign == Sign::Negative)
+                        .map(FltLit::from)
                         .map(flt)
                         .or(finite),
                 )
@@ -122,7 +123,7 @@ fn not_ahead_digit<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
 // A character literal is a monomorphic, proof-certified `/std/Char` value.
 pub fn parse_char_lit<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
     take_exact("'")
-        .and_keep(parse_char_value)
+        .and_keep(parse_written_char)
         .and_drop(take_exact("'"))
         .and_drop(parse_whitespace)
         .map(|character| Subterm::ProofLiteral(ProofLiteral::Char(character)))
@@ -204,11 +205,11 @@ fn not_ahead_word<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
     .parse(state)
 }
 
-/// A finite `Flt` literal past its sign: a decimal with a digit on each side of its dot, optionally scaled by an exponent. `start` is where the literal began, its sign included.
-fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> impl Parser<'a, Floating> {
+/// A finite `Flt` literal past its sign: a decimal with a digit on each side of its dot, optionally scaled by an exponent, kept with the text it was written as. `start` is where the literal began, its sign included.
+fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> impl Parser<'a, FltLit> {
     move |state: ParserState<'a>| {
         take_while(|char| ".-+eE".contains(char) || char.is_ascii_digit())
-            .flat_map::<Floating, _>(move |digits| {
+            .flat_map::<FltLit, _>(move |digits| {
                 let Some((whole, fraction)) = digits.split_once('.') else {
                     return fail("expected: a floating-point literal with a dot and a decimal")
                         .boxed();
@@ -233,8 +234,17 @@ fn parse_decimal_flt<'a>(start: Mark, sign: Sign) -> impl Parser<'a, Floating> {
                 };
 
                 // An overflowing magnitude rounds to the infinity of its sign, which is refused rather than taken: a decimal that overflows is almost certainly a mistake, and the infinity has literals of its own. Committed, since a dot between digits is the prefix that discriminates the literal: uncommitted, the refusal loses to the numeral, which reads the integer part and takes the `.0` after it for a projection.
+                let written = match sign {
+                    Sign::Negative => format!("-{digits}"),
+                    Sign::Positive => format!("+{digits}"),
+                    Sign::Unmarked => digits.to_string(),
+                };
                 match value.is_finite() {
-                    true => pure(value).boxed(),
+                    true => pure(FltLit {
+                        value,
+                        written: Written::new(&written),
+                    })
+                    .boxed(),
                     false => commit(fail_from(
                         &start,
                         &[
@@ -327,6 +337,21 @@ fn parse_unicode_escape<'a>(state: ParserState<'a>) -> Parsed<'a, char> {
     )).parse(state)
 }
 
+/// The text a literal's span covers, as it was written.
+fn written(span: &Span) -> Written {
+    Written::new(&span.source.text()[span.start..span.end])
+}
+
+/// A character literal's value between its quotes, with the text it was written as.
+pub fn parse_written_char<'a>(state: ParserState<'a>) -> Parsed<'a, CharLit> {
+    spanned(parse_char_value)
+        .map(|(span, value)| CharLit {
+            value,
+            written: written(&span),
+        })
+        .parse(state)
+}
+
 pub fn parse_char_value<'a>(state: ParserState<'a>) -> Parsed<'a, char> {
     take_exact("\\")
         .and_keep(
@@ -362,10 +387,13 @@ pub fn parse_string_literal<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a
 /// A one-line string literal, as the term and the pattern it spells both hold it.
 pub fn parse_line_str<'a>(state: ParserState<'a>) -> Parsed<'a, StrLit> {
     take_exact("\"")
-        .and_keep(many0(parse_string_chunk))
+        .and_keep(spanned(many0(parse_string_chunk)))
         .and_drop(take_exact("\"").or(refuse_line_break_in_string))
         .and_drop(parse_whitespace)
-        .map(|chunks| StrLit::line(chunks.concat()))
+        .map(|(span, chunks)| StrLit {
+            written: written(&span),
+            ..StrLit::line(chunks.concat())
+        })
         .parse(state)
 }
 
@@ -427,13 +455,22 @@ pub fn parse_block_str<'a>(state: ParserState<'a>) -> Parsed<'a, StrLit> {
                     ))
                 })))
                 // Past the opener and its newline this is a block literal and nothing else, so an unterminated one says so. Recoverable, it would backtrack to the one-line form, fail there too, and leave the enclosing term to complain at the opening quotes.
-                .and_keep(commit(many0(parse_block_piece).and(mark).and_drop(
-                    take_exact("\"\"\"").map_err(
-                        "a block string literal closes with `\"\"\"` on a line of its own",
+                .and_keep(commit(
+                    spanned(many0(parse_block_piece)).and(mark).and_drop(
+                        take_exact("\"\"\"").map_err(
+                            "a block string literal closes with `\"\"\"` on a line of its own",
+                        ),
                     ),
-                )))
-                .flat_map(|(pieces, close)| match assemble_block(pieces) {
-                    Ok(value) => pure(StrLit::block(value)).boxed(),
+                ))
+                .flat_map(|((span, pieces), close)| match assemble_block(pieces) {
+                    Ok((value, shared)) => pure(StrLit {
+                        written: Written::new(&written_block(
+                            &span.source.text()[span.start..span.end],
+                            shared,
+                        )),
+                        ..StrLit::block(value)
+                    })
+                    .boxed(),
                     Err(message) => commit(fail_from(&close, message)).boxed(),
                 })
         })
@@ -441,8 +478,24 @@ pub fn parse_block_str<'a>(state: ParserState<'a>) -> Parsed<'a, StrLit> {
         .parse(state)
 }
 
-/// The value a block's pieces spell, under the rules `parse_block_string_literal` states, or the refusal for a closer that shares its line with content.
-fn assemble_block(pieces: Vec<BlockPiece<'_>>) -> Result<String, &'static str> {
+/// A block's lines as they were written, from its body's text up to its closer: each past the `shared` indentation the reader removed, a blank one empty and each without the trailing blanks the reader strips, so written back at any indentation they read as the same value.
+fn written_block(body: &str, shared: usize) -> String {
+    let mut lines = body.split('\n').collect::<Vec<_>>();
+    lines.pop();
+    lines
+        .into_iter()
+        .map(
+            |line| match line.trim_start_matches([' ', '\t']).is_empty() {
+                true => "",
+                false => line[shared..].trim_end_matches([' ', '\t']),
+            },
+        )
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The value a block's pieces spell, under the rules `parse_block_string_literal` states, with the length of the indentation its lines share with its closer, or the refusal for a closer that shares its line with content.
+fn assemble_block(pieces: Vec<BlockPiece<'_>>) -> Result<(String, usize), &'static str> {
     // The physical lines, each with whether a backslash joined it to the next; the last is the closer's.
     let mut lines: Vec<(Vec<BlockPiece<'_>>, bool)> = vec![(Vec::new(), false)];
     for piece in pieces {
@@ -508,7 +561,7 @@ fn assemble_block(pieces: Vec<BlockPiece<'_>>) -> Result<String, &'static str> {
         }
     }
 
-    Ok(value)
+    Ok((value, shared.len()))
 }
 
 /// The whitespace a line opens with: the part of a leading run that the shared prefix is taken from.

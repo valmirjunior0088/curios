@@ -6,7 +6,7 @@ use crate::*;
 fn char_literal_ascii() {
     assert_eq!(
         "'a'".parse::<Term>().unwrap(),
-        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('a')))
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('a'.into())))
     );
 }
 
@@ -14,7 +14,7 @@ fn char_literal_ascii() {
 fn char_literal_escape() {
     assert_eq!(
         "'\\n'".parse::<Term>().unwrap(),
-        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('\n')))
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('\n'.into())))
     );
 }
 
@@ -38,7 +38,7 @@ fn a_character_literal_is_a_dispatch_pattern() {
     assert!(
         matches!(
             match_.arms[0].alternatives[0].pattern,
-            MatchPattern::Char('a')
+            MatchPattern::Char(CharLit { value: 'a', .. })
         ),
         "{:?}",
         match_.arms[0].alternatives[0].pattern
@@ -46,7 +46,7 @@ fn a_character_literal_is_a_dispatch_pattern() {
     assert!(
         matches!(
             match_.arms[1].alternatives[0].pattern,
-            MatchPattern::Char('\n')
+            MatchPattern::Char(CharLit { value: '\n', .. })
         ),
         "{:?}",
         match_.arms[1].alternatives[0].pattern
@@ -95,11 +95,21 @@ fn a_braced_unicode_escape_names_a_scalar_in_a_string() {
 fn a_braced_unicode_escape_names_a_scalar_in_a_character() {
     assert_eq!(
         "'\\u{301}'".parse::<Term>().unwrap(),
-        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('\u{301}')))
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('\u{301}'.into())))
     );
-    // The printer writes a visible scalar itself, so its escape has no round trip of its own: one scalar, one spelling.
-    assert_eq!("'\\u{65}'".parse::<Term>().unwrap().to_string(), "'e'");
-    assert_eq!("\"\\u{65}\"".parse::<Term>().unwrap().to_string(), "\"e\"");
+    // A literal read from text prints as it was written, its escape among it, and one the compiler built writes a visible scalar itself.
+    assert_eq!(
+        "'\\u{65}'".parse::<Term>().unwrap().to_string(),
+        "'\\u{65}'"
+    );
+    assert_eq!(
+        "\"\\u{65}\"".parse::<Term>().unwrap().to_string(),
+        "\"\\u{65}\""
+    );
+    assert_eq!(
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('e'.into()))).to_string(),
+        "'e'"
+    );
 }
 
 /// A control character's one spelling is its braced escape, in a character literal, a string and a match pattern alike: written verbatim it would be a byte no reader sees, which is what `curios format` made of `'\u{8}'` before.
@@ -117,9 +127,13 @@ fn a_control_character_prints_as_its_braced_escape() {
     ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
     }
-    // The digits print in the numerals' case, however the escape was written.
+    // An escape read from text keeps the case its digits were written in, and one the compiler built prints them in the numerals' case.
     assert_eq!(
         "'\\u{1b}'".parse::<Term>().unwrap().to_string(),
+        "'\\u{1b}'"
+    );
+    assert_eq!(
+        Term::from(Subterm::ProofLiteral(ProofLiteral::Char('\u{1b}'.into()))).to_string(),
         "'\\u{1B}'"
     );
 }

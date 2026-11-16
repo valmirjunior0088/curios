@@ -2,10 +2,10 @@ use {
     super::{
         BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PARAMETER_IS_A_PATTERN,
         PATTERN_TAKES_NO_USE, Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led,
-        member_ends, members, parse_block_str, parse_char_value, parse_identifier, parse_keyword,
-        parse_label, parse_line_str, parse_literal, parse_mark, parse_name, parse_named_premise,
-        parse_nat_digits, parse_number, parse_place, parse_qualified_name, parse_word_raw, refused,
-        require_space, trimmed,
+        member_ends, members, parse_block_str, parse_identifier, parse_keyword, parse_label,
+        parse_line_str, parse_literal, parse_mark, parse_name, parse_named_premise,
+        parse_nat_digits, parse_number, parse_place, parse_qualified_name, parse_word_raw,
+        parse_written_char, refused, require_space, trimmed,
     },
     crate::{
         Binder, Elements, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
@@ -478,7 +478,7 @@ pub fn parse_char_match_pattern<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
     take_exact("'")
-        .and_keep(parse_char_value)
+        .and_keep(parse_written_char)
         .and_drop(take_exact("'"))
         .and_drop(parse_whitespace)
         .map(MatchPattern::Char)

@@ -679,7 +679,7 @@ fn integer_written<D: Rendered>(integer: &Integer) -> crate::Term<D> {
 fn flt_literal<D: Rendered>(flt: Floating) -> crate::Term<D> {
     match flt.is_nan() && flt.abs().to_bits() != Floating::nan().to_bits() {
         true => hexadecimal(flt.to_bits(), 16),
-        false => tree(crate::Subterm::Literal(Literal::Flt(flt))),
+        false => tree(crate::Subterm::Literal(Literal::Flt(flt.into()))),
     }
 }
 
@@ -1501,7 +1501,7 @@ fn int_read(value: &CoreValue) -> Result<Integer, ReadError> {
 /// A `Flt`'s value: the literal that reads back as it, or its bits as a hexadecimal numeral.
 fn flt_read(value: &CoreValue) -> Result<Floating, ReadError> {
     match value_term(value)?.as_subterm() {
-        crate::Subterm::Literal(Literal::Flt(flt)) => Ok(*flt),
+        crate::Subterm::Literal(Literal::Flt(flt)) => Ok(flt.value),
         crate::Subterm::NumLit(NumLit {
             magnitude,
             sign: Sign::Unmarked,

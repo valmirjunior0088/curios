@@ -7,7 +7,7 @@ use {
         print_match_pattern, print_term,
     },
     curios_common::{InfixOp, Plicity, Sign, Source, Span, recurse},
-    curios_num::Natural,
+    curios_num::{Floating, Natural},
     curios_parse::ParserError,
     curios_print::run_printer,
     std::{fmt, mem, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
@@ -471,7 +471,7 @@ pub enum MatchPattern<D: Dialect = Program> {
     /// A `Bool` literal leaf: `true` or `false`.
     Bool(bool),
     /// A character literal leaf — a dispatch case spelled by its scalar value, at a `Char`, a `Nat` or a `Byte`, printed back as written.
-    Char(char),
+    Char(CharLit),
     /// A string literal leaf — a `Str` taken apart by its bytes — printed back in the spelling it was written in.
     Str(StrLit),
     /// A nested `Nat` literal leaf — the `0`/`n + 1` (case split) or bare literal (dispatch) shapes a headed `Nat` match takes.
@@ -763,16 +763,74 @@ pub enum Subterm<D: Dialect = Program> {
 /// The literals the lowerer desugars to a proof-carrying construction: a character becomes a proof-carrying `/std/Char`, and a string becomes a proof-carrying `/std/Str`. Held as a dedicated [`Subterm`] variant (not an `Intrinsic`) because the result is a core term, never a core intrinsic.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProofLiteral {
-    Char(char),
+    Char(CharLit),
     Str(StrLit),
 }
 
-/// A string literal's value with the spelling it was written in, so the printer rounds a block back to a block. Purely presentational, as a numeral's [`Radix`] is: dropped at lowering, where both spellings are the same `/std/Str`.
+/// The text a literal was written as, so the printer writes it back as it was written: `1.0e9` stays `1.0e9`, and an escape stays the escape its author chose for a character that is hard to see or to type. Empty for a literal the compiler built, which prints in its canonical spelling.
+///
+/// Presentational, as a span is: no part of what the literal is, so any two are equal and a literal compares by its value alone — which is what lets the formatter's verification read back a literal whose invisible character it spelled as an escape.
+#[derive(Debug, Clone, Default)]
+pub struct Written(Option<Rc<str>>);
+
+impl Written {
+    /// `text`, as its literal was written.
+    pub fn new(text: &str) -> Self {
+        Self(Some(text.into()))
+    }
+
+    /// The text written, where the literal was read from one.
+    pub fn text(&self) -> Option<&str> {
+        self.0.as_deref()
+    }
+}
+
+impl PartialEq for Written {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+/// A character literal's value with the text written between its quotes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CharLit {
+    pub value: char,
+    pub written: Written,
+}
+
+impl From<char> for CharLit {
+    fn from(value: char) -> Self {
+        Self {
+            value,
+            written: Written::default(),
+        }
+    }
+}
+
+/// A `Flt` literal's value with the text it was written as, its sign and exponent among it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FltLit {
+    pub value: Floating,
+    pub written: Written,
+}
+
+impl From<Floating> for FltLit {
+    fn from(value: Floating) -> Self {
+        Self {
+            value,
+            written: Written::default(),
+        }
+    }
+}
+
+/// A string literal's value with the spelling it was written in, so the printer rounds a block back to a block and writes the text back as written. Purely presentational, as a numeral's [`Radix`] is: dropped at lowering, where both spellings are the same `/std/Str`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StrLit {
     pub value: String,
     /// Written as a block — `"""`, a newline, the lines, a newline and `"""` — rather than on one line.
     pub block: bool,
+    /// The text between the quotes of a one-line literal, and a block's lines past the indentation they share with its closer, joined by newlines.
+    pub written: Written,
 }
 
 impl StrLit {
@@ -781,6 +839,7 @@ impl StrLit {
         Self {
             value: value.into(),
             block: false,
+            written: Written::default(),
         }
     }
 
@@ -789,6 +848,15 @@ impl StrLit {
         Self {
             value: value.into(),
             block: true,
+            written: Written::default(),
+        }
+    }
+
+    /// The literal, as the text it was written as.
+    pub fn written(self, text: &str) -> Self {
+        Self {
+            written: Written::new(text),
+            ..self
         }
     }
 }

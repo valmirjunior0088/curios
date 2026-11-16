@@ -562,7 +562,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub fn proof_literal(&self, literal: &ProofLiteral) -> Result<curios_core::Term, Error> {
         match literal {
             // A character literal is a polymorphic literal like a numeral: elaboration realizes it — `/std/Char` by default, a numeric carrier where one is expected — so the certified value is built there, not here.
-            ProofLiteral::Char(character) => Ok(curios_core::Term::num_lit_char(*character)),
+            ProofLiteral::Char(character) => Ok(curios_core::Term::num_lit_char(character.value)),
             ProofLiteral::Str(string) => Ok(self.str_literal(string.value.as_bytes())),
         }
     }
@@ -1461,7 +1461,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             },
             // A character-spelled atom folds as its code point when it fits the byte; past that it stays an atom term and elaboration refuses the range exactly as for a numeral.
             Subterm::ProofLiteral(ProofLiteral::Char(character)) => {
-                u8::try_from(*character as u32).ok()
+                u8::try_from(u32::from(character.value)).ok()
             }
             _ => None,
         }
@@ -1538,7 +1538,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     ) -> Result<curios_core::Intrinsic, Error> {
         Ok(match literal {
             Literal::Bool(b) => curios_core::Intrinsic::Bool(*b),
-            Literal::Flt(flt) => curios_core::Intrinsic::Flt(*flt),
+            Literal::Flt(flt) => curios_core::Intrinsic::Flt(flt.value),
             // `\hex` is a raw byte sequence; `\..` segments splice other `Bytes`s.
             Literal::Bytes(segments) => {
                 Self::lower_bytes_literal(segments, |term| self.term(term))?

@@ -21,11 +21,12 @@ pub use dialect::{
 mod term;
 use term::*;
 pub use term::{
-    Alternative, Apply, Argument, Binder, Elements, Field, Func, FuncParam, FuncSugarParam,
-    FuncType, FuncTypeParam, Guard, HeadlessArm, HeadlessMatch, Infix, Let, LetBinding, LetGroup,
-    LetSignature, Match, MatchPattern, MatchPatternField, MatrixArm, NatPattern, NumLit, Pattern,
-    PatternField, Proj, ProofLiteral, StrLit, StructLit, StructLitEntry, Subterm, Term, Tuple,
-    TupleField, TuplePattern, TupleType, TupleTypeParam, func_sugar_params, func_sugar_type_params,
+    Alternative, Apply, Argument, Binder, CharLit, Elements, Field, FltLit, Func, FuncParam,
+    FuncSugarParam, FuncType, FuncTypeParam, Guard, HeadlessArm, HeadlessMatch, Infix, Let,
+    LetBinding, LetGroup, LetSignature, Match, MatchPattern, MatchPatternField, MatrixArm,
+    NatPattern, NumLit, Pattern, PatternField, Proj, ProofLiteral, StrLit, StructLit,
+    StructLitEntry, Subterm, Term, Tuple, TupleField, TuplePattern, TupleType, TupleTypeParam,
+    Written, func_sugar_params, func_sugar_type_params,
 };
 
 mod spell;

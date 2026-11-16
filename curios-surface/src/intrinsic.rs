@@ -1,7 +1,4 @@
-use {
-    super::{Dialect, IntrinsicOperand, Program, Subterm, Term},
-    curios_num::Floating,
-};
+use super::{Dialect, FltLit, IntrinsicOperand, Program, Subterm, Term};
 
 /// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `List` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `ListConcat` intrinsic; a spread-free literal lowers to a plain `List`.
 #[derive(Debug, Clone, PartialEq)]
@@ -22,7 +19,7 @@ pub enum BytesSegment<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal<D: Dialect = Program> {
     Bool(bool),
-    Flt(Floating),
+    Flt(FltLit),
     Bytes(Vec<BytesSegment<D>>),
     List(Vec<ListEntry<D>>),
 }

@@ -12,22 +12,22 @@ mod list_layout_tests;
 
 use {
     super::{
-        Alternative, Apply, Argument, Binder, BytesSegment, CasePayloadParam, ConceptField,
-        CoreEntry, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText, CoreValue,
-        Decorated, DecoratorField, Dialect, Doc, Elements, Field, Func, FuncParam, FuncSugarParam,
-        FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm, HeadlessMatch, InductIndex, Infix,
-        Intrinsic, IntrinsicForm, Label, Let, LetSignature, ListEntry, Literal, Match,
-        MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern, NumLit, Pattern,
-        PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm, StrLit, StructField,
-        StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept, TopForeign, TopInduct,
-        TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField,
-        TuplePattern, TupleType, TupleTypeParam, UseGroup, WitnessField, intrinsic_form,
-        intrinsic_path,
+        Alternative, Apply, Argument, Binder, BytesSegment, CasePayloadParam, CharLit,
+        ConceptField, CoreEntry, CoreForm, CoreHead, CoreIntrinsic, CoreItem, CoreMember, CoreText,
+        CoreValue, Decorated, DecoratorField, Dialect, Doc, Elements, Field, FltLit, Func,
+        FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Guard, HeadlessArm,
+        HeadlessMatch, InductIndex, Infix, Intrinsic, IntrinsicForm, Label, Let, LetSignature,
+        ListEntry, Literal, Match, MatchPattern, MatchPatternField, Name, NatLiteral, NatPattern,
+        NumLit, Pattern, PatternField, Program, Proj, ProofLiteral, Radix, Shown, ShownForm,
+        StrLit, StructField, StructLit, StructLitEntry, Subterm, Term, TopCase, TopConcept,
+        TopForeign, TopInduct, TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness,
+        Tuple, TupleField, TuplePattern, TupleType, TupleTypeParam, UseGroup, WitnessField,
+        intrinsic_form, intrinsic_path,
     },
     crate::{ELIDED, Writer, op_precedence, written_intrinsic},
     curios_abi::{ResultShape, WireResults, WireReturn, WireSignature, WireType},
     curios_common::{Plicity, recurse},
-    curios_num::{Floating, Natural},
+    curios_num::Natural,
     curios_parse::unseen,
     curios_print::{
         FillItem, Printer, ends, fill, flat, flow, group, group_within, hard_line, if_break,
@@ -190,11 +190,12 @@ fn argument_lines(items: Vec<Printer>) -> Printer {
     ])
 }
 
-/// A string literal in the spelling it was written in: a block, or one line with its escapes.
+/// A string literal in the spelling it was written in: a block, or one line with its escapes — its text as written where it was read from one, see [`visible`].
 fn print_string_literal(literal: &StrLit) -> Printer {
-    match literal.block {
-        true => print_block_string(&literal.value),
-        false => pure(format!(
+    match (literal.block, literal.written.text()) {
+        (true, written) => print_block_string(&literal.value, written),
+        (false, Some(written)) => pure(format!("\"{}\"", visible(written))),
+        (false, None) => pure(format!(
             "\"{}\"",
             literal
                 .value
@@ -213,12 +214,16 @@ fn print_string_literal(literal: &StrLit) -> Printer {
     }
 }
 
-/// A block string literal, printed as the lines of its value one level in from the opener's line, with the closer at that level. Each line prints as itself: the leading whitespace lines share puts them right of the closer, which is exactly what a reader strips, so nothing is removed here — while trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form, but for any other control character, which prints as its braced escape.
-fn print_block_string(value: &str) -> Printer {
+/// A block string literal, printed as its lines one level in from the opener's line, with the closer at that level: the lines as they were written where it was read from them, see [`visible`], and otherwise the lines of its value, each spelled to read back as itself. A line prints at the closer's column, so the leading whitespace past it is what a reader keeps, and nothing is removed here — while a value's trailing whitespace, tabs, carriage returns, backslashes and every third consecutive quote are escaped, since the reader would strip, mistake or close on them. A scalar prints as itself, as in the one-line form, but for any other control character, which prints as its braced escape.
+fn print_block_string(value: &str, written: Option<&str>) -> Printer {
     let mut body = Vec::new();
-    for line in value.split('\n') {
+    let lines = match written {
+        Some(written) => written.split('\n').map(visible).collect::<Vec<_>>(),
+        None => value.split('\n').map(spell_block_line).collect(),
+    };
+    for line in lines {
         body.push(hard_line());
-        body.push(pure(spell_block_line(line)));
+        body.push(pure(line));
     }
     body.push(hard_line());
     body.push(pure("\"\"\""));
@@ -288,8 +293,12 @@ fn is_ladder<D: Layout>(body: &Term<D>) -> bool {
     )
 }
 
-/// A `Flt` literal as written: a finite value as its signed decimal, and the values no decimal spells as their literals, `+inf.0`, `-inf.0`, `+nan.0` and `-nan.0`. Source spells no other NaN, so the syntax holds none.
-fn print_flt(value: Floating) -> Printer {
+/// A `Flt` literal as written, and one the compiler built in its canonical spelling: a finite value as its signed decimal, and the values no decimal spells as their literals, `+inf.0`, `-inf.0`, `+nan.0` and `-nan.0`. Source spells no other NaN, so the syntax holds none.
+fn print_flt(literal: FltLit) -> Printer {
+    if let Some(written) = literal.written.text() {
+        return pure(written);
+    }
+    let value = literal.value;
     if !value.is_finite() {
         let sign = match value.abs().to_bits() == value.to_bits() {
             true => "+",
@@ -560,18 +569,34 @@ fn print_doc(doc: Option<Doc>) -> Printer {
     }))
 }
 
-/// A character literal as written: the five escapes by their spellings, any other character no reader sees by its braced escape, anything else verbatim — shared by the expression and match-pattern positions.
-fn print_char_literal(character: char) -> Printer {
-    let escaped = match character {
+/// A character literal as written, see [`visible`], and one the compiler built in its canonical spelling: the five escapes by their spellings, any other character no reader sees by its braced escape, anything else verbatim — shared by the expression and match-pattern positions.
+fn print_char_literal(literal: CharLit) -> Printer {
+    if let Some(written) = literal.written.text() {
+        return pure(format!("'{}'", visible(written)));
+    }
+    let escaped = match literal.value {
         '\'' => "\\'".to_string(),
         '\\' => "\\\\".to_string(),
         '\n' => "\\n".to_string(),
         '\t' => "\\t".to_string(),
         '\r' => "\\r".to_string(),
         hidden if unseen(hidden) => braced_escape(hidden),
-        _ => character.to_string(),
+        character => character.to_string(),
     };
     pure(format!("'{escaped}'"))
+}
+
+/// A literal's text as it was written, but for a character no reader sees, which takes its escape — a tab and a carriage return their named ones, any other its braced one: the formatter keeps the spelling an author chose, an escape among it, and never leaves a character that prints as nothing where the reader cannot see it.
+fn visible(written: &str) -> String {
+    written
+        .chars()
+        .map(|character| match character {
+            '\t' => "\\t".to_string(),
+            '\r' => "\\r".to_string(),
+            hidden if unseen(hidden) => braced_escape(hidden),
+            character => character.to_string(),
+        })
+        .collect()
 }
 
 /// A scalar as `\u{…}`, for a character a literal cannot show — what [`unseen`] reads as printing as nothing, a control, a format character such as a zero-width joiner or a direction override, white space other than a blank: written verbatim it is a byte no reader sees, and the escape is the only spelling of it that survives a reading.

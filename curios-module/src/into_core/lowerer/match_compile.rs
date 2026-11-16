@@ -243,7 +243,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 fields: self.fields(fields, binders)?,
             },
             MatchPattern::Bool(value) => curios_core::Pattern::Bool(*value),
-            MatchPattern::Char(character) => curios_core::Pattern::Character(*character),
+            MatchPattern::Char(character) => curios_core::Pattern::Character(character.value),
             MatchPattern::Str(literal) => curios_core::Pattern::Str(literal.value.clone()),
             MatchPattern::Nat(NatPattern::Zero) => curios_core::Pattern::Zero,
             MatchPattern::Nat(NatPattern::Succ { pred_label }) => curios_core::Pattern::Succ {

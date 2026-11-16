@@ -435,7 +435,7 @@ fn an_arm_writes_each_alternative_after_a_bar() {
     assert_eq!(
         patterns,
         [
-            MatchPattern::Char('a'),
+            MatchPattern::Char('a'.into()),
             MatchPattern::Variant {
                 tag: "some".to_string(),
                 args: vec![(Plicity::Explicit, MatchPattern::Binder("x".into()))],
