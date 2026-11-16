@@ -12,8 +12,8 @@ use host::*;
 
 use {
     crate::{
-        Access, Column, Failure, Piece, Reporting, Run, Served, Steps, Subject, Then, Tree, Wrote,
-        alone, answered, bound, cut, drained, framed, keep, kept, port_of, reader, relayed,
+        Access, Column, Failure, Piece, Quoted, Reporting, Run, Served, Steps, Subject, Then, Tree,
+        Wrote, alone, answered, bound, cut, drained, framed, keep, kept, port_of, reader, relayed,
         serve_run, total, troubled, url,
     },
     curios::{TestSubject, Tested, test_subjects},
@@ -498,16 +498,20 @@ impl Reporting for Printing<'_, '_> {
         }
 
         // What is kept is what was shown, unpainted, from the same column.
-        let kept = framed(&mut self.column.clone(), bytes, &Style::plain());
+        let quoted = match stream {
+            Stream::Stdout => Quoted::Output,
+            Stream::Stderr => Quoted::Error,
+        };
+        let kept = framed(&mut self.column.clone(), bytes, quoted, &Style::plain());
         match stream {
             Stream::Stdout => relayed(
                 io::stdout(),
-                &framed(&mut self.column, bytes, answered()),
+                &framed(&mut self.column, bytes, quoted, answered()),
                 &kept,
             ),
             Stream::Stderr => relayed(
                 io::stderr(),
-                &framed(&mut self.column, bytes, reader()),
+                &framed(&mut self.column, bytes, quoted, reader()),
                 &kept,
             ),
         }

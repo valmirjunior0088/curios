@@ -293,8 +293,21 @@ const CORNER: &str = "└─";
 /// The trunk, beside what stands beneath a node more are planned after.
 const TRUNK: &str = "│";
 
-/// The trunk a test's own lines stand behind, dashed where the tree's is whole: what is written there is the test's, not the runner's.
-const STREAM: &str = "╎";
+/// The mark a test's own lines stand behind, in the column its verdict closes in: what is written there is quoted from the test, not said by the runner.
+const QUOTE: &str = ">";
+
+/// The mark of a test that passed, where its verdict is said.
+const PASSED: &str = "✓";
+
+/// The mark of a test that did not pass — it failed, trapped or exited — where its verdict is said.
+const UNPASSED: &str = "✗";
+
+/// The standard stream a test wrote a line of its own on, which its quote mark is painted for: one on standard error stands apart from one on standard output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quoted {
+    Output,
+    Error,
+}
 
 /// Where a test's writes stand in the line they are on, which says whether its next byte opens a line and so stands behind the frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -347,9 +360,13 @@ pub fn framed_run(column: Column, bytes: &[u8]) -> (Owed, usize) {
     (owed, length)
 }
 
-/// What a line is `owed`, as a reader of `style` sees it: the tree's trunk and the dashed one of what a test writes, which stands in the column the test's verdict closes it in.
-pub fn frame_of(owed: Owed, style: &Style) -> String {
-    let frame = format!("{}  {}", style.dim(TRUNK), style.dim(STREAM));
+/// What a line the test wrote on `quoted` is `owed`, as a reader of `style` sees it: the tree's trunk and the quote mark, which stands in the column the test's verdict closes in.
+pub fn frame_of(owed: Owed, quoted: Quoted, style: &Style) -> String {
+    let mark = match quoted {
+        Quoted::Output => style.dim(QUOTE),
+        Quoted::Error => style.aside(QUOTE),
+    };
+    let frame = format!("{}  {mark}", style.dim(TRUNK));
 
     match owed {
         Owed::Nothing => String::new(),
@@ -358,14 +375,14 @@ pub fn frame_of(owed: Owed, style: &Style) -> String {
     }
 }
 
-/// `bytes`, which a test wrote from `column` on, each line behind its frame for a reader of `style`: what a run that writes a test's output once the test has ended hands over whole. `column` is left where the bytes leave the stream.
-pub fn framed(column: &mut Column, bytes: &[u8], style: &Style) -> Vec<u8> {
+/// `bytes`, which a test wrote on `quoted` from `column` on, each line behind its frame for a reader of `style`: what a run that writes a test's output once the test has ended hands over whole. `column` is left where the bytes leave the stream.
+pub fn framed(column: &mut Column, bytes: &[u8], quoted: Quoted, style: &Style) -> Vec<u8> {
     let mut framed = Vec::with_capacity(bytes.len());
     let mut rest = bytes;
     while !rest.is_empty() {
         let (owed, length) = framed_run(*column, rest);
         let (own, after) = rest.split_at(length);
-        framed.extend_from_slice(frame_of(owed, style).as_bytes());
+        framed.extend_from_slice(frame_of(owed, quoted, style).as_bytes());
         framed.extend_from_slice(own);
         *column = column.after(own);
         rest = after;
@@ -410,12 +427,13 @@ impl Wrote {
 ///
 /// **The connector is the plan's.** `├─` is written where more nodes are planned and `└─` at the last, before either's work is done, so a tree a refusal cuts short ends on `├─`: the steps it planned and never reached are the ones missing.
 ///
-/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), each line of it stands behind a dashed trunk as it is written ([`framed_run`]), and the outcome closes the node beneath it, on a corner off the trunk that closes the dashed one:
+/// **What a node's work writes of its own is never held back.** Its first byte ends the node's line ([`cut`]), each line of it stands quoted as it is written ([`framed_run`]), and the outcome closes the node beneath it, its mark in the quote's column. A test's verdict leads with its mark wherever it stands, `✓` where it passed and `✗` where it did not:
 ///
 /// ```text
+/// ├─ /geometry/is_square; ✓ passed in 0.0s
 /// ├─ /geometry/draws_a_square
-/// │  ╎ ■■■■
-/// │  └─ passed in 0.1s
+/// │  > ■■■■
+/// │  ✓ passed in 0.1s
 /// ```
 pub struct Tree {
     /// The subject's line, until the first node writes it.
@@ -523,35 +541,30 @@ impl Tree {
         done
     }
 
-    /// Close the open node with how its work ended and the time `taken` whoever ran it measured, then what only they know of it, a line of `beneath` each: `; passed in 0.1s` on the node's own line, or, where the work `wrote` of its own and so ended that line, on a corner beneath what it wrote, `│  └─ passed in 0.1s`, after the end of a line it left open.
+    /// Close the open test's node with its verdict, led by its mark, and the time `taken` whoever ran it measured, then what only they know of it, a line of `beneath` each under the verdict's word: `; ✓ passed in 0.1s` on the node's own line, or, where the test `wrote` of its own and so ended that line, beneath what it wrote with the mark in the quote's column, `│  ✓ passed in 0.1s`, after the end of a line it left open.
     pub fn ended(&mut self, verdict: &str, taken: Duration, wrote: Wrote, beneath: &[String]) {
-        let closing = worded(verdict)
+        let mark = match trouble(verdict) {
+            true => troubled(UNPASSED),
+            false => PASSED.into(),
+        };
+        let closing = mark
+            .then(" ")
+            .then(worded(verdict))
             .then(" ")
             .then(dim(format_args!("in {}", seconds(taken))));
 
         self.opened = None;
-        let inset = match wrote {
-            Wrote::Nothing => {
-                say(Piece::from("; ").then(closing).then("\n"));
-
-                "    "
-            }
+        match wrote {
+            Wrote::Nothing => say(Piece::from("; ").then(closing).then("\n")),
             Wrote::Lines | Wrote::Open => {
                 if wrote == Wrote::Open {
                     say("\n");
                 }
-                say(dim(TRUNK)
-                    .then("  ")
-                    .then(dim(CORNER))
-                    .then(" ")
-                    .then(closing)
-                    .then("\n"));
-
-                "       "
+                say(dim(TRUNK).then("  ").then(closing).then("\n"));
             }
-        };
+        }
         for line in beneath {
-            say(dim(TRUNK).then(format_args!("{inset}{line}\n")));
+            say(dim(TRUNK).then(format_args!("    {line}\n")));
         }
     }
 

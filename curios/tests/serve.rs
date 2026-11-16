@@ -383,16 +383,16 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
             concat!(
                 "serve; http://127.0.0.1:{port}/\n",
                 "/app\n",
-                "├─ /app/holds; passed in _\n",
+                "├─ /app/holds; ✓ passed in _\n",
                 "├─ /app/fails\n",
-                "│  ╎ expected 2 but got 1\n",
-                "│  └─ failed in _\n",
-                "├─ /app/exits; exited 7 in _\n",
+                "│  > expected 2 but got 1\n",
+                "│  ✗ failed in _\n",
+                "├─ /app/exits; ✗ exited 7 in _\n",
                 "└─ 1 passed, 1 failed, 1 exited; _\n",
                 "app\n",
                 "├─ /own\n",
                 "{drawn}",
-                "│  └─ passed in _\n",
+                "│  ✓ passed in _\n",
                 "└─ 1 passed, 0 failed; _\n",
                 "2 passed, 1 failed, 1 exited; _\n",
             ),
@@ -400,17 +400,17 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
             drawn = drawn,
         )
     };
-    assert_eq!(untimed(served(&shown)), run("│  ╎ drawn\n"));
+    assert_eq!(untimed(served(&shown)), run("│  > drawn\n"));
 
     let (code, stdout, stderr) = serving.ended();
     assert_eq!(code, Some(1));
     // The terminal showed what the runner was sent, each stream its own: what a page's test wrote on its standard output is relayed on the command's.
-    assert_eq!(String::from_utf8_lossy(&stdout), "│  ╎ drawn\n");
+    assert_eq!(String::from_utf8_lossy(&stdout), "│  > drawn\n");
     let stderr = String::from_utf8_lossy(&stderr);
     assert_eq!(untimed(served(&stderr)), run(""));
     assert_eq!(
         stderr,
-        shown.replace("│  ╎ drawn\n", ""),
+        shown.replace("│  > drawn\n", ""),
         "the runner is sent the run from its first line"
     );
 }
@@ -448,7 +448,7 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
     assert_eq!(
         untimed(&closing),
         concat!(
-            "; passed in _\n",
+            "; ✓ passed in _\n",
             "└─ 1 passed, 0 failed; _\n",
             "1 passed, 0 failed, 3 skipped; _\n",
         )

@@ -83,6 +83,11 @@ impl Style {
         self.painted("31", text)
     }
 
+    /// `text` as what is said aside is painted: the mark of a line a program wrote on its standard error.
+    pub fn aside(&self, text: impl fmt::Display) -> String {
+        self.painted("33", text)
+    }
+
     /// `path` as the reader would spell it: as it is written where it is relative, by the climb from where they stand and the descent to it where the two share more than the root, and whole anywhere else.
     pub fn spelled(&self, path: &Path) -> String {
         match (path.is_absolute(), &self.here) {

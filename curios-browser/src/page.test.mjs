@@ -425,7 +425,7 @@ test("a test page served by the command answers its word through its gateway, an
   assert.equal(reply.next, null);
   assert.match(
     Buffer.from(reply.written, "base64").toString(),
-    /^; passed in \d+\.\ds\n└─ 1 passed, 0 failed; \d+\.\ds\n1 passed, 0 failed; \d+\.\ds\n$/,
+    /^; ✓ passed in \d+\.\ds\n└─ 1 passed, 0 failed; \d+\.\ds\n1 passed, 0 failed; \d+\.\ds\n$/,
   );
 
   // A test that held wrote nothing, and the report is standard error's.

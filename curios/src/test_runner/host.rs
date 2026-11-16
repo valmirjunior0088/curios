@@ -1,10 +1,10 @@
-//! The host a test runs under natively: the operating system's, with what a test writes on the standard streams framed on its way through, a line each behind the dashed trunk beneath the test's node, so what a test wrote reads as the test's.
+//! The host a test runs under natively: the operating system's, with what a test writes on the standard streams framed on its way through, a line each quoted beneath the test's node, so what a test wrote reads as the test's.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{Column, Owed, Wrote, answered, cut, frame_of, framed_run, reader},
+    crate::{Column, Owed, Quoted, Wrote, answered, cut, frame_of, framed_run, reader},
     curios_abi::{ChildHandles, Failure, Handle, HostFront, HostOps, StdioMode},
     curios_common::Style,
     std::sync::{
@@ -69,17 +69,18 @@ impl<H: HostOps> TestHost<H> {
         Ok(())
     }
 
-    /// Write `own`, a run of the test's bytes on one line, on `h` behind what the line is `owed`, and answer how many of them the host took. `column` is left where the stream stands.
+    /// Write `own`, a run of the test's bytes on one line, on `h`, the stream `quoted` names, behind what the line is `owed`, and answer how many of them the host took. `column` is left where the stream stands.
     fn run(
         &self,
         h: &Handle,
         owed: Owed,
         own: &[u8],
+        quoted: Quoted,
         style: &Style,
         column: &mut Column,
     ) -> Result<usize, Failure> {
         if owed != Owed::Nothing {
-            self.put(h, frame_of(owed, style).into_bytes())?;
+            self.put(h, frame_of(owed, quoted, style).into_bytes())?;
             // The frame opened the line, whatever becomes of the bytes behind it.
             *column = Column::Within;
         }
@@ -100,9 +101,9 @@ impl<H: HostOps> HostFront for TestHost<H> {
 
     fn handle_write(&self, h: Handle, b: Vec<u8>) -> Result<u64, Failure> {
         // Each stream's frame is painted for whoever reads that stream.
-        let style = match h {
-            Handle::Stdout => answered(),
-            Handle::Stderr => reader(),
+        let (quoted, style) = match h {
+            Handle::Stdout => (Quoted::Output, answered()),
+            Handle::Stderr => (Quoted::Error, reader()),
             _ => return self.host.handle_write(h, b),
         };
         if b.is_empty() {
@@ -115,7 +116,7 @@ impl<H: HostOps> HostFront for TestHost<H> {
         while taken < b.len() {
             let (owed, length) = framed_run(*column, &b[taken..]);
             let own = &b[taken..taken + length];
-            let wrote = match self.run(&h, owed, own, style, &mut column) {
+            let wrote = match self.run(&h, owed, own, quoted, style, &mut column) {
                 Ok(wrote) => wrote,
                 Err(failure) if taken == 0 => return Err(failure),
                 // What the host took before it failed was written: the test is told of that much, and meets the failure at its next write.

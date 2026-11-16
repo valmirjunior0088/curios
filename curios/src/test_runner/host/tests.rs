@@ -29,7 +29,7 @@ fn a_write_on_a_standard_stream_is_framed_a_line_at_a_time() {
     // Each line reached the host behind its frame, the one the two streams share written once.
     assert_eq!(
         String::from_utf8(io.output()).unwrap(),
-        "│  ╎ drawn\n│  ╎ half a line\n"
+        "│  > drawn\n│  > half a line\n"
     );
 }
 
@@ -68,7 +68,7 @@ fn an_empty_line_and_a_line_written_over_keep_the_frame() {
 
     assert_eq!(
         String::from_utf8(io.output()).unwrap(),
-        "│  ╎ one\n│  ╎\n│  ╎ two\r│  ╎ 2\r\n"
+        "│  > one\n│  >\n│  > two\r│  > 2\r\n"
     );
 }
 

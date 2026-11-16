@@ -131,12 +131,12 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "├─ check; ",
             "├─ build; ",
             "├─ emit; ",
-            "├─ /app/doubling_passes; passed in ",
-            "├─ /app/addition_passes; passed in ",
-            "├─ /app/equality_fails\n│  ╎ expected 5 but got 4\n│  └─ failed in ",
-            "├─ /app/overflow_traps; trapped in ",
-            "├─ /app/exits_seven; exited 7 in ",
-            "├─ /app/effect_passes; passed in ",
+            "├─ /app/doubling_passes; ✓ passed in ",
+            "├─ /app/addition_passes; ✓ passed in ",
+            "├─ /app/equality_fails\n│  > expected 5 but got 4\n│  ✗ failed in ",
+            "├─ /app/overflow_traps; ✗ trapped in ",
+            "├─ /app/exits_seven; ✗ exited 7 in ",
+            "├─ /app/effect_passes; ✓ passed in ",
             "└─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
             "/app\n",
             "├─ check; ",
@@ -194,8 +194,8 @@ test fails_quietly =
     in_order(
         &stderr(&output),
         &[
-            "├─ /app/quits_early; exited 0 in ",
-            "├─ /app/fails_quietly; exited 1 in ",
+            "├─ /app/quits_early; ✗ exited 0 in ",
+            "├─ /app/fails_quietly; ✗ exited 1 in ",
             "└─ 0 passed, 0 failed, 2 exited; ",
         ],
     );
@@ -232,13 +232,13 @@ test mutters =
     );
 
     let apart = curios(&root, &["test"]);
-    assert_eq!(stdout(&apart), "│  ╎ drawn\n", "stderr: {}", stderr(&apart));
+    assert_eq!(stdout(&apart), "│  > drawn\n", "stderr: {}", stderr(&apart));
     in_order(
         &stderr(&apart),
         &[
-            "├─ /app/quiet; passed in ",
-            "├─ /app/draws\n│  └─ passed in ",
-            "├─ /app/mutters\n│  ╎ half\n│  └─ passed in ",
+            "├─ /app/quiet; ✓ passed in ",
+            "├─ /app/draws\n│  ✓ passed in ",
+            "├─ /app/mutters\n│  > half\n│  ✓ passed in ",
             "└─ 3 passed, 0 failed; ",
         ],
     );
@@ -260,9 +260,9 @@ test mutters =
     in_order(
         &together,
         &[
-            "├─ /app/quiet; passed in ",
-            "├─ /app/draws\n│  ╎ drawn\n│  └─ passed in ",
-            "├─ /app/mutters\n│  ╎ half\n│  └─ passed in ",
+            "├─ /app/quiet; ✓ passed in ",
+            "├─ /app/draws\n│  > drawn\n│  ✓ passed in ",
+            "├─ /app/mutters\n│  > half\n│  ✓ passed in ",
         ],
     );
 }
@@ -276,7 +276,7 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
         &stderr(&cold),
         &[
             "├─ emit; ",
-            "├─ /app/addition_passes; passed in ",
+            "├─ /app/addition_passes; ✓ passed in ",
             "└─ 1 passed, 0 failed, 5 skipped; ",
         ],
     );
@@ -287,7 +287,7 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     in_order(
         &stderr(&warm),
         &[
-            "/app\n├─ /app/addition_passes; passed in ",
+            "/app\n├─ /app/addition_passes; ✓ passed in ",
             "└─ 1 passed, 0 failed, 5 skipped; ",
             "app\n└─ 0 passed, 0 failed\n",
             "1 passed, 0 failed, 5 skipped; ",
@@ -359,9 +359,9 @@ end
     in_order(
         &stderr(&output),
         &[
-            "├─ /app/first; passed in ",
-            "├─ /app/second; passed in ",
-            "├─ /app/Inner/kept; passed in ",
+            "├─ /app/first; ✓ passed in ",
+            "├─ /app/second; ✓ passed in ",
+            "├─ /app/Inner/kept; ✓ passed in ",
             "└─ 3 passed, 0 failed, 2 skipped; ",
             "\n3 passed, 0 failed, 2 skipped; ",
         ],
@@ -423,7 +423,11 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     let executable = curios(&root, &["test", "app"]);
     in_order(
         &stderr(&executable),
-        &["app\n", "├─ /in_app; passed in ", "└─ 1 passed, 0 failed; "],
+        &[
+            "app\n",
+            "├─ /in_app; ✓ passed in ",
+            "└─ 1 passed, 0 failed; ",
+        ],
     );
     assert!(
         !stderr(&executable).contains("in_library"),
@@ -436,7 +440,7 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
         &stderr(&loose),
         &[
             "scratch/loose.crs\n",
-            "├─ /loose/in_loose; passed in ",
+            "├─ /loose/in_loose; ✓ passed in ",
             "└─ 1 passed, 0 failed; ",
         ],
     );
@@ -454,7 +458,7 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
         &stderr(&tested),
         &[
             "<stdin>\n",
-            "├─ /stdin/in_piped; passed in ",
+            "├─ /stdin/in_piped; ✓ passed in ",
             "└─ 1 passed, 0 failed; ",
         ],
     );
@@ -653,8 +657,8 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
     in_order(
         &stderr(&warm),
         &[
-            "├─ /app/lib_holds; passed in ",
-            "├─ /other_holds; passed in ",
+            "├─ /app/lib_holds; ✓ passed in ",
+            "├─ /other_holds; ✓ passed in ",
             "\n2 passed, 0 failed; ",
         ],
     );
