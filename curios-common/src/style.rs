@@ -43,6 +43,73 @@ impl Kind {
     }
 }
 
+/// What a painted run is painted as: the attribute a terminal is written for it, and the name an edge that paints otherwise reads it by ([`runs`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    /// What a block is about: a subject, a headline.
+    Bold,
+    /// What frames: a tree, a gutter, a time.
+    Dim,
+    /// What went wrong.
+    Troubled,
+    /// What is said aside: the mark of a line a program wrote on its standard error.
+    Aside,
+}
+
+/// What opens a terminal attribute, closed by `m`, and the attribute that ends every other.
+const OPEN: &str = "\x1b[";
+const RESET: &str = "0";
+
+impl Role {
+    const ALL: [Role; 4] = [Role::Bold, Role::Dim, Role::Troubled, Role::Aside];
+
+    /// The attribute a terminal is written for the role.
+    fn code(self) -> &'static str {
+        match self {
+            Role::Bold => "1",
+            Role::Dim => "2",
+            Role::Troubled => "31",
+            Role::Aside => "33",
+        }
+    }
+
+    /// The role as an edge that paints otherwise names it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Role::Bold => "bold",
+            Role::Dim => "dim",
+            Role::Troubled => "troubled",
+            Role::Aside => "aside",
+        }
+    }
+}
+
+/// `painted`, as a [`Style`] that sees colour wrote it, read back into its runs, in order: each text with the role it is painted in, `None` where it is plain. What an edge that paints a report otherwise than a terminal — a page — takes, so the roles reach it as data; joined, the texts are what the plain style writes.
+pub fn runs(painted: &str) -> Vec<(Option<Role>, String)> {
+    let mut runs = Vec::new();
+    let mut role = None;
+    let mut rest = painted;
+    while let Some(start) = rest.find(OPEN) {
+        let (text, attribute) = rest.split_at(start);
+        if !text.is_empty() {
+            runs.push((role, text.to_string()));
+        }
+        let end = attribute
+            .find('m')
+            .expect("a painted text closes every attribute it opens");
+        let code = &attribute[OPEN.len()..end];
+        role = match code {
+            RESET => None,
+            code => Role::ALL.into_iter().find(|role| role.code() == code),
+        };
+        rest = &attribute[end + 1..];
+    }
+    if !rest.is_empty() {
+        runs.push((role, rest.to_string()));
+    }
+    runs
+}
+
 /// Whoever a report is written for: where they stand, and whether they see colour. Decided by whoever prints, once, and handed to what renders, so a report is data until the edge that writes it.
 ///
 /// **Colour is a layer.** It changes no byte beneath it: what is painted, stripped of its codes, is what the plain style writes.
@@ -60,32 +127,32 @@ impl Style {
         Self::default()
     }
 
-    /// `text` under the attribute `code`, where the reader sees colour.
-    fn painted(&self, code: &str, text: impl fmt::Display) -> String {
+    /// `text` in `role`, where the reader sees colour.
+    fn painted(&self, role: Role, text: impl fmt::Display) -> String {
         match self.painted {
-            true => format!("\x1b[{code}m{text}\x1b[0m"),
+            true => format!("{OPEN}{}m{text}{OPEN}{RESET}m", role.code()),
             false => text.to_string(),
         }
     }
 
     /// `text` as what a block is about is painted: a subject, a headline.
     pub fn bold(&self, text: impl fmt::Display) -> String {
-        self.painted("1", text)
+        self.painted(Role::Bold, text)
     }
 
     /// `text` as what frames is painted: a tree, a gutter, a time.
     pub fn dim(&self, text: impl fmt::Display) -> String {
-        self.painted("2", text)
+        self.painted(Role::Dim, text)
     }
 
     /// `text` as what went wrong is painted.
     pub fn troubled(&self, text: impl fmt::Display) -> String {
-        self.painted("31", text)
+        self.painted(Role::Troubled, text)
     }
 
     /// `text` as what is said aside is painted: the mark of a line a program wrote on its standard error.
     pub fn aside(&self, text: impl fmt::Display) -> String {
-        self.painted("33", text)
+        self.painted(Role::Aside, text)
     }
 
     /// `path` as the reader would spell it: as it is written where it is relative, by the climb from where they stand and the descent to it where the two share more than the root, and whole anywhere else.

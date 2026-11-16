@@ -12,7 +12,7 @@ The Curios compiler in the browser: the wasm-bindgen export of the pure compile 
 
 ### Compiling is this crate's, and running is `curios-browser`'s
 
-**Decision.** This crate is the compiler in the browser and nothing else. `compile` hands back the module and the program's `foreign` rows as `curios-browser` renders them, and the bundle exports `curios-browser`'s `run` beside it, which this crate names so the bundle links it.
+**Decision.** This crate is the compiler in the browser and nothing else. `compile` hands back the module and the program's `foreign` rows as `curios-browser` renders them, and the bundle exports `curios-browser`'s `run` beside it, which this crate names so the bundle links it. A refusal is thrown as its report's runs, each a text and the role the terminal paints it in, so a page paints a refusal as a terminal does and reads it as data, with nothing to re-derive from the plain text.
 
 **Rationale.** Running a program under a JavaScript engine is one concern whoever compiled the program — this crate in the playground, the native compiler for a page — so one crate owns it, and this one depends on it rather than holding half of it.
 

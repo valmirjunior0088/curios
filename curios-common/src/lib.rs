@@ -25,7 +25,7 @@ pub use span::{
 };
 
 mod style;
-pub use style::{Kind, Style};
+pub use style::{Kind, Role, Style, runs};
 
 mod interner;
 pub use interner::{Table, intern};

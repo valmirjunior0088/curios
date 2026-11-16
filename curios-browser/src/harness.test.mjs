@@ -205,6 +205,33 @@ test("compile hands back the program beside the foreign rows it reaches as plain
   );
 });
 
+test("a refusal is thrown as its report's runs, each in the role the terminal paints it", () => {
+  const roles = ["bold", "dim", "troubled", "aside"];
+  // One the parser refuses, and one elaboration refuses.
+  for (const source of ["let = ;", "use /std/{print};\n\nprint(1)"]) {
+    let thrown;
+    try {
+      compile(source);
+    } catch (error) {
+      thrown = error;
+    }
+    assert.ok(Array.isArray(thrown), `${source} is refused with runs`);
+    assert.ok(
+      thrown.every(
+        ({ text, role }) =>
+          typeof text === "string" &&
+          (role === undefined || roles.includes(role)),
+      ),
+    );
+    assert.ok(
+      thrown.some(
+        ({ text, role }) => role === "troubled" && text === "[error]",
+      ),
+    );
+    assert.ok(thrown.some(({ role }) => role === "dim"));
+  }
+});
+
 test("a row that does not return is described as one, and a hook that returns from it stops the program", async () => {
   assert.deepEqual(
     compile(ABORT).foreigns.find(({ name }) => name === "/abort"),

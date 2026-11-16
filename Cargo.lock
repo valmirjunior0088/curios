@@ -795,6 +795,7 @@ name = "curios-js"
 version = "0.16.24"
 dependencies = [
  "curios-browser",
+ "curios-common",
  "curios-elab",
  "curios-module",
  "curios-pipeline",
