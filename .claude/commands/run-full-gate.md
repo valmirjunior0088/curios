@@ -1,6 +1,6 @@
 ---
 description: Run the hand-off gate — `cargo xtask gate`, every subject's steps one after another — and report each step's result
-allowed-tools: Read, Edit, Write, Grep, Glob, Bash(cargo:*), Bash(git:*), Bash(npm:*), Bash(rg:*), Bash(cp:*)
+allowed-tools: Read, Edit, Write, Grep, Glob, Monitor, Bash(cargo:*), Bash(git:*), Bash(npm:*), Bash(rg:*), Bash(cp:*)
 ---
 
 The hand-off gate for code. Why the gate holds these steps and no others is `documentation/design/every-gate-step-catches-what-no-other-step-does.md`; what the steps are, and what each runs after, is the task files', `xtask/tasks.toml` and `xtask/tasks/`, and `cargo xtask <subject> --help` prints a subject's.
@@ -13,7 +13,26 @@ It needs, beyond cargo, nextest, Biome, Node, `npm` and the `wasm-bindgen` progr
 
 ## How it runs
 
-The command is a tracked background task writing `cargo xtask gate > <scratchpad>/gate.log 2>&1; echo "EXIT=$?" >> <scratchpad>/gate.log`. The exit code is the log's last line, and the line before it names what failed and what was not run; a task notification's code is the wrapper's. Never detach with `&`, and never add a shell that waits on another. Do other work until the notification arrives, and read the log then.
+The command is a tracked background task writing `cargo xtask gate > <scratchpad>/gate.log 2>&1; echo "EXIT=$?" >> <scratchpad>/gate.log`. The exit code is the log's last line, and the line before it names what failed and what was not run; a task notification's code is the wrapper's. Never detach with `&`, and never add a shell that waits on another.
+
+Beside it, one monitor reports each step as it ends: an event for each line of the log that ends a step or the gate, in order, and an exit once the exit code is written. It is armed at the longest deadline a monitor takes, and armed again at its expiry while the gate runs on, starting past the lines it already reported:
+
+```sh
+seen=$(grep -cE ' (passed|failed) in |not run|^failed:|^EXIT=' <scratchpad>/gate.log 2>/dev/null || true)
+seen=${seen:-0}
+while true; do
+  n=$(grep -cE ' (passed|failed) in |not run|^failed:|^EXIT=' <scratchpad>/gate.log 2>/dev/null || true)
+  n=${n:-0}
+  if [ "$n" -gt "$seen" ]; then
+    grep -E ' (passed|failed) in |not run|^failed:|^EXIT=' <scratchpad>/gate.log | sed -n "$((seen+1)),${n}p"
+    seen=$n
+  fi
+  grep -q '^EXIT=' <scratchpad>/gate.log 2>/dev/null && break
+  sleep 2
+done
+```
+
+Do other work between events. A step that fails is read as its event arrives, while the steps that read nothing of it run on, and the whole log once the exit code is written.
 
 ## When a step fails
 
