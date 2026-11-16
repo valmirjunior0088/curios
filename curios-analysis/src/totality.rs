@@ -27,16 +27,16 @@ use matrix::*;
 
 mod part;
 use part::*;
-pub use part::{
-    PartShape, Segment, base_part, call_path, group_parts, handed_through, member_parts, part_calls,
-};
+pub use part::{PartShape, Segment, base_part, call_path, group_parts, handed_member, part_calls};
 
 mod shape;
 use shape::*;
 
 mod grade;
 use grade::*;
-pub use grade::{SizeContext, Standing, binder_bounds, grade, handed, nonzero_by, refined_by_arm};
+pub use grade::{
+    Applied, SizeContext, Standing, binder_bounds, grade, handed, nonzero_by, refined_by_arm,
+};
 
 #[cfg(test)]
 mod tests;
@@ -45,9 +45,10 @@ use {
     crate::Env,
     curios_common::recurse,
     curios_core::{
-        Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, Foreign, Free, Func,
-        FuncType, InductType, Intrinsic, Many, Match, Nat, One, Probe, Proj, RecGroup, Scope,
-        Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Two, Variant,
+        Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, FieldApplications,
+        Foreign, Free, Func, FuncType, InductType, Intrinsic, Many, Match, Nat, One, Probe, Proj,
+        RecGroup, Scope, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType,
+        Two, Variant,
     },
     curios_num::Natural,
     std::collections::{BTreeSet, HashMap, hash_map::Entry},
@@ -143,36 +144,54 @@ pub fn group_applications<E: Env>(
     Ok(bases
         .iter()
         .map(|&member| {
+            let mut fields = Vec::new();
             let applied = (0..arities[member])
                 .map(|position| {
                     let closed = closed.as_ref().filter(|_| seen[position])?;
-                    let mut matrices = uses[member].applied[position]
-                        .iter()
-                        .cloned()
-                        .collect::<BTreeSet<_>>();
-                    for path in closed.iter().filter(|path| path.caller == member) {
-                        for applied in uses[path.callee]
-                            .applied
-                            .get(position)
+                    // The applications of the parameter, or of its field at `path`: this member's, and each reached through a path of the group's calls. A field is applied through a call that hands the parameter on at its own place as the parameter is.
+                    let reached = |path: Option<&[usize]>| {
+                        let mut matrices = uses[member]
+                            .at(position, path)
                             .into_iter()
-                            .flatten()
-                        {
-                            if let Some(through) = path.matrix.compose(applied) {
-                                matrices.insert(through);
+                            .collect::<BTreeSet<_>>();
+                        for call in closed.iter().filter(|call| call.caller == member) {
+                            for applied in uses[call.callee].at(position, path) {
+                                if let Some(through) = call.matrix.compose(&applied) {
+                                    matrices.insert(through);
+                                }
                             }
                         }
+                        (matrices.len() <= APPLICATIONS_LIMIT)
+                            .then(|| matrices.into_iter().collect::<Vec<_>>())
+                    };
+                    let own = reached(None)?;
+                    let paths = uses
+                        .iter()
+                        .flat_map(|used| used.paths(position))
+                        .collect::<BTreeSet<_>>();
+                    let mut found = Vec::new();
+                    for path in paths {
+                        let applied = reached(Some(&path))?;
+                        found.push(FieldApplications {
+                            position,
+                            path,
+                            applied,
+                        });
                     }
-                    (matrices.len() <= APPLICATIONS_LIMIT).then(|| matrices.into_iter().collect())
+                    fields.extend(found);
+                    Some(own)
                 })
                 .collect();
-            Applications::new(applied)
+            Applications::new(applied, fields)
         })
         .collect())
 }
 
-/// What a walk summarizing its member's parameters found of each ([`group_applications`]): the matrices of its applications, and whether it is used otherwise.
+/// What a walk summarizing its member's parameters found of each ([`group_applications`]): the matrices of its applications and of its fields', and whether it is used otherwise.
 struct Tracked {
     applied: Vec<Vec<CallMatrix>>,
+    /// Each field path of a parameter applied, with the matrix grading that application.
+    fields: Vec<Vec<(Vec<usize>, CallMatrix)>>,
     escaped: Vec<bool>,
 }
 
@@ -180,9 +199,56 @@ impl Tracked {
     fn new(params: usize) -> Self {
         Self {
             applied: vec![Vec::new(); params],
+            fields: vec![Vec::new(); params],
             escaped: vec![false; params],
         }
     }
+
+    /// The matrices of the applications of the parameter at `position`, or, given `path`, of its field there.
+    fn at(&self, position: usize, path: Option<&[usize]>) -> Vec<CallMatrix> {
+        match path {
+            None => self.applied.get(position).cloned().unwrap_or_default(),
+            Some(path) => self
+                .fields
+                .get(position)
+                .into_iter()
+                .flatten()
+                .filter(|(at, _)| at == path)
+                .map(|(_, matrix)| matrix.clone())
+                .collect(),
+        }
+    }
+
+    /// Each field path of the parameter at `position` applied.
+    fn paths(&self, position: usize) -> Vec<Vec<usize>> {
+        self.fields
+            .get(position)
+            .into_iter()
+            .flatten()
+            .map(|(path, _)| path.clone())
+            .collect()
+    }
+}
+
+/// A parameter's field applied, read off its path's steps: the fields projected first, at least one, and every step after them arguments, at least one — `e.0(x, y)`, `e.1.0(y)`. A path any other way, a field of what an application answers among them, is no such application.
+fn field_application(steps: &[Segment]) -> Option<(Vec<usize>, Vec<Term>)> {
+    let fields = steps
+        .iter()
+        .take_while(|step| matches!(step, Segment::Field(_)))
+        .map(|step| match step {
+            Segment::Field(slot) => *slot,
+            Segment::Arguments(_) => unreachable!("taken while fields"),
+        })
+        .collect::<Vec<_>>();
+    let rest = &steps[fields.len()..];
+    if fields.is_empty()
+        || rest.is_empty()
+        || rest.iter().any(|step| matches!(step, Segment::Field(_)))
+    {
+        return None;
+    }
+    let arguments = rest.iter().flat_map(Segment::arguments).cloned().collect();
+    Some((fields, arguments))
 }
 
 /// Whether `calls`, every graded call of one group, close to no call path that can repeat forever without a strict decrease.
@@ -256,8 +322,13 @@ impl<E: Env> Walk<'_, E> {
         self.tracked.is_some() && self.params.iter().any(|param| term.mentions_free(param))
     }
 
-    /// Record an application of the parameter at `position` to `arguments`, graded against the member's parameters under what the enclosing arms established.
-    fn applied(&mut self, position: usize, arguments: &[Term]) -> Result<(), E::Error> {
+    /// Record an application of the parameter at `position` to `arguments`, or of its field at `path`, graded against the member's parameters under what the enclosing arms established.
+    fn applied(
+        &mut self,
+        position: usize,
+        path: Option<Vec<usize>>,
+        arguments: &[Term],
+    ) -> Result<(), E::Error> {
         if !self.summarizes {
             if let Some(tracked) = &mut self.tracked {
                 tracked.escaped[position] = true;
@@ -274,7 +345,10 @@ impl<E: Env> Walk<'_, E> {
             arguments,
         )?;
         if let Some(tracked) = &mut self.tracked {
-            tracked.applied[position].push(graded.matrix);
+            match path {
+                None => tracked.applied[position].push(graded.matrix),
+                Some(path) => tracked.fields[position].push((path, graded.matrix)),
+            }
         }
         Ok(())
     }
@@ -308,19 +382,76 @@ impl<E: Env> Walk<'_, E> {
         walked
     }
 
-    /// Record the calls of member `member` a definition makes where it applies it as `handed` grades: for each application, one of each of the member's parts, the record its leading lambdas answer escaping to the definition ([`handed_through`]).
-    fn call_handed(&mut self, member: usize, handed: &[CallMatrix]) {
-        let base = self.arities[base_part(self.parts, member)];
-        for callee in member_parts(self.parts, member) {
-            for matrix in handed {
-                let call = Call {
-                    caller: self.caller,
-                    callee,
-                    matrix: handed_through(matrix, base, self.params.len(), self.arities[callee]),
-                };
-                self.calls.push(call);
+    /// Walk an argument a call hands where its callee applies it as `applied` grades, and as any term where nothing applies it: a lambda's binders stand as its applications establish ([`Walk::walk_handed`]), a record literal hands each field what its path is applied with, and a member of this group, named bare or applied to its own arguments, makes the calls of its parts each application reaches ([`handed_member`]).
+    fn walk_argument(
+        &mut self,
+        argument: &Term,
+        applied: Option<&Applied>,
+    ) -> Result<(), E::Error> {
+        let Some(applied) = applied.filter(|applied| !applied.is_empty()) else {
+            return self.walk_term(argument);
+        };
+        match &**argument {
+            Subterm::Func(Func { telescope, .. }) => {
+                return self.walk_handed(telescope.clone(), &applied.itself);
             }
+            Subterm::Struct(Struct { params, fields, .. }) => {
+                self.walks(params)?;
+                return self.walk_fields(fields, applied);
+            }
+            Subterm::Tuple(Tuple { fields, .. }) => return self.walk_fields(fields, applied),
+            _ => {}
         }
+        let (root, steps) = call_path(argument);
+        let member = root
+            .as_rec_proj()
+            .filter(|(group, _)| *group == self.group)
+            .map(|(_, member)| member);
+        let given = steps
+            .iter()
+            .map(|step| match step {
+                Segment::Arguments(arguments) => Some(arguments.iter().cloned()),
+                Segment::Field(_) => None,
+            })
+            .collect::<Option<Vec<_>>>()
+            .map(|lists| lists.into_iter().flatten().collect::<Vec<_>>());
+        let (Some(member), Some(given)) = (member, given) else {
+            return self.walk_term(argument);
+        };
+        let base = base_part(self.parts, member);
+        let graded = match given.len() {
+            0 => None,
+            count if count == self.arities[base] => Some(
+                grade(
+                    self.env,
+                    &self.context,
+                    self.caller,
+                    self.params,
+                    base,
+                    count,
+                    &given,
+                )?
+                .matrix,
+            ),
+            _ => return self.walk_term(argument),
+        };
+        let rows = self.params.len();
+        for (callee, matrix) in handed_member(self.parts, member, rows, graded.as_ref(), applied) {
+            self.calls.push(Call {
+                caller: self.caller,
+                callee,
+                matrix,
+            });
+        }
+        self.walks(&given)
+    }
+
+    /// Walk a record literal's fields where a callee applies the record as `applied` grades, each handed what its own path is applied with.
+    fn walk_fields(&mut self, fields: &[Term], applied: &Applied) -> Result<(), E::Error> {
+        for (slot, field) in fields.iter().enumerate() {
+            self.walk_argument(field, Some(&applied.field(slot)))?;
+        }
+        Ok(())
     }
 
     /// The reader of terms as sizes, under the context this walk has built so far.
@@ -638,16 +769,24 @@ impl<E: Env> Walk<'_, E> {
                     return self.walks(&rest);
                 }
                 if projected {
+                    // A parameter's field applied, `e.0(x, y)`, is an application the summary states of that field.
+                    if let Subterm::Var(var) = &*spine_head
+                        && let Some(position) = self.tracked_position(var.as_free())
+                        && let Some((path, applied)) = field_application(&steps)
+                    {
+                        self.applied(position, Some(path), &applied)?;
+                        return self.walks(&applied);
+                    }
                     self.walk_term(&apply.head)?;
                     return self.walks(apply.params());
                 }
                 if let Subterm::Var(var) = &*spine_head
                     && let Some(position) = self.tracked_position(var.as_free())
                 {
-                    self.applied(position, &arguments)?;
+                    self.applied(position, None, &arguments)?;
                     return self.walks(&arguments);
                 }
-                // A call of a definition that applies a parameter as its summary states hands a lambda there binders standing to this member's parameters as each application of it stands, and hands a member of this group there a call graded through each.
+                // A call of a definition that applies a parameter, or a field of one, as its summary states hands each argument there what each application of it establishes ([`Walk::walk_argument`]).
                 if let Subterm::Instance(instance) = &*spine_head {
                     let handed = handed(
                         self.env,
@@ -657,20 +796,8 @@ impl<E: Env> Walk<'_, E> {
                         &arguments,
                     )?;
                     if handed.iter().any(Option::is_some) {
-                        for (argument, handed) in arguments.iter().zip(handed) {
-                            let member = argument
-                                .as_rec_proj()
-                                .filter(|(group, _)| *group == self.group)
-                                .map(|(_, index)| index);
-                            match (handed, &**argument, member) {
-                                (Some(handed), Subterm::Func(Func { telescope, .. }), _) => {
-                                    self.walk_handed(telescope.clone(), &handed)?;
-                                }
-                                (Some(handed), _, Some(member)) => {
-                                    self.call_handed(member, &handed)
-                                }
-                                _ => self.walk_term(argument)?,
-                            }
+                        for (argument, applied) in arguments.iter().zip(handed) {
+                            self.walk_argument(argument, applied.as_ref())?;
                         }
                         return Ok(());
                     }

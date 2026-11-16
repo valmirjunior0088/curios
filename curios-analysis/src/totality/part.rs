@@ -6,6 +6,7 @@
 mod tests;
 
 use {
+    super::Applied,
     crate::Env,
     curios_core::{Advance, CallMatrix, Free, Func, Proj, RecGroup, Struct, Subterm, Term, Tuple},
 };
@@ -131,7 +132,7 @@ pub fn base_part(parts: &[PartShape], member: usize) -> usize {
 }
 
 /// The call of a part of `arity` parameters an application of its member makes where `handed` grades the application against `rows` parameters: where it hands the member's leading lambdas all their `base` parameters, `handed` with columns claiming nothing after it for the field lambda's, and a call claiming nothing otherwise.
-pub fn handed_through(handed: &CallMatrix, base: usize, rows: usize, arity: usize) -> CallMatrix {
+fn handed_through(handed: &CallMatrix, base: usize, rows: usize, arity: usize) -> CallMatrix {
     match handed.columns() == base && handed.rows() == rows && arity >= base {
         true => handed
             .beside(&CallMatrix::unknown(rows, arity - base))
@@ -140,8 +141,61 @@ pub fn handed_through(handed: &CallMatrix, base: usize, rows: usize, arity: usiz
     }
 }
 
+/// The calls of member `member`'s parts an argument naming it makes where its callee applies it as `applied` grades, against `rows` parameters: the member named bare where `given` is `None`, and otherwise applied to its own arguments, which `given` grades.
+///
+/// - Each application of the argument itself is a call of each part: of a bare member's leading lambdas with what the application hands them, where it hands them all their parameters, a field lambda's parameters after them claiming nothing; and of an applied member's answer applied further, past what any part's parameters grade.
+/// - The argument is answered where it is handed: the member's leading lambdas are called with its own arguments, where those fill them, as a member of none is named bare.
+/// - Each application of a field of it is a call of the part at that path, the member's own arguments then the field lambda's as the application grades them; a part under the path, or one the arguments do not reach, claims nothing.
+pub fn handed_member(
+    parts: &[PartShape],
+    member: usize,
+    rows: usize,
+    given: Option<&CallMatrix>,
+    applied: &Applied,
+) -> Vec<(usize, CallMatrix)> {
+    let base = base_part(parts, member);
+    let arity = parts[base].arity;
+    let mut calls = Vec::new();
+    for matrix in &applied.itself {
+        for part in member_parts(parts, member) {
+            let call = match given {
+                None => handed_through(matrix, arity, rows, parts[part].arity),
+                Some(_) => CallMatrix::unknown(rows, parts[part].arity),
+            };
+            calls.push((part, call));
+        }
+    }
+    let answered = match given {
+        Some(given) => (given.columns() == arity && given.rows() == rows).then(|| given.clone()),
+        None => (arity == 0).then(|| CallMatrix::unknown(rows, 0)),
+    };
+    match &answered {
+        Some(answered) => calls.push((base, answered.clone())),
+        None if given.is_some() => calls.push((base, CallMatrix::unknown(rows, arity))),
+        None => {}
+    }
+    for (path, matrices) in &applied.fields {
+        for part in member_parts(parts, member).filter(|part| parts[*part].path.starts_with(path)) {
+            let arity = parts[part].arity;
+            match (&answered, parts[part].path == *path) {
+                (Some(answered), true) => {
+                    for matrix in matrices {
+                        let call = answered
+                            .beside(matrix)
+                            .filter(|call| call.columns() == arity)
+                            .unwrap_or_else(|| CallMatrix::unknown(rows, arity));
+                        calls.push((part, call));
+                    }
+                }
+                _ => calls.push((part, CallMatrix::unknown(rows, arity))),
+            }
+        }
+    }
+    calls
+}
+
 /// Each part of member `member`: what a call reaching the member without following a field into it makes a call of, the record its leading lambdas answer escaping ([`part_calls`]).
-pub fn member_parts(parts: &[PartShape], member: usize) -> impl Iterator<Item = usize> + '_ {
+fn member_parts(parts: &[PartShape], member: usize) -> impl Iterator<Item = usize> + '_ {
     parts
         .iter()
         .enumerate()

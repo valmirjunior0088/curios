@@ -12,11 +12,12 @@ mod tests;
 use {
     super::{Certifier, Error},
     curios_analysis::{
-        Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds, decide, grade,
-        group_parts, handed, handed_through, member_parts, nonzero_by, part_calls, refined_by_arm,
+        Applied, Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds,
+        call_path, decide, grade, group_parts, handed, handed_member, nonzero_by, part_calls,
+        refined_by_arm,
     },
     curios_common::Keyed,
-    curios_core::{CallMatrix, Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
+    curios_core::{Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
     std::{
         collections::{HashMap, HashSet},
         mem,
@@ -41,10 +42,12 @@ pub struct Calls {
     spine_head: bool,
     /// Whether the lambdas the next check opens are a member body's leading lambdas, whose binders are the member's parameters.
     parameters: bool,
-    /// What the lambda the next check opens is handed where its callee applies it ([`handed`]): taken by that check alone, as `parameters` is.
+    /// What the lambda or the record literal the next check opens is handed where its callee applies it ([`handed`]): taken by that check alone, as `parameters` is.
     assumed: Option<Handed>,
-    /// The member the next typing of a bare member local names, with what its callee hands it ([`handed`]): calls graded through each in place of one claiming nothing. Keyed by the member, so no other local's typing takes it.
+    /// The member the next typing of a member local names, bare or applied to its own arguments, with what its callee hands it ([`handed`]): calls graded through each in place of ones claiming nothing. Keyed by the member, so no other local's typing takes it.
     handed: Option<(Free, Handed)>,
+    /// What the record literal the next judgment types is handed, which its rule hands each field by its slot. Taken by that judgment alone, as `record` is.
+    literal: Option<Handed>,
     /// The argument lists applied after the application whose head the next judgment types, nearest first: the rest of a curried spine, which its head reads whole, as the elaborator's walk does. Taken by that judgment alone, as `spine_head` is.
     later: Vec<Vec<Term>>,
     /// What a curried spine's head handed the argument lists after its own, nearest first, left for the application around it to take its share of once its head is typed.
@@ -53,8 +56,17 @@ pub struct Calls {
     record: bool,
 }
 
-/// What a call hands one argument where its callee applies it ([`handed`]), once for each frame whose body is being checked: the frame, and the callee's applications graded against that frame's caller. A lambda handed inside an inner group's body runs within the enclosing member's invocation too, so its binders stand to every caller whose body holds it, as a call of an enclosing member is graded against that member's parameters ([`Certifier::record_call`]).
-pub type Handed = Vec<(usize, Vec<CallMatrix>)>;
+/// What a call hands one argument where its callee applies it ([`handed`]), once for each frame whose body is being checked: the frame, and the callee's applications of the argument and of its fields graded against that frame's caller. A lambda handed inside an inner group's body runs within the enclosing member's invocation too, so its binders stand to every caller whose body holds it, as a call of an enclosing member is graded against that member's parameters ([`Certifier::record_call`]).
+pub type Handed = Vec<(usize, Applied)>;
+
+/// What the field at `slot` of a record literal handed `handed` is handed: each frame's applications of that field and of each path under it.
+pub fn field_handed(handed: &Handed, slot: usize) -> Handed {
+    handed
+        .iter()
+        .map(|(frame, applied)| (*frame, applied.field(slot)))
+        .filter(|(_, applied)| !applied.is_empty())
+        .collect()
+}
 
 /// What [`Certifier::enter_field`] replaced, for [`Certifier::leave_field`] to put back: the part whose body was being checked, with its parameters, and where in its member's record the check stood.
 pub(super) struct Entered {
@@ -204,12 +216,22 @@ impl Calls {
         }
     }
 
-    /// Hand the argument whose check is about to run what its callee applies it with, `handed`: a lambda takes it as its binders' bounds, a member local as the calls it makes.
+    /// Hand the argument whose check is about to run what its callee applies it with, `handed`: a lambda takes it as its binders' bounds, a record literal hands each field its own, and a member local, bare or applied to its own arguments, takes it as the calls it makes.
     pub fn hand(&mut self, argument: &Term, handed: Handed) {
         match &**argument {
-            Subterm::Func(_) => self.assumed = Some(handed),
-            Subterm::Var(var) => self.handed = var.as_free().map(|member| (*member, handed)),
-            _ => {}
+            Subterm::Func(_) | Subterm::Struct(_) | Subterm::Tuple(_) => {
+                self.assumed = Some(handed)
+            }
+            _ => {
+                let (root, steps) = call_path(argument);
+                if let Subterm::Var(var) = &*root
+                    && steps
+                        .iter()
+                        .all(|step| matches!(step, Segment::Arguments(_)))
+                {
+                    self.handed = var.as_free().map(|member| (*member, handed));
+                }
+            }
         }
     }
 
@@ -217,6 +239,17 @@ impl Calls {
     pub fn clear_handed(&mut self) {
         self.assumed = None;
         self.handed = None;
+        self.literal = None;
+    }
+
+    /// Hand the record literal the next judgment types what `handed` says its callee applies it with.
+    pub fn set_literal(&mut self, handed: Handed) {
+        self.literal = Some(handed);
+    }
+
+    /// What the record literal about to be typed is handed, clearing it for the judgments after it.
+    pub fn take_literal(&mut self) -> Option<Handed> {
+        self.literal.take()
     }
 
     /// What the local `name` unfolds to in reduction: where it names a member known to terminate of a group whose bodies are being checked, its selection out of the members known to terminate ([`Certifier::read_known`]), and nothing otherwise. A member withheld stands for nothing in its group's bodies.
@@ -428,6 +461,9 @@ impl Certifier<'_> {
                     applications
                         .of(position)
                         .is_some_and(|applied| !applied.is_empty())
+                        || applications
+                            .fields_of(position)
+                            .any(|(_, applied)| !applied.is_empty())
                 })
             });
         if !summarized {
@@ -447,11 +483,11 @@ impl Certifier<'_> {
         for (frame, params) in &callers {
             match handed(self, &context, params, callee, &arguments) {
                 Ok(positions) => {
-                    for (position, matrices) in positions.into_iter().enumerate() {
-                        if let Some(matrices) = matrices {
+                    for (position, applied) in positions.into_iter().enumerate() {
+                        if let Some(applied) = applied {
                             by_position[position]
                                 .get_or_insert_with(Vec::new)
-                                .push((*frame, matrices));
+                                .push((*frame, applied));
                         }
                     }
                 }
@@ -466,12 +502,12 @@ impl Certifier<'_> {
     }
 
     /// Within the current bracket, each of `binders`, a lambda's handed where its callee applies it as `handed` grades, stands to the parameters of each member whose body holds it as [`binder_bounds`] reads them, one standing naming them all.
-    pub(super) fn assume_handed(&mut self, binders: &[Free], handed: &[(usize, Vec<CallMatrix>)]) {
+    pub(super) fn assume_handed(&mut self, binders: &[Free], handed: &Handed) {
         if !self.recording() {
             return;
         }
         let mut bounds: Vec<(Free, Standing)> = Vec::new();
-        for (frame, matrices) in handed {
+        for (frame, applied) in handed {
             let Some((_, params)) = self
                 .calls
                 .frames
@@ -480,7 +516,7 @@ impl Certifier<'_> {
             else {
                 continue;
             };
-            for (binder, standing) in binder_bounds(matrices, &params, binders) {
+            for (binder, standing) in binder_bounds(&applied.itself, &params, binders) {
                 match bounds.iter_mut().find(|(seen, _)| *seen == binder) {
                     Some((_, merged)) => merged.extend(standing),
                     None => bounds.push((binder, standing)),
@@ -495,12 +531,16 @@ impl Certifier<'_> {
         self.memos.begin_sizes();
     }
 
-    /// Record the calls a bare `member` local makes where its callee applies it as `handed` grades: for each application graded against the caller of the member's own group, as a call of it is ([`Certifier::record_call`]), one of each of the member's parts ([`handed_through`]).
+    /// Record the calls a `member` local makes where its callee applies it as `handed` grades, named bare where `given` is `None` and applied to its own arguments `given` otherwise: the calls of its parts each application reaches ([`handed_member`]), graded against the caller of the member's own group as a call of it is ([`Certifier::record_call`]).
     pub(super) fn record_handed(
         &mut self,
         member: &Free,
-        handed: &[(usize, Vec<CallMatrix>)],
+        given: Option<&[Term]>,
+        handed: &Handed,
     ) -> Result<(), Error> {
+        let steps = given
+            .map(|given| vec![Segment::Arguments(given.to_vec())])
+            .unwrap_or_default();
         let callee = self
             .calls
             .frames
@@ -515,27 +555,42 @@ impl Certifier<'_> {
                 Some((frame, callee))
             });
         let Some((frame, callee)) = callee.filter(|_| !self.positions.suppressed()) else {
-            return self.record_call(member, &[]);
+            return self.record_call(member, &steps);
         };
         let Some((caller, params)) = self.calls.frames[frame].caller.clone() else {
-            return self.record_call(member, &[]);
+            return self.record_call(member, &steps);
         };
-        let Some((_, matrices)) = handed.iter().find(|(graded, _)| *graded == frame) else {
-            return self.record_call(member, &[]);
+        let Some((_, applied)) = handed.iter().find(|(graded, _)| *graded == frame) else {
+            return self.record_call(member, &steps);
         };
-        // A member handed bare is called where the callee applies it, and each of its parts with it: the record its leading lambdas answer escapes to the callee ([`handed_through`]).
-        let open = &mut self.calls.frames[frame];
-        let base = open.parts[base_part(&open.parts, callee)].arity;
-        for part in member_parts(&open.parts, callee) {
-            let arity = open.parts[part].arity;
-            for matrix in matrices {
-                open.calls.push(Call {
-                    caller,
-                    callee: part,
-                    matrix: handed_through(matrix, base, params.len(), arity),
-                });
+        let base = base_part(&self.calls.frames[frame].parts, callee);
+        let arity = self.calls.frames[frame].parts[base].arity;
+        let graded = match given {
+            None => None,
+            Some(given) if given.len() == arity => {
+                // Graded on what each argument passes, as a call is.
+                let arguments = given
+                    .iter()
+                    .map(|argument| self.graded(argument))
+                    .collect::<Vec<_>>();
+                for argument in &arguments {
+                    self.debug_assert_graded(argument);
+                }
+                let context = mem::take(&mut self.calls.context);
+                let call = grade(self, &context, caller, &params, base, arity, &arguments);
+                self.calls.context = context;
+                Some(call?.matrix)
             }
-        }
+            Some(_) => return self.record_call(member, &steps),
+        };
+        let open = &mut self.calls.frames[frame];
+        let calls = handed_member(&open.parts, callee, params.len(), graded.as_ref(), applied);
+        open.calls
+            .extend(calls.into_iter().map(|(part, matrix)| Call {
+                caller,
+                callee: part,
+                matrix,
+            }));
         Ok(())
     }
 

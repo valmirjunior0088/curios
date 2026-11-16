@@ -1334,6 +1334,84 @@ fn a_recursion_through_a_callees_summary_is_judged_again_where_the_callee_moves_
     }
 }
 
+/// `/lib/apply` at one type either way, applying the field of `k` where [`applying`] applies `k` itself: below `x` where `below`, and otherwise at `x` itself where `x` is `0`.
+fn applying_field(below: bool) -> &'static str {
+    match below {
+        true => {
+            "\
+use /std/{Nat};
+use /base/{N};
+
+pub let apply(x: Nat, k: {(Nat) -> N}) -> N =
+    match x
+    | 0 => N/z()
+    | n + 1 => match apply(n, k) | z() => k.0(n) | s(_) => k.0(n) end
+    end;
+"
+        }
+        false => {
+            "\
+use /std/{Nat};
+use /base/{N};
+
+pub let apply(x: Nat, k: {(Nat) -> N}) -> N =
+    match x
+    | 0 => k.0(0)
+    | n + 1 => apply(n, k)
+    end;
+"
+        }
+    }
+}
+
+/// `/app/loop`, which recurses through the field of the record `/lib/apply` is handed, as [`LOOPING_THROUGH_APPLY`] recurses through the callback itself.
+const LOOPING_THROUGH_APPLY_FIELD: &str = "\
+use /std/{Nat};
+use /base/{N};
+use /lib/{apply};
+
+pub let loop(x: Nat) -> N =
+    apply(x, ((y) => N/s(loop(y)),));
+";
+
+/// The history above with the callback held at a record's field: what `/lib`'s record files of `k` is how `apply` applies `k.0`, so an edit moving that alone moves the summary `loop` was graded through. Mutation-check: as for the history above.
+#[test]
+fn a_recursion_through_a_callees_summary_of_a_field_is_judged_again_where_the_callee_moves() {
+    for steps in [
+        &[true][..],
+        &[true, false],
+        &[true, false, true],
+        &[true, false, true, false],
+    ] {
+        let (first, later) = steps.split_first().expect("a step of the library");
+        let mut history = History::new();
+        history
+            .step("base", Written::Program, SUCCESSOR)
+            .expect("the carrier builds");
+        history
+            .step("lib", Written::Program, applying_field(*first))
+            .expect("the library builds");
+        history
+            .step("app", Written::Program, LOOPING_THROUGH_APPLY_FIELD)
+            .expect("the recursion builds");
+        for below in later {
+            history
+                .step("lib", Written::Program, applying_field(*below))
+                .expect("the edited library builds");
+        }
+
+        let verdicts = put(&history, &no_fix_of_loop("app", "0"));
+
+        match steps.last() == Some(&true) {
+            true => assert!(
+                refused_for_its_equation_alone(&verdicts),
+                "{steps:?}: {verdicts:?}"
+            ),
+            false => assert!(refused_as_partial(&verdicts), "{steps:?}: {verdicts:?}"),
+        }
+    }
+}
+
 /// `fwd`, `apply` and `loop` in one unit: `apply` applies `k` to `fwd(p)` in the arm that takes `x` to `s(p)`, `fwd` the identity or the successor.
 fn forwarding(identity: bool) -> String {
     let body = match identity {

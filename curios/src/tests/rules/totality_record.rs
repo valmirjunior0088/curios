@@ -191,3 +191,160 @@ fn a_member_handed_where_its_callee_applies_it_is_a_call_of_each_of_its_parts() 
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A witness handed to a definition that applies its method is graded where the definition applies it: `/std/List/eql` applies `e.0` to elements below its lists, so the method's call of `List/eql` on the children is a call of the method below its arguments, and a type reaching `==` on the type is formed. The refusal hands `List/eql` lists built around the arguments themselves, whose elements are no smaller.
+#[test]
+fn a_witness_handed_to_a_container_operation_descends_where_the_operation_applies_its_method() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+        use /std/ops/{Eql};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        satisfy Eql(Rose) {
+            eql(a, b) = match a | rose(n, cs) => match b | rose(m, ds) => n == m && List/eql(cs, ds) end end,
+            neq(a, b) = Bool/not(Eql/eql(a, b)),
+        }
+
+        let Same(a: Rose, b: Rose) -> Prop = Bool/Holds(a == b);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("List/eql(cs, ds)", "List/eql([a], [b])")])
+    .by_elaborator_in("/Same", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Same", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A witness under a telescope is handed to a container operation as the member applied to its own parameters: its own arguments are graded as a call's are, and the method's after them as the operation applies it, so the call on the children descends as the witness of no telescope does. The refusal hands `List/eql` lists built around the arguments themselves.
+#[test]
+fn a_witness_applied_to_its_own_parameters_and_handed_to_a_container_operation_descends() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+        use /std/ops/{Eql};
+
+        induct Rose(A: Type): Type
+        | rose(A, List(Rose(A)))
+        end
+
+        satisfy (@A: Type, use Eql(A)) => Eql(Rose(A)) {
+            eql(a, b) = match a | rose(n, cs) => match b | rose(m, ds) => n == m && List/eql(cs, ds) end end,
+            neq(a, b) = Bool/not(Eql/eql(a, b)),
+        }
+
+        let Same(a: Rose(Nat), b: Rose(Nat)) -> Prop = Bool/Holds(a == b);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("List/eql(cs, ds)", "List/eql([a], [b])")])
+    .by_elaborator_in("/Same", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Same", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A structure of handlers handed to a walker is graded as a witness is: `walk` applies `h.0` to an element below its list, so `sizes`'s call of `walk` on the children is a call of its own field below `t`. The refusal is the walker applying the handler to a tree it built around its list.
+#[test]
+fn a_structure_of_handlers_handed_to_a_walker_descends_where_the_walker_applies_its_field() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        let walk(h: {(Rose) -> Nat}, l: List(Rose)) -> Nat =
+            match l | [] => 0 | [x, ..xs] => h.0(x) + walk(h, xs) end;
+
+        let sizes: {(Rose) -> Nat} = ((t) => match t | rose(n, cs) => n + walk(sizes, cs) end,);
+
+        let Small(t: Rose) -> Prop = Bool/Holds(sizes.0(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("h.0(x)", "h.0(Rose/rose(0, l))")])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A record literal handed to a walker hands each field what the walker applies it with: the lambda at the field `walk` applies binds an element below the list it is handed, so its call of `sizes` on that element descends. The refusal has the lambda call `sizes` on the tree it was walking.
+#[test]
+fn a_record_literal_handed_to_a_walker_binds_each_field_as_the_walker_applies_it() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        let walk(h: {(Rose) -> Nat}, l: List(Rose)) -> Nat =
+            match l | [] => 0 | [x, ..xs] => h.0(x) + walk(h, xs) end;
+
+        let sizes: {(Rose) -> Nat} = ((t) => match t | rose(n, cs) => n + walk(((u) => sizes.0(u),), cs) end,);
+
+        let Small(t: Rose) -> Prop = Bool/Holds(sizes.0(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("(u) => sizes.0(u)", "(u) => sizes.0(t)")])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A walker that hands on a record it built from its handler uses the handler otherwise than applying a field of it, so its summary states nothing of it, and a structure of handlers handed there is a call of each of its parts claiming nothing. The control hands the handler on unchanged.
+#[test]
+fn a_structure_of_handlers_handed_where_nothing_is_summarized_is_graded_as_unrelated() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        let walk(h: {(Rose) -> Nat}, l: List(Rose)) -> Nat =
+            match l | [] => 0 | [x, ..xs] => h.0(x) + walk(h, xs) end;
+
+        let sizes: {(Rose) -> Nat} = ((t) => match t | rose(n, cs) => n + walk(sizes, cs) end,);
+
+        let Small(t: Rose) -> Prop = Bool/Holds(sizes.0(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("walk(h, xs)", "walk((h.0,), xs)")])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

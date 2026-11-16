@@ -267,34 +267,85 @@ pub fn grade<E: Env>(
     })
 }
 
-/// What a call of `callee` with `arguments`, from a member whose parameters are `params`, hands each argument at a parameter `callee` applies as its summary states ([`Applications`](curios_core::Applications)): every matrix grading an application of that parameter against `params`, through what the call hands `callee` under `context`. `None` at a position `callee` summarizes nothing at or applies nowhere, and at every position where nothing is filed of `callee` or the call does not hand it every parameter.
+/// How a callee applies one argument a call hands it, graded against the caller's parameters: every application of the argument itself, and of each field path of it, as the callee's summary states them ([`Applications`](curios_core::Applications)).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Applied {
+    pub itself: Vec<CallMatrix>,
+    pub fields: Vec<(Vec<usize>, Vec<CallMatrix>)>,
+}
+
+impl Applied {
+    /// What the value at `slot` of a record handed here is handed: the applications of that field, and of each path under it.
+    pub fn field(&self, slot: usize) -> Applied {
+        let mut field = Applied::default();
+        for (path, applied) in &self.fields {
+            match path.split_first() {
+                Some((first, [])) if *first == slot => field.itself.extend(applied.iter().cloned()),
+                Some((first, rest)) if *first == slot => {
+                    field.fields.push((rest.to_vec(), applied.clone()))
+                }
+                _ => {}
+            }
+        }
+        field
+    }
+
+    /// Every matrix grading an application of the field at `path`.
+    pub fn at(&self, path: &[usize]) -> impl Iterator<Item = &CallMatrix> {
+        self.fields
+            .iter()
+            .filter(move |(at, _)| at == path)
+            .flat_map(|(_, applied)| applied)
+    }
+
+    /// Whether nothing applies the argument or any field of it.
+    pub fn is_empty(&self) -> bool {
+        self.itself.is_empty() && self.fields.iter().all(|(_, applied)| applied.is_empty())
+    }
+}
+
+/// What a call of `callee` with `arguments`, from a member whose parameters are `params`, hands each argument at a parameter `callee` applies as its summary states ([`Applications`](curios_core::Applications)): every matrix grading an application of that parameter, or of a field of it, against `params`, through what the call hands `callee` under `context`. `None` at a position `callee` summarizes nothing at or applies nowhere, and at every position where nothing is filed of `callee` or the call does not hand it every parameter.
 pub fn handed<E: Env>(
     env: &mut E,
     context: &SizeContext,
     params: &[Free],
     callee: &Global,
     arguments: &[Term],
-) -> Result<Vec<Option<Vec<CallMatrix>>>, E::Error> {
+) -> Result<Vec<Option<Applied>>, E::Error> {
     let mut handed = vec![None; arguments.len()];
     let Some(applications) = env.applications(callee) else {
         return Ok(handed);
     };
-    let applied = |position: usize| {
+    let applies = |position: usize| {
         applications
             .of(position)
-            .filter(|applied| !applied.is_empty())
+            .is_some_and(|applied| !applied.is_empty())
+            || applications
+                .fields_of(position)
+                .any(|(_, applied)| !applied.is_empty())
     };
-    if (0..arguments.len()).all(|position| applied(position).is_none()) {
+    if !(0..arguments.len()).any(applies) {
         return Ok(handed);
     }
     let call = grade(env, context, 0, params, 0, arguments.len(), arguments)?.matrix;
+    let through = |applied: &[CallMatrix]| {
+        applied
+            .iter()
+            .map(|application| call.compose(application))
+            .collect::<Option<Vec<_>>>()
+    };
     for (position, handed) in handed.iter_mut().enumerate() {
-        *handed = applied(position).and_then(|applied| {
-            applied
-                .iter()
-                .map(|application| call.compose(application))
-                .collect::<Option<Vec<_>>>()
-        });
+        if !applies(position) {
+            continue;
+        }
+        let Some(itself) = applications.of(position).and_then(through) else {
+            continue;
+        };
+        let fields = applications
+            .fields_of(position)
+            .map(|(path, applied)| Some((path.to_vec(), through(applied)?)))
+            .collect::<Option<Vec<_>>>();
+        *handed = fields.map(|fields| Applied { itself, fields });
     }
 
     Ok(handed)

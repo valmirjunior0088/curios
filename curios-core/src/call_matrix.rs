@@ -161,19 +161,29 @@ impl CallMatrix {
     }
 }
 
-/// How a definition applies each of its parameters: for each, every matrix grading what an application of it hands against the definition's parameters, or nothing where the parameter is used otherwise than applied or handed on unchanged.
+/// How a definition applies each of its parameters: for each, every matrix grading what an application of it hands against the definition's parameters, and every matrix grading what an application of a field of it hands, or nothing where the parameter is used otherwise than applied, a field of it applied, or handed on unchanged.
 ///
-/// What a certifier's record stores of a definition beside its totality, so a call a callback makes is graded where the definition handed it applies it: `/std/List/any` applies `pred` to an element below `l`.
+/// What a certifier's record stores of a definition beside its totality, so a call a callback makes is graded where the definition handed it applies it: `/std/List/any` applies `pred` to an element below `l`, and `/std/List/eql` applies its witness's method, `e.0(x, y)`, to elements below its lists.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Applications {
     parameters: Vec<Option<Vec<CallMatrix>>>,
+    fields: Vec<FieldApplications>,
+}
+
+/// The applications of one field of a parameter, reached by projecting `path` out of the parameter at `position`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct FieldApplications {
+    pub position: usize,
+    pub path: Vec<usize>,
+    pub applied: Vec<CallMatrix>,
 }
 
 impl Applications {
-    /// The applications of each parameter in order: `None` for one used otherwise.
-    pub fn new(parameters: Vec<Option<Vec<CallMatrix>>>) -> Self {
-        Self { parameters }
+    /// The applications of each parameter in order, `None` for one used otherwise, and of each field path of one, where the parameter is not used otherwise.
+    pub fn new(parameters: Vec<Option<Vec<CallMatrix>>>, fields: Vec<FieldApplications>) -> Self {
+        Self { parameters, fields }
     }
 
     /// Every matrix grading an application of parameter `index`, where every use of it is one; `None` where it is used otherwise, and for a parameter the definition has not.
@@ -181,10 +191,20 @@ impl Applications {
         self.parameters.get(index)?.as_deref()
     }
 
-    /// Whether no parameter is applied where every use of it is seen: what a record files nothing for.
+    /// Each field path of parameter `index` the definition applies, with every matrix grading an application of it: none where the parameter is used otherwise.
+    pub fn fields_of(&self, index: usize) -> impl Iterator<Item = (&[usize], &[CallMatrix])> {
+        let seen = self.of(index).is_some();
+        self.fields
+            .iter()
+            .filter(move |field| seen && field.position == index)
+            .map(|field| (field.path.as_slice(), field.applied.as_slice()))
+    }
+
+    /// Whether no parameter, and no field of one, is applied where every use of it is seen: what a record files nothing for.
     pub fn is_empty(&self) -> bool {
         self.parameters
             .iter()
             .all(|applied| applied.as_ref().is_none_or(Vec::is_empty))
+            && self.fields.iter().all(|field| field.applied.is_empty())
     }
 }

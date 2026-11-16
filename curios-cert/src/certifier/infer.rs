@@ -26,15 +26,15 @@ mod tests;
 
 use {
     super::{
-        Certifier, Counted, Error, Handed, Sort, as_sort, check_group, convert, infer_sort,
-        synth_neutral,
+        Certifier, Counted, Error, Handed, Sort, as_sort, check_group, convert, field_handed,
+        infer_sort, synth_neutral,
     },
-    curios_analysis::call_path,
+    curios_analysis::{Segment, call_path},
     curios_common::recurse,
     curios_core::{
-        Bound, CallMatrix, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType,
-        Intrinsic, LetBinding, Lockstep, Many, Nat, Produced, Proj, Quality, Reducer, Scope, Step,
-        Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Variant,
+        Bound, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType, Intrinsic,
+        LetBinding, Lockstep, Many, Nat, Produced, Proj, Quality, Reducer, Scope, Step, Struct,
+        StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType, Variant,
         foreign_operands, foreign_signature, goal_at,
     },
     curios_num::{Binary, Natural},
@@ -150,7 +150,7 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
 
             if !spine_head {
                 match certifier.calls.take_handed(free) {
-                    Some(handed) => certifier.record_handed(free, &handed)?,
+                    Some(handed) => certifier.record_handed(free, None, &handed)?,
                     None => certifier.record_call(free, &[])?,
                 }
             }
@@ -174,6 +174,19 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
         // A curried spine is read whole, as the elaborator's walk reads it: the head of `h(a)(b)` is typed with `[b]` applied after it, so a lambda applied on the spot binds its inner lambda's binders to the later lists too, and a callee's summary grades every list's arguments, the head's own taken there and each later list's taken by the application around it once its head is typed. Nothing else reads the later lists, so a spine inside an argument starts from none.
         Subterm::Apply(apply) => {
             let later = certifier.calls.take_later();
+            // A member applied to its own arguments, handed where its callee applies it, takes what it is handed before its arguments are typed, so no member local inside them takes it.
+            let path = (!spine_head).then(|| call_path(term));
+            let member_handed = path.as_ref().and_then(|(head, steps)| match &**head {
+                Subterm::Var(var)
+                    if steps
+                        .iter()
+                        .all(|step| matches!(step, Segment::Arguments(_))) =>
+                {
+                    let free = var.as_free()?;
+                    Some((*free, certifier.calls.take_handed(free)?))
+                }
+                _ => None,
+            });
             let mut from_head = Vec::new();
             let head_type = match &*apply.head {
                 Subterm::Func(func) if certifier.recording() => {
@@ -267,12 +280,20 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 certifier.calls.leave_rest_handed(rest);
             }
 
-            if !spine_head {
-                let (head, steps) = call_path(term);
-                if let Subterm::Var(var) = &*head
-                    && let Some(free) = var.as_free()
-                {
-                    certifier.record_call(free, &steps)?;
+            if let Some((head, steps)) = &path
+                && let Subterm::Var(var) = &**head
+                && let Some(free) = var.as_free()
+            {
+                match member_handed {
+                    Some((_, handed)) => {
+                        let given = steps
+                            .iter()
+                            .flat_map(Segment::arguments)
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        certifier.record_handed(free, Some(&given), &handed)?
+                    }
+                    None => certifier.record_call(free, steps)?,
                 }
             }
 
@@ -420,6 +441,7 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             ..
         }) => {
             let record = certifier.calls.take_record();
+            let literal = certifier.calls.take_literal();
             let at = certifier.struct_at(name, universes, params)?;
             check_along(certifier, at.parameters(certifier)?, params)?;
             let telescope = at.fields(certifier)?;
@@ -435,7 +457,7 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             let mut cursor = telescope.cursor();
             for (slot, field) in fields.iter().enumerate() {
                 let (_, domain) = cursor.entry().expect("the arity guard bounds the walk");
-                check_field(certifier, slot, field, &domain, record)?;
+                check_field(certifier, slot, field, &domain, record, literal.as_ref())?;
                 cursor.advance(field.clone());
             }
 
@@ -938,7 +960,7 @@ fn check_rules(
             let lambda = func.telescope.clone();
             let against = expected_func.telescope.clone();
             return certifier.scoped(|certifier| {
-                check_lambda(certifier, lambda, against, parameters, assumed.as_deref())
+                check_lambda(certifier, lambda, against, parameters, assumed.as_ref())
             });
         }
         // Anything else — a non-Π expectation, a plicity or arity mismatch — falls through, so the refusal keeps its ordinary inferred-versus-expected shape.
@@ -950,7 +972,7 @@ fn check_rules(
     if let Subterm::Tuple(Tuple { fields, .. }) = &**term {
         let reduced = certifier.reduce_forced(expected.clone())?;
         if let Subterm::TupleType(TupleType { telescope }) = &*reduced {
-            return check_fields(certifier, fields, telescope, parameters);
+            return check_fields(certifier, fields, telescope, parameters, assumed.as_ref());
         }
     }
 
@@ -958,8 +980,15 @@ fn check_rules(
     if parameters && matches!(&**term, Subterm::Struct(_)) {
         certifier.calls.mark_record();
     }
+    // A structure's literal handed where its callee applies it hands each field what its path is applied with, as a tuple's does above.
+    if let Some(assumed) = assumed
+        && matches!(&**term, Subterm::Struct(_))
+    {
+        certifier.calls.set_literal(assumed);
+    }
     let inferred = infer(certifier, term);
     certifier.calls.take_record();
+    certifier.calls.take_literal();
     let inferred = inferred?;
 
     match subsumes(certifier, &inferred, expected)? {
@@ -979,7 +1008,7 @@ fn check_lambda(
     lambda: Telescope<Term>,
     against: Telescope<Term>,
     parameters: bool,
-    assumed: Option<&[(usize, Vec<CallMatrix>)]>,
+    assumed: Option<&Handed>,
 ) -> Result<(), Error> {
     let mut walk = Lockstep::new(&lambda, &against);
     let mut binders = Vec::new();
@@ -1018,29 +1047,40 @@ fn check_lambda(
     }
 }
 
-/// Check `field`, slot `slot` of a record literal, at `type_`; where `record` says the literal is what a member's leading lambdas answer, or a record held at a field of one, as the part the field is ([`Certifier::enter_field`]), so the calls its lambda makes are that part's.
+/// Check `field`, slot `slot` of a record literal, at `type_`; where `record` says the literal is what a member's leading lambdas answer, or a record held at a field of one, as the part the field is ([`Certifier::enter_field`]), so the calls its lambda makes are that part's; and where the literal is `handed` where its callee applies it, with what the field's own path is applied with ([`field_handed`]).
 fn check_field(
     certifier: &mut Certifier,
     slot: usize,
     field: &Term,
     type_: &Term,
     record: bool,
+    handed: Option<&Handed>,
 ) -> Result<(), Error> {
-    if !record {
-        return check(certifier, field, type_);
+    if let Some(handed) = handed.map(|handed| field_handed(handed, slot))
+        && !handed.is_empty()
+    {
+        certifier.calls.hand(field, handed);
     }
-    let saved = certifier.enter_field(slot);
-    let checked = check(certifier, field, type_);
-    certifier.leave_field(saved);
+    let checked = match record {
+        false => check(certifier, field, type_),
+        true => {
+            let saved = certifier.enter_field(slot);
+            let checked = check(certifier, field, type_);
+            certifier.leave_field(saved);
+            checked
+        }
+    };
+    certifier.calls.clear_handed();
     checked
 }
 
-/// The entry-wise walk of the tuple rule above: each component checked at its entry's type, the telescope then opened at that *actual* component so later entries see the value the binder stands for; where `record` says the tuple is a member body's record, each as the part it is ([`check_field`]).
+/// The entry-wise walk of the tuple rule above: each component checked at its entry's type, the telescope then opened at that *actual* component so later entries see the value the binder stands for; where `record` says the tuple is a member body's record, each as the part it is, and where it is `handed` where its callee applies it, each with what its path is applied with ([`check_field`]).
 fn check_fields(
     certifier: &mut Certifier,
     fields: &[Term],
     telescope: &Telescope<()>,
     record: bool,
+    handed: Option<&Handed>,
 ) -> Result<(), Error> {
     if telescope.len() != fields.len() {
         return Err(Error::Arity {
@@ -1055,7 +1095,7 @@ fn check_fields(
         let (_, type_) = cursor
             .entry()
             .expect("the arity guard bounds the walk to the telescope's length");
-        check_field(certifier, slot, field, &type_, record)?;
+        check_field(certifier, slot, field, &type_, record, handed)?;
         cursor.advance(field.clone());
     }
 
