@@ -8,7 +8,8 @@ use {
     curios_core::{Definitions, Enter, Item, Sharing, Variance},
     curios_elab::{DEFAULT_BUDGET, TraceTable, Traces},
     curios_erase::{AskedItems, AskedTable, Erasures, erase_program},
-    curios_module::{LintKind, PreparedText, RootSource, SYNTAX, UnitSource},
+    curios_lint::LintKind,
+    curios_module::{PreparedText, RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
     curios_surface::Entrypoint,
     curios_unit::{Pack, Predecessors, Unit, packed},
@@ -335,9 +336,7 @@ fn elaborated(
 
 /// The binders a unit's `unused-binder` lints name, once elaboration has credited them.
 pub fn unused_binders(unit: &Unit) -> Vec<String> {
-    unit.text()
-        .expect("a program's unit holds its lowering")
-        .lints()
+    unit.lints()
         .iter()
         .filter(|lint| lint.kind == LintKind::UnusedBinder)
         .map(|lint| lint.report(&[]).message())

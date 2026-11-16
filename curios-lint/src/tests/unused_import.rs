@@ -1,6 +1,6 @@
 //! `unused-import`: a selector or glob nothing resolved through, what counts as resolving through one, and the order lints are read in.
 
-use crate::into_core::test_support::*;
+use super::test_support::*;
 
 #[test]
 fn a_selector_nothing_resolved_through_is_reported_at_its_word() {

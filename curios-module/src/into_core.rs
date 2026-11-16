@@ -67,7 +67,7 @@ pub use reachability::Reachability;
 use reachability::*;
 
 use {
-    crate::{Compiled, Error, Lint, LintedBinder, RootSource, ordered, tree_of},
+    crate::{Compiled, Error, LintedBinder, RootSource, Zero, tree_of},
     curios_abi::{ForeignFunction, ForeignStore},
     curios_archive::Bytes,
     curios_common::{
@@ -637,9 +637,10 @@ pub struct PreparedText {
     imports: Recorded<curios_core::Imports>,
     /// The mounts this unit may name: the ones it declared a dependency on, or every open one in scope where it declared none, and its own. What its references were guarded by, and what drops a path it may not write from the table a report spells by.
     visible: Vec<Mount>,
-    /// Every lint the lowering found, in reading order, less each `unused-binder` lint elaboration credited — see [`Lint`]. Carried with the unit because a lint depends on exactly what the unit's identity in the store depends on: its own sources and its predecessors' interfaces.
-    lints: Vec<Lint>,
-    /// Every written binder a proof the elaborator wrote read — see [`LintedBinder`]. What a unit compiled over this one as its baseline credits in a declaration it does not elaborate again. A set, since membership is all that is asked of it: its order is then the binders' own, by declaration and place, whichever pass credited which, and a unit compiled over a baseline stores the one a whole compile stores.
+    /// Every zero the lowering found — see [`Zero`]: what `curios-lint` decides the unit's lints from where the unit is made. Held by a unit lowered in this process alone: a unit stores the lints decided of it, and a lowering over it reads its baseline half's.
+    #[archived_with(curios_archive::Skip)]
+    zeros: Vec<Zero>,
+    /// Every written binder a zero names that a proof the elaborator wrote read — see [`LintedBinder`]. What a unit compiled over this one as its baseline credits in a declaration it does not elaborate again. A set, since membership is all that is asked of it: its order is then the binders' own, by declaration and place, whichever pass credited which, and a unit compiled over a baseline stores the one a whole compile stores.
     credited: BTreeSet<LintedBinder>,
     /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
     reached: BTreeSet<Qualifier>,
@@ -684,8 +685,14 @@ pub struct BrokenItem {
 }
 
 impl PreparedText {
-    pub fn lints(&self) -> &[Lint] {
-        &self.lints
+    /// See the field.
+    pub fn zeros(&self) -> &[Zero] {
+        &self.zeros
+    }
+
+    /// Every written binder a proof the elaborator wrote read, of those a binder zero names. See the field.
+    pub fn credited(&self) -> &BTreeSet<LintedBinder> {
+        &self.credited
     }
 
     /// Where each source declaration of this unit lies. See the field.
@@ -695,7 +702,7 @@ impl PreparedText {
             .unwrap_or_else(|error| panic!("a unit's anchors failed to restore: {error}"))
     }
 
-    /// Drop the `unused-binder` lint of every binder in `credited`: read by a proof the elaborator wrote, which no written name reaches, so used. Called once the unit has elaborated, since only elaboration writes such a proof.
+    /// Record which binders the unit's zeros name a proof the elaborator wrote read, as `credited` holds them: used, though no written name reaches them. Called once the unit has elaborated, since only elaboration writes such a proof.
     pub fn credit(&mut self, credited: &BTreeSet<(Option<curios_core::Global>, u32)>) {
         self.credit_where(|binder| credited.contains(&(binder.declaration, binder.ordinal)));
     }
@@ -728,14 +735,17 @@ impl PreparedText {
             .collect()
     }
 
-    /// Drop the `unused-binder` lint of every binder `read` holds of, and record which each was.
+    /// Record as read every binder a binder zero names that `read` holds of.
     fn credit_where(&mut self, read: impl Fn(&LintedBinder) -> bool) {
-        let (credited, kept) = std::mem::take(&mut self.lints)
-            .into_iter()
-            .partition::<Vec<_>, _>(|lint| lint.binder.as_ref().is_some_and(&read));
-        self.lints = kept;
-        self.credited
-            .extend(credited.into_iter().filter_map(|lint| lint.binder));
+        let credited = self
+            .zeros
+            .iter()
+            .filter_map(|zero| match zero {
+                Zero::Binder { binder, .. } if read(binder) => Some(*binder),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        self.credited.extend(credited);
     }
 
     /// Every item the parser could not read. A unit holding one is refused whatever elaboration said of the rest, and what it said is reported beside these.
@@ -2544,8 +2554,8 @@ struct Shared {
     sites: RefCell<Vec<UseSite>>,
     // The prefix of every mount some reference of this unit resolved into — what decides whether a declared dependency is used. Recorded where a target is resolved, never where it is spelled, so an absolute path and an import count alike.
     reached: RefCell<BTreeSet<Qualifier>>,
-    // Every lint a `Lowerer` of this unit decided — see `Lowerer::flush`.
-    lints: RefCell<BTreeMap<Qualifier, Vec<Lint>>>,
+    // Every zero a `Lowerer` of this unit recorded, by the module body it is written in — see `Lowerer::flush`.
+    zeros: RefCell<BTreeMap<Qualifier, Vec<Zero>>>,
     // Where the unit's declarations lie, and the one being lowered — see `Anchoring`.
     anchoring: Anchoring,
     // The module bodies whose `use` declarations this lowering has recorded what they brought into scope of.
@@ -2906,7 +2916,7 @@ fn into_core_unit_within(
             items: &mut flat_items,
             minted: &mut shared.minted.borrow_mut(),
             imports: &mut shared.imports.borrow_mut(),
-            lints: &mut shared.lints.borrow_mut(),
+            zeros: &mut shared.zeros.borrow_mut(),
         },
         &renames,
     );
@@ -3035,7 +3045,7 @@ fn into_core_unit_within(
         context.anchor(curios_core::Anchored::Entry, span);
     }
     let entry = {
-        // Scoped so the lowerer drops, and reports its lints, before the tables the context borrows are moved into the result below.
+        // Scoped so the lowerer drops, and records its zeros, before the tables the context borrows are moved into the result below.
         let lower = Lowerer::new(&context, None);
         match source.entrypoint() {
             Some(entrypoint) => Some(curios_core::Entrypoint {
@@ -3272,40 +3282,40 @@ fn into_core_unit_within(
     };
 
     // What each body's declarations and `use` declarations were found to leave unused: the baseline's, with each body the walk passed found again and each it no longer holds taken away.
-    let mut body_lints = baseline
+    let mut body_zeros = baseline
         .as_ref()
-        .map(|baseline| baseline.unit().half().lints.clone())
+        .map(|baseline| baseline.unit().half().zeros.clone())
         .unwrap_or_default();
     {
-        let mut found = shared.lints.take();
+        let mut found = shared.zeros.take();
         let mut imports = BTreeMap::<Qualifier, Vec<UseSite>>::new();
         for site in shared.sites.take() {
             imports.entry(site.body).or_default().push(site);
         }
         for body in shared.closed() {
-            let lints =
+            let zeros =
                 unused_imports(imports.remove(&body).unwrap_or_default(), &shared.anchoring)
                     .into_iter()
                     .chain(found.remove(&body).unwrap_or_default())
                     .collect::<Vec<_>>();
-            match lints.is_empty() {
+            match zeros.is_empty() {
                 true => {
-                    body_lints.remove(&body);
+                    body_zeros.remove(&body);
                 }
-                false => body_lints.insert(body, Rc::new(lints)),
+                false => body_zeros.insert(body, Rc::new(zeros)),
             }
         }
         // The entry's term is lowered in the compilation root's body, which a unit with no entry does not walk.
-        for (body, lints) in found {
-            let mut held = body_lints
+        for (body, zeros) in found {
+            let mut held = body_zeros
                 .get(&body)
                 .map(|held| (**held).clone())
                 .unwrap_or_default();
-            held.extend(lints);
-            body_lints.insert(body, Rc::new(held));
+            held.extend(zeros);
+            body_zeros.insert(body, Rc::new(held));
         }
         for body in &removed {
-            body_lints.remove(body);
+            body_zeros.remove(body);
         }
     }
 
@@ -3405,7 +3415,7 @@ fn into_core_unit_within(
                 ),
                 _ => Reachability::of(now, public.own(), &own, entry_roots.clone()),
             };
-            let dead = state.lints(
+            let dead = state.zeros(
                 now,
                 &|module, label| table.get(module)?.get_child(label),
                 &mod_spans,
@@ -3449,21 +3459,18 @@ fn into_core_unit_within(
         _ => OnceCell::new(),
     };
 
-    // Each line a lint stands in is kept, and every other namespace text goes: one a lint this lowering no longer finds was sited for, or one a baseline held of a line since gone.
+    // Each line a zero stands in is kept, and every other namespace text goes: one a zero this lowering no longer finds was sited for, or one a baseline held of a line since gone.
     shared.anchoring.keep_lines(
-        body_lints
+        body_zeros
             .iter()
-            .flat_map(|(_, lints)| lints.iter())
+            .flat_map(|(_, zeros)| zeros.iter())
             .chain(&dead),
     );
-    let lints = ordered(
-        body_lints
-            .iter()
-            .flat_map(|(_, lints)| lints.iter().cloned())
-            .chain(dead)
-            .collect(),
-        &shared.anchoring.anchors(),
-    );
+    let zeros = body_zeros
+        .iter()
+        .flat_map(|(_, zeros)| zeros.iter().cloned())
+        .chain(dead)
+        .collect();
     let unit = PreparedText {
         mounts: own.clone(),
         compiled: source.compiled(),
@@ -3488,7 +3495,7 @@ fn into_core_unit_within(
         imports: Recorded::held(shared.imports.into_inner()),
         visible: visible_mounts,
         broken,
-        lints,
+        zeros,
         credited: BTreeSet::new(),
         reached,
         anchors: Recorded::held(shared.anchoring.into_anchors()),
@@ -3497,7 +3504,7 @@ fn into_core_unit_within(
             scans,
             uses,
             keyed: held_keys,
-            lints: body_lints,
+            zeros: body_zeros,
         }),
         lookups: lookups.map(OnceCell::from).unwrap_or_default(),
         importers,
@@ -3617,15 +3624,15 @@ pub fn prepare_prelude(
     into_core_unit(&UnitSource::mounted(input), predecessors, syntax)
 }
 
-/// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, and its lints. A name that resolved to nothing is among what its declaration minted (`curios_core::Mints::unbound`).
+/// The entry program lowered: its module and the term it closes with, what its lowering minted, which elaboration's counters start above, its `foreign` rows, and its zeros. A name that resolved to nothing is among what its declaration minted (`curios_core::Mints::unbound`).
 pub struct LoweredEntry {
     pub program: curios_core::Program,
     pub minted: Rc<curios_core::Minted>,
     pub foreigns: ForeignStore,
     /// How the entry's names can be written, where — see [`EntryNames`].
     pub names: EntryNames,
-    /// See [`PreparedText::lints`].
-    pub lints: Vec<Lint>,
+    /// See [`PreparedText::zeros`].
+    pub zeros: Vec<Zero>,
     /// See [`PreparedText::broken`].
     pub broken: Vec<BrokenItem>,
     /// See [`PreparedText::reached`].
@@ -3713,8 +3720,8 @@ fn spellings_over(
     }
 }
 
-/// The `unused-import` lints: every site no reference resolved through, a re-export excepted.
-fn unused_imports(sites: Vec<UseSite>, anchoring: &Anchoring) -> Vec<Lint> {
+/// The import zeros: every site no reference resolved through, a re-export excepted.
+fn unused_imports(sites: Vec<UseSite>, anchoring: &Anchoring) -> Vec<Zero> {
     sites
         .into_iter()
         .filter(|site| !site.used && !site.exported)
@@ -3725,8 +3732,14 @@ fn unused_imports(sites: Vec<UseSite>, anchoring: &Anchoring) -> Vec<Lint> {
                 .zip(site.span.as_ref())
                 .and_then(|(line, span)| anchoring.line(site.body, line, span));
             match &site.what {
-                UseSiteKind::Selector(label) => Lint::unused_import(label, at),
-                UseSiteKind::Glob(path) => Lint::unused_glob(at, path),
+                UseSiteKind::Selector(label) => Zero::Selector {
+                    label: label.to_string(),
+                    at,
+                },
+                UseSiteKind::Glob(path) => Zero::Glob {
+                    path: path.clone(),
+                    at,
+                },
             }
         })
         .collect()
@@ -3764,7 +3777,7 @@ pub fn into_core_with_prelude(
             mounts: unit.mounts,
             visible: unit.visible,
         },
-        lints: unit.lints,
+        zeros: unit.zeros,
         reached: unit.reached,
         broken: unit.broken,
         anchors: unit

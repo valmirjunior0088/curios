@@ -1,6 +1,6 @@
 //! A binder the result type names: used where the name the result reads is its own, and reported where a later binder of its name shadows it.
 
-use crate::into_core::test_support::*;
+use super::test_support::*;
 
 /// The sugar's telescope is the Π-type at the root of its type, not the first one finished: a parameter whose own type is a function type is lowered before the result, and must not stand in for the telescope.
 #[test]

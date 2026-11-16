@@ -10,7 +10,7 @@
 
 use {
     super::{FlatItem, FlatLet},
-    crate::{Lint, PreparedText},
+    crate::{PreparedText, Zero},
     curios_common::{Plicity, Qualifier},
     std::{
         cell::RefCell,
@@ -167,7 +167,7 @@ pub struct Named<'a> {
     pub items: &'a mut [FlatItem],
     pub minted: &'a mut curios_core::Minted,
     pub imports: &'a mut curios_core::Imports,
-    pub lints: &'a mut BTreeMap<Qualifier, Vec<Lint>>,
+    pub zeros: &'a mut BTreeMap<Qualifier, Vec<Zero>>,
 }
 
 /// Give each witness `names` holds the name it takes there ([`witness_names`]), in each table that holds the name it holds.
@@ -203,12 +203,9 @@ pub fn rename_witnesses(
             named.imports.scope(taken, in_scope);
         }
     }
-    for binder in named
-        .lints
-        .values_mut()
-        .flatten()
-        .filter_map(|lint| lint.binder.as_mut())
-    {
-        binder.declaration = binder.declaration.map(renamed);
+    for zero in named.zeros.values_mut().flatten() {
+        if let Zero::Binder { binder, .. } = zero {
+            binder.declaration = binder.declaration.map(renamed);
+        }
     }
 }

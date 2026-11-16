@@ -14,6 +14,7 @@ use {
     curios_core::{Certification, Definitions, ItemRun, Lexicon, Places},
     curios_elab::{Candidating, Readers, Traces},
     curios_erase::ErasedUnit,
+    curios_lint::Lint,
     curios_module::PreparedText,
     std::{borrow::Cow, cell::OnceCell, rc::Rc},
 };
@@ -24,7 +25,11 @@ use {
 #[derive(Clone)]
 #[curios_archive::archived]
 enum Written {
-    Program(Rc<PreparedText>),
+    /// A program's lowering, and the lints the lint owner decided of the unit where it was made: stored with it, so a unit restored or compiled over reports what it was compiled to report, and a unit read from Core text holds none.
+    Program {
+        text: Rc<PreparedText>,
+        lints: Rc<Vec<Lint>>,
+    },
     CoreText {
         mounts: Vec<Mount>,
         foreigns: ForeignStore,
@@ -85,7 +90,7 @@ impl Produced {
     /// See [`Unit::mounts`].
     pub fn mounts(&self) -> &[Mount] {
         match &self.written {
-            Written::Program(text) => text.mounts(),
+            Written::Program { text, .. } => text.mounts(),
             Written::CoreText { mounts, .. } => mounts,
         }
     }
@@ -93,8 +98,16 @@ impl Produced {
     /// See [`Unit::text`].
     pub fn text(&self) -> Option<&PreparedText> {
         match &self.written {
-            Written::Program(text) => Some(text),
+            Written::Program { text, .. } => Some(text),
             Written::CoreText { .. } => None,
+        }
+    }
+
+    /// See [`Unit::lints`].
+    pub fn lints(&self) -> &[Lint] {
+        match &self.written {
+            Written::Program { lints, .. } => lints,
+            Written::CoreText { .. } => &[],
         }
     }
 
@@ -121,7 +134,7 @@ impl Produced {
     /// See [`Unit::foreigns`].
     pub fn foreigns(&self) -> &ForeignStore {
         match &self.written {
-            Written::Program(text) => text.foreigns(),
+            Written::Program { text, .. } => text.foreigns(),
             Written::CoreText { foreigns, .. } => foreigns,
         }
     }
@@ -148,13 +161,13 @@ impl Produced {
         candidates: bool,
     ) -> Result<Indexed, String> {
         let items = match &self.written {
-            Written::Program(text) => text.items_objects()?,
+            Written::Program { text, .. } => text.items_objects()?,
             Written::CoreText { .. } => Vec::new(),
         };
         let forms = self.erased.items_objects()?;
         let named = self.elaborated()?;
         // A unit whose records are as it restored them files them as it restored them, and one read from Core text was elaborated from nothing a candidate could be found by.
-        if let (true, None, Written::Program(text)) =
+        if let (true, None, Written::Program { text, .. }) =
             (candidates, self.traces.as_stored(), &self.written)
         {
             self.complete_elaborations(text, &items, &named)?;
@@ -180,7 +193,7 @@ impl Produced {
         let (traces_table, traces) = traces_indexed(&self.traces)?;
         let (asked_table, asked) = asked_indexed(self.erased.recorded())?;
         let ((text, lowering), (imports, scopes), (anchors, places)) = match &self.written {
-            Written::Program(text) => (
+            Written::Program { text, .. } => (
                 lowering_indexed(text)?,
                 imports_indexed(text)?,
                 anchors_indexed(text)?,
@@ -295,15 +308,21 @@ impl Produced {
         Ok(Self {
             fixed,
             written: match self.written {
-                Written::Program(written) => Written::Program(Rc::new(
-                    Rc::unwrap_or_clone(written)
-                        .with_baseline(text, found(&lowering, find)?)
-                        .with_reported(
-                            (imports, found(&scopes, find)?),
-                            (anchors, found(&places, find)?),
-                        )
-                        .with_items(found(&items, find)?)?,
-                )),
+                Written::Program {
+                    text: written,
+                    lints,
+                } => Written::Program {
+                    text: Rc::new(
+                        Rc::unwrap_or_clone(written)
+                            .with_baseline(text, found(&lowering, find)?)
+                            .with_reported(
+                                (imports, found(&scopes, find)?),
+                                (anchors, found(&places, find)?),
+                            )
+                            .with_items(found(&items, find)?)?,
+                    ),
+                    lints,
+                },
                 read @ Written::CoreText { .. } => read,
             },
             erased: Rc::new(
@@ -342,8 +361,22 @@ impl Unit {
         traces: Traces,
         certification: Certification,
     ) -> Self {
+        // Decided once, here, where every unit written as a program is made: what its lowering found, less every binder a proof its elaboration wrote read.
+        let lints = curios_lint::lints(
+            text.zeros(),
+            |binder| text.credited().contains(binder),
+            text.anchors(),
+        );
         Self {
-            unit: Produced::new(Written::Program(Rc::new(text)), core, erased, traces),
+            unit: Produced::new(
+                Written::Program {
+                    text: Rc::new(text),
+                    lints: Rc::new(lints),
+                },
+                core,
+                erased,
+                traces,
+            ),
             certification: Rc::new(certification),
         }
     }
@@ -394,6 +427,11 @@ impl Unit {
     /// This unit's resolution state, as what a later unit's names resolve against: a program's lowering, and nothing for a unit read from Core text ([`Unit::read`]).
     pub fn text(&self) -> Option<&PreparedText> {
         self.unit.text()
+    }
+
+    /// This unit's lints, decided where it was made: none for a unit read from Core text, which no lowering made.
+    pub fn lints(&self) -> &[Lint] {
+        self.unit.lints()
     }
 
     /// This unit's elaborated module as the certifier handed it back — what a successor's elaboration and judgment read rather than re-check.

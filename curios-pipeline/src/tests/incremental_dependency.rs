@@ -45,8 +45,6 @@ fn a_standing_files_declaration_is_lowered_again_where_another_files_edit_moves_
         "a declaration that read nothing the edit moved was lowered again"
     );
     let placed = incremental
-        .text()
-        .expect("a program's unit holds its lowering")
         .lints()
         .iter()
         .map(|lint| {
@@ -89,11 +87,7 @@ fn a_file_no_edit_reached_keeps_what_its_declarations_read_without_asking_them()
         );
     }
     assert_eq!(
-        incremental
-            .text()
-            .expect("a program's unit holds its lowering")
-            .lints()
-            .len(),
+        incremental.lints().len(),
         1,
         "the import nothing reads is the one finding"
     );

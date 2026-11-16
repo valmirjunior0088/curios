@@ -22,9 +22,10 @@ use {
     },
     curios_emit::into_wasm,
     curios_erase::{Erasures, erase_program, erase_unit},
+    curios_lint::Lint,
     curios_module::{
-        BrokenItem, Lint, LoweredEntry, PreparedText, RootSource, UnitSource, into_core_entry,
-        into_core_unit, into_core_unit_over, into_core_with_prelude,
+        BrokenItem, LintedBinder, LoweredEntry, PreparedText, RootSource, UnitSource, Zero,
+        into_core_entry, into_core_unit, into_core_unit_over, into_core_with_prelude,
     },
     curios_surface::{Entrypoint, ReaderPosition, Spelling},
     curios_unit::{Predecessors, Unit},
@@ -46,25 +47,38 @@ pub struct Findings {
 }
 
 impl Findings {
-    /// A stored unit's, as its lowering left them and its elaboration credited them: none of a unit read from Core text, which no lowering made ([`Unit::text`]).
+    /// A unit's, decided where it was made ([`Unit::lints`]): none of a unit read from Core text, which no lowering made ([`Unit::text`]).
     pub fn of_unit(unit: &Unit) -> Self {
-        unit.text().map(Self::of_text).unwrap_or_default()
+        unit.text()
+            .map(|text| Self {
+                lints: unit.lints().to_vec(),
+                anchors: text.anchors().clone(),
+                reached: text.reached().clone(),
+            })
+            .unwrap_or_default()
     }
 
-    /// A lowering's, as it left them and its elaboration credited them.
+    /// A lowering's that made no unit, decided now: what it found, less every binder its elaboration credited.
     pub fn of_text(text: &PreparedText) -> Self {
-        Self {
-            lints: text.lints().to_vec(),
-            anchors: text.anchors().clone(),
-            reached: text.reached().clone(),
-        }
+        Self::decided(
+            text.zeros(),
+            |binder| text.credited().contains(binder),
+            text.anchors().clone(),
+            text.reached().clone(),
+        )
     }
 
-    fn take(lowered: &mut LoweredEntry) -> Self {
+    /// The lints `zeros` come to, less every binder `read` holds of, placed by `anchors`.
+    fn decided(
+        zeros: &[Zero],
+        read: impl Fn(&LintedBinder) -> bool,
+        anchors: Anchors,
+        reached: BTreeSet<Qualifier>,
+    ) -> Self {
         Self {
-            lints: std::mem::take(&mut lowered.lints),
-            anchors: lowered.anchors.clone(),
-            reached: std::mem::take(&mut lowered.reached),
+            lints: curios_lint::lints(zeros, read, &anchors),
+            anchors,
+            reached,
         }
     }
 
@@ -74,11 +88,6 @@ impl Findings {
             .iter()
             .map(|lint| lint.report(&[&self.anchors]))
             .collect()
-    }
-
-    /// Drop the `unused-binder` lint of every binder a proof the elaborator wrote read — see [`PreparedText::credit`].
-    fn credit(&mut self, credited: &BTreeSet<(Option<curios_core::Global>, u32)>) {
-        self.lints.retain(|lint| !lint.is_credited(credited));
     }
 }
 
@@ -726,7 +735,12 @@ where
 {
     curios_profile::profile!("elaborate_and_zonk");
 
-    let mut findings = Findings::take(&mut lowered);
+    // Taken before the entry elaborates, which consumes its lowering, and decided once it has, when every proof it writes is written.
+    let zeros = std::mem::take(&mut lowered.zeros);
+    let (anchors, reached) = (
+        lowered.anchors.clone(),
+        std::mem::take(&mut lowered.reached),
+    );
     let established = Established::placed(&predecessors.placed());
     let mut context = Context::new(budget, *syntax);
     let verdict = elaborate_entry(
@@ -737,7 +751,13 @@ where
         tail,
         observe,
     );
-    findings.credit(&context.credited());
+    let credited = context.credited();
+    let findings = Findings::decided(
+        &zeros,
+        |binder| credited.contains(&(binder.declaration, binder.ordinal)),
+        anchors,
+        reached,
+    );
     (findings, verdict)
 }
 
@@ -765,7 +785,7 @@ where
         minted,
         foreigns: _,
         names,
-        lints: _,
+        zeros: _,
         reached: _,
         broken,
         anchors: own,
@@ -995,17 +1015,9 @@ where
     let mut findings = None;
     let closed = match (hit, baseline) {
         (Some(unit), _) => {
-            let mut restored = Findings::of_unit(&unit);
-            let closed = close_over(
-                budget,
-                predecessors,
-                syntax,
-                &unit,
-                &lowered,
-                closing,
-                &mut restored,
-            );
-            findings = Some(restored);
+            // Decided where the unit was made, of a compile that elaborated this term beside its declarations: the proofs it writes now read what they read then.
+            findings = Some(Findings::of_unit(&unit));
+            let closed = close_over(budget, predecessors, syntax, &unit, &lowered, closing);
 
             closed.map(|entry| (unit, Some(lowered), entry))
         }
@@ -1109,7 +1121,7 @@ where
     })
 }
 
-/// The term a program closes with, elaborated alone over `unit`, the unit of the program's declarations as a cache handed it back: nothing of the unit is elaborated, and the term reads it as it reads any unit in scope. `lowered` is this compile's lowering of the program, which a report is placed and spelled by, and `findings` are credited with what the term's elaboration read.
+/// The term a program closes with, elaborated alone over `unit`, the unit of the program's declarations as a cache handed it back: nothing of the unit is elaborated, and the term reads it as it reads any unit in scope. `lowered` is this compile's lowering of the program, which a report is placed and spelled by.
 fn close_over(
     budget: u64,
     predecessors: Predecessors<'_>,
@@ -1117,7 +1129,6 @@ fn close_over(
     unit: &Unit,
     lowered: &PreparedText,
     closing: Tail<'_>,
-    findings: &mut Findings,
 ) -> Result<curios_core::Entrypoint, CompileError> {
     curios_profile::profile!("elaborate_and_zonk");
     let units = predecessors
@@ -1133,7 +1144,7 @@ fn close_over(
     context.set_imports(lowered.imports().clone());
 
     let own = nothing();
-    let closed = elaborate_and_zonk_program(
+    elaborate_and_zonk_program(
         &mut context,
         &established,
         &own,
@@ -1157,10 +1168,7 @@ fn close_over(
             predecessors,
             syntax,
         )
-    });
-    findings.credit(&context.credited());
-
-    closed
+    })
 }
 
 /// The term `entry` closes the program with, over `scope`, the units before it and the unit of the program's declarations last, zonked and judged by the certifier; and, where `erasing` holds the program's lowering, erased and linked through the certifier that judged it, with what erasing it refused it for reported against that lowering and `predecessors`, the units before the program's own.

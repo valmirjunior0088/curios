@@ -3,7 +3,7 @@ use {
         Consulted, Lookup, PublicInterface, Reach, Scoped, Shared, carriers, named, out_of_reach,
         unresolved, visible_binding, visible_child,
     },
-    crate::{Error, Lint, OrderedMap},
+    crate::{Error, OrderedMap, Zero},
     curios_common::{Entropy, Mount, Qualifier, Span, SyntaxRegistry, nearest},
     curios_surface::{Label, Name},
     std::{
@@ -123,8 +123,8 @@ pub struct Journal {
     pub consulted: Vec<Consulted>,
     /// The names it recorded an import scope for.
     pub scoped: Vec<curios_core::Global>,
-    /// The lints its lowerers reported.
-    pub lints: Vec<Lint>,
+    /// The zeros its lowerers recorded.
+    pub zeros: Vec<Zero>,
     /// Whether a name it wrote resolved to nothing. Elaboration refuses such a declaration, and no later lowering keeps what it lowered to.
     pub unbound: bool,
 }
@@ -138,11 +138,6 @@ impl Anchoring {
     /// The span `extent` lies on, among the declarations this lowering has reached.
     pub fn resolved(&self, extent: &curios_core::Extent) -> Option<Span> {
         self.anchors.borrow().resolve(extent)
-    }
-
-    /// Where each text this lowering has reached lies, as it stands now.
-    pub fn anchors(&self) -> std::cell::Ref<'_, curios_core::Anchors> {
-        self.anchors.borrow()
     }
 
     /// Where `name` was written, among the declarations this lowering has reached.
@@ -162,11 +157,11 @@ impl Anchoring {
         self.anchors.borrow_mut().site(anchor, line).extent(at)
     }
 
-    /// Forget every namespace text no lint of `lints` stands in: one sited for a lint this lowering no longer finds, or kept from a baseline whose line is gone. A namespace text is sited for a report and kept for as long as one stands in it.
-    pub fn keep_lines<'l>(&self, lints: impl IntoIterator<Item = &'l Lint>) {
-        let placed = lints
+    /// Forget every namespace text no zero of `zeros` stands in: one sited for a zero this lowering no longer finds, or kept from a baseline whose line is gone. A namespace text is sited for a report and kept for as long as a zero stands in it, every zero standing in one being reported whatever elaboration says.
+    pub fn keep_lines<'z>(&self, zeros: impl IntoIterator<Item = &'z Zero>) {
+        let placed = zeros
             .into_iter()
-            .filter_map(|lint| lint.at.map(|at| (at.anchor, at.stamp)))
+            .filter_map(|zero| zero.at().map(|at| (at.anchor, at.stamp)))
             .collect::<HashSet<_>>();
         let mut anchors = self.anchors.borrow_mut();
         let stale = anchors
@@ -589,7 +584,7 @@ impl Shared {
             imports: RefCell::default(),
             sites: RefCell::default(),
             reached: RefCell::default(),
-            lints: RefCell::default(),
+            zeros: RefCell::default(),
             anchoring: Anchoring::default(),
             closed: RefCell::default(),
         }
@@ -706,20 +701,21 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn report(&self, lints: impl IntoIterator<Item = Lint>) {
-        let lints = lints.into_iter().collect::<Vec<_>>();
+    /// Record `zeros` of the declaration being lowered, under the module body it is written in.
+    pub fn report(&self, zeros: impl IntoIterator<Item = Zero>) {
+        let zeros = zeros.into_iter().collect::<Vec<_>>();
         self.shared
             .anchoring
             .journal
             .borrow_mut()
-            .lints
-            .extend(lints.iter().cloned());
+            .zeros
+            .extend(zeros.iter().cloned());
         self.shared
-            .lints
+            .zeros
             .borrow_mut()
             .entry(self.prefix)
             .or_default()
-            .extend(lints);
+            .extend(zeros);
     }
 
     /// Open the `use` site every label imported until [`Self::close_site`] is credited to.

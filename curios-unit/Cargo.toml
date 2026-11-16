@@ -28,3 +28,4 @@ curios-elab = { workspace = true }
 curios-erase = { workspace = true }
 curios-anf = { workspace = true }
 curios-module = { workspace = true }
+curios-lint = { workspace = true }

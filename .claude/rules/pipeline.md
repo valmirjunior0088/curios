@@ -5,6 +5,7 @@ paths:
   - "curios-package/**"
   - "curios-verdict/**"
   - "curios-wonder/**"
+  - "curios-lint/**"
 ---
 
 # The pipeline, packages and the store
@@ -14,4 +15,5 @@ paths:
 - What a unit hands its successors also reaches every stage whose artifact `Unit` holds, the fold, and the stored-unit format.
 - A program's own declarations are a unit (`enter`, `curios-pipeline/src/compile.rs`): how a unit is compiled, kept or filed also reaches the entry step, `Verdicts::executing` with every command that opens a handle for a program, and the two instruments that put a program whole (`typecheck_entrypoint`, `examine_entrypoint`).
 - Manifests, resolution or the store also reach the CLI commands wrapping them, `Qualifier` and `Mount`, `curios-verdict`'s keys, and `documentation/design/soundness/cached-verdicts.md`.
+- A lint, or a fact a stage records for one, also reaches `curios-lint`, which decides every lint where a unit is made (`Unit::new`), the lowering's zeros (`curios_module::Zero`), the elaborator's credits, `documentation/usage.md`'s `lint` table, the decision `documentation/design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md`, and the store's verdict schema tag when what a unit stores moves.
 - A `wonder` query, a record or what a diagnostic carries also reaches `curios-common`'s `Report`, every stage's `report`/`reports`, `CompileError` and `Fold::check`, both transports (`curios-wonder/src/ask.rs`, `server.rs`) and `curios-package`'s `Selection`.

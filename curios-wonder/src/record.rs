@@ -9,7 +9,7 @@ pub enum Severity {
     Error,
     /// A written `?`, reported with what elaboration determined there.
     Goal,
-    /// An unused import, binder or declaration — see `curios_module::Lint`.
+    /// A lint — see `curios_lint::Lint`.
     Lint,
 }
 

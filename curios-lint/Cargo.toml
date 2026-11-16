@@ -1,0 +1,23 @@
+[package]
+name = "curios-lint"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Curios lint owner: every lint decided from the facts the stages recorded of a unit, worded, placed and ordered for its reader"
+
+[lints]
+workspace = true
+
+[dependencies]
+curios-archive = { workspace = true }
+curios-common = { workspace = true }
+curios-core = { workspace = true }
+curios-module = { workspace = true }
+
+[dev-dependencies]
+# The registry the lowering's suites lower through, which the lint suites here lower a fixture through too. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
+curios-module = { workspace = true, features = ["test-support"] }
+# `fill!`, which a fixture splicing a name into braces is written with.
+curios-common = { workspace = true, features = ["test-support"] }
+# The entrypoint a fixture is parsed into.
+curios-surface = { workspace = true }

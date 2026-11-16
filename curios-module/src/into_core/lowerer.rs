@@ -3,7 +3,7 @@ use match_compile::*;
 
 use {
     super::{Context, SortSite},
-    crate::{Error, Lint, LintedBinder},
+    crate::{Error, LintedBinder, Zero},
     curios_abi::ForeignFunction,
     curios_common::{Plicity, Span, recurse},
     curios_num::Binary,
@@ -160,7 +160,7 @@ pub struct Lowerer<'a, 'b> {
     declaration: Option<curios_core::Global>,
     /// The enclosing local binders (function and `let` binders, match-arm patterns), innermost last. A bare reference whose spelling appears here resolves to the innermost such binder rather than a like-named module binding — see [`Self::resolve_name`]. Compiler-minted binders are never registered: nothing can write their name.
     scope: RefCell<LexicalScope>,
-    /// Every written binder a reference could reach, with where it was written — the `unused-binder` lint's candidates, decided by [`Self::flush`] once the whole declaration is lowered, since a goal anywhere in it or a mention in its declared type is decided after the binder's scope closes.
+    /// Every written binder a reference could reach, with where it was written — the candidates for a binder zero, read by [`Self::flush`] once the whole declaration is lowered, since a goal anywhere in it or a mention in its declared type is decided after the binder's scope closes.
     candidates: RefCell<Vec<Candidate>>,
     /// The binder identities some reference resolved to.
     used: RefCell<HashSet<curios_core::Free>>,
@@ -168,7 +168,7 @@ pub struct Lowerer<'a, 'b> {
     saw_goal: Cell<bool>,
 }
 
-/// One written binder the lint may report: its spelling, its identities and its span.
+/// One written binder a zero may be recorded of: its spelling, its identities and its span.
 struct Candidate {
     name: String,
     /// One for each time its text is lowered: an arm's body is lowered once for each of the arm's alternatives, and the binder is read where any lowering of it is.
@@ -257,31 +257,28 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// The lints of the declaration this lowered, decided now that every binder's scope has closed and every mention has been seen. A declaration holding a written goal reports none: its binders are what the goal's report lists for the author to use next.
+    /// The zeros of the declaration this lowered, read now that every binder's scope has closed and every mention has been seen. A declaration holding a written goal records none: its binders are what the goal's report lists for the author to use next.
     fn flush(&self) {
         if self.saw_goal.get() {
             return;
         }
         let used = self.used.borrow();
-        let lints = self
+        let zeros = self
             .candidates
             .borrow()
             .iter()
             .enumerate()
             .filter(|(_, candidate)| !candidate.ids.iter().any(|id| used.contains(id)))
-            .map(|(ordinal, candidate)| {
-                let binder = LintedBinder {
+            .map(|(ordinal, candidate)| Zero::Binder {
+                name: candidate.name.clone(),
+                at: self.context.extent(&candidate.span),
+                binder: LintedBinder {
                     declaration: self.declaration,
                     ordinal: u32::try_from(ordinal).expect("a declaration's binders fit a u32"),
-                };
-                Lint::unused_binder(
-                    &candidate.name,
-                    self.context.extent(&candidate.span),
-                    binder,
-                )
+                },
             })
             .collect::<Vec<_>>();
-        self.context.report(lints);
+        self.context.report(zeros);
     }
 
     /// Mint one binder identity per written name, in order. Nothing is brought into scope: the caller decides where each binder is visible, and the identity it holds is the one every such region re-enters.

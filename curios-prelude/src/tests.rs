@@ -76,10 +76,14 @@ fn every_authored_source_is_lint_clean() {
     let lints = [&sys, &std]
         .iter()
         .flat_map(|prepared| {
-            prepared
-                .lints()
-                .iter()
-                .map(|lint| lint.report(&[prepared.anchors()]).render())
+            curios_lint::lints(
+                prepared.zeros(),
+                |binder| prepared.credited().contains(binder),
+                prepared.anchors(),
+            )
+            .iter()
+            .map(|lint| lint.report(&[prepared.anchors()]).render())
+            .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
     assert!(
