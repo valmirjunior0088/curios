@@ -12,6 +12,8 @@ workspace = true
 curios-archive = { workspace = true }
 curios-common = { workspace = true }
 curios-core = { workspace = true }
+# What elaboration decided a written site binds, which a lint's wording reads.
+curios-elab = { workspace = true }
 curios-module = { workspace = true }
 
 [dev-dependencies]

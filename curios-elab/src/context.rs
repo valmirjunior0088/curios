@@ -17,6 +17,10 @@ use checked::*;
 mod credits;
 use credits::*;
 
+mod sites;
+use sites::*;
+pub use sites::{Binding, Observed};
+
 mod declared;
 pub use declared::Declared;
 use declared::*;
@@ -110,6 +114,9 @@ use {
 /// **A `Str` literal's ceiling is this constant divided by a per-character price the closed machine sets in transitions, not frames**: on the machine, guarded depth is flat in the length, so the frame row does not enter the price. The current price and ceiling are `curios`' `str_literal_cost_measurements`', and `a_str_literal_costs_transitions_rather_than_frames` holds the shape. Raising this constant raises the ceiling proportionally, and the trade it would make is the one stated above rather than anything about strings.
 pub const DEFAULT_BUDGET: u64 = 30_000_000;
 
+/// What deciding the class of one written site may spend, apart from its declaration's budget ([`DEFAULT_BUDGET`]), which it leaves as it found it: a class reads a type's weak head, through a few structs of one field, and an allowance run out is no class, never a refusal. See `context/sites.rs`.
+pub const LINT_ALLOWANCE: u64 = 1_000_000;
+
 /// The identity spine over a [`BirthTelescope`] — one `Var::free` per binder — shared with the scope as the telescope is.
 type SharedSpine = MetavarSpine;
 
@@ -145,6 +152,8 @@ pub struct SolutionMark {
     held_len: usize,
     universe: UniverseMark,
     credited_len: usize,
+    /// How many written sites had been opened ([`Sites::mark`]).
+    sites_len: usize,
     /// How many settled terms the totality obligations had been handed ([`Context::record_checked`]).
     checked_len: usize,
     /// How many questions reduction had put to conversion ([`Context::note_question`]).

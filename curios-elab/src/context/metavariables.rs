@@ -698,6 +698,7 @@ impl<'s> Context<'s> {
             held_len: self.underway.attempt.solutions.held_len(),
             universe: self.underway.attempt.universe_solver.mark(),
             credited_len: self.underway.credits.mark(),
+            sites_len: self.underway.sites.mark(),
             checked_len: self.underway.checked.mark(),
             questions: self.typing.asking.questions(),
         }
@@ -742,6 +743,8 @@ impl<'s> Context<'s> {
             .rollback(mark.universe);
         // A proof written inside what is rolled back reads nothing that stands.
         self.underway.credits.truncate(mark.credited_len);
+        // Nor does a site opened inside it bind anything that stands.
+        self.underway.sites.truncate(mark.sites_len);
         // Nor does a term settled inside it settle anything. It belonged to a candidate that is discarded, and the type it settled at may be a metavariable whose solution has just been unwound: left recorded, the totality obligations would zonk it at the item's end and report an implicit argument of a call the program never kept.
         self.truncate_checked(mark.checked_len);
 

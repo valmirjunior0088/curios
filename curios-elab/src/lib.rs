@@ -39,7 +39,7 @@ mod context;
 use context::*;
 pub use context::{
     Answered, ArchivedAnswered, ArchivedQuestion, AwaitId, Context, DEFAULT_BUDGET, HeldFrames,
-    Question,
+    LINT_ALLOWANCE, Observed, Question,
 };
 
 mod convert;
@@ -81,9 +81,9 @@ pub use established::Established;
 mod traces;
 use traces::*;
 pub use traces::{
-    ArchivedClassified, ArchivedForeign, ArchivedTraceTable, ArchivedTraces, ArchivedVectors,
-    Classified, Concluded, Foreign, HeldTrace, KeyAnswers, Keyed, Made, Parts, Readers,
-    TraceRecord, TraceTable, TracedEntry, Traces, Vectors,
+    ArchivedClassified, ArchivedForeign, ArchivedSiteClass, ArchivedTraceTable, ArchivedTraces,
+    ArchivedVectors, Classified, Concluded, Foreign, HeldTrace, KeyAnswers, Keyed, Made, Parts,
+    Readers, SiteClass, TraceRecord, TraceTable, TracedEntry, Traces, Vectors,
 };
 
 mod same;

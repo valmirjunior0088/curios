@@ -16,7 +16,7 @@ use {
         Subterm, Term, Transient,
     },
     curios_elab::{
-        Context, Established, FinalizedProgram, Reading, Tail, elaborate_and_zonk_entry,
+        Context, Established, FinalizedProgram, Observed, Reading, Tail, elaborate_and_zonk_entry,
         elaborate_and_zonk_program, elaborate_and_zonk_program_reporting, elaborate_and_zonk_unit,
         validate_entry_universes,
     },
@@ -58,25 +58,37 @@ impl Findings {
             .unwrap_or_default()
     }
 
-    /// A lowering's that made no unit, decided now: what it found, less every binder its elaboration credited.
-    pub fn of_text(text: &PreparedText) -> Self {
+    /// A lowering's that made no unit, decided now with what its elaboration `observed`: what it found, less every binder a proof it wrote read.
+    pub fn of_text(text: &PreparedText, observed: &Observed) -> Self {
         Self::decided(
             text.zeros(),
-            |binder| text.credited().contains(binder),
+            observed,
             text.anchors().clone(),
             text.reached().clone(),
         )
     }
 
-    /// The lints `zeros` come to, less every binder `read` holds of, placed by `anchors`.
+    /// The lints `zeros` come to with what an elaboration `observed`, placed by `anchors`: less every binder a proof it wrote read, worded by what each site of an entry's final term binds — a declaration's sites, whose records no unit holds here, are worded without.
     fn decided(
         zeros: &[Zero],
-        read: impl Fn(&LintedBinder) -> bool,
+        observed: &Observed,
         anchors: Anchors,
         reached: BTreeSet<Qualifier>,
     ) -> Self {
+        let read = |binder: &LintedBinder| {
+            observed
+                .credited
+                .contains(&(binder.declaration, binder.ordinal))
+        };
+        let class = |binder: &LintedBinder| {
+            binder
+                .declaration
+                .is_none()
+                .then(|| observed.entry_classes.get(&binder.ordinal).copied())
+                .flatten()
+        };
         Self {
-            lints: curios_lint::lints(zeros, read, &anchors),
+            lints: curios_lint::lints(zeros, read, class, &anchors),
             anchors,
             reached,
         }
@@ -751,13 +763,7 @@ where
         tail,
         observe,
     );
-    let credited = context.credited();
-    let findings = Findings::decided(
-        &zeros,
-        |binder| credited.contains(&(binder.declaration, binder.ordinal)),
-        anchors,
-        reached,
-    );
+    let findings = Findings::decided(&zeros, &context.observed(), anchors, reached);
     (findings, verdict)
 }
 
@@ -911,8 +917,8 @@ pub struct Closing<'a> {
     pub tail: Tail<'a>,
     /// Told the unit's module and the entry as they elaborated, before anything judges them.
     pub elaborated: &'a mut dyn FnMut(&curios_core::Definitions, &curios_core::Entrypoint),
-    /// Told the unit's lowering, credited by its elaboration, where the unit is refused: what a question reads the program's findings off whatever the verdict.
-    pub refused: &'a mut dyn FnMut(&PreparedText),
+    /// Told the unit's lowering, with what its elaboration observed, where the unit is refused: what a question reads the program's findings off whatever the verdict.
+    pub refused: &'a mut dyn FnMut(&PreparedText, &Observed),
 }
 
 /// What erasing an entered program came to: the module it links to, or what erasing it refused it for.
@@ -1032,7 +1038,9 @@ where
                         dumped,
                     ));
                 };
-            let mut refused = |lowered: &PreparedText| findings = Some(Findings::of_text(lowered));
+            let mut refused = |lowered: &PreparedText, observed: &Observed| {
+                findings = Some(Findings::of_text(lowered, observed));
+            };
             let closing = Some(Closing {
                 tail: closing,
                 elaborated: &mut elaborated,
@@ -1350,7 +1358,7 @@ pub fn compile_lowered(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
-    mut lowered: PreparedText,
+    lowered: PreparedText,
     closing: Option<Closing<'_>>,
 ) -> Result<(Unit, Option<curios_core::Entrypoint>), CompileError> {
     let cores = predecessors.cores();
@@ -1399,10 +1407,10 @@ pub fn compile_lowered(
         }),
     );
     // Whatever elaboration said: a lint is no part of its verdict.
-    lowered.credit(&context.credited());
+    let observed = context.observed();
     let mut refuse = |lowered: &PreparedText, error: CompileError| {
         if let Some(refused) = &mut refused {
-            refused(lowered);
+            refused(lowered, &observed);
         }
 
         error
@@ -1444,7 +1452,14 @@ pub fn compile_lowered(
     let core = core.into_definitions();
 
     Ok((
-        Unit::new(lowered, core, anf, traces, rechecked.certification),
+        Unit::new(
+            lowered,
+            core,
+            anf,
+            traces,
+            rechecked.certification,
+            &observed,
+        ),
         entry,
     ))
 }

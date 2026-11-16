@@ -3,8 +3,8 @@ use {
         Misaligned, align, check_witness_domain, insert_auto_argument, method_type, stands_at,
     },
     crate::{
-        BinderSite, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode, Occurrence,
-        ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, Turns, check,
+        BinderSite, Binding, Context, DomainScope, EmbeddingSite, ErasedSite, Error, Mode,
+        Occurrence, ParkedWork, Provenance, RegionOwner, Restriction, SlotPositions, Turns, check,
         check_is_sort, convert, elaborate, expect, metavar_origins, metavar_spines, mismatch,
         premise_label, read_by_value, reduce_with, resolve_witness_goal, resolve_witness_goal_or,
         stuck_on_metavar, written_monad, zonk_solved_term_metas,
@@ -22,6 +22,11 @@ use {
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding is one `Term::let_block`, which closes the bindings back into a single flat `Let` in one pass. The whole block is one source term with one extent, stamped by `elaborate`'s wrapper — no per-binding extent bookkeeping.
 pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(Term, Term), Error> {
     curios_profile::profile!("binding::elaborate_let");
+    // The type a `!` in this block reads its region off, where the block is checked: what a binding of the region's monad is an action of.
+    let region = match &mode {
+        Mode::Check(expected) => Some(expected.clone()),
+        Mode::Infer => None,
+    };
     context.with_frame(|context| {
         let mut label_terms = Vec::<Term>::with_capacity(let_.bindings().len());
         let mut triples = Vec::<(Free, Term, Term)>::with_capacity(let_.bindings().len());
@@ -49,6 +54,11 @@ pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(T
                 }
             };
             let label = context.fresh_for(let_.tail().hint(index), let_.tail().written(index));
+            context.open_site(
+                let_.tail().written(index),
+                &type_elaborated,
+                Binding::Let(region.clone()),
+            );
 
             // Define the binding with the *rebuilt* body so the tail's type-level evaluation does not reduce through the lowered (under-applied) original, its committed solutions substituted: a solved metavariable left in it stands over a spine of every binding before it, which each reduction through the definition would read again, a chain of definitions paying its length at every link. The type stays as written, since what a tail's unification solves from it is spelled as it is.
             let body_elaborated = zonk_solved_term_metas(context, &body_elaborated);
@@ -1265,7 +1275,9 @@ pub fn elaborate_func_check(
                         .expect("the alignment matched a written binder to this slot");
                     let w_domain = check_is_sort(context, &w_domain)?.0;
                     expect(context, term, &w_domain, &e_domain)?;
-                    let name = context.fresh_for(w_hint, written.written());
+                    let place = written.written();
+                    let name = context.fresh_for(w_hint, place);
+                    context.open_site(place, &w_domain, Binding::Slot);
                     written.advance(Term::free_var(&name));
                     name
                 }
@@ -1344,6 +1356,7 @@ pub fn elaborate_func_infer(
             let plicity = plicities[domains.len()];
             let written = cursor.written();
             let name = cursor.advance_fresh(|hint| context.fresh_for(hint, written));
+            context.open_site(written, &domain, Binding::Slot);
             if plicity == Plicity::Witness {
                 check_witness_domain(context, &domain)?;
             }

@@ -121,7 +121,7 @@ fn reported(
 /// `predecessors` are the roots before it, made: the certifier judges it against their modules, with the records their walks left, and an item of this root reads in their erased forms how a name of an earlier one is bound, its own erased form holding nothing of theirs.
 fn unit(
     root: &str,
-    mut prepared: PreparedText,
+    prepared: PreparedText,
     established: &Established<'_>,
     predecessors: &[&Unit],
 ) -> Unit {
@@ -171,8 +171,8 @@ fn unit(
             )
         )
     });
-    // The pipeline's crediting, for the one caller that elaborates a unit itself: a binder a proof the elaborator wrote reads is used, and the image's lints say so.
-    prepared.credit(&context.credited());
+    // What the elaboration observed of the sites no declaration's record holds, as the pipeline hands a unit it makes: the one caller that elaborates a unit itself.
+    let observed = context.observed();
 
     // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration reads exactly the bytes written from this value — a constant of the same build, whose structure bytecheck confirms — so re-deriving the invariants per compilation only re-answers a question already settled.
     validate_universes(&core)
@@ -202,7 +202,7 @@ fn unit(
     // What the certifier stated rebuilt the nodes whose marks it changed, which are consed with the rest: the table holds every node the module shared, so a node the certifier handed back as it was costs nothing.
     let core = core.shared(&sharing);
 
-    Unit::new(prepared, core, anf, traces, certification)
+    Unit::new(prepared, core, anf, traces, certification, &observed)
 }
 
 /// The certifier's walk over one root's module as it is imaged, against the roots before it with the records their walks left, and the root erased through the certifier that walked it: the module as the certifier stated it, the record of its definitions and its items' erased forms, or a panic at the first refusal, since a prelude the certifier does not accept or erasure cannot erase is no prelude.

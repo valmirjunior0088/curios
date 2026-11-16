@@ -12,11 +12,16 @@ use {
     curios_archive::{Bytes, joined, parted},
     curios_common::{Digest, Mount, Object, Recorded},
     curios_core::{Certification, Definitions, ItemRun, Lexicon, Places},
-    curios_elab::{Candidating, Readers, Traces},
+    curios_elab::{Candidating, Observed, Readers, Traces},
     curios_erase::ErasedUnit,
     curios_lint::Lint,
     curios_module::PreparedText,
-    std::{borrow::Cow, cell::OnceCell, collections::BTreeSet, rc::Rc},
+    std::{
+        borrow::Cow,
+        cell::OnceCell,
+        collections::{BTreeMap, BTreeSet},
+        rc::Rc,
+    },
 };
 
 /// What a unit was written in: a program's sources, whose lowering it holds, or Core text, read straight to the module a lowering and an elaboration would have made, which leaves it nothing of a lowering's but the prefixes it claims and the rows it declares.
@@ -353,26 +358,38 @@ pub struct Unit {
 }
 
 impl Unit {
-    /// Assemble a unit from what each stage produced for it and the record the certifier's walk over it left — with [`Unit::read`], the only way a unit is made, so none is without one.
+    /// Assemble a unit from what each stage produced for it and the record the certifier's walk over it left — with [`Unit::read`], the only way a unit is made, so none is without one. `observed` is what the elaboration that ran observed of the sites no declaration's record holds: the program's final term's, which its lints are decided with.
     pub fn new(
         text: PreparedText,
         core: Definitions,
         erased: ErasedUnit,
         traces: Traces,
         certification: Certification,
+        observed: &Observed,
     ) -> Self {
-        // Decided once, here, where every unit written as a program is made: what its lowering found, less every binder a proof its elaboration wrote read — a declaration's as its record holds them, whether elaborated now, kept from a baseline or taken from a store, and the program's final term's as the elaboration that ran credited them.
+        // Decided once, here, where every unit written as a program is made: what its lowering found, less every binder a proof its elaboration wrote read, worded by what each site binds — a declaration's as its record holds them, whether elaborated now, kept from a baseline or taken from a store, and the program's final term's as the elaboration that ran observed them.
         let recorded = traces
             .declarations()
             .flat_map(|(_, record)| record.concluded().credited.iter().copied())
             .collect::<BTreeSet<_>>();
+        let classes = traces
+            .declarations()
+            .flat_map(|(_, record)| record.concluded().classes.iter().copied())
+            .map(|(name, place, class)| ((name, place), class))
+            .collect::<BTreeMap<_, _>>();
         let lints = curios_lint::lints(
             text.zeros(),
             |binder| {
-                text.credited().contains(binder)
+                observed
+                    .credited
+                    .contains(&(binder.declaration, binder.ordinal))
                     || binder
                         .declaration
                         .is_some_and(|name| recorded.contains(&(name, binder.ordinal)))
+            },
+            |binder| match binder.declaration {
+                Some(name) => classes.get(&(name, binder.ordinal)).copied(),
+                None => observed.entry_classes.get(&binder.ordinal).copied(),
             },
             text.anchors(),
         );

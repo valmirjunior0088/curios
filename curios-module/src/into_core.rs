@@ -67,7 +67,7 @@ pub use reachability::Reachability;
 use reachability::*;
 
 use {
-    crate::{Compiled, Error, LintedBinder, RootSource, Zero, tree_of},
+    crate::{Compiled, Error, RootSource, Zero, tree_of},
     curios_abi::{ForeignFunction, ForeignStore},
     curios_archive::Bytes,
     curios_common::{
@@ -640,9 +640,6 @@ pub struct PreparedText {
     /// Every zero the lowering found — see [`Zero`]: what `curios-lint` decides the unit's lints from where the unit is made. Held by a unit lowered in this process alone: a unit stores the lints decided of it, and a lowering over it reads its baseline half's.
     #[archived_with(curios_archive::Skip)]
     zeros: Vec<Zero>,
-    /// Every written binder a zero names that a proof the elaborator wrote read where this unit was elaborated in this process — see [`LintedBinder`]: what the lint owner reads of a binder no declaration's record holds, the program's final term's, and of a unit refused, which files no record. A declaration's own are its trace record's, which a unit compiled over this one keeps. Never stored.
-    #[archived_with(curios_archive::Skip)]
-    credited: BTreeSet<LintedBinder>,
     /// The prefix of every mount some reference of this unit was *written* under — see `Context::note_spelled`.
     reached: BTreeSet<Qualifier>,
     /// Every item the parser could not read, in reading order — see [`BrokenItem`]. Empty for any unit that compiles.
@@ -691,33 +688,11 @@ impl PreparedText {
         &self.zeros
     }
 
-    /// Every written binder a proof the elaborator wrote read, of those a binder zero names. See the field.
-    pub fn credited(&self) -> &BTreeSet<LintedBinder> {
-        &self.credited
-    }
-
     /// Where each source declaration of this unit lies. See the field.
     pub fn anchors(&self) -> &curios_core::Anchors {
         self.anchors
             .get()
             .unwrap_or_else(|error| panic!("a unit's anchors failed to restore: {error}"))
-    }
-
-    /// Record which binders the unit's zeros name a proof the elaborator wrote read, as `credited` holds them: used, though no written name reaches them. Called once the unit has elaborated, since only elaboration writes such a proof.
-    pub fn credit(&mut self, credited: &BTreeSet<(Option<curios_core::Global>, u32)>) {
-        let read = self
-            .zeros
-            .iter()
-            .filter_map(|zero| match zero {
-                Zero::Binder { binder, .. }
-                    if credited.contains(&(binder.declaration, binder.ordinal)) =>
-                {
-                    Some(*binder)
-                }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        self.credited.extend(read);
     }
 
     /// Every item the parser could not read. A unit holding one is refused whatever elaboration said of the rest, and what it said is reported beside these.
@@ -3468,7 +3443,6 @@ fn into_core_unit_within(
         visible: visible_mounts,
         broken,
         zeros,
-        credited: BTreeSet::new(),
         reached,
         anchors: Recorded::held(shared.anchoring.into_anchors()),
         baseline: Recorded::held(BaselineHalf {

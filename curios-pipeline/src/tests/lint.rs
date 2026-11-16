@@ -73,7 +73,7 @@ pub let bounded(t: Bytes) -> Holds(Bytes/to_nat(t) < Nat/pow(256, Bytes/len(t)))
     assert_eq!(lints_of(&unit), Vec::<String>::new());
 }
 
-/// An action bound to `_` and never run is a description nothing performs: the `let` does nothing.
+/// An action bound to `_` and never run is a description nothing performs: the `let` does nothing, and running it is as likely the way out as deleting it.
 #[test]
 fn an_action_bound_and_never_run_is_reported() {
     let unit = unit_of(
@@ -88,12 +88,12 @@ pub let greet() -> Io({}) =
     assert_eq!(
         lints_of(&unit),
         [
-            "unused-let: unused let\n  nothing reads this `let`, and its value runs no action\n  delete it"
+            "unused-let: unused let\n  this `_` is an action this program never runs\n  run it with `!`, or delete it"
         ]
     );
 }
 
-/// A `Test` bound and never run is reported as an `Io` is: no list of types decides it, and an assertion dropped this way would let its test pass.
+/// A `Test` bound and never run is reported as an `Io` is: no list of types decides it, and an assertion dropped this way would let its test pass. It is an action of the region it stands in, whose monad `Test` is.
 #[test]
 fn a_test_bound_and_never_run_is_reported() {
     let unit = unit_of(
@@ -108,7 +108,63 @@ pub let dropped() -> Test({}) =
     assert_eq!(
         lints_of(&unit),
         [
-            "unused-let: unused let\n  `failed` is never used, and its value runs no action\n  delete it"
+            "unused-let: unused let\n  `failed` is an action this program never runs\n  run it with `!`, or delete it"
         ]
+    );
+}
+
+/// A fallible operation answers a `Try` over `Io`, a struct of one field holding an action, and is one.
+#[test]
+fn a_fallible_action_bound_and_never_run_is_an_action() {
+    let unit = unit_of(
+        "use /std/{Io, File, Path, print};
+
+pub let greet() -> Io({}) =
+    let read = File/read_all_text(Path/of_str(\"notes.txt\"));
+    print(\"ran\\n\");
+",
+    );
+
+    assert_eq!(
+        lints_of(&unit),
+        [
+            "unused-let: unused let\n  `read` is an action this program never runs\n  run it with `!`, or delete it"
+        ]
+    );
+}
+
+/// A value of no action's type is deleted: it runs nothing whatever it is.
+#[test]
+fn a_value_bound_and_never_read_is_deleted() {
+    let unit = unit_of(
+        "use /std/{Nat};
+
+pub let count() -> Nat =
+    let unread = [1, 2, 3];
+    3;
+",
+    );
+
+    assert_eq!(
+        lints_of(&unit),
+        [
+            "unused-let: unused let\n  `unread` is never used, and its value runs no action\n  delete it"
+        ]
+    );
+}
+
+/// A binder of `{}` nothing reads gives its name up to `()`, which checks the value is `{}`, rather than to `_`, which takes whatever a result becomes.
+#[test]
+fn a_binder_of_unit_nothing_reads_is_told_to_write_unit() {
+    let unit = unit_of(
+        "use /std/{Nat};
+
+pub let one(done: {}) -> Nat = 1;
+",
+    );
+
+    assert_eq!(
+        lints_of(&unit),
+        ["unused-binder: unused binder\n  `done` is never used\n  write `()` in its name's place"]
     );
 }

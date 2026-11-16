@@ -4,7 +4,8 @@
 
 use {
     curios_common::{Report, Said},
-    curios_module::Zero,
+    curios_elab::SiteClass,
+    curios_module::{LintedBinder, Zero},
     std::fmt,
 };
 
@@ -42,8 +43,8 @@ pub struct Lint {
 }
 
 impl Lint {
-    /// What `zero` is reported as, where it stands. There are no levels and no suppression: what keeps a name is spelled in the program, and each message says how.
-    pub(crate) fn of(zero: &Zero) -> Self {
+    /// What `zero` is reported as, where it stands, its way out worded by what `class` says a binder binds. There are no levels and no suppression: what keeps a name is spelled in the program, and each message says how.
+    pub(crate) fn of(zero: &Zero, class: impl Fn(&LintedBinder) -> Option<SiteClass>) -> Self {
         match zero {
             // A `use` selector nothing resolved through, underlined at the selector.
             Zero::Selector { label, at } => Self::at(
@@ -57,26 +58,40 @@ impl Lint {
                 *at,
                 unused("import", path, "delete it"),
             ),
-            // A binder nothing referenced, underlined at the word. The binder stays where the shape it fills needs a slot, and the name goes: `_` takes its place.
-            Zero::Binder { name, at, .. } => Self::at(
-                LintKind::UnusedBinder,
-                *at,
-                unused("binder", name, "write `_` in its name's place"),
-            ),
-            // A `let` that does nothing, underlined at its pattern: its value runs no action, so it is deleted with nothing lost.
-            Zero::Let { name, at, .. } => {
+            // A binder nothing referenced, underlined at the word. The binder stays where the shape it fills needs a slot, and the name goes: `()` takes the place of one of `{}`, which refuses a value that stops being one, and `_` the place of any other.
+            Zero::Binder { name, at, binder } => {
+                let way_out = match class(binder) {
+                    Some(SiteClass::Unit) => "write `()` in its name's place",
+                    Some(SiteClass::Action) | None => "write `_` in its name's place",
+                };
+                Self::at(LintKind::UnusedBinder, *at, unused("binder", name, way_out))
+            }
+            // A `let` that does nothing, underlined at its pattern: its value runs no action, so it is deleted with nothing lost — or, where it holds an action, run as was likely meant.
+            Zero::Let { name, at, binders } => {
+                let action = matches!(binders.as_slice(), [binder] if class(binder) == Some(SiteClass::Action));
                 let mut said = Said::line("unused let");
-                match name {
-                    Some(name) => {
+                match (name, action) {
+                    (Some(name), true) => {
+                        said.stating(format_args!(
+                            "`{name}` is an action this program never runs"
+                        ));
+                    }
+                    (None, true) => {
+                        said.stating("this `_` is an action this program never runs");
+                    }
+                    (Some(name), false) => {
                         said.stating(format_args!(
                             "`{name}` is never used, and its value runs no action"
                         ));
                     }
-                    None => {
+                    (None, false) => {
                         said.stating("nothing reads this `let`, and its value runs no action");
                     }
                 }
-                said.stating("delete it");
+                said.stating(match action {
+                    true => "run it with `!`, or delete it",
+                    false => "delete it",
+                });
                 Self::at(LintKind::UnusedLet, *at, said)
             }
             // A declaration nothing reaches, underlined at its name. Deleted, made part of what the unit hands out by `pub`, or kept unused on purpose by a `_` prefix.

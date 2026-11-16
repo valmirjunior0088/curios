@@ -1275,6 +1275,8 @@ impl<'a> Demand<'a> {
 
             let needs = context.take_needs();
             if needs.is_empty() {
+                // What each written site binds, decided before the trace is taken, so what deciding it read is the declaration's too.
+                let classes = context.classes_in(&names);
                 // What the attempt that stands asked of the declarations around it is its declaration's.
                 let trace = context.take_trace();
                 curios_profile::sample!("demand::asked", trace.len());
@@ -1291,6 +1293,7 @@ impl<'a> Demand<'a> {
                 let concluded = Concluded {
                     classified,
                     credited: context.credited_in(&names),
+                    classes,
                 };
                 self.file(&names, Rc::new(TraceRecord::new(trace, concluded)));
                 self.poison = poison;

@@ -67,7 +67,7 @@ pub fn compile_lowered_over(
     budget: u64,
     predecessors: Predecessors<'_>,
     syntax: &SyntaxRegistry,
-    mut lowered: PreparedText,
+    lowered: PreparedText,
     Over {
         baseline,
         moved,
@@ -150,10 +150,10 @@ pub fn compile_lowered_over(
         }),
     );
     // What the proofs written now read, whatever elaboration said: a lint is no part of its verdict.
-    lowered.credit(&context.credited());
+    let observed = context.observed();
     let mut refuse = |lowered: &PreparedText, error: CompileError| {
         if let Some(refused) = &mut refused {
-            refused(lowered);
+            refused(lowered, &observed);
         }
 
         error
@@ -234,9 +234,16 @@ pub fn compile_lowered_over(
     })?;
 
     Ok((
-        Unit::new(lowered, core.into_definitions(), anf, traces, certification)
-            .reading(readers)
-            .placing(Some(places)),
+        Unit::new(
+            lowered,
+            core.into_definitions(),
+            anf,
+            traces,
+            certification,
+            &observed,
+        )
+        .reading(readers)
+        .placing(Some(places)),
         entry,
     ))
 }

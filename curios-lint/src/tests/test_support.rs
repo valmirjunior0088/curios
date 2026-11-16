@@ -11,7 +11,7 @@ pub fn lints(src: &str) -> Vec<String> {
     let loader = RootSource::none().tested();
     let text = into_core_unit(&UnitSource::entry(&entrypoint, &loader), &[], &SYNTAX).unwrap();
 
-    crate::lints(text.zeros(), |_| false, text.anchors())
+    crate::lints(text.zeros(), |_| false, |_| None, text.anchors())
         .iter()
         .map(|lint| format!("{}: {}", lint.kind.name(), lint.report(&[]).message()))
         .collect()

@@ -13,14 +13,16 @@ pub use lint::{ArchivedLint, ArchivedLintKind, Lint, LintKind};
 
 use {
     curios_common::Qualifier,
+    curios_elab::SiteClass,
     curios_module::{LintedBinder, Zero},
     std::collections::BTreeSet,
 };
 
-/// The lints `zeros` come to, in reading order as `anchors` place them: each zero reported, less every binder `read` holds of — one a proof the elaborator wrote reads, which is used though no written name reaches it. A `let` none of whose binders is read either way does nothing, whatever its value: it is reported whole, once, and its binders are none of `unused-binder`'s.
+/// The lints `zeros` come to, in reading order as `anchors` place them: each zero reported, less every binder `read` holds of — one a proof the elaborator wrote reads, which is used though no written name reaches it. A `let` none of whose binders is read either way does nothing, whatever its value: it is reported whole, once, and its binders are none of `unused-binder`'s. `class` says what a binder binds where elaboration decided it, which words the way out.
 pub fn lints<'z>(
     zeros: impl IntoIterator<Item = &'z Zero>,
     read: impl Fn(&LintedBinder) -> bool,
+    class: impl Fn(&LintedBinder) -> Option<SiteClass>,
     anchors: &curios_core::Anchors,
 ) -> Vec<Lint> {
     let zeros = zeros.into_iter().collect::<Vec<_>>();
@@ -44,7 +46,7 @@ pub fn lints<'z>(
             | Zero::Declaration { .. }
             | Zero::Module { .. } => true,
         })
-        .map(Lint::of)
+        .map(|zero| Lint::of(zero, &class))
         .collect();
 
     ordered(lints, anchors)

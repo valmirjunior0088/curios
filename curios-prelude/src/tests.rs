@@ -76,6 +76,7 @@ fn every_authored_source_is_lint_clean() {
                         .declaration
                         .is_some_and(|name| recorded.contains(&(name, binder.ordinal)))
                 },
+                |_| None,
                 prepared.anchors(),
             )
             .iter()

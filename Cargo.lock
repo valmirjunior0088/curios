@@ -812,6 +812,7 @@ dependencies = [
  "curios-archive",
  "curios-common",
  "curios-core",
+ "curios-elab",
  "curios-module",
  "curios-surface",
 ]

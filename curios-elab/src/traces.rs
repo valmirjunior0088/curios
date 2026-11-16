@@ -52,6 +52,18 @@ pub struct Concluded {
     pub classified: Vec<(Global, Classified)>,
     /// The written binders the proofs it wrote read, each by the name of its definition and its place among that definition's written binders: each used, though no written name reaches it, which the lint owner reads where it decides `unused-binder`.
     pub credited: Vec<(Global, u32)>,
+    /// What each written site it opened binds, where that is decided ([`SiteClass`]), each by the name of its definition and its place among that definition's written binders: what the lint owner words a finding about the site by.
+    pub classes: Vec<(Global, u32, SiteClass)>,
+}
+
+/// What a written site binds, as far as a lint's wording reads it: decided off the type the site was opened at, reduced at its declaration's close, and absent where that type was left a metavariable, the reduction ran out of its allowance, or it is neither.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum SiteClass {
+    /// `{}`, which `()` names and checks.
+    Unit,
+    /// An action: a value a `!` would run where the site stands — one whose type reduces to `Io`, to a struct of one field holding an action, or to an application of the monad of the region a `let` stands in.
+    Action,
 }
 
 /// A declaration's trace as a unit holds it: what it asked and what elaboration concluded of it (`Concluded`), and once a filing completed it, what it was made from and made (`Made`). Shared with every version that keeps it, beside the digest it is stored under.
@@ -676,6 +688,7 @@ struct TabledTrace {
     asked: Trace<Question<u32, u32>, Answered<u32>>,
     classified: Vec<(u32, Classified)>,
     credited: Vec<(u32, u32)>,
+    classes: Vec<(u32, u32, SiteClass)>,
     made: Option<TabledMade>,
 }
 
@@ -718,6 +731,11 @@ impl TabledTrace {
                 .credited
                 .into_iter()
                 .map(|(place, ordinal)| Ok((name(place)?, ordinal)))
+                .collect::<Result<_, String>>()?,
+            classes: self
+                .classes
+                .into_iter()
+                .map(|(place, ordinal, class)| Ok((name(place)?, ordinal, class)))
                 .collect::<Result<_, String>>()?,
         };
 
@@ -861,6 +879,11 @@ impl TraceTable {
                         .credited
                         .iter()
                         .map(|(name, place)| (names.place(*name), *place))
+                        .collect(),
+                    classes: concluded
+                        .classes
+                        .iter()
+                        .map(|(name, place, class)| (names.place(*name), *place, *class))
                         .collect(),
                     made,
                 }

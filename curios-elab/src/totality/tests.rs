@@ -93,7 +93,7 @@ fn a_filed_verdict_is_what_a_later_unit_reads_back() {
             Trace::default(),
             Concluded {
                 classified,
-                credited: Vec::new(),
+                ..Concluded::default()
             },
         )),
     );

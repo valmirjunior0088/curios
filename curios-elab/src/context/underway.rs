@@ -3,7 +3,9 @@
 //! Elaboration turns what an author wrote into finished terms, and while it does it holds what no finished term has: the metavariables an attempt at a declaration mints and the levels it has yet to settle, which of the unit's declarations have not finished and what the attempt read of them, the witnesses the unit declares before they elaborate, the module a use site is judged from, and what it notes on the way for a lint, an obligation or a report. [`Underway`] is all of it. A context that only reads finished terms holds one that is empty, and no judgment it makes finds anything here to read.
 
 use {
-    super::{Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, Needs, Posture},
+    super::{
+        Attempt, CheckedTerms, Credits, DeclaredWitnesses, EmbeddingSite, Needs, Posture, Sites,
+    },
     curios_core::{Declarations, Extent, Free, Global, Imports, Minted},
     std::{collections::BTreeSet, rc::Rc},
 };
@@ -19,6 +21,8 @@ pub struct Underway {
     pub witnesses: DeclaredWitnesses,
     // The written binders the proofs the elaborator wrote read, which `unused-binder` does not report; see [`Credits`].
     pub credits: Credits,
+    // The written sites opened and not yet classified, each with the type it was opened at; see [`Sites`].
+    pub sites: Sites,
     // Every term elaboration settled, with the type it settled at — the seed of the erasure obligations; see [`CheckedTerms`].
     pub checked: CheckedTerms,
     // Where surface elaboration stands: the module whose item is being elaborated, and whether the prover is running; see [`Posture`].
@@ -51,6 +55,7 @@ impl Default for Underway {
             needs: Needs::default(),
             witnesses: DeclaredWitnesses::default(),
             credits: Credits::default(),
+            sites: Sites::default(),
             checked: CheckedTerms::default(),
             posture: Posture::default(),
             declarations: Declarations::default(),
