@@ -82,8 +82,8 @@ mod traces;
 use traces::*;
 pub use traces::{
     ArchivedClassified, ArchivedForeign, ArchivedTraceTable, ArchivedTraces, ArchivedVectors,
-    Classified, Foreign, HeldTrace, KeyAnswers, Keyed, Made, Parts, Readers, TraceRecord,
-    TraceTable, TracedEntry, Traces, Vectors,
+    Classified, Concluded, Foreign, HeldTrace, KeyAnswers, Keyed, Made, Parts, Readers,
+    TraceRecord, TraceTable, TracedEntry, Traces, Vectors,
 };
 
 mod same;

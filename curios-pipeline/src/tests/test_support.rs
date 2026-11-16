@@ -504,7 +504,7 @@ pub fn traces_stored(traces: &Traces) -> Vec<u8> {
         TraceTable::run(
             traces
                 .declarations()
-                .map(|(name, held)| (name, &***held, held.made())),
+                .map(|(name, held)| (name, &***held, held.concluded(), held.made())),
         )
         .expect("a unit's traces serialize"),
     );

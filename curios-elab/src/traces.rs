@@ -4,6 +4,8 @@
 //!
 //! **A version of the baseline's.** A unit compiled over a baseline holds its baseline's traces with the trace of each declaration it made filed in place of the one it replaces and each declaration it dropped taken out: the table is persistent and read back in the order of its names ([`Sorted`]), so a trace kept is shared, never copied, and nothing is visited to keep it.
 //!
+//! **What elaboration concluded of a declaration is its record's.** What a declaration reads of a definition besides its terms — its totality, how it applies its parameters, where its universe parameters reach ([`Classified`]) — is concluded where the declaration elaborates and held by the declaration's record from then on ([`Concluded`]), so a record a recompile shares, a store holds or a compile adopts carries it, and the unit reads a definition's by the record that concludes of it.
+//!
 //! **Each declaration's trace an object, stored with each name written once.** A trace is stored as an object of its own, and the traces a filing writes are the members of one run ([`TraceTable`]). A trace names the same few declarations its neighbours do: the library's traces hold some forty names each, drawn from the few thousand the library and its scope declare. A name is archived as its segments, and read back through the process's table at an allocation a segment, so a run holds a table of the names and of the witness keys, each once, and a question holds its place there. What the unit reads of other units, the declarations settled before the offer and the stored order are the unit's own, stored with it.
 //!
 //! **Completed where it is filed, and found by what its declaration was made from.** A store's filing completes each trace with what the declaration was made from, what each question read and what it made ([`Made`]), and names it by those ([`TraceRecord::digest`]): the one record a stage keeps of a declaration, which a later compile keeps the declaration by where it holds the baseline and takes the declaration from where it finds the record among those a store holds for the same input ([`curios_common::Candidates`]). A constructive trace, which "additionally stores the resulting value", where "it makes sense to record many constructive traces per key" (Mokhov, Mitchell and Peyton Jones, [Build Systems à la Carte](https://www.microsoft.com/en-us/research/wp-content/uploads/2018/03/build-systems.pdf), section 4.2.3), the value being held by its identity in the store beside it.
@@ -43,14 +45,20 @@ pub struct Made {
     pub outputs: Vec<Digest>,
     /// The written binders its proofs read, each by the name of its definition and its place among that definition's written binders.
     pub credited: Vec<(Global, u32)>,
-    /// What elaboration concluded of each definition it made, by the definition's name ([`Classified`]): what a compile that takes the declaration from this record files of it, its items holding none.
+}
+
+/// What elaboration concluded of a declaration as it made it, beside its items: what a compile that keeps the declaration — over a baseline, or from a record a store held — reads of it with nothing elaborated. Made where the declaration elaborates and held by its record, so a record shared, stored or taken from a store carries it.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Concluded {
+    /// What elaboration concluded of each definition the declaration made, by the definition's name ([`Classified`]), its items holding none: what a declaration reads of the definition besides its terms, in this unit, over it as a baseline, or in a unit compiled after it.
     pub classified: Vec<(Global, Classified)>,
 }
 
-/// A declaration's trace as a unit holds it: what it asked, and once a filing completed it, what it was made from and made (`Made`). Shared with every version that keeps it, beside the digest it is stored under.
+/// A declaration's trace as a unit holds it: what it asked and what elaboration concluded of it (`Concluded`), and once a filing completed it, what it was made from and made (`Made`). Shared with every version that keeps it, beside the digest it is stored under.
 #[derive(Debug)]
 pub struct TraceRecord {
     asked: Trace<Question, Answered>,
+    concluded: Concluded,
     /// What a filing completed it with: unset until one did, `None` where nothing completes it.
     made: OnceCell<Option<Made>>,
     /// The digest it is stored under, kept once it is complete: what a record not yet completed is stored under moves where a filing completes it.
@@ -58,24 +66,35 @@ pub struct TraceRecord {
 }
 
 impl TraceRecord {
-    /// The record of a declaration that asked `asked`, which no filing has completed.
-    pub fn new(asked: Trace<Question, Answered>) -> Self {
+    /// The record of a declaration that asked `asked`, of which elaboration concluded `concluded`, which no filing has completed.
+    pub fn new(asked: Trace<Question, Answered>, concluded: Concluded) -> Self {
         Self {
             asked,
+            concluded,
             made: OnceCell::new(),
             digest: OnceCell::new(),
         }
     }
 
     /// The record a store held under `digest`: complete where it was filed with `made`, and otherwise left for a filing to complete.
-    pub fn restored(asked: Trace<Question, Answered>, made: Option<Made>, digest: Digest) -> Self {
-        let traced = Self::new(asked);
+    pub fn restored(
+        asked: Trace<Question, Answered>,
+        concluded: Concluded,
+        made: Option<Made>,
+        digest: Digest,
+    ) -> Self {
+        let traced = Self::new(asked, concluded);
         if let Some(made) = made {
             let _ = traced.made.set(Some(made));
             let _ = traced.digest.set(digest);
         }
 
         traced
+    }
+
+    /// What elaboration concluded of the declaration. See the field.
+    pub fn concluded(&self) -> &Concluded {
+        &self.concluded
     }
 
     /// What the declaration made and read, where a filing completed the record with it.
@@ -98,7 +117,7 @@ impl TraceRecord {
         if let Some(digest) = self.digest.get() {
             return Ok(*digest);
         }
-        let run = TraceTable::run([(name, &self.asked, self.made())])?;
+        let run = TraceTable::run([(name, &self.asked, &self.concluded, self.made())])?;
         let digest = match self.made() {
             Some(made) => candidate_name(facet, &made.input, &run),
             None => Digest::of(&run),
@@ -123,11 +142,16 @@ impl Deref for TraceRecord {
 /// A declaration's record as a unit holds it: shared with every version that keeps it.
 pub type HeldTrace = Rc<TraceRecord>;
 
-/// A declaration's record as a run holds it: the name the declaration is written as, its trace, and what a filing completed it with.
-pub type TracedEntry = (Global, Trace<Question, Answered>, Option<Made>);
+/// A declaration's record as a run holds it: the name the declaration is written as, its trace, what elaboration concluded of it, and what a filing completed it with.
+pub type TracedEntry = (Global, Trace<Question, Answered>, Concluded, Option<Made>);
 
-/// A declaration's record as a run is written from: the name the declaration is written as, its trace, and what a filing completed it with, each borrowed.
-pub type Entry<'t> = (&'t Global, &'t Trace<Question, Answered>, Option<&'t Made>);
+/// A declaration's record as a run is written from: the name the declaration is written as, its trace, what elaboration concluded of it, and what a filing completed it with, each borrowed.
+pub type Entry<'t> = (
+    &'t Global,
+    &'t Trace<Question, Answered>,
+    &'t Concluded,
+    Option<&'t Made>,
+);
 
 /// Each declaration's trace, by the name it is written as. See the module documentation.
 #[derive(Debug, Clone, Default)]
@@ -145,9 +169,9 @@ pub struct Traces {
     before: Rc<BTreeSet<Global>>,
     /// The order the unit's items are stored in, with what each reaches of the unit and its depth: what a unit compiled over this one gives the order again from the items it made by ([`Order::revised`]).
     order: Order,
-    /// What elaboration concluded of each definition the unit holds as it published it, by the definition's name ([`Classified`]): what a declaration reads of the definition besides its terms, in this unit, over it as a baseline, or in a unit compiled after it.
-    #[archived_with(InKeyOrder)]
-    classified: Sorted<Global, Classified>,
+    /// The name each definition a record concludes of is filed under: the declaration's whose record holds what elaboration concluded of the definition ([`Concluded`]). Never stored, being read off the records where they are filed or restored.
+    #[archived_with(curios_archive::Skip)]
+    concluding: Sorted<Global, Global>,
 }
 
 /// What elaboration concluded of one definition as it published it, beside its terms: what a declaration reads of the definition that Core holds nothing of.
@@ -245,13 +269,30 @@ impl Foreign {
 }
 
 impl Traces {
-    /// File `record` as the declaration written as `name`'s: another unit's record of it, held where that unit holds it, or one a store held.
+    /// File `record` as the declaration written as `name`'s, in place of the one filed under it: another unit's record of it, held where that unit holds it, or one a store held.
     pub fn share(&mut self, name: Global, record: HeldTrace) {
+        self.forget(&name);
+        for (definition, _) in &record.concluded.classified {
+            self.concluding.insert(*definition, name);
+        }
         self.declarations.insert(name, record);
     }
 
     /// Take out the trace held under `name`, where one is: a declaration no longer written as it.
     pub fn forget(&mut self, name: &Global) {
+        let Some(record) = self.declarations.get(name) else {
+            return;
+        };
+        let concluded = record
+            .concluded
+            .classified
+            .iter()
+            .map(|(definition, _)| *definition)
+            .filter(|definition| self.concluding.get(definition) == Some(name))
+            .collect::<Vec<_>>();
+        for definition in &concluded {
+            self.concluding.remove(definition);
+        }
         self.declarations.remove(name);
     }
 
@@ -305,19 +346,15 @@ impl Traces {
         self.declarations.iter().map(|(_, trace)| &***trace)
     }
 
-    /// What elaboration concluded of the definition `name` as it published it, where the unit holds one.
+    /// What elaboration concluded of the definition `name` as it published it, where a record the unit holds concludes of it.
     pub fn classified(&self, name: &Global) -> Option<&Classified> {
-        self.classified.get(name)
-    }
-
-    /// File `classified` as what elaboration concluded of the definition `name`, in place of what was filed of it.
-    pub fn classify(&mut self, name: Global, classified: Classified) {
-        self.classified.insert(name, classified);
-    }
-
-    /// Take out what was filed of the definition `name`: a name the unit no longer defines.
-    pub fn unclassify(&mut self, name: &Global) {
-        self.classified.remove(name);
+        let declaration = self.concluding.get(name)?;
+        self.declarations
+            .get(declaration)?
+            .concluded
+            .classified
+            .iter()
+            .find_map(|(definition, classified)| (definition == name).then_some(classified))
     }
 }
 
@@ -637,6 +674,7 @@ pub struct TraceTable {
 struct TabledTrace {
     name: u32,
     asked: Trace<Question<u32, u32>, Answered<u32>>,
+    classified: Vec<(u32, Classified)>,
     made: Option<TabledMade>,
 }
 
@@ -647,7 +685,6 @@ struct TabledMade {
     reads: Vec<Read>,
     outputs: Vec<[u8; 32]>,
     credited: Vec<(u32, u32)>,
-    classified: Vec<(u32, Classified)>,
 }
 
 impl TabledTrace {
@@ -673,16 +710,18 @@ impl TabledTrace {
                         .into_iter()
                         .map(|(place, ordinal)| Ok((name(place)?, ordinal)))
                         .collect::<Result<_, String>>()?,
-                    classified: made
-                        .classified
-                        .into_iter()
-                        .map(|(place, classified)| Ok((name(place)?, classified)))
-                        .collect::<Result<_, String>>()?,
                 })
             })
             .transpose()?;
+        let concluded = Concluded {
+            classified: self
+                .classified
+                .into_iter()
+                .map(|(place, classified)| Ok((name(place)?, classified)))
+                .collect::<Result<_, String>>()?,
+        };
 
-        Ok((name(self.name)?, trace, made))
+        Ok((name(self.name)?, trace, concluded, made))
     }
 }
 
@@ -789,7 +828,7 @@ impl TraceTable {
         let mut keys = Placing::new();
         let declarations = entries
             .into_iter()
-            .map(|(name, trace, made)| {
+            .map(|(name, trace, concluded, made)| {
                 let mut asked = Trace::default();
                 for (question, answered) in trace.asked() {
                     let Ok(question) = question.spelled(
@@ -813,16 +852,16 @@ impl TraceTable {
                         .iter()
                         .map(|(name, place)| (names.place(*name), *place))
                         .collect(),
-                    classified: made
-                        .classified
-                        .iter()
-                        .map(|(name, classified)| (names.place(*name), classified.clone()))
-                        .collect(),
                 });
 
                 TabledTrace {
                     name: names.place(*name),
                     asked,
+                    classified: concluded
+                        .classified
+                        .iter()
+                        .map(|(name, classified)| (names.place(*name), classified.clone()))
+                        .collect(),
                     made,
                 }
             })
@@ -852,14 +891,14 @@ impl Records for Traces {
                     unread.insert(TraceTable::read(bytes)?.into_iter().map(Some).collect())
                 }
             };
-            let (name, trace, made) = usize::try_from(member.index)
+            let (name, trace, concluded, made) = usize::try_from(member.index)
                 .ok()
                 .and_then(|index| run.get_mut(index))
                 .and_then(Option::take)
                 .ok_or_else(|| format!("a run of traces holds no member {}", member.index))?;
-            traces.declarations.insert(
+            traces.share(
                 name,
-                Rc::new(TraceRecord::restored(trace, made, object.digest)),
+                Rc::new(TraceRecord::restored(trace, concluded, made, object.digest)),
             );
         }
 

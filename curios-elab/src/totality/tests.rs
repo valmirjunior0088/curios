@@ -3,7 +3,8 @@ use {
     crate::*,
     curios_analysis::test_support::*,
     curios_common::Qualifier,
-    curios_core::{DefinitionKind, Intrinsic, UniverseContext, Universes},
+    curios_core::{DefinitionKind, Intrinsic, Trace, UniverseContext, Universes},
+    std::rc::Rc,
 };
 
 /// A qualified top-level name, from the path a test writes. Fixture-only.
@@ -85,6 +86,10 @@ fn a_filed_verdict_is_what_a_later_unit_reads_back() {
     // Unfiled reads as partial, which is the fail-closed default rather than a verdict. Classifying against a clean prelude is what makes it total, so the flip is evidence the verdict was filed.
     assert_eq!(read(&traces), Totality::Partial);
     classify_totality(&mut context, &caller).expect("classified");
-    traces.classify(name("caller"), context.classified(&name("caller")));
+    let classified = vec![(name("caller"), context.classified(&name("caller")))];
+    traces.share(
+        name("caller"),
+        Rc::new(TraceRecord::new(Trace::default(), Concluded { classified })),
+    );
     assert_eq!(read(&traces), Totality::Total);
 }

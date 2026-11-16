@@ -18,8 +18,8 @@ use {
         withhold,
     },
     crate::{
-        Answered, Classified, Context, Error, Established, Foreign, GoalSite, HeldTrace, Made,
-        Parts, Question, Read, Readers, Same, TraceRecord, Traces, bytes_of, concepts_alike,
+        Answered, Classified, Concluded, Context, Error, Established, Foreign, GoalSite, HeldTrace,
+        Made, Parts, Question, Read, Readers, Same, TraceRecord, Traces, bytes_of, concepts_alike,
         declaration_input, entries_alike, found, inducts_alike, item_part_digest, items_of,
         lowered_digest, part_digest, structs_alike,
     },
@@ -473,7 +473,6 @@ impl<'a> Demand<'a> {
                 readers.replace(*name, Some(trace), None);
             }
             self.traces.forget(name);
-            self.traces.unclassify(name);
         }
         // A key at which the unit declares other witnesses than the baseline did: a witness's name states its key, so a key moved where a witness was gained or dropped there. Every witness the unit declares there is attempted, so the one registered first is the one a whole compile registers.
         let moved = gained
@@ -1002,13 +1001,6 @@ impl<'a> Demand<'a> {
         self.traces.share(*first, record);
     }
 
-    /// File what elaboration concluded of each definition of `made`, an item that stands, in place of what the baseline filed of it.
-    fn classify(&mut self, context: &Context, made: &Item) {
-        for name in made.declared_names() {
-            self.traces.classify(name, context.classified(&name));
-        }
-    }
-
     /// Note which parts of `made`, an item elaborated again over a baseline, came out as the baseline holds them.
     fn compare(&mut self, context: &Context, made: &Item) {
         let Some(over) = self.over else {
@@ -1104,8 +1096,7 @@ impl<'a> Demand<'a> {
 
             curios_profile::sample!("demand::adopted", record.len());
             for (position, item) in positions.iter().zip(items) {
-                context.publish_adopted(&item, &made.classified);
-                self.classify(context, &item);
+                context.publish_adopted(&item, &record.concluded().classified);
                 self.compare(context, &item);
                 self.survivors.keep(ItemStamp(*position), item, Vec::new());
             }
@@ -1287,13 +1278,25 @@ impl<'a> Demand<'a> {
                 // What the attempt that stands asked of the declarations around it is its declaration's.
                 let trace = context.take_trace();
                 curios_profile::sample!("demand::asked", trace.len());
-                self.file(&names, Rc::new(TraceRecord::new(trace)));
+                // What elaboration concluded of each definition an item that stands made, filed with the record that keeps it.
+                let classified = outcomes
+                    .iter()
+                    .filter_map(|outcome| match outcome {
+                        Outcome::Kept(elaborated, _) => Some(elaborated.declared_names()),
+                        _ => None,
+                    })
+                    .flatten()
+                    .map(|name| (name, context.classified(&name)))
+                    .collect();
+                self.file(
+                    &names,
+                    Rc::new(TraceRecord::new(trace, Concluded { classified })),
+                );
                 self.poison = poison;
                 let mut holding = Vec::new();
                 for (position, outcome) in items.iter().zip(outcomes) {
                     match outcome {
                         Outcome::Kept(elaborated, obligations) => {
-                            self.classify(context, &elaborated);
                             self.compare(context, &elaborated);
                             self.survivors
                                 .keep(ItemStamp(*position), elaborated, obligations);

@@ -147,7 +147,7 @@ impl Kind {
                 let run = TraceTable::run(
                     entries
                         .iter()
-                        .map(|(_, name, held)| (name, &***held, held.made())),
+                        .map(|(_, name, held)| (name, &***held, held.concluded(), held.made())),
                 )?;
 
                 members(

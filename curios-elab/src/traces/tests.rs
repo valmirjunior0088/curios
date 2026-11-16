@@ -8,7 +8,7 @@ fn named(segments: &[&str]) -> Global {
 
 /// File `trace` in `traces` as what the declaration written as `name` asked, as a walk files a declaration it made.
 fn file(traces: &mut Traces, name: Global, trace: Trace<Question, Answered>) {
-    traces.share(name, Rc::new(TraceRecord::new(trace)));
+    traces.share(name, Rc::new(TraceRecord::new(trace, Concluded::default())));
 }
 
 fn asking(questions: &[(Question, Answered)]) -> Trace<Question, Answered> {

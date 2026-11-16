@@ -154,17 +154,11 @@ impl<'a> Candidating<'a> {
             return Ok(None);
         };
 
-        let classified = names
-            .iter()
-            .filter_map(|name| Some((*name, self.traces.classified(name)?.clone())))
-            .collect();
-
         Ok(Some(Made {
             input: declaration_input(inputs),
             reads,
             outputs,
             credited: credited(&names),
-            classified,
         }))
     }
 
@@ -215,13 +209,19 @@ pub fn found(
             let member = object
                 .member
                 .filter(|member| member.kind == TraceTable::KIND)?;
-            let (traced, trace, made) =
+            let (traced, trace, concluded, made) =
                 TraceTable::member(object.bytes.as_slice(), member.index).ok()?;
             let made =
                 made.filter(|made| made.input == *input && made.reads.len() == trace.len())?;
 
-            (traced == *name)
-                .then(|| Rc::new(TraceRecord::restored(trace, Some(made), object.digest)))
+            (traced == *name).then(|| {
+                Rc::new(TraceRecord::restored(
+                    trace,
+                    concluded,
+                    Some(made),
+                    object.digest,
+                ))
+            })
         })
         .collect()
 }
