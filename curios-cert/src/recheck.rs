@@ -90,7 +90,8 @@ use {
         stated_marks, universe_verdict, unstated_entry,
     },
     curios_analysis::{
-        Declarations, PositivityRefusal, group_applications, positivity_vectors, variance_vectors,
+        Declarations, PositivityRefusal, definition_applications, group_applications,
+        positivity_vectors, variance_vectors,
     },
     curios_common::{Candidates, Facet, SyntaxRegistry, grown},
     curios_core::{
@@ -909,7 +910,16 @@ fn verdicts_within<'s>(
                 }
 
                 let (proof, value_sort) = match outcome {
-                    Ok(Stated { proof, value_sort }) => (proof, value_sort),
+                    Ok(Stated { proof, value_sort }) => {
+                        // How it applies its parameters, read off the body as checked, within the item's judgment, as a group's members are.
+                        if let Ok(Some(applied)) =
+                            definition_applications(certifier, &definition.body)
+                        {
+                            certifier.file_applications(&definition.name, applied.clone());
+                            applications.insert(definition.name, applied);
+                        }
+                        (proof, value_sort)
+                    }
                     Err(error) => {
                         verdicts.push(Verdict {
                             name: Some(definition.name),

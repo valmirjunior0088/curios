@@ -24,7 +24,7 @@ use {
         validate_entry_universes, validate_universes, zonk, zonk_arity, zonk_entry, zonk_published,
         zonk_solved_term_metas,
     },
-    curios_analysis::{group_applications, group_totality},
+    curios_analysis::{definition_applications, group_applications, group_totality},
     curios_common::{Candidates, Mount, Plicity, Qualifier, grown},
     curios_core::{
         Advance, Bound, ConceptDecl, Declarations, Definition, DefinitionKind, Definitions,
@@ -646,6 +646,10 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<(Item
 
     // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
     record_definition_totality(context, &definition, Totality::Total)?;
+    // How it applies its parameters, as a group's member files it, so a call through it is graded where it applies them; a budget that runs out leaves it summarizing nothing, as a group's does.
+    if let Ok(Some(applications)) = definition_applications(context, &definition.body) {
+        context.record_definition_applications(&definition.name, applications);
+    }
     Ok((Item::Let(Box::new(definition)), vectors))
 }
 

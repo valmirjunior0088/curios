@@ -476,3 +476,94 @@ fn a_callback_is_handed_on_at_the_place_core_counts_hidden_binders_included() {
             matches!(error, curios_cert::Error::NotTotal { .. })
         });
 }
+
+// A definition that is no recursive group publishes how it applies its parameters as a group's member does: `apply_some` applies `f` to the payload of `m`, so `depth`'s recursion through the lambda it hands `apply_some` descends. The refusal has `apply_some` apply `f` to a tree it built around `m`, which nothing is below.
+#[test]
+fn a_callback_handed_to_a_definition_of_no_group_is_graded_where_it_applies_it() {
+    control(
+        r#"
+        use /std/{Nat, Bool, Option};
+
+        induct Tree: Type
+        | leaf(Nat)
+        | node(Option(Tree))
+        end
+
+        let apply_some(m: Option(Tree), f: (Tree) -> Nat) -> Nat =
+            match m | some(a) => f(a) | none() => 0 end;
+
+        let depth(t: Tree) -> Nat =
+            match t | leaf(n) => n | node(o) => apply_some(o, (c) => depth(c)) end;
+
+        let Shallow(t: Tree) -> Prop = Bool/Holds(depth(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| some(a) => f(a)", "| some(a) => f(Tree/node(m))")])
+    .by_elaborator_in("/Shallow", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Shallow", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// `/sys/List/map` applies its function to each element of its list, so a member handed to it bare is called on something below the list: `total` mapped over a tree's children descends. The refusal maps `total` over a list holding the tree itself.
+#[test]
+fn a_member_handed_to_a_list_map_is_called_below_the_list() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        let total(t: Rose) -> Nat =
+            match t | rose(n, cs) => n + List/len(List/map(cs, total)) end;
+
+        let Small(t: Rose) -> Prop = Bool/Holds(total(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("List/map(cs, total)", "List/map([t], total)")])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// `/sys/List/fold` applies its function to each element of its list and the accumulator, so a lambda handed to it binds an element below the list and an accumulator below nothing: `total`'s call on the element descends. The refusal calls `total` on the tree being folded over.
+#[test]
+fn a_lambda_handed_to_a_list_fold_binds_its_element_below_the_list() {
+    control(
+        r#"
+        use /std/{Nat, Bool, List};
+
+        induct Rose: Type
+        | rose(Nat, List(Rose))
+        end
+
+        let total(t: Rose) -> Nat =
+            match t | rose(n, cs) => List/fold(cs, n, (c, acc) => acc + total(c)) end;
+
+        let Small(t: Rose) -> Prop = Bool/Holds(total(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("acc + total(c)", "acc + total(t)")])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

@@ -468,7 +468,7 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
     let arities = vec![1];
     let mut walk = Walk {
         env: &mut certifier,
-        group,
+        group: Some(group),
         parts: &parts,
         arities: &arities,
         caller: 0,
@@ -550,7 +550,7 @@ fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
     let arities = vec![1];
     let mut walk = Walk {
         env: &mut certifier,
-        group,
+        group: Some(group),
         parts: &parts,
         arities: &arities,
         caller: 0,

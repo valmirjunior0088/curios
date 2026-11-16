@@ -47,11 +47,14 @@ use {
     curios_core::{
         Advance, Applications, Arity, Bound, CallMatrix, Carrier, Cases, FieldApplications,
         Foreign, Free, Func, FuncType, InductType, Intrinsic, Many, Match, Nat, One, Probe, Proj,
-        RecGroup, Scope, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple, TupleType,
-        Two, Variant,
+        RecGroup, Scope, Size, Struct, StructType, Subterm, Telescope, Term, Totality, Tuple,
+        TupleType, Two, Variant,
     },
     curios_num::Natural,
-    std::collections::{BTreeSet, HashMap, hash_map::Entry},
+    std::{
+        collections::{BTreeSet, HashMap, hash_map::Entry},
+        slice,
+    },
 };
 
 /// Whether every recursive call path in `group` descends, discovering the calls by walking its member bodies.
@@ -70,7 +73,7 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Result<Totality,
     for (index, part) in parts.iter().enumerate() {
         let mut walk = Walk {
             env,
-            group,
+            group: Some(group),
             parts: &shapes,
             arities: &arities,
             caller: index,
@@ -101,6 +104,32 @@ pub fn group_applications<E: Env>(
 ) -> Result<Vec<Applications>, E::Error> {
     curios_profile::profile!("group_applications");
     let parts = open_parts(env, group);
+    summaries(env, Some(group), parts, group.length())
+}
+
+/// How a definition that is no recursive group applies its parameters, as [`group_applications`] reads a member's: `None` where it applies none, and where no parameter of its leading lambdas is of a type that is applied or projected, whose body is not walked.
+pub fn definition_applications<E: Env>(
+    env: &mut E,
+    body: &Term,
+) -> Result<Option<Applications>, E::Error> {
+    curios_profile::profile!("definition_applications");
+    let Some(parts) = open_definition(env, body)? else {
+        return Ok(None);
+    };
+    let applications = summaries(env, None, parts, 1)?;
+    Ok(applications
+        .into_iter()
+        .next()
+        .filter(|applications| !applications.is_empty()))
+}
+
+/// The summaries of `members` members whose parts are `parts`, walked as parts of `group` where there is one, and as parts of no group otherwise ([`group_applications`]).
+fn summaries<E: Env>(
+    env: &mut E,
+    group: Option<&RecGroup>,
+    parts: Vec<Part>,
+    members: usize,
+) -> Result<Vec<Applications>, E::Error> {
     let shapes = parts
         .iter()
         .map(|part| part.shape.clone())
@@ -128,7 +157,7 @@ pub fn group_applications<E: Env>(
         calls.extend(walk.calls);
         uses.push(walk.tracked.expect("a tracking walk keeps its record"));
     }
-    let bases = (0..group.length())
+    let bases = (0..members)
         .map(|member| base_part(&shapes, member))
         .collect::<Vec<_>>();
 
@@ -271,7 +300,8 @@ pub fn decide(calls: Vec<Call>) -> Totality {
 /// One member body's traversal: it finds the recursive calls, and has [`grade()`] grade each under the context its arms built.
 struct Walk<'a, E: Env> {
     env: &'a mut E,
-    group: &'a RecGroup,
+    /// The group whose members the walk reads as callees, and none where it walks a definition that is no group, whose calls are all of other declarations.
+    group: Option<&'a RecGroup>,
     /// The group's parts, which a call's path is read against ([`part_calls`]).
     parts: &'a [PartShape],
     /// Each part's arity — the columns a call to it is graded over.
@@ -322,6 +352,12 @@ impl<E: Env> Walk<'_, E> {
         self.tracked.is_some() && self.params.iter().any(|param| term.mentions_free(param))
     }
 
+    /// The member of the group walked that `term` names, where it names one: a projection of any other group names none, and so does every term where no group is walked.
+    fn member(&self, term: &Term) -> Option<usize> {
+        let (group, member) = term.as_rec_proj()?;
+        (Some(group) == self.group).then_some(member)
+    }
+
     /// Record an application of the parameter at `position` to `arguments`, or of its field at `path`, graded against the member's parameters under what the enclosing arms established.
     fn applied(
         &mut self,
@@ -330,10 +366,7 @@ impl<E: Env> Walk<'_, E> {
         arguments: &[Term],
     ) -> Result<(), E::Error> {
         if !self.summarizes {
-            if let Some(tracked) = &mut self.tracked {
-                tracked.escaped[position] = true;
-            }
-            return Ok(());
+            return self.recorded(position, path, None);
         }
         let graded = grade(
             self.env,
@@ -344,10 +377,47 @@ impl<E: Env> Walk<'_, E> {
             arguments.len(),
             arguments,
         )?;
+        self.recorded(position, path, Some(graded.matrix))
+    }
+
+    /// Record an application a list operation makes of the parameter at `position`, its function operand, on each element of `list`: the element below `list` as `list` stands to the member's parameters, and the rest of its `arity` arguments, a fold's accumulator, claiming nothing.
+    fn element_applied(
+        &mut self,
+        position: usize,
+        list: &Term,
+        arity: usize,
+    ) -> Result<(), E::Error> {
+        if !self.summarizes {
+            return self.recorded(position, None, None);
+        }
+        let graded = grade(
+            self.env,
+            &self.context,
+            self.caller,
+            self.params,
+            self.caller,
+            1,
+            slice::from_ref(list),
+        )?;
+        let mut matrix = CallMatrix::unknown(self.params.len(), arity);
+        for row in 0..self.params.len() {
+            matrix.set(row, 0, Size::Less.compose(graded.matrix.entry(row, 0)));
+        }
+        self.recorded(position, None, Some(matrix))
+    }
+
+    /// Keep `matrix`, an application of the parameter at `position` or of its field at `path`, in the record a summarizing walk keeps; with none, a part whose rows the summary does not read, the position is used otherwise.
+    fn recorded(
+        &mut self,
+        position: usize,
+        path: Option<Vec<usize>>,
+        matrix: Option<CallMatrix>,
+    ) -> Result<(), E::Error> {
         if let Some(tracked) = &mut self.tracked {
-            match path {
-                None => tracked.applied[position].push(graded.matrix),
-                Some(path) => tracked.fields[position].push((path, graded.matrix)),
+            match (matrix, path) {
+                (None, _) => tracked.escaped[position] = true,
+                (Some(matrix), None) => tracked.applied[position].push(matrix),
+                (Some(matrix), Some(path)) => tracked.fields[position].push((path, matrix)),
             }
         }
         Ok(())
@@ -403,10 +473,7 @@ impl<E: Env> Walk<'_, E> {
             _ => {}
         }
         let (root, steps) = call_path(argument);
-        let member = root
-            .as_rec_proj()
-            .filter(|(group, _)| *group == self.group)
-            .map(|(_, member)| member);
+        let member = self.member(&root);
         let given = steps
             .iter()
             .map(|step| match step {
@@ -725,12 +792,8 @@ impl<E: Env> Walk<'_, E> {
             Subterm::Sort(_) | Subterm::Instance(_) | Subterm::Metavar(_) => Ok(()),
 
             // A member reference at the head of a spine is a call with those arguments; anywhere else it is a call of each of its parts the analysis cannot grade, which an all-unknown matrix records faithfully ([`part_calls`]) — save where it is handed to a definition that applies it as its summary states, which the application arm below grades through each application. The guard names *this* group alone: a projection of any other group is that group's only appearance in the term, so it falls through to the general `rec` arm and its bodies are walked like any nested group's.
-            Subterm::Rec(_)
-                if term
-                    .as_rec_proj()
-                    .is_some_and(|(group, _)| group == self.group) =>
-            {
-                let (_, index) = term.as_rec_proj().expect("a projection");
+            Subterm::Rec(_) if self.member(term).is_some() => {
+                let index = self.member(term).expect("a member");
                 for (part, given) in part_calls(self.parts, index, &[]) {
                     self.call(part, &given)?;
                 }
@@ -746,9 +809,7 @@ impl<E: Env> Walk<'_, E> {
                     .flat_map(Segment::arguments)
                     .cloned()
                     .collect::<Vec<_>>();
-                if let Some((group, member)) = spine_head.as_rec_proj()
-                    && group == self.group
-                {
+                if let Some(member) = self.member(&spine_head) {
                     for (part, given) in part_calls(self.parts, member, &steps) {
                         self.call(part, &given)?;
                     }
@@ -827,9 +888,7 @@ impl<E: Env> Walk<'_, E> {
             // A path of this group's member that ends in a projection names the parts it reaches without calling them, which are calls the analysis cannot grade past the arguments it was handed.
             Subterm::Proj(Proj { head, .. }) => {
                 let (root, steps) = call_path(term);
-                if let Some((group, member)) = root.as_rec_proj()
-                    && group == self.group
-                {
+                if let Some(member) = self.member(&root) {
                     for (part, given) in part_calls(self.parts, member, &steps) {
                         self.call(part, &given)?;
                     }
@@ -861,6 +920,30 @@ impl<E: Env> Walk<'_, E> {
             Subterm::Transient(transient) => self.walks(transient.subterms()),
 
             Subterm::Intrinsic(intrinsic) => {
+                // A list operation applies its function operand to each element of its list, so a parameter standing there is applied, as a summary states it, to something below the list.
+                let elementwise = match intrinsic {
+                    Intrinsic::ListMap {
+                        from,
+                        to,
+                        list,
+                        function,
+                    } => Some((list, function, 1, vec![from, to, list])),
+                    Intrinsic::ListFold {
+                        element,
+                        result,
+                        list,
+                        init,
+                        function,
+                    } => Some((list, function, 2, vec![element, result, list, init])),
+                    _ => None,
+                };
+                if let Some((list, function, arity, rest)) = elementwise
+                    && let Subterm::Var(var) = &**function
+                    && let Some(position) = self.tracked_position(var.as_free())
+                {
+                    self.element_applied(position, list, arity)?;
+                    return self.walks(&rest.into_iter().cloned().collect::<Vec<_>>());
+                }
                 let mut terms = Vec::new();
                 intrinsic.any_term(&mut |child| {
                     terms.push(child.clone());

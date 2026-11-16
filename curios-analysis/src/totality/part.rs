@@ -214,20 +214,55 @@ pub(super) struct Part {
 pub(super) fn open_parts<E: Env>(env: &mut E, group: &RecGroup) -> Vec<Part> {
     let mut parts = Vec::new();
     for member in 0..group.length() {
-        let (params, body) = peel(env, group.member_body(member));
-        let base = parts.len();
-        parts.push(Part {
-            shape: PartShape {
-                member,
-                path: Vec::new(),
-                arity: params.len(),
-            },
-            params: params.clone(),
-            runs: Vec::new(),
-        });
-        parts[base].runs = record(env, member, &[], &params, &body, &mut parts);
+        let (params, _, body) = peel(env, group.member_body(member));
+        open_member(env, member, params, &body, &mut parts);
     }
     parts
+}
+
+/// The parts of a definition that is no recursive group, numbered as a group's lone member's are; `None` where no parameter of its leading lambdas is of a type that is applied or projected — a function, a structure or a tuple — so nothing of it can be summarized and its body is not walked.
+pub(super) fn open_definition<E: Env>(
+    env: &mut E,
+    body: &Term,
+) -> Result<Option<Vec<Part>>, E::Error> {
+    let (params, types, body) = peel(env, body.clone());
+    let mut applicable = false;
+    for type_ in &types {
+        if matches!(
+            &*env.force(type_)?,
+            Subterm::FuncType(_) | Subterm::StructType(_) | Subterm::TupleType(_)
+        ) {
+            applicable = true;
+            break;
+        }
+    }
+    if !applicable {
+        return Ok(None);
+    }
+    let mut parts = Vec::new();
+    open_member(env, 0, params, &body, &mut parts);
+    Ok(Some(parts))
+}
+
+/// Push member `member`'s parts: its leading lambdas, binding `params`, and the fields of the record `body`, under them, answers.
+fn open_member<E: Env>(
+    env: &mut E,
+    member: usize,
+    params: Vec<Free>,
+    body: &Term,
+    parts: &mut Vec<Part>,
+) {
+    let base = parts.len();
+    parts.push(Part {
+        shape: PartShape {
+            member,
+            path: Vec::new(),
+            arity: params.len(),
+        },
+        params: params.clone(),
+        runs: Vec::new(),
+    });
+    parts[base].runs = record(env, member, &[], &params, body, parts);
 }
 
 /// Each part's shape: what a call is graded over and where a path leads.
@@ -238,20 +273,22 @@ pub fn group_parts<E: Env>(env: &mut E, group: &RecGroup) -> Vec<PartShape> {
         .collect()
 }
 
-/// Peel `body`'s leading lambdas, minting one binder per parameter.
+/// Peel `body`'s leading lambdas, minting one binder per parameter, with each parameter's type over the binders before it.
 ///
 /// A member with no lambda — `rec inf : F = F/more(inf)`, or any of `/std/Json/decode`'s nullary parsers — has no parameter, and its self-call therefore contributes a 0×0 matrix. That matrix is idempotent and has no diagonal to descend on, so a nullary self-call is rejected, which is exactly right: nothing about it can get smaller.
-fn peel<E: Env>(env: &mut E, mut body: Term) -> (Vec<Free>, Term) {
+fn peel<E: Env>(env: &mut E, mut body: Term) -> (Vec<Free>, Vec<Term>, Term) {
     let mut params = Vec::new();
+    let mut types = Vec::new();
     while let Subterm::Func(Func { telescope, .. }) = &*body {
         let mut cursor = telescope.cursor();
-        while !cursor.is_done() {
+        while let Some((_, type_)) = cursor.entry() {
+            types.push(type_);
             params.push(cursor.advance_fresh(|hint| env.fresh(hint)));
         }
         let inner = cursor.body().expect("a cursor past every entry");
         body = inner;
     }
-    (params, body)
+    (params, types, body)
 }
 
 /// What `body`, at `path` under member `member`'s parameters `params`, runs where the part holding it is called: itself, unless it is a record literal, whose parameters and fields that are no part it runs, each field that is a lambda pushed as a part and each that is a record literal followed in turn.
@@ -274,7 +311,7 @@ fn record<E: Env>(
         at.push(slot);
         match &**field {
             Subterm::Func(_) => {
-                let (own, inner) = peel(env, field.clone());
+                let (own, _, inner) = peel(env, field.clone());
                 let mut all = params.to_vec();
                 all.extend(own);
                 parts.push(Part {
