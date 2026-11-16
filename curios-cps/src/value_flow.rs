@@ -35,14 +35,99 @@ use {
 /// What something may be: these, or any.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MayBe<T> {
-    Of(BTreeSet<T>),
+    Of(Ids<T>),
     Any,
+}
+
+/// A set of identities, ascending in a vector: what a fact holds of the functions or the constructions a value may be. A join merges two runs in one pass and a copy is one allocation, where a tree's are a node per handful of identities, and every solve copies and joins them by the hundred thousand ([`Solver::join`](crate::Solver::join)).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Ids<T>(Vec<T>);
+
+impl<T: Ord + Copy> Ids<T> {
+    /// No identity.
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    /// `item` alone.
+    pub fn one(item: T) -> Self {
+        Self(vec![item])
+    }
+
+    /// Whether `item` is among these.
+    pub fn contains(&self, item: &T) -> bool {
+        self.0.binary_search(item).is_ok()
+    }
+
+    /// These, ascending.
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.0.iter()
+    }
+
+    /// Gain every identity of `other` this lacks, answering whether any was.
+    pub fn absorb(&mut self, other: &Self) -> bool {
+        if other.0.iter().all(|item| self.contains(item)) {
+            return false;
+        }
+        let mut merged = Vec::with_capacity(self.0.len() + other.0.len());
+        let (mut left, mut right) = (self.0.iter().peekable(), other.0.iter().peekable());
+        loop {
+            match (left.peek(), right.peek()) {
+                (Some(&&l), Some(&&r)) => match l.cmp(&r) {
+                    std::cmp::Ordering::Less => {
+                        merged.push(l);
+                        left.next();
+                    }
+                    std::cmp::Ordering::Greater => {
+                        merged.push(r);
+                        right.next();
+                    }
+                    std::cmp::Ordering::Equal => {
+                        merged.push(l);
+                        left.next();
+                        right.next();
+                    }
+                },
+                (Some(&&l), None) => {
+                    merged.push(l);
+                    left.next();
+                }
+                (None, Some(&&r)) => {
+                    merged.push(r);
+                    right.next();
+                }
+                (None, None) => break,
+            }
+        }
+        self.0 = merged;
+
+        true
+    }
+}
+
+impl<T: Ord + Copy> FromIterator<T> for Ids<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(items: I) -> Self {
+        let mut items = items.into_iter().collect::<Vec<_>>();
+        items.sort_unstable();
+        items.dedup();
+
+        Self(items)
+    }
+}
+
+impl<T> IntoIterator for Ids<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
 }
 
 /// The rows a value may be a struct of: these, or any.
 pub type Rows = MayBe<RowId>;
 
-impl<T: Ord> MayBe<T> {
+impl<T: Ord + Copy> MayBe<T> {
     /// Whether `item` is among what it may be.
     pub fn may_be(&self, item: T) -> bool {
         match self {
@@ -52,15 +137,15 @@ impl<T: Ord> MayBe<T> {
     }
 
     fn nothing() -> Self {
-        MayBe::Of(BTreeSet::new())
+        MayBe::Of(Ids::new())
     }
 
     fn one(item: T) -> Self {
-        MayBe::Of(BTreeSet::from([item]))
+        MayBe::Of(Ids::one(item))
     }
 }
 
-impl<T: Ord + Clone> Lattice for MayBe<T> {
+impl<T: Ord + Copy> Lattice for MayBe<T> {
     fn bottom() -> Self {
         MayBe::nothing()
     }
@@ -78,12 +163,7 @@ impl<T: Ord + Clone> Lattice for MayBe<T> {
 
                 true
             }
-            (MayBe::Of(left), MayBe::Of(right)) => {
-                let before = left.len();
-                left.extend(right);
-
-                left.len() != before
-            }
+            (MayBe::Of(left), MayBe::Of(right)) => left.absorb(&right),
         }
     }
 }
@@ -345,7 +425,7 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
                 index: usize| match fact(solver, of).constructions {
         MayBe::Of(objects) => {
             let mut read = ValueFact::nothing();
-            for object in objects.intersection(kind) {
+            for object in objects.iter().filter(|object| kind.contains(object)) {
                 read.join(stored(solver, FlowKey::At(*object, index)));
             }
             read
@@ -427,17 +507,19 @@ fn solve(module: &Module, constructions: &Constructions) -> BTreeMap<FlowKey, Va
                     }
                     // A rebuild writes into the object `of` names and is that object: a construction of its row `of` may be, every one of them where `of` may be any.
                     ValueExpr::Rebuilt { of, row, slots } => {
+                        let of_row = constructions.of_row(*row);
                         let objects = match fact(solver, of).constructions {
                             MayBe::Of(objects) => objects
-                                .intersection(constructions.of_row(*row))
+                                .iter()
                                 .copied()
-                                .collect::<BTreeSet<_>>(),
-                            MayBe::Any => constructions.of_row(*row).clone(),
+                                .filter(|object| of_row.contains(object))
+                                .collect::<Ids<_>>(),
+                            MayBe::Any => of_row.iter().copied().collect(),
                         };
                         for (index, atom) in slots {
                             let incoming = fact(solver, atom);
                             solver.join(FlowKey::Slot(*row, *index), incoming.clone());
-                            for &object in &objects {
+                            for &object in objects.iter() {
                                 solver.join(FlowKey::At(object, *index), incoming.clone());
                             }
                         }

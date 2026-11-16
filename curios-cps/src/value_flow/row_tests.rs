@@ -4,7 +4,6 @@ use {
     super::*,
     crate::{test_support::*, *},
     curios_num::Natural,
-    std::collections::BTreeSet,
 };
 
 /// A program whose entry calls a function returning `returned`, which `produce` binds ahead of the return node it is handed, and resumes with what it returns in the value handed back. Where `tail`, a function between them calls the producer in tail position, so its return is the one the entry's call resumes with.
@@ -118,7 +117,7 @@ fn a_call_resumes_with_the_rows_its_callee_returns() {
 
         assert_eq!(
             rows_reaching(&module)[&received],
-            Rows::Of(BTreeSet::from([row])),
+            Rows::Of(Ids::one(row)),
             "tail: {tail}"
         );
     }
@@ -172,8 +171,8 @@ fn a_reference_read_out_of_a_value_is_the_rows_its_construction_stores() {
             })
         });
         let rows = match stores_a_row {
-            true => BTreeSet::from([row.expect("the producer built its row")]),
-            false => BTreeSet::new(),
+            true => Ids::one(row.expect("the producer built its row")),
+            false => Ids::new(),
         };
 
         assert_eq!(
