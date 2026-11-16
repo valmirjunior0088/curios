@@ -1,6 +1,6 @@
 //! The written binders a proof the elaborator wrote read.
 //!
-//! Every lint is a zero the lowering decides, and the one reference no written name makes is a proof the elaborator writes from the facts in scope: it reads the binders it sums. A binder one reads is *credited* here, by its declaration and its place among that declaration's written binders, and `unused-binder` does not report it. Appended to as proofs are written, and taken back where the candidate a proof was written inside is rolled back.
+//! The lowering records each written binder no written name references, and the one reference no written name makes is a proof the elaborator writes from the facts in scope: it reads the binders it sums. A binder one reads is *credited* here, by its declaration and its place among that declaration's written binders, and the lint owner (`curios-lint`) reports none it credits. Appended to as proofs are written, and taken back where the candidate a proof was written inside is rolled back.
 
 use {
     curios_core::{Free, Global, Term},
