@@ -664,6 +664,8 @@ pub fn flatten_indexed_lists(module: &mut Module) -> bool {
 /// Answer no for every row test whose operand no flow reaching it builds that row for ([`rows_reaching`]), in one sweep.
 ///
 /// A module with no row test pays nothing: the analysis is whole-module, so it runs only where a test stands for it to answer.
+///
+/// It answers in every round rather than only where the round's other passes moved nothing. A test the first rounds' inlining makes answerable is then answered while the rounds that settle what it exposes run anyway; answered once the rest had settled, it would start those rounds again, three or more of every pass for one answer, which costs a program whose test answers more than the solves it spares a program whose tests never do.
 pub fn answer_row_tests(module: &mut Module) -> bool {
     let asks = module.live_nodes().any(|(_, node)| {
         matches!(
