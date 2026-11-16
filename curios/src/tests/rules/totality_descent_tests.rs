@@ -711,3 +711,37 @@ fn a_callback_its_callee_hands_on_is_graded_as_unrelated() {
         matches!(error, curios_cert::Error::NotTotal { .. })
     });
 }
+
+// A parameter handed on at its own place to a member that takes no parameter there goes to what the member answers, which applies it where no summary of the member's parameters looks: `wrap(n)(f)` hands `f` to the function `wrap` answers, which applies it to `0`, so `hide` publishes nothing for `f`, and a recursion through a callback handed to `hide` is graded as fresh. Read as `wrap`'s parameter, `f` would be summarized by `hide`'s `f(k)` alone, below `n`, and `spin(0)`, which is `spin(0)` again, would be total. The control hands `wrap` a lambda of its own, so `hide` applies `f` below `n` and nowhere else, and `spin` descends.
+#[test]
+fn a_callback_handed_past_a_members_parameters_is_graded_as_unrelated() {
+    control(
+        r#"
+        use /std/{Nat};
+        use /std/Bool/{True};
+
+        let hide(n: Nat, f: (Nat) -> True) -> True =
+            match n
+            | 0 => wrap(n)((_) => True/qed())
+            | k + 1 => f(k)
+            end
+        and wrap(m: Nat) -> ((Nat) -> True) -> True =
+            match m
+            | 0 => (g) => g(0)
+            | k + 1 => (g) => hide(k, g)
+            end;
+
+        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("wrap(n)((_) => True/qed())", "wrap(n)(f)")])
+    .by_elaborator_in("/spin", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/spin", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

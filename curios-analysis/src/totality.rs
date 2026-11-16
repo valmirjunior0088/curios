@@ -82,9 +82,9 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Result<Totality,
 /// How many matrices a parameter's applications may close to before the parameter is summarized as used otherwise: the conservative direction, as a closure past its bound is `Partial`.
 const APPLICATIONS_LIMIT: usize = 64;
 
-/// How each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no member uses otherwise than as the head of an application or handed on unchanged at that position to a member, every application of it a member body makes, graded against that member's parameters, and every one reached through a path of the group's calls, graded through the path.
+/// How each member of `group` applies its parameters ([`Applications`]): for a parameter at a position no member uses otherwise than as the head of an application or handed on unchanged at that position to a member taking a parameter there, every application of it a member body makes, graded against that member's parameters, and every one reached through a path of the group's calls, graded through the path.
 ///
-/// **Only where every use is seen.** A use the walk cannot follow — the parameter stored, returned, handed to another function, handed to a member at another position, or named in a type — leaves the position unsummarized in every member, and a call through it is graded as it is without a summary. A member call handing a position something other than the caller's own parameter there hands the callee another function, whose applications the summary then counts as well: more matrices claim less, never more.
+/// **Only where every use is seen.** A use the walk cannot follow — the parameter stored, returned, handed to another function, handed to a member at another position or past its parameters, or named in a type — leaves the position unsummarized in every member, and a call through it is graded as it is without a summary. A member call handing a position something other than the caller's own parameter there hands the callee another function, whose applications the summary then counts as well: more matrices claim less, never more.
 pub fn group_applications<E: Env>(
     env: &mut E,
     group: &RecGroup,
@@ -616,9 +616,11 @@ impl<E: Env> Walk<'_, E> {
                     && group == self.group
                 {
                     self.call(index, &arguments)?;
-                    // A parameter handed on at its own position is the callee's parameter there, whose applications the summary reaches through this call.
+                    // A parameter handed on at its own position, where the callee takes one, is the callee's parameter there, whose applications the summary reaches through this call. One handed past the callee's parameters goes to what the callee answers, which applies it where no summary looks, so it is walked as any other use.
+                    let arity = self.arities[index];
                     let handed_on = |(position, argument): &(usize, &Term)| {
                         self.tracked.is_some()
+                            && *position < arity
                             && matches!(&***argument, Subterm::Var(var) if var.as_free() == self.params.get(*position))
                     };
                     let rest = arguments

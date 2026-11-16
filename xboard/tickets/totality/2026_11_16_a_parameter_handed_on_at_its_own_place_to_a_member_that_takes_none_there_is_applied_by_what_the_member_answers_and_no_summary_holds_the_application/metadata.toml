@@ -1,5 +1,5 @@
 title = "A parameter handed on at its own place to a member that takes none there is applied by what the member answers, and no summary holds the application"
-status = "open"
+status = "fixed"
 
 [[witness]]
 what = "a recursion through a callback `hide` hands past `wrap`'s one parameter to the function `wrap` answers, graded below its argument by `hide`'s summary"
