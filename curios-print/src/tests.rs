@@ -276,9 +276,30 @@ fn a_name_respelled_before_rendering_is_laid_out_at_its_new_width() {
     assert_eq!(
         annotations
             .iter()
-            .map(|annotation| annotation.name.as_str())
+            .map(|annotation| annotation.text.as_str())
             .collect::<Vec<_>>(),
         ["a", "b"]
+    );
+}
+
+#[test]
+fn a_word_is_annotated_as_one_and_is_no_name() {
+    let mut document = flat([word("let"), pure(" "), named("let"), pure(" = 1")]);
+    let mut names = Vec::new();
+    each_named(&mut document, |text, _| names.push(text.clone()));
+
+    let (text, annotations) = render_annotated(document, 2, 80);
+    assert_eq!(names, ["let"], "a word is no name to resolve");
+    assert_eq!(text, "let let = 1");
+    assert_eq!(
+        annotations
+            .iter()
+            .map(|annotation| (annotation.start, annotation.end, &annotation.annotated))
+            .collect::<Vec<_>>(),
+        [
+            (0, 3, &Annotated::Word),
+            (4, 7, &Annotated::Name { written: None }),
+        ]
     );
 }
 

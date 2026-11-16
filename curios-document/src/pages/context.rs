@@ -2,19 +2,14 @@
 
 use {
     super::{Bundle, Paragraph, Span, paragraphs, spans},
-    crate::{Declaration, Kind, Member, ModuleDocumentation, Signature},
+    crate::{Declaration, Kind, Marked, Member, ModuleDocumentation, Signature},
     askama::Template,
-    curios_common::Qualifier,
+    curios_common::{Class, Keyword, Qualifier},
     std::collections::BTreeMap,
 };
 
 /// The version every page's footer names: the compiler's.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// The words a signature sets apart from names and binders.
-const KEYWORDS: &[&str] = &[
-    "pub", "let", "induct", "struct", "concept", "satisfy", "foreign", "use", "mod",
-];
 
 /// One module's page, the root's doubling as the landing page.
 #[derive(Template)]
@@ -119,12 +114,14 @@ struct MemberRow {
     prose: Vec<Paragraph>,
 }
 
-/// A piece of a printed signature: text, a keyword, a link to a declaration in this bundle, or the name of one outside it.
+/// A piece of a printed signature: text, or a span the printer set apart, painted by its class's name and linked where it names a declaration in this bundle.
 enum Segment {
     Text(String),
-    Keyword(String),
-    Link { href: String, text: String },
-    Name(String),
+    Marked {
+        class: &'static str,
+        text: String,
+        href: Option<String>,
+    },
 }
 
 /// One `satisfy` on a page: its head with its links, whether the compiler wrote its body, and the note written above it.
@@ -271,7 +268,17 @@ fn card(bundle: &Bundle<'_>, depth: usize, declaration: &Declaration) -> Card {
 
     // The block as the source writes it, where the representation is shown: an inductive's constructors each after a bar and closed by `end`, a structure's fields and a concept's methods in braces, each with its comma. A sealed concept still lists its methods.
     let (layout, opener, lead, trail, closer) = match (declaration.kind, declaration.opaque) {
-        (Kind::Inductive, false) => ("cases", "", "| ", "", vec![Segment::Keyword("end".into())]),
+        (Kind::Inductive, false) => (
+            "cases",
+            "",
+            "| ",
+            "",
+            vec![Segment::Marked {
+                class: Keyword::End.class().name(),
+                text: Keyword::End.spelling().to_string(),
+                href: None,
+            }],
+        ),
         (Kind::Structure, false) | (Kind::Concept, _) => {
             ("fields", " {", "", ",", vec![Segment::Text("}".into())])
         }
@@ -314,32 +321,42 @@ fn segments(bundle: &Bundle<'_>, depth: usize, signature: &Signature) -> Vec<Seg
     let mut segments = Vec::new();
     let mut at = 0;
     for mark in &signature.marks {
-        words(&signature.text[at..mark.start], &mut segments);
+        plain(&signature.text[at..mark.start], &mut segments);
         let text = signature.text[mark.start..mark.end].to_string();
-        match mark
-            .within
-            .then(|| bundle.href(depth, &mark.referent))
-            .flatten()
-        {
-            Some(href) => segments.push(Segment::Link { href, text }),
-            None => segments.push(Segment::Name(text)),
-        }
+        segments.push(match &mark.marked {
+            Marked::Word(class) => Segment::Marked {
+                class: class.name(),
+                text,
+                href: None,
+            },
+            // A name the compilation does not class keeps the page's own word for a name.
+            Marked::Name {
+                class,
+                referent,
+                within,
+            } => Segment::Marked {
+                class: class.map_or("name", Class::name),
+                text,
+                href: within.then(|| bundle.href(depth, referent)).flatten(),
+            },
+        });
         at = mark.end;
     }
-    words(&signature.text[at..], &mut segments);
+    plain(&signature.text[at..], &mut segments);
     segments
 }
 
 /// The keyword a declaration is written with.
 pub fn keyword(kind: Kind) -> &'static str {
     match kind {
-        Kind::Definition => "let",
-        Kind::Inductive => "induct",
-        Kind::Structure => "struct",
-        Kind::Concept => "concept",
-        Kind::Witness => "satisfy",
-        Kind::Foreign => "foreign",
+        Kind::Definition => Keyword::Let,
+        Kind::Inductive => Keyword::Induct,
+        Kind::Structure => Keyword::Struct,
+        Kind::Concept => Keyword::Concept,
+        Kind::Witness => Keyword::Satisfy,
+        Kind::Foreign => Keyword::Foreign,
     }
+    .spelling()
 }
 
 /// What a member of a declaration of `kind` is called in the index: a constructor a case, a field a field, a concept's method a method. The other kinds expose no members, so the word for one is never shown.
@@ -352,41 +369,27 @@ pub fn member_kind(kind: Kind) -> &'static str {
     }
 }
 
-/// How many declarations of each kind, in the order the keywords are listed, skipping the kinds with none.
+/// How many declarations of each kind, in the order of [`Kind`], skipping the kinds with none.
 fn counts(declarations: &[Declaration]) -> String {
     let mut tally = BTreeMap::new();
     for declaration in declarations {
-        *tally.entry(keyword(declaration.kind)).or_insert(0usize) += 1;
+        *tally.entry(declaration.kind).or_insert(0usize) += 1;
     }
-    KEYWORDS
-        .iter()
-        .filter_map(|keyword| tally.get(keyword).map(|count| format!("{count} {keyword}")))
+    tally
+        .into_iter()
+        .map(|(kind, count)| format!("{count} {}", keyword(kind)))
         .collect::<Vec<_>>()
         .join(" · ")
 }
 
-/// `text` as segments, every whole word among [`KEYWORDS`] set apart and everything else text, joined to the text segment before it when there is one.
-fn words(text: &str, out: &mut Vec<Segment>) {
-    let mut rest = text;
-    while !rest.is_empty() {
-        let word_end = rest
-            .find(|char: char| !(char.is_ascii_alphanumeric() || char == '_'))
-            .unwrap_or(rest.len());
-        let (piece, after) = match word_end {
-            0 => rest.split_at(
-                rest.find(|char: char| char.is_ascii_alphanumeric() || char == '_')
-                    .unwrap_or(rest.len()),
-            ),
-            _ => rest.split_at(word_end),
-        };
-        match KEYWORDS.contains(&piece) {
-            true => out.push(Segment::Keyword(piece.to_string())),
-            false => match out.last_mut() {
-                Some(Segment::Text(text)) => text.push_str(piece),
-                _ => out.push(Segment::Text(piece.to_string())),
-            },
-        }
-        rest = after;
+/// `text` as a plain segment, joined to the plain segment before it when there is one.
+fn plain(text: &str, out: &mut Vec<Segment>) {
+    if text.is_empty() {
+        return;
+    }
+    match out.last_mut() {
+        Some(Segment::Text(before)) => before.push_str(text),
+        _ => out.push(Segment::Text(text.to_string())),
     }
 }
 

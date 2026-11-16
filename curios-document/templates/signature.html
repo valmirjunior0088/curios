@@ -1,15 +1,15 @@
-{#- A printed signature, segment by segment: a keyword set apart, a link to a declaration in this bundle, the name of one outside it, and text as it is. Every tag trims both sides, so the segments join with nothing between them. -#}
+{#- A printed signature, segment by segment: text as it is, and a span the printer set apart, painted by its class's name — a word of the language, or a name by what its declaration is — and linked where it names a declaration in this bundle. Every tag trims both sides, so the segments join with nothing between them. -#}
 {%- macro segments(items) -%}
     {%- for segment in items.iter() -%}
         {%- match segment -%}
             {%- when Segment::Text(text) -%}
                 {{ text }}
-            {%- when Segment::Keyword(word) -%}
-                <span class="keyword">{{ word }}</span>
-            {%- when Segment::Link { href, text } -%}
-                <a href="{{ href }}">{{ text }}</a>
-            {%- when Segment::Name(name) -%}
-                <span class="name">{{ name }}</span>
+            {%- when Segment::Marked { class, text, href } -%}
+                {%- if let Some(href) = href -%}
+                    <a class="{{ class }}" href="{{ href }}">{{ text }}</a>
+                {%- else -%}
+                    <span class="{{ class }}">{{ text }}</span>
+                {%- endif -%}
         {%- endmatch -%}
     {%- endfor -%}
 {%- endmacro -%}

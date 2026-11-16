@@ -1,8 +1,8 @@
-//! What a unit's interface is, read for a page: one record per module the unit exposes, each declaration's head printed as the author wrote it with every name it mentions resolved, and the prose attached to each — plain data a renderer walks and a transport encodes. The text lowering builds it where a command asks for one, from the tables the unit's lowering stored and the surface tree its sources parse to, and no unit carries it.
+//! What a unit's interface is, read for a page: one record per module the unit exposes, each declaration's head printed as the author wrote it with every word it writes classed and every name it mentions resolved and classed, and the prose attached to each — plain data a renderer walks and a transport encodes. The text lowering builds it where a command asks for one, from the tables the unit's lowering stored and the surface tree its sources parse to, and no unit carries it.
 //!
 //! **A library is documented for its consumers.** That is the one audience this record knows: which modules and declarations appear is the export view the lowering resolved to a fixed point, so a private declaration is absent rather than hidden and a re-export is a link to the declaration it names — or, when the declaration's own module has no page, the facade pattern, the declaration itself, documented where the re-export puts it and reached by every mark that names its home; a constructor appears only when the representation is public, a field likewise, and a test never. A program has no consumer, so nothing here documents one.
 
-use curios_common::Qualifier;
+use curios_common::{Class, Qualifier};
 
 /// A unit's interface, for its consumers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,8 +29,8 @@ pub struct ModuleDocumentation {
     pub declarations: Vec<Declaration>,
 }
 
-/// What kind of declaration a page entry is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What kind of declaration a page entry is, ordered as a module card tallies the kinds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[curios_archive::archived]
 pub enum Kind {
     Definition,
@@ -83,14 +83,28 @@ pub struct Signature {
     pub marks: Vec<Mark>,
 }
 
-/// One name in a signature, resolved: the byte range of `text` it occupies and the declaration it names, under the name a consumer writes rather than the path it was declared at. A name whose declaration a consumer cannot write carries no mark at all and stays plain text.
+/// One span of a signature the printer set apart: the byte range of `text` it occupies, and what it is. A name whose declaration a consumer cannot write, or a binder, carries no mark at all and stays plain text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[curios_archive::archived]
 pub struct Mark {
     pub start: usize,
     pub end: usize,
-    /// The path a consumer names the declaration by — a [`Declaration::home`] with its name, never a declaration site inside a root this unit keeps to itself.
-    pub referent: Qualifier,
-    /// Whether the referent lies within the documented unit, and so has a page in the same bundle.
-    pub within: bool,
+    pub marked: Marked,
+}
+
+/// What a [`Mark`] spans: a word of the language, or a name, each with what it is painted as.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Marked {
+    /// One of the language's words — a keyword, a boolean, a sort — or a wire word of a `foreign` signature, a type.
+    Word(Class),
+    /// A name, resolved: the declaration it names, under the name a consumer writes rather than the path it was declared at.
+    Name {
+        /// What the declaration is painted as, read off what it states; `None` where the compilation does not say.
+        class: Option<Class>,
+        /// The path a consumer names the declaration by — a [`Declaration::home`] with its name, never a declaration site inside a root this unit keeps to itself.
+        referent: Qualifier,
+        /// Whether the referent lies within the documented unit, and so has a page in the same bundle.
+        within: bool,
+    },
 }

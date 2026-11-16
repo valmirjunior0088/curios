@@ -99,12 +99,12 @@ fn document_writes_the_bundle_under_the_store() {
         "{landing}"
     );
     assert!(
-        landing.contains("<a href=\"index.html#Shape\">Shape</a>"),
+        landing.contains("<a class=\"type\" href=\"index.html#Shape\">Shape</a>"),
         "a signature links a name declared in the unit: {landing}"
     );
     assert!(
-        landing.contains("<span class=\"name\">Nat</span>"),
-        "a name outside the unit is a name, not a link: {landing}"
+        landing.contains("<span class=\"type\">Nat</span>"),
+        "a name outside the unit is painted by what it is, not linked: {landing}"
     );
 
     let geometry =
@@ -114,7 +114,7 @@ fn document_writes_the_bundle_under_the_store() {
         "{geometry}"
     );
     assert!(
-        geometry.contains("<a href=\"index.html#Shape\">Shape</a>"),
+        geometry.contains("<a class=\"type\" href=\"index.html#Shape\">Shape</a>"),
         "a link reaches the root's page from a sibling: {geometry}"
     );
     assert!(bundle.join("static/style.css").is_file());

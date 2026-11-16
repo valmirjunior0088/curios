@@ -3587,6 +3587,12 @@ pub fn document_unit(
         })
         .collect();
 
+    let units = predecessors
+        .iter()
+        .copied()
+        .chain([unit])
+        .collect::<Vec<_>>();
+
     Ok(Some(document(
         &modules,
         &Scoped::over(&tables),
@@ -3595,6 +3601,7 @@ pub fn document_unit(
         &prefix,
         &unit.visible,
         records,
+        &units,
         description,
     )))
 }

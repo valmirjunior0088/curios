@@ -26,20 +26,36 @@ use {
     },
     crate::{ELIDED, Writer, op_precedence, written_intrinsic},
     curios_abi::{NEVER, ResultShape, WireResults, WireReturn, WireSignature, WireType},
-    curios_common::{Plicity, recurse},
+    curios_common::{Keyword, Plicity, recurse},
     curios_num::Natural,
     curios_parse::unseen,
     curios_print::{
         FillItem, Printer, ends, fill, flat, flow, group, group_within, hang, hard_line, if_break,
         indent, line, named, named_at, own_line_if_broken, pure, reached, sep_flat, soft_line,
+        word,
     },
     std::iter,
 };
 
+/// `written` as the printer writes it, set apart as one of the language's words ([`word`]): what a renderer that paints the words reads, rather than the text again, so a name spelled as a word stays a name.
+fn keyword(written: Keyword) -> Printer {
+    word(written.spelling())
+}
+
+/// The words a head opens with, each followed by its space: `let `, `and induct `.
+fn lead(words: &[Keyword]) -> Printer {
+    flat(
+        words
+            .iter()
+            .map(|written| flat([keyword(*written), pure(" ")]))
+            .collect::<Vec<_>>(),
+    )
+}
+
 fn print_plicity(plicity: Plicity) -> Printer {
     match plicity {
         Plicity::Implicit => pure("@"),
-        Plicity::Witness => pure("use "),
+        Plicity::Witness => lead(&[Keyword::Use]),
         Plicity::Explicit => pure(""),
     }
 }
@@ -481,8 +497,8 @@ impl<D: Layout> TreePrinter<D> {
                     "}",
                 ),
             ]),
-            MatchPattern::Bool(false) => pure("false"),
-            MatchPattern::Bool(true) => pure("true"),
+            MatchPattern::Bool(false) => keyword(Keyword::False),
+            MatchPattern::Bool(true) => keyword(Keyword::True),
             MatchPattern::Char(character) => print_char_literal(character),
             MatchPattern::Str(literal) => print_string_literal(&literal),
             MatchPattern::Nat(NatPattern::Zero) => pure("0"),
@@ -606,19 +622,31 @@ fn braced_escape(character: char) -> String {
 }
 
 fn print_pub(vis_pub: bool) -> Printer {
-    if vis_pub { pure("pub ") } else { pure("") }
+    if vis_pub {
+        lead(&[Keyword::Pub])
+    } else {
+        pure("")
+    }
 }
 
 fn print_group_item(item: &GroupItem) -> String {
     match item {
-        GroupItem::Mod(s) => format!("mod {s}"),
-        GroupItem::Let(s) => format!("let {s}"),
+        GroupItem::Mod(s) => format!("{} {s}", Keyword::Mod.spelling()),
+        GroupItem::Let(s) => format!("{} {s}", Keyword::Let.spelling()),
         GroupItem::Both(s) => s.to_string(),
     }
 }
 
 fn print_wire_type(type_: WireType) -> Printer {
-    pure(type_.to_string())
+    match type_ {
+        WireType::List(leaf) | WireType::Option(leaf) => flat([
+            word(type_.word()),
+            pure("("),
+            word(WireType::from(leaf).word()),
+            pure(")"),
+        ]),
+        _ => word(type_.word()),
+    }
 }
 
 // A result as the surface spells it, which is the shape `WireResults` already decides: nothing is `{}`, one is the bare type forwarded through, and several are the tuple type the guest projects by — each field labelled, because a tuple's labels are part of its identity and dropping one would print a different type from the one declared.
@@ -655,7 +683,7 @@ pub fn print_wire_signature(signature: &WireSignature) -> Printer {
         pure(" -> "),
         match &signature.returns {
             WireReturn::Answers(results) => print_wire_results(results),
-            WireReturn::Never => pure(NEVER),
+            WireReturn::Never => word(NEVER),
         },
     ])
 }
@@ -937,7 +965,7 @@ impl<D: Layout> TreePrinter<D> {
         match entry {
             StructLitEntry::Field(field) => self.tuple_field(field),
             StructLitEntry::Implicit(field) => flat([pure("@"), self.tuple_field(field)]),
-            StructLitEntry::Use(term) => flat([pure("use "), self.term(term)]),
+            StructLitEntry::Use(term) => flat([lead(&[Keyword::Use]), self.term(term)]),
             StructLitEntry::Spread(term) => flat([pure(".."), self.term(term)]),
         }
     }
@@ -992,8 +1020,8 @@ impl<D: Layout> TreePrinter<D> {
     /// A written literal, as written.
     fn literal(self, literal: Literal<D>) -> Printer {
         match literal {
-            Literal::Bool(false) => pure("false"),
-            Literal::Bool(true) => pure("true"),
+            Literal::Bool(false) => keyword(Keyword::False),
+            Literal::Bool(true) => keyword(Keyword::True),
             Literal::Flt(value) => print_flt(value),
             // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `x[]` on its own.
             Literal::Bytes(segments) => {
@@ -1087,9 +1115,9 @@ impl<D: Layout> TreePrinter<D> {
         // Where a name was written, which a page asks the lowering about instead of resolving the text again.
         let written = term.span().map(|span| span.start..span.end);
         let body = match term.into_subterm() {
-            Subterm::Type => pure("Type"),
-            Subterm::Prop => pure("Prop"),
-            Subterm::Sort => pure("Sort"),
+            Subterm::Type => keyword(Keyword::Type),
+            Subterm::Prop => keyword(Keyword::Prop),
+            Subterm::Sort => keyword(Keyword::Sort),
             Subterm::Literal(literal) => self.literal(literal),
             Subterm::Intrinsic(intrinsic) => self.intrinsic(intrinsic),
             Subterm::Name(name) => match written {
@@ -1211,7 +1239,7 @@ impl<D: Layout> TreePrinter<D> {
                 return group_within(
                     within,
                     flat([
-                        pure("match "),
+                        lead(&[Keyword::Match]),
                         self.term(head),
                         flat(
                             arms.into_iter()
@@ -1229,7 +1257,7 @@ impl<D: Layout> TreePrinter<D> {
                                 .collect::<Vec<_>>(),
                         ),
                         separator(),
-                        pure("end"),
+                        keyword(Keyword::End),
                         suffix,
                     ]),
                 );
@@ -1247,7 +1275,7 @@ impl<D: Layout> TreePrinter<D> {
                 return group_within(
                     FLAT_MATCH_COLUMNS,
                     flat([
-                        pure("match"),
+                        keyword(Keyword::Match),
                         flat(
                             arms.into_iter()
                                 .map(|HeadlessArm { guards, body }| {
@@ -1271,7 +1299,7 @@ impl<D: Layout> TreePrinter<D> {
                         pure("| _"),
                         self.attached_body(" =>", default),
                         separator(),
-                        pure("end"),
+                        keyword(Keyword::End),
                         suffix,
                     ]),
                 );
@@ -1282,15 +1310,15 @@ impl<D: Layout> TreePrinter<D> {
                     .map(|group| {
                         let mut parts = Vec::new();
                         for (index, member) in group.members.into_iter().enumerate() {
-                            let keyword = match index {
-                                0 => "let ",
+                            let head = match index {
+                                0 => Keyword::Let,
                                 _ => {
                                     parts.push(hard_line());
-                                    "and "
+                                    Keyword::And
                                 }
                             };
                             parts.extend([
-                                pure(keyword),
+                                lead(&[head]),
                                 self.pattern(member.binder),
                                 self.let_signature(member.signature, false),
                             ]);
@@ -1380,7 +1408,7 @@ impl<D: Layout> TreePrinter<D> {
             self,
             &test.core,
             flat([
-                pure("test "),
+                lead(&[Keyword::Test]),
                 D::declared(&test.core, test.label),
                 pure(" ="),
                 hard_line(),
@@ -1391,7 +1419,7 @@ impl<D: Layout> TreePrinter<D> {
     }
 
     /// One member of a `let` group under `keyword`, `let` for the first and `and` for a later one: its body, and not the `;` the group owes.
-    fn let_member(self, item: TopLet<D>, keyword: &'static str) -> Printer {
+    fn let_member(self, item: TopLet<D>, words: &[Keyword]) -> Printer {
         flat([
             print_doc(item.doc),
             D::headed(
@@ -1400,7 +1428,7 @@ impl<D: Layout> TreePrinter<D> {
                 flat([
                     // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a group would print as `and pub f` and not reparse, and the formatter's verify gate would refuse the file rather than write it.
                     print_pub(item.vis_pub),
-                    pure(keyword),
+                    lead(words),
                     D::declared(&item.core, item.label),
                     self.let_signature(item.signature, true),
                 ]),
@@ -1412,11 +1440,11 @@ impl<D: Layout> TreePrinter<D> {
         let mut iter = items.into_iter();
         let first = iter.next().expect("a `let` item has a member");
         let rest = iter
-            .map(|item| flat([hard_line(), self.let_member(item, "and ")]))
+            .map(|item| flat([hard_line(), self.let_member(item, &[Keyword::And])]))
             .collect::<Vec<_>>();
 
         flat([
-            self.let_member(first, "let "),
+            self.let_member(first, &[Keyword::Let]),
             flat(rest),
             // Only the last body ends the item: a comment written under an earlier one stands above the `and` that follows it.
             indent(ends()),
@@ -1432,7 +1460,7 @@ impl<D: Layout> TreePrinter<D> {
                 &item.core,
                 flat([
                     print_pub(item.vis_pub),
-                    pure("foreign "),
+                    lead(&[Keyword::Foreign]),
                     D::declared(&item.core, item.label),
                     print_wire_signature(&item.signature),
                     pure(";"),
@@ -1529,7 +1557,7 @@ impl<D: Layout> TreePrinter<D> {
     }
 
     /// One member of an `induct` group under its keyword: `induct` for the first, `and` for a later one.
-    fn induct_member(self, item: TopInduct<D>, keyword: &'static str) -> Printer {
+    fn induct_member(self, item: TopInduct<D>, words: &[Keyword]) -> Printer {
         flat([
             print_doc(item.doc),
             D::headed(
@@ -1537,7 +1565,7 @@ impl<D: Layout> TreePrinter<D> {
                 &item.core,
                 flat([
                     print_pub(item.vis_pub),
-                    pure(keyword),
+                    lead(words),
                     D::declared(&item.core, item.label),
                     self.top_induct_params(item.params),
                     self.top_induct_arity(item.indices, item.rep_pub, item.result_sort),
@@ -1556,14 +1584,14 @@ impl<D: Layout> TreePrinter<D> {
         let mut iter = group.into_iter();
         let first = iter.next().expect("an `induct` item has a member");
         let rest = iter
-            .map(|item| flat([hard_line(), self.induct_member(item, "and ")]))
+            .map(|item| flat([hard_line(), self.induct_member(item, &[Keyword::And])]))
             .collect::<Vec<_>>();
 
         flat([
-            self.induct_member(first, "induct "),
+            self.induct_member(first, &[Keyword::Induct]),
             flat(rest),
             hard_line(),
-            pure("end"),
+            keyword(Keyword::End),
         ])
     }
 
@@ -1576,24 +1604,24 @@ impl<D: Layout> TreePrinter<D> {
                 flat([
                     hard_line(),
                     print_doc(item.doc.take()),
-                    self.struct_member(item, "and "),
+                    self.struct_member(item, &[Keyword::And]),
                 ])
             })
             .collect::<Vec<_>>();
         flat([
             print_doc(first.doc.take()),
-            self.struct_member(first, "struct "),
+            self.struct_member(first, &[Keyword::Struct]),
             flat(rest),
         ])
     }
 
-    fn struct_member(self, item: TopStruct<D>, keyword: &'static str) -> Printer {
+    fn struct_member(self, item: TopStruct<D>, words: &[Keyword]) -> Printer {
         D::headed(
             self,
             &item.core,
             flat([
                 print_pub(item.vis_pub),
-                pure(keyword),
+                lead(words),
                 D::declared(&item.core, item.label),
                 self.top_induct_params(item.params),
                 pure(": "),
@@ -1632,12 +1660,12 @@ impl<D: Layout> TreePrinter<D> {
             ..
         } = field;
         let Some(label) = label else {
-            return flat([pure("use "), self.term(type_)]);
+            return flat([lead(&[Keyword::Use]), self.term(type_)]);
         };
         let word = D::bound(self, core, pure(label.to_string()));
         // A superclass edge is a `use` member: the mark and its type, and no label but the word Core text reads it by.
         if edge {
-            return flat([pure("use "), word, pure(": "), self.term(type_)]);
+            return flat([lead(&[Keyword::Use]), word, pure(": "), self.term(type_)]);
         }
         match func_params {
             Some(params) => flat([
@@ -1673,24 +1701,24 @@ impl<D: Layout> TreePrinter<D> {
                 flat([
                     hard_line(),
                     print_doc(item.doc.take()),
-                    self.concept_member(item, "and "),
+                    self.concept_member(item, &[Keyword::And]),
                 ])
             })
             .collect::<Vec<_>>();
         flat([
             print_doc(first.doc.take()),
-            self.concept_member(first, "concept "),
+            self.concept_member(first, &[Keyword::Concept]),
             flat(rest),
         ])
     }
 
-    fn concept_member(self, item: TopConcept<D>, keyword: &'static str) -> Printer {
+    fn concept_member(self, item: TopConcept<D>, words: &[Keyword]) -> Printer {
         D::headed(
             self,
             &item.core,
             flat([
                 print_pub(item.vis_pub),
-                pure(keyword),
+                lead(words),
                 D::declared(&item.core, item.label),
                 self.top_induct_params(item.params),
                 pure(": "),
@@ -1985,24 +2013,28 @@ impl<D: CoreWritten> TreePrinter<D> {
 
     /// One member of a group: the first under its own word, a later one after `and`, a nominal one keeping its word there, and a family closed by its own `end`.
     fn core_member(self, member: CoreMember<D>, first: bool) -> Printer {
-        let keyword = |word: &'static str, later: &'static str| match first {
-            true => word,
-            false => later,
+        let words = |own: Keyword| match first {
+            true => vec![own],
+            false => vec![Keyword::And, own],
+        };
+        let let_words = match first {
+            true => [Keyword::Let],
+            false => [Keyword::And],
         };
         match member {
-            CoreMember::Let(item) => self.let_member(item, keyword("let ", "and ")),
+            CoreMember::Let(item) => self.let_member(item, &let_words),
             CoreMember::Induct(item) => flat([
-                self.induct_member(item, keyword("induct ", "and induct ")),
+                self.induct_member(item, &words(Keyword::Induct)),
                 hard_line(),
-                pure("end"),
+                keyword(Keyword::End),
             ]),
             CoreMember::Struct(mut item) => flat([
                 print_doc(item.doc.take()),
-                self.struct_member(item, keyword("struct ", "and struct ")),
+                self.struct_member(item, &words(Keyword::Struct)),
             ]),
             CoreMember::Concept(mut item) => flat([
                 print_doc(item.doc.take()),
-                self.concept_member(item, keyword("concept ", "and concept ")),
+                self.concept_member(item, &words(Keyword::Concept)),
             ]),
         }
     }
@@ -2088,7 +2120,7 @@ pub fn print_shown_entry(entry: CoreEntry<Shown>, options: ShownOptions) -> Prin
 fn print_top_use(item: TopUse) -> Printer {
     flat([
         print_pub(item.vis_pub),
-        pure("use "),
+        lead(&[Keyword::Use]),
         pure(item.name.join()),
         match item.group {
             // Filled rather than `listed`, because an import is a run of short interchangeable names and not a structure. `listed` is a group, so a head too wide for one line would put every name on a line of its own. The names wrap like prose instead, and each carries its own comma so the fill only ever inserts the gap.
@@ -2106,19 +2138,19 @@ fn print_top_mod(item: TopMod) -> Printer {
         None => flat([
             print_doc(item.doc),
             print_pub(item.vis_pub),
-            pure("mod "),
+            lead(&[Keyword::Mod]),
             pure(item.label),
             pure(";"),
         ]),
         Some(module) => flat([
             print_doc(item.doc),
             print_pub(item.vis_pub),
-            pure("mod "),
+            lead(&[Keyword::Mod]),
             pure(item.label),
             hard_line(),
             indent(flat([print_module_items(module.items), ends()])),
             hard_line(),
-            pure("end"),
+            keyword(Keyword::End),
         ]),
     }
 }
@@ -2169,14 +2201,14 @@ fn print_top_witness(items: Vec<TopWitness>) -> Printer {
             flat([
                 hard_line(),
                 print_doc(item.doc.take()),
-                print_witness_member(item, "and"),
+                print_witness_member(item, &[Keyword::And]),
             ])
         })
         .collect::<Vec<_>>();
 
     flat([
         print_doc(first.doc.take()),
-        print_witness_member(first, "satisfy"),
+        print_witness_member(first, &[Keyword::Satisfy]),
         flat(rest),
     ])
 }
@@ -2206,7 +2238,7 @@ fn witnessed(concept: &Name, args: Option<Vec<Argument>>) -> Printer {
     }
 }
 
-fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
+fn print_witness_member(item: TopWitness, words: &[Keyword]) -> Printer {
     let params = item
         .params
         .into_iter()
@@ -2232,12 +2264,7 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
         ]),
     };
 
-    flat([
-        pure(keyword),
-        pure(" "),
-        witness_signature(params, app),
-        body,
-    ])
+    flat([lead(words), witness_signature(params, app), body])
 }
 
 /// A witness-body entry, which is an implementation field — `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
@@ -2292,7 +2319,7 @@ pub fn print_let_head(item: &TopLet) -> Printer {
     };
     flat([
         print_pub(item.vis_pub),
-        pure("let "),
+        lead(&[Keyword::Let]),
         pure(item.label.to_string()),
         signature,
     ])
@@ -2302,7 +2329,7 @@ pub fn print_let_head(item: &TopLet) -> Printer {
 pub fn print_induct_head(item: &TopInduct) -> Printer {
     flat([
         print_pub(item.vis_pub),
-        pure("induct "),
+        lead(&[Keyword::Induct]),
         pure(item.label.to_string()),
         PROGRAM.top_induct_params(item.params.clone()),
         PROGRAM.top_induct_arity(item.indices.clone(), item.rep_pub, item.result_sort.clone()),
@@ -2349,7 +2376,7 @@ pub fn print_case_result_head(item: &TopInduct, case: &TopCase) -> Printer {
 pub fn print_struct_head(item: &TopStruct) -> Printer {
     flat([
         print_pub(item.vis_pub),
-        pure("struct "),
+        lead(&[Keyword::Struct]),
         pure(item.label.to_string()),
         PROGRAM.top_induct_params(item.params.clone()),
         pure(": "),
@@ -2370,7 +2397,7 @@ pub fn print_struct_field_head(field: &StructField) -> Printer {
 pub fn print_concept_head(item: &TopConcept) -> Printer {
     flat([
         print_pub(item.vis_pub),
-        pure("concept "),
+        lead(&[Keyword::Concept]),
         pure(item.label.to_string()),
         PROGRAM.top_induct_params(item.params.clone()),
         pure(": "),
@@ -2393,19 +2420,19 @@ pub fn print_witness_head(item: &TopWitness) -> Printer {
         .map(|param| PROGRAM.func_sugar_param(param))
         .collect();
     let app = witnessed(&item.concept, item.args.clone());
-    flat([pure("satisfy "), witness_signature(params, app)])
+    flat([lead(&[Keyword::Satisfy]), witness_signature(params, app)])
 }
 
 /// The head of a `test` declaration: the keyword and its name, without the body.
 pub fn print_test_head(item: &TopTest) -> Printer {
-    flat([pure("test "), pure(item.label.to_string())])
+    flat([lead(&[Keyword::Test]), pure(item.label.to_string())])
 }
 
 /// The head of a `foreign` declaration, which is the whole of it.
 pub fn print_foreign_head(item: &TopForeign) -> Printer {
     flat([
         print_pub(item.vis_pub),
-        pure("foreign "),
+        lead(&[Keyword::Foreign]),
         pure(item.label.to_string()),
         print_wire_signature(&item.signature),
     ])

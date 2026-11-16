@@ -16,7 +16,7 @@ use {
     },
     curios_abi::ForeignFunction,
     curios_common::{
-        Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
+        Class, Digest, Facet, InKeyOrder, Mount, Object, Persistent, Plicity, Qualifier, Recorded,
         Records, Sorted, SyntaxRegistry, candidate_name,
     },
     std::{
@@ -730,6 +730,19 @@ impl Declared {
     /// Whether the name is a written definition: a type, a function or a value.
     pub fn is_defined(self) -> bool {
         matches!(self, Declared::Function | Declared::Value | Declared::Type)
+    }
+
+    /// What a name of a declaration declared as `self` is painted as: a type former and a written type as a type, a written function and a test as a function, and each other as its own. `None` for a witness, whose name the compiler gives and no reader writes.
+    pub fn class(self) -> Option<Class> {
+        Some(match self {
+            Declared::Type | Declared::Inductive | Declared::Struct => Class::Type,
+            Declared::Function | Declared::Test => Class::Function,
+            Declared::Value => Class::Value,
+            Declared::Concept => Class::Concept,
+            Declared::Constructor => Class::Constructor,
+            Declared::Method => Class::Method,
+            Declared::Witness => return None,
+        })
     }
 
     /// Whether the name is a nominal declaration's former.

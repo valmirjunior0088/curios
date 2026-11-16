@@ -365,11 +365,36 @@ h2 {
 .signature.cases .member {
   padding-left: 0;
 }
-.signature .keyword {
+/* A signature's words and names, each painted by its class (`curios-common`'s `Class`), by the code palette's logic: a keyword keeps the amber, a boolean and a sort its paler step, a type and a concept stand out by being brighter, and every other name keeps the text's strength; a name the compilation does not class steps back. A linked name keeps its class's colour, underlined faintly, and takes the amber where the reader reaches for it. */
+.signature .keyword,
+.witnesses .keyword {
   color: var(--amber);
 }
-.signature .name {
+.signature .boolean,
+.signature .sort,
+.witnesses .boolean,
+.witnesses .sort {
+  color: var(--amber-bright);
+}
+.signature .type,
+.signature .concept,
+.witnesses .type,
+.witnesses .concept {
+  color: var(--ink);
+}
+.signature .name,
+.witnesses .name {
   color: var(--ink-70);
+}
+.signature a,
+.witnesses a {
+  color: inherit;
+  text-decoration: underline dotted var(--ink-28);
+  text-underline-offset: 3px;
+}
+.signature a:hover,
+.witnesses a:hover {
+  color: var(--amber);
 }
 .signature .note {
   margin: 0 0 6px;
@@ -418,12 +443,6 @@ h2 {
   color: var(--ink-85);
   overflow-x: auto;
   white-space: pre;
-}
-.witnesses .keyword {
-  color: var(--amber);
-}
-.witnesses .name {
-  color: var(--ink-70);
 }
 .witnesses .note {
   flex-basis: 100%;

@@ -7,6 +7,7 @@ macro_rules! classes {
     ($($(#[$doc:meta])* $variant:ident => $name:literal,)+) => {
         /// What a span of code is painted as.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[curios_archive::archived]
         pub enum Class {
             $($(#[$doc])* $variant,)+
         }

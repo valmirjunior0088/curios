@@ -19,7 +19,7 @@ struct PrinterState<'a, 'b, 'c> {
     formatter: &'a mut fmt::Formatter<'b>,
     /// Bytes emitted so far, which is what an [`Annotation`] measures its range in.
     written: usize,
-    /// Every [`Printer::Named`] emitted, with where it landed — empty for every renderer but [`render_annotated`].
+    /// Every [`Printer::Named`] and [`Printer::Word`] emitted, with where it landed — empty for every renderer but [`render_annotated`].
     annotations: Vec<Annotation>,
     indent_step: usize,
     indent_by: usize,
@@ -445,13 +445,22 @@ impl Cursor {
     }
 }
 
-/// One [`Printer::Named`] as rendered: the byte range of the output it occupies, the name it carries, and where in its original that name was written.
+/// One [`Printer::Named`] or [`Printer::Word`] as rendered: the byte range of the output it occupies, the text it carries, and which of the two it is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Annotation {
     pub start: usize,
     pub end: usize,
-    pub name: String,
-    pub written: Option<Range<usize>>,
+    pub text: String,
+    pub annotated: Annotated,
+}
+
+/// What an [`Annotation`] spans.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Annotated {
+    /// A name, with where in its original it was written, where it was read from one.
+    Name { written: Option<Range<usize>> },
+    /// One of the language's words.
+    Word,
 }
 
 /// One node of [`fits`]'s walk, with the facts about its surroundings its verdict depends on.
@@ -542,7 +551,7 @@ fn ahead(rest: &[Step]) -> Option<char> {
         };
 
         match node {
-            Printer::Text(text) | Printer::Named { text, .. } => {
+            Printer::Text(text) | Printer::Named { text, .. } | Printer::Word(text) => {
                 if let Some(found) = visible(text) {
                     return Some(found);
                 }
@@ -687,7 +696,7 @@ fn fits(
         };
 
         match node {
-            Printer::Text(text) | Printer::Named { text, .. } => {
+            Printer::Text(text) | Printer::Named { text, .. } | Printer::Word(text) => {
                 if let Some(verdict) = measure(text, &mut used) {
                     return verdict;
                 }
@@ -847,8 +856,19 @@ fn run<'b, 'c>(
                     state.annotations.push(Annotation {
                         start: state.written - text.len(),
                         end: state.written,
-                        name: mem::take(text),
-                        written: written.take(),
+                        text: mem::take(text),
+                        annotated: Annotated::Name {
+                            written: written.take(),
+                        },
+                    });
+                }
+                Printer::Word(text) => {
+                    state.text(text)?;
+                    state.annotations.push(Annotation {
+                        start: state.written - text.len(),
+                        end: state.written,
+                        text: mem::take(text),
+                        annotated: Annotated::Word,
                     });
                 }
                 // Reversed, because the stack pops last-in first.
@@ -1073,7 +1093,7 @@ fn run<'b, 'c>(
     Ok(state.annotations)
 }
 
-/// Render `printer` to a string at `width`, with every [`Printer::Named`] and the byte range it landed on — what a consumer that links names reads, since the layout is decided here and nowhere else, so nothing has to re-lex the text to find a name in it.
+/// Render `printer` to a string at `width`, with every [`Printer::Named`] and [`Printer::Word`] and the byte range each landed on — what a consumer that links names reads, since the layout is decided here and nowhere else, so nothing has to re-lex the text to find a name in it.
 pub fn render_annotated(
     printer: Printer,
     indent_step: usize,
@@ -1123,6 +1143,7 @@ pub fn each_named(
             | Printer::OwnLineIfBroken(inner)
             | Printer::Group { inner, .. } => stack.push(inner),
             Printer::Text(_)
+            | Printer::Word(_)
             | Printer::Line { .. }
             | Printer::IfBreak { .. }
             | Printer::Mark(_)

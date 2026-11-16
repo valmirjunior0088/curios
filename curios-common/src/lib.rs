@@ -39,7 +39,7 @@ mod keyword;
 pub use keyword::{Keyword, Standing, is_reserved};
 
 mod class;
-pub use class::Class;
+pub use class::{ArchivedClass, Class, ClassResolver};
 
 mod symbol;
 pub use symbol::{ArchivedSymbol, InterningText, Symbol};

@@ -10,12 +10,13 @@
 mod tests;
 
 use {
-    super::{ModuleInfo, PublicInterface, Scoped, visible_path},
-    curios_common::{LINE_WIDTH, Mount, Qualifier, RootKind, Source, Span},
+    super::{ModuleInfo, PreparedText, PublicInterface, Scoped, visible_path},
+    curios_abi::{NEVER, WireType},
+    curios_common::{Class, Keyword, LINE_WIDTH, Mount, Qualifier, RootKind, Source, Span},
     curios_document::{
-        Declaration, Documentation, Kind, Mark, Member, ModuleDocumentation, Signature,
+        Declaration, Documentation, Kind, Mark, Marked, Member, ModuleDocumentation, Signature,
     },
-    curios_print::{Printer, each_named, render_annotated},
+    curios_print::{Annotated, Printer, each_named, render_annotated},
     curios_surface::{
         Doc, Module, TopItem, UseGroup, print_case_head, print_case_result_head,
         print_concept_field_head, print_concept_head, print_foreign_head, print_induct_head,
@@ -69,7 +70,7 @@ fn chip(prefix: &Qualifier) -> Option<String> {
 /// Where `mounts` adopts a root no record of `records` documents.
 #[expect(
     clippy::too_many_arguments,
-    reason = "one over the line: each argument is a table the lowering built or a fact about its scope, and the one caller holds each under these names, so a struct would be a second spelling of the same eight"
+    reason = "two over the line: each argument is a table the lowering built or a fact about its scope, and the one caller holds each under these names, so a struct would be a second spelling of the same nine"
 )]
 pub fn document(
     modules: &HashMap<Qualifier, Rc<Module>>,
@@ -79,6 +80,7 @@ pub fn document(
     prefix: &Qualifier,
     mounts: &[Mount],
     records: &[&Documentation],
+    units: &[&PreparedText],
     description: Option<String>,
 ) -> Documentation {
     curios_profile::profile!("document");
@@ -105,6 +107,7 @@ pub fn document(
         adopted: &adopted,
         internal: &internal,
         records,
+        units,
         public_names: HashMap::new(),
     };
     // Read before the walk, because a signature anywhere in the unit may name an adopted declaration, and taken through the reader because knowing which modules have pages is its own rule.
@@ -136,6 +139,8 @@ struct Reader<'a> {
     ///
     /// **An adopted root is a different unit, and a unit keeps no surface tree.** Its declarations are rendered from its own source, by its own record, which is made before this one. So a `pub use` into an adopted root is answered out of that record rather than re-derived from items nothing here can reach; re-derived, the adopted half would go missing silently, because every check of it asserts the absence of a path rather than the presence of a card.
     records: &'a [&'a Documentation],
+    /// The units this one was lowered over and itself: what says what each declaration a name resolves to is, with nothing read ([`PreparedText::declared_as`]).
+    units: &'a [&'a PreparedText],
     /// What a consumer calls each declaration that no page of its own shows: its declaration site, to the path of the page that exposes it. One entry per declaration a private child or an adopted root holds and a page re-exports.
     public_names: HashMap<Qualifier, Qualifier>,
 }
@@ -279,15 +284,22 @@ impl Reader<'_> {
             marks: signature
                 .marks
                 .iter()
-                .map(|mark| {
-                    let referent = self.public_name(&mark.referent);
-
-                    Mark {
-                        start: mark.start,
-                        end: mark.end,
-                        within: referent.is_within(self.prefix),
-                        referent,
-                    }
+                .map(|mark| Mark {
+                    start: mark.start,
+                    end: mark.end,
+                    marked: match &mark.marked {
+                        Marked::Word(class) => Marked::Word(*class),
+                        Marked::Name {
+                            class, referent, ..
+                        } => {
+                            let referent = self.public_name(referent);
+                            Marked::Name {
+                                class: *class,
+                                within: referent.is_within(self.prefix),
+                                referent,
+                            }
+                        }
+                    },
                 })
                 .collect(),
         }
@@ -621,31 +633,52 @@ impl Reader<'_> {
             if referent.is_some() {
                 *text = self.shown(text);
             }
-            referents.push(referent.map(|referent| self.public_name(&referent)));
+            referents.push(
+                referent.map(|referent| (self.public_name(&referent), self.class_of(&referent))),
+            );
         });
         let (text, annotations) = render_annotated(head, INDENT, LINE_WIDTH);
-        assert_eq!(
-            annotations.len(),
-            referents.len(),
-            "a render emits every name the walk met, once"
-        );
 
+        let mut referents = referents.into_iter();
         let marks = annotations
             .into_iter()
-            .zip(referents)
-            .filter_map(|(annotation, referent)| {
-                let referent = referent?;
+            .filter_map(|annotation| {
+                let marked = match annotation.annotated {
+                    Annotated::Word => Marked::Word(word_class(&annotation.text)),
+                    Annotated::Name { .. } => {
+                        let (referent, class) = referents
+                            .next()
+                            .expect("a render emits every name the walk met, once")?;
+                        Marked::Name {
+                            class,
+                            within: referent.is_within(self.prefix),
+                            referent,
+                        }
+                    }
+                };
 
                 Some(Mark {
                     start: annotation.start,
                     end: annotation.end,
-                    within: referent.is_within(self.prefix),
-                    referent,
+                    marked,
                 })
             })
             .collect();
+        assert!(
+            referents.next().is_none(),
+            "a render emits every name the walk met, once"
+        );
 
         Signature { text, marks }
+    }
+
+    /// What the declaration at `referent` is painted as, read off what the units in scope outline it as: a name's class is what its declaration states, never where it lives.
+    fn class_of(&self, referent: &Qualifier) -> Option<Class> {
+        let name = curios_core::Global::Authored(*referent);
+        self.units
+            .iter()
+            .find_map(|unit| unit.declared_as(&name))?
+            .class()
     }
 
     /// The declaration a name the printer wrote — one with no place, so no mention — names from `module`, by the lowering's visibility functions: an absolute path walks the public tree from the root, and a relative one is the module's own declaration or a path through its own children. No `use` brought it into scope, since nobody wrote it. `None` is a name that does not resolve or is out of view, which a page leaves as plain text.
@@ -916,4 +949,16 @@ fn declares(item: &TopItem, label: &str) -> bool {
 /// A documentation comment's lines, or `None` when there is none.
 fn lines(doc: &Option<Doc>) -> Option<Vec<String>> {
     doc.as_ref().map(|doc| doc.lines.clone())
+}
+
+/// What a word the printer wrote is painted as: one of the language's ([`Keyword`]), or a wire word of a `foreign` signature, which `curios-abi` states and which names a type. The printer writes no other word.
+fn word_class(word: &str) -> Class {
+    let wire = || word == NEVER || WireType::words().any(|wire| wire == word);
+    match Keyword::read(word) {
+        Some(keyword) => keyword.class(),
+        None if wire() => Class::Type,
+        None => panic!(
+            "the printer writes `{word}` as a word, which is neither the language's nor the wire's"
+        ),
+    }
 }

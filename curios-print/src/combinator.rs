@@ -147,6 +147,11 @@ pub fn named_at(text: impl Into<String>, written: Range<usize>) -> Printer {
     }
 }
 
+/// Literal text that is one of the language's words — see [`Printer::Word`]. Prints exactly as [`pure`] does.
+pub fn word(text: impl Into<String>) -> Printer {
+    Printer::Word(text.into())
+}
+
 /// Note that the document holds its original up to `offset` — see [`Printer::Mark`]. Zero width and no output.
 pub fn reached(offset: usize) -> Printer {
     Printer::Mark(offset)

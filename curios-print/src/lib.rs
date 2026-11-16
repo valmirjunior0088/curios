@@ -5,7 +5,7 @@
 mod combinator;
 pub use combinator::{
     ends, fill, flat, flow, group, group_within, hang, hard_line, if_break, indent, line, named,
-    named_at, own_line_if_broken, pure, reached, sep_flat, soft_line,
+    named_at, own_line_if_broken, pure, reached, sep_flat, soft_line, word,
 };
 
 mod document;
@@ -13,8 +13,8 @@ pub use document::{FillItem, FillStyle, Printer};
 
 mod run;
 pub use run::{
-    Annotation, Original, Owed, each_named, render_annotated, run_printer, run_printer_placing,
-    run_printer_within,
+    Annotated, Annotation, Original, Owed, each_named, render_annotated, run_printer,
+    run_printer_placing, run_printer_within,
 };
 
 #[cfg(test)]

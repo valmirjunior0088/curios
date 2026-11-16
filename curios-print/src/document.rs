@@ -35,6 +35,8 @@ pub enum Printer {
         text: String,
         written: Option<Range<usize>>,
     },
+    /// Literal text that is one of the language's words: emitted exactly as [`Printer::Text`], and reported as a word to a renderer collecting annotations through [`render_annotated`](crate::render_annotated), so a consumer paints the words a printer wrote by what the printer knew of them — a name spelled as a word stays a name — without re-lexing the text. Every other renderer treats it as text, and it measures as text.
+    Word(String),
     /// Emitted in order.
     Concat(Vec<Printer>),
     /// Emitted one indentation level deeper.
@@ -82,7 +84,11 @@ impl Printer {
     /// Whether this node's children are already gone, so dropping it cannot reach another node.
     fn is_dismantled(&self) -> bool {
         match self {
-            Printer::Text(_) | Printer::Named { .. } | Printer::Mark(_) | Printer::Ends => true,
+            Printer::Text(_)
+            | Printer::Named { .. }
+            | Printer::Word(_)
+            | Printer::Mark(_)
+            | Printer::Ends => true,
             Printer::Concat(parts) => parts.is_empty(),
             Printer::Fill { items, .. } => items.is_empty(),
             Printer::Indent(inner)
@@ -109,7 +115,7 @@ impl Drop for Printer {
 
         while let Some(mut printer) = pending.pop() {
             match &mut printer {
-                Printer::Text(_) | Printer::Named { .. } => {}
+                Printer::Text(_) | Printer::Named { .. } | Printer::Word(_) => {}
                 Printer::Concat(parts) => {
                     pending.extend(mem::take(parts));
                 }

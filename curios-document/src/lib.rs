@@ -2,9 +2,9 @@
 
 mod record;
 pub use record::{
-    ArchivedDeclaration, ArchivedDocumentation, ArchivedKind, ArchivedMark, ArchivedMember,
-    ArchivedModuleDocumentation, ArchivedSignature, Declaration, Documentation, Kind, Mark, Member,
-    ModuleDocumentation, Signature,
+    ArchivedDeclaration, ArchivedDocumentation, ArchivedKind, ArchivedMark, ArchivedMarked,
+    ArchivedMember, ArchivedModuleDocumentation, ArchivedSignature, Declaration, Documentation,
+    Kind, Mark, Marked, Member, ModuleDocumentation, Signature,
 };
 
 mod pages;

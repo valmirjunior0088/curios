@@ -1,8 +1,8 @@
 //! A package's documentation record, made from the unit its compilation builds: what `curios document` renders, checked over the standard library — the largest interface in the tree, read off the image it ships in — and over a fixture package whose every rule of the record is written out.
 
 use {
-    curios_common::{Qualifier, test_support::*},
-    curios_document::Kind,
+    curios_common::{Class, Qualifier, test_support::*},
+    curios_document::{Kind, Marked, Signature},
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_package::{Governing, order},
@@ -131,10 +131,11 @@ fn the_standard_library_documents_from_the_archive() {
         .find(|declaration| declaration.name == "flip")
         .expect("Ordering/flip");
     assert!(
-        flip.signature
-            .marks
-            .iter()
-            .any(|mark| mark.referent.join() == "/std/Ord/Ordering/Ordering" && mark.within),
+        flip.signature.marks.iter().any(|mark| matches!(
+            &mark.marked,
+            Marked::Name { referent, within: true, .. }
+                if referent.join() == "/std/Ord/Ordering/Ordering"
+        )),
         "{:?}",
         flip.signature
     );
@@ -198,12 +199,15 @@ fn a_concept_method_resolves_the_names_in_its_signature() {
         .signature
         .marks
         .iter()
-        .map(|mark| {
-            (
+        .filter_map(|mark| match &mark.marked {
+            Marked::Name {
+                referent, within, ..
+            } => Some((
                 &method.signature.text[mark.start..mark.end],
-                mark.referent.join(),
-                mark.within,
-            )
+                referent.join(),
+                *within,
+            )),
+            Marked::Word(_) => None,
         })
         .collect::<Vec<_>>();
 
@@ -297,7 +301,10 @@ fn card(
         signature
             .marks
             .iter()
-            .map(|mark| mark.referent.join())
+            .filter_map(|mark| match &mark.marked {
+                Marked::Name { referent, .. } => Some(referent.join()),
+                Marked::Word(_) => None,
+            })
             .collect(),
     )
 }
@@ -578,7 +585,12 @@ fn a_package_documents_its_interface_for_its_consumers() {
             .signature
             .marks
             .iter()
-            .map(|mark| (mark.referent.join(), mark.within))
+            .filter_map(|mark| match &mark.marked {
+                Marked::Name {
+                    referent, within, ..
+                } => Some((referent.join(), *within)),
+                Marked::Word(_) => None,
+            })
             .collect::<Vec<_>>(),
         [
             ("/shapes/Token".to_string(), true),
@@ -621,12 +633,15 @@ fn a_package_documents_its_interface_for_its_consumers() {
         .signature
         .marks
         .iter()
-        .map(|mark| {
-            (
+        .filter_map(|mark| match &mark.marked {
+            Marked::Name {
+                referent, within, ..
+            } => Some((
                 &area.signature.text[mark.start..mark.end],
-                mark.referent.join(),
-                mark.within,
-            )
+                referent.join(),
+                *within,
+            )),
+            Marked::Word(_) => None,
         })
         .collect::<Vec<_>>();
     assert_eq!(
@@ -669,5 +684,107 @@ fn a_package_documents_its_interface_for_its_consumers() {
     assert_eq!(
         geometry.declarations[0].prose,
         Some(vec!["Where it starts.".to_string()])
+    );
+}
+
+/// Each span a signature marks, as `(text, class)`: a word by its class, a name by its declaration's.
+fn painted(signature: &Signature) -> Vec<(&str, Option<Class>)> {
+    signature
+        .marks
+        .iter()
+        .map(|mark| {
+            let class = match &mark.marked {
+                Marked::Word(class) => Some(*class),
+                Marked::Name { class, .. } => *class,
+            };
+            (&signature.text[mark.start..mark.end], class)
+        })
+        .collect()
+}
+
+/// **A signature paints each word and each name by what it is.** The printer marks the words it writes, so a parameter spelled as a contextual word, or one whose first letters spell a keyword, is no word; and a name is classed by what the declaration it resolved to states — a type, a constructor, a concept and a function of `/std`, a value of the package's own — wherever it is declared, a binder staying plain; a `foreign` signature's wire words are words, each naming a type.
+#[test]
+fn a_signature_paints_each_word_and_name_by_what_it_is() {
+    let root = tree(
+        "document-classes",
+        &[
+            (
+                "curios.toml",
+                concat!(
+                    "compiler = \"",
+                    env!("CARGO_PKG_VERSION"),
+                    "\"\nname = \"probe\"\n"
+                ),
+            ),
+            (
+                "lib.crs",
+                concat!(
+                    "use /std/{Nat, Option, Show, Eq};\n\n",
+                    "pub let seven: Nat =\n    7;\n\n",
+                    "pub let pick(concept: Nat, letà: Nat) -> Nat =\n    concept + letà;\n\n",
+                    "pub let need(@A: Type, use Show(A), p: Eq()(Option/some(Nat/add(seven, 1)), Option/some(8))) -> Nat =\n    0;\n\n",
+                    "pub foreign halt(Nat, List(Bytes)) -> Never;\n",
+                ),
+            ),
+        ],
+    );
+    let governing = Governing::found(None, &root).expect("a governed package");
+    let units = order(&governing).expect("a scope");
+    let documentation = documentation(DEFAULT_BUDGET, units, &Overlay::default(), None)
+        .expect("the package documents");
+    let signature = |label: &str| {
+        &documentation.modules[0]
+            .declarations
+            .iter()
+            .find(|declaration| declaration.name == label)
+            .unwrap_or_else(|| panic!("the package declares {label}"))
+            .signature
+    };
+
+    let keyword = Some(Class::Keyword);
+    let type_ = Some(Class::Type);
+    assert_eq!(
+        painted(signature("pick")),
+        [
+            ("pub", keyword),
+            ("let", keyword),
+            ("Nat", type_),
+            ("Nat", type_),
+            ("Nat", type_)
+        ],
+        "{}",
+        signature("pick").text
+    );
+    assert_eq!(
+        painted(signature("need")),
+        [
+            ("pub", keyword),
+            ("let", keyword),
+            ("Type", Some(Class::Sort)),
+            ("use", keyword),
+            ("Show", Some(Class::Concept)),
+            ("Eq", type_),
+            ("Option/some", Some(Class::Constructor)),
+            ("Nat/add", Some(Class::Function)),
+            ("seven", Some(Class::Value)),
+            ("Option/some", Some(Class::Constructor)),
+            ("Nat", type_)
+        ],
+        "{}",
+        signature("need").text
+    );
+
+    assert_eq!(
+        painted(signature("halt")),
+        [
+            ("pub", keyword),
+            ("foreign", keyword),
+            ("Nat", type_),
+            ("List", type_),
+            ("Bytes", type_),
+            ("Never", type_)
+        ],
+        "{}",
+        signature("halt").text
     );
 }
