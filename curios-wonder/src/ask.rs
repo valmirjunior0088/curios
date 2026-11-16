@@ -909,7 +909,7 @@ fn row(named: &Named) -> String {
 /// The word a declaration is said to be declared as by.
 fn declared_as(declared: Declared) -> &'static str {
     match declared {
-        Declared::Authored => "definition",
+        Declared::Function | Declared::Value | Declared::Type => "definition",
         Declared::Inductive => "inductive",
         Declared::Struct => "structure",
         Declared::Concept => "concept",

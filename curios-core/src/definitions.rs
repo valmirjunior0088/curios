@@ -673,15 +673,20 @@ impl DefinitionKind {
             .collect()
     }
 
-    /// What the definition is declared as, with nothing of its entry in it.
-    pub fn declared(&self) -> Declared {
+    /// What a former is declared as, with nothing of its entry in it: an inductive, a structure or a concept. `None` for any other definition.
+    pub fn former(&self) -> Option<Declared> {
+        self.nominal().map(|nominal| match nominal {
+            Nominal::Inductive(_) => Declared::Inductive,
+            Nominal::Struct(_) => Declared::Struct,
+            Nominal::Concept { .. } => Declared::Concept,
+        })
+    }
+
+    /// What the definition is declared as, with nothing of its entry in it, `type_` being the type it states: a written definition is a type, a function or a value by that type ([`Declared::defined`]).
+    pub fn declared(&self, type_: &Term) -> Declared {
         match self {
-            DefinitionKind::Authored => Declared::Authored,
-            DefinitionKind::Nominal(nominal) => match &**nominal {
-                Nominal::Inductive(_) => Declared::Inductive,
-                Nominal::Struct(_) => Declared::Struct,
-                Nominal::Concept { .. } => Declared::Concept,
-            },
+            DefinitionKind::Authored => Declared::defined(type_),
+            DefinitionKind::Nominal(_) => self.former().expect("a nominal is a former"),
             DefinitionKind::InductiveConstructor { .. } => Declared::Constructor,
             DefinitionKind::Witness => Declared::Witness,
             DefinitionKind::Test => Declared::Test,
@@ -689,11 +694,16 @@ impl DefinitionKind {
     }
 }
 
-/// What a name is declared as: a [`DefinitionKind`] without the entry a former's carries, so it is read and compared with no declaration in hand, or a concept's method, which is a name its concept declares and no definition.
+/// What a name is declared as: a [`DefinitionKind`] without the entry a former's carries, so it is read and compared with no declaration in hand, or a concept's method, which is a name its concept declares and no definition. A written definition is told a type, a function and a value apart by the type it states ([`Declared::defined`]), so what a name is painted as is read here with nothing read either.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum Declared {
-    Authored,
+    /// A written definition whose stated type is a function's, ending in no sort.
+    Function,
+    /// A written definition whose stated type is neither a function's nor a sort.
+    Value,
+    /// A written definition whose stated type is a sort, or a function's ending in one: a type or a family of them, an intrinsic type of `/sys` among them.
+    Type,
     Inductive,
     Struct,
     Concept,
@@ -704,6 +714,24 @@ pub enum Declared {
 }
 
 impl Declared {
+    /// A written definition stating `type_`, read as written and unfolding nothing — `Endo(Nat)` is a value's type, whatever it unfolds to: a type where it ends, past every function's telescope, in a sort; a function where it is a function's otherwise; and a value where it is neither.
+    pub fn defined(type_: &Term) -> Declared {
+        let mut result = type_;
+        while let Subterm::FuncType(FuncType { telescope }) = &**result {
+            result = telescope.terminal();
+        }
+        match (&**result, &**type_) {
+            (Subterm::Sort(_), _) => Declared::Type,
+            (_, Subterm::FuncType(_)) => Declared::Function,
+            _ => Declared::Value,
+        }
+    }
+
+    /// Whether the name is a written definition: a type, a function or a value.
+    pub fn is_defined(self) -> bool {
+        matches!(self, Declared::Function | Declared::Value | Declared::Type)
+    }
+
     /// Whether the name is a nominal declaration's former.
     pub fn is_former(self) -> bool {
         matches!(
@@ -1340,16 +1368,17 @@ impl Item {
 
     /// What this item declares each of its names as, in the order of [`Item::declared_names`]. A definition the item holds is no constructor whatever its kind states: a constructor is its family's, which the item declares beside its definitions.
     pub fn declared(&self) -> Vec<Declared> {
-        let held = |kind: &DefinitionKind| match kind.declared() {
-            Declared::Constructor => Declared::Authored,
+        let held = |kind: &DefinitionKind, type_: &Term| match kind.declared(type_) {
+            Declared::Constructor => Declared::defined(type_),
             declared => declared,
         };
         let own = match self {
-            Item::Let(definition) => vec![held(&definition.kind)],
+            Item::Let(definition) => vec![held(&definition.kind, &definition.type_)],
             Item::Rec(rec) => rec
                 .definitions
                 .iter()
-                .map(|definition| held(&definition.kind))
+                .enumerate()
+                .map(|(member, definition)| held(&definition.kind, &rec.group.member_type(member)))
                 .collect(),
         };
         let constructors = self.constructor_names().len();

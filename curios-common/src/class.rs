@@ -49,14 +49,14 @@ classes! {
     Decorator => "decorator",
     /// A module: a segment of a path, or the module a `use` line names.
     Module => "module",
-    /// An inductive, a structure, a type of `/sys`, or a wire word of a `foreign` signature.
+    /// An inductive, a structure, a written definition whose stated type ends in a sort — a type of `/sys` among them — or a wire word of a `foreign` signature.
     Type => "type",
     /// An inductive's constructor.
     Constructor => "constructor",
     Concept => "concept",
     /// A concept's method.
     Method => "method",
-    /// A declaration whose stated type is a function's — a `foreign`, an operation of `/sys` — and a test.
+    /// A declaration whose stated type is a function's ending in no sort — a `foreign`, an operation of `/sys` — and a test.
     Function => "function",
     /// Any other declaration, a witness's name in Core text among them.
     Value => "value",

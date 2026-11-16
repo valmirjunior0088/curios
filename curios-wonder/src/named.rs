@@ -608,7 +608,7 @@ fn witnesses(
     let head = match found.declared {
         Declared::Concept => None,
         Declared::Inductive | Declared::Struct => Some(HeadKey::Nominal(*name)),
-        Declared::Authored => Some(found.lowered.lowered(name).and_then(|item| {
+        Declared::Type => Some(found.lowered.lowered(name).and_then(|item| {
             let definition = item
                 .definitions()
                 .into_iter()
@@ -736,7 +736,7 @@ fn spelled(
         declaration: said.declaration,
         type_: type_.map(|type_| type_.spelled(&spelling).to_string()),
         totality: certification
-            .filter(|_| said.declared == Declared::Authored)
+            .filter(|_| said.declared.is_defined())
             .and_then(|certification| certification.totality(&name)),
         members: said.members,
         witnesses: said.witnesses,

@@ -861,7 +861,7 @@ impl PreparedText {
         let place = self.places().place(name)?;
         let declared = self.declared_at(place);
         let body = match (declared, place) {
-            (curios_core::Declared::Authored, curios_core::Place::Let(_)) => {
+            (declared, curios_core::Place::Let(_)) if declared.is_defined() => {
                 match self.lowered_item(place.item()) {
                     curios_core::Item::Let(definition) => Some(&definition.body),
                     curios_core::Item::Rec(_) => None,
@@ -3117,7 +3117,7 @@ fn into_core_unit_within(
                 let formers = made
                     .iter()
                     .flat_map(|index| flat_items[*index].declared())
-                    .filter(|(_, kind, _)| kind.declared().is_former())
+                    .filter(|(_, kind, _)| kind.nominal().is_some())
                     .map(|(name, _, _)| name)
                     .chain(
                         gone.iter()

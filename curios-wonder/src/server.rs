@@ -580,7 +580,9 @@ fn outline(buffer: &str, checked: &[Written]) -> Vec<DocumentSymbol> {
         let mut owner = None;
         for named in written.names.iter().filter(|named| named.declares) {
             let (kind, member) = match named.declared {
-                Declared::Authored | Declared::Test => (SymbolKind::FUNCTION, false),
+                Declared::Function | Declared::Test => (SymbolKind::FUNCTION, false),
+                Declared::Value => (SymbolKind::CONSTANT, false),
+                Declared::Type => (SymbolKind::TYPE_PARAMETER, false),
                 Declared::Inductive => (SymbolKind::ENUM, false),
                 Declared::Struct => (SymbolKind::STRUCT, false),
                 Declared::Concept => (SymbolKind::INTERFACE, false),

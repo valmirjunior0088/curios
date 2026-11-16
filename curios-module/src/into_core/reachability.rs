@@ -97,7 +97,9 @@ impl<'u> Items<'u> {
 fn is_reportable(declared: curios_core::Declared) -> bool {
     matches!(
         declared,
-        curios_core::Declared::Authored
+        curios_core::Declared::Function
+            | curios_core::Declared::Value
+            | curios_core::Declared::Type
             | curios_core::Declared::Inductive
             | curios_core::Declared::Struct
             | curios_core::Declared::Concept

@@ -271,7 +271,10 @@ pub fn declared_digest(
         Part::Body => curios_cert::part_digest(unit, &name, true),
         Part::Kind => constructor(unit.definitions, unit.places, &name)
             .map(|definition| {
-                let kind = (definition.kind.declared(), definition.kind.generated_from());
+                let kind = (
+                    definition.kind.declared(&definition.type_),
+                    definition.kind.generated_from(),
+                );
 
                 curios_archive::to_bytes(&kind).map(|bytes| digest(&bytes))
             })

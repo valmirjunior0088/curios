@@ -282,6 +282,28 @@ satisfy Painted(Colour) {
     );
 }
 
+/// A written definition is outlined by the type it states: a type where it states a sort, a function where it states a function's, and a constant where it states any other.
+#[test]
+fn a_written_definition_is_outlined_by_the_type_it_states() {
+    const DEFINED: &str = "\
+let one: /std/Nat = 1;
+let same(n: /std/Nat) -> /std/Nat = n;
+let Count: Type = /std/Nat;
+
+/std/print(\"\")
+";
+    let symbols = outline(DEFINED, &checked(DEFINED));
+
+    assert_eq!(
+        symbols.iter().map(|symbol| symbol.kind).collect::<Vec<_>>(),
+        [
+            SymbolKind::CONSTANT,
+            SymbolKind::FUNCTION,
+            SymbolKind::TYPE_PARAMETER
+        ]
+    );
+}
+
 /// A protocol position is the offset it was derived from, in a text whose characters take one unit and two: the two directions of the one place UTF-16 is spoken.
 #[test]
 fn a_position_names_the_offset_it_was_derived_from() {

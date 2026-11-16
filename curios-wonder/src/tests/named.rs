@@ -61,10 +61,7 @@ const REFUSED: &str = "let one: /std/Nat = true;\nlet two: /std/Nat = one;\n/std
 fn a_program_that_does_not_check_answers_what_it_writes() {
     let named = at(REFUSED, "one", 1, 0).expect("a name stands at the use");
 
-    assert_eq!(
-        said(&named),
-        ("/one", Declared::Authored, false, Some((1, 5)))
-    );
+    assert_eq!(said(&named), ("/one", Declared::Value, false, Some((1, 5))));
 }
 
 /// A declaration's own name answers the declaration, as a use of it does.
@@ -72,10 +69,7 @@ fn a_program_that_does_not_check_answers_what_it_writes() {
 fn a_declarations_own_name_answers_itself() {
     let named = at(REFUSED, "two", 0, 1).expect("a name stands at the label");
 
-    assert_eq!(
-        said(&named),
-        ("/two", Declared::Authored, true, Some((2, 5)))
-    );
+    assert_eq!(said(&named), ("/two", Declared::Value, true, Some((2, 5))));
 }
 
 /// An offset at a name's end is at the name, and one where nothing is named answers nothing.
@@ -221,7 +215,7 @@ fn a_library_is_asked_through_one_of_its_files() {
 
     assert_eq!(
         said(named),
-        ("/answers/answer", Declared::Authored, false, Some((2, 9)))
+        ("/answers/answer", Declared::Value, false, Some((2, 9)))
     );
 }
 
@@ -271,7 +265,7 @@ fn a_library_definition_is_answered_with_its_type_and_text() {
         ),
         (
             "/std/Bool/not",
-            Declared::Authored,
+            Declared::Function,
             Some(true),
             Some("(b: Bool) -> Bool")
         ),
@@ -414,6 +408,6 @@ fn a_place_answers_the_declaration_its_name_names() {
             described.type_,
             described.witnesses,
         ),
-        ("/std/Bool/not", Declared::Authored, Some(true), None, None),
+        ("/std/Bool/not", Declared::Function, Some(true), None, None),
     );
 }

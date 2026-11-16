@@ -208,7 +208,7 @@ fn inductive_constructor_ownership_is_explicit() {
             // A former by what it is declared as, its entry being its own; a constructor by its kind, which names its family.
             (
                 definition.name,
-                definition.kind.declared(),
+                definition.kind.declared(&definition.type_),
                 definition
                     .kind
                     .nominal()

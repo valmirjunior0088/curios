@@ -12,7 +12,7 @@ The next step is stage 1, a delivery.
 
 - **One statement of the words and one class set**, `curios-common`'s `Keyword` and `Class` ([Curios is coloured from one class set](../../design/tools/curios-is-coloured-from-one-class-set.md)).
 - **The printer marks what it writes.** `Printer::Named` reports each name it emits with the range it landed on (`render_annotated`), and the documentation builder resolves each to the declaration it names from the lowering's tables (`curios-module/src/into_core/document.rs`), the builder that answers `wonder --at`'s heading as well.
-- **What each declaration is**, outlined by the lowering for every unit, a stored one included (`PreparedText::declared_as`, `curios_core::Declared`).
+- **What each declaration is**, outlined by the lowering for every unit, a stored one included, a written definition told a type, a function and a value apart by the type it states (`PreparedText::declared_as`, `curios_core::Declared`).
 
 ## What the peers do
 
@@ -22,11 +22,11 @@ What is taken: printed text classed by its printer (Unison), a name of another u
 
 ## Settled
 
-- **Printed text is classed by its printer.** Each word as `Keyword` states it, or `curios-abi` for a wire word, a type, and each name by what the declaration it resolved to is, the unit's or a dependency's alike, so the documentation reads no text again. A class is read off what a declaration states, never off where it lives, and whether a declaration is a function or a value off the head of the type it states, where the lowering outlines what each declaration is (`Declared`), so the documentation and the server's outline read one answer.
+- **Printed text is classed by its printer.** Each word as `Keyword` states it, or `curios-abi` for a wire word, a type, and each name by what the declaration it resolved to is, the unit's or a dependency's alike, so the documentation reads no text again. A class is read off what a declaration states, never off where it lives, and whether a written definition is a type, a function or a value off the type it states, where the lowering outlines what each declaration is (`Declared`), so the documentation and the server's outline read one answer.
 
 ## Stages
 
-1. **The documentation's signatures.** The lowering's outline tells a function from a value (`Declared`), which the server's outline reads as well; the printer annotates each word it writes, as it annotates a name; the builder classes a word by `Keyword`, or `curios-abi` for a wire word, and each name by what the declaration it resolved to is, of the unit or of a unit it was lowered over alike (`declared_as`), and the record carries the class with each mark; a binder, which resolves to no declaration until [The editor is answered at a position](300-the-editor-is-answered-at-a-position.md)'s first stage records binders, stays plain; a page paints each class by its name, `KEYWORDS` and `words` gone and a module card's tally ordered by `Kind`. The record's layout changes, so the store's verdict schema tag, the prelude's records image and `curios/src/tests/document.rs` move with it. Check: `curios-document`'s suites, and a documented package whose signatures name a `/std` type, constructor, concept and function, a value of its own, and parameters named `concept` and `letà`, rendering each in its class.
+1. **The documentation's signatures.** The printer annotates each word it writes, as it annotates a name; the builder classes a word by `Keyword`, or `curios-abi` for a wire word, and each name by what the declaration it resolved to is, of the unit or of a unit it was lowered over alike (`declared_as`), and the record carries the class with each mark; a binder, which resolves to no declaration until [The editor is answered at a position](300-the-editor-is-answered-at-a-position.md)'s first stage records binders, stays plain; a page paints each class by its name, `KEYWORDS` and `words` gone and a module card's tally ordered by `Kind`. The record's layout changes, so the store's verdict schema tag, the prelude's records image and `curios/src/tests/document.rs` move with it. Check: `curios-document`'s suites, and a documented package whose signatures name a `/std` type, constructor, concept and function, a value of its own, and parameters named `concept` and `letà`, rendering each in its class.
 
 The stage's contract lands in [the decision](../../design/tools/curios-is-coloured-from-one-class-set.md): what classes printed text.
 

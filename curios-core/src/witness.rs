@@ -345,7 +345,7 @@ impl Written {
     pub fn of(declared: Declared, body: Option<&Term>) -> Self {
         match (declared, body) {
             (declared, _) if declared.is_former() => Written::Former,
-            (Declared::Authored, Some(body)) => Written::Defined(body.clone()),
+            (declared, Some(body)) if declared.is_defined() => Written::Defined(body.clone()),
             _ => Written::Opaque,
         }
     }

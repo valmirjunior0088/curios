@@ -24,16 +24,23 @@ pub type Keyed<'a> = (curios_core::Declared, Option<&'a curios_core::Term>);
 /// How `item` declares each of its names, as a key reads it: a `let` with its body, a group's members without theirs.
 pub fn keyed_of(item: &FlatItem) -> Vec<(curios_core::Global, Keyed<'_>)> {
     match item {
-        FlatItem::Let(let_) => vec![(let_.name, (let_.kind.declared(), Some(&let_.body)))],
+        FlatItem::Let(let_) => vec![(
+            let_.name,
+            (let_.kind.declared(&let_.type_), Some(&let_.body)),
+        )],
         // A member's body is closed over its group, which a key is not read through.
         FlatItem::Rec(lets) => lets
             .iter()
-            .map(|let_| (let_.name, (let_.kind.declared(), None)))
+            .map(|let_| (let_.name, (let_.kind.declared(&let_.type_), None)))
             .collect(),
         FlatItem::Kept(rec) => rec
             .exports()
             .iter()
-            .map(|definition| (definition.name, (definition.kind.declared(), None)))
+            .enumerate()
+            .map(|(member, definition)| {
+                let type_ = rec.group().member_type(member);
+                (definition.name, (definition.kind.declared(&type_), None))
+            })
             .collect(),
     }
 }

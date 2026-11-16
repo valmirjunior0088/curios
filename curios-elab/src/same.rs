@@ -229,7 +229,7 @@ pub fn item_part_digest(
 
     // What the name is declared as, the entry a former carries left out: the entry is a part of its own.
     let origin = (!matches!(held, DefinitionKind::Nominal(_))).then(|| held.clone());
-    let kind = (name, held.declared(), origin, island);
+    let kind = (name, held.former(), origin, island);
     let signature = || match (plain, group) {
         (Some(definition), _) => {
             let type_ = sharing.share(&definition.type_);
@@ -314,9 +314,7 @@ fn sealed(archived: Result<curios_archive::Serialized, String>) -> Result<String
 /// Whether two kinds say one thing of a name, the entry a type former carries left out. An entry is a part of its own, compared as the context holds it ([`Same::keying`]): the one a former made again carries is the lowering's until its item leaves the walk, and a former held to it would have moved for every declaration that read its signature.
 fn kinds_alike(this: &DefinitionKind, that: &DefinitionKind) -> bool {
     match (this, that) {
-        (DefinitionKind::Nominal(_), DefinitionKind::Nominal(_)) => {
-            this.declared() == that.declared()
-        }
+        (DefinitionKind::Nominal(_), DefinitionKind::Nominal(_)) => this.former() == that.former(),
         _ => this == that,
     }
 }
