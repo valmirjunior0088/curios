@@ -2013,6 +2013,13 @@ fn elaborate_and_zonk_over<'s>(
             elaborated.obligations,
         );
         if !elaborated.refusals.is_empty() {
+            // A declaration kept as the baseline holds it is filed with the record the baseline made, whose credits no proof written now repeats: they join this elaboration's, so the lints a refusal is read with credit what a kept proof reads, as a unit made of the same traces would.
+            context.credit_adopted(
+                elaborated
+                    .traces
+                    .declarations()
+                    .flat_map(|(_, record)| record.concluded().credited.iter().copied()),
+            );
             return Err(refused(elaborated.refusals, finalized));
         }
         let Finalized {

@@ -7,7 +7,7 @@ use {
     curios_module::{RootSource, SYNTAX, UnitSource},
     curios_prelude::with_prelude,
     curios_unit::{Predecessors, Unit},
-    std::cell::{Cell, RefCell},
+    std::cell::Cell,
 };
 
 const BASE: &str = "use /std/{Nat};\n\npub let answer: Nat = 42;\n";
@@ -163,32 +163,6 @@ fn an_offered_baseline_is_taken_by_a_cache_and_by_nothing_else() {
         ["compiling /lib", "compiled"],
         "no cache, no taker"
     );
-}
-
-/// A cache as a session is one: it never hits, keeps the last unit it was handed, and offers it as the baseline of the next compile, and it counts what it was asked.
-#[derive(Default)]
-struct Keeping {
-    kept: RefCell<Option<Unit>>,
-    asked: Cell<usize>,
-}
-
-impl Cache for Keeping {
-    fn get(&self, _: &UnitSource<'_>) -> Option<Unit> {
-        self.asked.set(self.asked.get() + 1);
-        None
-    }
-
-    fn baseline(&self, _: &UnitSource<'_>, _: Option<&Unit>) -> Option<Earlier> {
-        self.kept.borrow().clone().map(|unit| Earlier {
-            unit,
-            after: After::Scope,
-            candidates: None,
-        })
-    }
-
-    fn put(&self, _: &UnitSource<'_>, unit: &Unit) {
-        *self.kept.borrow_mut() = Some(unit.clone());
-    }
 }
 
 /// A program of two declarations and a final term that reads both.

@@ -1,6 +1,6 @@
 //! `unused-binder` and `unused-let` once elaboration has credited them: a binder only a proof the elaborator writes reads is used wherever that proof is written, `_` among them, and a credit names the declaration whose binder was read and no other.
 
-use {super::test_support::*, curios_lint::LintKind};
+use {super::test_support::*, crate::*, curios_lint::LintKind};
 
 /// The bound of `/` in the result type is discharged from `ok`, which nothing names: the proof is written while the type elaborates, under the type's own binder.
 #[test]
@@ -14,6 +14,39 @@ pub let halves(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
     );
 
     assert_eq!(unused_binders(&unit), Vec::<String>::new());
+}
+
+/// A program checked again over the unit kept of it, refused for `_other`, keeps `_halves` as it was elaborated, and the proof of `/`'s bound that reads `ok` stands in the record kept with it: what the refusal reports reads that proof as the accepted check did, and `_other`'s own `n` is the one binder nothing reads.
+///
+/// Mutation-checked: with the refusal handed out before the kept records' credits join, `ok` is reported.
+#[test]
+fn a_kept_declarations_proof_reads_its_hypothesis_beside_a_refusal() {
+    let accepted = "use /std/{Nat, Eq};
+use /std/Bool/{Holds};
+
+let _halves(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
+
+let _other(n: Nat) -> Nat = n;
+
+/std/print(\"x\")
+";
+    let refused = accepted.replace("-> Nat = n;", "-> Nat = \"s\";");
+    let cache = Keeping::default();
+
+    assert!(checked_through(accepted, &cache).verdict.is_ok());
+    assert!(cache.kept.borrow().is_some(), "the accepted unit was kept");
+    let Checked { entry, verdict } = checked_through(&refused, &cache);
+
+    assert!(verdict.is_err(), "`_other` is refused");
+    assert_eq!(
+        entry
+            .lints
+            .iter()
+            .filter(|lint| lint.kind == LintKind::UnusedBinder)
+            .map(|lint| lint.report(&[&entry.anchors]).message())
+            .collect::<Vec<_>>(),
+        ["unused binder\n  `n` is never used\n  write `_` in its name's place"]
+    );
 }
 
 /// `idle` and `ok` sit at one place among their own declarations' written binders, so a credit keyed by the wrong member would spare the first and report the second.

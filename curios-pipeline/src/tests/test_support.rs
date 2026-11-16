@@ -13,7 +13,12 @@ use {
     curios_prelude::with_prelude,
     curios_surface::Entrypoint,
     curios_unit::{Pack, Predecessors, Unit, packed},
-    std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc},
+    std::{
+        cell::{Cell, RefCell},
+        collections::BTreeMap,
+        fs,
+        rc::Rc,
+    },
 };
 
 /// What a store holds of the units filed into it, by name, and the name of every object a compile read out of it: a store's candidates, held in memory.
@@ -53,6 +58,54 @@ impl Candidates for Store {
         self.read.borrow_mut().push(*digest);
         self.objects.get(digest).cloned()
     }
+}
+
+/// A cache as a session is one: it never hits, keeps the last unit it was handed, and offers it as the baseline of the next compile, and it counts what it was asked.
+#[derive(Default)]
+pub struct Keeping {
+    pub kept: RefCell<Option<Unit>>,
+    pub asked: Cell<usize>,
+}
+
+impl Cache for Keeping {
+    fn get(&self, _: &UnitSource<'_>) -> Option<Unit> {
+        self.asked.set(self.asked.get() + 1);
+        None
+    }
+
+    fn baseline(&self, _: &UnitSource<'_>, _: Option<&Unit>) -> Option<Earlier> {
+        self.kept.borrow().clone().map(|unit| Earlier {
+            unit,
+            after: After::Scope,
+            candidates: None,
+        })
+    }
+
+    fn put(&self, _: &UnitSource<'_>, unit: &Unit) {
+        *self.kept.borrow_mut() = Some(unit.clone());
+    }
+}
+
+/// What checking the program `source` decides against the prelude, its declarations taken from `cache` and handed to it: its lints, and its verdict.
+pub fn checked_through(source: &str, cache: &dyn Cache) -> Checked {
+    let entrypoint = entrypoint_of(source);
+
+    with_prelude(|prelude| {
+        check_entrypoint(
+            DEFAULT_BUDGET,
+            Predecessors::over(prelude),
+            &SYNTAX,
+            &UnitSource::entry(&entrypoint, &RootSource::none()),
+            Some(cache),
+            EntryTail::Program,
+            Told {
+                observe: &mut |_: Stage<'_>| {},
+                read: None,
+                progress: &mut |_| {},
+            },
+        )
+    })
+    .expect("the program lowers")
 }
 
 /// A fixture's entrypoint. Every fixture is a program, so its final term describes doing something and yielding nothing: one whose subject is a term binds it in a `let` at the type under test and closes with `Io/pure(())`.
