@@ -533,7 +533,7 @@ satisfy Spell(Str) {
             fold(s, "", (c, acc) =>
                 concat(
                     acc,
-                    match Char/to_nat(c)
+                    match c
                     | '\n' => "\\n"
                     | '\t' => "\\t"
                     | '\r' => "\\r"

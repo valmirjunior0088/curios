@@ -22,9 +22,9 @@ pub let to_str(b: Bool) -> Str =
 
 --- The value `to_str` writes, or `none` for any other text.
 pub let of_str(s: Str) -> Option(Bool) =
-    match
-    | s == "true" => Option/some(true)
-    | s == "false" => Option/some(false)
+    match s
+    | "true" => Option/some(true)
+    | "false" => Option/some(false)
     | _ => Option/none()
     end;
 

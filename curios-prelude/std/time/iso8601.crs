@@ -277,7 +277,7 @@ let duration_parts(hours: Nat, minutes: Nat, last: Nat) -> Parse(Str, Int) =
     | true =>
         let read = more_digits(0, 0)!;
         let unit = Parse/str/char!;
-        match Char/to_nat(unit)
+        match unit
         | 'H', last < 1 => duration_parts(read.value, minutes, 1)
         | 'M', last < 2 => duration_parts(hours, read.value, 2)
         | 'S' => total(hours, minutes, read.value, 0)

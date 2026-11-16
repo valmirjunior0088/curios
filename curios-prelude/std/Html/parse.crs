@@ -2,10 +2,7 @@ use /std/{Str, Char, Nat, Bool, List, Option, Result, Parse, Html};
 use /std/Html/{Attr};
 
 let is_ws(c: Char) -> Bool =
-    match Char/to_nat(c)
-    | ' ' | '\t' | '\n' | '\r' | '\u{C}' => true
-    | _ => false
-    end;
+    match c | ' ' | '\t' | '\n' | '\r' | '\u{C}' => true | _ => false end;
 
 let ws: Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws), (_) => ());
@@ -23,13 +20,13 @@ let until_char(stop: Char) -> Parse(Str, Str) =
     Parse/str/take_while((c) => c != stop);
 
 let named_reference(body: Str) -> Option(Str) =
-    match
-    | body == "amp" => Option/some("&")
-    | body == "lt" => Option/some("<")
-    | body == "gt" => Option/some(">")
-    | body == "quot" => Option/some("\"")
-    | body == "apos" => Option/some("'")
-    | body == "nbsp" => Option/some("\u{A0}")
+    match body
+    | "amp" => Option/some("&")
+    | "lt" => Option/some("<")
+    | "gt" => Option/some(">")
+    | "quot" => Option/some("\"")
+    | "apos" => Option/some("'")
+    | "nbsp" => Option/some("\u{A0}")
     | _ => Option/none()
     end;
 
@@ -169,7 +166,7 @@ and tree() -> Parse(Str, Html) =
             match second
             | none() => lone_bracket
             | some(after) =>
-                match Char/to_nat(after)
+                match after
                 | '/' => Parse/fail("a closing tag")
                 | '!' => Parse/or(comment(), declaration())
                 | _, is_name_char(after) => element()

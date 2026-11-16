@@ -5,7 +5,7 @@ let words(parts: List(Str)) -> Str =
     Str/join(" ", List/filter(parts, (part) => part != ""));
 
 let bracket(s: Str) -> Str =
-    match s == "" | true => "" | false => Fmt/render("[%]")(s) end;
+    match s | "" => "" | _ => Fmt/render("[%]")(s) end;
 
 -- The command `path` names, the root's own name first: the deepest one the path reaches.
 let at(c: Command, path: List(Str)) -> Command =

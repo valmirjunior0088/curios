@@ -88,7 +88,7 @@ let word_forth(s: Str, at: Str/At(s)) -> Str/At(s) =
 
 -- What a key with Ctrl does, as readline has it: A and E to either end, B and F a cluster back and on, K and U the text cut to either end, and W the word before the cursor cut.
 let controlled(i: Field, c: Char) -> Field =
-    match Char/to_nat(c)
+    match c
     | 'a' => moved(i, Str/At/start(i.text))
     | 'e' => moved(i, Str/At/finish(i.text))
     | 'b' => moved(i, back(i.text, i.cursor))
@@ -101,7 +101,7 @@ let controlled(i: Field, c: Char) -> Field =
 
 -- What a key with Alt does, as readline has it: B and F a word back and on.
 let alternate(i: Field, c: Char) -> Field =
-    match Char/to_nat(c)
+    match c
     | 'b' => moved(i, word_back(i.text, i.cursor))
     | 'f' => moved(i, word_forth(i.text, i.cursor))
     | _ => i

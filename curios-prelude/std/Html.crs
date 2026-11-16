@@ -64,7 +64,7 @@ pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> H
             element("body", [], body)]);
 
 let escape_char(c: Char) -> Str =
-    match Char/to_nat(c)
+    match c
     | '&' => "&amp;"
     | '<' => "&lt;"
     | '>' => "&gt;"

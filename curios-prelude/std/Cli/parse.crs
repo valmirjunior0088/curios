@@ -29,7 +29,7 @@ let readings(v: Value, name: Str, texts: List(Str)) -> Result(Failure, List(v.A)
 
 -- What an environment variable says of a flag: anything but nothing, `0` and `false` sets it.
 let truthy(text: Str) -> Bool =
-    Bool/not(text == "" || text == "0" || text == "false");
+    match text | "" | "0" | "false" => false | _ => true end;
 
 let given(seen: List(Seen)) -> Nat =
     List/len(List/filter(seen, (s) => match s | given() => true | _ => false end));

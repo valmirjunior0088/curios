@@ -80,7 +80,7 @@ let number() -> Parse(Str, Json) =
 
 --- Whether `c` may stand in a string as written: any but the quote, the backslash and the control characters below `U+0020`, which the grammar has escaped.
 let is_unescaped(c: Char) -> Bool =
-    match Char/to_nat(c)
+    match c
     | '"' => false
     | '\\' => false
     | _ => Char/to_nat(c) >= 0x20
@@ -123,7 +123,7 @@ let unicode_escape() -> Parse(Str, Str) =
 
 let escape_fields() -> Parse(Str, Str) =
     let c = Parse/str/char!;
-    match Char/to_nat(c)
+    match c
     | '"' => Parse/pure("\"")
     | '\\' => Parse/pure("\\")
     | '/' => Parse/pure("/")
@@ -165,10 +165,7 @@ let str_value: Parse(Str, Json) =
     Parse/map(raw_str(), (s) => Json/str(s));
 
 let is_ws(c: Char) -> Bool =
-    match Char/to_nat(c)
-    | ' ' | '\t' | '\n' | '\r' => true
-    | _ => false
-    end;
+    match c | ' ' | '\t' | '\n' | '\r' => true | _ => false end;
 
 let ws: Parse(Str, {}) =
     Parse/map(Parse/str/take_while(is_ws), (_) => ());
@@ -206,7 +203,7 @@ let bracketed(
 let value() -> Parse(Str, Json) =
     let () = ws!;
     let next = peek_char()!;
-    match Char/to_nat(next)
+    match next
     | 'n' => null_value
     | 't' => true_value
     | 'f' => false_value

@@ -76,12 +76,12 @@ let sign() -> Parse(Str, {Bool, Bool}) =
     end;
 
 let is_radix_marker(c: Char) -> Bool =
-    match Char/to_nat(c) | 'x' | 'o' | 'b' => true | _ => false end;
+    match c | 'x' | 'o' | 'b' => true | _ => false end;
 
 let prefixed() -> Parse(Str, Nat) =
     let _ = Parse/str/expect('0')!;
     let marker = Parse/str/char!;
-    match Char/to_nat(marker)
+    match marker
     | 'x' => magnitude(16, hex_val)
     | 'o' => magnitude(8, oct_digit)
     | 'b' => magnitude(2, bin_digit)

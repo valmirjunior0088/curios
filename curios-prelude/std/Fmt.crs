@@ -29,7 +29,7 @@ let Walk: Type =
 
 --- `c` read where no backslash waits: a place closes the run before it, a backslash waits for what follows, and any other character joins the run.
 let plain(c: Char, read: Fmt, run: Str) -> Walk =
-    match Char/to_nat(c)
+    match c
     | '%' => (Fmt/show(Fmt/lit(run, read)), "", false)
     | '#' => (Fmt/spell(Fmt/lit(run, read)), "", false)
     | '\\' => (read, run, true)
@@ -42,7 +42,7 @@ let step(c: Char, walk: Walk) -> Walk =
     match escaped
     | false => plain(c, read, run)
     | true =>
-        match Char/to_nat(c)
+        match c
         | '%' => (read, Str/concat(run, "%"), false)
         | '#' => (read, Str/concat(run, "#"), false)
         | _ => plain(c, read, Str/concat(run, "\\"))

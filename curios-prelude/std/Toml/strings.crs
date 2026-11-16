@@ -36,7 +36,7 @@ let escape() -> Parse(Str, Str) =
     | none() => Parse/fail("unterminated escape")
     | some(c) =>
         let _ = Parse/str/char!;
-        match Char/to_nat(c)
+        match c
         | 'b' => Parse/pure("\u{8}")
         | 't' => Parse/pure("\t")
         | 'n' => Parse/pure("\n")
@@ -70,7 +70,7 @@ let basic_body(acc: Str) -> Parse(Str, Str) =
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
-        match Char/to_nat(c)
+        match c
         | '"' =>
             let _ = Parse/str/char!;
             Parse/pure(here)
@@ -115,7 +115,7 @@ let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
     match next
     | none() => stop
     | some(c) =>
-        match Char/to_nat(c)
+        match c
         | ' ' | '\t' =>
             let _ = Parse/str/char!;
             trim_run(seen_nl)
@@ -159,7 +159,7 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
-        match Char/to_nat(c)
+        match c
         | '"' =>
             let (kept, closed) = quote_run('"', here)!;
             match closed
@@ -197,7 +197,7 @@ let ml_literal_body(acc: Str) -> Parse(Str, Str) =
     match next
     | none() => Parse/fail("unterminated string")
     | some(c) =>
-        match Char/to_nat(c)
+        match c
         | '\'' =>
             let (kept, closed) = quote_run('\'', here)!;
             match closed

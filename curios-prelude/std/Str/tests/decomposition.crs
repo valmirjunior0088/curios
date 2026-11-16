@@ -88,7 +88,7 @@ test to_list_yields_the_scalars_and_of_char_encodes_one =
 -- An escape replaces only the characters its table answers for and copies the runs between as the pieces they are: a multi-byte character passes untouched, a replacement may open, close or follow another, and a table that answers for nothing gives the text back.
 test escape_replaces_chosen_characters_and_copies_the_runs_between =
     let marked(c: Char) -> Option(Str) =
-        match Char/to_nat(c)
+        match c
         | '"' => Option/some("\\\"")
         | '€' => Option/some("EUR")
         | _ => Option/none()

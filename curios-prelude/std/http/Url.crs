@@ -51,7 +51,7 @@ let scheme() -> Parse(Str, Scheme) =
 -- Whether the authority ends here: at the path, the query, the fragment, or the end of the text.
 let ends_authority(next: Option(Char)) -> Bool =
     match next
-    | some(c) => match Char/to_nat(c) | '/' | '?' | '#' => true | _ => false end
+    | some(c) => match c | '/' | '?' | '#' => true | _ => false end
     | none() => true
     end;
 

@@ -1,4 +1,4 @@
-use /std/{Char, Str, List, Map, Parse, Toml};
+use /std/{Str, List, Map, Parse, Toml};
 use /std/Toml/{Error};
 use /std/Toml/build/{inline_fold};
 use /std/Toml/scan/{trivia, ws};
@@ -82,7 +82,7 @@ pub and value() -> Parse(Str, Toml) =
     match next
     | none() => Parse/fail("expected value")
     | some(c) =>
-        match Char/to_nat(c)
+        match c
         | '"' => str_basic_value
         | '\'' => str_literal_value
         | 't' => true_value
