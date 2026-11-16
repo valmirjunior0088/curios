@@ -1,20 +1,20 @@
 //! The program reaching outside itself: streams, files, the terminal, serial ports, the process surface, the network, and the foreign declarations that bind to a host.
 //!
-//! Every case here runs against a scripted host, so what is asserted is the program's side of the contract rather than any real device — except `os_tests`, the few programs that run against the real host to prove the scheduler's wait path against a certifier-backed descriptor.
+//! Every case here runs against a scripted host, so what is asserted is the program's side of the contract rather than any real device — except `os`, the few programs that run against the real host to prove the scheduler's wait path against a certifier-backed descriptor.
 
-mod boundary_tests;
-mod description_tests;
-mod file_tests;
-mod fs_tests;
-mod http_tests;
-mod net_tests;
-mod os_tests;
-mod outcome_tests;
-mod plugin_tests;
-mod proc_tests;
-mod program_tests;
-mod reader_tests;
-mod serial_tests;
-mod stream_tests;
-mod suspension_tests;
-mod tty_tests;
+mod boundary;
+mod description;
+mod file;
+mod fs;
+mod http;
+mod net;
+mod os;
+mod outcome;
+mod plugin;
+mod proc;
+mod program;
+mod reader;
+mod serial;
+mod stream;
+mod suspension;
+mod tty;

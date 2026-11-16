@@ -2,21 +2,21 @@
 //!
 //! Inference is not one mechanism, and this is deliberately not one file. An implicit is *solved*; a checked-only form is *postponed* until its expectation has structure, or synthesized once nothing is left to give it any; a match's goal nothing expects is *inferred* from its arms; a `?` is *reported*. A test belongs here when what it pins is the elaborator supplying something the program left out — and belongs in one of the modules below, never beside them, which is what keeps a file named for a whole phase from becoming the place anything type-directed lands.
 
-mod argument_tests;
-mod arm_implicit_tests;
-mod birth_tests;
-mod block_tests;
-mod budget_tests;
-mod drain_tests;
-mod elimination_tests;
-mod goal_tests;
-mod imitation_tests;
-mod implicit_tests;
-mod lambda_tests;
-mod numeral_tests;
-mod postponement_tests;
-mod retry_tests;
-mod spine_tests;
-mod tuple_tests;
+mod argument;
+mod arm_implicit;
+mod birth;
+mod block;
+mod budget;
+mod drain;
+mod elimination;
+mod goal;
+mod imitation;
+mod implicit;
+mod lambda;
+mod numeral;
+mod postponement;
+mod retry;
+mod spine;
+mod tuple;
 
-mod type_sequencing_tests;
+mod type_sequencing;

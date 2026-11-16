@@ -401,7 +401,7 @@ fn refused_at(
     })
 }
 
-/// A definition and a top-level group that hold two values of a sort left to their caller one are true at `Prop` alone, and refused at `Type`, where the closing term would carry `Holds(true)` to `Holds(false)`. `curios`'s `tests::rules::subsumption_tests` puts the definition to the elaborator under this name. Rename both or neither.
+/// A definition and a top-level group that hold two values of a sort left to their caller one are true at `Prop` alone, and refused at `Type`, where the closing term would carry `Holds(true)` to `Holds(false)`. `curios`'s `tests::rules::subsumption` puts the definition to the elaborator under this name. Rename both or neither.
 ///
 /// Mutation-check: cut `at_every_sort` to its first assignment, the one stating `Prop`, and each module is admitted at `False`.
 #[test]
@@ -524,7 +524,7 @@ fn a_sort_no_declaration_binds_is_refused_at_every_route_before_any_judgment() {
     }
 }
 
-/// A group inside a term binds no sort of its own, and is read at each assignment with the declaration that holds it: at `Prop` its member is a proof's recursion, which owes the descent it does not make. `curios`'s `tests::rules::totality_partiality_tests` puts the same declaration to both checkers under this name. Rename both or neither.
+/// A group inside a term binds no sort of its own, and is read at each assignment with the declaration that holds it: at `Prop` its member is a proof's recursion, which owes the descent it does not make. `curios`'s `tests::rules::totality_partiality` puts the same declaration to both checkers under this name. Rename both or neither.
 ///
 /// Mutation-check: cut `at_every_sort` to its last assignment, the one stating `Type`, and `/spin` is refused at no assignment; obligation (V) still refuses the closing term, which reaches a definition enclosing a group that does not descend.
 #[test]
@@ -540,7 +540,7 @@ fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts
     );
 }
 
-/// A parameter's polarity is decided on the entry as stated, where a match on an equation at a sort left to the caller stands and is read at `Mixed`, so a family that holds its parameter left of an arrow at `Prop` alone is never composed through as positive in it. The route to `False` stands but for `/G`. `curios`'s `tests::rules::positivity_computed_type_tests` puts the same declarations to the elaborator under this name. Rename both or neither.
+/// A parameter's polarity is decided on the entry as stated, where a match on an equation at a sort left to the caller stands and is read at `Mixed`, so a family that holds its parameter left of an arrow at `Prop` alone is never composed through as positive in it. The route to `False` stands but for `/G`. `curios`'s `tests::rules::positivity_computed_type` puts the same declarations to the elaborator under this name. Rename both or neither.
 ///
 /// Mutation-check: have positivity's `Walk::opaque` visit no child of a match, and `/F`'s vector reads `B` unused, `/G` is accepted, and the module is admitted at `False`.
 #[test]

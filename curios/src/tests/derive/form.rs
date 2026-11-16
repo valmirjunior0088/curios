@@ -236,7 +236,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
     );
 }
 
-// Registration reads the signature alone, so the orphan rule and the one-witness-per-key rule refuse a derived declaration with the written form's exact reports (`rules/coherence_tests.rs`).
+// Registration reads the signature alone, so the orphan rule and the one-witness-per-key rule refuse a derived declaration with the written form's exact reports (`rules/coherence.rs`).
 #[test]
 fn the_signature_refusals_fire_on_a_derived_witness_as_on_a_written_one() {
     let orphan = r#"
@@ -307,7 +307,7 @@ fn a_parameterized_head_is_refused_as_a_written_witness_is() {
     assert_eq!(report.lines().last(), written.lines().last());
 }
 
-// Sealing is decided at the declaration, before the derivation lookup: the refusal is the written form's (`concepts/sealed_tests.rs`), so no derivation could become a door through representation privacy.
+// Sealing is decided at the declaration, before the derivation lookup: the refusal is the written form's (`concepts/sealed.rs`), so no derivation could become a door through representation privacy.
 #[test]
 fn a_sealed_concept_refuses_a_derived_witness_outside_its_module() {
     let source = r#"

@@ -2,7 +2,7 @@
 
 use super::test_support::*;
 
-// Appended to curios/src/tests/rules/totality_descent_tests.rs; the file's imports already hold every name below.
+// Appended to curios/src/tests/rules/totality_descent.rs; the file's imports already hold every name below.
 
 // A callback applied through a lambda applied on the spot, whose binder shadows the arm's payload, is graded at the argument the binder stands for: `((h : Rose) => p(h))(h)` is `p` applied to the payload, below `l`, and `has_zero` descends through `some`. The refusal hands the lambda the tree rebuilt around `l`, so `p` is applied to something above `l`; read as the arm's `h` it would grade below `l`, and `has_zero(node(1, …))` would recurse on itself through `some` while a type reaches it.
 #[test]

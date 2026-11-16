@@ -473,7 +473,7 @@ let /in_a_groups_tail : #NatType =
 (/spin(())).0
 "#;
 
-// The certifier records a position wherever it types a term at a proposition or a sort, so each is refused under the declaration that holds it: by the definition it reaches, or with no name to blame where it reaches a member of a group standing in a term, which it reads by value. `curios`'s `tests::rules::totality_partiality_tests` puts the positions a program writes to the elaborator under this name.
+// The certifier records a position wherever it types a term at a proposition or a sort, so each is refused under the declaration that holds it: by the definition it reaches, or with no name to blame where it reaches a member of a group standing in a term, which it reads by value. `curios`'s `tests::rules::totality_partiality` puts the positions a program writes to the elaborator under this name.
 //
 // Mutation-checked at `Certifier::record_checked`: with every position dropped before it is recorded, nothing here is refused `NotTotal`.
 #[test]
@@ -534,7 +534,7 @@ let /held : Type =
 /std/Bool/False
 "#;
 
-// An occurrence's parameters are checked as arguments are, by subsumption, which holds no proposition below a type: the head rule `certifier::infer::tests::sort`'s `the_head_rules_still_decide_a_bare_sort` pins, reached through a family's occurrence. `curios`'s `tests::rules::subsumption_tests` puts the program to the elaborator under this name.
+// An occurrence's parameters are checked as arguments are, by subsumption, which holds no proposition below a type: the head rule `certifier::infer::tests::sort`'s `the_head_rules_still_decide_a_bare_sort` pins, reached through a family's occurrence. `curios`'s `tests::rules::subsumption` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `subsumes`: with two sorts compared by their levels whatever their qualities, `held` types.
 #[test]
@@ -603,7 +603,7 @@ let /f : (
 /std/Bool/True/qed()
 "#;
 
-// The elimination whose conversion Carneiro (*The Type Theory of Lean*, 2019, §3.1) shows no checker decides transitively is refused at its source: a proposition is taken apart into data only where its indices pin every payload, and `below` is a proof no index pins. `curios`'s `tests::rules::proposition_elimination_tests` puts the program to the elaborator under this name.
+// The elimination whose conversion Carneiro (*The Type Theory of Lean*, 2019, §3.1) shows no checker decides transitively is refused at its source: a proposition is taken apart into data only where its indices pin every payload, and `below` is a proof no index pins. `curios`'s `tests::rules::proposition_elimination` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `guard_large_elimination` (`curios-cert/src/certifier/infer/eliminate.rs`): with the singleton rung excusing a payload whose type is a proposition, as Lean's subsingleton elimination does, `/f` is admitted.
 #[test]

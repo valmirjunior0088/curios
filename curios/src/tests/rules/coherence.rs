@@ -276,7 +276,7 @@ fn a_tuple_witness_for_a_standard_concept_is_an_orphan() {
     });
 }
 
-// The other half of the rule: the shape contributes nothing, but a concept the entry root declares does, so a program writes tuple witnesses for its own concepts freely. `a_concept_resolves_on_a_tuple_value` in `shape_tests` is the same admission seen from the resolution side.
+// The other half of the rule: the shape contributes nothing, but a concept the entry root declares does, so a program writes tuple witnesses for its own concepts freely. `a_concept_resolves_on_a_tuple_value` in `tests::concepts::shape` is the same admission seen from the resolution side.
 #[test]
 fn a_tuple_witness_for_an_entry_concept_registers() {
     let source = r#"

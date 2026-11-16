@@ -1,16 +1,16 @@
 //! Concepts and witnesses, end to end.
 
-mod dictionary_tests;
-mod erasure_tests;
-mod field_tests;
-mod higher_kinded_tests;
-mod monad_tests;
-mod ordering_tests;
-mod premise_tests;
-mod recursion_tests;
-mod resolution_tests;
-mod sealed_tests;
-mod shape_tests;
-mod superclass_tests;
-mod tuple_tests;
-mod unresolved_tests;
+mod dictionary;
+mod erasure;
+mod field;
+mod higher_kinded;
+mod monad;
+mod ordering;
+mod premise;
+mod recursion;
+mod resolution;
+mod sealed;
+mod shape;
+mod superclass;
+mod tuple;
+mod unresolved;

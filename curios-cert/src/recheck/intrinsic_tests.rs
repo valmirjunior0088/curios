@@ -158,7 +158,7 @@ let /gone : #NatType = 0;
 /matched(#{node = Foreign} /gone(@#{node = InductType} /std/Bool/False()))
 "#;
 
-// `Io` has no eliminator: its scrutinee is no family's occurrence and no `Bool`, so each case form refuses it as unclassified, and a projection finds no components in it. The closing term, which types through `matched`'s stated type, is refused all the same, by (V), the row that does not return standing in a proof with no definition to blame. `curios`'s `tests::rules::effect_tests` puts the program to the elaborator under this name.
+// `Io` has no eliminator: its scrutinee is no family's occurrence and no `Bool`, so each case form refuses it as unclassified, and a projection finds no components in it. The closing term, which types through `matched`'s stated type, is refused all the same, by (V), the row that does not return standing in a proof with no definition to blame. `curios`'s `tests::rules::effect` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `check_cases`: with a `Bool` case form no longer held to a `Bool` scrutinee, `split` types and is not refused.
 #[test]
@@ -215,7 +215,7 @@ let /together : (c: #ByteType, d: #ByteType) ->
 /together(#Byte(1), #Byte(2))
 "#;
 
-// A strip whose residuals hold runs and single bytes alone clashes them by their lengths, which is a disequality the free monoid has: so `/apart` types, and `/together`, whose runs are one length, stays the stuck `==` its bytes leave, and is the one refusal between the module and `False`. `curios`'s `tests::rules::sequence_tests` puts the program to the elaborator under this name.
+// A strip whose residuals hold runs and single bytes alone clashes them by their lengths, which is a disequality the free monoid has: so `/apart` types, and `/together`, whose runs are one length, stays the stuck `==` its bytes leave, and is the one refusal between the module and `False`. `curios`'s `tests::rules::sequence` puts the program to the elaborator under this name.
 #[test]
 fn byte_runs_of_one_length_are_not_apart_by_their_lengths() {
     let verdicts = core_text_verdicts(&fill!(

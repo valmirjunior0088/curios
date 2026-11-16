@@ -2,12 +2,12 @@
 //!
 //! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot loops are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `curios-emit`'s `expr_emitter`; an ordinary constructor-tag `switch` is not a dispatcher whatever shape it takes — a `br_table` over `$case$N`/`$tail` labels for three or more cases, a plain `if` for the two-way and one-way shapes.
 
-mod bounds_tests;
-mod closure_tests;
-mod fusion_tests;
-mod layout_tests;
-mod loop_tests;
-mod measurement_tests;
+mod bounds;
+mod closure;
+mod fusion;
+mod layout;
+mod loop_;
+mod measurement;
 
 // The shapes the sibling codegen suites also assert through.
 pub mod test_support;

@@ -109,7 +109,7 @@ const A_GUARD_SETTLED_UNDER_AN_INNER_ARMS_EQUATION: &str = r#"
 )
 "#;
 
-// Settled with the inner arm's equation in force, the guard's spelling would be `k(0)`, kept with the guard past the arm, and the `qed` after the split would hold at `Holds(k(0))`, which at `g` the identity and `c := false` is `Holds(false)`: the closing term would be admitted at `False`. A settlement withholds the equation it settles and every one inside it, so the spelling is the stuck match and that `qed` is refused. `curios`'s `tests::rules::arm_tests` holds the elaborator to the same term.
+// Settled with the inner arm's equation in force, the guard's spelling would be `k(0)`, kept with the guard past the arm, and the `qed` after the split would hold at `Holds(k(0))`, which at `g` the identity and `c := false` is `Holds(false)`: the closing term would be admitted at `False`. A settlement withholds the equation it settles and every one inside it, so the spelling is the stuck match and that `qed` is refused. `curios`'s `tests::rules::arm` holds the elaborator to the same term.
 //
 // Mutation-checked at `Scope::in_force_innermost_first`: with a settlement withholding the equation it settles alone, and not those inside it, the module is admitted.
 #[test]
@@ -394,7 +394,7 @@ let /w : (g: (b: #BoolType) -> #BoolType, e: #BoolType, h: /std/Bool/Holds(g(e))
 /w((b: #BoolType) => b, true, /std/Bool/True/qed())
 "#;
 
-// A refused arm is withdrawn where its scrutinee computes to another case, and `g(e)` is computed with the `true` arm's bracket and its sibling's closed, so it stands stuck and the `true` arm's refusal stands. Read where the `false` arm's equation still answered it, or off a reduct remembered under that equation, `g(e)` would be `false`, the `true` arm would be withdrawn untyped, and the closing term, `/w` at the identity, would be admitted at `False`: `/w`'s refusal is all that stands between the module and `False`. `curios`'s `tests::rules::arm_tests` holds the elaborator to the same program.
+// A refused arm is withdrawn where its scrutinee computes to another case, and `g(e)` is computed with the `true` arm's bracket and its sibling's closed, so it stands stuck and the `true` arm's refusal stands. Read where the `false` arm's equation still answered it, or off a reduct remembered under that equation, `g(e)` would be `false`, the `true` arm would be withdrawn untyped, and the closing term, `/w` at the identity, would be admitted at `False`: `/w`'s refusal is all that stands between the module and `False`. `curios`'s `tests::rules::arm` holds the elaborator to the same program.
 #[test]
 fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
     let verdicts = core_text_verdicts(&fill!(
@@ -479,7 +479,7 @@ let /f : (x: #FltType, y: #FltType) -> /M(#FltLt(x, y), x, y) =
 /f(#Flt(+nan.0), #Flt(0.0))
 "#;
 
-// Against a NaN both directions of an ordered comparison are false, so a `Flt` comparison has no dual the refinement probe may ask its guard under, and the false arm's `Holds(y <= x)` is left standing: `qed` is refused there, the one refusal between the module and `False`. `curios`'s `tests::rules::arm_tests` puts the program to the elaborator under this name, over `Nat`, where the mirror is the guard's negation, as its control.
+// Against a NaN both directions of an ordered comparison are false, so a `Flt` comparison has no dual the refinement probe may ask its guard under, and the false arm's `Holds(y <= x)` is left standing: `qed` is refused there, the one refusal between the module and `False`. `curios`'s `tests::rules::arm` puts the program to the elaborator under this name, over `Nat`, where the mirror is the guard's negation, as its control.
 #[test]
 fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
     let verdicts = core_text_verdicts(&fill!(

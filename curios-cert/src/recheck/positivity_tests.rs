@@ -276,7 +276,7 @@ end
 /std/Bool/True/qed()
 "#;
 
-// Positivity walks no index binder type, which is sound only because a former's domains name nothing that holds the declaration: a family indexed by a family that holds it is induction-induction, which no decision admits. Each is refused under the declaration whose former names the other, declared in one group or apart, before or after the family that holds it, and a record's parameter alike, where positivity, which reads a family not yet judged at `Mixed`, refuses only the order that walks the holder first. `curios`'s `tests::rules::positivity_index_tests` puts the grouped shape to the elaborator under this name.
+// Positivity walks no index binder type, which is sound only because a former's domains name nothing that holds the declaration: a family indexed by a family that holds it is induction-induction, which no decision admits. Each is refused under the declaration whose former names the other, declared in one group or apart, before or after the family that holds it, and a record's parameter alike, where positivity, which reads a family not yet judged at `Mixed`, refuses only the order that walks the holder first. `curios`'s `tests::rules::positivity_index` puts the grouped shape to the elaborator under this name.
 #[test]
 fn a_family_is_indexed_by_nothing_that_holds_it() {
     let verdicts = core_text_verdicts(&fill!(

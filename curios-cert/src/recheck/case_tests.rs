@@ -183,7 +183,7 @@ let /Code : (
 )
 "#;
 
-// An absent arm is excused only by a definite clash, and inversion concludes none at a `Prop`-valued position, where irrelevance makes `Two/a()` and `Two/b()` one value: `tb` is missing, and the arm reduction would take untyped is refused with it. `curios`'s `tests::rules::index_tests` puts the same proposition to the elaborator under this name.
+// An absent arm is excused only by a definite clash, and inversion concludes none at a `Prop`-valued position, where irrelevance makes `Two/a()` and `Two/b()` one value: `tb` is missing, and the arm reduction would take untyped is refused with it. `curios`'s `tests::rules::index` puts the same proposition to the elaborator under this name.
 #[test]
 fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
     let verdicts = core_text_verdicts(&fill!(
@@ -384,7 +384,7 @@ let /excused : (
 /std/Bool/False
 "#;
 
-// An absent arm is excused only where the unifier finds a definite clash: `j + j` against `0` or against `k + 1` is a disagreement only arithmetic could settle, which keeps each arm mandatory, while `j + 1` against `0` clashes and excuses `zero`, the control. `curios`'s `tests::rules::coverage_tests` puts the program to the elaborator under this name.
+// An absent arm is excused only where the unifier finds a definite clash: `j + j` against `0` or against `k + 1` is a disagreement only arithmetic could settle, which keeps each arm mandatory, while `j + 1` against `0` clashes and excuses `zero`, the control. `curios`'s `tests::rules::coverage` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `check_induct_arms`: with the coverage loop taken out, neither `only_zero` nor `only_succ` is refused.
 #[test]
@@ -699,7 +699,7 @@ let /filled : (
 )
 "#;
 
-// An absent arm is excused only where the carriers' algebra concludes a clash that holds at every value, so each near miss keeps its case mandatory and each control's case is excused; the closing term types, so the seven refusals are all that stand between the module and `False`. `curios`'s `tests::rules::coverage_tests` puts the program to the elaborator under this name.
+// An absent arm is excused only where the carriers' algebra concludes a clash that holds at every value, so each near miss keeps its case mandatory and each control's case is excused; the closing term types, so the seven refusals are all that stand between the module and `False`. `curios`'s `tests::rules::coverage` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `Cancelled::<Natural, _>::deduction` (`curios-algebra/src/combination.rs`): with an impossible arm asking only that the emptied side's constant be zero, `self.left.constant.is_zero()` for `self.left.is_zero()` and its mirror, `/sum`, `/product` and `/difference` are excused. At `Word::against_identity` (`curios-algebra/src/word.rs`): with a window and a chunk counted positive, `/window`, `/chunks` and `/fill` are excused.
 #[test]
@@ -801,7 +801,7 @@ let /apart : (
 /absurd(/Ix/mk())
 "#;
 
-// No clash is concluded between two of a proposition's constructors, and a list's elements are terms rather than decided values, so two runs that differ at a proof are no clash: `mk` stays mandatory in `/absurd`, while `/apart`'s clash of length is excused. The refusal in `/absurd` is all that stands between the module and `False`. `curios`'s `tests::rules::coverage_tests` puts the program to the elaborator under this name.
+// No clash is concluded between two of a proposition's constructors, and a list's elements are terms rather than decided values, so two runs that differ at a proof are no clash: `mk` stays mandatory in `/absurd`, while `/apart`'s clash of length is excused. The refusal in `/absurd` is all that stands between the module and `False`. `curios`'s `tests::rules::coverage` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `Run for Vec<E>` (`curios-algebra/src/word.rs`): with `DECIDED` true, the two runs' heads clash, `/absurd` is excused and the walk returns no verdict.
 #[test]
@@ -853,7 +853,7 @@ let /drain : (
 /drain(/Wit/triv(), /Q/nil())
 "#;
 
-// What stands between the reading and `False` is coverage: inversion concludes no clash between two of a proposition's constructors, so `nil`'s arm is mandatory and `drain` is refused for the arm it omits, not for its descent. `curios`'s `tests::rules::totality_tests` puts the program to the elaborator under this name.
+// What stands between the reading and `False` is coverage: inversion concludes no clash between two of a proposition's constructors, so `nil`'s arm is mandatory and `drain` is refused for the arm it omits, not for its descent. `curios`'s `tests::rules::totality` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `unify_node` (`curios-analysis/src/invert.rs`): with its `Prop`-sorted family answering by tags, `Wit/triv()` against `Wit/s(v)` clashes, `nil` is excused and the walk returns no verdict.
 #[test]
@@ -1047,7 +1047,7 @@ let /falias : (p: /Alias(/Wit/b())) -> #{node = InductType} /std/Bool/True() =
 /fbox(/Pbox/base())
 "#;
 
-// The size order reads each `step(q)` as a descent, so a recursion that omits `base` is refused by coverage alone, at every shape an index carries its proof in: no clash is concluded between two of a proposition's constructors at any depth of an index, through a tuple, a type family's payload or a group, at any level, nor at a stated instance or a type a definition spells. The control writes `base`'s arm and every recursion stands, which is what makes each refusal coverage's and not the descent's. `curios`'s `tests::rules::totality_tests` puts the shapes a program can write to the elaborator under this name.
+// The size order reads each `step(q)` as a descent, so a recursion that omits `base` is refused by coverage alone, at every shape an index carries its proof in: no clash is concluded between two of a proposition's constructors at any depth of an index, through a tuple, a type family's payload or a group, at any level, nor at a stated instance or a type a definition spells. The control writes `base`'s arm and every recursion stands, which is what makes each refusal coverage's and not the descent's. `curios`'s `tests::rules::totality` puts the shapes a program can write to the elaborator under this name.
 //
 // Mutation-checked at `unify_node` (`curios-analysis/src/invert.rs`): with its `Prop`-sorted family answering by tags, every `base` is excused and no recursion above is refused.
 #[test]
@@ -1190,7 +1190,7 @@ let /bytes : (c: #ByteType, v: #{node = InductType} /E()(#BytesAppend(x[], c), x
 /swapped(#{node = Variant} /Ix/mk())
 "#;
 
-// Two `List` literals of one length are decided pointwise and two whose lengths differ by their lengths, and neither reads a clash where a value meets the case: two of a proposition's constructors are one value wherever they stand, in a list, in a pair or forced twice, and a chunk, an appended base and a window hold lengths no literal fixes. So each case stays mandatory, and the eight refusals are all that stand between the module and `False`. `curios`'s `tests::rules::coverage_tests` puts the program to the elaborator under this name, with its control. Mutation-checked: with the `Variant` arm of `Unifier::unify_node` (`curios-analysis/src/invert.rs`) deciding a proposition's constructors by their tags, the declarations over lists of proofs are excused and this fails.
+// Two `List` literals of one length are decided pointwise and two whose lengths differ by their lengths, and neither reads a clash where a value meets the case: two of a proposition's constructors are one value wherever they stand, in a list, in a pair or forced twice, and a chunk, an appended base and a window hold lengths no literal fixes. So each case stays mandatory, and the eight refusals are all that stand between the module and `False`. `curios`'s `tests::rules::coverage` puts the program to the elaborator under this name, with its control. Mutation-checked: with the `Variant` arm of `Unifier::unify_node` (`curios-analysis/src/invert.rs`) deciding a proposition's constructors by their tags, the declarations over lists of proofs are excused and this fails.
 #[test]
 fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
     let verdicts = core_text_verdicts(&fill!(

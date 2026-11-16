@@ -465,7 +465,7 @@ let /F: (c: #BoolType) -> /S(c) =
     (c: #BoolType) => #{goal = /S(c)} match c | false => #NatType | true => ${proposition} end;
 "#;
 
-/// A declaration whose codomain is a sort its argument computes lands in `Prop` where the argument decides one and nowhere else. `F(c) : S(c)`, with `S(true)` the propositions and `S(false)` the types, is known for a proposition at `true` by its declaration, before `F(true)` is reduced, and at `false` its two values stay apart: what the declaration says of an application is read at the arguments the application states. `curios`'s `tests::rules::subsumption_tests` holds the program under this name, where a binder at `F(c)` with `c` open is no type at all.
+/// A declaration whose codomain is a sort its argument computes lands in `Prop` where the argument decides one and nowhere else. `F(c) : S(c)`, with `S(true)` the propositions and `S(false)` the types, is known for a proposition at `true` by its declaration, before `F(true)` is reduced, and at `false` its two values stay apart: what the declaration says of an application is read at the arguments the application states. `curios`'s `tests::rules::subsumption` holds the program under this name, where a binder at `F(c)` with `c` open is no type at all.
 #[test]
 fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argument_decides_one() {
     let mut certifier = certifier();

@@ -250,7 +250,7 @@ let /g : (n: #NatType) ->
 /std/Bool/False
 "#;
 
-// A type is typed as written, so the goal's `g(n)` is an application the walk types and records, at an argument nothing is below: a group whose calls were looked for in its arms alone would read none here and descend. `curios`'s `tests::rules::totality_descent_tests` puts the program to the elaborator under this name.
+// A type is typed as written, so the goal's `g(n)` is an application the walk types and records, at an argument nothing is below: a group whose calls were looked for in its arms alone would read none here and descend. `curios`'s `tests::rules::totality_descent` puts the program to the elaborator under this name.
 //
 // Mutation-checked at the `Apply` rule of `infer_within`: with no call recorded for an application whose head is a member, `g` descends and is not refused.
 #[test]
@@ -292,7 +292,7 @@ let /again : (n: #NatType) ->
 /std/Bool/False
 "#;
 
-// The binder stands for `n` and the arm's case for the binder, so whichever of the two facts the size order holds, the call's argument is the parameter it stands at and nothing below it. `curios`'s `tests::rules::totality_descent_tests` puts the program to the elaborator under this name.
+// The binder stands for `n` and the arm's case for the binder, so whichever of the two facts the size order holds, the call's argument is the parameter it stands at and nothing below it. `curios`'s `tests::rules::totality_descent` puts the program to the elaborator under this name.
 #[test]
 fn a_call_handing_back_a_lambdas_binder_does_not_descend() {
     let verdicts = core_text_verdicts(&fill!(
@@ -445,7 +445,7 @@ let /control : /std/Bool/Holds(true) =
 /std/Bool/False
 "#;
 
-// A member known to terminate is read by value in its group's bodies, as its tail reads it: `Flip` calls nothing, so its turn finds it known, and `claimed` states `Flip(false)` in its own body, which is `True` there as it is where `stated`'s body is checked, and both stand. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
+// A member known to terminate is read by value in its group's bodies, as its tail reads it: `Flip` calls nothing, so its turn finds it known, and `claimed` states `Flip(false)` in its own body, which is `True` there as it is where `stated`'s body is checked, and both stand. `curios`'s `tests::rules::group` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `check_group`: with no member read by value, `/outer` and `/control` are refused `Mismatch`.
 #[test]
@@ -513,7 +513,7 @@ let /read : #BoolType =
 /std/Bool/False
 "#;
 
-// A group that owes no descent reads a member by value once its turn finds it known too: `b` calls nothing, so `Holds(b)` is the `True` `qed` inhabits. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
+// A group that owes no descent reads a member by value once its turn finds it known too: `b` calls nothing, so `Holds(b)` is the `True` `qed` inhabits. `curios`'s `tests::rules::group` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `check_group`: with no member read by value, `/read` is refused `Mismatch`.
 #[test]
@@ -552,7 +552,7 @@ let /withheld : #BoolType =
 /std/Bool/False
 "#;
 
-// A member not known to terminate stands for nothing in its group's bodies: `b`'s turn withholds it, and an equation of a member that need not terminate is no fact, so `Holds(b(0))` is no `True` for `qed` to inhabit, though `b(0)` is `true`. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
+// A member not known to terminate stands for nothing in its group's bodies: `b`'s turn withholds it, and an equation of a member that need not terminate is no fact, so `Holds(b(0))` is no `True` for `qed` to inhabit, though `b(0)` is `true`. `curios`'s `tests::rules::group` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `check_group`: with every member read by value whatever its turn finds, `/withheld` stands.
 #[test]
@@ -583,7 +583,7 @@ let /listing : #NatType =
 /std/Bool/False
 "#;
 
-// A group that owes descent is named where it does not, rather than refused for its budget: `b` calls itself with nothing below, so its turn withholds it and nothing unfolds it, and `c`'s body, which reads `b` by value to check `[]` at it, is refused only after the group's calls have named it. `curios`'s `tests::rules::group_tests` puts the program to the elaborator under this name.
+// A group that owes descent is named where it does not, rather than refused for its budget: `b` calls itself with nothing below, so its turn withholds it and nothing unfolds it, and `c`'s body, which reads `b` by value to check `[]` at it, is refused only after the group's calls have named it. `curios`'s `tests::rules::group` puts the program to the elaborator under this name.
 //
 // Mutation-checked at `check_group`: with every member read by value whatever its turn finds, `c`'s body unfolds `b` into a list of itself without end and `/listing` is refused for its budget.
 #[test]
@@ -731,7 +731,7 @@ and /h : (
 /h(/W/base())
 "#;
 
-// Reading the cast's payload below the proof is sound — a proof of `S(i)` ranks above `i` at its least derivation, `mk` over a derivation of `i`'s proposition — so what refuses the loop is the other half: nothing in the size order reads `S/mk(w)` at or below `w`, so the base arm's call starts no thread back to `s` and the group does not descend. `curios`'s `tests::rules::totality_tests` puts the program to both checkers under this name.
+// Reading the cast's payload below the proof is sound — a proof of `S(i)` ranks above `i` at its least derivation, `mk` over a derivation of `i`'s proposition — so what refuses the loop is the other half: nothing in the size order reads `S/mk(w)` at or below `w`, so the base arm's call starts no thread back to `s` and the group does not descend. `curios`'s `tests::rules::totality` puts the program to both checkers under this name.
 #[test]
 fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
     let verdicts = core_text_verdicts(&fill!(
@@ -775,7 +775,7 @@ let /X : (
 /std/Bool/True/qed()
 "#;
 
-// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to be put at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios`'s `tests::rules::totality_tests` puts the program to the elaborator under this name.
+// The one way a proof reaches a type is the cast, and a recursion graded below the proof it casts along must still descend to be put at (T): `m` is below `p`, `S/mk(m)` is nothing below `p`, and `m` stands for `n` only by the arm's index solution, which refines for typing alone. `curios`'s `tests::rules::totality` puts the program to the elaborator under this name.
 #[test]
 fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
     let verdicts = core_text_verdicts(&fill!(

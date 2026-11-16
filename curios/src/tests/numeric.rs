@@ -1,16 +1,16 @@
 //! The unbounded carriers, the bounds discharged over them, and the `Flt` codec.
 
-mod arithmetic_tests;
-mod bound_tests;
-mod byte_word_tests;
-mod capacity_tests;
-mod domain_tests;
-mod flt_tests;
-mod grid_tests;
-mod late_bound_tests;
-mod packed_word_tests;
-mod power_tests;
-mod rounding_tests;
-mod shift_tests;
+mod arithmetic;
+mod bound;
+mod byte_word;
+mod capacity;
+mod domain;
+mod flt;
+mod grid;
+mod late_bound;
+mod packed_word;
+mod power;
+mod rounding;
+mod shift;
 mod test_support;
-mod unbounded_tests;
+mod unbounded;

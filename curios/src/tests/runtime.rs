@@ -1,10 +1,10 @@
 //! What a compiled program does when it runs.
 
-mod bang_tests;
-mod closure_tests;
-mod coordination_tests;
-mod diagnostic_tests;
-mod knot_tests;
-mod loop_tests;
-mod rope_tests;
-mod std_tests;
+mod bang;
+mod closure;
+mod coordination;
+mod diagnostic;
+mod knot;
+mod loop_;
+mod rope;
+mod std;

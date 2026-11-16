@@ -2,6 +2,6 @@
 //!
 //! What each vocabulary *is* stays with its own section in these suites. What they share is the shape these tests pin: a region's monad is read from its expected type, never inferred from the action, and an embedding across monads exists only where a `/std/Monad/Lift` witness declares one.
 
-mod lift_tests;
-mod region_tests;
-mod vocabulary_tests;
+mod lift;
+mod region;
+mod vocabulary;

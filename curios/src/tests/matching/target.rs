@@ -76,7 +76,7 @@ fn struct_match_target_projects_fields() {
     assert_eq!(run(source), b"7");
 }
 
-// A struct match-arm pattern desugars to the same `proj`/`proj_label` calls an ordinary projection uses, so representation privacy is inherited automatically and unmodified — matching `struct_private_projection_rejected` in `structs/visibility_tests.rs`, but reached through a match arm instead of `.0`.
+// A struct match-arm pattern desugars to the same `proj`/`proj_label` calls an ordinary projection uses, so representation privacy is inherited automatically and unmodified — matching `struct_private_projection_rejected` in `structs/visibility.rs`, but reached through a match arm instead of `.0`.
 #[test]
 fn struct_arm_privacy_is_enforced() {
     let source = r#"

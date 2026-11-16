@@ -89,7 +89,7 @@ fn a_proposition_holding_a_list_of_its_own_propositions_is_refused() {
     assert_eq!(check_induct_decl(&mut certifier, &declaration), Ok(()));
 }
 
-/// Russell's paradox through a large inductive, the certifier's reading of the clash the elaborator refuses at `R: V = V/set(Regular, …)`. `V : Type 1 | set(A : Type 0, f : (A) -> V)` is a set of the values of any `Type 0`, a valid declaration since the payload fits below it; and `V/set(V, …)`, the set whose members are `V`s, hands `V` itself — a `Type 1` — to the `A : Type 0` field, which asks a type to sit strictly below itself. The declaration stands and the self-application is refused, where `curios`'s `tests::universes::hierarchy_tests` puts the paradox's own `R` to the elaborator.
+/// Russell's paradox through a large inductive, the certifier's reading of the clash the elaborator refuses at `R: V = V/set(Regular, …)`. `V : Type 1 | set(A : Type 0, f : (A) -> V)` is a set of the values of any `Type 0`, a valid declaration since the payload fits below it; and `V/set(V, …)`, the set whose members are `V`s, hands `V` itself — a `Type 1` — to the `A : Type 0` field, which asks a type to sit strictly below itself. The declaration stands and the self-application is refused, where `curios`'s `tests::universes::hierarchy` puts the paradox's own `R` to the elaborator.
 #[test]
 fn a_large_inductive_holding_its_own_type_is_refused_at_the_self_application() {
     let mut certifier = certifier();

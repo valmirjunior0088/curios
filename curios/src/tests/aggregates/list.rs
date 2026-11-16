@@ -22,7 +22,7 @@ fn a_list_reads_as_its_flat_copy_in_every_shape_its_children_take() {
     assert_eq!(io.output(), b"111111111");
 }
 
-/// **A list read after another extended its payload in place reads as it was written**, as a packed run does (`packed_tests`'s twin, the claims the fixture states).
+/// **A list read after another extended its payload in place reads as it was written**, as a packed run does (`packed`'s twin, the claims the fixture states).
 #[test]
 fn a_list_extended_in_place_reads_as_it_was_written() {
     let (system, io) = MockHost::builder().stdin_chunks(vec![ARRIVAL]).build();

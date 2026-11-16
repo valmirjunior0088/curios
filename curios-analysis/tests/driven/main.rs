@@ -8,7 +8,7 @@
 
 mod test_support;
 
-mod classification_tests;
-mod forcing_tests;
-mod positivity_tests;
-mod walk_tests;
+mod classification;
+mod forcing;
+mod positivity;
+mod walk;

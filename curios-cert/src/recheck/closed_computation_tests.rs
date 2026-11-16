@@ -613,7 +613,7 @@ let /p : /std/Bool/Holds(
 /std/Bool/True/qed()
 "#;
 
-// A match and a projection force what they read, so where an intrinsic answers a recursive call the machine forces the call before either reads it, as the strategy forces what `whnf` answers: `y`'s and `p`'s instances are `True`, `c3`'s type is `Bool` and `S` is a sort. Handed the fold's answer at the weak demand, a match or a projection stands on the unforced call, `Frame::RecGuard` reads `f`'s step as neutral, and `y`, `s` and `p` are refused. `curios`'s `tests::rules::sequence_tests` puts the program to both checkers under this name.
+// A match and a projection force what they read, so where an intrinsic answers a recursive call the machine forces the call before either reads it, as the strategy forces what `whnf` answers: `y`'s and `p`'s instances are `True`, `c3`'s type is `Bool` and `S` is a sort. Handed the fold's answer at the weak demand, a match or a projection stands on the unforced call, `Frame::RecGuard` reads `f`'s step as neutral, and `y`, `s` and `p` are refused. `curios`'s `tests::rules::sequence` puts the program to both checkers under this name.
 #[test]
 fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
     let verdicts = core_text_verdicts(&fill!(
@@ -680,7 +680,7 @@ let /typed : #{goal = Prop} match /loop(()) | c() => #{node = InductType} /std/B
 /forged
 "#;
 
-// No value of `/F(1)` is `c`, so reduction reaches the ruled-out arm only through a scrutinee that is no value, a call not known to terminate, and totality is what stands between the module and `False`: the proof and the type that reach `/loop` are refused, and the closing term that reaches `/forged`. `curios`'s `tests::rules::totality_partiality_tests` puts the program to the elaborator under this name.
+// No value of `/F(1)` is `c`, so reduction reaches the ruled-out arm only through a scrutinee that is no value, a call not known to terminate, and totality is what stands between the module and `False`: the proof and the type that reach `/loop` are refused, and the closing term that reaches `/forged`. `curios`'s `tests::rules::totality_partiality` puts the program to the elaborator under this name.
 #[test]
 fn a_ruled_out_arm_a_closed_match_takes_is_reached_only_through_a_partial_call() {
     let verdicts = core_text_verdicts(&fill!(

@@ -8,8 +8,8 @@
 //!
 //! "Interface" is load-bearing in that sentence and is what `a_body_carried_level_is_minimized_rather_than_generalized` pins: the levels reachable only through a body are *minimized* instead, so the set of declarations a use site can instantiate at two levels is narrower than "every declaration".
 
-mod hierarchy_tests;
-mod instance_tests;
-mod settlement_tests;
-mod sort_tests;
+mod hierarchy;
+mod instance;
+mod settlement;
+mod sort;
 mod test_support;

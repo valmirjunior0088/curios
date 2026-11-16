@@ -1,4 +1,4 @@
-//! A call in a callback, graded where its callee applies it: modules built by hand and put to the certifier alone, each claim beside the program `curios`'s `tests::rules::totality_callback_tests` or `totality_callback_binder_tests` puts to both checkers.
+//! A call in a callback, graded where its callee applies it: modules built by hand and put to the certifier alone, each claim beside the program `curios`'s `tests::rules::totality_callback` or `totality_callback_binder` puts to both checkers.
 
 use {super::test_support::*, crate::*, curios_common::fill};
 
@@ -24,7 +24,7 @@ let /spin: (n: #NatType) -> #{node = InductType} /T() =
     (n: #NatType) => /h(n, (c: #NatType) => /spin(c));
 "#;
 
-/// The certifier summarizes how a definition applies its parameters from the module it judges, with no elaborator's record beside it, and a use its walk does not follow leaves the summary empty: with `h`'s `0` arm a constructor, `h` applies `f` below `n` alone and `spin` descends through it; with the arm applying `f` at `n + 1` through a `let` alias, `h` publishes nothing for `f` and `spin`, whose `spin(1)` is `h(0, …)` applying the lambda at `1`, does not descend. Read as unseen, the alias would leave `f(j)` the summary's one application, and the certifier would admit a proof that recurs for ever. `curios`'s `tests::rules::totality_callback_tests` puts the alias, among the other routes, to both checkers as a program.
+/// The certifier summarizes how a definition applies its parameters from the module it judges, with no elaborator's record beside it, and a use its walk does not follow leaves the summary empty: with `h`'s `0` arm a constructor, `h` applies `f` below `n` alone and `spin` descends through it; with the arm applying `f` at `n + 1` through a `let` alias, `h` publishes nothing for `f` and `spin`, whose `spin(1)` is `h(0, …)` applying the lambda at `1`, does not descend. Read as unseen, the alias would leave `f(j)` the summary's one application, and the certifier would admit a proof that recurs for ever. `curios`'s `tests::rules::totality_callback` puts the alias, among the other routes, to both checkers as a program.
 #[test]
 fn a_callback_applied_through_an_alias_at_a_value_not_below_is_not_graded_below() {
     let zero = "#{node = Variant} /T/t()";
@@ -72,7 +72,7 @@ let /spin: (n: #NatType) -> #{node = InductType} /std/Bool/True() =
     (n: #NatType) => /hide(n, (c: #NatType) => /spin(c));
 "#;
 
-// A member's parameters are the ones its leading lambdas bind, whatever its type takes: `/relay` named as `/apply` or as `/pick(0)` binds none, so `/hide` handing `f` to it at its own place hands `f` to what `/relay` is, which applies it to `0`, and `/hide` publishes nothing for `f`. Counted by its type, `f` would be `/relay`'s second parameter, which no body of the group applies: `/hide`'s summary would hold `f(k)` alone, below `n`, and `/spin`, which at `0` is `/apply(0, …)`, `/spin(0)` again, would descend. No program reaches either module, since the elaborator refuses a group whose members do not all need one another. The control hands `/relay` a callback of its own, so `/hide` applies `f` below `n` alone and `/spin` descends. `curios`'s `tests::rules::totality_descent_tests` puts a member whose body binds fewer parameters than its type takes to both checkers as `a_callback_handed_past_a_members_parameters_is_graded_as_unrelated`.
+// A member's parameters are the ones its leading lambdas bind, whatever its type takes: `/relay` named as `/apply` or as `/pick(0)` binds none, so `/hide` handing `f` to it at its own place hands `f` to what `/relay` is, which applies it to `0`, and `/hide` publishes nothing for `f`. Counted by its type, `f` would be `/relay`'s second parameter, which no body of the group applies: `/hide`'s summary would hold `f(k)` alone, below `n`, and `/spin`, which at `0` is `/apply(0, …)`, `/spin(0)` again, would descend. No program reaches either module, since the elaborator refuses a group whose members do not all need one another. The control hands `/relay` a callback of its own, so `/hide` applies `f` below `n` alone and `/spin` descends. `curios`'s `tests::rules::totality_descent` puts a member whose body binds fewer parameters than its type takes to both checkers as `a_callback_handed_past_a_members_parameters_is_graded_as_unrelated`.
 //
 // Mutation-checked: with `*position < arity` removed from `handed_on` in `curios-analysis/src/totality.rs`, both refusals certify and this test fails.
 #[test]
@@ -213,7 +213,7 @@ fn spin_does_not_descend(verdicts: &[Verdict]) -> bool {
     })
 }
 
-// A bound a callback is handed stays with its binders: `each` stands `c` below `t`, and the lambda the callback answers binds `e` to `r`, which `spin` hands `t` itself, so `spin(e)` is `spin(t)` again. `curios`'s `tests::rules::totality_callback_binder_tests` puts the program to both checkers under this name. The control recurses on `c`.
+// A bound a callback is handed stays with its binders: `each` stands `c` below `t`, and the lambda the callback answers binds `e` to `r`, which `spin` hands `t` itself, so `spin(e)` is `spin(t)` again. `curios`'s `tests::rules::totality_callback_binder` puts the program to both checkers under this name. The control recurses on `c`.
 #[test]
 fn a_lambda_a_callback_answers_takes_none_of_the_callbacks_bounds() {
     let attack = spin_verdicts(
@@ -233,7 +233,7 @@ fn a_lambda_a_callback_answers_takes_none_of_the_callbacks_bounds() {
     );
 }
 
-// Each argument of a call is bounded by the applications of its own parameter: `split` stands `p`'s binder below `t` and `q`'s at `r`, which `spin` hands `t` itself, so `spin(e)` is `spin(t)` again. `curios`'s `tests::rules::totality_callback_binder_tests` puts the program to both checkers under this name. The control's `q` callback recurses on what a `more` of `t` holds.
+// Each argument of a call is bounded by the applications of its own parameter: `split` stands `p`'s binder below `t` and `q`'s at `r`, which `spin` hands `t` itself, so `spin(e)` is `spin(t)` again. `curios`'s `tests::rules::totality_callback_binder` puts the program to both checkers under this name. The control's `q` callback recurses on what a `more` of `t` holds.
 #[test]
 fn a_callbacks_sibling_is_bounded_by_its_own_applications() {
     let attack = spin_verdicts(

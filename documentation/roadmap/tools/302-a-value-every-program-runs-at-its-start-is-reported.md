@@ -9,7 +9,7 @@ A statement that does not finish where its unit is erased runs when a program st
 ## What is known
 
 - **No value of `/std` is linked into every program so.** The erased rung of the one-line program `/std/print("ok")` (`curios wonder --stage anf`) holds only the items its entry reaches: the library's recursive parsers are functions of none, as its effects that take no argument are, so a program that names none of them links none of them.
-- **One suite notices such a value and none names it.** `curios`'s `tests::codegen::structural::loop_tests` hold that a small program allocates no environment of its own.
+- **One suite notices such a value and none names it.** `curios`'s `tests::codegen::structural::loop_` hold that a small program allocates no environment of its own.
 - **The finding is exact, and decided later than a lint is today.** The four lints are zeros read off name resolution, decided in `into_core`, always on, with nothing to configure ([A lint is an exact finding read off the compilation](../../design/tools/a-lint-is-an-exact-finding-read-off-the-compilation.md)). Whether a value's statements finish where its unit is erased is a fact of the unit's erased forms, with no false positive either, and known two stages after names resolve.
 
 ## Refinement

@@ -183,7 +183,7 @@ fn at_a_value(telescope: &Telescope<Term>, position: usize, value: &Term) -> Ter
 ///
 /// The elaborator writes such a type wherever it derives one — a `let` it leaves unannotated, a lambda's domain, a match's goal — and types none of them, so a declared type the certifier refuses at a value is a program it refuses after the elaborator accepted it. A refusal for the budget is no violation: the instance is one a compilation affords or does not.
 ///
-/// **Over the prelude it holds what is written later, and shows nothing of the rule.** With the certifier typing every arm, one under a scrutinee that already is another case among them, it reports no instance either: no declared type of the prelude holds an arm that rests on a parameter's case. The programs known to break the property are `curios`'s `tests::matching::instance_tests`, and the arm rule's own fixtures are `curios-cert`'s.
+/// **Over the prelude it holds what is written later, and shows nothing of the rule.** With the certifier typing every arm, one under a scrutinee that already is another case among them, it reports no instance either: no declared type of the prelude holds an arm that rests on a parameter's case. The programs known to break the property are `curios`'s `tests::matching::instance`, and the arm rule's own fixtures are `curios-cert`'s.
 #[test]
 fn the_certifier_types_a_declared_type_at_each_value_of_a_parameter() {
     with_prelude(|prelude| {
