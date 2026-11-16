@@ -40,6 +40,7 @@ impl ErasedUnit {
         forms: &HashMap<usize, Digest>,
     ) {
         curios_profile::profile!("erasures::complete");
+        let unit = curios_cert::DigestedUnit::of(definitions, places, certification);
         // What each part read digests to, made once however many items read it.
         let mut digests = HashMap::<(curios_core::Global, Part), Option<Read>>::new();
         for place in definitions.items.places() {
@@ -59,9 +60,9 @@ impl ErasedUnit {
                 .reads()
                 .map(|read| match names.contains(&read.0) {
                     true => Some(None),
-                    false => *digests.entry(read).or_insert_with(|| {
-                        self.read_then((definitions, places, certification), read)
-                    }),
+                    false => *digests
+                        .entry(read)
+                        .or_insert_with(|| self.read_then(unit, read)),
                 })
                 .collect::<Option<Vec<_>>>();
             held.complete(reads.map(|reads| Made {
@@ -75,19 +76,15 @@ impl ErasedUnit {
     /// What an item read of `part` of `name`, as a completed record holds it ([`Read`]), off this unit, its module held where `places` says under `certification`, and what its erasure recorded of other units: `None` where it will not digest.
     fn read_then(
         &self,
-        (definitions, places, certification): (
-            &curios_core::Definitions,
-            &curios_core::Places,
-            &curios_core::Certification,
-        ),
+        unit: curios_cert::DigestedUnit<'_>,
         (name, part): (curios_core::Global, Part),
     ) -> Option<Read> {
-        let digest = match (part, self.place(&name), places.place(&name)) {
+        let digest = match (part, self.place(&name), unit.places.place(&name)) {
             (Part::Binding | Part::Forms, Some(place), _) => {
                 erased_digest(self, place, (name, part))
             }
             (Part::Signature | Part::Body | Part::Kind, _, Some(_)) => {
-                declared_digest(definitions, places, certification, (name, part))
+                declared_digest(unit, (name, part))
             }
             _ => return self.recorded_read(&name, part),
         };

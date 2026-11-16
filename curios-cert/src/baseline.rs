@@ -185,18 +185,47 @@ pub type Beside<'a> = (
     Option<&'a Applications>,
 );
 
+/// A unit as a digest of a part of it reads it: its definitions, where it holds each name, the record its certification filed, and whether that record covers the definitions ([`Certification::covers`]). The last walks every definition, so it is decided once for every part read of the unit.
+#[derive(Clone, Copy)]
+pub struct DigestedUnit<'a> {
+    pub definitions: &'a Definitions,
+    pub places: &'a Places,
+    pub certification: &'a Certification,
+    pub covers: bool,
+}
+
+impl<'a> DigestedUnit<'a> {
+    /// The unit `definitions` holds where `places` says, under the record `certification`.
+    pub fn of(
+        definitions: &'a Definitions,
+        places: &'a Places,
+        certification: &'a Certification,
+    ) -> Self {
+        Self {
+            definitions,
+            places,
+            certification,
+            covers: certification.covers(definitions),
+        }
+    }
+}
+
 /// The certifier's digest of what a read reads of `name`, a declaration of the unit `module` is, held where `places` says, under the verdict and vectors `certification` files for it: of its body where `body`, and otherwise of its signature, as a walk digests a part it read of a unit in scope (`read_digest`). It is what a stage that reads declarations through the certifier records of a read and asks the read again by, so what it compares is the certifier's own digest. `Ok(None)` where the unit holds no such name.
 pub fn part_digest(
-    definitions: &Definitions,
-    places: &Places,
-    certification: &Certification,
+    unit: DigestedUnit<'_>,
     name: &Global,
     body: bool,
 ) -> Result<Option<String>, String> {
+    let DigestedUnit {
+        definitions,
+        places,
+        certification,
+        covers,
+    } = unit;
     // A vector is the entry's, filed for a name the unit holds one under, as a unit in scope answers it (`Globals`).
     let nominal = definitions.nominal(places, name).is_some();
     // The classification is read only where the record covers its unit, as `Globals::partial` reads one: a record naming fewer definitions than the unit holds was not made by a walk over it, so what it says of a name is nothing a reader may take, here as there.
-    let classified = certification.covers(definitions);
+    let classified = covers;
     let verdicts = (
         classified && certification.totality(name) == Some(Totality::Partial),
         certification.polarities(name).filter(|_| nominal),

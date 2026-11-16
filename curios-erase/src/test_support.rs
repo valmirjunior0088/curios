@@ -24,6 +24,7 @@ pub fn part_digests(
     certification: &curios_core::Certification,
     erased: &ErasedUnit,
 ) -> Vec<(NamedPart, Result<Option<String>, String>)> {
+    let unit = curios_cert::DigestedUnit::of(definitions, places, certification);
     definitions
         .items
         .places()
@@ -33,7 +34,7 @@ pub fn part_digests(
             let digest = match (read.1, erased.place(&read.0)) {
                 (Part::Binding | Part::Forms, Some(at)) => erased_digest(erased, at, read),
                 (Part::Binding | Part::Forms, None) => Ok(None),
-                _ => declared_digest(definitions, places, certification, read),
+                _ => declared_digest(unit, read),
             };
 
             (read, digest)

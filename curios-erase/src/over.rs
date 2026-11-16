@@ -61,6 +61,10 @@ pub struct ErasedOver<'a> {
     visited: BTreeSet<usize>,
     /// The first names of the baseline's items the unit no longer declares, each one's record the baseline holds.
     lost: Vec<curios_core::Global>,
+    /// The module being erased, under the record its certification filed, as a part of it digests.
+    now: curios_cert::DigestedUnit<'a>,
+    /// The baseline's module, under its record, as a part of it digests.
+    then: curios_cert::DigestedUnit<'a>,
 }
 
 impl<'a> ErasedOver<'a> {
@@ -79,6 +83,12 @@ impl<'a> ErasedOver<'a> {
             read: HashMap::new(),
             visited: BTreeSet::new(),
             lost: Vec::new(),
+            now: curios_cert::DigestedUnit::of(definitions, baseline.now, baseline.recorded),
+            then: curios_cert::DigestedUnit::of(
+                baseline.core,
+                baseline.places,
+                baseline.certification,
+            ),
         };
         over.reach();
 
@@ -289,12 +299,7 @@ impl<'a> ErasedOver<'a> {
                 self.kept_form(place.item())?;
                 erased_digest(unit, unit.place(&name)?, (name, part))
             }
-            (_, Some(_)) => declared_digest(
-                self.module,
-                self.baseline.now,
-                self.baseline.recorded,
-                (name, part),
-            ),
+            (_, Some(_)) => declared_digest(self.now, (name, part)),
             _ if !self.scope.recorded(&name) => return Some(None),
             _ => match self.baseline.erased.asked_items().abroad(&name, part) {
                 Some(then) if self.scope.unmoved(&name) => Ok(then.clone()),
@@ -369,16 +374,11 @@ impl<'a> ErasedOver<'a> {
         if !self.baseline.made.contains(name) {
             return true;
         }
-        let (definitions, baseline) = (self.module, self.baseline);
+        let (now, then) = (self.now, self.then);
 
         *self.same.entry((*name, part)).or_insert_with(|| {
-            let now = declared_digest(definitions, baseline.now, baseline.recorded, (*name, part));
-            let then = declared_digest(
-                baseline.core,
-                baseline.places,
-                baseline.certification,
-                (*name, part),
-            );
+            let now = declared_digest(now, (*name, part));
+            let then = declared_digest(then, (*name, part));
 
             matches!((now, then), (Ok(now), Ok(then)) if now == then)
         })

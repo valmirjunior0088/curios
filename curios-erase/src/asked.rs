@@ -263,17 +263,13 @@ impl Records for AskedItems {
 
 /// The digest of `part` of `name`, a declaration of the unit `module` is, held where `places` says and concluded as `certification` records: a signature or a body by the certifier's own digest ([`curios_cert::part_digest`]), and a kind by erasure's, that a constructor is one and of which family, nothing of an entry. `Ok(None)` where the unit declares no such part, a binding and forms whole being read off its erased forms instead.
 pub fn declared_digest(
-    definitions: &curios_core::Definitions,
-    places: &curios_core::Places,
-    certification: &curios_core::Certification,
+    unit: curios_cert::DigestedUnit<'_>,
     (name, part): (curios_core::Global, Part),
 ) -> Result<Option<String>, String> {
     match part {
-        Part::Signature => {
-            curios_cert::part_digest(definitions, places, certification, &name, false)
-        }
-        Part::Body => curios_cert::part_digest(definitions, places, certification, &name, true),
-        Part::Kind => constructor(definitions, places, &name)
+        Part::Signature => curios_cert::part_digest(unit, &name, false),
+        Part::Body => curios_cert::part_digest(unit, &name, true),
+        Part::Kind => constructor(unit.definitions, unit.places, &name)
             .map(|definition| {
                 let kind = (definition.kind.declared(), definition.kind.generated_from());
 

@@ -458,8 +458,12 @@ fn a_part_digest_reads_a_classification_where_the_certifiers_own_reads_one() {
         "the certifier's own digest reads the name as classified by no record",
     );
     assert_eq!(
-        part_digest(&definitions, &places, &partial, &global("five"), false)
-            .expect("the part digests"),
+        part_digest(
+            DigestedUnit::of(&definitions, &places, &partial),
+            &global("five"),
+            false
+        )
+        .expect("the part digests"),
         digest((false, None, None, None)),
         "and so does the digest a stage outside the certifier asks a part by",
     );
