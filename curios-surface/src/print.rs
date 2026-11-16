@@ -281,8 +281,8 @@ fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> 
 /// The most arms a ladder may keep on one line. Beyond this it is a dispatch table rather than a decision, and a table reads as rows.
 const MAX_FLAT_ARMS: usize = 3;
 
-/// The most of the line width, in percent, a match keeps on one line from `match` to `end`. A decision on one line is read as one thing, and past this share the eye loses which arm a body belongs to, however wide the line.
-const FLAT_MATCH_SHARE: usize = 70;
+/// The most columns a match keeps on one line, from `match` to `end`. A decision on one line is read as one thing, and past this span the eye loses which arm a body belongs to: a property of the reader, not of the page, so it is the same at every width, and a page narrower than it decides by what fits.
+const FLAT_MATCH_COLUMNS: usize = 70;
 
 /// Whether a term is itself an arm ladder — the arm body that forces its enclosing ladder to break.
 ///
@@ -1054,6 +1054,7 @@ impl<D: Layout> TreePrinter<D> {
             (true, false) => flat([pure("("), self.term(term), indent(ends()), pure(")")]),
             (false, _) => self.term(term),
         }
+    }
 
     /// [`TreePrinter::operand`] for the head of an application, projection, or bang — a position above every operator, so any infix parenthesizes. A numeric literal parenthesizes too: `(1).0` must not reprint as the float literal `1.0`.
     fn suffix_head(self, term: Term<D>, suffix: Printer) -> Printer {
@@ -1194,7 +1195,7 @@ impl<D: Layout> TreePrinter<D> {
             ]),
             // An arm ladder is width-adaptive: `match carry | true => x[\\1] | false => x[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines would make a proof-heavy module half again as tall as it was written.
             //
-            // Two ladders are broken regardless of width, by [`is_ladder`]. Laid out at a width, a ladder stays on one line only within [`FLAT_MATCH_SHARE`] of it, and one with guards after an arm's patterns never does: they stand between a pattern and its body, crowding a line however short the line is. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
+            // Two ladders are broken regardless of width, by [`is_ladder`]. Laid out at a width, a ladder stays on one line only within [`FLAT_MATCH_COLUMNS`], and one with guards after an arm's patterns never does: they stand between a pattern and its body, crowding a line however short the line is. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
             Subterm::Match(Match { head, arms }) => {
                 let forced =
                     arms.len() > MAX_FLAT_ARMS || arms.iter().map(|arm| &arm.body).any(is_ladder);
@@ -1205,7 +1206,7 @@ impl<D: Layout> TreePrinter<D> {
                 let crowded = arms.iter().any(|arm| !arm.guards.is_empty());
                 let within = match crowded {
                     true => 0,
-                    false => FLAT_MATCH_SHARE,
+                    false => FLAT_MATCH_COLUMNS,
                 };
                 return group_within(
                     within,
@@ -1244,7 +1245,7 @@ impl<D: Layout> TreePrinter<D> {
                     false => line,
                 };
                 return group_within(
-                    FLAT_MATCH_SHARE,
+                    FLAT_MATCH_COLUMNS,
                     flat([
                         pure("match"),
                         flat(

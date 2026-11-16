@@ -56,7 +56,7 @@ pub enum Printer {
     },
     /// The width-adaptive unit: renders flat — every enclosed [`Printer::Line`] as its flat spelling — when its flat form fits the room left on the line, and broken otherwise. Nested groups measured inside a fitting parent render flat with it; under a broken parent each decides for itself. With no width configured every group fits.
     ///
-    /// `within` holds the group's own flat form to a share of the line width, in percent, where it is held to one: past that share it renders broken however much room the line has left, and so does a group measured flat around it, since it would not be flat inside one.
+    /// `within` holds the group's own flat form to a span of columns, where it is held to one: past that span it renders broken however much room the line has left, and so does a group measured flat around it, since it would not be flat inside one. A width-free rendering holds nothing to it, as it holds every group flat.
     Group {
         inner: Box<Printer>,
         within: Option<usize>,

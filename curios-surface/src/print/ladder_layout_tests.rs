@@ -1,34 +1,34 @@
-//! How a ladder keeps one line: within its share of the width, as part of whatever holds it, and never with a headed arm's guards where a width lays it out.
+//! How a ladder keeps one line: within the columns a decision is read in, as part of whatever holds it, and never with a headed arm's guards where a width lays it out.
 
 use {
-    super::{FLAT_MATCH_SHARE, test_support::*},
+    super::{FLAT_MATCH_COLUMNS, test_support::*},
     crate::*,
 };
 
-/// A ladder past its share of a width of 100 and short of the line.
+/// A ladder past the columns a decision is read in and short of a line of 100.
 const LONG: &str =
     "match value | some(inner) => combine(inner, other) | none() => fallback(value) end";
 
-// A ladder on one line is read as one decision, so it keeps one only within its share of the width, however much room the line has.
+// A ladder on one line is read as one decision, so it keeps one only within the columns a reader takes in at once, however much room the line has, and within them wherever it fits: the span is the reader's, so a page narrower than it decides by what fits, as the site's code panel does.
 #[test]
-fn a_ladder_stays_on_one_line_only_within_its_share_of_the_width() {
-    let share = 100 * FLAT_MATCH_SHARE / 100;
-    assert!(share < LONG.len() && LONG.len() < 100);
+fn a_ladder_stays_on_one_line_only_within_the_columns_a_decision_is_read_in() {
+    assert!(FLAT_MATCH_COLUMNS < LONG.len() && LONG.len() < 100);
     assert_eq!(
         render(LONG, 100),
         "match value\n| some(inner) => combine(inner, other)\n| none() => fallback(value)\nend"
     );
 
-    let short = "match b | true => f | false => g end";
-    let width = (short.len() * 100).div_ceil(FLAT_MATCH_SHARE);
-    assert_eq!(render(short, width), short);
+    let short = "match n | 0 => true | p + 1 => even(p) end";
+    for width in [short.len(), 50, 60, 100] {
+        assert_eq!(render(short, width), short, "at {width}");
+    }
     assert_eq!(
-        render(short, width - 1),
-        "match b\n| true => f\n| false => g\nend"
+        render(short, short.len() - 1),
+        "match n\n| 0 => true\n| p + 1 => even(p)\nend"
     );
 }
 
-// What holds a ladder laid out flat holds it flat too, so a call around a ladder past its share breaks where the call alone would fit.
+// What holds a ladder laid out flat holds it flat too, so a call around a ladder past its columns breaks where the call alone would fit.
 #[test]
 fn a_call_around_a_long_ladder_breaks_with_it() {
     let source = format!("f({LONG})");

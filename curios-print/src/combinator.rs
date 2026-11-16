@@ -115,11 +115,11 @@ pub fn group(printer: Printer) -> Printer {
     }
 }
 
-/// A [`group`] that renders flat only where its own flat form also takes at most `percent` of the line width: past that it renders broken whatever room the line has, and a group measured flat around it breaks with it. A structure that reads as rows once it is long, however wide the line, is held to a share of it.
-pub fn group_within(percent: usize, printer: Printer) -> Printer {
+/// A [`group`] that renders flat only where its own flat form also spans at most `columns`: past that it renders broken whatever room the line has, and a group measured flat around it breaks with it. A structure that reads as rows once it is long, however wide the line, is held to the span a reader takes in at once, which is the same on every page.
+pub fn group_within(columns: usize, printer: Printer) -> Printer {
     Printer::Group {
         inner: Box::new(printer),
-        within: Some(percent),
+        within: Some(columns),
     }
 }
 

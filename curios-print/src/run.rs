@@ -764,11 +764,11 @@ fn fits(
             })),
             // A nested group inside a fitting parent must fit wholly flat, including any fills it holds. Only an atomic fill in the measured group itself may wrap without breaking that group. A block that takes its own line only where it breaks is measured as one.
             Printer::Group { inner, within } => {
-                // One held to a share of the width is flat inside the measured group only where its own flat form is within that share.
-                if inside && let (Some(percent), Some(width)) = (*within, width) {
+                // One held to a span is flat inside the measured group only where its own flat form is within that span.
+                if inside && let (Some(columns), Some(_)) = (*within, width) {
                     stack.push(Scanned::Held {
                         from: used,
-                        cap: width * percent / 100,
+                        cap: columns,
                     });
                 }
                 stack.push(Scanned::Node(Measured {
@@ -964,7 +964,7 @@ fn run<'b, 'c>(
                             None => true,
                             // A comment already taken onto this line ends it, so nothing measured now can render flat over the break it forces. Asked here rather than in the scan because it is a fact about the line already written, not about the document ahead.
                             Some(_) if !state.suffix.is_empty() => false,
-                            // Held to a share of the width, its flat form is measured alone against that share too.
+                            // Held to a span, its flat form is measured alone against that span too.
                             Some(width) => {
                                 fits(
                                     &inner,
@@ -974,16 +974,8 @@ fn run<'b, 'c>(
                                     false,
                                     state.following,
                                     state.width,
-                                ) && within.is_none_or(|percent| {
-                                    fits(
-                                        &inner,
-                                        &[],
-                                        width * percent / 100,
-                                        true,
-                                        false,
-                                        None,
-                                        state.width,
-                                    )
+                                ) && within.is_none_or(|columns| {
+                                    fits(&inner, &[], columns, true, false, None, state.width)
                                 })
                             }
                         };
