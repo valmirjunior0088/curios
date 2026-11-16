@@ -23,7 +23,7 @@ fn the_stages_show_the_transient_and_its_expansion() {
 
 // --- Refusals, each at the declaration and naming what to write instead. ---
 
-// A derived body is a term judged as an authored one is, its termination included: over a recursive family it reaches its own entry, as the body written out does, and a proof that reads either is refused, so no derivation is a recursion graded total that a written one is not.
+// A derived body is a term judged as an authored one is, its termination included: over a recursive family it reaches its own entry through its method, as the body written out does, each call on a child below its argument, so a proof that reads either is admitted alike; and the written body that hands its method back its own arguments is refused where a proof reads it, so no derivation is a recursion graded total that a written one is not.
 #[test]
 fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is() {
     let derived = r#"
@@ -52,12 +52,18 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
         "#;
 
     for source in [derived, written] {
-        let report = error(source);
-        assert!(
-            report.contains("a proof in `_apart` is a proof position\n│  it reaches `/witness~/std/ops/Eql(/Tree)`, which is not known to terminate"),
-            "{report}"
-        );
+        assert_eq!(run(source), b"", "{source}");
     }
+
+    let looping = written.replace(
+        "Eql/eql(l, m) && Eql/eql(r, s)",
+        "Eql/eql(a, b) && Eql/eql(r, s)",
+    );
+    let report = error(&looping);
+    assert!(
+        report.contains("a proof in `_apart` is a proof position\n│  it reaches `/witness~/std/ops/Eql(/Tree)`, which is not known to terminate"),
+        "{report}"
+    );
 }
 
 // A proposition is no key: every derivable concept is over a `Type`, so the signature is refused before a body is written, and no derived body takes a proof apart into data.

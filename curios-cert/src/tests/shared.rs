@@ -18,13 +18,15 @@ use {
 };
 
 /// Every function of the shared layer a judgment of this crate calls, by its crate's path.
-const ROSTER: [&str; 56] = [
+const ROSTER: [&str; 60] = [
     "curios_analysis::another_case",
     "curios_analysis::answers",
     "curios_analysis::answers_classed",
     "curios_analysis::atoms_within",
+    "curios_analysis::base_part",
     "curios_analysis::binder_bounds",
     "curios_analysis::blocker",
+    "curios_analysis::call_path",
     "curios_analysis::case_target_indices",
     "curios_analysis::connectives_agree",
     "curios_analysis::connectives_agree_classed",
@@ -35,12 +37,15 @@ const ROSTER: [&str; 56] = [
     "curios_analysis::foreign_congruence",
     "curios_analysis::grade",
     "curios_analysis::group_applications",
+    "curios_analysis::group_parts",
     "curios_analysis::handed",
+    "curios_analysis::handed_through",
     "curios_analysis::holds_no_type",
     "curios_analysis::known_to_terminate",
-    "curios_analysis::member_arities",
+    "curios_analysis::member_parts",
     "curios_analysis::nonzero_by",
     "curios_analysis::one_up_to_instances",
+    "curios_analysis::part_calls",
     "curios_analysis::pinned_instance",
     "curios_analysis::positivity_vectors",
     "curios_analysis::read_operands",
@@ -53,7 +58,6 @@ const ROSTER: [&str; 56] = [
     "curios_analysis::retyped",
     "curios_analysis::scrutinee_solution",
     "curios_analysis::solve_indices",
-    "curios_analysis::spine",
     "curios_analysis::struct_reaches_itself",
     "curios_analysis::variance_vectors",
     "curios_analysis::wholly_pinned",

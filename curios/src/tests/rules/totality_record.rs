@@ -1,0 +1,193 @@
+//! A call through a record's field, graded as a call of that field: a member whose leading lambdas answer a record — a witness, a structure of handlers — is called where a field of it is applied, against the member's parameters and the field lambda's after them.
+//!
+//! The rule is the totality decision's, *A call is read off a path* (`documentation/design/soundness/totality-of-the-erased-program.md`).
+
+use super::test_support::*;
+
+// A witness whose method recurses on its argument descends where the method does: `count`'s calls of `Count/count` on the children are calls of the witness's field, below `t`, so a type reaching it is formed. The refusal hands the method the tree rebuilt around the children, which is `t` again.
+#[test]
+fn a_witness_whose_method_recurses_on_its_argument_descends() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        concept Count(A: Type): Type {
+            count(A) -> Nat,
+        }
+
+        induct Tree: Type
+        | leaf(Nat)
+        | node(Tree, Tree)
+        end
+
+        satisfy Count(Tree) {
+            count(t) = match t | leaf(n) => n | node(l, r) => Count/count(l) + Count/count(r) end,
+        }
+
+        let Small(t: Tree) -> Prop = Bool/Holds(Count/count(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "Count/count(l) + Count/count(r)",
+        "Count/count(Tree/node(l, r)) + Count/count(r)",
+    )])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A derived witness on a recursive type is a written one the compiler wrote: its method compares the children through its own field, below each argument, so a type reaching `==` on the type is formed.
+#[test]
+fn a_derived_witness_on_a_recursive_type_is_reached_by_a_type() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+        use /std/ops/{Eql};
+
+        induct Tree: Type
+        | leaf(Nat)
+        | node(Tree, Tree)
+        end
+
+        satisfy Eql(Tree) {
+            ..
+        }
+
+        let Same(a: Tree, b: Tree) -> Prop = Bool/Holds(a == b);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    );
+}
+
+// A witness under a telescope is a member whose leading lambdas bind the telescope and answer the record: its method's parameters follow them, and a call of the method on a child, the telescope handed on in place, is below `t` as a written witness's is. The refusal hands the method the tree rebuilt around the children.
+#[test]
+fn a_witness_under_a_telescope_recurses_through_its_field_below_its_argument() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        concept Count(A: Type): Type {
+            count(A) -> Nat,
+        }
+
+        induct Tree(A: Type): Type
+        | leaf(A)
+        | node(Tree(A), Tree(A))
+        end
+
+        satisfy Count(Nat) {
+            count(n) = n,
+        }
+
+        satisfy (@A: Type, use Count(A)) => Count(Tree(A)) {
+            count(t) = match t | leaf(a) => Count/count(a) | node(l, r) => Count/count(l) + Count/count(r) end,
+        }
+
+        let Small(t: Tree(Nat)) -> Prop = Bool/Holds(Count/count(t) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[(
+        "Count/count(l) + Count/count(r)",
+        "Count/count(Tree/node(l, r)) + Count/count(r)",
+    )])
+    .by_elaborator_in("/Small", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Small", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A record is any literal of functions, a tuple of handlers as much as a witness: `handlers`, a value whose fields call each other on a predecessor, is graded field by field, each call below its caller's argument, so a type reaching one is formed, and a cycle through the pair descends where either call does. The refusal has each hand the other its own argument, so `handlers.0(1)` reaches `handlers.1(1)` and itself again.
+#[test]
+fn a_tuple_of_handlers_calling_each_other_descends_field_by_field() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let handlers: {(Nat) -> Nat, (Nat) -> Nat} = (
+            (n) => match n | 0 => 0 | k + 1 => handlers.1(k) end,
+            (n) => match n | 0 => 1 | k + 1 => handlers.0(k) end
+        );
+
+        let Low(n: Nat) -> Prop = Bool/Holds(handlers.0(n) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[
+        ("| k + 1 => handlers.1(k)", "| k + 1 => handlers.1(n)"),
+        ("| k + 1 => handlers.0(k)", "| k + 1 => handlers.0(n)"),
+    ])
+    .by_elaborator_in("/Low", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Low", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A member named anywhere but at a path's root lets the record it answers escape, so it is a call of each of its parts, claiming nothing: `W` handed bare to `apply0`, which reads its field and applies it, reaches `W.0` again with `n`, which is no descent, and both checkers see the call. The control reaches the field by its path, below its argument.
+#[test]
+fn a_member_handed_bare_is_a_call_of_each_of_its_parts() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let apply0(w: {(Nat) -> Nat}, n: Nat) -> Nat = w.0(n);
+
+        let W: {(Nat) -> Nat} = ((n) => match n | 0 => 0 | k + 1 => W.0(k) end,);
+
+        let Low(n: Nat) -> Prop = Bool/Holds(apply0(W, n) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| k + 1 => W.0(k)", "| k + 1 => apply0(W, n)")])
+    .by_elaborator_in("/Low", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Low", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}
+
+// A member handed where its callee applies it lets the record each application answers escape to the callee, so each application is a call of each of its parts, graded on the member's own arguments and claiming nothing past them: `go` applies `f` and calls a field of what it answers, which is `W`'s field lambda, and the refusal hands `go` the field's own argument back, so `W(0).0(0)` reaches itself through `go(W, 0)`.
+#[test]
+fn a_member_handed_where_its_callee_applies_it_is_a_call_of_each_of_its_parts() {
+    control(
+        r#"
+        use /std/{Nat, Bool};
+
+        let go(f: (Nat) -> {(Nat) -> Nat}, n: Nat) -> Nat =
+            match n | 0 => f(0).0(0) | k + 1 => go(f, k) end;
+
+        let W(m: Nat) -> {(Nat) -> Nat} = ((x) => match x | 0 => m | k + 1 => W(m).0(k) end,);
+
+        let Low(n: Nat) -> Prop = Bool/Holds(go(W, n) == 0);
+
+        /std/print("ok")
+        "#,
+        b"ok",
+    )
+    .refused(&[("| k + 1 => W(m).0(k)", "| k + 1 => go(W, x)")])
+    .by_elaborator_in("/Low", |error| {
+        matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
+    })
+    .by_certifier_in("/Low", |error| {
+        matches!(error, curios_cert::Error::NotTotal { .. })
+    });
+}

@@ -12,8 +12,8 @@ mod tests;
 use {
     super::{Certifier, Error},
     curios_analysis::{
-        Call, SizeContext, Standing, binder_bounds, decide, grade, handed, member_arities,
-        nonzero_by, refined_by_arm,
+        Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds, decide, grade,
+        group_parts, handed, handed_through, member_parts, nonzero_by, part_calls, refined_by_arm,
     },
     curios_common::Keyed,
     curios_core::{CallMatrix, Free, Global, Intrinsic, RecGroup, Subterm, Term, Totality},
@@ -49,19 +49,29 @@ pub struct Calls {
     later: Vec<Vec<Term>>,
     /// What a curried spine's head handed the argument lists after its own, nearest first, left for the application around it to take its share of once its head is typed.
     rest_handed: Vec<Option<Handed>>,
+    /// Whether the record literal the next judgment types is what a member's leading lambdas answer, or a record held at a field of one, so its fields are checked as the parts they are ([`Certifier::enter_field`]). Taken by that judgment alone, as `parameters` is.
+    record: bool,
 }
 
 /// What a call hands one argument where its callee applies it ([`handed`]), once for each frame whose body is being checked: the frame, and the callee's applications graded against that frame's caller. A lambda handed inside an inner group's body runs within the enclosing member's invocation too, so its binders stand to every caller whose body holds it, as a call of an enclosing member is graded against that member's parameters ([`Certifier::record_call`]).
 pub type Handed = Vec<(usize, Vec<CallMatrix>)>;
 
+/// What [`Certifier::enter_field`] replaced, for [`Certifier::leave_field`] to put back: the part whose body was being checked, with its parameters, and where in its member's record the check stood.
+pub(super) struct Entered {
+    caller: Option<(usize, Vec<Free>)>,
+    path: Vec<usize>,
+}
+
 /// One group whose bodies are being checked.
 struct Frame {
     /// The locals its members are assumed under while the bodies are checked.
     members: Vec<Free>,
-    /// Each member's parameter count — the columns a call to it is graded over.
-    arities: Vec<usize>,
-    /// The member whose body is being checked, and the parameters its leading lambdas have bound so far. `None` before the bodies and after them: a member named in a signature or in the group's tail is not a call from a body.
+    /// The group's parts ([`PartShape`]): each member's leading lambdas and each field lambda of the record under them, with the arity a call to it is graded over.
+    parts: Vec<PartShape>,
+    /// The part whose body is being checked, and the parameters its lambdas have bound so far. `None` before the bodies and after them: a member named in a signature or in the group's tail is not a call from a body.
     caller: Option<(usize, Vec<Free>)>,
+    /// Where in the record its member's leading lambdas answer the check stands: empty but while a field of it is checked.
+    path: Vec<usize>,
     calls: Vec<Call>,
     /// What reduction unfolds each member's local to while the group's bodies are checked: its selection out of the members known to terminate, for each of those, and nothing for one withheld ([`Calls::member_value`]).
     values: Vec<Option<Term>>,
@@ -139,6 +149,16 @@ impl Calls {
     /// Mark the next judgment as typing the head of an application spine.
     pub fn set_spine_head(&mut self) {
         self.spine_head = true;
+    }
+
+    /// Mark the record literal the next judgment types as what a member's leading lambdas answer, or a record held at a field of one.
+    pub fn mark_record(&mut self) {
+        self.record = true;
+    }
+
+    /// Whether the record literal about to be typed is one [`Calls::mark_record`] marked, clearing the mark for the judgments after it.
+    pub fn take_record(&mut self) -> bool {
+        mem::take(&mut self.record)
     }
 
     /// The argument lists applied after the application about to be typed, clearing them for the judgments after it: empty but where that application heads a curried spine.
@@ -228,11 +248,12 @@ impl Calls {
 impl Certifier<'_> {
     /// Open `group` for recording, its members assumed under `members`, each standing for nothing until [`Certifier::read_known`] reads it by value.
     pub(super) fn open_group(&mut self, group: &RecGroup, members: &[Free]) {
-        let arities = member_arities(self, group);
+        let parts = group_parts(self, group);
         self.calls.frames.push(Frame {
             members: members.to_vec(),
-            arities,
+            parts,
             caller: None,
+            path: Vec::new(),
             calls: Vec::new(),
             values: vec![None; members.len()],
         });
@@ -254,9 +275,55 @@ impl Certifier<'_> {
     /// Begin checking member `index`'s body: its leading lambdas bind its parameters, and the calls inside are its own.
     pub(super) fn begin_member(&mut self, index: usize) {
         if let Some(frame) = self.calls.frames.last_mut() {
-            frame.caller = Some((index, Vec::new()));
+            frame.caller = Some((base_part(&frame.parts, index), Vec::new()));
+            frame.path = Vec::new();
         }
         self.calls.parameters = true;
+    }
+
+    /// Begin checking field `slot` of the record a member's leading lambdas answer, or of a record held at the field being checked: where a part lies there, the calls the field's lambda makes are that part's, graded against the member's parameters and the lambda's after them, which the lambda binds as the member's leading lambdas bind theirs. What it replaces, for [`Certifier::leave_field`] to put back.
+    pub(super) fn enter_field(&mut self, slot: usize) -> Option<Entered> {
+        let frame = self.calls.frames.last_mut()?;
+        let (current, params) = frame.caller.clone()?;
+        let member = frame.parts[current].member;
+        let mut path = frame.path.clone();
+        path.push(slot);
+        let saved = Entered {
+            caller: frame.caller.clone(),
+            path: mem::replace(&mut frame.path, path.clone()),
+        };
+        match frame
+            .parts
+            .iter()
+            .position(|part| part.member == member && part.path == path)
+        {
+            Some(part) => {
+                let base = frame.parts[base_part(&frame.parts, member)].arity;
+                frame.caller = Some((part, params[..base.min(params.len())].to_vec()));
+                self.calls.parameters = true;
+            }
+            None if frame
+                .parts
+                .iter()
+                .any(|part| part.member == member && part.path.starts_with(&path)) =>
+            {
+                self.calls.parameters = true;
+            }
+            None => {
+                frame.caller = saved.caller;
+                frame.path = saved.path;
+                return None;
+            }
+        }
+        Some(saved)
+    }
+
+    /// End checking the field [`Certifier::enter_field`] began, putting back what it replaced.
+    pub(super) fn leave_field(&mut self, saved: Option<Entered>) {
+        if let (Some(saved), Some(frame)) = (saved, self.calls.frames.last_mut()) {
+            frame.caller = saved.caller;
+            frame.path = saved.path;
+        }
     }
 
     /// One more parameter of the member whose body is being checked.
@@ -293,10 +360,10 @@ impl Certifier<'_> {
         totality
     }
 
-    /// Record a call to `head` with `arguments`, when `head` is a member of a group whose body is being checked.
+    /// Record the call a path rooted at `head` makes, its `steps` read as [`part_calls`] reads them, when `head` is a member of a group whose body is being checked: each part the path reaches, with the arguments it hands that part.
     ///
     /// Not while a position is being classified: deciding a position's erased half types that position's *type*, which may name a member — `T(n)`, a sibling computing the type — without being a call any body makes.
-    pub(super) fn record_call(&mut self, head: &Free, arguments: &[Term]) -> Result<(), Error> {
+    pub(super) fn record_call(&mut self, head: &Free, steps: &[Segment]) -> Result<(), Error> {
         if self.calls.frames.is_empty() || self.positions.suppressed() {
             return Ok(());
         }
@@ -316,21 +383,23 @@ impl Certifier<'_> {
         let Some((caller, params)) = self.calls.frames[frame].caller.clone() else {
             return Ok(());
         };
-        let arity = self.calls.frames[frame].arities[callee];
-        // A call is graded on what it passes, and a `let`-bound local passes what it stands for; a variable an arm's index inversion solved passes itself, since the size order reads nothing an inversion concluded, as the elaborator's discovery walk grades it.
-        let arguments = arguments
-            .iter()
-            .map(|argument| self.graded(argument))
-            .collect::<Vec<_>>();
-        for argument in &arguments {
-            self.debug_assert_graded(argument);
-        }
+        for (callee, arguments) in part_calls(&self.calls.frames[frame].parts, callee, steps) {
+            let arity = self.calls.frames[frame].parts[callee].arity;
+            // A call is graded on what it passes, and a `let`-bound local passes what it stands for; a variable an arm's index inversion solved passes itself, since the size order reads nothing an inversion concluded, as the elaborator's discovery walk grades it.
+            let arguments = arguments
+                .iter()
+                .map(|argument| self.graded(argument))
+                .collect::<Vec<_>>();
+            for argument in &arguments {
+                self.debug_assert_graded(argument);
+            }
 
-        // Taken out for the grading and put back: the grader reads the context while reducing through this certifier, and nothing it reduces opens an arm.
-        let context = mem::take(&mut self.calls.context);
-        let call = grade(self, &context, caller, &params, callee, arity, &arguments);
-        self.calls.context = context;
-        self.calls.frames[frame].calls.push(call?);
+            // Taken out for the grading and put back: the grader reads the context while reducing through this certifier, and nothing it reduces opens an arm.
+            let context = mem::take(&mut self.calls.context);
+            let call = grade(self, &context, caller, &params, callee, arity, &arguments);
+            self.calls.context = context;
+            self.calls.frames[frame].calls.push(call?);
+        }
         Ok(())
     }
 
@@ -426,7 +495,7 @@ impl Certifier<'_> {
         self.memos.begin_sizes();
     }
 
-    /// Record the calls a bare `member` local makes where its callee applies it as `handed` grades: one for each application graded against the caller of the member's own group, as a call of it is ([`Certifier::record_call`]), where an application hands it all its parameters, and one claiming nothing otherwise.
+    /// Record the calls a bare `member` local makes where its callee applies it as `handed` grades: for each application graded against the caller of the member's own group, as a call of it is ([`Certifier::record_call`]), one of each of the member's parts ([`handed_through`]).
     pub(super) fn record_handed(
         &mut self,
         member: &Free,
@@ -454,17 +523,18 @@ impl Certifier<'_> {
         let Some((_, matrices)) = handed.iter().find(|(graded, _)| *graded == frame) else {
             return self.record_call(member, &[]);
         };
-        let arity = self.calls.frames[frame].arities[callee];
-        for matrix in matrices {
-            let matrix = match matrix.columns() == arity && matrix.rows() == params.len() {
-                true => matrix.clone(),
-                false => CallMatrix::unknown(params.len(), arity),
-            };
-            self.calls.frames[frame].calls.push(Call {
-                caller,
-                callee,
-                matrix,
-            });
+        // A member handed bare is called where the callee applies it, and each of its parts with it: the record its leading lambdas answer escapes to the callee ([`handed_through`]).
+        let open = &mut self.calls.frames[frame];
+        let base = open.parts[base_part(&open.parts, callee)].arity;
+        for part in member_parts(&open.parts, callee) {
+            let arity = open.parts[part].arity;
+            for matrix in matrices {
+                open.calls.push(Call {
+                    caller,
+                    callee: part,
+                    matrix: handed_through(matrix, base, params.len(), arity),
+                });
+            }
         }
         Ok(())
     }

@@ -130,6 +130,35 @@ impl CallMatrix {
     pub fn descends(&self) -> bool {
         (0..self.rows.min(self.columns)).any(|index| self.entry(index, index) == Size::Less)
     }
+
+    /// `self`'s columns followed by `other`'s, over the same rows: a call whose first arguments `self` grades and whose later ones `other` does — a member's own arguments, then a field lambda's. `None` where the rows differ.
+    pub fn beside(&self, other: &CallMatrix) -> Option<CallMatrix> {
+        if self.rows != other.rows {
+            return None;
+        }
+        let entries = self
+            .entries
+            .iter()
+            .zip(&other.entries)
+            .map(|(first, second)| {
+                first
+                    .iter()
+                    .copied()
+                    .chain(
+                        second
+                            .iter()
+                            .map(|(column, size)| (column + self.columns, *size)),
+                    )
+                    .collect()
+            })
+            .collect();
+
+        Some(CallMatrix {
+            rows: self.rows,
+            columns: self.columns + other.columns,
+            entries,
+        })
+    }
 }
 
 /// How a definition applies each of its parameters: for each, every matrix grading what an application of it hands against the definition's parameters, or nothing where the parameter is used otherwise than applied or handed on unchanged.

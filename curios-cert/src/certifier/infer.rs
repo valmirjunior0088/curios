@@ -29,7 +29,7 @@ use {
         Certifier, Counted, Error, Handed, Sort, as_sort, check_group, convert, infer_sort,
         synth_neutral,
     },
-    curios_analysis::spine,
+    curios_analysis::call_path,
     curios_common::recurse,
     curios_core::{
         Bound, CallMatrix, Carrier, Cases, Cost, Field, Foreign, Free, Func, FuncType, InductType,
@@ -268,11 +268,11 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             }
 
             if !spine_head {
-                let (head, arguments) = spine(term);
+                let (head, steps) = call_path(term);
                 if let Subterm::Var(var) = &*head
                     && let Some(free) = var.as_free()
                 {
-                    certifier.record_call(free, &arguments)?;
+                    certifier.record_call(free, &steps)?;
                 }
             }
 
@@ -302,7 +302,17 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 actual: len,
             };
 
+            // A projection is a step of the path its head starts, typed as part of it, and the path's call is recorded where the path ends: a member's field applied is a call of the part it reaches, and one named unapplied a call it cannot grade ([`Certifier::record_call`]).
+            certifier.calls.set_spine_head();
             let head_type = infer(certifier, head)?;
+            if !spine_head {
+                let (root, steps) = call_path(term);
+                if let Subterm::Var(var) = &*root
+                    && let Some(free) = var.as_free()
+                {
+                    certifier.record_call(free, &steps)?;
+                }
+            }
             let reduced = certifier.reduce_forced(head_type.clone())?;
 
             match (&*reduced, field) {
@@ -409,6 +419,7 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
             fields,
             ..
         }) => {
+            let record = certifier.calls.take_record();
             let at = certifier.struct_at(name, universes, params)?;
             check_along(certifier, at.parameters(certifier)?, params)?;
             let telescope = at.fields(certifier)?;
@@ -421,7 +432,12 @@ fn infer_within(certifier: &mut Certifier, term: &Term, spine_head: bool) -> Res
                 });
             }
 
-            check_along(certifier, telescope, fields)?;
+            let mut cursor = telescope.cursor();
+            for (slot, field) in fields.iter().enumerate() {
+                let (_, domain) = cursor.entry().expect("the arity guard bounds the walk");
+                check_field(certifier, slot, field, &domain, record)?;
+                cursor.advance(field.clone());
+            }
 
             Ok(Subterm::StructType(StructType {
                 name: *name,
@@ -934,11 +950,17 @@ fn check_rules(
     if let Subterm::Tuple(Tuple { fields, .. }) = &**term {
         let reduced = certifier.reduce_forced(expected.clone())?;
         if let Subterm::TupleType(TupleType { telescope }) = &*reduced {
-            return check_fields(certifier, fields, telescope);
+            return check_fields(certifier, fields, telescope, parameters);
         }
     }
 
-    let inferred = infer(certifier, term)?;
+    // A structure's literal leading a member body, under its leading lambdas, is the record whose fields are parts of their own: its rule checks each as the part it is. Taken back past the judgment, which a remembered typing answers without reading it.
+    if parameters && matches!(&**term, Subterm::Struct(_)) {
+        certifier.calls.mark_record();
+    }
+    let inferred = infer(certifier, term);
+    certifier.calls.take_record();
+    let inferred = inferred?;
 
     match subsumes(certifier, &inferred, expected)? {
         true => Ok(()),
@@ -996,11 +1018,29 @@ fn check_lambda(
     }
 }
 
-/// The entry-wise walk of the tuple rule above: each component checked at its entry's type, the telescope then opened at that *actual* component so later entries see the value the binder stands for.
+/// Check `field`, slot `slot` of a record literal, at `type_`; where `record` says the literal is what a member's leading lambdas answer, or a record held at a field of one, as the part the field is ([`Certifier::enter_field`]), so the calls its lambda makes are that part's.
+fn check_field(
+    certifier: &mut Certifier,
+    slot: usize,
+    field: &Term,
+    type_: &Term,
+    record: bool,
+) -> Result<(), Error> {
+    if !record {
+        return check(certifier, field, type_);
+    }
+    let saved = certifier.enter_field(slot);
+    let checked = check(certifier, field, type_);
+    certifier.leave_field(saved);
+    checked
+}
+
+/// The entry-wise walk of the tuple rule above: each component checked at its entry's type, the telescope then opened at that *actual* component so later entries see the value the binder stands for; where `record` says the tuple is a member body's record, each as the part it is ([`check_field`]).
 fn check_fields(
     certifier: &mut Certifier,
     fields: &[Term],
     telescope: &Telescope<()>,
+    record: bool,
 ) -> Result<(), Error> {
     if telescope.len() != fields.len() {
         return Err(Error::Arity {
@@ -1011,11 +1051,11 @@ fn check_fields(
     }
 
     let mut cursor = telescope.cursor();
-    for field in fields {
+    for (slot, field) in fields.iter().enumerate() {
         let (_, type_) = cursor
             .entry()
             .expect("the arity guard bounds the walk to the telescope's length");
-        check(certifier, field, &type_)?;
+        check_field(certifier, slot, field, &type_, record)?;
         cursor.advance(field.clone());
     }
 

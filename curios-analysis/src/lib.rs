@@ -52,9 +52,9 @@ pub use variance::{HeldLevels, VarianceVectors, held_by, held_levels, variance_v
 
 mod totality;
 pub use totality::{
-    Call, SizeContext, Standing, binder_bounds, blocker, decide, grade, group_applications,
-    group_totality, handed, known_to_terminate, member_arities, nonzero_by, refined_by_arm, spine,
-    yields_a_sort_where,
+    Call, PartShape, Segment, SizeContext, Standing, base_part, binder_bounds, blocker, call_path,
+    decide, grade, group_applications, group_parts, group_totality, handed, handed_through,
+    known_to_terminate, member_parts, nonzero_by, part_calls, refined_by_arm, yields_a_sort_where,
 };
 
 mod erased;

@@ -4,7 +4,7 @@
 
 use {
     crate::{test_support::*, *},
-    curios_analysis::test_support::*,
+    curios_analysis::{Segment, test_support::*},
     curios_common::fill,
     curios_core::{Subterm, Term, Totality},
 };
@@ -154,7 +154,7 @@ fn a_refused_walk_takes_back_the_calls_it_recorded() {
         certifier.begin_member(0);
         certifier.bind_parameter(&n);
         let refused = |certifier: &mut Certifier| {
-            certifier.record_call(&f, &[Term::free_var(&n)])?;
+            certifier.record_call(&f, &[Segment::Arguments(vec![Term::free_var(&n)])])?;
             Err::<(), _>(Error::Unclassified(self::term("0")))
         };
         let outcome = match tried {

@@ -464,10 +464,12 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
     }
 
     let params = [n];
+    let parts = one_part();
     let arities = vec![1];
     let mut walk = Walk {
         env: &mut certifier,
         group,
+        parts: &parts,
         arities: &arities,
         caller: 0,
         params: &params,
@@ -476,8 +478,9 @@ fn a_body_nested_deeper_than_an_unguarded_recursion_survives_is_walked() {
         walked: HashMap::new(),
         calls: Vec::new(),
         tracked: None,
+        summarizes: false,
     };
-    walk.walk(&body);
+    walk.walk(slice::from_ref(&body));
 
     // The call passes the parameter itself, so it grades `Same` — a grade only a walk that reached the bottom of the nest can record.
     assert_eq!(walk.calls.len(), 1);
@@ -543,10 +546,12 @@ fn calls_in(group: &RecGroup, n: Free, body: &Term) -> usize {
 fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
     let mut certifier = Probe::default();
     let params = [n];
+    let parts = one_part();
     let arities = vec![1];
     let mut walk = Walk {
         env: &mut certifier,
         group,
+        parts: &parts,
         arities: &arities,
         caller: 0,
         params: &params,
@@ -555,10 +560,20 @@ fn graded_in(group: &RecGroup, n: Free, body: &Term) -> Vec<Call> {
         walked: HashMap::new(),
         calls: Vec::new(),
         tracked: None,
+        summarizes: false,
     };
-    walk.walk(body);
+    walk.walk(slice::from_ref(body));
 
     walk.calls
+}
+
+/// The parts of a group of one member taking one parameter, whose body is no record.
+fn one_part() -> Vec<PartShape> {
+    vec![PartShape {
+        member: 0,
+        path: Vec::new(),
+        arity: 1,
+    }]
 }
 
 /// Sixty `let`s over `first`, each binding `line` of the one before, closed by `tail` of the last.

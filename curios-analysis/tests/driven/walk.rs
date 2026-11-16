@@ -196,7 +196,7 @@ fn forms(term: &Term) -> Vec<&'static str> {
 ///
 /// **What that does and does not hold.** A term-bearing field added to a form whose specimen is a struct literal is a compile error at that literal, and the marker that repairs it is planted with no further edit. `Func`, `FuncType`, `TupleType`, `Let` and `Rec` are built through `Term`'s constructors, their fields being private, so a field added behind one of those is held only by whoever extends the constructor.
 ///
-/// **The whitelist is three mechanisms.** A `Metavar`'s spine, which the elaborator's strict zonk refuses before this pass runs. A group member's declared type, in the one spelling a group is reached by, a nested `Rec`. And the one the fold cannot show, because it is not a child position but a peel: `Member::of` takes the member body's *leading* lambdas and discards their domain annotations at `Telescope::Cons(_, _, rest)`, so a call planted there is invisible while the same lambda one node deeper is walked — which is why every row is wrapped in a tuple, and why the two spellings are asserted against each other at the end.
+/// **The whitelist is three mechanisms.** A `Metavar`'s spine, which the elaborator's strict zonk refuses before this pass runs. A group member's declared type, in the one spelling a group is reached by, a nested `Rec`. And the one the fold cannot show, because it is not a child position but a peel: a group's parts take the member body's *leading* lambdas, and each lambda field of the record literal under them, and discard their domain annotations at `Telescope::Cons(_, _, rest)`, so a call planted there is invisible while the same lambda as an argument is walked — which is why every row is wrapped in an application of a variable no member is, and why the spellings are asserted against each other at the end.
 ///
 /// All three are type positions, and the argument that they are safe is the audit's: a call in one is consumed by β or read only by typing, never reduced, and an edge the engine misses is dangerous only where it can complete a reduction cycle. That argument is not what this test checks.
 #[test]
@@ -481,9 +481,9 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
                 .iter()
                 .find(|(marker, _)| marker == child)
                 .map(|(_, mechanism)| *mechanism);
-            // Wrapped in a tuple so the member body is never itself a lambda: `Member::of` peels a *leading* lambda and discards its domain annotations, which is the third mechanism and has its own pair below, and leaving it in the way would hide what `Walk::step` does with every other position.
+            // Handed to a variable no member is, so the member body is neither a lambda nor a record of one: a part peels a *leading* lambda, or a record's lambda field, and discards its domain annotations, which is the third mechanism and has its own spellings below, and leaving it in the way would hide what `Walk::step` does with every other position.
             assert_eq!(
-                call_is_seen(Term::tuple([plant])),
+                call_is_seen(argument_of_another(plant)),
                 mechanism.is_none(),
                 "{form}, at the child {child:?}: the walk {} the planted self-call{}",
                 if mechanism.is_none() {
@@ -496,16 +496,25 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         }
     }
 
-    // The third mechanism, stated as the pair that separates it from `Walk::step`: the same lambda is invisible at the top of a member body and visited one node deeper.
+    // The third mechanism, stated as the spellings that separate it from `Walk::step`: the same lambda is invisible at the top of a member body and as a field of the record a member body is, both parts the walk peels, and visited as an argument.
     let lambda = || Term::func([(binder(1), call())], Term::type_ground());
     assert!(
         !call_is_seen(lambda()),
         "a peeled lambda domain: the walk reached the planted self-call",
     );
     assert!(
-        call_is_seen(Term::tuple([lambda()])),
+        !call_is_seen(Term::tuple([lambda()])),
+        "a peeled field lambda's domain: the walk reached the planted self-call",
+    );
+    assert!(
+        call_is_seen(argument_of_another(lambda())),
         "a lambda domain below the peel: the walk missed the planted self-call",
     );
+}
+
+/// `term` handed to a variable no member is: a position the walk reaches as it reaches any argument, and no part peels.
+fn argument_of_another(term: Term) -> Term {
+    Term::apply(Term::free_var(&Free::local(2, Some("g"))), [term])
 }
 
 /// A declaration whose payload type an inline `rec` computes by calling itself: `rec Count : (n : Nat) -> Type = (n) => {Nat, Count(n)}`, planted as `Count(0)`.
