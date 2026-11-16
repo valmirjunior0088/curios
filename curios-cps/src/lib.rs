@@ -56,6 +56,7 @@ pub use survey::{Fate, Outcome, descendants, fates};
 
 mod value_flow;
 use value_flow::*;
+pub use value_flow::{MayBe, ValueFlow};
 
 mod verify;
 pub use verify::VerifyError;

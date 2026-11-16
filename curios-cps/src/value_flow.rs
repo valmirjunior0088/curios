@@ -6,7 +6,9 @@
 //!
 //! **Any is what the module does not see.** That is the entry's parameters, and what a heap call answers, which only a module [`bound_frames`](crate::bound_frames) rewrote holds. A host's reply is its wire values, no closure and no construction, and the advance enters only the descriptions the entry surfaced, which take no parameter, so every other parameter takes what the module's own calls hand it. A callee that may be any reaches every function some atom names that takes as many parameters, and a read out of a value that may be any reads the summary, since every aggregate is one the module builds.
 //!
-//! **The rows a value may be are its constructions' rows**, every row where it may be any. They are what [`rows_reaching`] answers the row tests, the rebuild in place and the verifier, and what [`Module::entry_suspension`] reads off the entry's returns for its ABI ([An entry exports only the turns it can return](../../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md)): each function-return position has its own fact, even where no caller receives it, so only what reaches the entry's returns decides its capability, and a suspension consumed inside the program does not escape merely because it was built.
+//! **The rows a value may be are its constructions' rows**, every row where it may be any. They are what [`ValueFlow::rows`] answers the row tests, the rebuild in place and the verifier, and what [`Module::entry_suspension`] reads off the entry's returns for its ABI ([An entry exports only the turns it can return](../../documentation/design/compilation/an-entry-exports-only-the-turns-it-can-return.md)): each function-return position has its own fact, even where no caller receives it, so only what reaches the entry's returns decides its capability, and a suspension consumed inside the program does not escape merely because it was built.
+//!
+//! **A solve serves every reader of the module as it stands.** Where two read one module, as the machine boundary's verifier and the entry's capability do, they read one solve ([`Module::verify_reading`], [`Module::entry_suspension_reading`]), and a join that moved nothing is told by what the fact gained rather than by a copy of it.
 //!
 //! **A flow it misses is a wrong answer** wherever a reader trusts what a value may not be, so every rule matches its node's whole alphabet: no wildcard stands over a node, a value expression or an operation.
 
@@ -24,7 +26,10 @@ use {
         Atom, Callee, CellOp, ChannelOp, ContinuationId, FunctionId, Intrinsic, IntrinsicCall,
         Lattice, Module, Node, NodeId, RowId, Solver, ValueExpr, ValueId,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        cell::OnceCell,
+        collections::{BTreeMap, BTreeSet},
+    },
 };
 
 /// What something may be: these, or any.
@@ -61,13 +66,25 @@ impl<T: Ord + Clone> Lattice for MayBe<T> {
     }
 
     fn join(&mut self, incoming: Self) {
-        *self = match (std::mem::replace(self, MayBe::Any), incoming) {
-            (MayBe::Any, _) | (_, MayBe::Any) => MayBe::Any,
-            (MayBe::Of(mut left), MayBe::Of(right)) => {
-                left.extend(right);
-                MayBe::Of(left)
+        self.joined(incoming);
+    }
+
+    // A set moved where it grew, or became any.
+    fn joined(&mut self, incoming: Self) -> bool {
+        match (&mut *self, incoming) {
+            (MayBe::Any, _) => false,
+            (_, MayBe::Any) => {
+                *self = MayBe::Any;
+
+                true
             }
-        };
+            (MayBe::Of(left), MayBe::Of(right)) => {
+                let before = left.len();
+                left.extend(right);
+
+                left.len() != before
+            }
+        }
     }
 }
 
@@ -114,8 +131,14 @@ impl Lattice for ValueFact {
     }
 
     fn join(&mut self, incoming: Self) {
-        self.functions.join(incoming.functions);
-        self.constructions.join(incoming.constructions);
+        self.joined(incoming);
+    }
+
+    fn joined(&mut self, incoming: Self) -> bool {
+        let functions = self.functions.joined(incoming.functions);
+        let constructions = self.constructions.joined(incoming.constructions);
+
+        functions || constructions
     }
 }
 
@@ -152,7 +175,7 @@ impl ValueFlow {
     }
 
     /// The rows of the constructions `fact` may be, every row where it may be any.
-    fn rows(&self, fact: &ValueFact) -> Rows {
+    fn rows_of(&self, fact: &ValueFact) -> Rows {
         match &fact.constructions {
             MayBe::Of(constructions) => MayBe::Of(
                 constructions
@@ -179,14 +202,20 @@ impl ValueFlow {
 
 /// The rows each value may be a struct of.
 pub fn rows_reaching(module: &Module) -> BTreeMap<ValueId, Rows> {
-    let flow = ValueFlow::of(module);
-    flow.facts
-        .iter()
-        .filter_map(|(key, fact)| match key {
-            FlowKey::Value(value) => Some((*value, flow.rows(fact))),
-            _ => None,
-        })
-        .collect()
+    ValueFlow::of(module).rows()
+}
+
+impl ValueFlow {
+    /// The rows each value may be a struct of.
+    pub fn rows(&self) -> BTreeMap<ValueId, Rows> {
+        self.facts
+            .iter()
+            .filter_map(|(key, fact)| match key {
+                FlowKey::Value(value) => Some((*value, self.rows_of(fact))),
+                _ => None,
+            })
+            .collect()
+    }
 }
 
 impl Module {
@@ -194,14 +223,19 @@ impl Module {
     ///
     /// This reads the current graph without caching or changing its row vocabulary. A result the module does not see retains the row; a computation that never returns contributes no returned row and need not be proved terminating.
     pub fn entry_suspension(&self) -> Option<RowId> {
+        self.entry_suspension_reading(&OnceCell::new())
+    }
+
+    /// [`Module::entry_suspension`], reading the value flow from `flow`, solved there where nothing has solved it yet ([`Module::verify_reading`]).
+    pub fn entry_suspension_reading(&self, flow: &OnceCell<ValueFlow>) -> Option<RowId> {
         let entry = self.entry()?;
         let row = self.suspension()?;
-        let flow = ValueFlow::of(self);
+        let flow = flow.get_or_init(|| ValueFlow::of(self));
         let mut returned = flow
             .facts
             .iter()
             .filter_map(|(key, fact)| match key {
-                FlowKey::Returned(function, _) if *function == entry => Some(flow.rows(fact)),
+                FlowKey::Returned(function, _) if *function == entry => Some(flow.rows_of(fact)),
                 _ => None,
             })
             .peekable();

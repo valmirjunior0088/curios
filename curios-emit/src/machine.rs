@@ -6,6 +6,7 @@ use {
     curios_abi::ForeignFunction,
     curios_common::{Entropy, id},
     std::{
+        cell::OnceCell,
         collections::{BTreeMap, BTreeSet, VecDeque},
         fmt,
         sync::Arc,
@@ -217,8 +218,10 @@ pub fn lower(
     source: &curios_cps::Module,
     results: &BTreeMap<curios_cps::FunctionId, Vec<curios_cps::Storage>>,
 ) -> MachineModule {
+    // One value flow for the module as it stands, read by the verifier's rebuilds and by the entry's capability alike.
+    let flow = OnceCell::new();
     source
-        .verify()
+        .verify_reading(&flow)
         .expect("invalid high CPS at machine boundary");
     let mut free_values = source
         .functions()
@@ -326,7 +329,7 @@ pub fn lower(
         function_hints,
         rows,
         members: source.members().to_vec(),
-        entry_suspension: source.entry_suspension(),
+        entry_suspension: source.entry_suspension_reading(&flow),
     };
     module.verify().expect("invalid closed machine CFG");
     module

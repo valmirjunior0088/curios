@@ -3,10 +3,11 @@
 use {
     super::{
         Atom, Callee, ContinuationId, Edge, Function, FunctionId, Intrinsic, IntrinsicCall, Module,
-        Node, NodeId, Panic, RowId, ValueExpr, ValueId, atoms, function_nodes, rows_reaching,
+        Node, NodeId, Panic, RowId, ValueExpr, ValueFlow, ValueId, atoms, function_nodes,
     },
     curios_common::Sorted,
     std::{
+        cell::OnceCell,
         collections::{BTreeMap, BTreeSet},
         fmt,
         hash::Hash,
@@ -174,17 +175,23 @@ impl ScopeVerifier {
 
 impl Module {
     pub fn verify(&self) -> Result<(), VerifyError> {
-        self.verify_with(true)
+        self.verify_reading(&OnceCell::new())
+    }
+
+    /// [`Module::verify`], reading the value flow a rebuild is held to from `flow`, solved there where nothing has solved it yet: one solve serves the verifier and every other reader of the module as it stands.
+    pub fn verify_reading(&self, flow: &OnceCell<ValueFlow>) -> Result<(), VerifyError> {
+        self.verify_with(Some(flow))
     }
 
     /// The round-boundary subset of [`Module::verify`]: every structural clause, without the row-vocabulary one.
     ///
     /// A round's close leaves scoping, ownership and arities canonical, but the vocabulary clause holds only of the *converged* module: constant folding pushes a decided reply's payload into both arms of its dispatch, so until a later round threads the decided switch and prunes behind it, the dead arm legitimately reads that payload in the other vocabulary — the tag the fold decided is what keeps it honest, and no per-round rewrite is obliged to have cleaned it up yet. `/std/Parse`'s reply dispatches reach this state on every `pure`-fed combinator, so the full check at a round boundary would refuse half the cross-stage corpus that the exit gate admits. The entry and exit verifies keep the full set, so a mismatch that survives convergence is still refused where its premise actually holds.
     pub fn verify_structure(&self) -> Result<(), VerifyError> {
-        self.verify_with(false)
+        self.verify_with(None)
     }
 
-    fn verify_with(&self, rows: bool) -> Result<(), VerifyError> {
+    /// The structural clauses, and where `flow` is given the row-vocabulary ones, which read it.
+    fn verify_with(&self, flow: Option<&OnceCell<ValueFlow>>) -> Result<(), VerifyError> {
         let entry = self
             .entry()
             .ok_or_else(|| VerifyError("module has no entry function".into()))?;
@@ -234,9 +241,9 @@ impl Module {
             self.verify_function_body(id, function, &facts, &mut bound_continuations)?;
         }
         self.verify_lexical_scopes(entry)?;
-        if rows {
+        if let Some(flow) = flow {
             self.verify_rows()?;
-            self.verify_rebuilds()?;
+            self.verify_rebuilds(flow)?;
         }
 
         let live_nodes = self.node_ids().collect::<BTreeSet<_>>();
@@ -389,7 +396,7 @@ impl Module {
     }
 
     /// A rebuild writes into a value nothing else reads: `of` names a value some flow reaching which builds the rebuild's row, its slots are in range and listed once each, in order, and no node a run can reach after the rebuild reads `of`, the rebuilt value going by the rebuild's result from there on. What the value flow cannot see into may be any row, and the emitted rebuild casts `of` to its row, which traps rather than writes where it is another; that nothing outside its function holds `of` is a fact of the whole module, which the tests of the rewrite minting the form hold.
-    fn verify_rebuilds(&self) -> Result<(), VerifyError> {
+    fn verify_rebuilds(&self, flow: &OnceCell<ValueFlow>) -> Result<(), VerifyError> {
         let mut rows = None;
         for (function, _) in self.live_functions() {
             for node_id in function_nodes(self, function) {
@@ -422,7 +429,8 @@ impl Module {
                         definition.width(),
                     )));
                 }
-                let rows = rows.get_or_insert_with(|| rows_reaching(self));
+                let rows =
+                    rows.get_or_insert_with(|| flow.get_or_init(|| ValueFlow::of(self)).rows());
                 if !rows.get(of).is_some_and(|rows| rows.may_be(*row)) {
                     return Err(VerifyError(format!(
                         "{function} node {node_id} rebuilds {of} as {row}, which no flow reaching it builds"

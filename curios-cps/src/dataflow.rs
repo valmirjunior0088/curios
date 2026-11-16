@@ -31,6 +31,14 @@ pub trait Lattice: Clone + PartialEq {
 
     /// Raise this fact to the least upper bound of itself and `incoming`.
     fn join(&mut self, incoming: Self);
+
+    /// [`Lattice::join`], answering whether the fact moved. Stated by a fact the solver would otherwise copy whole at every join to compare, such as a set, which can tell a move by what it gained.
+    fn joined(&mut self, incoming: Self) -> bool {
+        let before = self.clone();
+        self.join(incoming);
+
+        *self != before
+    }
 }
 
 /// A rule of a client's constraint system: what it reads through [`Solver::fact`] and raises through [`Solver::join`].
@@ -78,12 +86,9 @@ impl<F: Lattice, K: Ord + Clone> Solver<F, K> {
     /// A key absent from the seeding is inserted rather than rejected, so a client may discover targets as it runs instead of enumerating them all up front.
     pub fn join(&mut self, id: K, incoming: F) {
         let current = self.facts.entry(id.clone()).or_insert_with(F::bottom);
-        let mut updated = current.clone();
-        updated.join(incoming);
-        if updated == *current {
+        if !current.joined(incoming) {
             return;
         }
-        *current = updated;
         if let Some(readers) = self.readers.get_mut().get(&id) {
             for &rule in readers {
                 if !self.queued[rule] {
