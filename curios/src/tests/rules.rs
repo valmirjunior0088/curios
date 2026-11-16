@@ -33,6 +33,7 @@ mod sequence_tests;
 mod spine_tests;
 mod subsumption_tests;
 mod test_support;
+mod totality_callback_tests;
 mod totality_descent_tests;
 mod totality_partiality_tests;
 mod totality_proof_release_tests;
