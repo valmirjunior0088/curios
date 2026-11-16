@@ -1,19 +1,17 @@
 # A random sequence replays from its seed
 
-**Not refined yet.** This specification reserves a generator of random values that a seed determines, its draws, and the property tests built on it. It is not an implementation plan. The generator and property-testing integration are independent deliveries: a consumer of replayable draws releases the first, and shrinking or a test-runner option waits on a consumer of the second. No module of `/std` consumes it yet: its first consumers are the measurement corpus, which rolls its own, and a claim a test means to try on values its author did not write out.
+**Not refined yet.** This specification reserves a generator of random values that a seed determines, and its draws. It is not an implementation plan: a consumer of replayable draws releases it. No module of `/std` consumes it yet: its first consumer is the measurement corpus, which rolls its own.
 
 ## What is missing
 
-- **`/std/rand` reads the host and nothing else.** `curios-prelude/std/rand.crs` is `bytes(n) -> Io(Bytes)` over the `rand_bytes` row, the operating system's entropy inside `Io`. No value of `/std` computes a sequence from a seed, so a program cannot replay a run, a test cannot reproduce a case, and a function outside `Io` cannot draw at all.
+- **`/std/rand` reads the host and nothing else.** `curios-prelude/std/rand.crs` is `bytes(n) -> Io(Bytes)` over the `rand_bytes` row, the operating system's entropy inside `Io`. No value of `/std` computes a sequence from a seed, so a program cannot replay a run, and a function outside `Io` cannot draw at all.
 - **The corpus rolls its own.** `programs/rng_state.crs`, `programs/rng_manual.crs`, `programs/spines/spines.crs` and `programs/churn/churn.crs` each step `75 * x % 65537`, a Lehmer generator of period at most 65,536, chosen so that every product stays below `2^30`, the range a `Nat` is held unboxed in ([Nat and Int are an i31 until they outgrow it](../../design/arithmetic/nat-and-int-are-an-i31-until-they-outgrow-it.md)).
-- **`Test` tries a claim on the cases written.** `curios-prelude/std/Test.crs` has `assert`, `equal`, `all` and the effects around them, and no generator: a claim not yet proved is tried only on the values its author spelled out.
 
 ## What is known
 
 - **Peers ship a seeded generator beside the entropy source.** Go's [`math/rand/v2`](https://pkg.go.dev/math/rand/v2) (PCG and ChaCha8 sources), Python's [`random`](https://docs.python.org/3/library/random.html) (Mersenne Twister), OCaml 5's `Random` (LXM, splittable), Java 17's [`RandomGenerator`](https://openjdk.org/jeps/356) (LXM and SplitMix), Lean 4's core `StdGen`, and Haskell's [`random`](https://hackage.haskell.org/package/random), whose `StdGen` is SplitMix since 1.2.
 - **A splittable generator hands a pure program independent streams** without threading one state through it: SplitMix (Steele, Lea and Flood, OOPSLA 2014) and LXM (Steele and Vigna, OOPSLA 2021).
 - **A bounded draw is its own algorithm.** A draw below `n` by `%` is biased toward the low residues; Lemire's nearly divisionless method (ACM TOMACS 2019) and plain rejection are unbiased, and a float in `[0, 1)` is 53 drawn bits scaled by `2^-53`.
-- **A property test is generators and a way to shrink.** QuickCheck (Claessen and Hughes, ICFP 2000) shrinks by type; [Hedgehog](https://hedgehog.qa/) builds the shrinking into the generator; Hypothesis reduces the sequence of choices a generator made (MacIver and Donaldson, ECOOP 2020); QuickChick derives generators of the values an inductive relation admits (Lampropoulos, Paraskevopoulou and Pierce, POPL 2018); Lean's [Plausible](https://github.com/leanprover-community/plausible) tries a goal before it is proved.
 - **A type under proofs is drawn through a total constructor.** `Date/of_days`, `Time/of_seconds` and `Weekday/of_days_from_monday` are total over their counts, so a generator of a calendar value draws a count. A type whose fields a decided bound guards draws and decides through `Bool/holds`, and the retries are a cost to bound.
 
 ## Refinement
@@ -21,14 +19,12 @@
 - **The word.** The proposed SplitMix or PCG step uses 32- or 64-bit arithmetic, with intermediates past `2^30`: [arithmetic modulo a word](../arithmetic/301-arithmetic-modulo-a-word.md)'s question, settled there for this and for [bytes are written as text and digested](300-bytes-are-written-as-text-and-digested.md).
 - **The state.** A value threaded through `State`, as `programs/rng_state.crs` threads its seed, or a splittable seed; and whether `/std/rand` offers a generator seeded from `rand_bytes`.
 - **The draws.** Bounded naturals and integers, floats, booleans, a choice from a list and a shuffle, each with its law as a proof where one is stated, a draw below its bound first among them.
-- **Property tests.** Where generators live, in `Test` or a module of their own; how a failing case shrinks; how a run reports its seed and is replayed from one, which a `curios test` option would reach (`documentation/usage.md`, and the keys of `curios-verdict` where a seed changes a verdict); and how a generator of a type under proofs is written.
 - **What moves to it.** Whether the corpus programs keep their Lehmer step, which is what they measure, or draw from the library.
 
-## Independent deliveries
+## The delivery
 
-1. **A replayable generator and its required draws.** Settle the algorithm, word and state contracts for a named consumer, with explicit seed input and state or split-stream output. Provide only the draws the consumer needs, including an unbiased bounded draw where requested. Check published algorithm vectors, deterministic replay of a seed and draw sequence, bounds and edge cases, and agreement of folded and executed draws. This delivery needs no shrinking framework, `curios test` option or change to cached test verdicts; its caller can record and pass its seed explicitly. The measurement corpus changes generator only by the separate decision above.
-2. **Property-testing integration.** A named testing consumer releases the choice of generators, shrinking, failure reports, replay options and the verdict inputs those options change. Check that a failing case is replayed from the reported seed and choices, that shrinking preserves failure and produces valid values, and that changing a verdict input invalidates a kept result. This stage consumes the generator's public contracts and does not hold its delivery back.
+A replayable generator and the draws its consumer requires. Settle the algorithm, word and state contracts for a named consumer, with explicit seed input and state or split-stream output. Provide only the draws the consumer needs, including an unbiased bounded draw where requested; its caller records and passes its seed explicitly. Check published algorithm vectors, deterministic replay of a seed and draw sequence, bounds and edge cases, and agreement of folded and executed draws. The measurement corpus changes generator only by the separate decision above.
 
 ## Completion and retirement
 
-A delivered generator records its algorithm, seed and draw contracts and tests beside `/std/rand`, and leaves property-testing work and any unrequested draws pending here under their own consumer gates. The specification retires when no reserved work remains, a seed determines every offered draw, tests can replay their failures under the chosen integration, and dependent references name the implemented contracts.
+A delivered generator records its algorithm, seed and draw contracts and tests beside `/std/rand`, and leaves any unrequested draws pending here under their own consumer gates. The specification retires when no reserved work remains, a seed determines every offered draw, and dependent references name the implemented contracts.

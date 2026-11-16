@@ -1,6 +1,8 @@
 # A term by name cannot reach a reader
 
-The certifier's readers take their terms by a type only reading by value makes, so a term that names a `let`-bound local is refused where it would be handed to one, by the compiler, rather than met by an assertion where a reader takes it or read as written. Its next step is stage 1, a ready delivery.
+**The benefit.** The certifier's readers take their terms by a type only reading by value makes, so a term that names a `let`-bound local is refused where it would be handed to one, by the compiler, rather than met by an assertion that only a build keeping its checks makes, and read as written in any other. The project has decided to adopt it.
+
+Its next step is stage 1, a ready delivery. Stage 2 is not refined: it takes the shared doors as the first open question settles, door by door.
 
 ## What this builds on
 

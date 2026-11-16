@@ -1,6 +1,6 @@
 # Flex–flex problems with distinct heads
 
-**Not refined yet.** This specification reserves intersection for two metavariables met against each other. It is not an implementation plan.
+**Not refined yet.** This specification reserves intersection for two metavariables met against each other. It is not an implementation plan: it waits for a program whose item is left with a metavariable such a problem did not solve.
 
 ## What is missing
 

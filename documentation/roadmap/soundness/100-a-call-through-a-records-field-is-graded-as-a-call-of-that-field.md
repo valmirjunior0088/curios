@@ -1,12 +1,12 @@
 # A call through a record's field is graded as a call of that field
 
-**The benefit.** A recursion through a record of functions descends where the function the record holds descends, so a witness whose method recurses on its argument is total and a type may reach it: a derived `Eql`, `Ord` or `Spell` on any recursive type, the first witnesses a program over a tree derives, a hand-written `satisfy` whose method calls itself on a payload, and a struct of handlers a recursive walker is handed. A recursion through a record's field the member's own body applies descends ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md), *A call is read off a path*); one through a record handed to another definition is still refused wherever a type reaches it. The project has decided to adopt it.
+**The benefit.** A recursion through a record of functions descends where the function the record holds descends, so a witness whose method recurses on its argument is total and a type may reach it: a derived `Eql`, `Ord` or `Spell` on a recursive type whose children it compares itself, the first witnesses a program over a tree derives, a hand-written `satisfy` whose method calls itself on a payload, and a struct of handlers a recursive walker is handed. A recursion through a record's field the member's own body applies descends ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md), *A call is read off a path*); one through a record handed to another definition is still refused wherever a type reaches it. The project has decided to adopt it.
 
 The next step is stage 2.
 
 ## What is missing
 
-**A record handed to a definition that applies a field of its parameter is graded as fresh.** A derived `Eql` on `induct Rose | rose(Nat, List(Rose))` compares the children with `List`'s witness, handing it the witness being defined (`use /witness~/std/ops/Eql(/Rose)`), and `/std/List/eql` applies the method off that parameter, `x == y` being `e.0(x, y)`. A summary states how a definition applies each parameter (`group_applications`, `curios-analysis`), and the summary walk reads a parameter's field applied as a use it does not follow, so `List/eql` publishes nothing for its witness parameter, and the recursion through it is graded as fresh, in both checkers alike. Recursive data whose children sit in a container, a document tree or a syntax tree, takes this shape, and so does a structure of handlers handed to a walker over a list.
+**A record handed to a definition that applies a field of its parameter is graded as fresh.** A written `Eql` on `induct Rose | rose(Nat, List(Rose))` compares the children with `List/eql(cs, ds)`, handing it the witness being defined, and `/std/List/eql` applies the method off that parameter, `x == y` being `e.0(x, y)`. A summary states how a definition applies each parameter (`group_applications`, `curios-analysis`), and the summary walk reads a parameter's field applied as a use it does not follow, so `List/eql` publishes nothing for its witness parameter, and the recursion through it is graded as fresh, in both checkers alike. Recursive data whose children sit in a container, a document tree or a syntax tree, takes this shape, and so does a structure of handlers handed to a walker over a list. A derived `Eql` on `Rose` reaches `List/eql` through `List`'s witness, a definition that is no recursive group, which is [A call in a callback is graded where its callee applies it](302-a-call-in-a-callback-is-graded-where-its-callee-applies-it.md)'s.
 
 ## What this builds on
 
@@ -35,14 +35,12 @@ What is taken: Rocq's reading through a uniform parameter and Agda's explicit tr
 
 ## Stages
 
-2. **Summaries per field, and records handed at them.** A summary states the applications of each field of a parameter, and a record handed at one is graded field by field. Check: a derived `Eql` on `Rose`, and a user's struct of handlers handed to a recursive walker over a list, reached by a type, pass both checkers; a container applying the method at its own argument, and a record handed where the summary records nothing, refused by both; the record's format raised where a summary's archived form moves.
-
-What this waits on beyond its stages: a container whose operation is no recursive group, `Option`'s `eql`, publishes nothing until [A call in a callback is graded where its callee applies it](302-a-call-in-a-callback-is-graded-where-its-callee-applies-it.md) summarizes a definition that is no recursive group, so a recursion through one is graded as fresh until that stage lands.
+2. **Summaries per field, and records handed at them.** A summary states the applications of each field of a parameter, and a record handed at one is graded field by field. Check: a written `Eql` on `Rose` whose method compares the children with `List/eql`, and a user's struct of handlers handed to a recursive walker over a list, reached by a type, pass both checkers; a container applying the method at its own argument, and a record handed where the summary records nothing, refused by both; the record's format raised where a summary's archived form moves.
 
 ## Verification
 
-`cargo xtask workspace lint` and `cargo xtask format` after each stage, with the stage's tests by name, `cargo xtask workspace test` and `cargo xboard report`, since both change what the trusted base admits. A soundness hunt follows stage 2 before this specification retires, its charter the premise this specification adds: that the path a summary records is the path the call reaches.
+`cargo xtask workspace lint` and `cargo xtask format` after each stage, with the stage's tests by name, `cargo xtask workspace test` and `cargo xboard report`, since both change what the trusted base admits.
 
 ## Retirement
 
-Once both stages have landed, the totality decision states that a call is read off a path and a record handed at a summarized parameter is graded field by field, `curios-cert`'s README its call recording, and nothing references this specification, it is deleted.
+Once both stages have landed, the totality decision states that a call is read off a path and a record handed at a summarized parameter is graded field by field, `curios-cert`'s README its call recording, and nothing references this specification, it is deleted. A soundness hunt is filed then as an uncertain entry of the soundness findings, its charter the premise this specification adds: that the path a summary records is the path the call reaches.

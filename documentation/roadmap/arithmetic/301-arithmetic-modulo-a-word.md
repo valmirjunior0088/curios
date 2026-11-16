@@ -1,6 +1,6 @@
 # Arithmetic modulo a word
 
-**Not refined yet.** This specification reserves how a program computes modulo `2^32` or `2^64`, which the generator delivery of [a random sequence replays from its seed](../standard-library/301-a-random-sequence-replays-from-its-seed.md) and Curios digest rounds of [bytes are written as text and digested](../standard-library/300-bytes-are-written-as-text-and-digested.md) wait on. Encodings and property-testing integration have no dependency on this decision of their own. It is not an implementation plan: it waits on the choice under *Refinement*, which those two make once here.
+**Not refined yet.** This specification reserves how a program computes modulo `2^32` or `2^64`, which the generator delivery of [a random sequence replays from its seed](../standard-library/301-a-random-sequence-replays-from-its-seed.md) and Curios digest rounds of [bytes are written as text and digested](../standard-library/300-bytes-are-written-as-text-and-digested.md) wait on. Encodings have no dependency on this decision of their own. It is not an implementation plan: it waits on the choice under *Refinement*, which those two make once here.
 
 ## What is missing
 

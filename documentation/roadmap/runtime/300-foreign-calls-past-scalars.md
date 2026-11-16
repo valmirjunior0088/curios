@@ -1,6 +1,6 @@
 # Foreign calls past scalars and byte strings
 
-**Not refined yet.** This specification reserves the marshalling a plugin needs to speak more than scalars and byte strings. It is not an implementation plan.
+**Not refined yet.** This specification reserves the marshalling a plugin needs to speak more than scalars and byte strings. It is not an implementation plan: it waits for a plugin that needs a shape past those, and is refined for that shape alone.
 
 ## The ceiling
 

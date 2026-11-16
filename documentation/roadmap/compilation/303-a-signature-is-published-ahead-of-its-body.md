@@ -10,7 +10,7 @@ A declaration is published whole, its signature with its body, so one that names
 
 - **The elaborator tells the two reads apart and has no time to answer one alone.** What a declaration asks of another is recorded by its part, a signature or a body (`Question`, `curios-elab/src/context/traced.rs`), and the witness asks the signature of `neq` and never its body. The declaration is the unit of work all the same: it is attempted and published whole, so a signature is answered once its body is. The order that serves the pair is the signature of `neq`, the witness against it, then the body of `neq` against the witness, and [item tasks](302-item-tasks.md) names the same split as a refinement for throughput, for a declaration whose signature fixes its own universe context.
 - **A stored unit has no form for the pair.** The body of `neq` names the witness and the witness names `neq`. A unit stores an item after every item it names (`Module::ordered`, `curios-core/src/order.rs`), and the certifier refuses a name an item reaches before it is defined. A recursive group is the one form whose members name each other, and it holds a witness already, one that names itself being a group of one (`elaborate_module_let`, `curios-elab/src/elaborate/module.rs`); nothing forms a group of a definition and a witness, and the surface joins declarations of one kind.
-- **Totality reads the pair as a recursion.** `neq` reaches itself through the witness, whose `neq` field is the definition, unless the analysis reads `eql` projected off the dictionary as the field it selects.
+- **Totality reads the pair as a recursion.** A call through a record's field is that field's call where the field is a lambda ([Totality of the erased program](../../design/soundness/totality-of-the-erased-program.md), *A call is read off a path*), and `Dyadic`'s witness writes `eql = eql, neq = neq`, fields that name a function. In one group with the witness, `neq = neq` names a member bare, which is a call of each of its parts graded as unrelated, so `neq` reaches itself through the witness with no descent.
 
 ## Refinement
 
@@ -18,7 +18,7 @@ The split is this specification's: [item tasks](302-item-tasks.md) schedules a d
 
 - Who forms the group: its author, by a form the surface does not have, or the compiler, where a cycle closes through a witness a goal resolved to, which no name in the source wrote.
 - What a definition and a witness that name each other are in a stored unit, a group holding both or a definition stated ahead of its body, and what each asks of the certifier, of the certifier's record and of erasure.
-- Whether size-change reads a projection of a dictionary as the field it selects, and where that is no call.
+- Whether size-change reads a field that names a member as that member, so that `W.1(a, b)` is a call of `neq` with `(a, b)` and the record answered calls nothing for it.
 - Which signatures are published early: one that fixes its own universe context, as item tasks states, or every signature written out in full.
 
 It retires when the pair above elaborates, both checkers accept it, and `/std/Flt/internal/Dyadic`'s `neq`, `gt` and `ge` are written with their operators.
