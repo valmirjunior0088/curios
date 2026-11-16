@@ -172,3 +172,61 @@ fn a_test_takes_no_pub_and_stays_a_contextual_word() {
             .is_ok()
     );
 }
+
+// A binder is read only by the terms in its scope, and every term reads a sort's word as the sort, so a binder spelled as one binds what nothing reads: it is refused at the word, wherever a binder is written.
+#[test]
+fn a_sort_cannot_name_a_binder() {
+    for (source, word) in [
+        ("let f(Type: Nat) -> Nat = 0;", "Type"),
+        ("let f: (Nat) -> Nat = (Prop: Nat) => 0;", "Prop"),
+        ("let f: (Sort: Nat) -> Nat = (x) => x;", "Sort"),
+        ("let f: Nat = match 1 | Type => 0 end;", "Type"),
+        ("let f: Nat = let a: Nat = 1 and Prop: Nat = 2; a;", "Prop"),
+        ("induct Box: Type | box(Prop: Nat)\nend", "Prop"),
+        ("induct Box(@Type: Type): Type | box()\nend", "Type"),
+        (
+            "induct Box: (Sort: Nat) -> Type | box(): Box(0)\nend",
+            "Sort",
+        ),
+    ] {
+        let error = source.parse::<Module>().unwrap_err();
+        assert!(
+            error.format().contains(&format!(
+                "`{word}` is a sort wherever a term stands, so it cannot name a binder"
+            )),
+            "{source}: {}",
+            error.format()
+        );
+    }
+}
+
+// The positions that read a binder's name through its `:` refuse a reserved word too, as a pattern's binder always has.
+#[test]
+fn a_reserved_keyword_cannot_name_a_binder_written_with_its_type() {
+    for (source, word) in [
+        ("let f: (match: Nat) -> Nat = (x) => x;", "match"),
+        ("induct Box: Type | box(match: Nat)\nend", "match"),
+        ("induct Box(@end: Type): Type | box()\nend", "end"),
+    ] {
+        let error = source.parse::<Module>().unwrap_err();
+        assert!(
+            error.format().contains(&format!(
+                "`{word}` is a reserved keyword, so it cannot be a name"
+            )),
+            "{source}: {}",
+            error.format()
+        );
+    }
+}
+
+// What a later read can still reach keeps a sort's word: a declaration's name by its path, and a field's label by its projection.
+#[test]
+fn a_sort_still_names_a_declaration_and_a_field() {
+    for source in [
+        "let Sort: Nat = 1;",
+        "struct S: Type { Type: Nat }",
+        "let s: Nat = /Sort;",
+    ] {
+        assert!(source.parse::<Module>().is_ok(), "{source}");
+    }
+}

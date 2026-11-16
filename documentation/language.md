@@ -66,7 +66,7 @@ These words are reserved, and no path segment may be one:
 | --- | --- |
 | `let`, `match`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
 
-`concept`, `satisfy`, `and` and `test` are contextual: each is a word only where the grammar uses it, and an ordinary identifier elsewhere. `Type`, `Prop` and `Sort` are sorts where they stand as terms, and may still be path segments.
+`concept`, `satisfy`, `and` and `test` are contextual: each is a word only where the grammar uses it, and an ordinary identifier elsewhere. `Type`, `Prop` and `Sort` are sorts where they stand as terms, so no binder may be one, which nothing could read; a path segment or a field's label may still be one.
 
 ### Paths
 

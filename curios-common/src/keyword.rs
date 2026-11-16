@@ -14,7 +14,7 @@ pub enum Standing {
     ItemHead,
     /// A word between the members of a group, and a name anywhere else.
     GroupJoin,
-    /// A sort where a term stands, and a path segment elsewhere.
+    /// A sort where a term stands, so it names no binder, which only a term reads; a path segment or a field's label elsewhere.
     Sort,
 }
 

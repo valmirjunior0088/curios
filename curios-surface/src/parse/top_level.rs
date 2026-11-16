@@ -2,10 +2,10 @@ use {
     super::{
         CONCEPT_FIELD_TAKES_NO_IMPLICIT, Grammar, INDEX_TAKES_NO_MARK, LAMBDA_TAKES_PARENTHESES,
         PAYLOAD_TAKES_NO_USE, STRUCT_FIELD_TAKES_NO_USE, members, name_from_segments,
-        parse_apply_argument, parse_field_equals, parse_field_member, parse_func_pattern_param,
-        parse_func_sugar_param, parse_func_type_param, parse_identifier, parse_keyword,
-        parse_let_signature, parse_literal, parse_mark, parse_name, parse_named_premise,
-        parse_prop, parse_type, parse_word_raw, raised, refusing,
+        parse_apply_argument, parse_bound_word, parse_field_equals, parse_field_member,
+        parse_func_pattern_param, parse_func_sugar_param, parse_func_type_param, parse_identifier,
+        parse_keyword, parse_let_signature, parse_literal, parse_mark, parse_name,
+        parse_named_premise, parse_prop, parse_type, parse_word_raw, raised, refusing,
     },
     crate::{
         CasePayloadParam, ConceptField, DOC_BEFORE_NOTHING, Doc, FuncTypeParam, GroupItem,
@@ -545,8 +545,7 @@ pub fn parse_induct_payload_field<'a, D: Grammar>(
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Witness => commit(fail_from(&start, PAYLOAD_TAKES_NO_USE)).boxed(),
             Plicity::Explicit | Plicity::Implicit => D::parse_fields
-                .and(parse_identifier)
-                .and_drop(parse_literal(":"))
+                .and(parse_bound_word)
                 .and(parse_term::<D>)
                 .map(|((core, name), type_): ((D::Fields, &str), Term<D>)| {
                     (core, Some(name.to_string()), type_)
@@ -636,8 +635,7 @@ pub fn parse_induct_param<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
                 })
                 .boxed(),
             Plicity::Explicit | Plicity::Implicit => D::parse_fields
-                .and(parse_identifier)
-                .and_drop(parse_literal(":"))
+                .and(parse_bound_word)
                 .and(parse_term::<D>)
                 .map(
                     move |((core, name), type_): ((D::Fields, &str), Term<D>)| FuncTypeParam {
@@ -671,8 +669,7 @@ pub fn parse_induct_index<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
         .and(parse_mark)
         .flat_map(|(start, plicity)| match plicity {
             Plicity::Explicit => D::parse_fields
-                .and(parse_identifier)
-                .and_drop(parse_literal(":"))
+                .and(parse_bound_word)
                 .and(parse_term::<D>)
                 .map(|((core, name), ty): ((D::Fields, &str), Term<D>)| {
                     (core, Some(name.to_string()), ty)

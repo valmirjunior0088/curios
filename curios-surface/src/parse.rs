@@ -32,7 +32,8 @@ mod tests;
 use {
     super::{Dialect, Doc, Label, Name, Program, Term},
     curios_common::{
-        Keyword, Qualifier, Source, Span, is_identifier_char, is_identifier_start, is_reserved,
+        Keyword, Qualifier, Source, Span, Standing, is_identifier_char, is_identifier_start,
+        is_reserved,
     },
     curios_parse::{
         Parsed, Parser, ParserError, ParserState, ahead, commit, fail, fail_from, is_blank,
@@ -360,33 +361,69 @@ fn parse_identifier<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
 //
 // Safe as the last alternative of a choice because every keyword-valued spelling the grammar does admit is parsed by an earlier one: `parse_bool_match_pattern` precedes `parse_binder` in `parse_match_pattern_inner`, exactly as it already precedes `parse_name`'s identical refusal.
 fn parse_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
-    parse_label_owning(false).parse(state)
+    parse_word_owning(false, unnameable).parse(state)
+}
+
+// A binder's name: [`parse_label`], refusing a sort as well, which no term can read as the binder — every term reading `Type` reads the sort. A field's label and a declaration's name keep [`parse_label`]'s refusals alone, since a projection reads `.Type` and a path `/Sort`.
+fn parse_binder_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
+    parse_word_owning(false, unbindable).parse(state)
+}
+
+// The name a binder written `name: type` binds, read through its `:`. Past the colon the word is a binder's and nothing else's, so a word no term can read is refused there, committed, with the caret on the word: uncommitted, the term the same word opens would be tried in its place and fail at the colon, naming the colon for a mistake about the name.
+fn parse_bound_word<'a>(state: ParserState<'a>) -> Parsed<'a, &'a str> {
+    mark()
+        .and(parse_identifier)
+        .and_drop(parse_literal(":"))
+        .flat_map(|(start, word)| match unbindable(word) {
+            None => pure(word).boxed(),
+            Some(refusal) => commit(fail_from(&start, refusal)).boxed(),
+        })
+        .parse(state)
 }
 
 // A *declaration's own* name — the word after `let`, `mod`, `induct`, `struct`, `concept`, `foreign` or `test`, and each selector of a `use` group. [`parse_label`] with its keyword refusal committed: these positions sit past the prefix that discriminates them, so the refusal is the branch's diagnosis rather than a guess, and `Parser::or` must not discard it for a sibling that happened to read further before giving up.
 //
 // Uncommitted, it would be discarded every time: `let match : Nat = 1;` would report at second hand through the struct-pattern alternative, as `path 'match' contains a reserved keyword` with the caret past the word, and `use /std/{match}` as `Expected '}', obtained 'm'`, which names the brace for a mistake about a name.
 pub fn parse_declared_label<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
-    parse_label_owning(true).parse(state)
+    parse_word_owning(true, unnameable).parse(state)
 }
 
 /// A declared label and what follows it, the failure of the rest named for the label ([`tagging`]): what lets a loop recovering past the item say which declaration broke.
 pub fn declared<'a, T: 'a>(rest: impl Parser<'a, T>) -> impl Parser<'a, (Label, T)> {
+    named(parse_declared_label, rest)
+}
+
+/// [`declared`], for a name that binds: a later member of a local `let` group, past the `and` that discriminates it, refused as a binder's name is ([`parse_binder_label`]) and committed as a declaration's.
+pub fn bound<'a, T: 'a>(rest: impl Parser<'a, T>) -> impl Parser<'a, (Label, T)> {
+    named(
+        |state| parse_word_owning(true, unbindable).parse(state),
+        rest,
+    )
+}
+
+/// `name`'s label and what follows it, the failure of the rest named for the label.
+fn named<'a, T: 'a>(
+    name: impl Parser<'a, Label>,
+    rest: impl Parser<'a, T>,
+) -> impl Parser<'a, (Label, T)> {
     move |state: ParserState<'a>| {
-        parse_declared_label
-            .flat_map(move |label| {
-                tagging(Some(label.to_string()), rest).map(move |rest| (label, rest))
-            })
-            .parse(state)
+        name.flat_map(move |label| {
+            tagging(Some(label.to_string()), rest).map(move |rest| (label, rest))
+        })
+        .parse(state)
     }
 }
 
-fn parse_label_owning<'a>(owns_the_fault: bool) -> impl Parser<'a, Label> {
+// A word as a name, refused where `refusal` says why it cannot be one.
+fn parse_word_owning<'a>(
+    owns_the_fault: bool,
+    refusal: fn(&str) -> Option<String>,
+) -> impl Parser<'a, Label> {
     move |state: ParserState<'a>| {
         mark()
             .and(spanned(parse_word_raw))
             .flat_map(move |(start, (span, text))| {
-                match (unnameable(text), owns_the_fault) {
+                match (refusal(text), owns_the_fault) {
                     (None, _) => pure(Label::spanned(text, span)).boxed(),
                     // Reported where the word begins, as `parse_keyword` reports a misspelled one, so the caret stands on the name rather than after it. Only the committed side may rewind: an uncommitted error that gives back the offset it read loses `Parser::or`'s tie-break to every sibling, which is how this refusal reached no reader at all.
                     (Some(refusal), true) => commit(fail_from(&start, refusal)).boxed(),
@@ -424,6 +461,16 @@ fn unnameable(word: &str) -> Option<String> {
         (false, false) => Some(digit_led(word)),
         (false, true) => None,
     }
+}
+
+// Why `word` cannot name a binder, where it cannot: what cannot be a name, and a sort, which every term reading the word reads as itself, so a binder of it binds what nothing reads.
+fn unbindable(word: &str) -> Option<String> {
+    let sort = Keyword::read(word).is_some_and(|keyword| keyword.standing() == Standing::Sort);
+    unnameable(word).or_else(|| {
+        sort.then(|| {
+            format!("`{word}` is a sort wherever a term stands, so it cannot name a binder")
+        })
+    })
 }
 
 fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> impl Parser<'a, Name> {

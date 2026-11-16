@@ -2,17 +2,17 @@ use {
     super::{
         BINDER_FOLLOWS_IMPLICIT, Grammar, MEMO_MATCH_PATTERN, MEMO_PATTERN, PARAMETER_IS_A_PATTERN,
         PATTERN_TAKES_NO_USE, Read, STRUCT_PATTERN_TAKES_NO_MARK, begins_a_name, digit_led,
-        member_ends, members, parse_block_str, parse_identifier, parse_keyword, parse_label,
-        parse_line_str, parse_literal, parse_mark, parse_name, parse_named_premise,
+        member_ends, members, parse_binder_label, parse_block_str, parse_identifier, parse_keyword,
+        parse_label, parse_line_str, parse_literal, parse_mark, parse_name, parse_named_premise,
         parse_nat_digits, parse_number, parse_place, parse_qualified_name, parse_word_raw,
-        parse_written_char, refused, require_space, trimmed,
+        parse_written_char, refused, require_space, trimmed, unbindable,
     },
     crate::{
         Binder, Elements, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
         MatchPatternField, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Subterm, Term,
         TuplePattern, parse_term, parse_whitespace,
     },
-    curios_common::{Keyword, Plicity, Sign, recurse},
+    curios_common::{Keyword, Plicity, Sign, Standing, recurse},
     curios_parse::{
         Parsed, Parser, ParserState, commit, fail, fail_from, is_blank, look_ahead, many0, mark,
         memoize, not_ahead, preceded_by_space, pure, refusal, sep_by0_trailing, spanned,
@@ -36,7 +36,7 @@ fn parse_declared_member<'a, D: Grammar>(
         .parse(state)
 }
 
-// One Π-binder: `use Concept(args)`, or under `@` or no mark `label: type` or the type alone.
+// One Π-binder: `use Concept(args)`, or under `@` or no mark `label: type` or the type alone. A word no term can read, written with its type, is read and its report held ([`parse_unreadable_binder`]): the list is a lambda's as readily until the arrow after it says it is a function type's, which raises it.
 pub fn parse_func_type_param<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, Read<FuncTypeParam<D>>> {
@@ -53,15 +53,15 @@ pub fn parse_func_type_param<'a, D: Grammar>(
                     })
                 })
                 .boxed(),
-            Plicity::Explicit | Plicity::Implicit => parse_declared_member
-                .map(move |(core, label, type_)| {
+            Plicity::Explicit | Plicity::Implicit => parse_unreadable_binder::<_, D>
+                .or(parse_declared_member.map(move |(core, label, type_)| {
                     Ok(FuncTypeParam {
                         plicity,
                         core,
                         label,
                         type_,
                     })
-                })
+                }))
                 .boxed(),
         })
         .parse(state)
@@ -91,7 +91,15 @@ pub fn parse_func_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Ter
 
 // A binder name: a plain identifier (`_` to ignore). `let`, lambda, function-definition-sugar and field-sugar parameters accept a full `Pattern` instead (see `parse_pattern`); match arms accept a full `MatchPattern` instead (see `parse_match_pattern`).
 pub fn parse_binder<'a>(state: ParserState<'a>) -> Parsed<'a, Label> {
-    parse_label.parse(state)
+    parse_binder_label.parse(state)
+}
+
+// A field's label, under the decorator Core text may write before it as before a binder: [`parse_label`], not [`parse_binder`], since a projection reads the label whatever a later field makes of the word — `.Type` reads a field a later field's `Type` never could.
+pub fn parse_decorated_label<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Binder<D>> {
+    D::parse_fields
+        .and(parse_label)
+        .map(|(core, label)| Binder { core, label })
+        .parse(state)
 }
 
 // A binder of a pattern: its word, under the decorator Core text may write before it stating the rest of the label Core keeps for the binder (see [`Binder`]); a program's grammar reads no decorator. A decorator no word follows fails back, so whatever else may stand where the binder does is still read.
@@ -355,6 +363,26 @@ pub fn parse_ctor_match_pattern<'a, D: Grammar>(
         .parse(state)
 }
 
+// A sort's word standing alone where an arm binds, refused at the word: a binder of it binds what nothing reads ([`unbindable`]). Tried first, ahead of the qualified head's refusal, which reads the word as a path of one segment and fails past it, where the binder alternative, last, refuses the word without committing and so loses that tie. The word is only looked at until it is one, so any other fails at the choice point; and one a path, a structure's fields or a constructor's arguments follow is left to those forms.
+fn refuse_sort_binder<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, MatchPattern<D>> {
+    look_ahead(parse_word_raw)
+        .flat_map(|word| {
+            let sort = Keyword::read(word).map(Keyword::standing) == Some(Standing::Sort);
+            match unbindable(word).filter(|_| sort) {
+                Some(why) => mark()
+                    .and_drop(parse_word_raw)
+                    .and_drop(not_ahead("/"))
+                    .and_drop(parse_whitespace)
+                    .and_drop(not_ahead("{"))
+                    .and_drop(not_ahead("("))
+                    .flat_map(move |start| commit(fail_from(&start, why)))
+                    .boxed(),
+                None => fail("expected: a sort's word standing alone").boxed(),
+            }
+        })
+        .parse(state)
+}
+
 // A match pattern written with a qualified head, refused by name.
 //
 // A constructor pattern names its constructor *bare*: the tag is resolved against the scrutinee's type rather than looked up, so the namespace is never spelled. Left to fall through, `Option/some(n)` parsed `Option` as a `Binder` and the arm then reported `Expected '=>'` against the `/` — with a `=>` plainly written four columns along.
@@ -601,7 +629,8 @@ pub fn parse_match_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a,
 fn parse_match_pattern_inner<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, MatchPattern<D>> {
-    parse_qualified_match_pattern::<D>
+    refuse_sort_binder::<D>
+        .or(parse_qualified_match_pattern::<D>)
         .or(parse_bytes_match_pattern::<D>)
         .or(parse_struct_match_pattern::<D>)
         .or(parse_ctor_match_pattern::<D>)
@@ -653,6 +682,7 @@ fn parse_bound_member<'a, B: 'a, D: Grammar>(
                     .and(parse_annotation)
                     .and_drop(member_ends)
                     .map(|(binder, annotation)| Ok((Plicity::Implicit, binder, annotation)))
+                    .or(parse_unreadable_binder::<_, D>.and_drop(member_ends))
                     .or(parse_term::<D>.flat_map(move |_| refused(&start, BINDER_FOLLOWS_IMPLICIT)))
                     .boxed(),
                 // A binder its list's separator follows; a word that begins with a digit, likewise; any other term the separator follows, read only to be reported; and last the binder alone, so a list that cannot go on past it says so where it stops.
@@ -661,6 +691,7 @@ fn parse_bound_member<'a, B: 'a, D: Grammar>(
                     .and_drop(member_ends)
                     .map(|(binder, annotation)| Ok((Plicity::Explicit, binder, annotation)))
                     .or(parse_numbered_binder::<_, D>.and_drop(member_ends))
+                    .or(parse_unreadable_binder::<_, D>.and_drop(member_ends))
                     // Uncommitted: a refusal the term's own forms commit to — a call's list that does not close — is no refusal of the list it stands in, which a tuple's or a call's reading may still take.
                     .or(uncommit(parse_term::<D>)
                         .and_drop(member_ends)
@@ -681,6 +712,24 @@ pub fn parse_numbered_binder<'a, T: 'a, D: Grammar>(state: ParserState<'a>) -> P
         .flat_map(|(start, word)| match begins_a_name(word) {
             true => fail("expected: a word that begins with a digit").boxed(),
             false => refusal(&start, digit_led(word)).boxed(),
+        })
+        .and_drop(parse_whitespace)
+        .and_drop(parse_annotation::<D>)
+        .map(Err)
+        .parse(state)
+}
+
+// A reserved word or a sort where a member binds with its type, read with the annotation and reported, as a numbered one is ([`parse_numbered_binder`]): the binder alternative refuses the word without committing, so that a term may still begin with it, and the member written as its type alone would otherwise be tried in its place and fail at the `:`. Without a `:` after it the word may be the member's type, which that refusal names.
+pub fn parse_unreadable_binder<'a, T: 'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, Read<T>> {
+    D::parse_fields
+        .and_keep(mark())
+        .and(parse_word_raw)
+        .and_drop(look_ahead(parse_whitespace.and(parse_literal(":"))))
+        .flat_map(|(start, word)| match unbindable(word) {
+            Some(why) => refusal(&start, why).boxed(),
+            None => fail("expected: a word no term can read").boxed(),
         })
         .and_drop(parse_whitespace)
         .and_drop(parse_annotation::<D>)

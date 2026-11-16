@@ -5,11 +5,11 @@ use {
         parse_intrinsic, parse_keyword, parse_let_binder, parse_literal, parse_mark, parse_match,
         parse_name, parse_numbered_binder, parse_parens, parse_pattern, parse_premise, parse_prop,
         parse_qualified_name, parse_struct_lit, parse_tuple, parse_tuple_type, parse_type,
-        parse_usize_raw, refused,
+        parse_unreadable_binder, parse_usize_raw, refused,
     },
     crate::{
         Apply, Argument, Binder, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding,
-        LetGroup, LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, declared,
+        LetGroup, LetSignature, Name, Pattern, Proj, Subterm, Term, Tuple, bound,
         parse_identifier_raw, parse_whitespace,
     },
     curios_common::{InfixOp, Keyword, Plicity, Span, Standing, is_identifier_char, recurse},
@@ -59,11 +59,11 @@ pub fn refusing<'a>(
     }
 }
 
-// A plain-label binding with a mandatory type: every top-level member, and every member of a local group after the first.
+// A plain-label binding with a mandatory type: a member of a local group after the first, whose name binds.
 pub fn parse_binding<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, (Label, LetSignature<D>)> {
-    declared(parse_let_signature).parse(state)
+    bound(parse_let_signature).parse(state)
 }
 
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
@@ -109,6 +109,7 @@ pub fn parse_func_sugar_param<'a, D: Grammar>(
                     })
                 })
                 .or(parse_numbered_binder::<_, D>)
+                .or(parse_unreadable_binder::<_, D>)
                 // Its type alone, or its binder alone where that is `_`, which no type is.
                 .or(parse_term::<D>
                     .map(|_| ())

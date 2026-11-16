@@ -2,7 +2,7 @@ use {
     super::{
         Grammar, TUPLE_FIELD_TAKES_NO_MARK, begins_a_name, digit_led, members,
         parse_apply_argument, parse_block_string_literal, parse_bool_intrinsic,
-        parse_bytes_literal, parse_char_lit, parse_decorated_binder, parse_func_pattern_param,
+        parse_bytes_literal, parse_char_lit, parse_decorated_label, parse_func_pattern_param,
         parse_func_type_param, parse_held, parse_identifier, parse_list_literal, parse_literal,
         parse_mark, parse_name, parse_number, parse_string_literal, parse_word_raw,
         refuse_dangling_dot,
@@ -53,7 +53,7 @@ type SugaredField<D> = (Binder<D>, Vec<FuncTypeParam<D>>);
 
 // A Σ-type / struct-declaration field, past whatever mark its site takes: an optional label and the field type, or the signature sugar `label(params) -> type` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar. Shared by tuple types and `struct` decls. The sugared catch spans through `->`, so a positional field that merely starts with an application (`f(x)`) backtracks cleanly.
 pub fn parse_field_member<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, TupleTypeParam<D>> {
-    parse_decorated_binder::<D>
+    parse_decorated_label::<D>
         .and(
             parse_literal("(")
                 .and_keep(sep_by0_trailing(parse_func_type_param, || {
@@ -76,7 +76,7 @@ pub fn parse_field_member<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, 
                 type_: output,
             },
         )
-        .or(parse_decorated_binder::<D>
+        .or(parse_decorated_label::<D>
             .and_drop(parse_literal(":"))
             .and(commit(parse_term::<D>))
             .map(|(binder, type_): (Binder<D>, Term<D>)| TupleTypeParam {

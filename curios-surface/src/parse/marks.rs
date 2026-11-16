@@ -5,7 +5,7 @@
 //! **A refused form is read, held, and raised once the site is known.** `(@A, use Show(A), x)` opens a function type and a lambda alike, and only the arrow after it says which, so neither grammar may refuse a member where it stands: whichever is tried first would commit a refusal of a program that is valid as the other. A member parser therefore answers with a [`Read`] — the member, or the report [`refused`] builds over the text the form covers — and the site hands its list to [`members`] past the token that discriminates it. A site nothing else can be read as — a declaration's parameters, a payload, a field, a constructor pattern — raises where the mark stands.
 
 use {
-    super::{Grammar, parse_identifier, parse_keyword, parse_literal},
+    super::{Grammar, parse_bound_word, parse_identifier, parse_keyword, parse_literal},
     crate::{Term, parse_term},
     curios_common::{Keyword, Plicity},
     curios_parse::{
@@ -192,8 +192,7 @@ pub fn parse_named_premise<'a, D: Grammar>(
             .map(|read| read.map(|type_| (D::Fields::default(), None, type_)));
         match D::NAMES_WITNESSES {
             true => D::parse_fields
-                .and(parse_identifier)
-                .and_drop(parse_literal(":"))
+                .and(parse_bound_word)
                 .and(parse_term::<D>)
                 .map(|((core, label), type_)| Ok((core, Some(label.to_string()), type_)))
                 .or(premise)
