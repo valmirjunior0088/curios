@@ -38,5 +38,6 @@ mod totality_callback;
 mod totality_callback_binder;
 mod totality_descent;
 mod totality_partiality;
+mod totality_projection;
 mod totality_proof_release;
 mod totality_record;

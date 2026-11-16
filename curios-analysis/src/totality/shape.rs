@@ -57,7 +57,7 @@ pub enum Shape {
         heads: Rc<[Shape]>,
         tail: Rc<Shape>,
     },
-    /// A `Nat` strictly below the value it holds, established arithmetically rather than structurally: `n / k` for a literal `k >= 2`, or `n - k` for a literal `k >= 1`, of an `n` known nonzero — a binder an arm ruled zero out of, or a successor run, which is nonzero by its shape.
+    /// A value strictly below the value it holds, where no constructor shows it: arithmetically, `n / k` for a literal `k >= 2`, or `n - k` for a literal `k >= 1`, of an `n` known nonzero — a binder an arm ruled zero out of, or a successor run, which is nonzero by its shape; or as a field of a record, `b.i` of a binder `b` whose record no constructor in reach shows.
     ///
     /// It is a claim *about* another shape rather than a shape of its own, so it is inert everywhere the constructor order is read — never equal to anything, never a subterm of anything — and is consulted only by [`Shape::against`].
     Smaller(Rc<Shape>),
@@ -75,7 +75,7 @@ impl Shape {
         Shape::Node(tag, kids.into_iter().collect())
     }
 
-    /// A `Nat` strictly below `value`.
+    /// A value strictly below `value`: an arithmetic decrease, or a field of a record.
     pub fn smaller(value: Shape) -> Shape {
         Shape::Smaller(Rc::new(value))
     }

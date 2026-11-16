@@ -6,8 +6,8 @@ use {
     super::{Call, Carriers, Guard, Shape, Tag, spine},
     crate::{Env, forceable},
     curios_core::{
-        CallMatrix, Free, FreeMonoid, Global, Intrinsic, Layer, Nat, Probe, Size, Struct, Subterm,
-        Term, Tuple, Variant,
+        CallMatrix, Free, FreeMonoid, Global, Intrinsic, Layer, Nat, Probe, Proj, Size, Struct,
+        Subterm, Term, Tuple, Variant,
     },
     curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet, HashMap},
@@ -515,6 +515,19 @@ impl<'a, E: Env> Grader<'a, E> {
 
             Subterm::Intrinsic(Intrinsic::NatSub(left, right)) => {
                 self.arithmetic_shape(left, right, &Natural::from(1usize))?
+            }
+
+            // A record is the node of its fields, by eta, so a field of one is strictly below it, and a field of a proof record ranks below the record as each of its least derivation's premises does: a projection of a record literal reads as its field, and one of a binder, or of what is already below one, as below that binder. A field applied is read no further, a record being no family whose function-typed fields sizing keeps below it.
+            Subterm::Proj(Proj { head, field }) if field.slot().is_some() => {
+                let slot = field.slot().expect("a slot");
+                match self.shape_of(head)? {
+                    Shape::Node(Tag::Tuple | Tag::Struct(_), kids) if slot < kids.len() => {
+                        kids[slot].clone()
+                    }
+                    atom @ Shape::Atom(_) => Shape::smaller(atom),
+                    Shape::Smaller(below) => Shape::Smaller(below),
+                    _ => self.unfolded_shape(term)?,
+                }
             }
 
             // An application of a constructor payload reads as the payload it came from: a function-typed payload is a branching node whose children are its applications, so `below(y, r)` grades below `intro(x, below)` for the reason `below` does. The head is read through the same refinement expansion a parameter gets, so a payload bound by a nested pattern reads the same. Any other head — a parameter, a lambda binder, a global — falls through to unfolding.
